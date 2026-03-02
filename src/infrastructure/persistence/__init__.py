@@ -1,4 +1,11 @@
-from src.infrastructure.persistence.user import User
-from src.infrastructure.persistence.tenant import Tenant
+from src.infrastructure.persistence.tenant_domain import TenantDomainOrm
+from src.infrastructure.persistence.user_email import UserEmailOrm
+from src.infrastructure.persistence.user import UserOrm
+from src.infrastructure.persistence.tenant import TenantOrm
 
-__all__ = ["Tenant", "User"]
+__all__ = [
+    "TenantOrm",
+    "UserOrm",
+    "TenantDomainOrm",
+    "UserEmailOrm",
+]

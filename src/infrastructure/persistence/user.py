@@ -9,7 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from src.common.db.base import Base, StringUUID
 
 
-class User(Base):
+class UserOrm(Base):
     __tablename__ = "users"
 
     id: Mapped[UUID] = mapped_column(

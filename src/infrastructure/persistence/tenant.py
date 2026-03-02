@@ -10,7 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from src.common.db.base import Base, PortableJSON, StringUUID
 
 
-class Tenant(Base):
+class TenantOrm(Base):
     __tablename__ = "tenants"
 
     id: Mapped[UUID] = mapped_column(
