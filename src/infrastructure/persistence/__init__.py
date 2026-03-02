@@ -1,11 +1,11 @@
-from src.infrastructure.persistence.tenant_domain import TenantDomainOrm
-from src.infrastructure.persistence.user_email import UserEmailOrm
-from src.infrastructure.persistence.user import UserOrm
-from src.infrastructure.persistence.tenant import TenantOrm
+from src.infrastructure.persistence.tenant_domain import TenantDomainModel
+from src.infrastructure.persistence.user_email import UserEmailModel
+from src.infrastructure.persistence.user import UserModel
+from src.infrastructure.persistence.tenant import TenantModel
 
 __all__ = [
-    "TenantOrm",
-    "UserOrm",
-    "TenantDomainOrm",
-    "UserEmailOrm",
+    "TenantModel",
+    "UserModel",
+    "TenantDomainModel",
+    "UserEmailModel",
 ]

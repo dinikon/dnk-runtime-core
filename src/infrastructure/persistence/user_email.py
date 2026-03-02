@@ -6,10 +6,11 @@ import sqlalchemy as sa
 from sqlalchemy import ForeignKey, String, DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.common.db.base import Base, StringUUID
+from src.common.db.base import Base
+from src.common.db.types import StringUUID
 
 
-class UserEmailOrm(Base):
+class UserEmailModel(Base):
     __tablename__ = "user_emails"
 
     id: Mapped[UUID] = mapped_column(

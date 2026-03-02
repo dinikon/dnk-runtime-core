@@ -1,0 +1,48 @@
+from __future__ import annotations
+
+from typing import Protocol
+from uuid import UUID
+
+from src.application.admin_tenants.ports.repositories import UserRepositoryProtocol
+from src.domain.common.errors import UserEmailAlreadyExistsError
+from src.domain.users.entities import User
+
+
+class UserServiceProtocol(Protocol):
+    async def create_tenant_admin(
+        self,
+        tenant_id: UUID,
+        first_name: str,
+        last_name: str,
+        email: str,
+    ) -> User: ...
+
+
+class UserService:
+    def __init__(self, users_repository: UserRepositoryProtocol):
+        self._users_repository = users_repository
+
+    async def create_tenant_admin(
+        self,
+        tenant_id: UUID,
+        first_name: str,
+        last_name: str,
+        email: str,
+    ) -> User:
+        normalized_first_name = first_name.strip()
+        normalized_last_name = last_name.strip()
+        normalized_email = email.strip().lower()
+        if await self._users_repository.exists_by_tenant_and_email(
+            tenant_id=tenant_id,
+            email=normalized_email,
+        ):
+            raise UserEmailAlreadyExistsError(normalized_email)
+
+        user = User.create_tenant_admin(
+            tenant_id=tenant_id,
+            first_name=normalized_first_name,
+            last_name=normalized_last_name,
+        )
+        user.add_email(normalized_email, is_primary=True)
+        await self._users_repository.add(user)
+        return user

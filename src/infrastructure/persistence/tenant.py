@@ -7,10 +7,11 @@ import sqlalchemy as sa
 from sqlalchemy import DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.common.db.base import Base, PortableJSON, StringUUID
+from src.common.db.base import Base, PortableJSON
+from src.common.db.types import StringUUID
 
 
-class TenantOrm(Base):
+class TenantModel(Base):
     __tablename__ = "tenants"
 
     id: Mapped[UUID] = mapped_column(

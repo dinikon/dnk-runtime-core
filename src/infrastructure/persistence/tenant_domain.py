@@ -6,10 +6,11 @@ import sqlalchemy as sa
 from sqlalchemy import ForeignKey, String, Boolean, func, DateTime, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.common.db.base import Base, PortableJSON, StringUUID
+from src.common.db.base import Base, PortableJSON
+from src.common.db.types import StringUUID
 
 
-class TenantDomainOrm(Base):
+class TenantDomainModel(Base):
     __tablename__ = "tenant_domains"
 
     id: Mapped[UUID] = mapped_column(
@@ -18,7 +19,7 @@ class TenantDomainOrm(Base):
         default=uuid6.uuid7,
         nullable=False,
     )
-    tenant_id: Mapped[str] = mapped_column(
+    tenant_id: Mapped[UUID] = mapped_column(
         StringUUID,
         ForeignKey("tenants.id"),
         nullable=False,
