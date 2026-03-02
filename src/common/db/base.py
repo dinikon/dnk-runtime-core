@@ -1,4 +1,5 @@
-from sqlalchemy import MetaData, String, Text
+from sqlalchemy import JSON, MetaData, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase
 
 
@@ -9,3 +10,4 @@ class Base(DeclarativeBase):
 
 StringUUID = String(64)
 LongText = Text
+PortableJSON = JSON().with_variant(JSONB(), "postgresql")

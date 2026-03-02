@@ -5,10 +5,9 @@ from uuid import UUID
 import uuid6
 import sqlalchemy as sa
 from sqlalchemy import DateTime, String, func
-from sqlalchemy.dialects.postgresql import JSON, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.common.db.base import Base, StringUUID
+from src.common.db.base import Base, PortableJSON, StringUUID
 
 
 class Tenant(Base):
@@ -28,7 +27,7 @@ class Tenant(Base):
         index=True,
     )
     custom_config: Mapped[dict[str, Any] | None] = mapped_column(
-        JSONB,
+        PortableJSON,
         nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
