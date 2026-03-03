@@ -1,0 +1,1 @@
+"""Organization bounded context placeholder."""

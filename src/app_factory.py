@@ -1,10 +1,7 @@
 from contextlib import asynccontextmanager
-from src.common.db.helper import db_helper
-
-# from src.middleware import apply_middleware
-# from src.router import apply_routes
-
 from src.dnk_app import DnkApp
+from src.modules.router import router as api_router
+from src.modules.shared.db.helper import db_helper
 
 
 @asynccontextmanager
@@ -18,5 +15,5 @@ async def lifespan(app: DnkApp):
 
 def create_app() -> DnkApp:
     app = DnkApp(lifespan=lifespan)
-    # apply_routes(app)
+    app.include_router(api_router)
     return app

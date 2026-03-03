@@ -1,0 +1,1 @@
+"""Catalog bounded context placeholder."""

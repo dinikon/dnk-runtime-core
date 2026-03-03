@@ -1,5 +1,6 @@
 import logging
 from pathlib import Path
+
 # from typing import Any
 
 # from pydantic.fields import FieldInfo
@@ -11,6 +12,7 @@ from pydantic_settings import (
 )
 
 from src.libs.file_utils import search_file_upwards
+from .control_plane import ControlPlaneConfig
 from .infrastructure import DatabaseConfig
 
 # from .deploy import DeploymentConfig
@@ -20,6 +22,7 @@ from .infrastructure import DatabaseConfig
 # from .middleware import MiddlewareConfig
 # from .observability import ObservabilityConfig
 from .packaging import PackagingInfo
+
 # from .remote_settings_sources import (
 #     RemoteSettingsSource,
 #     RemoteSettingsSourceConfig,
@@ -84,6 +87,8 @@ PYPROJECT_TOML_PATH = search_file_upwards(
 class DnkConfig(
     # Infra config
     DatabaseConfig,
+    # Control Plane config
+    ControlPlaneConfig,
     # Packaging info
     PackagingInfo,
     # Deployment configs
