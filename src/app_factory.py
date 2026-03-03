@@ -1,8 +1,7 @@
 from contextlib import asynccontextmanager
-from src.common.db.helper import db_helper
-from src.presentation.api import router as api_router
-
 from src.dnk_app import DnkApp
+from src.modules.router import router as api_router
+from src.modules.shared.db.helper import db_helper
 
 
 @asynccontextmanager
