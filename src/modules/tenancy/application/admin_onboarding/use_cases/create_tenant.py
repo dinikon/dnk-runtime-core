@@ -31,7 +31,10 @@ class CreateTenantUseCase:
 
     async def execute(self, dto: CreateTenantCommandDTO) -> CreateTenantResultDTO:
         try:
-            tenant = await self._tenant_service.create_tenant(dto.tenant_name)
+            tenant = await self._tenant_service.create_tenant(
+                dto.tenant_name,
+                dto.external_id,
+            )
             user = await self._identity_provisioning_service.create_tenant_admin(
                 tenant_id=tenant.id,
                 first_name=dto.user_first_name,

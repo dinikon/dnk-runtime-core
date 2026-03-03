@@ -21,6 +21,12 @@ class TenantModel(Base):
         nullable=False,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    external_id: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
     status: Mapped[str] = mapped_column(
         String(255),
         nullable=False,

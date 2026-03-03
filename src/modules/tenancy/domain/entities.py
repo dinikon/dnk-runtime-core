@@ -22,28 +22,34 @@ from src.modules.tenancy.domain.value_objects.tenant_domian_status import (
 from src.modules.tenancy.domain.value_objects.tenant_service_type import (
     TenantServiceType,
 )
+from src.modules.tenancy.domain.value_objects.tenant_status import TenantStatus
 
 
 @dataclass(slots=True)
 class Tenant:
     id: UUID
     name: str
-    status: str
+    external_id: str
+    status: TenantStatus
     custom_config: dict[str, object] | None
     created_at: datetime
     updated_at: datetime
 
     @classmethod
-    def create(cls, name: str) -> "Tenant":
+    def create(cls, name: str, external_id: str) -> "Tenant":
         normalized_name = name.strip()
+        normalized_external_id = external_id.strip()
         if not normalized_name:
             raise ValidationError("Tenant name must not be empty.")
+        if not normalized_external_id:
+            raise ValidationError("Tenant external_id must not be empty.")
 
         now = datetime.now(UTC)
         return cls(
             id=uuid6.uuid7(),
             name=normalized_name,
-            status="active",
+            external_id=normalized_external_id,
+            status=TenantStatus.ACTIVE,
             custom_config=None,
             created_at=now,
             updated_at=now,

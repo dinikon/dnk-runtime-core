@@ -12,6 +12,7 @@ from pydantic_settings import (
 )
 
 from src.libs.file_utils import search_file_upwards
+from .control_plane import ControlPlaneConfig
 from .infrastructure import DatabaseConfig
 
 # from .deploy import DeploymentConfig
@@ -86,6 +87,8 @@ PYPROJECT_TOML_PATH = search_file_upwards(
 class DnkConfig(
     # Infra config
     DatabaseConfig,
+    # Control Plane config
+    ControlPlaneConfig,
     # Packaging info
     PackagingInfo,
     # Deployment configs

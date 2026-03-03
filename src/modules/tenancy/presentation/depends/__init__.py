@@ -1,8 +1,13 @@
 from src.modules.tenancy.presentation.depends.authorization import (
-    AdminCreateTenantAuthorizationDep,
     AuthorizationServiceDep,
     authorize_admin_create_tenant,
     get_authorization_service,
+)
+from src.modules.tenancy.presentation.depends.control_plane_auth import (
+    AdminCreateTenantAuthorizationDep,
+    ControlPlaneApiKeyDep,
+    authorize_control_plane_request,
+    get_control_plane_api_key,
 )
 from src.modules.tenancy.presentation.depends.repositories import (
     TenantDomainsRepositoryDep,
@@ -20,13 +25,18 @@ from src.modules.tenancy.presentation.depends.services import (
 )
 from src.modules.tenancy.presentation.depends.use_cases import (
     CreateTenantUseCaseDep,
+    ResolveTenantByHostUseCaseDep,
     get_create_tenant_use_case,
+    get_resolve_tenant_by_host_use_case,
 )
 
 __all__ = [
     "get_authorization_service",
     "AuthorizationServiceDep",
     "authorize_admin_create_tenant",
+    "get_control_plane_api_key",
+    "ControlPlaneApiKeyDep",
+    "authorize_control_plane_request",
     "AdminCreateTenantAuthorizationDep",
     "get_tenants_repository",
     "TenantsRepositoryDep",
@@ -40,4 +50,6 @@ __all__ = [
     "IdentityProvisioningServiceDep",
     "get_create_tenant_use_case",
     "CreateTenantUseCaseDep",
+    "get_resolve_tenant_by_host_use_case",
+    "ResolveTenantByHostUseCaseDep",
 ]

@@ -16,6 +16,7 @@ from src.modules.tenancy.domain.value_objects.tenant_domian_status import (
 from src.modules.tenancy.domain.value_objects.tenant_service_type import (
     TenantServiceType,
 )
+from src.modules.tenancy.domain.value_objects.tenant_status import TenantStatus
 
 __all__ = [
     "TenantApiAuthMode",
@@ -24,4 +25,5 @@ __all__ = [
     "TenantDomainVerificationStatus",
     "TenantDomainStatus",
     "TenantServiceType",
+    "TenantStatus",
 ]

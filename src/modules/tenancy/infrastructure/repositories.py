@@ -20,6 +20,7 @@ from src.modules.tenancy.domain.value_objects.tenant_domian_status import (
 from src.modules.tenancy.domain.value_objects.tenant_service_type import (
     TenantServiceType,
 )
+from src.modules.tenancy.domain.value_objects.tenant_status import TenantStatus
 from src.modules.tenancy.application.admin_onboarding.ports.repositories import (
     TenantDomainRepositoryProtocol,
     TenantRepositoryProtocol,
@@ -40,6 +41,7 @@ class SqlAlchemyTenantRepository(TenantRepositoryProtocol):
             TenantModel(
                 id=tenant.id,
                 name=tenant.name,
+                external_id=tenant.external_id,
                 status=tenant.status,
                 custom_config=tenant.custom_config,
                 created_at=tenant.created_at,
@@ -64,6 +66,14 @@ class SqlAlchemyTenantRepository(TenantRepositoryProtocol):
             return None
         return self._map_tenant(model)
 
+    async def exists_by_external_id(self, external_id: str) -> bool:
+        tenant_id = await self._session.scalar(
+            select(TenantModel.id)
+            .where(TenantModel.external_id == external_id)
+            .limit(1)
+        )
+        return tenant_id is not None
+
     async def exists_by_name(self, name: str) -> bool:
         tenant_id = await self._session.scalar(
             select(TenantModel.id).where(TenantModel.name == name).limit(1)
@@ -75,7 +85,8 @@ class SqlAlchemyTenantRepository(TenantRepositoryProtocol):
         return Tenant(
             id=_to_uuid(model.id),
             name=model.name,
-            status=model.status,
+            external_id=model.external_id,
+            status=TenantStatus(model.status),
             custom_config=model.custom_config,
             created_at=model.created_at,
             updated_at=model.updated_at,
@@ -119,15 +130,30 @@ class SqlAlchemyTenantDomainRepository(TenantDomainRepositoryProtocol):
 
     async def get_by_host(self, host: str) -> TenantDomain | None:
         model = await self._session.scalar(
-            select(TenantDomainModel).where(TenantDomainModel.host == host)
+            select(TenantDomainModel)
+            .where(TenantDomainModel.host == host)
+            .where(TenantDomainModel.status != TenantDomainStatus.DELETED)
         )
         if model is None:
             return None
         return self._map_domain(model)
 
+    async def get_api_host_by_tenant_id(self, tenant_id: UUID) -> str | None:
+        return await self._session.scalar(
+            select(TenantDomainModel.host)
+            .where(TenantDomainModel.tenant_id == str(tenant_id))
+            .where(TenantDomainModel.service_type == TenantServiceType.API)
+            .where(TenantDomainModel.status != TenantDomainStatus.DELETED)
+            .order_by(TenantDomainModel.is_primary.desc(), TenantDomainModel.created_at)
+            .limit(1)
+        )
+
     async def exists_by_host(self, host: str) -> bool:
         domain_id = await self._session.scalar(
-            select(TenantDomainModel.id).where(TenantDomainModel.host == host).limit(1)
+            select(TenantDomainModel.id)
+            .where(TenantDomainModel.host == host)
+            .where(TenantDomainModel.status != TenantDomainStatus.DELETED)
+            .limit(1)
         )
         return domain_id is not None
 

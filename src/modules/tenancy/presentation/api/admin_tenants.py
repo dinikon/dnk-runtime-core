@@ -9,12 +9,13 @@ from src.modules.identity.domain.errors import UserEmailAlreadyExistsError
 from src.modules.shared.domain.errors import ValidationError as DomainValidationError
 from src.modules.tenancy.domain.errors import (
     TenantDomainHostAlreadyExistsError,
+    TenantExternalIdAlreadyExistsError,
     TenantNameAlreadyExistsError,
 )
 from src.modules.tenancy.application.admin_onboarding.dto import (
     CreateTenantCommandDTO,
 )
-from src.modules.tenancy.presentation.depends.authorization import (
+from src.modules.tenancy.presentation.depends.control_plane_auth import (
     AdminCreateTenantAuthorizationDep,
 )
 from src.modules.tenancy.presentation.depends.use_cases import CreateTenantUseCaseDep
@@ -24,6 +25,7 @@ router = APIRouter(tags=["admin-tenants"])
 
 class TenantCreatePartSchema(BaseModel):
     name: str
+    external_id: str
 
 
 class TenantDomainCreatePartSchema(BaseModel):
@@ -67,6 +69,7 @@ async def create_tenant(
 ) -> AdminCreateTenantResponseSchema:
     dto = CreateTenantCommandDTO(
         tenant_name=payload.tenant.name,
+        external_id=payload.tenant.external_id,
         tenant_domain_host=payload.tenant_domain.host,
         user_last_name=payload.user.last_name,
         user_first_name=payload.user.first_name,
@@ -77,6 +80,7 @@ async def create_tenant(
         result = await use_case.execute(dto)
     except (
         TenantNameAlreadyExistsError,
+        TenantExternalIdAlreadyExistsError,
         UserEmailAlreadyExistsError,
         TenantDomainHostAlreadyExistsError,
     ) as exc:

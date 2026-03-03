@@ -6,13 +6,15 @@ from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from src.application.admin_tenants.services.user_service import UserService
-from src.common.db.base import Base
-from src.domain.common.errors import UserEmailAlreadyExistsError
-from src.infrastructure.admin_tenants.repositories import SqlAlchemyUserRepository
-from src.infrastructure.persistence.tenant import TenantModel
-from src.infrastructure.persistence.user import UserModel
-from src.infrastructure.persistence.user_email import UserEmailModel
+from src.modules.identity.application.provisioning.services.user_service import (
+    UserService,
+)
+from src.modules.identity.domain.errors import UserEmailAlreadyExistsError
+from src.modules.identity.infrastructure.persistence.user import UserModel
+from src.modules.identity.infrastructure.persistence.user_email import UserEmailModel
+from src.modules.identity.infrastructure.repositories import SqlAlchemyUserRepository
+from src.modules.shared.db.base import Base
+from src.modules.tenancy.infrastructure.persistence.tenant import TenantModel
 
 
 class UserServiceTests(unittest.IsolatedAsyncioTestCase):
@@ -81,6 +83,7 @@ class SqlAlchemyUserRepositoryTests(unittest.IsolatedAsyncioTestCase):
                 TenantModel(
                     id=tenant_id,
                     name="Acme",
+                    external_id="tenant-acme",
                     status="active",
                     custom_config=None,
                     created_at=now,
@@ -91,6 +94,7 @@ class SqlAlchemyUserRepositoryTests(unittest.IsolatedAsyncioTestCase):
                 TenantModel(
                     id=other_tenant_id,
                     name="Beta",
+                    external_id="tenant-beta",
                     status="active",
                     custom_config=None,
                     created_at=now,
