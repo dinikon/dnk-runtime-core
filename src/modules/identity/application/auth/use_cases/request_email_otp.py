@@ -20,10 +20,9 @@ from src.modules.identity.application.auth.services.otp_service import (
 )
 from src.modules.identity.domain.errors import (
     PrimaryUserEmailNotFoundError,
-    TenantHostNotFoundError,
-    TenantLoginUnavailableError,
     UserLoginUnavailableError,
 )
+from src.modules.shared.http.host import normalize_host
 
 
 class RequestEmailOtpUseCase:
@@ -47,17 +46,10 @@ class RequestEmailOtpUseCase:
         self,
         dto: RequestEmailOtpCommandDTO,
     ) -> RequestEmailOtpResultDTO:
-        host = dto.host.strip().lower()
+        host = normalize_host(dto.host)
         email = dto.email.strip().lower()
 
         tenant_context = await self._tenant_context_reader.get_by_host(host)
-        if tenant_context is None:
-            raise TenantHostNotFoundError(host)
-        if (
-            tenant_context.tenant_status != "active"
-            or tenant_context.domain_status != "active"
-        ):
-            raise TenantLoginUnavailableError(host)
 
         user = await self._users_repository.get_by_tenant_and_primary_email(
             tenant_context.tenant_id,

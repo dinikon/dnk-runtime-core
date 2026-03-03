@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-from uuid import UUID
-
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, EmailStr
 
 from src.modules.identity.domain.errors import UserEmailAlreadyExistsError
 from src.modules.shared.domain.errors import ValidationError as DomainValidationError
@@ -15,47 +12,18 @@ from src.modules.tenancy.domain.errors import (
 from src.modules.tenancy.application.admin_onboarding.dto import (
     CreateTenantCommandDTO,
 )
+from src.modules.tenancy.presentation.api.requests.admin_tenants import (
+    AdminCreateTenantRequestSchema,
+)
+from src.modules.tenancy.presentation.api.responses.admin_tenants import (
+    AdminCreateTenantResponseSchema,
+)
 from src.modules.tenancy.presentation.depends.control_plane_auth import (
     AdminCreateTenantAuthorizationDep,
 )
 from src.modules.tenancy.presentation.depends.use_cases import CreateTenantUseCaseDep
 
 router = APIRouter(tags=["admin-tenants"])
-
-
-class TenantCreatePartSchema(BaseModel):
-    name: str
-    external_id: str
-
-
-class TenantDomainCreatePartSchema(BaseModel):
-    host: str
-
-
-class UserCreatePartSchema(BaseModel):
-    last_name: str
-    first_name: str
-
-
-class UserEmailCreatePartSchema(BaseModel):
-    email: EmailStr
-
-
-class AdminCreateTenantRequestSchema(BaseModel):
-    tenant: TenantCreatePartSchema
-    tenant_domain: TenantDomainCreatePartSchema
-    user: UserCreatePartSchema
-    user_email: UserEmailCreatePartSchema
-
-
-class AdminCreateTenantResponseSchema(BaseModel):
-    tenant_id: UUID
-    user_id: UUID
-    user_email_id: UUID
-    tenant_domain_id: UUID
-    tenant_status: str
-    user_status: str
-    tenant_domain_host: str
 
 
 @router.post(

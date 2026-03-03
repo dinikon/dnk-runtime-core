@@ -8,6 +8,14 @@ from src.modules.tenancy.application.request_context_by_host.dto import (
     GetTenantRequestContextByHostQueryDTO,
     TenantRequestContextDTO,
 )
+from src.modules.tenancy.domain.errors import (
+    TenantHostNotFoundError,
+    TenantLoginUnavailableError,
+)
+from src.modules.tenancy.domain.value_objects.tenant_domian_status import (
+    TenantDomainStatus,
+)
+from src.modules.shared.http.host import normalize_host
 
 
 class GetTenantRequestContextByHostUseCase:
@@ -22,20 +30,25 @@ class GetTenantRequestContextByHostUseCase:
     async def execute(
         self,
         dto: GetTenantRequestContextByHostQueryDTO,
-    ) -> TenantRequestContextDTO | None:
-        normalized_host = dto.host.strip().lower()
+    ) -> TenantRequestContextDTO:
+        normalized_host = normalize_host(dto.host)
         if not normalized_host:
-            return None
+            raise TenantHostNotFoundError(normalized_host)
 
         tenant_domain = await self._tenant_domains_repository.get_by_host(
             normalized_host
         )
         if tenant_domain is None:
-            return None
+            raise TenantHostNotFoundError(normalized_host)
 
         tenant = await self._tenants_repository.get_by_id(tenant_domain.tenant_id)
         if tenant is None:
-            return None
+            raise TenantHostNotFoundError(normalized_host)
+        if (
+            tenant_domain.status != TenantDomainStatus.ACTIVE
+            or not tenant.allows_login()
+        ):
+            raise TenantLoginUnavailableError(normalized_host)
 
         api_host = await self._tenant_domains_repository.get_api_host_by_tenant_id(
             tenant.id

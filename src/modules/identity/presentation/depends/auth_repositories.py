@@ -36,12 +36,10 @@ class TenancyTenantContextReaderAdapter(TenantContextReaderPort):
     def __init__(self, use_case: TenantRequestContextByHostUseCaseDep):
         self._use_case = use_case
 
-    async def get_by_host(self, host: str) -> TenantRequestContext | None:
+    async def get_by_host(self, host: str) -> TenantRequestContext:
         result = await self._use_case.execute(
             GetTenantRequestContextByHostQueryDTO(host=host)
         )
-        if result is None:
-            return None
         return TenantRequestContext(
             tenant_id=result.tenant_id,
             tenant_domain_id=result.tenant_domain_id,

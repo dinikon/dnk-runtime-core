@@ -26,10 +26,9 @@ from src.modules.identity.domain.errors import (
     InvalidOtpChallengeError,
     InvalidOtpCodeError,
     PrimaryUserEmailNotFoundError,
-    TenantHostNotFoundError,
-    TenantLoginUnavailableError,
     UserLoginUnavailableError,
 )
+from src.modules.shared.http.host import normalize_host
 
 
 class ConfirmEmailOtpUseCase:
@@ -57,17 +56,10 @@ class ConfirmEmailOtpUseCase:
         self,
         dto: ConfirmEmailOtpCommandDTO,
     ) -> ConfirmEmailOtpResultDTO:
-        host = dto.host.strip().lower()
+        host = normalize_host(dto.host)
         email = dto.email.strip().lower()
 
         tenant_context = await self._tenant_context_reader.get_by_host(host)
-        if tenant_context is None:
-            raise TenantHostNotFoundError(host)
-        if (
-            tenant_context.tenant_status != "active"
-            or tenant_context.domain_status != "active"
-        ):
-            raise TenantLoginUnavailableError(host)
 
         challenge = await self._otp_challenge_store.get_challenge(
             tenant_context.tenant_id,

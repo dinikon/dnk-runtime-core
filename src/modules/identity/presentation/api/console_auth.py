@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-from uuid import UUID
-
 from fastapi import APIRouter, HTTPException, Request, Response, status
-from pydantic import BaseModel, EmailStr
 
 from src.modules.identity.application.auth.dto import (
     ConfirmEmailOtpCommandDTO,
@@ -14,9 +11,16 @@ from src.modules.identity.domain.errors import (
     InvalidOtpChallengeError,
     InvalidOtpCodeError,
     PrimaryUserEmailNotFoundError,
-    TenantHostNotFoundError,
-    TenantLoginUnavailableError,
     UserLoginUnavailableError,
+)
+from src.modules.identity.presentation.api.requests.console_auth import (
+    ConfirmEmailOtpRequestSchema,
+    RequestEmailOtpRequestSchema,
+)
+from src.modules.identity.presentation.api.responses.console_auth import (
+    ConfirmEmailOtpResponseSchema,
+    LogoutCurrentSessionResponseSchema,
+    RequestEmailOtpResponseSchema,
 )
 from src.modules.identity.presentation.depends.auth_services import AuthSettingsDep
 from src.modules.identity.presentation.depends.auth_use_cases import (
@@ -24,33 +28,13 @@ from src.modules.identity.presentation.depends.auth_use_cases import (
     LogoutCurrentSessionUseCaseDep,
     RequestEmailOtpUseCaseDep,
 )
+from src.modules.shared.depends.request_host import RequestHostDep
+from src.modules.tenancy.domain.errors import (
+    TenantHostNotFoundError,
+    TenantLoginUnavailableError,
+)
 
 router = APIRouter(tags=["console-auth"])
-
-
-class RequestEmailOtpRequestSchema(BaseModel):
-    email: EmailStr
-
-
-class RequestEmailOtpResponseSchema(BaseModel):
-    token: str
-    expires_in: int
-
-
-class ConfirmEmailOtpRequestSchema(BaseModel):
-    email: EmailStr
-    token: str
-    code: str
-
-
-class ConfirmEmailOtpResponseSchema(BaseModel):
-    ok: bool
-    user_id: UUID
-    tenant_id: UUID
-
-
-class LogoutCurrentSessionResponseSchema(BaseModel):
-    ok: bool
 
 
 @router.post(
@@ -59,13 +43,13 @@ class LogoutCurrentSessionResponseSchema(BaseModel):
 )
 async def request_email_otp(
     payload: RequestEmailOtpRequestSchema,
-    request: Request,
+    host: RequestHostDep,
     use_case: RequestEmailOtpUseCaseDep,
 ) -> RequestEmailOtpResponseSchema:
     try:
         result = await use_case.execute(
             RequestEmailOtpCommandDTO(
-                host=_get_request_host(request),
+                host=host,
                 email=str(payload.email),
             )
         )
@@ -94,7 +78,7 @@ async def request_email_otp(
 )
 async def confirm_email_otp(
     payload: ConfirmEmailOtpRequestSchema,
-    request: Request,
+    host: RequestHostDep,
     response: Response,
     settings: AuthSettingsDep,
     use_case: ConfirmEmailOtpUseCaseDep,
@@ -102,7 +86,7 @@ async def confirm_email_otp(
     try:
         result = await use_case.execute(
             ConfirmEmailOtpCommandDTO(
-                host=_get_request_host(request),
+                host=host,
                 email=str(payload.email),
                 token=payload.token,
                 code=payload.code,
@@ -148,13 +132,14 @@ async def confirm_email_otp(
 async def logout_current_session(
     request: Request,
     response: Response,
+    host: RequestHostDep,
     settings: AuthSettingsDep,
     use_case: LogoutCurrentSessionUseCaseDep,
 ) -> LogoutCurrentSessionResponseSchema:
     try:
         result = await use_case.execute(
             LogoutCurrentSessionCommandDTO(
-                host=_get_request_host(request),
+                host=host,
                 session_token=request.cookies.get(settings.session_cookie_name),
             )
         )
@@ -173,10 +158,6 @@ async def logout_current_session(
         samesite="lax",
     )
     return LogoutCurrentSessionResponseSchema(ok=result.ok)
-
-
-def _get_request_host(request: Request) -> str:
-    return request.url.hostname or request.headers.get("host", "")
 
 
 __all__ = ["router"]

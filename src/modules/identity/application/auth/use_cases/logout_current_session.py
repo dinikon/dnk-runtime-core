@@ -10,10 +10,7 @@ from src.modules.identity.application.auth.ports.tenant_context import (
 from src.modules.identity.application.auth.ports.token_store import (
     SessionStorePort,
 )
-from src.modules.identity.domain.errors import (
-    TenantHostNotFoundError,
-    TenantLoginUnavailableError,
-)
+from src.modules.shared.http.host import normalize_host
 
 
 class LogoutCurrentSessionUseCase:
@@ -29,15 +26,8 @@ class LogoutCurrentSessionUseCase:
         self,
         dto: LogoutCurrentSessionCommandDTO,
     ) -> LogoutCurrentSessionResultDTO:
-        host = dto.host.strip().lower()
+        host = normalize_host(dto.host)
         tenant_context = await self._tenant_context_reader.get_by_host(host)
-        if tenant_context is None:
-            raise TenantHostNotFoundError(host)
-        if (
-            tenant_context.tenant_status != "active"
-            or tenant_context.domain_status != "active"
-        ):
-            raise TenantLoginUnavailableError(host)
 
         if not dto.session_token:
             return LogoutCurrentSessionResultDTO(ok=True)

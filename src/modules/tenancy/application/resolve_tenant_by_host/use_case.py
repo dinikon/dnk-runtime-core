@@ -8,7 +8,7 @@ from src.modules.tenancy.application.resolve_tenant_by_host.dto import (
     ResolveTenantByHostQueryDTO,
     ResolveTenantByHostResultDTO,
 )
-from src.modules.tenancy.domain.value_objects.tenant_status import TenantStatus
+from src.modules.shared.http.host import normalize_host
 
 
 class ResolveTenantByHostUseCase:
@@ -24,7 +24,7 @@ class ResolveTenantByHostUseCase:
         self,
         dto: ResolveTenantByHostQueryDTO,
     ) -> ResolveTenantByHostResultDTO:
-        normalized_host = dto.host.strip().lower()
+        normalized_host = normalize_host(dto.host)
         if not normalized_host:
             return ResolveTenantByHostResultDTO(
                 exists=False,
@@ -64,7 +64,7 @@ class ResolveTenantByHostUseCase:
 
         return ResolveTenantByHostResultDTO(
             exists=True,
-            available=tenant.status == TenantStatus.ACTIVE,
+            available=tenant.allows_login(),
             status=tenant.status.value,
             tenant_id=tenant.id,
             api_host=api_host,
