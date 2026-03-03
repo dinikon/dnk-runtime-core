@@ -12,8 +12,10 @@ from pydantic_settings import (
 )
 
 from src.libs.file_utils import search_file_upwards
+from .auth_config import IdentityAuthConfig
 from .control_plane import ControlPlaneConfig
 from .infrastructure import DatabaseConfig
+from .redis_config import RedisConfig
 
 # from .deploy import DeploymentConfig
 # from .enterprise import EnterpriseFeatureConfig
@@ -87,6 +89,10 @@ PYPROJECT_TOML_PATH = search_file_upwards(
 class DnkConfig(
     # Infra config
     DatabaseConfig,
+    # Redis config
+    RedisConfig,
+    # Auth config
+    IdentityAuthConfig,
     # Control Plane config
     ControlPlaneConfig,
     # Packaging info
@@ -111,6 +117,7 @@ class DnkConfig(
         # read from dotenv format config file
         env_file=ENV_FILE_PATH,
         env_file_encoding="utf-8",
+        env_nested_delimiter="__",
         # ignore extra attributes
         extra="ignore",
     )

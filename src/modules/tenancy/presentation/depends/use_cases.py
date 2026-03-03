@@ -7,6 +7,9 @@ from fastapi import Depends
 from src.modules.tenancy.application.admin_onboarding.use_cases.create_tenant import (
     CreateTenantUseCase,
 )
+from src.modules.tenancy.application.request_context_by_host.use_case import (
+    GetTenantRequestContextByHostUseCase,
+)
 from src.modules.tenancy.application.resolve_tenant_by_host.use_case import (
     ResolveTenantByHostUseCase,
 )
@@ -57,9 +60,27 @@ ResolveTenantByHostUseCaseDep = Annotated[
     Depends(get_resolve_tenant_by_host_use_case),
 ]
 
+
+def get_tenant_request_context_by_host_use_case(
+    tenants_repository: TenantsRepositoryDep,
+    tenant_domains_repository: TenantDomainsRepositoryDep,
+) -> GetTenantRequestContextByHostUseCase:
+    return GetTenantRequestContextByHostUseCase(
+        tenants_repository=tenants_repository,
+        tenant_domains_repository=tenant_domains_repository,
+    )
+
+
+TenantRequestContextByHostUseCaseDep = Annotated[
+    GetTenantRequestContextByHostUseCase,
+    Depends(get_tenant_request_context_by_host_use_case),
+]
+
 __all__ = [
     "get_create_tenant_use_case",
     "CreateTenantUseCaseDep",
     "get_resolve_tenant_by_host_use_case",
     "ResolveTenantByHostUseCaseDep",
+    "get_tenant_request_context_by_host_use_case",
+    "TenantRequestContextByHostUseCaseDep",
 ]

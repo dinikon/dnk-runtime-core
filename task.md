@@ -1,346 +1,693 @@
 ## 1. Цель
 
-Нужно доработать модуль `tenancy` в текущей архитектуре проекта (**DDD + Clean Architecture**) для двух сценариев:
+Нужно добавить в проект полноценный auth-flow для пользователей системы, где авторизация всегда привязана к **конкретному Tenant и его домену**.
 
-1. Расширить существующий endpoint `POST /api/admin/create-tenant`, чтобы его мог вызывать `ControlPlane` с server-to-server авторизацией по `API_KEY`, а также передавать `external_id`.
-2. Добавить endpoint `GET /api/console/tenants/resolve`, который по `host` клиента определяет, существует ли Tenant на данном домене, и возвращает его состояние.
-
-Дополнительно нужно расширить модель Tenant новым статусом: `freeze`.
+Реализация должна лечь в текущую модульную структуру `src/modules`, не ломать правило **1 request = 1 UoW = 1 SQLAlchemy session**, и соблюдать границы bounded contexts: `tenancy` владеет Tenant/Domain, `identity` владеет User/UserEmail, а `shared` хранит только технические cross-module компоненты.   
 
 ---
 
-## 2. Изменения в существующем create endpoint
+## 2. Бизнес-идея
 
-## 2.1. Используем существующий endpoint
+Каждый Tenant работает на своем домене, поэтому **каждый auth-запрос должен проверять, с какого host он пришел**.
 
-Новый endpoint создавать не нужно.
+Базовый пользовательский путь:
 
-Дорабатываем **существующий**:
+1. Пользователь открывает сайт Tenant.
+2. Фронтенд вызывает `GET /api/console/tenants/resolve`.
+3. Если Tenant активен — показывается форма логина.
+4. Пользователь вводит email.
+5. Бэкенд генерирует `token` + `code`, отправляет `code` на email, а `token` возвращает фронтенду.
+6. Пользователь вводит code.
+7. Фронтенд отправляет `token + code + email` в `confirm_otp`.
+8. Если все валидно — бэкенд создает session в Redis и выставляет **session cookie на тот же host**, с которого пришел запрос.
+9. Для выхода из системы отдельный endpoint инвалидирует session и очищает cookie.
+
+---
+
+## 3. Ключевые бизнес-правила
+
+### 3.1. Tenant всегда определяется по host
+
+Для `request_otp`, `confirm_otp` и `logout` backend **на каждом запросе заново**:
+
+* берет `host` из request;
+* нормализует `host` (`strip().lower()`);
+* проверяет, что этот host принадлежит не удаленному `TenantDomain`;
+* проверяет, что Tenant в допустимом статусе для логина.
+
+Нельзя доверять только фронтенду. Даже если фронт уже вызвал `resolve`, backend должен повторно валидировать tenant-context.
+
+---
+
+### 3.2. Email должен проверяться в контексте Tenant
+
+Сейчас в проекте email уникален **только внутри конкретного tenant**, а одинаковый email в разных tenant разрешен. Нормализация email уже заложена как `.strip().lower()`. 
+
+Значит логин по email должен искать пользователя **внутри текущего tenant**, а не глобально.
+
+---
+
+### 3.3. Логин только через primary email
+
+Рекомендуемое правило для этого сценария:
+
+* авторизация разрешена только по `UserEmail`, где `is_primary = true`;
+* `UserEmail` с `is_deleted = true` не участвует;
+* после успешного `confirm_otp` можно пометить email как подтвержденный (`is_verified = true`), если он еще не подтвержден.
+
+---
+
+### 3.4. OTP challenge должен быть привязан к tenant + host + email
+
+Чтобы нельзя было использовать token между разными tenant/доменами, OTP challenge в Redis должен быть связан с:
+
+* `tenant_id`
+* `tenant_domain_id`
+* `host`
+* `email`
+
+То есть `confirm_otp` валидирует не только `token` и `code`, но и совпадение tenant-context.
+
+---
+
+## 4. API endpoints
+
+Рекомендуемый console API:
 
 ```text
-POST /api/admin/create-tenant
+POST /api/console/auth/request-otp
+POST /api/console/auth/confirm-otp
+POST /api/console/auth/logout
 ```
+
+`GET /api/console/tenants/resolve` уже используется как pre-check до показа формы.
 
 ---
 
-## 2.2. Авторизация для вызова от `ControlPlane`
+## 5. Контракт endpoint'ов
 
-Запрос на создание Tenant должен быть доступен для server-to-server вызова от `ControlPlane`.
+## 5.1. `POST /api/console/auth/request-otp`
 
-**Требования:**
+### Request
 
-* endpoint должен быть защищен по `API_KEY`;
-* ключ хранится в `config/` проекта;
-* значение читается из переменной окружения через **Pydantic Settings**;
-* ключ передается в заголовке:
+Пользователь отправляет:
 
-```http
-Authorization: Bearer <API_KEY>
+```json
+{
+  "email": "john@example.com"
+}
 ```
 
-* при отсутствии заголовка или неверном ключе возвращать `401 Unauthorized`.
+### Backend flow
+
+1. Получить `host` из request.
+2. Через `tenancy` проверить, что на host есть активный Tenant.
+3. Нормализовать email.
+4. Найти `UserEmail` внутри текущего tenant:
+
+   * `is_primary = true`
+   * `is_deleted = false`
+5. Сгенерировать:
+
+   * `token` — случайная строка
+   * `code` — цифровой код длиной из config
+6. Сохранить challenge в Redis через `TokenManager`.
+7. Отправить `code` на email.
+8. Вернуть `token` и TTL.
+
+### Response
+
+```json
+{
+  "token": "otp_xxx",
+  "expires_in": 300
+}
+```
 
 **Важно:**
-Так как endpoint остается `POST /api/admin/create-tenant`, нужно встроить эту проверку в текущий flow данного route, не создавая отдельного internal route.
+`code` в response не возвращать. Только отправка на email.
 
 ---
 
-## 2.3. Добавить `external_id` в create flow
+## 5.2. `POST /api/console/auth/confirm-otp`
 
-В существующий сценарий создания Tenant нужно добавить новое поле:
+### Request
 
-* `external_id` — идентификатор Tenant в системе `ControlPlane`.
+```json
+{
+  "email": "john@example.com",
+  "token": "otp_xxx",
+  "code": "123456"
+}
+```
 
-**Требования:**
+### Backend flow
 
-* `external_id` должен приходить в request DTO;
-* `external_id` должен передаваться в use case;
-* `external_id` должен сохраняться в сущности Tenant;
-* `external_id` должен сохраняться в БД.
+1. Получить `host` из request.
+2. Повторно resolve Tenant по host.
+3. Нормализовать email.
+4. Загрузить OTP challenge из Redis по `token`.
+5. Проверить:
 
-**Рекомендуемо:**
+   * challenge существует;
+   * не истек TTL;
+   * `email` совпадает;
+   * `host` совпадает;
+   * `tenant_id` / `tenant_domain_id` совпадают;
+   * `code` валиден.
+6. Повторно найти `UserEmail` в БД в рамках tenant:
 
-* сделать `external_id` уникальным.
+   * на случай, если пользователь был удален/деактивирован между шагами.
+7. Создать session token.
+8. Сохранить session в Redis.
+9. Инвалидировать OTP challenge.
+10. Выставить session cookie в response.
+11. При необходимости обновить `UserEmail.is_verified = true`.
+12. Сделать `commit()` в конце use case.
+
+### Response
+
+```json
+{
+  "ok": true,
+  "user_id": "019c....",
+  "tenant_id": "019c...."
+}
+```
+
+Плюс `Set-Cookie` с session token.
 
 ---
 
-## 3. Новый endpoint resolve Tenant
+## 5.3. `POST /api/console/auth/logout`
 
-Нужно добавить endpoint:
+### Request
+
+Тело не обязательно. Session читается из cookie.
+
+### Backend flow
+
+1. Получить `host` из request.
+2. Resolve Tenant по host.
+3. Прочитать session token из cookie.
+4. Найти session в Redis.
+5. Проверить, что session принадлежит:
+
+   * этому `tenant_id`
+   * этому `tenant_domain_id`
+   * этому `host`
+6. Инвалидировать session token в Redis.
+7. Вернуть response с очисткой cookie (`max-age=0` / expired).
+
+### Response
+
+```json
+{
+  "ok": true
+}
+```
+
+---
+
+## 6. Архитектура по модулям
+
+## 6.1. `modules/tenancy`
+
+`tenancy` уже владеет `Tenant` и `TenantDomain`, поэтому именно он остается источником истины для проверки host. 
+
+### Что использовать
+
+* существующий `GET /api/console/tenants/resolve` как внешний pre-check для UI;
+* внутри auth-flow — отдельный application port / use case для получения `TenantRequestContext` по host.
+
+### Что нужно добавить/использовать
+
+В `tenancy` желательно иметь read-scenario уровня:
+
+* `ResolveActiveTenantByHostUseCase`
+  или
+* `GetTenantRequestContextByHostUseCase`
+
+Он должен вернуть минимальный контекст:
+
+* `tenant_id`
+* `tenant_domain_id`
+* `host`
+* `tenant_status`
+* `domain_status`
+* `api_host` / `service_type` (если нужно)
+
+Этот сценарий не должен импортироваться через ORM из `identity`; взаимодействие только через port/adapter.
+
+---
+
+## 6.2. `modules/identity`
+
+`identity` уже владеет `User` и `UserEmail`, поэтому auth-flow должен жить именно здесь, как новый bounded-context сценарий поверх существующего provisioning-направления. 
+
+### Новый application slice
+
+Рекомендуется добавить новый раздел:
 
 ```text
-GET /api/console/tenants/resolve
+src/modules/identity/application/auth/
+```
+
+Внутри:
+
+* `dto.py`
+* `ports/`
+* `services/`
+* `use_cases/`
+
+### Нужные use cases
+
+1. `RequestEmailOtpUseCase`
+2. `ConfirmEmailOtpUseCase`
+3. `LogoutCurrentSessionUseCase`
+
+---
+
+## 6.3. `modules/shared`
+
+`shared` по вашему контексту хранит только действительно общие технические компоненты, а не бизнес-логику конкретного модуля. Поэтому `TokenManager` — хороший кандидат именно для `shared`, так как это инфраструктурный reusable-компонент для Redis token storage. 
+
+---
+
+## 7. Shared `TokenManager`
+
+## 7.1. Назначение
+
+Нужен общий `TokenManager`, который умеет работать с Redis-ключами для:
+
+* OTP challenge
+* session token
+* в будущем — reset password, invite links, magic links и т.д.
+
+Это не domain-service `identity`, а **технический storage-manager**.
+
+---
+
+## 7.2. Где разместить
+
+Рекомендуемо:
+
+```text
+src/modules/shared/tokens/
+  manager.py
+  protocols.py
+  models.py
+```
+
+или проще:
+
+```text
+src/modules/shared/token_manager.py
+```
+
+Но лучше отдельной папкой.
+
+---
+
+## 7.3. Модель ключа
+
+У токена должны быть:
+
+* `prefix`
+* `suffix`
+* `token`
+* `body`
+* `ttl`
+
+### Рекомендуемый формат Redis key
+
+```text
+<prefix>:<suffix>:<token>
+```
+
+### Примеры
+
+* OTP:
+
+```text
+otp_login:<tenant_id>:<token>
+```
+
+* Session:
+
+```text
+session:<tenant_id>:<token>
+```
+
+Если хотите сильнее привязать к host, можно suffix делать составным:
+
+```text
+otp_login:<tenant_id>:<tenant_domain_id>:<token>
+session:<tenant_id>:<host_hash>:<token>
 ```
 
 ---
 
-## 3.1. Назначение
+## 7.4. Что хранить в `body`
 
-Endpoint должен:
+### Для OTP
 
-1. принимать входящий запрос;
-2. брать `host` клиента из request;
-3. искать Tenant по этому host;
-4. учитывать только не удаленные домены;
-5. возвращать состояние Tenant.
-
----
-
-## 3.2. Источник host
-
-`host` не передается в body.
-
-Нужно брать его из HTTP request:
-
-* из `Host` header / request host.
-
-Перед поиском `host` нужно нормализовать:
-
-* `strip()`
-* `lower()`
-
----
-
-## 3.3. Логика поиска
-
-Ищем Tenant через `TenantDomain`:
-
-* по `TenantDomain.host`
-* только среди записей, где домен **не удален**
-* `is_deleted = false`
-
-Если домен найден — получаем связанный Tenant и анализируем его статус.
-
----
-
-## 4. Новый статус Tenant
-
-Для Tenant нужно добавить новый статус:
-
-* `freeze`
-
-Итого поддерживаем:
-
-* `active`
-* `freeze`
-
----
-
-## 5. Поведение `GET /api/console/tenants/resolve`
-
-## 5.1. Если Tenant найден и статус `active`
-
-Возвращаем, что Tenant существует и доступен.
-
-**Ответ:**
-
-* `exists = true`
-* `available = true`
-* `status = active`
+* `email`
 * `tenant_id`
-* домен, который используется для API (`api_host`)
+* `tenant_domain_id`
+* `host`
+* `code_hash`
+* `created_at`
 
-**Пример:**
+**Важно:**
+в Redis лучше хранить не raw `code`, а `code_hash`.
 
-```json
-{
-  "exists": true,
-  "available": true,
-  "status": "active",
-  "tenant_id": "019c....",
-  "api_host": "api.acme.example.com"
-}
-```
+### Для session
 
----
-
-## 5.2. Если Tenant найден и статус `freeze`
-
-Возвращаем, что Tenant существует, но недоступен для нормальной работы.
-
-**Ответ:**
-
-* `exists = true`
-* `available = false`
-* `status = freeze`
+* `session_id` (логический id, если нужен)
+* `user_id`
 * `tenant_id`
-* `api_host`
+* `tenant_domain_id`
+* `host`
+* `issued_at`
+* `expires_at`
 
-**Пример:**
+---
 
-```json
-{
-  "exists": true,
-  "available": false,
-  "status": "freeze",
-  "tenant_id": "019c....",
-  "api_host": "api.acme.example.com"
-}
+## 7.5. Методы `TokenManager`
+
+Обязательные методы:
+
+* `set_token(prefix, suffix, token, body, ttl) -> None`
+* `exists(prefix, suffix, token) -> bool`
+* `get_token(prefix, suffix, token) -> dict | None`
+* `invalidate(prefix, suffix, token) -> None`
+
+Дополнительно очень полезно добавить:
+
+* `consume_token(...) -> body | None`
+  (атомарно прочитать и удалить; идеально для OTP)
+
+Для `logout` достаточно:
+
+* прочитать session token из cookie;
+* `invalidate(...)`.
+
+---
+
+## 8. Конфиг
+
+Нужен отдельный config-файл и отдельный config-класс, который подключается к `DnkConfig`.
+
+## 8.1. Где разместить
+
+Рекомендуемо:
+
+```text
+src/config/auth_config.py
 ```
 
 ---
 
-## 5.3. Если Tenant не найден
+## 8.2. Класс настроек
 
-Если по host нет ни одного не удаленного домена — возвращаем:
+Рекомендуемое имя:
 
-```json
-{
-  "exists": false,
-  "available": false,
-  "status": "not_found",
-  "tenant_id": null,
-  "api_host": null
-}
+* `IdentityAuthConfig`
+
+И подключение в:
+
+* `DnkConfig`
+
+---
+
+## 8.3. Обязательные настройки
+
+1. `otp_code_length`
+2. `otp_token_ttl_seconds`
+3. `session_ttl_seconds`
+4. `session_cookie_name`
+
+Пример логики:
+
+* `otp_code_length = 6`
+* `otp_token_ttl_seconds = 300`
+* `session_ttl_seconds = 432000` (5 дней)
+* `session_cookie_name = "dnk_session"`
+
+---
+
+## 8.4. Как читать из env
+
+Лучше использовать nested-конфиг через `pydantic-settings`, чтобы значения приходили из env и собирались в `DnkConfig`.
+
+Пример подхода:
+
+* `AUTH__OTP_CODE_LENGTH`
+* `AUTH__OTP_TOKEN_TTL_SECONDS`
+* `AUTH__SESSION_TTL_SECONDS`
+* `AUTH__SESSION_COOKIE_NAME`
+
+---
+
+## 9. Application ports
+
+Чтобы не ломать модульные границы, в `identity.application.auth.ports` нужны отдельные контракты.
+
+## 9.1. `TenantContextReaderPort`
+
+Порт для получения tenant-context по `host`.
+
+Метод:
+
+* `get_active_by_host(host: str) -> TenantRequestContext | None`
+
+Реализация адаптера будет использовать `tenancy`, но без прямого импорта ORM другого модуля.
+
+---
+
+## 9.2. `UserEmailReaderPort`
+
+Для поиска primary email в рамках tenant.
+
+Методы:
+
+* `get_primary_active_email(tenant_id, email) -> UserEmail | None`
+
+---
+
+## 9.3. `OtpChallengeStorePort`
+
+Для хранения OTP challenge.
+
+Можно реализовать поверх shared `TokenManager`.
+
+Методы:
+
+* `create_challenge(...)`
+* `get_challenge(...)`
+* `invalidate_challenge(...)`
+
+---
+
+## 9.4. `SessionStorePort`
+
+Для хранения сессий в Redis.
+
+Тоже поверх shared `TokenManager`.
+
+Методы:
+
+* `create_session(...)`
+* `get_session(...)`
+* `invalidate_session(...)`
+
+---
+
+## 9.5. `EmailSenderPort`
+
+Технический порт для отправки кода на email.
+
+Метод:
+
+* `send_login_code(email, code)`
+
+Для MVP можно сделать stub/adapter.
+
+---
+
+## 10. Domain и application логика
+
+## 10.1. Что остается в domain
+
+В `identity.domain` должны оставаться бизнес-правила про:
+
+* допустимость логина пользователя;
+* работу с primary email;
+* подтверждение email (если это часть доменной логики).
+
+Но Redis token/session storage — это не domain, а infrastructure/application boundary.
+
+---
+
+## 10.2. Session как MVP
+
+Так как вы явно хотите хранить session в Redis, для MVP **не нужен SQL ORM для сессий**.
+
+Лучше сделать так:
+
+* session — это auth-state;
+* живет в `SessionStorePort` (Redis);
+* в БД его не дублируем;
+* при необходимости позже можно добавить отдельную persistence-модель.
+
+Это позволит не усложнять схему сейчас.
+
+---
+
+## 11. Cookie policy
+
+Session cookie должна выставляться **на тот же host**, с которого пришел запрос к Tenant.
+
+### Требования
+
+* `HttpOnly = true`
+* `Secure = true` (в prod)
+* `SameSite = "Lax"`
+* `Path = "/"`
+* `Max-Age = session_ttl_seconds`
+
+### Важно
+
+Не указывать общий `Domain=.example.com`, если хотите жестко изолировать tenant по host.
+Для multi-tenant по отдельным host безопаснее **host-only cookie**.
+
+---
+
+## 12. Последующая авторизация на защищенных endpoints
+
+Сразу стоит заложить shared/dependency flow для последующих запросов в console API:
+
+1. взять `host`;
+2. resolve tenant;
+3. прочитать session cookie;
+4. найти session в Redis;
+5. убедиться, что `tenant_id` и `host` совпадают;
+6. построить `AuthContext`.
+
+То есть login/logout — это только начало. После этого должен появиться reusable dependency вида:
+
+* `get_current_identity_session()`
+* `get_current_auth_context()`
+
+который потом будет использоваться в `crm`, `org`, `catalog` endpoints.
+
+---
+
+## 13. Структура файлов
+
+### Добавить в `identity`
+
+```text
+src/modules/identity/
+  application/
+    auth/
+      dto.py
+      ports/
+        tenant_context.py
+        repositories.py
+        token_store.py
+        email_sender.py
+      services/
+        otp_service.py
+        session_service.py
+      use_cases/
+        request_email_otp.py
+        confirm_email_otp.py
+        logout_current_session.py
+  presentation/
+    api/
+      console_auth.py
+    depends/
+      auth_repositories.py
+      auth_services.py
+      auth_use_cases.py
 ```
 
-**HTTP статус:**
+### Добавить в `shared`
 
-* `200 OK`
+```text
+src/modules/shared/
+  tokens/
+    protocols.py
+    manager.py
+    models.py
+    redis_adapter.py
+```
 
----
+### Добавить в `config`
 
-## 6. Архитектурная реализация по слоям
-
-## 6.1. Domain
-
-Нужно доработать сущность `Tenant`:
-
-* добавить поле `external_id`;
-* добавить поддержку статуса `freeze`.
-
-**Что обновить:**
-
-* фабрику / конструктор Tenant;
-* валидацию статуса;
-* enum / VO статуса Tenant.
-
----
-
-## 6.2. Application
-
-### A. Доработка существующего use case создания Tenant
-
-Нужно расширить текущий use case, который стоит за `POST /api/admin/create-tenant`:
-
-* принять `external_id`;
-* проверить бизнес-ограничения;
-* создать Tenant с новым полем.
-
-### B. Новый read use case: `ResolveTenantByHost`
-
-Новый use case должен:
-
-* принять `host`;
-* найти `TenantDomain` по host;
-* игнорировать удаленные домены;
-* загрузить Tenant;
-* вернуть response DTO.
-
----
-
-## 6.3. Infrastructure
-
-Нужно доработать persistence-слой:
-
-* добавить колонку `external_id` в таблицу Tenant;
-* расширить допустимые значения статуса (`freeze`);
-* обновить ORM mapping;
-* доработать repository метод для поиска по host.
-
-**Нужны методы уровня репозитория:**
-
-* `exists_by_external_id(...)`
-* `get_by_host(...)` или query-метод для resolve
-
----
-
-## 6.4. Presentation
-
-### Для `POST /api/admin/create-tenant`
-
-Нужно доработать текущий route:
-
-* добавить dependency / guard, который валидирует Bearer API key;
-* расширить request schema полем `external_id`.
-
-### Для `GET /api/console/tenants/resolve`
-
-Нужно добавить новый route:
-
-* читает `host` из request;
-* вызывает `ResolveTenantByHost`;
-* возвращает read-model response.
-
----
-
-## 6.5. Config
-
-Нужно добавить в settings:
-
-* `CONTROL_PLANE_API_KEY`
-
-Источник:
-
-* env variable
-* Pydantic Settings
-
----
-
-## 7. Что меняется по файлам
-
-### Добавить
-
-* `src/modules/tenancy/application/resolve_tenant_by_host/dto.py`
-* `src/modules/tenancy/application/resolve_tenant_by_host/use_case.py`
-* `src/modules/tenancy/presentation/api/console_tenants.py`
-* `src/modules/tenancy/presentation/depends/control_plane_auth.py`
+```text
+src/config/
+  auth_config.py
+```
 
 ### Изменить
 
-* `src/modules/tenancy/domain/entities.py`
-* `src/modules/tenancy/domain/value_objects/*` (если статус как VO)
-* `src/modules/tenancy/application/.../create_tenant*.py`
-* `src/modules/tenancy/infrastructure/persistence/tenant.py`
-* `src/modules/tenancy/infrastructure/repositories.py`
-* `src/modules/tenancy/presentation/api/admin*.py`
-* `src/modules/tenancy/presentation/api/router.py`
+* `src/config/app_config.py`
 * `src/modules/router.py`
-* `src/config/app_config.py` (или соответствующий settings module)
+  (сейчас у вас подключен только router `tenancy`, нужно добавить router `identity`) 
+* `src/modules/persistence.py`
+  (если появятся новые persistence-модули; для Redis-only session это может не понадобиться)
+* `src/modules/identity/presentation/api/router.py`
 
 ---
 
-## 8. Acceptance Criteria
+## 14. Acceptance Criteria
 
-1. `POST /api/admin/create-tenant` принимает Bearer API key.
-2. При отсутствии или неверном API key возвращается `401 Unauthorized`.
-3. `POST /api/admin/create-tenant` принимает `external_id`.
-4. При создании Tenant поле `external_id` сохраняется в доменной модели и БД.
-5. Tenant поддерживает статус `freeze`.
-6. `GET /api/console/tenants/resolve` читает `host` из request.
-7. Поиск идет только по `TenantDomain`, где `is_deleted = false`.
-8. Для `active` возвращается `exists=true`, `available=true`, `tenant_id`, `api_host`.
-9. Для `freeze` возвращается `exists=true`, `available=false`, `status=freeze`.
-10. Для отсутствующего host возвращается `exists=false`, `status=not_found`.
-11. Реализация не нарушает границы модуля `tenancy` и текущий `UoW` flow.
+1. `POST /api/console/auth/request-otp` принимает email и определяет Tenant по `host`.
+2. Запрос не проходит, если host не принадлежит активному Tenant.
+3. Email ищется только внутри текущего tenant.
+4. Логин разрешен только по primary email.
+5. Backend генерирует случайный `token` и цифровой `code`.
+6. OTP challenge сохраняется в Redis через shared `TokenManager`.
+7. Код отправляется на email, а в response возвращается только `token` и TTL.
+8. `POST /api/console/auth/confirm-otp` повторно валидирует `host`, `tenant`, `email`, `token`, `code`.
+9. При успешном confirm создается session в Redis.
+10. В response выставляется host-only session cookie.
+11. OTP token после успешного confirm инвалидируется.
+12. `POST /api/console/auth/logout` инвалидирует текущую session в Redis.
+13. Logout очищает cookie в response.
+14. Реализация не нарушает границы модулей и не тянет ORM одного модуля в другой.
 
 ---
 
-## 9. Тесты
+## 15. Тесты
 
-### Для `POST /api/admin/create-tenant`
+### `request_otp`
 
-* успешное создание Tenant по валидному API key;
-* `401`, если нет `Authorization`;
-* `401`, если Bearer token неверный;
-* сохранение `external_id`;
-* конфликт при дублировании `external_id` (если делаем unique);
-* конфликт при дублировании host.
+* успешный запрос для активного tenant + valid email;
+* `404/403`, если tenant по host не найден или неактивен;
+* отказ, если email не найден в текущем tenant;
+* отказ, если email не primary;
+* проверка, что OTP challenge записан в Redis;
+* проверка, что token возвращен, а code — нет.
 
-### Для `GET /api/console/tenants/resolve`
+### `confirm_otp`
 
-* найден Tenant со статусом `active`;
-* найден Tenant со статусом `freeze`;
-* домен удален (`is_deleted = true`) → результат `not_found`;
-* host нормализуется в lower-case;
-* по отсутствующему host возвращается `exists=false`.
+* успешное подтверждение;
+* неверный `code`;
+* неверный `token`;
+* истекший OTP;
+* `email` не совпадает с challenge;
+* `host` не совпадает с challenge;
+* попытка использовать OTP повторно после успешного confirm;
+* проверка, что session создана в Redis;
+* проверка, что cookie выставлена.
+
+### `logout`
+
+* успешный logout по валидной session;
+* повторный logout по уже удаленной session;
+* очистка cookie;
+* session другого tenant/host не может быть инвалидирована чужим host.

@@ -20,6 +20,13 @@ class UserEmail:
     created_at: datetime
     updated_at: datetime
 
+    def mark_verified(self) -> None:
+        if self.is_verified:
+            return
+        now = datetime.now(UTC)
+        self.is_verified = True
+        self.updated_at = now
+
 
 @dataclass(slots=True)
 class User:
@@ -103,3 +110,25 @@ class User:
         self.emails.append(user_email)
         self.updated_at = now
         return user_email
+
+    def can_login(self) -> bool:
+        return self.status == "active"
+
+    def get_primary_email(self, email: str) -> UserEmail | None:
+        normalized_email = email.strip().lower()
+        for existing in self.emails:
+            if (
+                existing.email == normalized_email
+                and existing.is_primary
+                and not existing.is_deleted
+            ):
+                return existing
+        return None
+
+    def mark_email_verified(self, user_email_id: UUID) -> None:
+        for email in self.emails:
+            if email.id == user_email_id:
+                email.mark_verified()
+                self.updated_at = datetime.now(UTC)
+                return
+        raise ValidationError(f"User email '{user_email_id}' was not found.")
