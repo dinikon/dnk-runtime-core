@@ -35,6 +35,15 @@ class Tenant:
     created_at: datetime
     updated_at: datetime
 
+    def allows_login(self) -> bool:
+        return self.status == TenantStatus.ACTIVE
+
+    def allows_read_business_data(self) -> bool:
+        return self.status in {TenantStatus.ACTIVE, TenantStatus.FREEZE}
+
+    def allows_write_business_data(self) -> bool:
+        return self.status == TenantStatus.ACTIVE
+
     @classmethod
     def create(cls, name: str, external_id: str) -> "Tenant":
         normalized_name = name.strip()

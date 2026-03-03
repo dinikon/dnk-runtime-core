@@ -2,20 +2,26 @@
 
 ## Назначение проекта
 
-`dnk-runtime-core` — backend-сервис на `FastAPI` + `SQLAlchemy AsyncIO`.
+`dnk-runtime-core` — backend-сервис на `FastAPI` + `SQLAlchemy AsyncIO`, построенный вокруг модульной структуры `src/modules`.
 
-Сейчас в проекте реализован один полноценный бизнес-сценарий:
+Сейчас в проекте реализованы два рабочих направления:
 
-- `POST /api/admin/create-tenant`
+1. `tenancy`
+   - server-to-server создание tenant через `POST /api/admin/create-tenant`
+   - resolve tenant по host через `GET /api/console/tenants/resolve`
+2. `identity`
+   - tenant-bound auth-flow по email OTP:
+     - `POST /api/console/auth/request-otp`
+     - `POST /api/console/auth/confirm-otp`
+     - `POST /api/console/auth/logout`
 
-Сценарий создает в рамках одного запроса:
+Ключевая бизнес-идея приложения:
 
-1. `Tenant`
-2. первого `User` внутри tenant
-3. `UserEmail` как primary email пользователя
-4. `TenantDomain` как primary domain tenant
-
-Текущая архитектура уже разложена по слоям и должна дальше расширяться в том же стиле.
+- tenant всегда определяется по `host`;
+- `tenancy` владеет `Tenant` и `TenantDomain`;
+- `identity` владеет `User` и `UserEmail`;
+- `shared` хранит только технические cross-module механизмы;
+- один HTTP request должен проходить через один `UoW` и одну SQLAlchemy session.
 
 ---
 
@@ -25,686 +31,425 @@
 - FastAPI
 - SQLAlchemy `asyncio`
 - asyncpg
-- Pydantic / pydantic-settings
+- pydantic / pydantic-settings
 - uuid6
+- Redis как целевое хранилище token/session state
 - aiosqlite для локальной разработки и тестов
 - unittest как текущий test runner
 
-Основные зависимости описаны в [pyproject.toml](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/pyproject.toml).
+Основные зависимости описаны в [pyproject.toml](/Users/inikon/PycharmProjects/dnk-runtime-core/pyproject.toml).
 
 ---
 
 ## Точка входа
 
-- Приложение создается в [src/app_factory.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/app_factory.py)
-- Экспорт `app` находится в [src/app.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/app.py)
-- Класс приложения: [src/dnk_app.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/dnk_app.py)
+- приложение создается в [src/app_factory.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/app_factory.py)
+- экспорт `app` находится в [src/app.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/app.py)
+- класс приложения: [src/dnk_app.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/dnk_app.py)
+- общий router собирается в [src/modules/router.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/router.py)
 
-Текущий `lifespan` делает:
+Текущий `lifespan`:
 
 1. кладет `session_factory` в `app.state.db`
-2. вызывает `create_all()`
-3. при остановке делает `dispose()`
+2. кладет `db_helper` в `app.state.db_helper`
+3. вызывает `create_all()`
+4. при остановке делает `dispose()`
 
-Это важно для dependency graph: `UoW` и репозитории получают одну и ту же session factory через `request.app.state.db`.
+`token_manager` и `email_sender` при необходимости могут быть переопределены через `app.state.*`, что активно используется в тестах.
 
 ---
 
-## Структура проекта
-
-Актуальная рабочая структура:
+## Актуальная структура проекта
 
 ```text
 src/
   app.py
   app_factory.py
   dnk_app.py
-  application/
-    admin_tenants/
-      dto.py
-      ports/
-        repositories.py
-      services/
-        tenant_service.py
-        user_service.py
-        tenant_domain_service.py
-      use_cases/
-        create_tenant.py
-  common/
-    uow.py
-    db/
-      base.py
-      helper.py
-      types/
-        string_uuid.py
-        long_text.py
   config/
     app_config.py
-    infrastructure/__init__.py
-  domain/
-    common/
-      errors.py
-    tenancy/
-      entities.py
-    users/
-      entities.py
-    value_object/
-      *.py
-  infrastructure/
-    admin_tenants/
-      repositories.py
-    persistence/
-      tenant.py
-      user.py
-      user_email.py
-      tenant_domain.py
-  presentation/
-    api/
-      admin_tenants.py
-      router.py
-    depends/
+    auth_config.py
+    control_plane.py
+    redis_config.py
+    infrastructure/
+    packaging/
+  modules/
+    router.py
+    persistence.py
+    shared/
+      db/
+      depends/
+      domain/
+      http/
+      tokens/
       uow.py
-      repositories.py
-      services.py
-      use_cases.py
+    tenancy/
+      application/
+        admin_onboarding/
+        request_context_by_host/
+        resolve_tenant_by_host/
+      domain/
+      infrastructure/
+      presentation/
+    identity/
+      application/
+        provisioning/
+        auth/
+      domain/
+      infrastructure/
+      presentation/
+    crm/
+    catalog/
+    org/
 test/
   test_admin_create_tenant_endpoint.py
+  test_console_auth_endpoint.py
   test_user_service.py
 ```
 
----
-
-## Слои и их ответственность
-
-### 1. Presentation layer
-
-Файлы:
-
-- [src/presentation/api/admin_tenants.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/presentation/api/admin_tenants.py)
-- [src/presentation/api/router.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/presentation/api/router.py)
-- [src/presentation/depends/](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/presentation/depends)
-
-Что делает:
-
-- объявляет HTTP endpoint
-- описывает request/response schema
-- маппит request в application DTO
-- получает use case через `Depends`
-- конвертирует доменные ошибки в HTTP-ответ
-
-Чего не делает:
-
-- не создает `UnitOfWork` руками
-- не создает репозитории руками
-- не работает с SQLAlchemy session напрямую
-- не содержит бизнес-логику
-
-### 2. Application layer
-
-Файлы:
-
-- [src/application/admin_tenants/dto.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/application/admin_tenants/dto.py)
-- [src/application/admin_tenants/use_cases/create_tenant.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/application/admin_tenants/use_cases/create_tenant.py)
-- [src/application/admin_tenants/services/](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/application/admin_tenants/services)
-- [src/application/admin_tenants/ports/repositories.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/application/admin_tenants/ports/repositories.py)
-
-Что делает:
-
-- orchestrates use cases
-- описывает DTO
-- задает контракты репозиториев
-- держит прикладные сервисы
-
-Чего не делает:
-
-- не знает про FastAPI
-- не знает про Pydantic
-- не знает про ORM-детали
-- не открывает соединения сам
-
-### 3. Domain layer
-
-Файлы:
-
-- [src/domain/tenancy/entities.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/domain/tenancy/entities.py)
-- [src/domain/users/entities.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/domain/users/entities.py)
-- [src/domain/common/errors.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/domain/common/errors.py)
-- [src/domain/value_object/](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/domain/value_object)
-
-Что делает:
-
-- хранит чистые доменные сущности
-- валидирует инварианты на уровне сущностей
-- хранит доменные ошибки
-- хранит value objects / enum’ы
-
-Чего не делает:
-
-- не использует SQLAlchemy
-- не использует FastAPI
-- не знает о DI
-
-### 4. Infrastructure layer
-
-Файлы:
-
-- [src/infrastructure/persistence/](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/infrastructure/persistence)
-- [src/infrastructure/admin_tenants/repositories.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/infrastructure/admin_tenants/repositories.py)
-
-Что делает:
-
-- ORM-модели
-- SQLAlchemy repository implementation
-- mapping domain ↔ DB model
-
----
-
-## Как сейчас проходит запрос
-
-Для `POST /api/admin/create-tenant` цепочка такая:
-
-1. HTTP приходит в `presentation/api/admin_tenants.py`
-2. Pydantic schema конвертируется в `CreateTenantCommandDTO`
-3. контроллер получает `CreateTenantUseCaseDep`
-4. dependency graph собирает:
-   - `UoW`
-   - repositories
-   - services
-   - use case
-5. use case вызывает сервисы в порядке:
-   - `TenantService`
-   - `UserService`
-   - `TenantDomainService`
-6. сервисы вызывают repository implementation
-7. repositories делают `flush()`, но не делают `commit()`
-8. use case делает `commit()` в конце сценария
-9. при исключении выполняется `rollback()`
-
-Ключевая идея: один HTTP request должен использовать один `UoW` и одну SQLAlchemy session.
-
----
-
-## Текущая бизнес-логика create-tenant
-
-### Вход
-
-Метод принимает:
-
-```json
-{
-  "tenant": {
-    "name": "dnk-003.dniko.net"
-  },
-  "tenant_domain": {
-    "host": "dnk-003.dniko.net"
-  },
-  "user": {
-    "last_name": "Doe",
-    "first_name": "John"
-  },
-  "user_email": {
-    "email": "john@example.com"
-  }
-}
-```
-
-### Выход
-
-Метод возвращает:
-
-- `tenant_id`
-- `user_id`
-- `user_email_id`
-- `tenant_domain_id`
-- `tenant_status`
-- `user_status`
-- `tenant_domain_host`
-
-### Актуальные правила
-
-На момент написания документа действуют такие правила:
-
-- `tenant.name` должен быть уникален глобально
-- `tenant_domain.host` должен быть уникален глобально
-- `user_email.email` должен быть уникален только внутри конкретного tenant
-- `user_email.email` проверяется только среди `is_deleted = false`
-- одинаковый email в разных tenant разрешен
-- primary email пользователя создается внутри агрегата `User`
-
-### Нормализация значений
-
-- `tenant.name`: `.strip()`
-- `tenant_domain.host`: `.strip().lower()`
-- `user.first_name`: `.strip()`
-- `user.last_name`: `.strip()`
-- `user_email.email`: `.strip().lower()`
-
----
-
-## Domain model
-
-### Tenant
-
-Находится в [src/domain/tenancy/entities.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/domain/tenancy/entities.py).
-
-Фабрика:
-
-```python
-tenant = Tenant.create(name="Acme")
-```
-
-Поведение:
-
-- валидирует непустое имя
-- создает `uuid7`
-- выставляет `status="active"`
-
-### User и UserEmail
-
-Находятся в [src/domain/users/entities.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/domain/users/entities.py).
-
-Пример:
-
-```python
-user = User.create_tenant_admin(
-    tenant_id=tenant.id,
-    first_name="John",
-    last_name="Doe",
-)
-user.add_email("john@example.com", is_primary=True)
-```
-
-Правила:
-
-- пользователь создается как активный
-- email добавляется как дочерняя сущность пользователя
-- второй primary email запрещен
-
-### TenantDomain
-
-Находится в [src/domain/tenancy/entities.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/domain/tenancy/entities.py).
-
-Пример:
-
-```python
-domain = TenantDomain.create_primary(
-    tenant_id=tenant.id,
-    host="acme.example.com",
-)
-```
-
-По умолчанию:
-
-- `service_type = console`
-- `kind = default`
-- `status = active`
-- `verification_status = verified`
-- `tls_mode = managed`
-- `is_primary = True`
-
----
-
-## Ошибки
-
-Доменные ошибки находятся в [src/domain/common/errors.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/domain/common/errors.py).
-
-Используются сейчас:
-
-- `ValidationError`
-- `TenantNameAlreadyExistsError`
-- `UserEmailAlreadyExistsError`
-- `TenantDomainHostAlreadyExistsError`
-
-Роутер переводит их в:
-
-- `409 Conflict` для конфликтов уникальности
-- `422 Unprocessable Entity` для ошибок валидации домена
-
----
-
-## Use case и транзакции
-
-Общий `UnitOfWork` находится в [src/common/uow.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/common/uow.py).
-
-Dependency для него находится в [src/presentation/depends/uow.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/presentation/depends/uow.py).
-
-Правило проекта:
-
-- `UoW` общий для проекта
-- `UseCase` владеет сценарием целиком
-- `services` не коммитят
-- `repositories` не коммитят
-
-Текущая реализация сценария:
-
-```python
-try:
-    tenant = await self._tenant_service.create_tenant(dto.tenant_name)
-    user = await self._user_service.create_tenant_admin(...)
-    tenant_domain = await self._tenant_domain_service.create_primary_domain(...)
-    await self._uow.commit()
-except Exception:
-    await self._uow.rollback()
-    raise
-```
-
-Важно:
-
-- repository может делать `flush()`
-- `flush()` не равен `commit()`
-- бизнес-смысл транзакции остается один на весь сценарий
-
----
-
-## Dependency injection
-
-Dependency graph разбит по типам:
-
-- [src/presentation/depends/uow.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/presentation/depends/uow.py)
-- [src/presentation/depends/repositories.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/presentation/depends/repositories.py)
-- [src/presentation/depends/services.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/presentation/depends/services.py)
-- [src/presentation/depends/use_cases.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/presentation/depends/use_cases.py)
-
-Правило:
-
-- каждый файл dependencies отвечает только за один тип зависимостей
-
-Пример:
-
-```python
-def get_users_repository(uow: UoWDep) -> UserRepositoryProtocol:
-    return SqlAlchemyUserRepository(uow.session)
-```
-
----
-
-## Persistence и ORM
-
-ORM-модели находятся в:
-
-- [src/infrastructure/persistence/tenant.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/infrastructure/persistence/tenant.py)
-- [src/infrastructure/persistence/user.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/infrastructure/persistence/user.py)
-- [src/infrastructure/persistence/user_email.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/infrastructure/persistence/user_email.py)
-- [src/infrastructure/persistence/tenant_domain.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/infrastructure/persistence/tenant_domain.py)
-
-Текущее правило именования:
-
-- ORM-модели называются `*Model`
-- доменные сущности называются `Tenant`, `User`, `UserEmail`, `TenantDomain`
-
-### Кастомные DB types
-
-Сейчас они вынесены в:
-
-- [src/common/db/types/string_uuid.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/common/db/types/string_uuid.py)
-- [src/common/db/types/long_text.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/common/db/types/long_text.py)
-
-`StringUUID` нужен для совместимого хранения UUID:
-
-- PostgreSQL: native UUID
-- SQLite: `CHAR(36)`
-
-### Регистрация ORM в metadata
-
-В [src/common/db/helper.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/common/db/helper.py) есть важный side-effect import:
-
-```python
-import src.infrastructure.persistence  # noqa: F401
-```
-
-Он нужен, чтобы SQLAlchemy увидел все ORM-классы и добавил их в `Base.metadata` до `create_all()`.
-
-Не удалять этот импорт, если не заменили его на эквивалентную регистрацию моделей.
-
----
-
-## SQLAlchemy repositories
-
-Реализация портов находится в [src/infrastructure/admin_tenants/repositories.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/infrastructure/admin_tenants/repositories.py).
-
-Правила репозиториев:
-
-- работают только через переданный `AsyncSession`
-- не делают `commit()`
-- маппят domain ↔ ORM
-- проверяют existence запросами вида `select(...).limit(1)`
-
-Пример проверки email в tenant:
-
-```python
-select(UserEmailModel.id)
-    .join(UserModel, UserModel.id == UserEmailModel.user_id)
-    .where(UserModel.tenant_id == str(tenant_id))
-    .where(UserEmailModel.email == email)
-    .where(UserEmailModel.is_deleted.is_(False))
-    .limit(1)
-```
+`crm`, `catalog` и `org` пока являются каркасами модулей без реализованной прикладной логики.
 
 ---
 
 ## Конфигурация
 
-Конфигурация собирается через:
+Все конфиги агрегируются через [src/config/app_config.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/config/app_config.py) в `DnkConfig`.
 
-- [src/config/app_config.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/config/app_config.py)
-- [src/config/infrastructure/__init__.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/config/infrastructure/__init__.py)
+Сейчас проект использует несколько config-групп:
 
-Источники:
+- `DatabaseConfig`
+  - SQLAlchemy connection и pool settings
+- `RedisConfig`
+  - `REDIS_HOST`
+  - `REDIS_PORT`
+  - `REDIS_USERNAME`
+  - `REDIS_PASSWORD`
+  - `REDIS_USE_SSL`
+  - `REDIS_DB`
+- `IdentityAuthConfig`
+  - `AUTH.otp_code_length`
+  - `AUTH.otp_token_ttl_seconds`
+  - `AUTH.session_ttl_seconds`
+  - `AUTH.session_cookie_name`
+- `ControlPlaneConfig`
+  - `CONTROL_PLANE_API_KEY`
+- `PackagingInfo`
+  - packaging metadata из `pyproject.toml`
+
+Конфиг читается из:
 
 1. init values
 2. env
-3. dotenv (`.env`)
+3. `.env`
 4. file secrets
 5. `pyproject.toml`
 
-Шаблоны:
+Для nested-настроек включен `env_nested_delimiter="__"`, поэтому auth-параметры можно задавать как:
 
-- [temaplate.dev.env](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/temaplate.dev.env)
-- [temaplate.env](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/temaplate.env)
-
-Локальная разработка по умолчанию ориентирована на SQLite.
-
----
-
-## Тесты
-
-Текущие тесты находятся в:
-
-- [test/test_admin_create_tenant_endpoint.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/test/test_admin_create_tenant_endpoint.py)
-- [test/test_user_service.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/test/test_user_service.py)
-
-Используется `unittest`, не `pytest`.
-
-Что проверяется:
-
-- happy-path create-tenant
-- rollback целого сценария при конфликте на последнем шаге
-- одинаковый email в разных tenant разрешен
-- одинаковый email в одном tenant запрещен
-- удаленный email не участвует в проверке уникальности
-
-Запуск:
-
-```bash
-./.venv/bin/python -m unittest discover -s test -v
-```
-
-Форматирование:
-
-```bash
-./.venv/bin/python -m black src test
-```
+- `AUTH__OTP_CODE_LENGTH`
+- `AUTH__OTP_TOKEN_TTL_SECONDS`
+- `AUTH__SESSION_TTL_SECONDS`
+- `AUTH__SESSION_COOKIE_NAME`
 
 ---
 
-## Правила продолжения разработки
+## Shared слой
 
-### 1. Добавление нового HTTP-сценария
+`shared` содержит только технические кросс-модульные компоненты:
 
-Для нового сценария создавай тот же набор слоев:
+- [src/modules/shared/db/helper.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/shared/db/helper.py)
+  - создание engine
+  - session factory
+  - `create_all()`
+- [src/modules/shared/uow.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/shared/uow.py)
+  - request-scoped `UnitOfWork`
+- [src/modules/shared/depends/uow.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/shared/depends/uow.py)
+  - FastAPI dependency для `UoW`
+- [src/modules/shared/http/host.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/shared/http/host.py)
+  - общая нормализация `host`
+  - извлечение `host` из `Request`
+- [src/modules/shared/depends/request_host.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/shared/depends/request_host.py)
+  - dependency `RequestHostDep`
+- [src/modules/shared/tokens/](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/shared/tokens)
+  - `TokenManager`
+  - in-memory backend
+  - Redis repository
+  - Redis adapter
 
-1. `presentation/api/<feature>.py`
-2. `application/<feature>/dto.py`
-3. `application/<feature>/ports/*.py`
-4. `application/<feature>/services/*.py`
-5. `application/<feature>/use_cases/*.py`
-6. `infrastructure/<feature>/repositories.py`
-7. DI в `presentation/depends/`
-8. router registration в `presentation/api/router.py`
-9. тесты
-
-### 2. Не смешивать слои
-
-- не тянуть Pydantic в application/domain
-- не тянуть SQLAlchemy models в domain
-- не писать бизнес-логику в роутере
-- не делать `commit()` в сервисах и репозиториях
-
-### 3. Именование
-
-- domain: `Tenant`, `User`, `TenantDomain`
-- ORM: `TenantModel`, `UserModel`, `TenantDomainModel`, `UserEmailModel`
-- DI aliases: `*Dep`
-- repository implementation: `SqlAlchemy*Repository`
-
-### 4. Работа с UUID
-
-- в домене использовать `UUID`
-- в ORM использовать `StringUUID`
-- при raw SQLAlchemy query фильтрах ориентироваться на текущую модель поля
-- в проекте уже есть helper `_to_uuid(...)` для чтения ORM результатов
-
-### 5. Нормализация входных данных
-
-Для новых сценариев нормализовать вход до создания сущности:
-
-- строковые имена через `.strip()`
-- email/host через `.strip().lower()`, если это идентификатор без кейс-сенситивности
-
-### 6. DI-файлы
-
-Не складывать все dependencies в один файл.
-
-Текущее правило:
-
-- `uow.py` — только UoW
-- `repositories.py` — только repository dependencies
-- `services.py` — только service dependencies
-- `use_cases.py` — только use case dependencies
-
-### 7. Роутеры
-
-Каждый feature router живет отдельно, но подключается в общий router aggregator:
-
-- feature route: `presentation/api/admin_tenants.py`
-- общий API router: `presentation/api/router.py`
-
-### 8. Тесты при изменениях
-
-При изменении сценария:
-
-- добавить/обновить endpoint test
-- добавить/обновить service или repository test
-- проверять rollback отдельно
+`TokenManager` — технический storage manager для OTP/session token state. Это не domain-service `identity`.
 
 ---
 
-## Пример добавления нового use case
+## Модуль `tenancy`
 
-Минимальная схема:
+### Ответственность
 
-```python
-# application/foo/dto.py
-@dataclass(frozen=True, slots=True)
-class FooCommandDTO:
-    name: str
-```
+`tenancy` владеет:
 
-```python
-# application/foo/use_cases/create_foo.py
-class CreateFooUseCase:
-    def __init__(self, uow: UnitOfWorkProtocol, foo_service: FooServiceProtocol):
-        self._uow = uow
-        self._foo_service = foo_service
+- `Tenant`
+- `TenantDomain`
+- статусами tenant/domain
+- правилом определения tenant по `host`
+- server-to-server созданием tenant
 
-    async def execute(self, dto: FooCommandDTO) -> FooResultDTO:
-        try:
-            foo = await self._foo_service.create(dto.name)
-            await self._uow.commit()
-        except Exception:
-            await self._uow.rollback()
-            raise
-        return FooResultDTO(foo_id=foo.id)
-```
+### Domain
 
-```python
-# presentation/depends/use_cases.py
-def get_create_foo_use_case(
-    uow: UoWDep,
-    foo_service: FooServiceDep,
-) -> CreateFooUseCase:
-    return CreateFooUseCase(uow=uow, foo_service=foo_service)
-```
+Файлы:
 
-```python
-# presentation/api/foo.py
-@router.post("/api/foo")
-async def create_foo(
-    payload: FooRequestSchema,
-    use_case: CreateFooUseCaseDep,
-) -> FooResponseSchema:
-    result = await use_case.execute(FooCommandDTO(name=payload.name))
-    return FooResponseSchema(foo_id=result.foo_id)
-```
+- [src/modules/tenancy/domain/entities.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/tenancy/domain/entities.py)
+- [src/modules/tenancy/domain/errors.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/tenancy/domain/errors.py)
+- [src/modules/tenancy/domain/value_objects/](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/tenancy/domain/value_objects)
+
+Бизнес-правила:
+
+- `TenantStatus`
+  - `active`
+  - `freeze`
+- `TenantDomainStatus`
+  - домен может быть удален через статус `deleted`
+- tenant определяет прикладной режим работы:
+  - `allows_login()` -> только `active`
+  - `allows_read_business_data()` -> `active` и `freeze`
+  - `allows_write_business_data()` -> только `active`
+
+Это важно для будущих CRM/read-only сценариев:
+
+- `freeze` означает, что tenant может остаться доступным для чтения бизнес-данных;
+- но write-операции должны быть запрещены прикладным модулем.
+
+### Application
+
+Реализованные slices:
+
+1. `admin_onboarding`
+   - создание tenant + первого admin user + primary domain
+2. `resolve_tenant_by_host`
+   - внешний read-model для UI
+3. `request_context_by_host`
+   - внутренний use case для получения валидного tenant request context
+
+### Presentation
+
+Роуты:
+
+- `POST /api/admin/create-tenant`
+- `GET /api/console/tenants/resolve`
+
+Схемы request/response вынесены в отдельные файлы:
+
+- `presentation/api/requests/*`
+- `presentation/api/responses/*`
+
+### Infrastructure
+
+Содержит:
+
+- SQLAlchemy persistence models
+- SQLAlchemy repositories
+- mapping domain <-> DB
+
+### Текущий create-tenant flow
+
+`POST /api/admin/create-tenant`:
+
+1. route получает request schema
+2. route проходит Bearer API key guard
+3. payload маппится в `CreateTenantCommandDTO`
+4. `CreateTenantUseCase` вызывает:
+   - `TenantService`
+   - `IdentityProvisioningServiceAdapter`
+   - `TenantDomainService`
+5. use case делает `commit()`
+6. при ошибке делает `rollback()`
+
+Endpoint принимает:
+
+- `tenant.name`
+- `tenant.external_id`
+- `tenant_domain.host`
+- `user.first_name`
+- `user.last_name`
+- `user_email.email`
+
+### Текущий resolve flow
+
+`GET /api/console/tenants/resolve`:
+
+1. общий shared dependency извлекает `host`
+2. `ResolveTenantByHostUseCase` ищет не удаленный `TenantDomain`
+3. получает связанный `Tenant`
+4. возвращает read-model:
+   - `exists`
+   - `available`
+   - `status`
+   - `tenant_id`
+   - `api_host`
+
+`available=true` только если tenant допускает login.
 
 ---
 
-## Известные особенности и замечания
+## Модуль `identity`
 
-### 1. В проекте есть legacy-папка `src/domain/entity`
+### Ответственность
 
-Сейчас активная архитектура использует:
+`identity` владеет:
 
-- [src/domain/tenancy/](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/domain/tenancy)
-- [src/domain/users/](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/domain/users)
+- `User`
+- `UserEmail`
+- tenant-scoped поиском email
+- auth-flow по email OTP
 
-Папка `src/domain/entity` выглядит как старый слой и в текущем сценарии не используется. Для новой разработки ориентироваться на новые каталоги `domain/tenancy` и `domain/users`.
+### Domain
 
-### 2. В проекте нет pytest-инфраструктуры
+Файлы:
 
-На данный момент стандартный и подтвержденный путь — `unittest`.
+- [src/modules/identity/domain/entities.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/identity/domain/entities.py)
+- [src/modules/identity/domain/errors.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/identity/domain/errors.py)
 
-### 3. Таблицы создаются автоматически через `create_all()`
+Бизнес-правила:
 
-Это удобно для локальной разработки и тестов, но для production-сценариев обычно потребуется миграционная стратегия.
+- email нормализуется как `strip().lower()`
+- login разрешен только для primary email
+- `UserEmail.is_deleted = true` не участвует в login flow
+- при успешном confirm email может быть помечен как verified
+
+### Application
+
+Реализованы два slices:
+
+1. `provisioning`
+   - создание tenant admin пользователя
+2. `auth`
+   - `request_otp`
+   - `confirm_otp`
+   - `logout`
+
+### Auth-flow
+
+#### `POST /api/console/auth/request-otp`
+
+1. route берет `host` через shared dependency
+2. `RequestEmailOtpUseCase` запрашивает tenant-context у `tenancy`
+3. user ищется по `tenant_id + primary email`
+4. генерируется:
+   - `token`
+   - цифровой `code`
+   - `code_hash`
+5. challenge пишется в token store
+6. code отправляется через email sender adapter
+7. response возвращает только:
+   - `token`
+   - `expires_in`
+
+#### `POST /api/console/auth/confirm-otp`
+
+1. повторно определяется `host`
+2. повторно загружается tenant-context
+3. challenge читается из token store
+4. валидируются:
+   - tenant
+   - tenant domain
+   - host
+   - email
+   - token
+   - code
+5. user повторно загружается из БД
+6. создается session record
+7. session сохраняется в token store
+8. OTP challenge инвалидируется
+9. при необходимости `UserEmail.is_verified = true`
+10. `UoW.commit()`
+11. route выставляет host-only cookie
+
+#### `POST /api/console/auth/logout`
+
+1. определяется `host`
+2. загружается tenant-context
+3. session token читается из cookie
+4. session проверяется на совпадение:
+   - `tenant_id`
+   - `tenant_domain_id`
+   - `host`
+5. session инвалидируется
+6. route очищает cookie
+
+### Token storage
+
+Сейчас `identity` работает не напрямую с Redis, а через:
+
+- `OtpChallengeStorePort`
+- `SessionStorePort`
+- shared `TokenManager`
+
+В production path используется Redis backend.
+В тестах backend обычно переопределяется через `app.state.token_manager`.
+
+### Email sender
+
+Для MVP используется `InMemoryEmailSender` как stub adapter.
+Это техническая заглушка, а не финальный интеграционный email provider.
 
 ---
 
-## Краткий чеклист перед новой задачей
+## Правило tenant по host
 
-1. Определи, к какому feature относится задача.
-2. Проверь, есть ли уже domain entity/value objects для этого feature.
-3. Добавь DTO и use case в application.
-4. Добавь ports и infrastructure repository implementation.
-5. Собери dependencies в `presentation/depends/*`.
-6. Добавь feature router и подключи его в `presentation/api/router.py`.
-7. Напиши минимум один happy-path test и один negative-path test.
-8. Запусти:
+В проекте уже централизовано правило:
 
-```bash
-./.venv/bin/python -m unittest discover -s test -v
-```
+- `host` всегда извлекается из `Request`
+- `host` всегда нормализуется в shared слое
+- auth-flow не доверяет frontend resolve-check и всегда повторно валидирует tenant context
+
+Для login-сценариев внутренний источник истины — `GetTenantRequestContextByHostUseCase`.
+
+Этот use case:
+
+- возвращает `tenant_id`, `tenant_domain_id`, `host`, `tenant_status`, `domain_status`, `api_host`
+- либо бросает предметную ошибку:
+  - tenant по host не найден
+  - tenant недоступен для login
 
 ---
 
-## Основной принцип проекта
+## Текущее состояние Redis
 
-Проект развивается как layered backend с явным разделением ответственности:
+В коде реализованы:
 
-- HTTP отдельно
-- orchestration отдельно
-- domain отдельно
-- SQLAlchemy отдельно
-- DI отдельно
+- Redis config
+- Redis repository
+- Redis token backend adapter
 
-Если новая логика начинает тянуть SQLAlchemy в controller, Pydantic в domain или `commit()` в repository/service — это сигнал, что структура нарушается.
+Если пакет `redis` недоступен в runtime, `identity` dependencies логируют warning и откатываются на in-memory backend.
+
+Это сделано как безопасный fallback для локальной среды и тестов, но production path должен использовать реальный Redis backend.
+
+---
+
+## Текущее тестовое покрытие
+
+Сейчас есть:
+
+- [test/test_admin_create_tenant_endpoint.py](/Users/inikon/PycharmProjects/dnk-runtime-core/test/test_admin_create_tenant_endpoint.py)
+  - create-tenant
+  - external_id
+  - API key
+  - tenant resolve
+- [test/test_user_service.py](/Users/inikon/PycharmProjects/dnk-runtime-core/test/test_user_service.py)
+  - tenant-local email uniqueness
+- [test/test_console_auth_endpoint.py](/Users/inikon/PycharmProjects/dnk-runtime-core/test/test_console_auth_endpoint.py)
+  - request OTP
+  - confirm OTP
+  - logout
+  - tenant/host/session isolation
+
+---
+
+## Архитектурные договоренности
+
+1. Один request = один `UoW` = одна SQLAlchemy session.
+2. HTTP layer не содержит бизнес-логики.
+3. Domain не знает про FastAPI, SQLAlchemy, Redis.
+4. Cross-module взаимодействие должно идти через application ports/adapters, а не через ORM-модели чужого модуля.
+5. `shared` хранит технические механизмы, но не бизнес-правила конкретного bounded context.
+6. `tenancy` — источник истины для host -> tenant context.
+7. `identity` — источник истины для user/email/auth.

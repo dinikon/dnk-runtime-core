@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Sequence
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.identity.application.provisioning.ports.repositories import (
@@ -67,6 +67,38 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
             )
         ).all()
         return self._map_user(user_model, email_models)
+
+    async def get_by_tenant_and_primary_email(
+        self,
+        tenant_id: UUID,
+        email: str,
+    ) -> User | None:
+        user_model = await self._session.scalar(
+            select(UserModel)
+            .join(UserEmailModel, UserEmailModel.user_id == UserModel.id)
+            .where(UserModel.tenant_id == str(tenant_id))
+            .where(UserEmailModel.email == email)
+            .where(UserEmailModel.is_primary.is_(True))
+            .where(UserEmailModel.is_deleted.is_(False))
+            .limit(1)
+        )
+        if user_model is None:
+            return None
+
+        email_models = (
+            await self._session.scalars(
+                select(UserEmailModel).where(UserEmailModel.user_id == user_model.id)
+            )
+        ).all()
+        return self._map_user(user_model, email_models)
+
+    async def mark_email_verified(self, user_email_id: UUID) -> None:
+        await self._session.execute(
+            update(UserEmailModel)
+            .where(UserEmailModel.id == str(user_email_id))
+            .values(is_verified=True)
+        )
+        await self._session.flush()
 
     async def exists_by_tenant_and_email(
         self,

@@ -26,8 +26,10 @@ from src.modules.tenancy.presentation.depends.services import (
 from src.modules.tenancy.presentation.depends.use_cases import (
     CreateTenantUseCaseDep,
     ResolveTenantByHostUseCaseDep,
+    TenantRequestContextByHostUseCaseDep,
     get_create_tenant_use_case,
     get_resolve_tenant_by_host_use_case,
+    get_tenant_request_context_by_host_use_case,
 )
 
 __all__ = [
@@ -52,4 +54,6 @@ __all__ = [
     "CreateTenantUseCaseDep",
     "get_resolve_tenant_by_host_use_case",
     "ResolveTenantByHostUseCaseDep",
+    "get_tenant_request_context_by_host_use_case",
+    "TenantRequestContextByHostUseCaseDep",
 ]
