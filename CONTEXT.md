@@ -13,6 +13,8 @@
    - tenant-bound auth-flow по email OTP:
      - `POST /api/console/auth/request-otp`
      - `POST /api/console/auth/confirm-otp`
+     - `GET /api/console/auth/me`
+     - `PATCH /api/console/auth/me`
      - `POST /api/console/auth/logout`
 
 Ключевая бизнес-идея приложения:
@@ -299,6 +301,7 @@ Endpoint принимает:
 - `UserEmail`
 - tenant-scoped поиском email
 - auth-flow по email OTP
+- tenant-scoped валидацией session и чтением current user profile
 
 ### Domain
 
@@ -323,6 +326,8 @@ Endpoint принимает:
 2. `auth`
    - `request_otp`
    - `confirm_otp`
+   - `current_user`
+   - `update_current_user_profile`
    - `logout`
 
 ### Auth-flow
@@ -373,6 +378,39 @@ Endpoint принимает:
    - `host`
 5. session инвалидируется
 6. route очищает cookie
+
+#### `GET /api/console/auth/me`
+
+1. определяется `host`
+2. загружается tenant-context
+3. session token читается из cookie
+4. session проверяется на совпадение:
+   - `tenant_id`
+   - `tenant_domain_id`
+   - `host`
+5. user загружается по `session.user_id`
+6. проверяется статус user (`active`)
+7. response возвращает user profile и `emails` c фильтром `is_deleted = false`
+
+#### `PATCH /api/console/auth/me`
+
+1. определяется `host`
+2. загружается tenant-context
+3. session token читается из cookie
+4. session проверяется на совпадение:
+   - `tenant_id`
+   - `tenant_domain_id`
+   - `host`
+5. user загружается по `session.user_id`
+6. проверяется статус user (`active`)
+7. обновляются поля:
+   - `last_name`, `first_name`, `middle_name`
+   - `interface_language` (`uk`/`en`)
+   - `interface_theme` (`system`/`dark`/`light`/`null`)
+   - `timezone` (`Europe/Kyiv`/`Europe/Warsaw`)
+   - дополнительные поля вне контракта PATCH payload отклоняются
+8. `UoW.commit()`
+9. response возвращает обновленный user profile и `emails` c фильтром `is_deleted = false`
 
 ### Token storage
 
@@ -439,6 +477,8 @@ Endpoint принимает:
 - [test/test_console_auth_endpoint.py](/Users/inikon/PycharmProjects/dnk-runtime-core/test/test_console_auth_endpoint.py)
   - request OTP
   - confirm OTP
+  - get current user profile (`/api/console/auth/me`)
+  - update current user profile (`PATCH /api/console/auth/me`)
   - logout
   - tenant/host/session isolation
 

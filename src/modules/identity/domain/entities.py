@@ -132,3 +132,56 @@ class User:
                 self.updated_at = datetime.now(UTC)
                 return
         raise ValidationError(f"User email '{user_email_id}' was not found.")
+
+    def update_profile(
+        self,
+        *,
+        last_name: str,
+        first_name: str,
+        middle_name: str | None,
+        interface_language: str,
+        interface_theme: str | None,
+        timezone: str,
+    ) -> None:
+        normalized_last_name = last_name.strip()
+        normalized_first_name = first_name.strip()
+        normalized_middle_name = (
+            middle_name.strip() if middle_name is not None else None
+        )
+        normalized_interface_language = interface_language.strip().lower()
+        normalized_interface_theme = (
+            interface_theme.strip().lower() if interface_theme is not None else None
+        )
+        normalized_timezone = timezone.strip()
+
+        if not normalized_last_name:
+            raise ValidationError("User last name must not be empty.")
+        if not normalized_first_name:
+            raise ValidationError("User first name must not be empty.")
+        if normalized_middle_name == "":
+            normalized_middle_name = None
+
+        if normalized_interface_language not in {"uk", "en"}:
+            raise ValidationError(
+                "User interface language must be one of: uk, en."
+            )
+        if normalized_interface_theme is not None and normalized_interface_theme not in {
+            "system",
+            "dark",
+            "light",
+        }:
+            raise ValidationError(
+                "User interface theme must be one of: system, dark, light."
+            )
+        if normalized_timezone not in {"Europe/Kyiv", "Europe/Warsaw"}:
+            raise ValidationError(
+                "User timezone must be one of: Europe/Kyiv, Europe/Warsaw."
+            )
+
+        self.last_name = normalized_last_name
+        self.first_name = normalized_first_name
+        self.middle_name = normalized_middle_name
+        self.interface_language = normalized_interface_language
+        self.interface_theme = normalized_interface_theme
+        self.timezone = normalized_timezone
+        self.updated_at = datetime.now(UTC)
