@@ -34,10 +34,12 @@ from src.modules.identity.presentation.depends.auth_use_cases import (
     GetCurrentUserUseCaseDep,
     LogoutCurrentSessionUseCaseDep,
     RequestEmailOtpUseCaseDep,
+    UpdateCurrentUserProfileUseCaseDep,
     get_confirm_email_otp_use_case,
     get_current_user_use_case,
     get_logout_current_session_use_case,
     get_request_email_otp_use_case,
+    get_update_current_user_profile_use_case,
 )
 
 __all__ = [
@@ -72,4 +74,6 @@ __all__ = [
     "GetCurrentUserUseCaseDep",
     "get_logout_current_session_use_case",
     "LogoutCurrentSessionUseCaseDep",
+    "get_update_current_user_profile_use_case",
+    "UpdateCurrentUserProfileUseCaseDep",
 ]

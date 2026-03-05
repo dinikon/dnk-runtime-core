@@ -7,6 +7,7 @@ from src.modules.identity.application.auth.dto import (
     GetCurrentUserCommandDTO,
     LogoutCurrentSessionCommandDTO,
     RequestEmailOtpCommandDTO,
+    UpdateCurrentUserProfileCommandDTO,
 )
 from src.modules.identity.domain.errors import (
     InvalidSessionError,
@@ -18,6 +19,7 @@ from src.modules.identity.domain.errors import (
 from src.modules.identity.presentation.api.requests.console_auth import (
     ConfirmEmailOtpRequestSchema,
     RequestEmailOtpRequestSchema,
+    UpdateCurrentUserProfileRequestSchema,
 )
 from src.modules.identity.presentation.api.responses.console_auth import (
     ConfirmEmailOtpResponseSchema,
@@ -31,7 +33,9 @@ from src.modules.identity.presentation.depends.auth_use_cases import (
     GetCurrentUserUseCaseDep,
     LogoutCurrentSessionUseCaseDep,
     RequestEmailOtpUseCaseDep,
+    UpdateCurrentUserProfileUseCaseDep,
 )
+from src.modules.shared.domain.errors import ValidationError as DomainValidationError
 from src.modules.shared.depends.request_host import RequestHostDep
 from src.modules.tenancy.domain.errors import (
     TenantHostNotFoundError,
@@ -159,6 +163,73 @@ async def get_current_user(
     except InvalidSessionError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+        ) from exc
+
+    return CurrentUserResponseSchema(
+        id=result.id,
+        status=result.status,
+        last_name=result.last_name,
+        first_name=result.first_name,
+        middle_name=result.middle_name,
+        avatar=result.avatar,
+        interface_language=result.interface_language,
+        interface_theme=result.interface_theme,
+        timezone=result.timezone,
+        emails=[
+            {
+                "id": email.id,
+                "email": email.email,
+                "is_primary": email.is_primary,
+                "is_verified": email.is_verified,
+            }
+            for email in result.emails
+        ],
+    )
+
+
+@router.patch(
+    "/api/console/auth/me",
+    response_model=CurrentUserResponseSchema,
+)
+async def update_current_user_profile(
+    payload: UpdateCurrentUserProfileRequestSchema,
+    request: Request,
+    host: RequestHostDep,
+    settings: AuthSettingsDep,
+    use_case: UpdateCurrentUserProfileUseCaseDep,
+) -> CurrentUserResponseSchema:
+    try:
+        result = await use_case.execute(
+            UpdateCurrentUserProfileCommandDTO(
+                host=host,
+                session_token=request.cookies.get(settings.session_cookie_name),
+                last_name=payload.last_name,
+                first_name=payload.first_name,
+                middle_name=payload.middle_name,
+                interface_language=payload.interface_language,
+                interface_theme=payload.interface_theme,
+                timezone=payload.timezone,
+            )
+        )
+    except TenantHostNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except (TenantLoginUnavailableError, UserLoginUnavailableError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    except InvalidSessionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+        ) from exc
+    except DomainValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),
         ) from exc
 

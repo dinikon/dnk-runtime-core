@@ -16,6 +16,9 @@ from src.modules.identity.application.auth.use_cases.logout_current_session impo
 from src.modules.identity.application.auth.use_cases.request_email_otp import (
     RequestEmailOtpUseCase,
 )
+from src.modules.identity.application.auth.use_cases.update_current_user_profile import (
+    UpdateCurrentUserProfileUseCase,
+)
 from src.modules.identity.presentation.depends.auth_repositories import (
     AuthUsersRepositoryDep,
     OtpChallengeStoreDep,
@@ -101,6 +104,26 @@ GetCurrentUserUseCaseDep = Annotated[
 ]
 
 
+def get_update_current_user_profile_use_case(
+    uow: UoWDep,
+    tenant_context_reader: TenantContextReaderDep,
+    users_repository: AuthUsersRepositoryDep,
+    session_store: SessionStoreDep,
+) -> UpdateCurrentUserProfileUseCase:
+    return UpdateCurrentUserProfileUseCase(
+        uow=uow,
+        tenant_context_reader=tenant_context_reader,
+        users_repository=users_repository,
+        session_store=session_store,
+    )
+
+
+UpdateCurrentUserProfileUseCaseDep = Annotated[
+    UpdateCurrentUserProfileUseCase,
+    Depends(get_update_current_user_profile_use_case),
+]
+
+
 def get_logout_current_session_use_case(
     tenant_context_reader: TenantContextReaderDep,
     session_store: SessionStoreDep,
@@ -122,8 +145,10 @@ __all__ = [
     "GetCurrentUserUseCaseDep",
     "LogoutCurrentSessionUseCaseDep",
     "RequestEmailOtpUseCaseDep",
+    "UpdateCurrentUserProfileUseCaseDep",
     "get_confirm_email_otp_use_case",
     "get_current_user_use_case",
     "get_logout_current_session_use_case",
     "get_request_email_otp_use_case",
+    "get_update_current_user_profile_use_case",
 ]

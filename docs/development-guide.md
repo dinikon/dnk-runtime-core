@@ -176,6 +176,7 @@ docs/
 - `POST /api/console/auth/request-otp`
 - `POST /api/console/auth/confirm-otp`
 - `GET /api/console/auth/me`
+- `PATCH /api/console/auth/me`
 - `GET /api/console/tenants/resolve`
 
 ## Слой `domain`
@@ -958,6 +959,7 @@ Service/repository tests:
 - `create_tenant.py`
 - `request_email_otp.py`
 - `get_current_user.py`
+- `update_current_user_profile.py`
 - `logout_current_session.py`
 - `repositories.py`
 - `tenant_domain_service.py`
@@ -1084,5 +1086,5 @@ presentation/
 Если сомневаешься, смотри на уже реализованные потоки как на эталон:
 
 - create tenant flow в `tenancy`;
-- request/confirm/me/logout auth flow в `identity`;
+- request/confirm/me/update/logout auth flow в `identity`;
 - tenant resolve/request context flow в `tenancy`.

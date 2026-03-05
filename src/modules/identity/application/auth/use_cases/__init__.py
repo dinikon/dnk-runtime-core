@@ -10,10 +10,14 @@ from src.modules.identity.application.auth.use_cases.logout_current_session impo
 from src.modules.identity.application.auth.use_cases.request_email_otp import (
     RequestEmailOtpUseCase,
 )
+from src.modules.identity.application.auth.use_cases.update_current_user_profile import (
+    UpdateCurrentUserProfileUseCase,
+)
 
 __all__ = [
     "ConfirmEmailOtpUseCase",
     "GetCurrentUserUseCase",
     "LogoutCurrentSessionUseCase",
     "RequestEmailOtpUseCase",
+    "UpdateCurrentUserProfileUseCase",
 ]

@@ -9,6 +9,8 @@ from src.modules.identity.domain.entities import User
 class AuthUserRepositoryPort(Protocol):
     async def get_by_id(self, user_id: UUID) -> User | None: ...
 
+    async def update_profile(self, user: User) -> None: ...
+
     async def get_by_tenant_and_primary_email(
         self,
         tenant_id: UUID,

@@ -9,6 +9,7 @@
 - tenant-scoped проверкой email
 - auth-flow по email OTP
 - tenant-scoped валидацией session cookie и чтением текущего пользователя
+- обновлением profile текущего пользователя
 
 ## Структура
 
@@ -79,6 +80,7 @@ async def create_tenant_admin(
 - session creation
 - logout
 - current user profile read by session cookie
+- current user profile update
 
 #### DTO
 
@@ -111,6 +113,29 @@ GetCurrentUserResultDTO(
     timezone: str,
     emails: list[GetCurrentUserEmailDTO],
 )
+
+UpdateCurrentUserProfileCommandDTO(
+    host: str,
+    session_token: str | None,
+    last_name: str,
+    first_name: str,
+    middle_name: str | None,
+    interface_language: str,  # uk|en
+    interface_theme: str | None,  # system|dark|light|null
+    timezone: str,  # Europe/Kyiv|Europe/Warsaw
+)
+UpdateCurrentUserProfileResultDTO(
+    id: UUID,
+    status: str,
+    last_name: str,
+    first_name: str,
+    middle_name: str | None,
+    avatar: str | None,
+    interface_language: str,
+    interface_theme: str | None,
+    timezone: str,
+    emails: list[GetCurrentUserEmailDTO],
+)
 ```
 
 #### Ports
@@ -127,6 +152,7 @@ GetCurrentUserResultDTO(
 ```python
 class AuthUserRepositoryPort(Protocol):
     async def get_by_id(user_id: UUID) -> User | None: ...
+    async def update_profile(user: User) -> None: ...
     async def get_by_tenant_and_primary_email(tenant_id: UUID, email: str) -> User | None: ...
     async def mark_email_verified(user_email_id: UUID) -> None: ...
 
@@ -170,6 +196,7 @@ class SessionServiceProtocol(Protocol):
 - [`RequestEmailOtpUseCase.execute(dto)`](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/identity/application/auth/use_cases/request_email_otp.py)
 - [`ConfirmEmailOtpUseCase.execute(dto)`](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/identity/application/auth/use_cases/confirm_email_otp.py)
 - [`GetCurrentUserUseCase.execute(dto)`](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/identity/application/auth/use_cases/get_current_user.py)
+- [`UpdateCurrentUserProfileUseCase.execute(dto)`](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/identity/application/auth/use_cases/update_current_user_profile.py)
 - [`LogoutCurrentSessionUseCase.execute(dto)`](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/identity/application/auth/use_cases/logout_current_session.py)
 
 Контракт поведения:
@@ -196,6 +223,18 @@ class SessionServiceProtocol(Protocol):
   - проверяет статус пользователя (`active`)
   - возвращает профиль и `emails` c фильтром `is_deleted = False`
   - при невалидной/просроченной session возвращает `InvalidSessionError`
+- `update_current_user_profile`
+  - валидирует session cookie в tenant-context
+  - проверяет соответствие `tenant/domain/host`
+  - загружает пользователя по `user_id` из session
+  - проверяет статус пользователя (`active`)
+  - обновляет только поля:
+    - `last_name`, `first_name`, `middle_name`
+    - `interface_language` (`uk`/`en`)
+    - `interface_theme` (`system`/`dark`/`light`/`null`)
+    - `timezone` (`Europe/Kyiv`/`Europe/Warsaw`)
+  - не принимает дополнительные поля вне контракта PATCH payload
+  - делает `UoW.commit()` после сохранения профиля
 
 ## Infrastructure
 
@@ -226,6 +265,7 @@ async def exists_by_tenant_and_email(tenant_id: UUID, email: str) -> bool
 - [`POST /api/console/auth/request-otp`](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/identity/presentation/api/console_auth.py)
 - [`POST /api/console/auth/confirm-otp`](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/identity/presentation/api/console_auth.py)
 - [`GET /api/console/auth/me`](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/identity/presentation/api/console_auth.py)
+- [`PATCH /api/console/auth/me`](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/identity/presentation/api/console_auth.py)
 - [`POST /api/console/auth/logout`](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/identity/presentation/api/console_auth.py)
 
 Схемы request/response вынесены в:

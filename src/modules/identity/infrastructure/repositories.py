@@ -92,6 +92,22 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
         ).all()
         return self._map_user(user_model, email_models)
 
+    async def update_profile(self, user: User) -> None:
+        await self._session.execute(
+            update(UserModel)
+            .where(UserModel.id == str(user.id))
+            .values(
+                last_name=user.last_name,
+                first_name=user.first_name,
+                middle_name=user.middle_name,
+                interface__language=user.interface_language,
+                interface_theme=user.interface_theme,
+                timezone=user.timezone,
+                updated_at=user.updated_at,
+            )
+        )
+        await self._session.flush()
+
     async def mark_email_verified(self, user_email_id: UUID) -> None:
         await self._session.execute(
             update(UserEmailModel)

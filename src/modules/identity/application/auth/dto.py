@@ -68,3 +68,29 @@ class GetCurrentUserResultDTO:
     interface_theme: str | None
     timezone: str
     emails: list[GetCurrentUserEmailDTO] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class UpdateCurrentUserProfileCommandDTO:
+    host: str
+    session_token: str | None
+    last_name: str
+    first_name: str
+    middle_name: str | None
+    interface_language: str
+    interface_theme: str | None
+    timezone: str
+
+
+@dataclass(frozen=True, slots=True)
+class UpdateCurrentUserProfileResultDTO:
+    id: UUID
+    status: str
+    last_name: str
+    first_name: str
+    middle_name: str | None
+    avatar: str | None
+    interface_language: str
+    interface_theme: str | None
+    timezone: str
+    emails: list[GetCurrentUserEmailDTO] = field(default_factory=list)

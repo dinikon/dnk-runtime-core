@@ -465,6 +465,231 @@ class ConsoleAuthEndpointTests(unittest.TestCase):
         )
         self.assertNotIn("deleted.secondary@example.com", emails)
 
+    def test_update_current_user_profile_updates_and_persists(self) -> None:
+        self._create_tenant(
+            host="acme.example.com",
+            external_id="tenant-acme",
+            email="john@example.com",
+        )
+        session_token = self._confirm_login(
+            host="acme.example.com",
+            email="john@example.com",
+        )
+        payload = {
+            "last_name": "Doe-Updated",
+            "first_name": "Jane",
+            "middle_name": "Alice",
+            "interface_language": "en",
+            "interface_theme": "dark",
+            "timezone": "Europe/Warsaw",
+        }
+
+        patch_response = self.client.patch(
+            "http://acme.example.com/api/console/auth/me",
+            headers=self._session_cookie_headers(session_token),
+            json=payload,
+        )
+
+        self.assertEqual(patch_response.status_code, 200)
+        patched = patch_response.json()
+        self.assertEqual(patched["last_name"], payload["last_name"])
+        self.assertEqual(patched["first_name"], payload["first_name"])
+        self.assertEqual(patched["middle_name"], payload["middle_name"])
+        self.assertEqual(patched["interface_language"], payload["interface_language"])
+        self.assertEqual(patched["interface_theme"], payload["interface_theme"])
+        self.assertEqual(patched["timezone"], payload["timezone"])
+
+        get_response = self.client.get(
+            "http://acme.example.com/api/console/auth/me",
+            headers=self._session_cookie_headers(session_token),
+        )
+        self.assertEqual(get_response.status_code, 200)
+        persisted = get_response.json()
+        self.assertEqual(persisted["last_name"], payload["last_name"])
+        self.assertEqual(persisted["first_name"], payload["first_name"])
+        self.assertEqual(persisted["middle_name"], payload["middle_name"])
+        self.assertEqual(
+            persisted["interface_language"],
+            payload["interface_language"],
+        )
+        self.assertEqual(persisted["interface_theme"], payload["interface_theme"])
+        self.assertEqual(persisted["timezone"], payload["timezone"])
+
+    def test_update_current_user_profile_allows_null_middle_name_and_theme(
+        self,
+    ) -> None:
+        self._create_tenant(
+            host="acme.example.com",
+            external_id="tenant-acme",
+            email="john@example.com",
+        )
+        session_token = self._confirm_login(
+            host="acme.example.com",
+            email="john@example.com",
+        )
+
+        response = self.client.patch(
+            "http://acme.example.com/api/console/auth/me",
+            headers=self._session_cookie_headers(session_token),
+            json={
+                "last_name": "Doe",
+                "first_name": "John",
+                "middle_name": None,
+                "interface_language": "uk",
+                "interface_theme": None,
+                "timezone": "Europe/Kyiv",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIsNone(payload["middle_name"])
+        self.assertIsNone(payload["interface_theme"])
+        self.assertEqual(payload["interface_language"], "uk")
+
+    def test_update_current_user_profile_returns_401_for_missing_session_cookie(
+        self,
+    ) -> None:
+        self._create_tenant(
+            host="acme.example.com",
+            external_id="tenant-acme",
+            email="john@example.com",
+        )
+
+        response = self.client.patch(
+            "http://acme.example.com/api/console/auth/me",
+            json={
+                "last_name": "Doe",
+                "first_name": "John",
+                "middle_name": None,
+                "interface_language": "en",
+                "interface_theme": "light",
+                "timezone": "Europe/Kyiv",
+            },
+        )
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_update_current_user_profile_returns_401_for_other_tenant_session(
+        self,
+    ) -> None:
+        self._create_tenant(
+            host="acme.example.com",
+            external_id="tenant-acme",
+            email="shared@example.com",
+        )
+        self._create_tenant(
+            host="beta.example.com",
+            external_id="tenant-beta",
+            email="shared@example.com",
+        )
+        session_token = self._confirm_login(
+            host="acme.example.com",
+            email="shared@example.com",
+        )
+
+        response = self.client.patch(
+            "http://beta.example.com/api/console/auth/me",
+            headers=self._session_cookie_headers(session_token),
+            json={
+                "last_name": "Doe",
+                "first_name": "John",
+                "middle_name": None,
+                "interface_language": "en",
+                "interface_theme": "light",
+                "timezone": "Europe/Warsaw",
+            },
+        )
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_update_current_user_profile_returns_403_for_inactive_user(self) -> None:
+        tenant = self._create_tenant(
+            host="acme.example.com",
+            external_id="tenant-acme",
+            email="john@example.com",
+        )
+        session_token = self._confirm_login(
+            host="acme.example.com",
+            email="john@example.com",
+        )
+        asyncio.run(
+            self._set_user_status(
+                user_id=tenant["user_id"],
+                status="freeze",
+            )
+        )
+
+        response = self.client.patch(
+            "http://acme.example.com/api/console/auth/me",
+            headers=self._session_cookie_headers(session_token),
+            json={
+                "last_name": "Doe",
+                "first_name": "John",
+                "middle_name": None,
+                "interface_language": "en",
+                "interface_theme": "light",
+                "timezone": "Europe/Kyiv",
+            },
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_update_current_user_profile_returns_422_for_invalid_values(
+        self,
+    ) -> None:
+        self._create_tenant(
+            host="acme.example.com",
+            external_id="tenant-acme",
+            email="john@example.com",
+        )
+        session_token = self._confirm_login(
+            host="acme.example.com",
+            email="john@example.com",
+        )
+
+        response = self.client.patch(
+            "http://acme.example.com/api/console/auth/me",
+            headers=self._session_cookie_headers(session_token),
+            json={
+                "last_name": "Doe",
+                "first_name": "John",
+                "middle_name": None,
+                "interface_language": "uk",
+                "interface_theme": "blue",
+                "timezone": "UTC",
+            },
+        )
+
+        self.assertEqual(response.status_code, 422)
+
+    def test_update_current_user_profile_rejects_unknown_fields(self) -> None:
+        self._create_tenant(
+            host="acme.example.com",
+            external_id="tenant-acme",
+            email="john@example.com",
+        )
+        session_token = self._confirm_login(
+            host="acme.example.com",
+            email="john@example.com",
+        )
+
+        response = self.client.patch(
+            "http://acme.example.com/api/console/auth/me",
+            headers=self._session_cookie_headers(session_token),
+            json={
+                "last_name": "Doe",
+                "first_name": "John",
+                "middle_name": None,
+                "interface_language": "en",
+                "interface_theme": "light",
+                "timezone": "Europe/Kyiv",
+                "avatar": "https://example.com/new-avatar.png",
+            },
+        )
+
+        self.assertEqual(response.status_code, 422)
+
     def test_logout_invalidates_session_and_clears_cookie(self) -> None:
         tenant = self._create_tenant(
             host="acme.example.com",

@@ -8,6 +8,8 @@ from src.modules.identity.application.auth.dto import (
     LogoutCurrentSessionResultDTO,
     RequestEmailOtpCommandDTO,
     RequestEmailOtpResultDTO,
+    UpdateCurrentUserProfileCommandDTO,
+    UpdateCurrentUserProfileResultDTO,
 )
 
 __all__ = [
@@ -20,4 +22,6 @@ __all__ = [
     "LogoutCurrentSessionResultDTO",
     "RequestEmailOtpCommandDTO",
     "RequestEmailOtpResultDTO",
+    "UpdateCurrentUserProfileCommandDTO",
+    "UpdateCurrentUserProfileResultDTO",
 ]
