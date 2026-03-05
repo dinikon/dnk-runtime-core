@@ -21,6 +21,7 @@
 
 - `tenancy`
 - `identity`
+- `mock`
 
 Каркасами без прикладной логики пока остаются:
 
@@ -70,6 +71,7 @@ src/
   modules/
     router.py
     shared/
+    mock/
     tenancy/
     identity/
     crm/

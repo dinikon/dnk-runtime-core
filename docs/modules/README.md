@@ -6,6 +6,7 @@
 
 - `config.md` — конфигурация и источники настроек
 - `shared.md` — общие технические механизмы
+- `mock.md` — mock endpoints и frontend bootstrap contracts
 - `tenancy.md` — tenant/domain bounded context
 - `identity.md` — user/email/auth bounded context
 - `crm.md` — текущее состояние модуля CRM
