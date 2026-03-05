@@ -13,6 +13,7 @@
    - tenant-bound auth-flow по email OTP:
      - `POST /api/console/auth/request-otp`
      - `POST /api/console/auth/confirm-otp`
+     - `GET /api/console/auth/me`
      - `POST /api/console/auth/logout`
 
 Ключевая бизнес-идея приложения:
@@ -299,6 +300,7 @@ Endpoint принимает:
 - `UserEmail`
 - tenant-scoped поиском email
 - auth-flow по email OTP
+- tenant-scoped валидацией session и чтением current user profile
 
 ### Domain
 
@@ -323,6 +325,7 @@ Endpoint принимает:
 2. `auth`
    - `request_otp`
    - `confirm_otp`
+   - `current_user`
    - `logout`
 
 ### Auth-flow
@@ -373,6 +376,19 @@ Endpoint принимает:
    - `host`
 5. session инвалидируется
 6. route очищает cookie
+
+#### `GET /api/console/auth/me`
+
+1. определяется `host`
+2. загружается tenant-context
+3. session token читается из cookie
+4. session проверяется на совпадение:
+   - `tenant_id`
+   - `tenant_domain_id`
+   - `host`
+5. user загружается по `session.user_id`
+6. проверяется статус user (`active`)
+7. response возвращает user profile и `emails` c фильтром `is_deleted = false`
 
 ### Token storage
 
@@ -439,6 +455,7 @@ Endpoint принимает:
 - [test/test_console_auth_endpoint.py](/Users/inikon/PycharmProjects/dnk-runtime-core/test/test_console_auth_endpoint.py)
   - request OTP
   - confirm OTP
+  - get current user profile (`/api/console/auth/me`)
   - logout
   - tenant/host/session isolation
 

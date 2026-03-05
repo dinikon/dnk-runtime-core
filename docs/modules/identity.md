@@ -8,6 +8,7 @@
 - `UserEmail`
 - tenant-scoped проверкой email
 - auth-flow по email OTP
+- tenant-scoped валидацией session cookie и чтением текущего пользователя
 
 ## Структура
 
@@ -194,6 +195,7 @@ class SessionServiceProtocol(Protocol):
   - загружает пользователя по `user_id` из session
   - проверяет статус пользователя (`active`)
   - возвращает профиль и `emails` c фильтром `is_deleted = False`
+  - при невалидной/просроченной session возвращает `InvalidSessionError`
 
 ## Infrastructure
 
