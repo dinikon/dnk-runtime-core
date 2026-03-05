@@ -4,10 +4,12 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 
 from src.modules.identity.application.auth.dto import (
     ConfirmEmailOtpCommandDTO,
+    GetCurrentUserCommandDTO,
     LogoutCurrentSessionCommandDTO,
     RequestEmailOtpCommandDTO,
 )
 from src.modules.identity.domain.errors import (
+    InvalidSessionError,
     InvalidOtpChallengeError,
     InvalidOtpCodeError,
     PrimaryUserEmailNotFoundError,
@@ -19,12 +21,14 @@ from src.modules.identity.presentation.api.requests.console_auth import (
 )
 from src.modules.identity.presentation.api.responses.console_auth import (
     ConfirmEmailOtpResponseSchema,
+    CurrentUserResponseSchema,
     LogoutCurrentSessionResponseSchema,
     RequestEmailOtpResponseSchema,
 )
 from src.modules.identity.presentation.depends.auth_services import AuthSettingsDep
 from src.modules.identity.presentation.depends.auth_use_cases import (
     ConfirmEmailOtpUseCaseDep,
+    GetCurrentUserUseCaseDep,
     LogoutCurrentSessionUseCaseDep,
     RequestEmailOtpUseCaseDep,
 )
@@ -122,6 +126,61 @@ async def confirm_email_otp(
         ok=result.ok,
         user_id=result.user_id,
         tenant_id=result.tenant_id,
+    )
+
+
+@router.get(
+    "/api/console/auth/me",
+    response_model=CurrentUserResponseSchema,
+)
+async def get_current_user(
+    request: Request,
+    host: RequestHostDep,
+    settings: AuthSettingsDep,
+    use_case: GetCurrentUserUseCaseDep,
+) -> CurrentUserResponseSchema:
+    try:
+        result = await use_case.execute(
+            GetCurrentUserCommandDTO(
+                host=host,
+                session_token=request.cookies.get(settings.session_cookie_name),
+            )
+        )
+    except TenantHostNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except (TenantLoginUnavailableError, UserLoginUnavailableError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    except InvalidSessionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+        ) from exc
+
+    return CurrentUserResponseSchema(
+        id=result.id,
+        status=result.status,
+        last_name=result.last_name,
+        first_name=result.first_name,
+        middle_name=result.middle_name,
+        avatar=result.avatar,
+        interface_language=result.interface_language,
+        interface_theme=result.interface_theme,
+        timezone=result.timezone,
+        emails=[
+            {
+                "id": email.id,
+                "email": email.email,
+                "is_primary": email.is_primary,
+                "is_verified": email.is_verified,
+            }
+            for email in result.emails
+        ],
     )
 
 

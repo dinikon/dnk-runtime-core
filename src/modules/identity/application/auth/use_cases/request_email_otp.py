@@ -77,6 +77,7 @@ class RequestEmailOtpUseCase:
             ),
             ttl_seconds=self._otp_ttl_seconds,
         )
+        print(generated.code)
         await self._email_sender.send_login_code(primary_email.email, generated.code)
 
         return RequestEmailOtpResultDTO(

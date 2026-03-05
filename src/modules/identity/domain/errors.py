@@ -24,3 +24,8 @@ class InvalidOtpChallengeError(ValidationError):
 class InvalidOtpCodeError(ValidationError):
     def __init__(self):
         super().__init__("OTP code is invalid.")
+
+
+class InvalidSessionError(ValidationError):
+    def __init__(self):
+        super().__init__("Session is invalid or expired.")

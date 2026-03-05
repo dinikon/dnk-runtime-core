@@ -7,6 +7,9 @@ from fastapi import Depends
 from src.modules.identity.application.auth.use_cases.confirm_email_otp import (
     ConfirmEmailOtpUseCase,
 )
+from src.modules.identity.application.auth.use_cases.get_current_user import (
+    GetCurrentUserUseCase,
+)
 from src.modules.identity.application.auth.use_cases.logout_current_session import (
     LogoutCurrentSessionUseCase,
 )
@@ -80,6 +83,24 @@ ConfirmEmailOtpUseCaseDep = Annotated[
 ]
 
 
+def get_current_user_use_case(
+    tenant_context_reader: TenantContextReaderDep,
+    users_repository: AuthUsersRepositoryDep,
+    session_store: SessionStoreDep,
+) -> GetCurrentUserUseCase:
+    return GetCurrentUserUseCase(
+        tenant_context_reader=tenant_context_reader,
+        users_repository=users_repository,
+        session_store=session_store,
+    )
+
+
+GetCurrentUserUseCaseDep = Annotated[
+    GetCurrentUserUseCase,
+    Depends(get_current_user_use_case),
+]
+
+
 def get_logout_current_session_use_case(
     tenant_context_reader: TenantContextReaderDep,
     session_store: SessionStoreDep,
@@ -98,9 +119,11 @@ LogoutCurrentSessionUseCaseDep = Annotated[
 
 __all__ = [
     "ConfirmEmailOtpUseCaseDep",
+    "GetCurrentUserUseCaseDep",
     "LogoutCurrentSessionUseCaseDep",
     "RequestEmailOtpUseCaseDep",
     "get_confirm_email_otp_use_case",
+    "get_current_user_use_case",
     "get_logout_current_session_use_case",
     "get_request_email_otp_use_case",
 ]
