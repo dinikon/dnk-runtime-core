@@ -5,9 +5,12 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from src.modules.identity.application.auth.dto import (
     ConfirmEmailOtpCommandDTO,
     GetCurrentUserCommandDTO,
+    GetCurrentUserEmailDTO,
+    GetCurrentUserResultDTO,
     LogoutCurrentSessionCommandDTO,
     RequestEmailOtpCommandDTO,
     UpdateCurrentUserProfileCommandDTO,
+    UpdateCurrentUserProfileResultDTO,
 )
 from src.modules.identity.domain.errors import (
     InvalidSessionError,
@@ -23,6 +26,7 @@ from src.modules.identity.presentation.api.requests.console_auth import (
 )
 from src.modules.identity.presentation.api.responses.console_auth import (
     ConfirmEmailOtpResponseSchema,
+    CurrentUserEmailResponseSchema,
     CurrentUserResponseSchema,
     LogoutCurrentSessionResponseSchema,
     RequestEmailOtpResponseSchema,
@@ -43,6 +47,37 @@ from src.modules.tenancy.domain.errors import (
 )
 
 router = APIRouter(tags=["console-auth"])
+
+
+def _map_current_user_emails(
+    emails: list[GetCurrentUserEmailDTO],
+) -> list[CurrentUserEmailResponseSchema]:
+    return [
+        CurrentUserEmailResponseSchema(
+            id=email.id,
+            email=email.email,
+            is_primary=email.is_primary,
+            is_verified=email.is_verified,
+        )
+        for email in emails
+    ]
+
+
+def _to_current_user_response(
+    result: GetCurrentUserResultDTO | UpdateCurrentUserProfileResultDTO,
+) -> CurrentUserResponseSchema:
+    return CurrentUserResponseSchema(
+        id=result.id,
+        status=result.status,
+        last_name=result.last_name,
+        first_name=result.first_name,
+        middle_name=result.middle_name,
+        avatar=result.avatar,
+        interface_language=result.interface_language,
+        interface_theme=result.interface_theme,
+        timezone=result.timezone,
+        emails=_map_current_user_emails(result.emails),
+    )
 
 
 @router.post(
@@ -166,26 +201,7 @@ async def get_current_user(
             detail=str(exc),
         ) from exc
 
-    return CurrentUserResponseSchema(
-        id=result.id,
-        status=result.status,
-        last_name=result.last_name,
-        first_name=result.first_name,
-        middle_name=result.middle_name,
-        avatar=result.avatar,
-        interface_language=result.interface_language,
-        interface_theme=result.interface_theme,
-        timezone=result.timezone,
-        emails=[
-            {
-                "id": email.id,
-                "email": email.email,
-                "is_primary": email.is_primary,
-                "is_verified": email.is_verified,
-            }
-            for email in result.emails
-        ],
-    )
+    return _to_current_user_response(result)
 
 
 @router.patch(
@@ -233,26 +249,7 @@ async def update_current_user_profile(
             detail=str(exc),
         ) from exc
 
-    return CurrentUserResponseSchema(
-        id=result.id,
-        status=result.status,
-        last_name=result.last_name,
-        first_name=result.first_name,
-        middle_name=result.middle_name,
-        avatar=result.avatar,
-        interface_language=result.interface_language,
-        interface_theme=result.interface_theme,
-        timezone=result.timezone,
-        emails=[
-            {
-                "id": email.id,
-                "email": email.email,
-                "is_primary": email.is_primary,
-                "is_verified": email.is_verified,
-            }
-            for email in result.emails
-        ],
-    )
+    return _to_current_user_response(result)
 
 
 @router.post(
