@@ -8,6 +8,12 @@ from uuid import UUID
 import uuid6
 
 from src.modules.shared.domain.errors import ValidationError
+from src.modules.runtime_schema.domain.errors import (
+    InvalidRequiredRelationOnDeleteError,
+    RelationJunctionTableRequiredError,
+    RelationOwnerFieldRequiredError,
+    RelationTargetFieldRequiredError,
+)
 from src.modules.runtime_schema.domain.value_objects.field_type import (
     RuntimeSchemaFieldType,
 )
@@ -399,18 +405,14 @@ class RelationMetadata:
             RuntimeSchemaRelationKind.ONE_TO_ONE,
         }:
             if source_field_metadata_id is None:
-                raise ValidationError("Owner relation must have source field metadata.")
+                raise RelationOwnerFieldRequiredError()
             if target_field_metadata_id is None:
-                raise ValidationError("Owner relation must have target field metadata.")
+                raise RelationTargetFieldRequiredError()
             if is_required and on_delete == RuntimeSchemaRelationOnDelete.SET_NULL:
-                raise ValidationError(
-                    "Required relation must not use on_delete='set_null'."
-                )
+                raise InvalidRequiredRelationOnDeleteError(on_delete.value)
         if kind == RuntimeSchemaRelationKind.MANY_TO_MANY:
             if not normalized_junction_table_name:
-                raise ValidationError(
-                    "Many-to-many relation must have junction_table_name."
-                )
+                raise RelationJunctionTableRequiredError()
 
         now = datetime.now(UTC)
         return cls(

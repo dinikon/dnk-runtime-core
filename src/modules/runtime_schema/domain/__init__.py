@@ -7,12 +7,20 @@ from src.modules.runtime_schema.domain.entities import (
 )
 from src.modules.runtime_schema.domain.errors import (
     CrossTenantRelationError,
+    FieldMetadataNotFoundError,
+    FieldMetadataObjectMismatchError,
     FieldMetadataNameImmutableError,
     InvalidRelationFieldTypeError,
+    InvalidRequiredRelationOnDeleteError,
+    ObjectMetadataNotFoundError,
     ObjectMetadataNameImmutableError,
     RelationFieldAlreadyBoundError,
+    RelationJunctionTableRequiredError,
     RelationJunctionTableAlreadyExistsError,
     RelationMetadataNotFoundError,
+    RelationOwnerFieldRequiredError,
+    RelationTargetFieldRequiredError,
+    SystemRelationDefinitionError,
 )
 
 __all__ = [
@@ -21,11 +29,19 @@ __all__ = [
     "RelationMetadata",
     "SystemObjectDefinition",
     "SystemFieldDefinition",
+    "ObjectMetadataNotFoundError",
     "ObjectMetadataNameImmutableError",
+    "FieldMetadataNotFoundError",
+    "FieldMetadataObjectMismatchError",
     "FieldMetadataNameImmutableError",
     "RelationMetadataNotFoundError",
     "RelationFieldAlreadyBoundError",
+    "RelationOwnerFieldRequiredError",
+    "RelationTargetFieldRequiredError",
     "RelationJunctionTableAlreadyExistsError",
+    "RelationJunctionTableRequiredError",
     "InvalidRelationFieldTypeError",
+    "InvalidRequiredRelationOnDeleteError",
     "CrossTenantRelationError",
+    "SystemRelationDefinitionError",
 ]

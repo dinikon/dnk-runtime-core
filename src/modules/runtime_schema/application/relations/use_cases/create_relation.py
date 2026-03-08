@@ -17,9 +17,13 @@ from src.modules.runtime_schema.application.relations.ports.schema_manager impor
 from src.modules.runtime_schema.domain.entities import RelationMetadata
 from src.modules.runtime_schema.domain.errors import (
     CrossTenantRelationError,
+    FieldMetadataNotFoundError,
+    FieldMetadataObjectMismatchError,
     InvalidRelationFieldTypeError,
+    ObjectMetadataNotFoundError,
     RelationFieldAlreadyBoundError,
     RelationJunctionTableAlreadyExistsError,
+    RelationOwnerFieldRequiredError,
 )
 from src.modules.runtime_schema.domain.value_objects import (
     RuntimeSchemaFieldType,
@@ -55,8 +59,10 @@ class CreateRelationUseCase:
         target_object = await self._objects_repository.get_by_id(
             dto.target_object_metadata_id
         )
-        if source_object is None or target_object is None:
-            raise CrossTenantRelationError()
+        if source_object is None:
+            raise ObjectMetadataNotFoundError(dto.source_object_metadata_id)
+        if target_object is None:
+            raise ObjectMetadataNotFoundError(dto.target_object_metadata_id)
         if (
             source_object.tenant_id != dto.tenant_id
             or target_object.tenant_id != dto.tenant_id
@@ -86,21 +92,32 @@ class CreateRelationUseCase:
             RuntimeSchemaRelationKind.ONE_TO_ONE,
         }:
             if dto.source_field_metadata_id is None:
-                raise RelationFieldAlreadyBoundError("missing-source-field")
+                raise RelationOwnerFieldRequiredError()
             source_field = await self._fields_repository.get_by_id(
                 dto.source_field_metadata_id
             )
-            if source_field is None or target_field is None:
-                raise CrossTenantRelationError()
+            if source_field is None:
+                raise FieldMetadataNotFoundError(dto.source_field_metadata_id)
+            if target_field is None:
+                target_field_reference = (
+                    dto.target_field_metadata_id
+                    if dto.target_field_metadata_id is not None
+                    else f"{target_object.id}:id"
+                )
+                raise FieldMetadataNotFoundError(target_field_reference)
             if (
                 source_field.tenant_id != dto.tenant_id
                 or target_field.tenant_id != dto.tenant_id
             ):
                 raise CrossTenantRelationError()
             if source_field.object_metadata_id != source_object.id:
-                raise CrossTenantRelationError()
+                raise FieldMetadataObjectMismatchError(
+                    source_field.id, source_object.id
+                )
             if target_field.object_metadata_id != target_object.id:
-                raise CrossTenantRelationError()
+                raise FieldMetadataObjectMismatchError(
+                    target_field.id, target_object.id
+                )
             if source_field.field_type != RuntimeSchemaFieldType.UUID:
                 raise InvalidRelationFieldTypeError(
                     source_field.name_field,

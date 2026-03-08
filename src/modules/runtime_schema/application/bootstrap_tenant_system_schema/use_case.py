@@ -22,6 +22,7 @@ from src.modules.runtime_schema.domain.entities import (
     SystemFieldDefinition,
     SystemObjectDefinition,
 )
+from src.modules.runtime_schema.domain.errors import SystemRelationDefinitionError
 from src.modules.runtime_schema.domain.value_objects.relation_kind import (
     RuntimeSchemaRelationKind,
 )
@@ -169,7 +170,11 @@ class BootstrapTenantSystemSchemaUseCase:
                 field_definition.relation_target_object_name_singular is None
                 or field_definition.relation_target_field_name is None
             ):
-                continue
+                raise SystemRelationDefinitionError(
+                    object_definition.name_singular,
+                    field_definition.name_field,
+                    "missing relation target object or field name",
+                )
 
             source_field = (
                 await self._field_metadata_repository.get_by_object_and_name_field(
@@ -178,7 +183,11 @@ class BootstrapTenantSystemSchemaUseCase:
                 )
             )
             if source_field is None:
-                continue
+                raise SystemRelationDefinitionError(
+                    object_definition.name_singular,
+                    field_definition.name_field,
+                    "source field metadata was not created",
+                )
 
             target_object = (
                 await self._object_metadata_repository.get_by_tenant_and_name_singular(
@@ -187,7 +196,11 @@ class BootstrapTenantSystemSchemaUseCase:
                 )
             )
             if target_object is None:
-                continue
+                raise SystemRelationDefinitionError(
+                    object_definition.name_singular,
+                    field_definition.name_field,
+                    "target object metadata was not found",
+                )
 
             target_field = (
                 await self._field_metadata_repository.get_by_object_and_name_field(
@@ -196,7 +209,11 @@ class BootstrapTenantSystemSchemaUseCase:
                 )
             )
             if target_field is None:
-                continue
+                raise SystemRelationDefinitionError(
+                    object_definition.name_singular,
+                    field_definition.name_field,
+                    "target field metadata was not found",
+                )
 
             if (
                 source_field.relation_target_object_metadata_id != target_object.id
@@ -218,6 +235,19 @@ class BootstrapTenantSystemSchemaUseCase:
                     target_field=target_field,
                 )
                 await self._relation_metadata_repository.add(relation)
+            elif self._relation_conflicts_with_definition(
+                relation=relation,
+                field_definition=field_definition,
+                source_object=source_object,
+                source_field=source_field,
+                target_object=target_object,
+                target_field=target_field,
+            ):
+                raise SystemRelationDefinitionError(
+                    object_definition.name_singular,
+                    field_definition.name_field,
+                    "existing relation metadata conflicts with system definition",
+                )
 
             await self._tenant_schema_manager.ensure_relation(
                 schema=schema,
@@ -270,4 +300,27 @@ class BootstrapTenantSystemSchemaUseCase:
             on_delete=field_definition.relation_on_delete,
             is_required=not source_field.is_nullable,
             is_system=True,
+        )
+
+    @staticmethod
+    def _relation_conflicts_with_definition(
+        *,
+        relation: RelationMetadata,
+        field_definition: SystemFieldDefinition,
+        source_object: ObjectMetadata,
+        source_field: FieldMetadata,
+        target_object: ObjectMetadata,
+        target_field: FieldMetadata,
+    ) -> bool:
+        return (
+            not relation.is_active
+            or relation.kind != field_definition.relation_kind
+            or relation.source_object_metadata_id != source_object.id
+            or relation.source_field_metadata_id != source_field.id
+            or relation.target_object_metadata_id != target_object.id
+            or relation.target_field_metadata_id != target_field.id
+            or relation.reverse_name_field != field_definition.reverse_name_field
+            or relation.reverse_label != field_definition.reverse_label
+            or relation.on_delete != field_definition.relation_on_delete
+            or relation.is_required != (not source_field.is_nullable)
         )

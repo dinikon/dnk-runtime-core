@@ -16,6 +16,14 @@ from src.modules.runtime_schema.domain.entities import (
     ObjectMetadata,
     RelationMetadata,
 )
+from src.modules.runtime_schema.domain.errors import (
+    FieldMetadataNotFoundError,
+    FieldMetadataObjectMismatchError,
+    ObjectMetadataNotFoundError,
+    RelationJunctionTableAlreadyExistsError,
+    RelationMetadataNotFoundError,
+    RelationOwnerFieldRequiredError,
+)
 from src.modules.runtime_schema.domain.value_objects import (
     RuntimeSchemaFieldType,
 )
@@ -266,6 +274,302 @@ class RuntimeSchemaRelationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(contact_id.relation_target_field_metadata_id)
         self.assertFalse(relations.items[relation.id].is_active)
         self.assertEqual(len(schema_manager.dropped_relations), 1)
+
+    async def test_create_relation_requires_owner_source_field_id(self) -> None:
+        tenant_id = uuid4()
+        deal = ObjectMetadata.create_system(
+            tenant_id=tenant_id,
+            data_source_id=uuid4(),
+            table_name="crm_deals",
+            name_singular="deal",
+            name_plural="deals",
+            label_singular="Deal",
+            label_plural="Deals",
+        )
+        company = ObjectMetadata.create_system(
+            tenant_id=tenant_id,
+            data_source_id=uuid4(),
+            table_name="crm_companies",
+            name_singular="company",
+            name_plural="companies",
+            label_singular="Company",
+            label_plural="Companies",
+        )
+        company_pk = FieldMetadata.create_system(
+            tenant_id=tenant_id,
+            object_metadata_id=company.id,
+            field_type=RuntimeSchemaFieldType.UUID,
+            name_field="id",
+            label="ID",
+            is_nullable=False,
+            is_unique=True,
+        )
+        use_case = CreateRelationUseCase(
+            InMemoryObjectRepository((deal, company)),
+            InMemoryFieldRepository((company_pk,)),
+            InMemoryRelationRepository(),
+            InMemoryRelationSchemaManager(),
+        )
+
+        with self.assertRaises(RelationOwnerFieldRequiredError):
+            await use_case.execute(
+                CreateRelationCommandDTO(
+                    tenant_id=tenant_id,
+                    schema="dnk_schema_test",
+                    kind="many_to_one",
+                    source_object_metadata_id=deal.id,
+                    source_field_metadata_id=None,
+                    target_object_metadata_id=company.id,
+                )
+            )
+
+    async def test_create_relation_raises_when_object_is_missing(self) -> None:
+        tenant_id = uuid4()
+        company = ObjectMetadata.create_system(
+            tenant_id=tenant_id,
+            data_source_id=uuid4(),
+            table_name="crm_companies",
+            name_singular="company",
+            name_plural="companies",
+            label_singular="Company",
+            label_plural="Companies",
+        )
+        use_case = CreateRelationUseCase(
+            InMemoryObjectRepository((company,)),
+            InMemoryFieldRepository(()),
+            InMemoryRelationRepository(),
+            InMemoryRelationSchemaManager(),
+        )
+
+        with self.assertRaises(ObjectMetadataNotFoundError):
+            await use_case.execute(
+                CreateRelationCommandDTO(
+                    tenant_id=tenant_id,
+                    schema="dnk_schema_test",
+                    kind="many_to_many",
+                    source_object_metadata_id=uuid4(),
+                    source_field_metadata_id=None,
+                    target_object_metadata_id=company.id,
+                )
+            )
+
+    async def test_create_relation_raises_when_field_is_missing(self) -> None:
+        tenant_id = uuid4()
+        deal = ObjectMetadata.create_system(
+            tenant_id=tenant_id,
+            data_source_id=uuid4(),
+            table_name="crm_deals",
+            name_singular="deal",
+            name_plural="deals",
+            label_singular="Deal",
+            label_plural="Deals",
+        )
+        company = ObjectMetadata.create_system(
+            tenant_id=tenant_id,
+            data_source_id=uuid4(),
+            table_name="crm_companies",
+            name_singular="company",
+            name_plural="companies",
+            label_singular="Company",
+            label_plural="Companies",
+        )
+        use_case = CreateRelationUseCase(
+            InMemoryObjectRepository((deal, company)),
+            InMemoryFieldRepository(()),
+            InMemoryRelationRepository(),
+            InMemoryRelationSchemaManager(),
+        )
+
+        with self.assertRaises(FieldMetadataNotFoundError):
+            await use_case.execute(
+                CreateRelationCommandDTO(
+                    tenant_id=tenant_id,
+                    schema="dnk_schema_test",
+                    kind="many_to_one",
+                    source_object_metadata_id=deal.id,
+                    source_field_metadata_id=uuid4(),
+                    target_object_metadata_id=company.id,
+                )
+            )
+
+    async def test_create_relation_rejects_field_object_mismatch(self) -> None:
+        tenant_id = uuid4()
+        deal = ObjectMetadata.create_system(
+            tenant_id=tenant_id,
+            data_source_id=uuid4(),
+            table_name="crm_deals",
+            name_singular="deal",
+            name_plural="deals",
+            label_singular="Deal",
+            label_plural="Deals",
+        )
+        company = ObjectMetadata.create_system(
+            tenant_id=tenant_id,
+            data_source_id=uuid4(),
+            table_name="crm_companies",
+            name_singular="company",
+            name_plural="companies",
+            label_singular="Company",
+            label_plural="Companies",
+        )
+        contact = ObjectMetadata.create_system(
+            tenant_id=tenant_id,
+            data_source_id=uuid4(),
+            table_name="crm_contacts",
+            name_singular="contact",
+            name_plural="contacts",
+            label_singular="Contact",
+            label_plural="Contacts",
+        )
+        foreign_field = FieldMetadata.create_system(
+            tenant_id=tenant_id,
+            object_metadata_id=contact.id,
+            field_type=RuntimeSchemaFieldType.UUID,
+            name_field="company_id",
+            label="Company",
+            is_nullable=True,
+        )
+        company_pk = FieldMetadata.create_system(
+            tenant_id=tenant_id,
+            object_metadata_id=company.id,
+            field_type=RuntimeSchemaFieldType.UUID,
+            name_field="id",
+            label="ID",
+            is_nullable=False,
+            is_unique=True,
+        )
+        use_case = CreateRelationUseCase(
+            InMemoryObjectRepository((deal, company, contact)),
+            InMemoryFieldRepository((foreign_field, company_pk)),
+            InMemoryRelationRepository(),
+            InMemoryRelationSchemaManager(),
+        )
+
+        with self.assertRaises(FieldMetadataObjectMismatchError):
+            await use_case.execute(
+                CreateRelationCommandDTO(
+                    tenant_id=tenant_id,
+                    schema="dnk_schema_test",
+                    kind="many_to_one",
+                    source_object_metadata_id=deal.id,
+                    source_field_metadata_id=foreign_field.id,
+                    target_object_metadata_id=company.id,
+                )
+            )
+
+    async def test_create_many_to_many_rejects_duplicate_junction_table(self) -> None:
+        tenant_id = uuid4()
+        deal = ObjectMetadata.create_system(
+            tenant_id=tenant_id,
+            data_source_id=uuid4(),
+            table_name="crm_deals",
+            name_singular="deal",
+            name_plural="deals",
+            label_singular="Deal",
+            label_plural="Deals",
+        )
+        contact = ObjectMetadata.create_system(
+            tenant_id=tenant_id,
+            data_source_id=uuid4(),
+            table_name="crm_contacts",
+            name_singular="contact",
+            name_plural="contacts",
+            label_singular="Contact",
+            label_plural="Contacts",
+        )
+        existing_relation = RelationMetadata.create_many_to_many(
+            tenant_id=tenant_id,
+            source_object_metadata_id=deal.id,
+            target_object_metadata_id=contact.id,
+            junction_table_name="rel_deal_contact_fixed",
+        )
+        use_case = CreateRelationUseCase(
+            InMemoryObjectRepository((deal, contact)),
+            InMemoryFieldRepository(()),
+            InMemoryRelationRepository((existing_relation,)),
+            InMemoryRelationSchemaManager(),
+        )
+
+        with self.assertRaises(RelationJunctionTableAlreadyExistsError):
+            await use_case.execute(
+                CreateRelationCommandDTO(
+                    tenant_id=tenant_id,
+                    schema="dnk_schema_test",
+                    kind="many_to_many",
+                    source_object_metadata_id=deal.id,
+                    source_field_metadata_id=None,
+                    target_object_metadata_id=contact.id,
+                    junction_table_name="rel_deal_contact_fixed",
+                )
+            )
+
+    async def test_delete_relation_raises_when_relation_missing(self) -> None:
+        use_case = DeleteRelationUseCase(
+            InMemoryObjectRepository(()),
+            InMemoryFieldRepository(()),
+            InMemoryRelationRepository(),
+            InMemoryRelationSchemaManager(),
+        )
+
+        with self.assertRaises(RelationMetadataNotFoundError):
+            await use_case.execute(
+                DeleteRelationCommandDTO(
+                    relation_id=uuid4(),
+                    schema="dnk_schema_test",
+                )
+            )
+
+    async def test_delete_relation_raises_when_owner_field_missing(self) -> None:
+        tenant_id = uuid4()
+        lead = ObjectMetadata.create_system(
+            tenant_id=tenant_id,
+            data_source_id=uuid4(),
+            table_name="crm_leads",
+            name_singular="lead",
+            name_plural="leads",
+            label_singular="Lead",
+            label_plural="Leads",
+        )
+        contact = ObjectMetadata.create_system(
+            tenant_id=tenant_id,
+            data_source_id=uuid4(),
+            table_name="crm_contacts",
+            name_singular="contact",
+            name_plural="contacts",
+            label_singular="Contact",
+            label_plural="Contacts",
+        )
+        contact_pk = FieldMetadata.create_system(
+            tenant_id=tenant_id,
+            object_metadata_id=contact.id,
+            field_type=RuntimeSchemaFieldType.UUID,
+            name_field="id",
+            label="ID",
+            is_nullable=False,
+            is_unique=True,
+        )
+        relation = RelationMetadata.create_many_to_one(
+            tenant_id=tenant_id,
+            source_object_metadata_id=lead.id,
+            source_field_metadata_id=uuid4(),
+            target_object_metadata_id=contact.id,
+            target_field_metadata_id=contact_pk.id,
+            is_system=True,
+        )
+        use_case = DeleteRelationUseCase(
+            InMemoryObjectRepository((lead, contact)),
+            InMemoryFieldRepository((contact_pk,)),
+            InMemoryRelationRepository((relation,)),
+            InMemoryRelationSchemaManager(),
+        )
+
+        with self.assertRaises(FieldMetadataNotFoundError):
+            await use_case.execute(
+                DeleteRelationCommandDTO(
+                    relation_id=relation.id,
+                    schema="dnk_schema_test",
+                )
+            )
 
 
 class InMemoryObjectRepository:

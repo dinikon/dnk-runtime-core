@@ -15,6 +15,11 @@ from src.modules.runtime_schema.domain.entities import (
     ObjectMetadata,
     RelationMetadata,
 )
+from src.modules.runtime_schema.domain.errors import (
+    FieldMetadataNotFoundError,
+    ObjectMetadataNotFoundError,
+    RelationMetadataNotFoundError,
+)
 from src.modules.runtime_schema.domain.value_objects.field_type import (
     RuntimeSchemaFieldType,
 )
@@ -71,7 +76,7 @@ class SqlAlchemyObjectMetadataRepository(ObjectMetadataRepositoryProtocol):
     async def save(self, object_metadata: ObjectMetadata) -> None:
         model = await self._session.get(ObjectMetadataModel, object_metadata.id)
         if model is None:
-            return
+            raise ObjectMetadataNotFoundError(object_metadata.id)
         model.label_identifier_field_metadata_id = (
             object_metadata.label_identifier_field_metadata_id
         )
@@ -164,7 +169,7 @@ class SqlAlchemyFieldMetadataRepository(FieldMetadataRepositoryProtocol):
     async def save(self, field_metadata: FieldMetadata) -> None:
         model = await self._session.get(FieldMetadataModel, field_metadata.id)
         if model is None:
-            return
+            raise FieldMetadataNotFoundError(field_metadata.id)
         model.relation_target_field_metadata_id = (
             field_metadata.relation_target_field_metadata_id
         )
@@ -257,7 +262,7 @@ class SqlAlchemyRelationMetadataRepository(RelationMetadataRepositoryProtocol):
     async def save(self, relation_metadata: RelationMetadata) -> None:
         model = await self._session.get(RelationMetadataModel, relation_metadata.id)
         if model is None:
-            return
+            raise RelationMetadataNotFoundError(relation_metadata.id)
         model.is_active = relation_metadata.is_active
         model.updated_at = relation_metadata.updated_at
         await self._session.flush()

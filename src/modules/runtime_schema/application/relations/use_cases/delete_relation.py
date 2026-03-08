@@ -12,7 +12,11 @@ from src.modules.runtime_schema.application.relations.ports.repositories import 
 from src.modules.runtime_schema.application.relations.ports.schema_manager import (
     RelationSchemaManagerProtocol,
 )
-from src.modules.runtime_schema.domain.errors import RelationMetadataNotFoundError
+from src.modules.runtime_schema.domain.errors import (
+    FieldMetadataNotFoundError,
+    ObjectMetadataNotFoundError,
+    RelationMetadataNotFoundError,
+)
 
 
 class DeleteRelationUseCase:
@@ -52,8 +56,16 @@ class DeleteRelationUseCase:
             target_field = await self._fields_repository.get_by_id(
                 relation.target_field_metadata_id
             )
-        if source_object is None or target_object is None:
-            raise RelationMetadataNotFoundError(dto.relation_id)
+        if source_object is None:
+            raise ObjectMetadataNotFoundError(relation.source_object_metadata_id)
+        if target_object is None:
+            raise ObjectMetadataNotFoundError(relation.target_object_metadata_id)
+        if relation.is_owner_relation and relation.source_field_metadata_id is not None:
+            if source_field is None:
+                raise FieldMetadataNotFoundError(relation.source_field_metadata_id)
+        if relation.is_owner_relation and relation.target_field_metadata_id is not None:
+            if target_field is None:
+                raise FieldMetadataNotFoundError(relation.target_field_metadata_id)
 
         await self._schema_manager.drop_relation(
             schema=dto.schema,
