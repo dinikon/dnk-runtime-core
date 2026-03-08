@@ -113,7 +113,7 @@ class TenancyEndpointsTests(unittest.TestCase):
         self.assertEqual(data_source.type, "postgresql")
         self.assertFalse(data_source.is_remote)
         self.assertIsNone(data_source.dsn)
-        self.assertEqual(data_source.schema, f"dnk-schema-{payload['tenant_id']}")
+        self.assertEqual(data_source.schema, f"dnk_schema_{payload['tenant_id']}")
 
     def test_create_tenant_rejects_duplicate_external_id(self) -> None:
         first_response = self.client.post(
