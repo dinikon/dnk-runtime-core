@@ -7,6 +7,7 @@ from src.modules.runtime_schema.application.bootstrap_tenant_system_schema.dto i
 from src.modules.runtime_schema.application.bootstrap_tenant_system_schema.ports.repositories import (
     FieldMetadataRepositoryProtocol,
     ObjectMetadataRepositoryProtocol,
+    RelationMetadataRepositoryProtocol,
 )
 from src.modules.runtime_schema.application.bootstrap_tenant_system_schema.ports.schema_manager import (
     TenantSchemaManagerProtocol,
@@ -14,7 +15,16 @@ from src.modules.runtime_schema.application.bootstrap_tenant_system_schema.ports
 from src.modules.runtime_schema.application.bootstrap_tenant_system_schema.ports.system_definitions import (
     SystemObjectDefinitionsProviderProtocol,
 )
-from src.modules.runtime_schema.domain.entities import FieldMetadata, ObjectMetadata
+from src.modules.runtime_schema.domain.entities import (
+    FieldMetadata,
+    ObjectMetadata,
+    RelationMetadata,
+    SystemFieldDefinition,
+    SystemObjectDefinition,
+)
+from src.modules.runtime_schema.domain.value_objects.relation_kind import (
+    RuntimeSchemaRelationKind,
+)
 
 
 class BootstrapTenantSystemSchemaUseCase:
@@ -22,11 +32,13 @@ class BootstrapTenantSystemSchemaUseCase:
         self,
         object_metadata_repository: ObjectMetadataRepositoryProtocol,
         field_metadata_repository: FieldMetadataRepositoryProtocol,
+        relation_metadata_repository: RelationMetadataRepositoryProtocol,
         system_object_definitions_provider: SystemObjectDefinitionsProviderProtocol,
         tenant_schema_manager: TenantSchemaManagerProtocol,
     ):
         self._object_metadata_repository = object_metadata_repository
         self._field_metadata_repository = field_metadata_repository
+        self._relation_metadata_repository = relation_metadata_repository
         self._system_object_definitions_provider = system_object_definitions_provider
         self._tenant_schema_manager = tenant_schema_manager
 
@@ -37,9 +49,11 @@ class BootstrapTenantSystemSchemaUseCase:
         objects_created = 0
         fields_created = 0
 
-        for (
-            object_definition
-        ) in self._system_object_definitions_provider.get_system_objects():
+        object_definitions = (
+            self._system_object_definitions_provider.get_system_objects()
+        )
+
+        for object_definition in object_definitions:
             object_metadata = (
                 await self._object_metadata_repository.get_by_tenant_and_name_singular(
                     dto.tenant_id,
@@ -50,6 +64,7 @@ class BootstrapTenantSystemSchemaUseCase:
                 object_metadata = ObjectMetadata.create_system(
                     tenant_id=dto.tenant_id,
                     data_source_id=dto.data_source_id,
+                    table_name=object_definition.table_name,
                     name_singular=object_definition.name_singular,
                     name_plural=object_definition.name_plural,
                     label_singular=object_definition.label_singular,
@@ -91,60 +106,21 @@ class BootstrapTenantSystemSchemaUseCase:
                     await self._field_metadata_repository.add(field_metadata)
                     fields_created += 1
 
-                if (
-                    field_definition.name_field
-                    == object_definition.label_identifier_field_name
-                    and object_metadata.label_identifier_field_metadata_id
-                    != field_metadata.id
-                ):
-                    object_metadata.bind_label_identifier_field(field_metadata.id)
-                    await self._object_metadata_repository.save(object_metadata)
-
-            for field_definition in object_definition.fields:
-                if (
-                    field_definition.relation_target_object_name_singular is None
-                    or field_definition.relation_target_field_name is None
-                ):
-                    continue
-
-                field_metadata = (
-                    await self._field_metadata_repository.get_by_object_and_name_field(
-                        object_metadata.id,
-                        field_definition.name_field,
-                    )
+                await self._bind_label_identifier_field(
+                    object_metadata=object_metadata,
+                    object_definition=object_definition,
+                    field_definition=field_definition,
+                    field_metadata=field_metadata,
                 )
-                if field_metadata is None:
-                    continue
-
-                relation_target_object = await self._object_metadata_repository.get_by_tenant_and_name_singular(
-                    dto.tenant_id,
-                    field_definition.relation_target_object_name_singular,
-                )
-                if relation_target_object is None:
-                    continue
-
-                relation_target_field = (
-                    await self._field_metadata_repository.get_by_object_and_name_field(
-                        relation_target_object.id,
-                        field_definition.relation_target_field_name,
-                    )
-                )
-                if relation_target_field is None:
-                    continue
-
-                if (
-                    field_metadata.relation_target_object_metadata_id
-                    != relation_target_object.id
-                    or field_metadata.relation_target_field_metadata_id
-                    != relation_target_field.id
-                ):
-                    field_metadata.bind_relation(
-                        relation_target_object.id,
-                        relation_target_field.id,
-                    )
-                    await self._field_metadata_repository.save(field_metadata)
 
             await self._tenant_schema_manager.ensure_system_object(
+                schema=dto.schema,
+                object_definition=object_definition,
+            )
+
+        for object_definition in object_definitions:
+            await self._ensure_system_relations(
+                tenant_id=dto.tenant_id,
                 schema=dto.schema,
                 object_definition=object_definition,
             )
@@ -152,4 +128,146 @@ class BootstrapTenantSystemSchemaUseCase:
         return BootstrapTenantSystemSchemaResultDTO(
             objects_created=objects_created,
             fields_created=fields_created,
+        )
+
+    async def _bind_label_identifier_field(
+        self,
+        *,
+        object_metadata: ObjectMetadata,
+        object_definition: SystemObjectDefinition,
+        field_definition: SystemFieldDefinition,
+        field_metadata: FieldMetadata,
+    ) -> None:
+        if field_definition.name_field != object_definition.label_identifier_field_name:
+            return
+        if object_metadata.label_identifier_field_metadata_id == field_metadata.id:
+            return
+
+        object_metadata.bind_label_identifier_field(field_metadata.id)
+        await self._object_metadata_repository.save(object_metadata)
+
+    async def _ensure_system_relations(
+        self,
+        *,
+        tenant_id,
+        schema: str,
+        object_definition: SystemObjectDefinition,
+    ) -> None:
+        source_object = (
+            await self._object_metadata_repository.get_by_tenant_and_name_singular(
+                tenant_id,
+                object_definition.name_singular,
+            )
+        )
+        if source_object is None:
+            return
+
+        for field_definition in object_definition.fields:
+            if not self._is_owner_relation(field_definition):
+                continue
+            if (
+                field_definition.relation_target_object_name_singular is None
+                or field_definition.relation_target_field_name is None
+            ):
+                continue
+
+            source_field = (
+                await self._field_metadata_repository.get_by_object_and_name_field(
+                    source_object.id,
+                    field_definition.name_field,
+                )
+            )
+            if source_field is None:
+                continue
+
+            target_object = (
+                await self._object_metadata_repository.get_by_tenant_and_name_singular(
+                    tenant_id,
+                    field_definition.relation_target_object_name_singular,
+                )
+            )
+            if target_object is None:
+                continue
+
+            target_field = (
+                await self._field_metadata_repository.get_by_object_and_name_field(
+                    target_object.id,
+                    field_definition.relation_target_field_name,
+                )
+            )
+            if target_field is None:
+                continue
+
+            if (
+                source_field.relation_target_object_metadata_id != target_object.id
+                or source_field.relation_target_field_metadata_id != target_field.id
+            ):
+                source_field.bind_relation(target_object.id, target_field.id)
+                await self._field_metadata_repository.save(source_field)
+
+            relation = await self._relation_metadata_repository.get_by_source_field_id(
+                source_field.id
+            )
+            if relation is None:
+                relation = self._build_system_relation(
+                    tenant_id=tenant_id,
+                    field_definition=field_definition,
+                    source_object=source_object,
+                    source_field=source_field,
+                    target_object=target_object,
+                    target_field=target_field,
+                )
+                await self._relation_metadata_repository.add(relation)
+
+            await self._tenant_schema_manager.ensure_relation(
+                schema=schema,
+                relation=relation,
+                source_object=source_object,
+                source_field=source_field,
+                target_object=target_object,
+                target_field=target_field,
+            )
+
+    @staticmethod
+    def _is_owner_relation(field_definition: SystemFieldDefinition) -> bool:
+        return field_definition.relation_kind in {
+            RuntimeSchemaRelationKind.MANY_TO_ONE,
+            RuntimeSchemaRelationKind.ONE_TO_ONE,
+        }
+
+    @staticmethod
+    def _build_system_relation(
+        *,
+        tenant_id,
+        field_definition: SystemFieldDefinition,
+        source_object: ObjectMetadata,
+        source_field: FieldMetadata,
+        target_object: ObjectMetadata,
+        target_field: FieldMetadata,
+    ) -> RelationMetadata:
+        if field_definition.relation_kind == RuntimeSchemaRelationKind.ONE_TO_ONE:
+            return RelationMetadata.create_one_to_one(
+                tenant_id=tenant_id,
+                source_object_metadata_id=source_object.id,
+                source_field_metadata_id=source_field.id,
+                target_object_metadata_id=target_object.id,
+                target_field_metadata_id=target_field.id,
+                reverse_name_field=field_definition.reverse_name_field,
+                reverse_label=field_definition.reverse_label,
+                on_delete=field_definition.relation_on_delete,
+                is_required=not source_field.is_nullable,
+                is_system=True,
+            )
+
+        return RelationMetadata.create_many_to_one(
+            tenant_id=tenant_id,
+            source_object_metadata_id=source_object.id,
+            source_field_metadata_id=source_field.id,
+            target_object_metadata_id=target_object.id,
+            target_field_metadata_id=target_field.id,
+            reverse_name_field=field_definition.reverse_name_field,
+            reverse_label=field_definition.reverse_label,
+            on_delete=field_definition.relation_on_delete,
+            is_required=not source_field.is_nullable,
+            is_system=True,
         )

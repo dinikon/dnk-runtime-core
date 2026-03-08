@@ -6,18 +6,10 @@ from src.modules.runtime_schema.domain.entities import (
     FieldMetadata,
     ObjectMetadata,
     RelationMetadata,
-    SystemObjectDefinition,
 )
 
 
-class TenantSchemaManagerProtocol(Protocol):
-    async def ensure_system_object(
-        self,
-        *,
-        schema: str,
-        object_definition: SystemObjectDefinition,
-    ) -> None: ...
-
+class RelationSchemaManagerProtocol(Protocol):
     async def ensure_relation(
         self,
         *,

@@ -12,6 +12,12 @@ from src.modules.runtime_schema.domain.entities import (
 from src.modules.runtime_schema.domain.value_objects.field_type import (
     RuntimeSchemaFieldType,
 )
+from src.modules.runtime_schema.domain.value_objects.relation_kind import (
+    RuntimeSchemaRelationKind,
+)
+from src.modules.runtime_schema.domain.value_objects.relation_on_delete import (
+    RuntimeSchemaRelationOnDelete,
+)
 
 
 def _tenant_system_fields() -> tuple[SystemFieldDefinition, ...]:
@@ -181,8 +187,12 @@ class StaticSystemObjectDefinitionsProvider(SystemObjectDefinitionsProviderProto
                         field_type=RuntimeSchemaFieldType.UUID,
                         label="Contact",
                         is_nullable=True,
+                        relation_kind=RuntimeSchemaRelationKind.MANY_TO_ONE,
                         relation_target_object_name_singular="contact",
                         relation_target_field_name="id",
+                        reverse_name_field="leads",
+                        reverse_label="Leads",
+                        relation_on_delete=RuntimeSchemaRelationOnDelete.SET_NULL,
                     ),
                     SystemFieldDefinition(
                         name_field="company_id",
@@ -190,8 +200,12 @@ class StaticSystemObjectDefinitionsProvider(SystemObjectDefinitionsProviderProto
                         field_type=RuntimeSchemaFieldType.UUID,
                         label="Company",
                         is_nullable=True,
+                        relation_kind=RuntimeSchemaRelationKind.MANY_TO_ONE,
                         relation_target_object_name_singular="company",
                         relation_target_field_name="id",
+                        reverse_name_field="leads",
+                        reverse_label="Leads",
+                        relation_on_delete=RuntimeSchemaRelationOnDelete.SET_NULL,
                     ),
                 ),
                 description="System CRM lead entity.",

@@ -11,6 +11,12 @@ from src.modules.shared.domain.errors import ValidationError
 from src.modules.runtime_schema.domain.value_objects.field_type import (
     RuntimeSchemaFieldType,
 )
+from src.modules.runtime_schema.domain.value_objects.relation_kind import (
+    RuntimeSchemaRelationKind,
+)
+from src.modules.runtime_schema.domain.value_objects.relation_on_delete import (
+    RuntimeSchemaRelationOnDelete,
+)
 
 JsonValue = object
 
@@ -20,6 +26,7 @@ class ObjectMetadata:
     id: UUID
     tenant_id: UUID
     data_source_id: UUID
+    table_name: str
     name_singular: str
     name_plural: str
     label_singular: str
@@ -45,6 +52,7 @@ class ObjectMetadata:
         *,
         tenant_id: UUID,
         data_source_id: UUID,
+        table_name: str,
         name_singular: str,
         name_plural: str,
         label_singular: str,
@@ -57,10 +65,13 @@ class ObjectMetadata:
         duplicate_criteria: JsonValue | None = None,
         shortcut: str | None = None,
     ) -> "ObjectMetadata":
+        normalized_table_name = table_name.strip().lower()
         normalized_name_singular = name_singular.strip().lower()
         normalized_name_plural = name_plural.strip().lower()
         normalized_label_singular = label_singular.strip()
         normalized_label_plural = label_plural.strip()
+        if not normalized_table_name:
+            raise ValidationError("Object metadata table_name must not be empty.")
         if not normalized_name_singular:
             raise ValidationError("Object metadata name_singular must not be empty.")
         if not normalized_name_plural:
@@ -78,6 +89,7 @@ class ObjectMetadata:
             id=uuid6.uuid7(),
             tenant_id=tenant_id,
             data_source_id=data_source_id,
+            table_name=normalized_table_name,
             name_singular=normalized_name_singular,
             name_plural=normalized_name_plural,
             label_singular=normalized_label_singular,
@@ -188,6 +200,11 @@ class FieldMetadata:
         self.relation_target_field_metadata_id = relation_target_field_metadata_id
         self.updated_at = datetime.now(UTC)
 
+    def unbind_relation(self) -> None:
+        self.relation_target_object_metadata_id = None
+        self.relation_target_field_metadata_id = None
+        self.updated_at = datetime.now(UTC)
+
 
 @dataclass(frozen=True, slots=True)
 class SystemFieldDefinition:
@@ -203,8 +220,14 @@ class SystemFieldDefinition:
     icon: str | None = None
     options: JsonValue | None = None
     settings: JsonValue | None = None
+    relation_kind: RuntimeSchemaRelationKind | None = None
     relation_target_object_name_singular: str | None = None
     relation_target_field_name: str | None = None
+    reverse_name_field: str | None = None
+    reverse_label: str | None = None
+    relation_on_delete: RuntimeSchemaRelationOnDelete = (
+        RuntimeSchemaRelationOnDelete.RESTRICT
+    )
     is_primary_key: bool = False
     default_sql: str | None = None
 
@@ -225,3 +248,191 @@ class SystemObjectDefinition:
     is_searchable: bool = True
     duplicate_criteria: JsonValue | None = None
     shortcut: str | None = None
+
+
+@dataclass(slots=True)
+class RelationMetadata:
+    id: UUID
+    tenant_id: UUID
+    source_object_metadata_id: UUID
+    source_field_metadata_id: UUID | None
+    target_object_metadata_id: UUID
+    target_field_metadata_id: UUID | None
+    kind: RuntimeSchemaRelationKind
+    reverse_name_field: str | None
+    reverse_label: str | None
+    junction_table_name: str | None
+    on_delete: RuntimeSchemaRelationOnDelete
+    is_required: bool
+    is_custom: bool
+    is_system: bool
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    @property
+    def reverse_kind(self) -> RuntimeSchemaRelationKind:
+        if self.kind == RuntimeSchemaRelationKind.MANY_TO_ONE:
+            return RuntimeSchemaRelationKind.ONE_TO_MANY
+        return self.kind
+
+    @property
+    def is_owner_relation(self) -> bool:
+        return self.kind in {
+            RuntimeSchemaRelationKind.MANY_TO_ONE,
+            RuntimeSchemaRelationKind.ONE_TO_ONE,
+        }
+
+    @classmethod
+    def create_many_to_one(
+        cls,
+        *,
+        tenant_id: UUID,
+        source_object_metadata_id: UUID,
+        source_field_metadata_id: UUID,
+        target_object_metadata_id: UUID,
+        target_field_metadata_id: UUID,
+        reverse_name_field: str | None = None,
+        reverse_label: str | None = None,
+        on_delete: RuntimeSchemaRelationOnDelete = RuntimeSchemaRelationOnDelete.RESTRICT,
+        is_required: bool = False,
+        is_system: bool = False,
+    ) -> "RelationMetadata":
+        return cls._create(
+            tenant_id=tenant_id,
+            source_object_metadata_id=source_object_metadata_id,
+            source_field_metadata_id=source_field_metadata_id,
+            target_object_metadata_id=target_object_metadata_id,
+            target_field_metadata_id=target_field_metadata_id,
+            kind=RuntimeSchemaRelationKind.MANY_TO_ONE,
+            reverse_name_field=reverse_name_field,
+            reverse_label=reverse_label,
+            junction_table_name=None,
+            on_delete=on_delete,
+            is_required=is_required,
+            is_system=is_system,
+        )
+
+    @classmethod
+    def create_one_to_one(
+        cls,
+        *,
+        tenant_id: UUID,
+        source_object_metadata_id: UUID,
+        source_field_metadata_id: UUID,
+        target_object_metadata_id: UUID,
+        target_field_metadata_id: UUID,
+        reverse_name_field: str | None = None,
+        reverse_label: str | None = None,
+        on_delete: RuntimeSchemaRelationOnDelete = RuntimeSchemaRelationOnDelete.RESTRICT,
+        is_required: bool = False,
+        is_system: bool = False,
+    ) -> "RelationMetadata":
+        return cls._create(
+            tenant_id=tenant_id,
+            source_object_metadata_id=source_object_metadata_id,
+            source_field_metadata_id=source_field_metadata_id,
+            target_object_metadata_id=target_object_metadata_id,
+            target_field_metadata_id=target_field_metadata_id,
+            kind=RuntimeSchemaRelationKind.ONE_TO_ONE,
+            reverse_name_field=reverse_name_field,
+            reverse_label=reverse_label,
+            junction_table_name=None,
+            on_delete=on_delete,
+            is_required=is_required,
+            is_system=is_system,
+        )
+
+    @classmethod
+    def create_many_to_many(
+        cls,
+        *,
+        tenant_id: UUID,
+        source_object_metadata_id: UUID,
+        target_object_metadata_id: UUID,
+        junction_table_name: str,
+        reverse_name_field: str | None = None,
+        reverse_label: str | None = None,
+        is_system: bool = False,
+    ) -> "RelationMetadata":
+        return cls._create(
+            tenant_id=tenant_id,
+            source_object_metadata_id=source_object_metadata_id,
+            source_field_metadata_id=None,
+            target_object_metadata_id=target_object_metadata_id,
+            target_field_metadata_id=None,
+            kind=RuntimeSchemaRelationKind.MANY_TO_MANY,
+            reverse_name_field=reverse_name_field,
+            reverse_label=reverse_label,
+            junction_table_name=junction_table_name,
+            on_delete=RuntimeSchemaRelationOnDelete.CASCADE,
+            is_required=False,
+            is_system=is_system,
+        )
+
+    @classmethod
+    def _create(
+        cls,
+        *,
+        tenant_id: UUID,
+        source_object_metadata_id: UUID,
+        source_field_metadata_id: UUID | None,
+        target_object_metadata_id: UUID,
+        target_field_metadata_id: UUID | None,
+        kind: RuntimeSchemaRelationKind,
+        reverse_name_field: str | None,
+        reverse_label: str | None,
+        junction_table_name: str | None,
+        on_delete: RuntimeSchemaRelationOnDelete,
+        is_required: bool,
+        is_system: bool,
+    ) -> "RelationMetadata":
+        normalized_reverse_name_field = (
+            reverse_name_field.strip().lower() if reverse_name_field else None
+        )
+        normalized_reverse_label = reverse_label.strip() if reverse_label else None
+        normalized_junction_table_name = (
+            junction_table_name.strip().lower() if junction_table_name else None
+        )
+        if kind in {
+            RuntimeSchemaRelationKind.MANY_TO_ONE,
+            RuntimeSchemaRelationKind.ONE_TO_ONE,
+        }:
+            if source_field_metadata_id is None:
+                raise ValidationError("Owner relation must have source field metadata.")
+            if target_field_metadata_id is None:
+                raise ValidationError("Owner relation must have target field metadata.")
+            if is_required and on_delete == RuntimeSchemaRelationOnDelete.SET_NULL:
+                raise ValidationError(
+                    "Required relation must not use on_delete='set_null'."
+                )
+        if kind == RuntimeSchemaRelationKind.MANY_TO_MANY:
+            if not normalized_junction_table_name:
+                raise ValidationError(
+                    "Many-to-many relation must have junction_table_name."
+                )
+
+        now = datetime.now(UTC)
+        return cls(
+            id=uuid6.uuid7(),
+            tenant_id=tenant_id,
+            source_object_metadata_id=source_object_metadata_id,
+            source_field_metadata_id=source_field_metadata_id,
+            target_object_metadata_id=target_object_metadata_id,
+            target_field_metadata_id=target_field_metadata_id,
+            kind=kind,
+            reverse_name_field=normalized_reverse_name_field,
+            reverse_label=normalized_reverse_label,
+            junction_table_name=normalized_junction_table_name,
+            on_delete=on_delete,
+            is_required=is_required,
+            is_custom=not is_system,
+            is_system=is_system,
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+    def deactivate(self) -> None:
+        self.is_active = False
+        self.updated_at = datetime.now(UTC)

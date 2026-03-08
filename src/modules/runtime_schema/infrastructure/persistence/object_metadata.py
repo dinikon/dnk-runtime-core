@@ -31,6 +31,7 @@ class ObjectMetadataModel(Base):
         nullable=False,
         index=True,
     )
+    table_name: Mapped[str] = mapped_column(String(255), nullable=False)
     name_singular: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     name_plural: Mapped[str] = mapped_column(String(255), nullable=False)
     label_singular: Mapped[str] = mapped_column(String(255), nullable=False)

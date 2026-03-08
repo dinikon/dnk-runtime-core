@@ -18,6 +18,9 @@ from src.modules.runtime_schema.infrastructure.persistence.field_metadata import
 from src.modules.runtime_schema.infrastructure.persistence.object_metadata import (
     ObjectMetadataModel,
 )
+from src.modules.runtime_schema.infrastructure.persistence.relation_metadata import (
+    RelationMetadataModel,
+)
 from src.modules.shared.db.base import Base
 from src.modules.tenancy.infrastructure.persistence.data_source import (
     TenantDataSourceModel,
@@ -122,7 +125,7 @@ class TenancyEndpointsTests(unittest.TestCase):
         self.assertEqual(data_source.schema, f"dnk_schema_{payload['tenant_id']}")
 
         runtime_schema_counts = asyncio.run(self._fetch_runtime_schema_counts())
-        self.assertEqual(runtime_schema_counts, (4, 33))
+        self.assertEqual(runtime_schema_counts, (4, 33, 2))
 
     def test_create_tenant_rejects_duplicate_external_id(self) -> None:
         first_response = self.client.post(
@@ -350,7 +353,7 @@ class TenancyEndpointsTests(unittest.TestCase):
                 data_source_count,
             )
 
-    async def _fetch_runtime_schema_counts(self) -> tuple[int, int]:
+    async def _fetch_runtime_schema_counts(self) -> tuple[int, int, int]:
         async with self._session_factory() as session:
             object_count = await session.scalar(
                 select(func.count()).select_from(ObjectMetadataModel)
@@ -358,7 +361,10 @@ class TenancyEndpointsTests(unittest.TestCase):
             field_count = await session.scalar(
                 select(func.count()).select_from(FieldMetadataModel)
             )
-            return object_count, field_count
+            relation_count = await session.scalar(
+                select(func.count()).select_from(RelationMetadataModel)
+            )
+            return object_count, field_count, relation_count
 
     async def _get_tenant_by_external_id(self, external_id: str) -> TenantModel | None:
         async with self._session_factory() as session:
