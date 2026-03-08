@@ -8,6 +8,9 @@ from src.modules.tenancy.application.admin_onboarding.dto import (
 from src.modules.tenancy.application.admin_onboarding.ports.identity import (
     IdentityProvisioningServiceProtocol,
 )
+from src.modules.tenancy.application.admin_onboarding.ports.runtime_schema import (
+    TenantRuntimeSchemaBootstrapperProtocol,
+)
 from src.modules.tenancy.application.admin_onboarding.ports.storage import (
     TenantSchemaProvisionerProtocol,
 )
@@ -35,6 +38,7 @@ class CreateTenantUseCase:
         tenant_schema_name_service: TenantSchemaNameServiceProtocol,
         tenant_schema_provisioner: TenantSchemaProvisionerProtocol,
         tenant_data_source_service: TenantDataSourceServiceProtocol,
+        runtime_schema_bootstrapper: TenantRuntimeSchemaBootstrapperProtocol,
     ):
         self._uow = uow
         self._tenant_service = tenant_service
@@ -43,6 +47,7 @@ class CreateTenantUseCase:
         self._tenant_schema_name_service = tenant_schema_name_service
         self._tenant_schema_provisioner = tenant_schema_provisioner
         self._tenant_data_source_service = tenant_data_source_service
+        self._runtime_schema_bootstrapper = runtime_schema_bootstrapper
 
     async def execute(self, dto: CreateTenantCommandDTO) -> CreateTenantResultDTO:
         try:
@@ -56,9 +61,14 @@ class CreateTenantUseCase:
             )
             tenant_schema = self._tenant_schema_name_service.build(tenant.id)
             await self._tenant_schema_provisioner.create_schema(tenant_schema)
-            await self._tenant_data_source_service.register_primary_local_data_source(
+            data_source = await self._tenant_data_source_service.register_primary_local_data_source(
                 tenant_id=tenant.id,
                 schema=tenant_schema,
+            )
+            await self._runtime_schema_bootstrapper.bootstrap_system_objects(
+                tenant_id=tenant.id,
+                data_source_id=data_source.id,
+                schema=data_source.schema,
             )
             user = await self._identity_provisioning_service.create_tenant_admin(
                 tenant_id=tenant.id,

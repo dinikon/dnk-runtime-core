@@ -5,8 +5,14 @@ from typing import Annotated
 from fastapi import Depends
 
 from src.modules.identity.presentation.depends.services import UserServiceDep
+from src.modules.runtime_schema.presentation.depends.use_cases import (
+    BootstrapTenantSystemSchemaUseCaseDep,
+)
 from src.modules.tenancy.application.admin_onboarding.ports.identity import (
     IdentityProvisioningServiceProtocol,
+)
+from src.modules.tenancy.application.admin_onboarding.ports.runtime_schema import (
+    TenantRuntimeSchemaBootstrapperProtocol,
 )
 from src.modules.tenancy.application.admin_onboarding.ports.storage import (
     TenantSchemaProvisionerProtocol,
@@ -29,6 +35,9 @@ from src.modules.tenancy.application.admin_onboarding.services.tenant_service im
 )
 from src.modules.tenancy.infrastructure.identity_provisioning_service import (
     IdentityProvisioningServiceAdapter,
+)
+from src.modules.tenancy.infrastructure.runtime_schema_bootstrapper import (
+    RuntimeSchemaBootstrapperAdapter,
 )
 from src.modules.tenancy.infrastructure.schema_provisioner import (
     SqlAlchemyTenantSchemaProvisioner,
@@ -110,8 +119,21 @@ TenantDataSourceServiceDep = Annotated[
     Depends(get_tenant_data_source_service),
 ]
 
+
+def get_runtime_schema_bootstrapper(
+    use_case: BootstrapTenantSystemSchemaUseCaseDep,
+) -> TenantRuntimeSchemaBootstrapperProtocol:
+    return RuntimeSchemaBootstrapperAdapter(use_case)
+
+
+RuntimeSchemaBootstrapperDep = Annotated[
+    TenantRuntimeSchemaBootstrapperProtocol,
+    Depends(get_runtime_schema_bootstrapper),
+]
+
 __all__ = [
     "IdentityProvisioningServiceAdapter",
+    "RuntimeSchemaBootstrapperAdapter",
     "get_tenant_service",
     "TenantServiceDep",
     "get_tenant_domain_service",
@@ -124,4 +146,6 @@ __all__ = [
     "TenantSchemaProvisionerDep",
     "get_tenant_data_source_service",
     "TenantDataSourceServiceDep",
+    "get_runtime_schema_bootstrapper",
+    "RuntimeSchemaBootstrapperDep",
 ]
