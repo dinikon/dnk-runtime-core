@@ -1,1 +1,0 @@
-"""CRM bounded context placeholder."""
