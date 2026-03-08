@@ -12,6 +12,7 @@
 - `crm.md` — текущее состояние модуля CRM
 - `catalog.md` — текущее состояние модуля Catalog
 - `org.md` — текущее состояние модуля Org
+- `hybrid_storage.md` — план по hybrid storage, `data_sourses`, `crm`, `universal_access`, `access_control`
 
 Документация ориентирована на разработчиков и описывает:
 
