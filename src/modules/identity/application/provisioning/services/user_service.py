@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
@@ -10,6 +11,13 @@ from src.modules.identity.domain.entities import User
 from src.modules.identity.domain.errors import UserEmailAlreadyExistsError
 
 
+@dataclass(frozen=True, slots=True)
+class CreatedTenantAdmin:
+    user_id: UUID
+    user_email_id: UUID
+    user_status: str
+
+
 class UserServiceProtocol(Protocol):
     async def create_tenant_admin(
         self,
@@ -17,7 +25,7 @@ class UserServiceProtocol(Protocol):
         first_name: str,
         last_name: str,
         email: str,
-    ) -> User: ...
+    ) -> CreatedTenantAdmin: ...
 
 
 class UserService:
@@ -30,7 +38,7 @@ class UserService:
         first_name: str,
         last_name: str,
         email: str,
-    ) -> User:
+    ) -> CreatedTenantAdmin:
         normalized_first_name = first_name.strip()
         normalized_last_name = last_name.strip()
         normalized_email = email.strip().lower()
@@ -45,6 +53,10 @@ class UserService:
             first_name=normalized_first_name,
             last_name=normalized_last_name,
         )
-        user.add_email(normalized_email, is_primary=True)
+        primary_email = user.add_email(normalized_email, is_primary=True)
         await self._users_repository.add(user)
-        return user
+        return CreatedTenantAdmin(
+            user_id=user.id,
+            user_email_id=primary_email.id,
+            user_status=user.status,
+        )

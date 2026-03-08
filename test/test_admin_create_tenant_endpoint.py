@@ -13,6 +13,9 @@ from src.modules.identity.infrastructure.persistence.user import UserModel
 from src.modules.identity.infrastructure.persistence.user_email import UserEmailModel
 from src.modules.router import router as api_router
 from src.modules.shared.db.base import Base
+from src.modules.tenancy.infrastructure.persistence.data_source import (
+    TenantDataSourceModel,
+)
 from src.modules.tenancy.infrastructure.persistence.tenant import TenantModel
 from src.modules.tenancy.infrastructure.persistence.tenant_domain import (
     TenantDomainModel,
@@ -94,13 +97,23 @@ class TenancyEndpointsTests(unittest.TestCase):
         self.assertEqual(payload["tenant_domain_host"], "acme.example.com")
 
         counts = asyncio.run(self._fetch_counts())
-        self.assertEqual(counts, (1, 1, 1, 1))
+        self.assertEqual(counts, (1, 1, 1, 1, 1))
 
         tenant = asyncio.run(self._get_tenant_by_external_id("tenant-acme"))
         self.assertIsNotNone(tenant)
         assert tenant is not None
         self.assertEqual(tenant.name, "Acme")
         self.assertEqual(tenant.external_id, "tenant-acme")
+
+        data_source = asyncio.run(
+            self._get_data_source_by_tenant_id(payload["tenant_id"])
+        )
+        self.assertIsNotNone(data_source)
+        assert data_source is not None
+        self.assertEqual(data_source.type, "postgresql")
+        self.assertFalse(data_source.is_remote)
+        self.assertIsNone(data_source.dsn)
+        self.assertEqual(data_source.schema, f"dnk-schema-{payload['tenant_id']}")
 
     def test_create_tenant_rejects_duplicate_external_id(self) -> None:
         first_response = self.client.post(
@@ -133,7 +146,7 @@ class TenancyEndpointsTests(unittest.TestCase):
         )
 
         counts = asyncio.run(self._fetch_counts())
-        self.assertEqual(counts, (1, 1, 1, 1))
+        self.assertEqual(counts, (1, 1, 1, 1, 1))
 
     def test_create_tenant_rejects_duplicate_host(self) -> None:
         first_response = self.client.post(
@@ -303,7 +316,7 @@ class TenancyEndpointsTests(unittest.TestCase):
         async with self._engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
 
-    async def _fetch_counts(self) -> tuple[int, int, int, int]:
+    async def _fetch_counts(self) -> tuple[int, int, int, int, int]:
         async with self._session_factory() as session:
             tenant_count = await session.scalar(
                 select(func.count()).select_from(TenantModel)
@@ -317,12 +330,32 @@ class TenancyEndpointsTests(unittest.TestCase):
             domain_count = await session.scalar(
                 select(func.count()).select_from(TenantDomainModel)
             )
-            return tenant_count, user_count, email_count, domain_count
+            data_source_count = await session.scalar(
+                select(func.count()).select_from(TenantDataSourceModel)
+            )
+            return (
+                tenant_count,
+                user_count,
+                email_count,
+                domain_count,
+                data_source_count,
+            )
 
     async def _get_tenant_by_external_id(self, external_id: str) -> TenantModel | None:
         async with self._session_factory() as session:
             return await session.scalar(
                 select(TenantModel).where(TenantModel.external_id == external_id)
+            )
+
+    async def _get_data_source_by_tenant_id(
+        self,
+        tenant_id: str,
+    ) -> TenantDataSourceModel | None:
+        async with self._session_factory() as session:
+            return await session.scalar(
+                select(TenantDataSourceModel).where(
+                    TenantDataSourceModel.tenant_id == tenant_id
+                )
             )
 
     async def _set_tenant_status(self, tenant_id: str, status: str) -> None:

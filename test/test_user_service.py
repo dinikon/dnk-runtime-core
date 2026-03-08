@@ -43,15 +43,18 @@ class UserServiceTests(unittest.IsolatedAsyncioTestCase):
         repository = InMemoryUserRepository(duplicate_email_tenants={other_tenant_id})
         service = UserService(repository)
 
-        user = await service.create_tenant_admin(
+        result = await service.create_tenant_admin(
             tenant_id=tenant_id,
             first_name="John",
             last_name="Doe",
             email="john.doe@example.com",
         )
 
-        self.assertEqual(user.tenant_id, tenant_id)
         self.assertEqual(len(repository.added_users), 1)
+        self.assertEqual(repository.added_users[0].tenant_id, tenant_id)
+        self.assertEqual(result.user_id, repository.added_users[0].id)
+        self.assertEqual(result.user_email_id, repository.added_users[0].emails[0].id)
+        self.assertEqual(result.user_status, "active")
 
 
 class SqlAlchemyUserRepositoryTests(unittest.IsolatedAsyncioTestCase):

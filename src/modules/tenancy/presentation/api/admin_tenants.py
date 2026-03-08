@@ -5,6 +5,8 @@ from fastapi import APIRouter, HTTPException, status
 from src.modules.identity.domain.errors import UserEmailAlreadyExistsError
 from src.modules.shared.domain.errors import ValidationError as DomainValidationError
 from src.modules.tenancy.domain.errors import (
+    TenantDataSourceAlreadyExistsError,
+    TenantDataSourceSchemaAlreadyExistsError,
     TenantDomainHostAlreadyExistsError,
     TenantExternalIdAlreadyExistsError,
     TenantNameAlreadyExistsError,
@@ -51,6 +53,8 @@ async def create_tenant(
         TenantExternalIdAlreadyExistsError,
         UserEmailAlreadyExistsError,
         TenantDomainHostAlreadyExistsError,
+        TenantDataSourceAlreadyExistsError,
+        TenantDataSourceSchemaAlreadyExistsError,
     ) as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

@@ -5,10 +5,12 @@ from typing import Annotated
 from fastapi import Depends
 
 from src.modules.tenancy.application.admin_onboarding.ports.repositories import (
+    TenantDataSourceRepositoryProtocol,
     TenantDomainRepositoryProtocol,
     TenantRepositoryProtocol,
 )
 from src.modules.tenancy.infrastructure.repositories import (
+    SqlAlchemyTenantDataSourceRepository,
     SqlAlchemyTenantDomainRepository,
     SqlAlchemyTenantRepository,
 )
@@ -34,9 +36,23 @@ TenantDomainsRepositoryDep = Annotated[
     Depends(get_tenant_domains_repository),
 ]
 
+
+def get_tenant_data_sources_repository(
+    uow: UoWDep,
+) -> TenantDataSourceRepositoryProtocol:
+    return SqlAlchemyTenantDataSourceRepository(uow.session)
+
+
+TenantDataSourcesRepositoryDep = Annotated[
+    TenantDataSourceRepositoryProtocol,
+    Depends(get_tenant_data_sources_repository),
+]
+
 __all__ = [
     "get_tenants_repository",
     "TenantsRepositoryDep",
     "get_tenant_domains_repository",
     "TenantDomainsRepositoryDep",
+    "get_tenant_data_sources_repository",
+    "TenantDataSourcesRepositoryDep",
 ]

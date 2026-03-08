@@ -109,3 +109,48 @@ class TenantDomain:
             created_at=now,
             updated_at=now,
         )
+
+
+@dataclass(slots=True)
+class TenantDataSource:
+    id: UUID
+    tenant_id: UUID
+    type: str
+    is_remote: bool
+    dsn: str | None
+    schema: str
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def create_primary(
+        cls,
+        *,
+        tenant_id: UUID,
+        schema: str,
+        dsn: str | None = None,
+        is_remote: bool = False,
+        source_type: str = "postgresql",
+    ) -> "TenantDataSource":
+        normalized_schema = schema.strip()
+        normalized_type = source_type.strip().lower()
+        if not normalized_schema:
+            raise ValidationError("Tenant data source schema must not be empty.")
+        if not normalized_type:
+            raise ValidationError("Tenant data source type must not be empty.")
+
+        normalized_dsn = dsn.strip() if dsn is not None else None
+        if normalized_dsn == "":
+            normalized_dsn = None
+
+        now = datetime.now(UTC)
+        return cls(
+            id=uuid6.uuid7(),
+            tenant_id=tenant_id,
+            type=normalized_type,
+            is_remote=is_remote,
+            dsn=normalized_dsn,
+            schema=normalized_schema,
+            created_at=now,
+            updated_at=now,
+        )

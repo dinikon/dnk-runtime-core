@@ -22,10 +22,14 @@ from src.modules.tenancy.domain.value_objects.tenant_service_type import (
 )
 from src.modules.tenancy.domain.value_objects.tenant_status import TenantStatus
 from src.modules.tenancy.application.admin_onboarding.ports.repositories import (
+    TenantDataSourceRepositoryProtocol,
     TenantDomainRepositoryProtocol,
     TenantRepositoryProtocol,
 )
-from src.modules.tenancy.domain.entities import Tenant, TenantDomain
+from src.modules.tenancy.domain.entities import Tenant, TenantDataSource, TenantDomain
+from src.modules.tenancy.infrastructure.persistence.data_source import (
+    TenantDataSourceModel,
+)
 from src.modules.tenancy.infrastructure.persistence.tenant import TenantModel
 from src.modules.tenancy.infrastructure.persistence.tenant_domain import (
     TenantDomainModel,
@@ -176,6 +180,57 @@ class SqlAlchemyTenantDomainRepository(TenantDomainRepositoryProtocol):
             ),
             tls_mode=TenantDomainTlsMode(model.tls_mode),
             metadata_json=model.metadata_json,
+            created_at=model.created_at,
+            updated_at=model.updated_at,
+        )
+
+
+class SqlAlchemyTenantDataSourceRepository(TenantDataSourceRepositoryProtocol):
+    def __init__(self, session: AsyncSession):
+        self._session = session
+
+    async def add(self, data_source: TenantDataSource) -> None:
+        self._session.add(
+            TenantDataSourceModel(
+                id=data_source.id,
+                tenant_id=str(data_source.tenant_id),
+                type=data_source.type,
+                is_remote=data_source.is_remote,
+                dsn=data_source.dsn,
+                schema=data_source.schema,
+                created_at=data_source.created_at,
+                updated_at=data_source.updated_at,
+            )
+        )
+        await self._session.flush()
+
+    async def get_by_tenant_id(self, tenant_id: UUID) -> TenantDataSource | None:
+        model = await self._session.scalar(
+            select(TenantDataSourceModel).where(
+                TenantDataSourceModel.tenant_id == str(tenant_id)
+            )
+        )
+        if model is None:
+            return None
+        return self._map_data_source(model)
+
+    async def exists_by_schema(self, schema: str) -> bool:
+        data_source_id = await self._session.scalar(
+            select(TenantDataSourceModel.id)
+            .where(TenantDataSourceModel.schema == schema)
+            .limit(1)
+        )
+        return data_source_id is not None
+
+    @staticmethod
+    def _map_data_source(model: TenantDataSourceModel) -> TenantDataSource:
+        return TenantDataSource(
+            id=_to_uuid(model.id),
+            tenant_id=_to_uuid(model.tenant_id),
+            type=model.type,
+            is_remote=model.is_remote,
+            dsn=model.dsn,
+            schema=model.schema,
             created_at=model.created_at,
             updated_at=model.updated_at,
         )

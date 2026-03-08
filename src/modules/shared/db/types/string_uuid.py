@@ -16,14 +16,21 @@ class StringUUID(TypeDecorator):
     def process_bind_param(self, value, dialect):
         if value is None:
             return value
+        normalized_value = self._normalize_uuid(value)
         if dialect.name == "postgresql":
-            return value
-        return str(value)
+            return normalized_value
+        return str(normalized_value)
 
     def process_result_value(self, value, dialect):
         if value is None:
             return value
-        return uuid.UUID(value)
+        return self._normalize_uuid(value)
+
+    @staticmethod
+    def _normalize_uuid(value) -> uuid.UUID:
+        if isinstance(value, uuid.UUID):
+            return value
+        return uuid.UUID(str(value))
 
 
 __all__ = ["StringUUID"]
