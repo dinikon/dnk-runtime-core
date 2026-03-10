@@ -1,8 +1,5 @@
+from src.modules.crm.domain.shared.company_name import CompanyName
 from src.modules.crm.domain.shared.crm_entity_id import CrmEntityId
 from src.modules.crm.domain.shared.person_name import PersonName
 
-
-class ContactId(CrmEntityId): ...
-
-
-__all__ = ["ContactId", "PersonName"]
+__all__ = ["CompanyName", "CrmEntityId", "PersonName"]

@@ -60,9 +60,18 @@ class LeadTitleRequiredError(ValidationError):
         super().__init__("title cannot be empty")
 
 
+class LeadPersonNameRequiredForConversionError(ValidationError):
+    def __init__(self):
+        super().__init__("person_name is required to convert lead to contact")
+
+
+class LeadCompanyNameRequiredForConversionError(ValidationError):
+    def __init__(self):
+        super().__init__("company_name is required to convert lead to company")
+
+
 __all__ = [
     "CompanyNameRequiredError",
-    "LeadTitleRequiredError",
     "ContactPointKindNotSupportedError",
     "ContactPointNotFoundError",
     "ContactPointTypeAlreadyExistsError",
@@ -72,4 +81,7 @@ __all__ = [
     "ContactPointTypeSystemLockedError",
     "ContactPointTypeTitleRequiredError",
     "ContactPointValueRequiredError",
+    "LeadCompanyNameRequiredForConversionError",
+    "LeadPersonNameRequiredForConversionError",
+    "LeadTitleRequiredError",
 ]
