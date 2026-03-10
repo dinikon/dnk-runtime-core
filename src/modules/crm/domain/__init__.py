@@ -8,6 +8,7 @@ from src.modules.crm.domain.contact_point import (
     ContactPointTypeCode,
     ContactPointTypeDictionary,
 )
+from src.modules.crm.domain.lead import Lead, LeadId, LeadTitle
 
 __all__ = [
     "Company",
@@ -22,4 +23,7 @@ __all__ = [
     "ContactPointType",
     "ContactPointTypeCode",
     "ContactPointTypeDictionary",
+    "Lead",
+    "LeadId",
+    "LeadTitle",
 ]

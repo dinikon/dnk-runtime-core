@@ -55,8 +55,14 @@ class CompanyNameRequiredError(ValidationError):
         super().__init__("company_name cannot be empty")
 
 
+class LeadTitleRequiredError(ValidationError):
+    def __init__(self):
+        super().__init__("title cannot be empty")
+
+
 __all__ = [
     "CompanyNameRequiredError",
+    "LeadTitleRequiredError",
     "ContactPointKindNotSupportedError",
     "ContactPointNotFoundError",
     "ContactPointTypeAlreadyExistsError",
