@@ -10,4 +10,4 @@ class TenantSchemaNameServiceProtocol(Protocol):
 
 class TenantSchemaNameService:
     def build(self, tenant_id: UUID) -> str:
-        return f"dnk_schema_{tenant_id}"
+        return f"dnk-{tenant_id}"

@@ -6,22 +6,42 @@ from uuid import UUID
 from fastapi import Depends
 
 from src.modules.identity.application.provisioning.services.user_service import (
+    UserService,
     UserServiceProtocol,
 )
-from src.modules.identity.presentation.depends.services import UserServiceDep
+from src.modules.identity.infrastructure.repositories import SqlAlchemyUserRepository
+from src.modules.shared.depends.uow import UoWDep
 from src.modules.tenancy.application.admin_onboarding.ports.identity import (
     IdentityProvisioningServiceProtocol,
     ProvisionedTenantAdmin,
+)
+from src.modules.tenancy.application.admin_onboarding.ports.runtime_schema import (
+    TenantRuntimeSchemaBootstrapperProtocol,
+)
+from src.modules.tenancy.application.admin_onboarding.ports.storage import (
+    TenantSchemaProvisionerProtocol,
+)
+from src.modules.tenancy.application.admin_onboarding.services.tenant_data_source_service import (
+    TenantDataSourceService,
+    TenantDataSourceServiceProtocol,
 )
 from src.modules.tenancy.application.admin_onboarding.services.tenant_domain_service import (
     TenantDomainService,
     TenantDomainServiceProtocol,
 )
+from src.modules.tenancy.application.admin_onboarding.services.tenant_schema_name_service import (
+    TenantSchemaNameService,
+    TenantSchemaNameServiceProtocol,
+)
 from src.modules.tenancy.application.admin_onboarding.services.tenant_service import (
     TenantService,
     TenantServiceProtocol,
 )
+from src.modules.tenancy.infrastructure.schema_provisioner import (
+    SqlAlchemyTenantSchemaProvisioner,
+)
 from src.modules.tenancy.presentation.depends.repositories import (
+    TenantDataSourcesRepositoryDep,
     TenantDomainsRepositoryDep,
     TenantsRepositoryDep,
 )
@@ -38,22 +58,28 @@ class IdentityProvisioningServiceAdapter(IdentityProvisioningServiceProtocol):
         last_name: str,
         email: str,
     ) -> ProvisionedTenantAdmin:
-        user = await self._user_service.create_tenant_admin(
+        created_admin = await self._user_service.create_tenant_admin(
             tenant_id=tenant_id,
             first_name=first_name,
             last_name=last_name,
             email=email,
         )
-        primary_email = next(
-            existing
-            for existing in user.emails
-            if existing.is_primary and not existing.is_deleted
-        )
         return ProvisionedTenantAdmin(
-            user_id=user.id,
-            user_email_id=primary_email.id,
-            user_status=user.status,
+            user_id=created_admin.user_id,
+            user_email_id=created_admin.user_email_id,
+            user_status=created_admin.user_status,
         )
+
+
+class NoOpTenantRuntimeSchemaBootstrapper(TenantRuntimeSchemaBootstrapperProtocol):
+    async def bootstrap_system_objects(
+        self,
+        *,
+        tenant_id: UUID,
+        data_source_id: UUID,
+        schema: str,
+    ) -> None:
+        return None
 
 
 def get_tenant_service(
@@ -80,9 +106,54 @@ TenantDomainServiceDep = Annotated[
 ]
 
 
+def get_tenant_schema_name_service() -> TenantSchemaNameServiceProtocol:
+    return TenantSchemaNameService()
+
+
+TenantSchemaNameServiceDep = Annotated[
+    TenantSchemaNameServiceProtocol,
+    Depends(get_tenant_schema_name_service),
+]
+
+
+def get_tenant_schema_provisioner(
+    uow: UoWDep,
+) -> TenantSchemaProvisionerProtocol:
+    return SqlAlchemyTenantSchemaProvisioner(uow.session)
+
+
+TenantSchemaProvisionerDep = Annotated[
+    TenantSchemaProvisionerProtocol,
+    Depends(get_tenant_schema_provisioner),
+]
+
+
+def get_tenant_data_source_service(
+    tenant_data_sources_repository: TenantDataSourcesRepositoryDep,
+) -> TenantDataSourceServiceProtocol:
+    return TenantDataSourceService(tenant_data_sources_repository)
+
+
+TenantDataSourceServiceDep = Annotated[
+    TenantDataSourceServiceProtocol,
+    Depends(get_tenant_data_source_service),
+]
+
+
+def get_runtime_schema_bootstrapper() -> TenantRuntimeSchemaBootstrapperProtocol:
+    return NoOpTenantRuntimeSchemaBootstrapper()
+
+
+TenantRuntimeSchemaBootstrapperDep = Annotated[
+    TenantRuntimeSchemaBootstrapperProtocol,
+    Depends(get_runtime_schema_bootstrapper),
+]
+
+
 def get_identity_provisioning_service(
-    user_service: UserServiceDep,
+    uow: UoWDep,
 ) -> IdentityProvisioningServiceProtocol:
+    user_service = UserService(SqlAlchemyUserRepository(uow.session))
     return IdentityProvisioningServiceAdapter(user_service)
 
 
@@ -93,10 +164,19 @@ IdentityProvisioningServiceDep = Annotated[
 
 __all__ = [
     "IdentityProvisioningServiceAdapter",
+    "NoOpTenantRuntimeSchemaBootstrapper",
     "get_tenant_service",
     "TenantServiceDep",
     "get_tenant_domain_service",
     "TenantDomainServiceDep",
+    "get_tenant_schema_name_service",
+    "TenantSchemaNameServiceDep",
+    "get_tenant_schema_provisioner",
+    "TenantSchemaProvisionerDep",
+    "get_tenant_data_source_service",
+    "TenantDataSourceServiceDep",
+    "get_runtime_schema_bootstrapper",
+    "TenantRuntimeSchemaBootstrapperDep",
     "get_identity_provisioning_service",
     "IdentityProvisioningServiceDep",
 ]
