@@ -35,7 +35,11 @@ async def authorize_control_plane_request(
             detail="Control plane API key is not configured.",
         )
 
-    if credentials is None or credentials.scheme != "Bearer" or not credentials.credentials:
+    if (
+        credentials is None
+        or credentials.scheme != "Bearer"
+        or not credentials.credentials
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Unauthorized.",
