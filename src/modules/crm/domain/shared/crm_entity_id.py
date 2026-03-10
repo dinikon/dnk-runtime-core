@@ -6,7 +6,7 @@ import uuid6
 
 
 @dataclass(frozen=True, slots=True)
-class CrmEntityId:
+class CrmEntityIdVO:
     value: UUID
 
     @classmethod
@@ -23,5 +23,4 @@ class CrmEntityId:
         return str(self.value)
 
 
-__all__ = ["CrmEntityId"]
-
+__all__ = ["CrmEntityIdVO"]

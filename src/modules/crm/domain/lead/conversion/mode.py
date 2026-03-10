@@ -1,7 +1,7 @@
 from enum import StrEnum
 
 
-class LeadConversionMode(StrEnum):
+class LeadConversionModeVO(StrEnum):
     CONTACT_ONLY = "contact_only"
     COMPANY_ONLY = "company_only"
     CONTACT_AND_COMPANY = "contact_and_company"
@@ -11,5 +11,4 @@ class LeadConversionMode(StrEnum):
     DEAL_AND_CONTACT_AND_COMPANY = "deal_and_contact_and_company"
 
 
-__all__ = ["LeadConversionMode"]
-
+__all__ = ["LeadConversionModeVO"]

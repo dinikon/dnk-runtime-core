@@ -12,7 +12,7 @@ from src.modules.crm.domain.error import (
 
 
 @dataclass(frozen=True, slots=True)
-class ContactPointId:
+class ContactPointIdVO:
     value: UUID
 
     @classmethod
@@ -30,7 +30,7 @@ class ContactPointId:
 
 
 @dataclass(frozen=True, slots=True)
-class ContactPointKind:
+class ContactPointKindVO:
     value: str
 
     ALLOWED = {"phone", "email", "site", "messenger"}
@@ -44,29 +44,29 @@ class ContactPointKind:
         object.__setattr__(self, "value", normalized)
 
     @classmethod
-    def phone(cls) -> "ContactPointKind":
+    def phone(cls) -> "ContactPointKindVO":
         return cls("phone")
 
     @classmethod
-    def email(cls) -> "ContactPointKind":
+    def email(cls) -> "ContactPointKindVO":
         return cls("email")
 
     @classmethod
-    def site(cls) -> "ContactPointKind":
+    def site(cls) -> "ContactPointKindVO":
         return cls("site")
 
     @classmethod
-    def website(cls) -> "ContactPointKind":
+    def website(cls) -> "ContactPointKindVO":
         # Backward compatibility alias.
         return cls("site")
 
     @classmethod
-    def messenger(cls) -> "ContactPointKind":
+    def messenger(cls) -> "ContactPointKindVO":
         return cls("messenger")
 
 
 @dataclass(frozen=True, slots=True)
-class ContactPointTypeCode:
+class ContactPointTypeCodeVO:
     """
     Расширяемый код типа из словаря.
     Примеры:
@@ -89,7 +89,7 @@ class ContactPointTypeCode:
 
 
 @dataclass(slots=True, frozen=True)
-class ContactPointType:
+class ContactPointTypeVO:
     """
     Элемент словаря типов контактных точек.
 
@@ -99,8 +99,8 @@ class ContactPointType:
     - kind=messenger, code=telegram, title="Telegram"
     """
 
-    kind: ContactPointKind
-    code: ContactPointTypeCode
+    kind: ContactPointKindVO
+    code: ContactPointTypeCodeVO
     title: str
     is_system: bool = False
     is_active: bool = True
@@ -112,17 +112,25 @@ class ContactPointType:
             raise ContactPointTypeTitleRequiredError()
         object.__setattr__(self, "title", title)
 
-    def rename(self, title: str) -> "ContactPointType":
+    def rename(self, title: str) -> "ContactPointTypeVO":
         normalized_title = title.strip()
         if not normalized_title:
             raise ContactPointTypeTitleRequiredError()
         return replace(self, title=normalized_title)
 
-    def activate(self) -> "ContactPointType":
+    def activate(self) -> "ContactPointTypeVO":
         return replace(self, is_active=True)
 
-    def deactivate(self) -> "ContactPointType":
+    def deactivate(self) -> "ContactPointTypeVO":
         return replace(self, is_active=False)
 
-    def reorder(self, sort_order: int) -> "ContactPointType":
+    def reorder(self, sort_order: int) -> "ContactPointTypeVO":
         return replace(self, sort_order=sort_order)
+
+
+__all__ = [
+    "ContactPointIdVO",
+    "ContactPointKindVO",
+    "ContactPointTypeCodeVO",
+    "ContactPointTypeVO",
+]

@@ -4,7 +4,7 @@ from src.modules.crm.domain.error import CompanyNameRequiredError
 
 
 @dataclass(frozen=True, slots=True)
-class CompanyName:
+class CompanyNameVO:
     value: str
 
     def __post_init__(self) -> None:
@@ -14,5 +14,4 @@ class CompanyName:
         object.__setattr__(self, "value", normalized)
 
 
-__all__ = ["CompanyName"]
-
+__all__ = ["CompanyNameVO"]

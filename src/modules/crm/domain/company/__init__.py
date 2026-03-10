@@ -1,4 +1,4 @@
-from src.modules.crm.domain.company.entity import Company
-from src.modules.crm.domain.company.value_objects import CompanyId, CompanyName
+from src.modules.crm.domain.company.entity import CompanyEntity
+from src.modules.crm.domain.company.value_objects import CompanyIdVO, CompanyNameVO
 
-__all__ = ["Company", "CompanyId", "CompanyName"]
+__all__ = ["CompanyEntity", "CompanyIdVO", "CompanyNameVO"]

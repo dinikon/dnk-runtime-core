@@ -1,14 +1,14 @@
 from dataclasses import dataclass
 
 from src.modules.crm.domain.error import LeadTitleRequiredError
-from src.modules.crm.domain.shared.crm_entity_id import CrmEntityId
+from src.modules.crm.domain.shared.crm_entity_id import CrmEntityIdVO
 
 
-class LeadId(CrmEntityId): ...
+class LeadIdVO(CrmEntityIdVO): ...
 
 
 @dataclass(frozen=True, slots=True)
-class LeadTitle:
+class LeadTitleVO:
     value: str
 
     def __post_init__(self) -> None:
@@ -18,4 +18,4 @@ class LeadTitle:
         object.__setattr__(self, "value", normalized)
 
 
-__all__ = ["LeadId", "LeadTitle"]
+__all__ = ["LeadIdVO", "LeadTitleVO"]

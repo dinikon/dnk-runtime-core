@@ -1,61 +1,64 @@
 from dataclasses import dataclass, field
 from typing import Self
 
-from src.modules.crm.domain.company.entity import Company
-from src.modules.crm.domain.deal.entity import Deal
-from src.modules.crm.domain.contact_point.entity import (
-    ContactPoint,
-    ContactPointTypeDictionary,
+from src.modules.crm.domain.company.entity import CompanyEntity
+from src.modules.crm.domain.contact.entity import ContactEntity
+from src.modules.crm.domain.contact_point.contact_point_entity import (
+    ContactPointEntity,
+)
+from src.modules.crm.domain.contact_point.contact_point_type_dictionary_entity import (
+    ContactPointTypeDictionaryEntity,
 )
 from src.modules.crm.domain.contact_point.value_objects import (
-    ContactPointId,
-    ContactPointKind,
-    ContactPointTypeCode,
+    ContactPointIdVO,
+    ContactPointKindVO,
+    ContactPointTypeCodeVO,
 )
-from src.modules.crm.domain.contact.entity import Contact
+from src.modules.crm.domain.deal.entity import DealEntity
 from src.modules.crm.domain.error import (
     ContactPointNotFoundError,
     LeadCompanyNameRequiredForConversionError,
     LeadPersonNameRequiredForConversionError,
 )
-from src.modules.crm.domain.lead.conversion.mode import LeadConversionMode
-from src.modules.crm.domain.lead.conversion.result import LeadConversionResult
-from src.modules.crm.domain.lead.value_objects import LeadId, LeadTitle
-from src.modules.crm.domain.shared.company_name import CompanyName
-from src.modules.crm.domain.shared.person_name import PersonName
+from src.modules.crm.domain.lead.conversion.mode import LeadConversionModeVO
+from src.modules.crm.domain.lead.conversion.result import LeadConversionResultVO
+from src.modules.crm.domain.lead.value_objects import LeadIdVO, LeadTitleVO
+from src.modules.crm.domain.shared.company_name import CompanyNameVO
+from src.modules.crm.domain.shared.person_name import PersonNameVO
+
 
 @dataclass(slots=True)
-class Lead:
-    id: LeadId
-    title: LeadTitle
-    person_name: PersonName | None = None
-    company_name: CompanyName | None = None
-    contact_points: list[ContactPoint] = field(default_factory=list)
+class LeadEntity:
+    id: LeadIdVO
+    title: LeadTitleVO
+    person_name: PersonNameVO | None = None
+    company_name: CompanyNameVO | None = None
+    contact_points: list[ContactPointEntity] = field(default_factory=list)
 
     @classmethod
     def create(
         cls,
         *,
         title: str,
-        person_name: PersonName | None = None,
-        company_name: str | CompanyName | None = None,
+        person_name: PersonNameVO | None = None,
+        company_name: str | CompanyNameVO | None = None,
     ) -> Self:
-        normalized_company_name: CompanyName | None = None
+        normalized_company_name: CompanyNameVO | None = None
         if isinstance(company_name, str):
-            normalized_company_name = CompanyName(company_name)
+            normalized_company_name = CompanyNameVO(company_name)
         elif company_name is not None:
             normalized_company_name = company_name
 
         return cls(
-            id=LeadId.new(),
-            title=LeadTitle(title),
+            id=LeadIdVO.new(),
+            title=LeadTitleVO(title),
             person_name=person_name,
             company_name=normalized_company_name,
             contact_points=[],
         )
 
     def rename(self, *, title: str) -> None:
-        self.title = LeadTitle(title)
+        self.title = LeadTitleVO(title)
 
     def set_person_name(
         self,
@@ -64,7 +67,7 @@ class Lead:
         last_name: str | None = None,
         middle_name: str | None = None,
     ) -> None:
-        self.person_name = PersonName(
+        self.person_name = PersonNameVO(
             first_name=first_name,
             last_name=last_name,
             middle_name=middle_name,
@@ -74,7 +77,7 @@ class Lead:
         self.person_name = None
 
     def set_company_name(self, value: str) -> None:
-        self.company_name = CompanyName(value)
+        self.company_name = CompanyNameVO(value)
 
     def clear_company_name(self) -> None:
         self.company_name = None
@@ -82,18 +85,18 @@ class Lead:
     def add_contact_point(
         self,
         *,
-        kind: ContactPointKind,
+        kind: ContactPointKindVO,
         value: str,
-        type_code: ContactPointTypeCode,
-        type_dictionary: ContactPointTypeDictionary | None = None,
+        type_code: ContactPointTypeCodeVO,
+        type_dictionary: ContactPointTypeDictionaryEntity | None = None,
         is_primary: bool = False,
         is_verified: bool = False,
         sort_order: int = 0,
-    ) -> ContactPoint:
+    ) -> ContactPointEntity:
         if type_dictionary is not None:
             type_dictionary.ensure_active_type(kind=kind, code=type_code)
 
-        point = ContactPoint.create(
+        point = ContactPointEntity.create(
             kind=kind,
             value=value,
             type_code=type_code,
@@ -108,66 +111,66 @@ class Lead:
         self.contact_points.append(point)
         return point
 
-    def remove_contact_point(self, point_id: ContactPointId) -> None:
+    def remove_contact_point(self, point_id: ContactPointIdVO) -> None:
         self.contact_points = [
             point for point in self.contact_points if point.id != point_id
         ]
 
-    def mark_contact_point_as_primary(self, point_id: ContactPointId) -> None:
+    def mark_contact_point_as_primary(self, point_id: ContactPointIdVO) -> None:
         target = self.get_contact_point(point_id)
         self._reset_primary_for_kind(kind=target.kind)
         target.mark_as_primary()
 
-    def change_contact_point_value(self, point_id: ContactPointId, value: str) -> None:
+    def change_contact_point_value(self, point_id: ContactPointIdVO, value: str) -> None:
         target = self.get_contact_point(point_id)
         target.change_value(value)
 
     def change_contact_point_type(
         self,
         *,
-        point_id: ContactPointId,
-        type_code: ContactPointTypeCode,
-        type_dictionary: ContactPointTypeDictionary | None = None,
+        point_id: ContactPointIdVO,
+        type_code: ContactPointTypeCodeVO,
+        type_dictionary: ContactPointTypeDictionaryEntity | None = None,
     ) -> None:
         target = self.get_contact_point(point_id)
         if type_dictionary is not None:
             type_dictionary.ensure_active_type(kind=target.kind, code=type_code)
         target.change_type(type_code)
 
-    def deactivate_contact_point(self, point_id: ContactPointId) -> None:
+    def deactivate_contact_point(self, point_id: ContactPointIdVO) -> None:
         target = self.get_contact_point(point_id)
         target.deactivate()
 
-    def activate_contact_point(self, point_id: ContactPointId) -> None:
+    def activate_contact_point(self, point_id: ContactPointIdVO) -> None:
         target = self.get_contact_point(point_id)
         target.activate()
 
-    def get_contact_point(self, point_id: ContactPointId) -> ContactPoint:
+    def get_contact_point(self, point_id: ContactPointIdVO) -> ContactPointEntity:
         for point in self.contact_points:
             if point.id == point_id:
                 return point
         raise ContactPointNotFoundError(str(point_id))
 
-    def get_points_by_kind(self, kind: ContactPointKind) -> list[ContactPoint]:
+    def get_points_by_kind(self, kind: ContactPointKindVO) -> list[ContactPointEntity]:
         return [point for point in self.contact_points if point.kind == kind]
 
-    def phones(self) -> list[ContactPoint]:
-        return self.get_points_by_kind(ContactPointKind.phone())
+    def phones(self) -> list[ContactPointEntity]:
+        return self.get_points_by_kind(ContactPointKindVO.phone())
 
-    def emails(self) -> list[ContactPoint]:
-        return self.get_points_by_kind(ContactPointKind.email())
+    def emails(self) -> list[ContactPointEntity]:
+        return self.get_points_by_kind(ContactPointKindVO.email())
 
-    def sites(self) -> list[ContactPoint]:
-        return self.get_points_by_kind(ContactPointKind.site())
+    def sites(self) -> list[ContactPointEntity]:
+        return self.get_points_by_kind(ContactPointKindVO.site())
 
-    def websites(self) -> list[ContactPoint]:
+    def websites(self) -> list[ContactPointEntity]:
         # Backward compatibility alias.
         return self.sites()
 
-    def messengers(self) -> list[ContactPoint]:
-        return self.get_points_by_kind(ContactPointKind.messenger())
+    def messengers(self) -> list[ContactPointEntity]:
+        return self.get_points_by_kind(ContactPointKindVO.messenger())
 
-    def _reset_primary_for_kind(self, *, kind: ContactPointKind) -> None:
+    def _reset_primary_for_kind(self, *, kind: ContactPointKindVO) -> None:
         for point in self.contact_points:
             if point.kind == kind:
                 point.unmark_as_primary()
@@ -175,35 +178,35 @@ class Lead:
     def convert(
         self,
         *,
-        mode: LeadConversionMode,
-        type_dictionary: ContactPointTypeDictionary | None = None,
-    ) -> LeadConversionResult:
-        contact: Contact | None = None
-        company: Company | None = None
-        deal: Deal | None = None
+        mode: LeadConversionModeVO,
+        type_dictionary: ContactPointTypeDictionaryEntity | None = None,
+    ) -> LeadConversionResultVO:
+        contact: ContactEntity | None = None
+        company: CompanyEntity | None = None
+        deal: DealEntity | None = None
 
         include_contact = mode in (
-            LeadConversionMode.CONTACT_ONLY,
-            LeadConversionMode.CONTACT_AND_COMPANY,
-            LeadConversionMode.DEAL_AND_CONTACT,
-            LeadConversionMode.DEAL_AND_CONTACT_AND_COMPANY,
+            LeadConversionModeVO.CONTACT_ONLY,
+            LeadConversionModeVO.CONTACT_AND_COMPANY,
+            LeadConversionModeVO.DEAL_AND_CONTACT,
+            LeadConversionModeVO.DEAL_AND_CONTACT_AND_COMPANY,
         )
         include_company = mode in (
-            LeadConversionMode.COMPANY_ONLY,
-            LeadConversionMode.CONTACT_AND_COMPANY,
-            LeadConversionMode.DEAL_AND_COMPANY,
-            LeadConversionMode.DEAL_AND_CONTACT_AND_COMPANY,
+            LeadConversionModeVO.COMPANY_ONLY,
+            LeadConversionModeVO.CONTACT_AND_COMPANY,
+            LeadConversionModeVO.DEAL_AND_COMPANY,
+            LeadConversionModeVO.DEAL_AND_CONTACT_AND_COMPANY,
         )
         include_deal = mode in (
-            LeadConversionMode.DEAL_ONLY,
-            LeadConversionMode.DEAL_AND_CONTACT,
-            LeadConversionMode.DEAL_AND_COMPANY,
-            LeadConversionMode.DEAL_AND_CONTACT_AND_COMPANY,
+            LeadConversionModeVO.DEAL_ONLY,
+            LeadConversionModeVO.DEAL_AND_CONTACT,
+            LeadConversionModeVO.DEAL_AND_COMPANY,
+            LeadConversionModeVO.DEAL_AND_CONTACT_AND_COMPANY,
         )
 
         if include_contact:
             person_name = self._require_person_name_for_contact_conversion()
-            contact = Contact.create(
+            contact = ContactEntity.create(
                 first_name=person_name.first_name,
                 last_name=person_name.last_name,
                 middle_name=person_name.middle_name,
@@ -215,23 +218,23 @@ class Lead:
 
         if include_company:
             company_name = self._require_company_name_for_company_conversion()
-            company = Company.create(company_name=company_name.value)
+            company = CompanyEntity.create(company_name=company_name.value)
             self._copy_contact_points_to_company(
                 company=company,
                 type_dictionary=type_dictionary,
             )
 
         if include_deal:
-            deal = Deal.create(title=self.title.value)
+            deal = DealEntity.create(title=self.title.value)
 
-        return LeadConversionResult(contact=contact, company=company, deal=deal)
+        return LeadConversionResultVO(contact=contact, company=company, deal=deal)
 
-    def _require_person_name_for_contact_conversion(self) -> PersonName:
+    def _require_person_name_for_contact_conversion(self) -> PersonNameVO:
         if self.person_name is None:
             raise LeadPersonNameRequiredForConversionError()
         return self.person_name
 
-    def _require_company_name_for_company_conversion(self) -> CompanyName:
+    def _require_company_name_for_company_conversion(self) -> CompanyNameVO:
         if self.company_name is None:
             raise LeadCompanyNameRequiredForConversionError()
         return self.company_name
@@ -239,8 +242,8 @@ class Lead:
     def _copy_contact_points_to_contact(
         self,
         *,
-        contact: Contact,
-        type_dictionary: ContactPointTypeDictionary | None = None,
+        contact: ContactEntity,
+        type_dictionary: ContactPointTypeDictionaryEntity | None = None,
     ) -> None:
         for point in self.contact_points:
             created = contact.add_contact_point(
@@ -258,8 +261,8 @@ class Lead:
     def _copy_contact_points_to_company(
         self,
         *,
-        company: Company,
-        type_dictionary: ContactPointTypeDictionary | None = None,
+        company: CompanyEntity,
+        type_dictionary: ContactPointTypeDictionaryEntity | None = None,
     ) -> None:
         for point in self.contact_points:
             created = company.add_contact_point(
@@ -273,3 +276,6 @@ class Lead:
             )
             if not point.is_active:
                 created.deactivate()
+
+
+__all__ = ["LeadEntity"]

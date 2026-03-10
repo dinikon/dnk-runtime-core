@@ -1,12 +1,12 @@
-from src.modules.crm.domain.lead.conversion.mode import LeadConversionMode
-from src.modules.crm.domain.lead.conversion.result import LeadConversionResult
-from src.modules.crm.domain.lead.entity import Lead
-from src.modules.crm.domain.lead.value_objects import LeadId, LeadTitle
+from src.modules.crm.domain.lead.conversion.mode import LeadConversionModeVO
+from src.modules.crm.domain.lead.conversion.result import LeadConversionResultVO
+from src.modules.crm.domain.lead.entity import LeadEntity
+from src.modules.crm.domain.lead.value_objects import LeadIdVO, LeadTitleVO
 
 __all__ = [
-    "Lead",
-    "LeadConversionMode",
-    "LeadConversionResult",
-    "LeadId",
-    "LeadTitle",
+    "LeadConversionModeVO",
+    "LeadConversionResultVO",
+    "LeadEntity",
+    "LeadIdVO",
+    "LeadTitleVO",
 ]

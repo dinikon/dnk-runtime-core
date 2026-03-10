@@ -1,5 +1,4 @@
-from src.modules.crm.domain.deal.entity import Deal
-from src.modules.crm.domain.deal.value_objects import DealId, DealTitle
+from src.modules.crm.domain.deal.entity import DealEntity
+from src.modules.crm.domain.deal.value_objects import DealIdVO, DealTitleVO
 
-__all__ = ["Deal", "DealId", "DealTitle"]
-
+__all__ = ["DealEntity", "DealIdVO", "DealTitleVO"]

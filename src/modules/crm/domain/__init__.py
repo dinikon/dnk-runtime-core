@@ -1,43 +1,43 @@
-from src.modules.crm.domain.company import Company, CompanyId
-from src.modules.crm.domain.contact import Contact, ContactId
+from src.modules.crm.domain.company import CompanyEntity, CompanyIdVO
+from src.modules.crm.domain.contact import ContactEntity, ContactIdVO
 from src.modules.crm.domain.contact_point import (
-    ContactPoint,
-    ContactPointId,
-    ContactPointKind,
-    ContactPointType,
-    ContactPointTypeCode,
-    ContactPointTypeDictionary,
+    ContactPointEntity,
+    ContactPointIdVO,
+    ContactPointKindVO,
+    ContactPointTypeCodeVO,
+    ContactPointTypeDictionaryEntity,
+    ContactPointTypeVO,
 )
-from src.modules.crm.domain.deal import Deal, DealId, DealTitle
+from src.modules.crm.domain.deal import DealEntity, DealIdVO, DealTitleVO
 from src.modules.crm.domain.lead import (
-    Lead,
-    LeadConversionMode,
-    LeadConversionResult,
-    LeadId,
-    LeadTitle,
+    LeadConversionModeVO,
+    LeadConversionResultVO,
+    LeadEntity,
+    LeadIdVO,
+    LeadTitleVO,
 )
-from src.modules.crm.domain.shared import CompanyName, CrmEntityId, PersonName
+from src.modules.crm.domain.shared import CompanyNameVO, CrmEntityIdVO, PersonNameVO
 
 __all__ = [
-    "Company",
-    "CompanyId",
-    "CompanyName",
-    "Contact",
-    "ContactId",
-    "PersonName",
-    "ContactPoint",
-    "ContactPointId",
-    "ContactPointKind",
-    "ContactPointType",
-    "ContactPointTypeCode",
-    "ContactPointTypeDictionary",
-    "CrmEntityId",
-    "Deal",
-    "DealId",
-    "DealTitle",
-    "Lead",
-    "LeadConversionMode",
-    "LeadConversionResult",
-    "LeadId",
-    "LeadTitle",
+    "CompanyEntity",
+    "CompanyIdVO",
+    "CompanyNameVO",
+    "ContactEntity",
+    "ContactIdVO",
+    "PersonNameVO",
+    "ContactPointEntity",
+    "ContactPointIdVO",
+    "ContactPointKindVO",
+    "ContactPointTypeVO",
+    "ContactPointTypeCodeVO",
+    "ContactPointTypeDictionaryEntity",
+    "CrmEntityIdVO",
+    "DealEntity",
+    "DealIdVO",
+    "DealTitleVO",
+    "LeadEntity",
+    "LeadConversionModeVO",
+    "LeadConversionResultVO",
+    "LeadIdVO",
+    "LeadTitleVO",
 ]

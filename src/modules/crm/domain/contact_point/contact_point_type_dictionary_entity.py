@@ -5,97 +5,32 @@ from src.modules.crm.domain.error import (
     ContactPointTypeInactiveError,
     ContactPointTypeNotFoundError,
     ContactPointTypeSystemLockedError,
-    ContactPointValueRequiredError,
 )
 from src.modules.crm.domain.contact_point.value_objects import (
-    ContactPointId,
-    ContactPointKind,
-    ContactPointType,
-    ContactPointTypeCode,
+    ContactPointKindVO,
+    ContactPointTypeCodeVO,
+    ContactPointTypeVO,
 )
 
 
 @dataclass(slots=True)
-class ContactPoint:
-    id: ContactPointId
-    kind: ContactPointKind
-    value: str
-    type_code: ContactPointTypeCode
-    is_primary: bool = False
-    is_verified: bool = False
-    sort_order: int = 0
-    is_active: bool = True
-
-    @classmethod
-    def create(
-        cls,
-        *,
-        kind: ContactPointKind,
-        value: str,
-        type_code: ContactPointTypeCode,
-        is_primary: bool = False,
-        is_verified: bool = False,
-        sort_order: int = 0,
-        is_active: bool = True,
-    ) -> "ContactPoint":
-        normalized_value = value.strip()
-        if not normalized_value:
-            raise ContactPointValueRequiredError()
-
-        return cls(
-            id=ContactPointId.new(),
-            kind=kind,
-            value=normalized_value,
-            type_code=type_code,
-            is_primary=is_primary,
-            is_verified=is_verified,
-            sort_order=sort_order,
-            is_active=is_active,
-        )
-
-    def change_value(self, new_value: str) -> None:
-        normalized_value = new_value.strip()
-        if not normalized_value:
-            raise ContactPointValueRequiredError()
-        self.value = normalized_value
-
-    def change_type(self, new_type_code: ContactPointTypeCode) -> None:
-        self.type_code = new_type_code
-
-    def mark_as_primary(self) -> None:
-        self.is_primary = True
-
-    def unmark_as_primary(self) -> None:
-        self.is_primary = False
-
-    def verify(self) -> None:
-        self.is_verified = True
-
-    def deactivate(self) -> None:
-        self.is_active = False
-
-    def activate(self) -> None:
-        self.is_active = True
-
-
-@dataclass(slots=True)
-class ContactPointTypeDictionary:
-    items: list[ContactPointType] = field(default_factory=list)
+class ContactPointTypeDictionaryEntity:
+    items: list[ContactPointTypeVO] = field(default_factory=list)
 
     def add_type(
         self,
         *,
-        kind: ContactPointKind,
-        code: ContactPointTypeCode,
+        kind: ContactPointKindVO,
+        code: ContactPointTypeCodeVO,
         title: str,
         is_system: bool = False,
         is_active: bool = True,
         sort_order: int = 0,
-    ) -> ContactPointType:
+    ) -> ContactPointTypeVO:
         if self._find_index(kind=kind, code=code) is not None:
             raise ContactPointTypeAlreadyExistsError(kind.value, code.value)
 
-        created = ContactPointType(
+        created = ContactPointTypeVO(
             kind=kind,
             code=code,
             title=title,
@@ -110,10 +45,10 @@ class ContactPointTypeDictionary:
     def rename_type(
         self,
         *,
-        kind: ContactPointKind,
-        code: ContactPointTypeCode,
+        kind: ContactPointKindVO,
+        code: ContactPointTypeCodeVO,
         title: str,
-    ) -> ContactPointType:
+    ) -> ContactPointTypeVO:
         index = self._require_index(kind=kind, code=code)
         current = self.items[index]
         if current.is_system:
@@ -125,9 +60,9 @@ class ContactPointTypeDictionary:
     def activate_type(
         self,
         *,
-        kind: ContactPointKind,
-        code: ContactPointTypeCode,
-    ) -> ContactPointType:
+        kind: ContactPointKindVO,
+        code: ContactPointTypeCodeVO,
+    ) -> ContactPointTypeVO:
         index = self._require_index(kind=kind, code=code)
         updated = self.items[index].activate()
         self.items[index] = updated
@@ -136,9 +71,9 @@ class ContactPointTypeDictionary:
     def deactivate_type(
         self,
         *,
-        kind: ContactPointKind,
-        code: ContactPointTypeCode,
-    ) -> ContactPointType:
+        kind: ContactPointKindVO,
+        code: ContactPointTypeCodeVO,
+    ) -> ContactPointTypeVO:
         index = self._require_index(kind=kind, code=code)
         current = self.items[index]
         if current.is_system:
@@ -150,10 +85,10 @@ class ContactPointTypeDictionary:
     def reorder_type(
         self,
         *,
-        kind: ContactPointKind,
-        code: ContactPointTypeCode,
+        kind: ContactPointKindVO,
+        code: ContactPointTypeCodeVO,
         sort_order: int,
-    ) -> ContactPointType:
+    ) -> ContactPointTypeVO:
         index = self._require_index(kind=kind, code=code)
         updated = self.items[index].reorder(sort_order)
         self.items[index] = updated
@@ -163,8 +98,8 @@ class ContactPointTypeDictionary:
     def remove_type(
         self,
         *,
-        kind: ContactPointKind,
-        code: ContactPointTypeCode,
+        kind: ContactPointKindVO,
+        code: ContactPointTypeCodeVO,
     ) -> None:
         index = self._require_index(kind=kind, code=code)
         current = self.items[index]
@@ -175,9 +110,9 @@ class ContactPointTypeDictionary:
     def get_type(
         self,
         *,
-        kind: ContactPointKind,
-        code: ContactPointTypeCode,
-    ) -> ContactPointType:
+        kind: ContactPointKindVO,
+        code: ContactPointTypeCodeVO,
+    ) -> ContactPointTypeVO:
         index = self._find_index(kind=kind, code=code)
         if index is None:
             raise ContactPointTypeNotFoundError(kind.value, code.value)
@@ -186,9 +121,9 @@ class ContactPointTypeDictionary:
     def list_types(
         self,
         *,
-        kind: ContactPointKind | None = None,
+        kind: ContactPointKindVO | None = None,
         active_only: bool = False,
-    ) -> list[ContactPointType]:
+    ) -> list[ContactPointTypeVO]:
         entries = self.items
         if kind is not None:
             entries = [item for item in entries if item.kind == kind]
@@ -202,8 +137,8 @@ class ContactPointTypeDictionary:
     def ensure_active_type(
         self,
         *,
-        kind: ContactPointKind,
-        code: ContactPointTypeCode,
+        kind: ContactPointKindVO,
+        code: ContactPointTypeCodeVO,
     ) -> None:
         item = self.get_type(kind=kind, code=code)
         if not item.is_active:
@@ -212,8 +147,8 @@ class ContactPointTypeDictionary:
     def _find_index(
         self,
         *,
-        kind: ContactPointKind,
-        code: ContactPointTypeCode,
+        kind: ContactPointKindVO,
+        code: ContactPointTypeCodeVO,
     ) -> int | None:
         for index, item in enumerate(self.items):
             if item.kind == kind and item.code == code:
@@ -223,8 +158,8 @@ class ContactPointTypeDictionary:
     def _require_index(
         self,
         *,
-        kind: ContactPointKind,
-        code: ContactPointTypeCode,
+        kind: ContactPointKindVO,
+        code: ContactPointTypeCodeVO,
     ) -> int:
         index = self._find_index(kind=kind, code=code)
         if index is None:
@@ -239,3 +174,7 @@ class ContactPointTypeDictionary:
                 item.title,
             )
         )
+
+
+__all__ = ["ContactPointTypeDictionaryEntity"]
+

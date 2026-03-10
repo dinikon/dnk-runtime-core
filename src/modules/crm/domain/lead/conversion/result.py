@@ -4,17 +4,16 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.modules.crm.domain.company.entity import Company
-    from src.modules.crm.domain.contact.entity import Contact
-    from src.modules.crm.domain.deal.entity import Deal
+    from src.modules.crm.domain.company.entity import CompanyEntity
+    from src.modules.crm.domain.contact.entity import ContactEntity
+    from src.modules.crm.domain.deal.entity import DealEntity
 
 
 @dataclass(frozen=True, slots=True)
-class LeadConversionResult:
-    contact: Contact | None
-    company: Company | None
-    deal: Deal | None
+class LeadConversionResultVO:
+    contact: ContactEntity | None
+    company: CompanyEntity | None
+    deal: DealEntity | None
 
 
-__all__ = ["LeadConversionResult"]
-
+__all__ = ["LeadConversionResultVO"]
