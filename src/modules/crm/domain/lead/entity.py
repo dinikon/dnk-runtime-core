@@ -1,8 +1,8 @@
 from dataclasses import dataclass, field
-from enum import StrEnum
 from typing import Self
 
 from src.modules.crm.domain.company.entity import Company
+from src.modules.crm.domain.deal.entity import Deal
 from src.modules.crm.domain.contact_point.entity import (
     ContactPoint,
     ContactPointTypeDictionary,
@@ -18,22 +18,11 @@ from src.modules.crm.domain.error import (
     LeadCompanyNameRequiredForConversionError,
     LeadPersonNameRequiredForConversionError,
 )
+from src.modules.crm.domain.lead.conversion.mode import LeadConversionMode
+from src.modules.crm.domain.lead.conversion.result import LeadConversionResult
 from src.modules.crm.domain.lead.value_objects import LeadId, LeadTitle
 from src.modules.crm.domain.shared.company_name import CompanyName
 from src.modules.crm.domain.shared.person_name import PersonName
-
-
-class LeadConversionMode(StrEnum):
-    CONTACT_ONLY = "contact_only"
-    COMPANY_ONLY = "company_only"
-    CONTACT_AND_COMPANY = "contact_and_company"
-
-
-@dataclass(frozen=True, slots=True)
-class LeadConversionResult:
-    contact: Contact | None
-    company: Company | None
-
 
 @dataclass(slots=True)
 class Lead:
@@ -191,11 +180,28 @@ class Lead:
     ) -> LeadConversionResult:
         contact: Contact | None = None
         company: Company | None = None
+        deal: Deal | None = None
 
-        if mode in (
+        include_contact = mode in (
             LeadConversionMode.CONTACT_ONLY,
             LeadConversionMode.CONTACT_AND_COMPANY,
-        ):
+            LeadConversionMode.DEAL_AND_CONTACT,
+            LeadConversionMode.DEAL_AND_CONTACT_AND_COMPANY,
+        )
+        include_company = mode in (
+            LeadConversionMode.COMPANY_ONLY,
+            LeadConversionMode.CONTACT_AND_COMPANY,
+            LeadConversionMode.DEAL_AND_COMPANY,
+            LeadConversionMode.DEAL_AND_CONTACT_AND_COMPANY,
+        )
+        include_deal = mode in (
+            LeadConversionMode.DEAL_ONLY,
+            LeadConversionMode.DEAL_AND_CONTACT,
+            LeadConversionMode.DEAL_AND_COMPANY,
+            LeadConversionMode.DEAL_AND_CONTACT_AND_COMPANY,
+        )
+
+        if include_contact:
             person_name = self._require_person_name_for_contact_conversion()
             contact = Contact.create(
                 first_name=person_name.first_name,
@@ -207,10 +213,7 @@ class Lead:
                 type_dictionary=type_dictionary,
             )
 
-        if mode in (
-            LeadConversionMode.COMPANY_ONLY,
-            LeadConversionMode.CONTACT_AND_COMPANY,
-        ):
+        if include_company:
             company_name = self._require_company_name_for_company_conversion()
             company = Company.create(company_name=company_name.value)
             self._copy_contact_points_to_company(
@@ -218,7 +221,10 @@ class Lead:
                 type_dictionary=type_dictionary,
             )
 
-        return LeadConversionResult(contact=contact, company=company)
+        if include_deal:
+            deal = Deal.create(title=self.title.value)
+
+        return LeadConversionResult(contact=contact, company=company, deal=deal)
 
     def _require_person_name_for_contact_conversion(self) -> PersonName:
         if self.person_name is None:

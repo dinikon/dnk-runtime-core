@@ -70,8 +70,14 @@ class LeadCompanyNameRequiredForConversionError(ValidationError):
         super().__init__("company_name is required to convert lead to company")
 
 
+class DealTitleRequiredError(ValidationError):
+    def __init__(self):
+        super().__init__("deal title cannot be empty")
+
+
 __all__ = [
     "CompanyNameRequiredError",
+    "DealTitleRequiredError",
     "ContactPointKindNotSupportedError",
     "ContactPointNotFoundError",
     "ContactPointTypeAlreadyExistsError",
