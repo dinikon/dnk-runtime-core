@@ -75,9 +75,57 @@ class DealTitleRequiredError(ValidationError):
         super().__init__("deal title cannot be empty")
 
 
+class ProductRowNotFoundError(ValidationError):
+    def __init__(self, row_id: str):
+        super().__init__(f"Product row not found: {row_id}")
+
+
+class ProductRowEntityIdRequiredError(ValidationError):
+    def __init__(self):
+        super().__init__("entity_id must be greater than zero")
+
+
+class ProductRowProductNameRequiredError(ValidationError):
+    def __init__(self):
+        super().__init__("product_name cannot be empty")
+
+
+class ProductRowMeasureCodeRequiredError(ValidationError):
+    def __init__(self):
+        super().__init__("measure_code cannot be empty")
+
+
+class ProductRowMeasureNameRequiredError(ValidationError):
+    def __init__(self):
+        super().__init__("measure_name cannot be empty")
+
+
+class ProductRowQuantityMustBePositiveError(ValidationError):
+    def __init__(self):
+        super().__init__("quantity must be greater than zero")
+
+
+class ProductRowFieldMustBeNonNegativeError(ValidationError):
+    def __init__(self, field_name: str):
+        super().__init__(f"{field_name} must be non-negative")
+
+
+class ProductRowDiscountTypeNotSupportedError(ValidationError):
+    def __init__(self, value: str):
+        super().__init__(f"Unsupported discount type: {value}")
+
+
 __all__ = [
     "CompanyNameRequiredError",
     "DealTitleRequiredError",
+    "ProductRowDiscountTypeNotSupportedError",
+    "ProductRowEntityIdRequiredError",
+    "ProductRowFieldMustBeNonNegativeError",
+    "ProductRowMeasureCodeRequiredError",
+    "ProductRowMeasureNameRequiredError",
+    "ProductRowNotFoundError",
+    "ProductRowProductNameRequiredError",
+    "ProductRowQuantityMustBePositiveError",
     "ContactPointKindNotSupportedError",
     "ContactPointNotFoundError",
     "ContactPointTypeAlreadyExistsError",

@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Self
+from uuid import UUID
 
 from src.modules.crm.domain.company.entity import CompanyEntity
 from src.modules.crm.domain.contact.entity import ContactEntity
@@ -19,7 +21,15 @@ from src.modules.crm.domain.error import (
     ContactPointNotFoundError,
     LeadCompanyNameRequiredForConversionError,
     LeadPersonNameRequiredForConversionError,
+    ProductRowNotFoundError,
 )
+from src.modules.crm.domain.product_row.entity import ProductRowEntity
+from src.modules.crm.domain.product_row.value_objects import (
+    ProductRowDiscountTypeVO,
+    ProductRowEntityIdVO,
+    ProductRowIdVO,
+)
+from src.modules.crm.domain.shared.crm_entity_id import CrmEntityIdVO
 from src.modules.crm.domain.lead.conversion.mode import LeadConversionModeVO
 from src.modules.crm.domain.lead.conversion.result import LeadConversionResultVO
 from src.modules.crm.domain.lead.value_objects import LeadIdVO, LeadTitleVO
@@ -34,6 +44,7 @@ class LeadEntity:
     person_name: PersonNameVO | None = None
     company_name: CompanyNameVO | None = None
     contact_points: list[ContactPointEntity] = field(default_factory=list)
+    product_rows: list[ProductRowEntity] = field(default_factory=list)
 
     @classmethod
     def create(
@@ -55,6 +66,7 @@ class LeadEntity:
             person_name=person_name,
             company_name=normalized_company_name,
             contact_points=[],
+            product_rows=[],
         )
 
     def rename(self, *, title: str) -> None:
@@ -170,6 +182,60 @@ class LeadEntity:
     def messengers(self) -> list[ContactPointEntity]:
         return self.get_points_by_kind(ContactPointKindVO.messenger())
 
+    def add_product_row(
+        self,
+        *,
+        product_name: str,
+        product_id: CrmEntityIdVO | UUID | str | None = None,
+        price: Decimal | int | float | str = 0,
+        price_account: Decimal | int | float | str = 0,
+        price_exclusive: Decimal | int | float | str = 0,
+        price_netto: Decimal | int | float | str = 0,
+        price_brutto: Decimal | int | float | str = 0,
+        quantity: Decimal | int | float | str = 1,
+        discount_type_id: ProductRowDiscountTypeVO | str = ProductRowDiscountTypeVO.PERCENT,
+        discount_rate: Decimal | int | float | str = 0,
+        discount_sum: Decimal | int | float | str = 0,
+        tax_rate: Decimal | int | float | str = 0,
+        tax_included: bool = False,
+        customized: bool = False,
+        measure_code: str = "pcs",
+        measure_name: str = "pcs",
+        sort: int = 0,
+    ) -> ProductRowEntity:
+        row = ProductRowEntity.create(
+            entity_id=ProductRowEntityIdVO.lead(),
+            entity_uuid=self.id,
+            product_id=product_id,
+            product_name=product_name,
+            price=price,
+            price_account=price_account,
+            price_exclusive=price_exclusive,
+            price_netto=price_netto,
+            price_brutto=price_brutto,
+            quantity=quantity,
+            discount_type_id=discount_type_id,
+            discount_rate=discount_rate,
+            discount_sum=discount_sum,
+            tax_rate=tax_rate,
+            tax_included=tax_included,
+            customized=customized,
+            measure_code=measure_code,
+            measure_name=measure_name,
+            sort=sort,
+        )
+        self.product_rows.append(row)
+        return row
+
+    def remove_product_row(self, row_id: ProductRowIdVO) -> None:
+        self.product_rows = [row for row in self.product_rows if row.id != row_id]
+
+    def get_product_row(self, row_id: ProductRowIdVO) -> ProductRowEntity:
+        for row in self.product_rows:
+            if row.id == row_id:
+                return row
+        raise ProductRowNotFoundError(str(row_id))
+
     def _reset_primary_for_kind(self, *, kind: ContactPointKindVO) -> None:
         for point in self.contact_points:
             if point.kind == kind:
@@ -226,6 +292,7 @@ class LeadEntity:
 
         if include_deal:
             deal = DealEntity.create(title=self.title.value)
+            self._copy_product_rows_to_deal(deal=deal)
 
         return LeadConversionResultVO(contact=contact, company=company, deal=deal)
 
@@ -276,6 +343,28 @@ class LeadEntity:
             )
             if not point.is_active:
                 created.deactivate()
+
+    def _copy_product_rows_to_deal(self, *, deal: DealEntity) -> None:
+        for row in self.product_rows:
+            deal.add_product_row(
+                product_id=row.product_id,
+                product_name=row.product_name,
+                price=row.price,
+                price_account=row.price_account,
+                price_exclusive=row.price_exclusive,
+                price_netto=row.price_netto,
+                price_brutto=row.price_brutto,
+                quantity=row.quantity,
+                discount_type_id=row.discount_type_id,
+                discount_rate=row.discount_rate,
+                discount_sum=row.discount_sum,
+                tax_rate=row.tax_rate,
+                tax_included=row.tax_included,
+                customized=row.customized,
+                measure_code=row.measure_code,
+                measure_name=row.measure_name,
+                sort=row.sort,
+            )
 
 
 __all__ = ["LeadEntity"]

@@ -16,6 +16,12 @@ from src.modules.crm.domain.lead import (
     LeadIdVO,
     LeadTitleVO,
 )
+from src.modules.crm.domain.product_row import (
+    ProductRowDiscountTypeVO,
+    ProductRowEntity,
+    ProductRowEntityIdVO,
+    ProductRowIdVO,
+)
 from src.modules.crm.domain.shared import CompanyNameVO, CrmEntityIdVO, PersonNameVO
 
 __all__ = [
@@ -35,6 +41,10 @@ __all__ = [
     "DealEntity",
     "DealIdVO",
     "DealTitleVO",
+    "ProductRowEntity",
+    "ProductRowIdVO",
+    "ProductRowEntityIdVO",
+    "ProductRowDiscountTypeVO",
     "LeadEntity",
     "LeadConversionModeVO",
     "LeadConversionResultVO",
