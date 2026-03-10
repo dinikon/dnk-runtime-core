@@ -4,6 +4,8 @@ from uuid import UUID
 
 import uuid6
 
+from src.modules.crm.domain.error import CompanyNameRequiredError
+
 
 @dataclass(frozen=True, slots=True)
 class CompanyId:
@@ -21,3 +23,14 @@ class CompanyId:
 
     def __str__(self) -> str:
         return str(self.value)
+
+
+@dataclass(frozen=True, slots=True)
+class CompanyName:
+    value: str
+
+    def __post_init__(self) -> None:
+        normalized = self.value.strip()
+        if not normalized:
+            raise CompanyNameRequiredError()
+        object.__setattr__(self, "value", normalized)

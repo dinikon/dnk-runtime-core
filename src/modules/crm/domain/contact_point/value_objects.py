@@ -1,8 +1,14 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Self
 from uuid import UUID
 
 import uuid6
+
+from src.modules.crm.domain.error import (
+    ContactPointKindNotSupportedError,
+    ContactPointTypeCodeRequiredError,
+    ContactPointTypeTitleRequiredError,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,12 +33,14 @@ class ContactPointId:
 class ContactPointKind:
     value: str
 
-    ALLOWED = {"phone", "email", "website", "messenger"}
+    ALLOWED = {"phone", "email", "site", "messenger"}
+    ALIASES = {"website": "site"}
 
     def __post_init__(self) -> None:
         normalized = self.value.strip().lower()
+        normalized = self.ALIASES.get(normalized, normalized)
         if normalized not in self.ALLOWED:
-            raise ValueError(f"Unsupported contact point kind: {self.value}")
+            raise ContactPointKindNotSupportedError(self.value)
         object.__setattr__(self, "value", normalized)
 
     @classmethod
@@ -44,8 +52,13 @@ class ContactPointKind:
         return cls("email")
 
     @classmethod
+    def site(cls) -> "ContactPointKind":
+        return cls("site")
+
+    @classmethod
     def website(cls) -> "ContactPointKind":
-        return cls("website")
+        # Backward compatibility alias.
+        return cls("site")
 
     @classmethod
     def messenger(cls) -> "ContactPointKind":
@@ -71,7 +84,7 @@ class ContactPointTypeCode:
     def __post_init__(self) -> None:
         normalized = self.value.strip().lower()
         if not normalized:
-            raise ValueError("ContactPointTypeCode cannot be empty")
+            raise ContactPointTypeCodeRequiredError()
         object.__setattr__(self, "value", normalized)
 
 
@@ -96,5 +109,20 @@ class ContactPointType:
     def __post_init__(self) -> None:
         title = self.title.strip()
         if not title:
-            raise ValueError("ContactPointType title cannot be empty")
+            raise ContactPointTypeTitleRequiredError()
         object.__setattr__(self, "title", title)
+
+    def rename(self, title: str) -> "ContactPointType":
+        normalized_title = title.strip()
+        if not normalized_title:
+            raise ContactPointTypeTitleRequiredError()
+        return replace(self, title=normalized_title)
+
+    def activate(self) -> "ContactPointType":
+        return replace(self, is_active=True)
+
+    def deactivate(self) -> "ContactPointType":
+        return replace(self, is_active=False)
+
+    def reorder(self, sort_order: int) -> "ContactPointType":
+        return replace(self, sort_order=sort_order)
