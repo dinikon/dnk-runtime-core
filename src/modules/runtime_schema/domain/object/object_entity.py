@@ -29,16 +29,4 @@ class ObjectMetadataEntity:
     updated_at: datetime
 
 
-@dataclass(slots=True)
-class FieldMetadataEntity:
-    id: UUID
-    tenant_id: UUID
-    object_metadata_id: UUID
-    type: str
-    field_name: str
-    label: str
-    defaultValue: str | None
-    description: str | None
-
-
 __all__ = ["ObjectMetadataEntity"]
