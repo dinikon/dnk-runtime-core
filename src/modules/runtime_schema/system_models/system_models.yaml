@@ -1,0 +1,897 @@
+version: "2026.03.11"
+module: "crm"
+
+objects:
+  - key: "crm_lead"
+    name:
+      singular: "lead"
+      plural: "leads"
+    label:
+      singular: "Lead"
+      plural: "Leads"
+    description: "Lead aggregate from CRM domain."
+    is_system: true
+    is_custom: false
+    is_active: true
+    is_ui_read_only: false
+    fields:
+      - name: "id"
+        type: "uuid"
+        label: "ID"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: true
+        is_index: true
+        is_ui_read_only: true
+        is_searchable: false
+      - name: "title"
+        type: "string"
+        label: "Title"
+        description: "Lead title from LeadTitleVO."
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: true
+        settings:
+          min_length: 1
+          max_length: 255
+      - name: "person_name"
+        type: "full_name"
+        label: "Person Name"
+        description: "Optional person name (last, middle, first)."
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: true
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        settings:
+          require_last_name: false
+          require_middle_name: false
+          require_first_name: true
+      - name: "company_name"
+        type: "string"
+        label: "Company Name"
+        description: "Optional company name from CompanyNameVO."
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: true
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: true
+        settings:
+          min_length: 1
+          max_length: 255
+      - name: "contact_points"
+        type: "relation"
+        label: "Contact Points"
+        description: "Collection of lead contact points."
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: true
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        relation_target_object: "crm_contact_point"
+        relation_target_field: "id"
+        settings:
+          on_delete: "cascade"
+          max_links: null
+          enforce_tenant_scope: true
+      - name: "product_rows"
+        type: "relation"
+        label: "Product Rows"
+        description: "Collection of lead product rows."
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: true
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        relation_target_object: "crm_product_row"
+        relation_target_field: "id"
+        settings:
+          on_delete: "cascade"
+          max_links: null
+          enforce_tenant_scope: true
+
+  - key: "crm_contact"
+    name:
+      singular: "contact"
+      plural: "contacts"
+    label:
+      singular: "Contact"
+      plural: "Contacts"
+    description: "Contact aggregate from CRM domain."
+    is_system: true
+    is_custom: false
+    is_active: true
+    is_ui_read_only: false
+    fields:
+      - name: "id"
+        type: "uuid"
+        label: "ID"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: true
+        is_index: true
+        is_ui_read_only: true
+        is_searchable: false
+      - name: "name"
+        type: "full_name"
+        label: "Name"
+        description: "Contact full name from PersonNameVO."
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        settings:
+          require_last_name: false
+          require_middle_name: false
+          require_first_name: true
+      - name: "contact_points"
+        type: "relation"
+        label: "Contact Points"
+        description: "Collection of contact points."
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: true
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        relation_target_object: "crm_contact_point"
+        relation_target_field: "id"
+        settings:
+          on_delete: "cascade"
+          max_links: null
+          enforce_tenant_scope: true
+
+  - key: "crm_company"
+    name:
+      singular: "company"
+      plural: "companies"
+    label:
+      singular: "Company"
+      plural: "Companies"
+    description: "Company aggregate from CRM domain."
+    is_system: true
+    is_custom: false
+    is_active: true
+    is_ui_read_only: false
+    fields:
+      - name: "id"
+        type: "uuid"
+        label: "ID"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: true
+        is_index: true
+        is_ui_read_only: true
+        is_searchable: false
+      - name: "name"
+        type: "string"
+        label: "Name"
+        description: "Company name from CompanyNameVO."
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: true
+        settings:
+          min_length: 1
+          max_length: 255
+      - name: "contact_points"
+        type: "relation"
+        label: "Contact Points"
+        description: "Collection of company contact points."
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: true
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        relation_target_object: "crm_contact_point"
+        relation_target_field: "id"
+        settings:
+          on_delete: "cascade"
+          max_links: null
+          enforce_tenant_scope: true
+
+  - key: "crm_deal"
+    name:
+      singular: "deal"
+      plural: "deals"
+    label:
+      singular: "Deal"
+      plural: "Deals"
+    description: "Deal aggregate from CRM domain."
+    is_system: true
+    is_custom: false
+    is_active: true
+    is_ui_read_only: false
+    fields:
+      - name: "id"
+        type: "uuid"
+        label: "ID"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: true
+        is_index: true
+        is_ui_read_only: true
+        is_searchable: false
+      - name: "title"
+        type: "string"
+        label: "Title"
+        description: "Deal title from DealTitleVO."
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: true
+        settings:
+          min_length: 1
+          max_length: 255
+      - name: "product_rows"
+        type: "relation"
+        label: "Product Rows"
+        description: "Collection of deal product rows."
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: true
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        relation_target_object: "crm_product_row"
+        relation_target_field: "id"
+        settings:
+          on_delete: "cascade"
+          max_links: null
+          enforce_tenant_scope: true
+
+  - key: "crm_contact_point"
+    name:
+      singular: "contact_point"
+      plural: "contact_points"
+    label:
+      singular: "Contact Point"
+      plural: "Contact Points"
+    description: "Child entity for phones, emails, links and messengers."
+    is_system: true
+    is_custom: false
+    is_active: true
+    is_ui_read_only: false
+    fields:
+      - name: "id"
+        type: "uuid"
+        label: "ID"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: true
+        is_index: true
+        is_ui_read_only: true
+        is_searchable: false
+      - name: "kind"
+        type: "select"
+        label: "Kind"
+        description: "ContactPointKindVO: phone, email, site, messenger."
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+        options:
+          items:
+            - code: "phone"
+              label: "Phone"
+            - code: "email"
+              label: "Email"
+            - code: "site"
+              label: "Site"
+            - code: "messenger"
+              label: "Messenger"
+          allow_custom: false
+      - name: "value"
+        type: "string"
+        label: "Value"
+        description: "Raw contact value, validated by business services."
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: true
+        settings:
+          min_length: 1
+          max_length: 512
+      - name: "type_code"
+        type: "string"
+        label: "Type Code"
+        description: "Dictionary code (work, mobile, personal, telegram)."
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+        settings:
+          min_length: 1
+          max_length: 64
+      - name: "is_primary"
+        type: "boolean"
+        label: "Is Primary"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+        default_value:
+          value: false
+      - name: "is_verified"
+        type: "boolean"
+        label: "Is Verified"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+        default_value:
+          value: false
+      - name: "sort_order"
+        type: "integer"
+        label: "Sort Order"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+        settings:
+          min_value: 0
+        default_value:
+          value: 0
+      - name: "is_active"
+        type: "boolean"
+        label: "Is Active"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+        default_value:
+          value: true
+      - name: "lead_id"
+        type: "relation"
+        label: "Lead"
+        description: "Owner lead (one of lead/contact/company should be set)."
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: true
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+        relation_target_object: "crm_lead"
+        relation_target_field: "id"
+        settings:
+          on_delete: "cascade"
+          max_links: 1
+          enforce_tenant_scope: true
+      - name: "contact_id"
+        type: "relation"
+        label: "Contact"
+        description: "Owner contact (one of lead/contact/company should be set)."
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: true
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+        relation_target_object: "crm_contact"
+        relation_target_field: "id"
+        settings:
+          on_delete: "cascade"
+          max_links: 1
+          enforce_tenant_scope: true
+      - name: "company_id"
+        type: "relation"
+        label: "Company"
+        description: "Owner company (one of lead/contact/company should be set)."
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: true
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+        relation_target_object: "crm_company"
+        relation_target_field: "id"
+        settings:
+          on_delete: "cascade"
+          max_links: 1
+          enforce_tenant_scope: true
+
+  - key: "crm_contact_point_type"
+    name:
+      singular: "contact_point_type"
+      plural: "contact_point_types"
+    label:
+      singular: "Contact Point Type"
+      plural: "Contact Point Types"
+    description: "Dictionary rows for ContactPoint type_code per kind."
+    is_system: true
+    is_custom: false
+    is_active: true
+    is_ui_read_only: false
+    fields:
+      - name: "id"
+        type: "uuid"
+        label: "ID"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: true
+        is_index: true
+        is_ui_read_only: true
+        is_searchable: false
+      - name: "kind"
+        type: "select"
+        label: "Kind"
+        description: "Kind of contact point."
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+        options:
+          items:
+            - code: "phone"
+              label: "Phone"
+            - code: "email"
+              label: "Email"
+            - code: "site"
+              label: "Site"
+            - code: "messenger"
+              label: "Messenger"
+          allow_custom: false
+      - name: "code"
+        type: "string"
+        label: "Code"
+        description: "Type code within kind (mobile, work, telegram, etc)."
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+        settings:
+          min_length: 1
+          max_length: 64
+      - name: "title"
+        type: "string"
+        label: "Title"
+        description: "Human-readable title for the type."
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: true
+        settings:
+          min_length: 1
+          max_length: 128
+      - name: "is_system"
+        type: "boolean"
+        label: "Is System"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+        default_value:
+          value: false
+      - name: "is_active"
+        type: "boolean"
+        label: "Is Active"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+        default_value:
+          value: true
+      - name: "sort_order"
+        type: "integer"
+        label: "Sort Order"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+        settings:
+          min_value: 0
+        default_value:
+          value: 0
+
+  - key: "crm_product_row"
+    name:
+      singular: "product_row"
+      plural: "product_rows"
+    label:
+      singular: "Product Row"
+      plural: "Product Rows"
+    description: "Product row line item used by lead/deal."
+    is_system: true
+    is_custom: false
+    is_active: true
+    is_ui_read_only: false
+    fields:
+      - name: "id"
+        type: "uuid"
+        label: "ID"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: true
+        is_index: true
+        is_ui_read_only: true
+        is_searchable: false
+      - name: "entity_id"
+        type: "select"
+        label: "Owner Entity Type"
+        description: "ProductRowEntityIdVO: 1=lead, 2=deal."
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+        options:
+          items:
+            - code: "lead"
+              label: "Lead"
+            - code: "deal"
+              label: "Deal"
+          allow_custom: false
+      - name: "entity_uuid"
+        type: "uuid"
+        label: "Owner Entity UUID"
+        description: "ID of owner entity according to entity_id."
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+      - name: "product_id"
+        type: "uuid"
+        label: "Product ID"
+        description: "Optional product reference."
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: true
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+      - name: "product_name"
+        type: "string"
+        label: "Product Name"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: true
+        settings:
+          min_length: 1
+          max_length: 255
+      - name: "price"
+        type: "currency"
+        label: "Price"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        settings:
+          allowed_currencies: ["USD", "EUR", "GBP", "UAH", "PLN"]
+          display_scale: 2
+      - name: "price_account"
+        type: "currency"
+        label: "Price Account"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        settings:
+          allowed_currencies: ["USD", "EUR", "GBP", "UAH", "PLN"]
+          display_scale: 2
+      - name: "price_exclusive"
+        type: "currency"
+        label: "Price Exclusive"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        settings:
+          allowed_currencies: ["USD", "EUR", "GBP", "UAH", "PLN"]
+          display_scale: 2
+      - name: "price_netto"
+        type: "currency"
+        label: "Price Netto"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        settings:
+          allowed_currencies: ["USD", "EUR", "GBP", "UAH", "PLN"]
+          display_scale: 2
+      - name: "price_brutto"
+        type: "currency"
+        label: "Price Brutto"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        settings:
+          allowed_currencies: ["USD", "EUR", "GBP", "UAH", "PLN"]
+          display_scale: 2
+      - name: "quantity"
+        type: "integer"
+        label: "Quantity"
+        description: "Quantity; should be positive."
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        settings:
+          min_value: 1
+        default_value:
+          value: 1
+      - name: "discount_type_id"
+        type: "select"
+        label: "Discount Type"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        options:
+          items:
+            - code: "percent"
+              label: "Percent"
+            - code: "fixed"
+              label: "Fixed"
+          allow_custom: false
+        default_value:
+          code: "percent"
+      - name: "discount_rate"
+        type: "integer"
+        label: "Discount Rate"
+        description: "Non-negative value."
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        settings:
+          min_value: 0
+        default_value:
+          value: 0
+      - name: "discount_sum"
+        type: "currency"
+        label: "Discount Sum"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        settings:
+          allowed_currencies: ["USD", "EUR", "GBP", "UAH", "PLN"]
+          display_scale: 2
+      - name: "tax_rate"
+        type: "integer"
+        label: "Tax Rate"
+        description: "Non-negative value."
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        settings:
+          min_value: 0
+        default_value:
+          value: 0
+      - name: "tax_included"
+        type: "boolean"
+        label: "Tax Included"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        default_value:
+          value: false
+      - name: "customized"
+        type: "boolean"
+        label: "Customized"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        default_value:
+          value: false
+      - name: "measure_code"
+        type: "string"
+        label: "Measure Code"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        settings:
+          min_length: 1
+          max_length: 32
+        default_value:
+          value: "pcs"
+      - name: "measure_name"
+        type: "string"
+        label: "Measure Name"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        settings:
+          min_length: 1
+          max_length: 64
+        default_value:
+          value: "pcs"
+      - name: "sort"
+        type: "integer"
+        label: "Sort"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+        settings:
+          min_value: 0
+        default_value:
+          value: 0
