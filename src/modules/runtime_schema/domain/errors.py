@@ -120,11 +120,17 @@ class FieldMaxItemsInvalidError(ValidationError):
         super().__init__("max_items must be greater than zero")
 
 
+class FieldDefaultValueInvalidError(ValidationError):
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+
+
 __all__ = [
     "FieldDefaultExceedsMaxItemsError",
     "FieldDefaultOptionNotFoundError",
     "FieldDefaultRelationTargetMismatchError",
     "FieldDefaultTypeMismatchError",
+    "FieldDefaultValueInvalidError",
     "FieldLabelRequiredError",
     "FieldMaxItemsInvalidError",
     "FieldNameInvalidFormatError",

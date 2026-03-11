@@ -23,9 +23,17 @@ class FieldTypeVO(StrEnum):
 
     INTEGER = "integer"
 
+    ACTOR = "actor"
+    ADDRESS = "address"
+    ARRAY = "array"
     BOOLEAN = "boolean"
+    CURRENCY = "currency"
     DATE_TIME = "date_time"
+    EMAILS = "emails"
+    FULL_NAME = "full_name"
     JSON = "json"
+    LINKS = "links"
+    PHONES = "phones"
 
     SELECT = "select"
     MULTI_SELECT = "multi_select"

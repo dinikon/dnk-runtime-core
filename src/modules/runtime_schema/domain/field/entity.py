@@ -1,12 +1,15 @@
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import ClassVar
+from uuid import UUID
 
 from ..errors import (
     FieldDefaultExceedsMaxItemsError,
     FieldDefaultOptionNotFoundError,
     FieldDefaultRelationTargetMismatchError,
     FieldDefaultTypeMismatchError,
+    FieldDefaultValueInvalidError,
     FieldLabelRequiredError,
     FieldOptionsNotAllowedError,
     FieldOptionsRequiredError,
@@ -18,18 +21,35 @@ from ..errors import (
     FieldUniqueMustBeIndexedError,
 )
 from .configuration import (
+    ActorDefaultValue,
+    ActorFieldSettings,
+    AddressDefaultValue,
+    AddressFieldSettings,
+    ArrayDefaultValue,
+    ArrayFieldSettings,
+    ArrayItemTypeVO,
     BooleanDefaultValue,
+    CurrencyDefaultValue,
+    CurrencyFieldSettings,
     DateTimeDefaultValue,
     DateTimeFieldSettings,
+    EmailsDefaultValue,
+    EmailsFieldSettings,
     FieldDefaultValue,
     FieldOptions,
     FieldSettings,
+    FullNameDefaultValue,
+    FullNameFieldSettings,
     IntegerDefaultValue,
     IntegerFieldSettings,
     JsonDefaultValue,
     JsonFieldSettings,
+    LinksDefaultValue,
+    LinksFieldSettings,
     MultiSelectDefaultValue,
     MultiSelectFieldOptions,
+    PhonesDefaultValue,
+    PhonesFieldSettings,
     RelationDefaultValue,
     RelationFieldSettings,
     SelectDefaultValue,
@@ -51,25 +71,41 @@ from modules.shared.domain.value_object.entity_id import EntityIdVO
 @dataclass(slots=True)
 class FieldMetadataEntity:
     _ALLOWED_SETTINGS_BY_TYPE: ClassVar[dict[FieldTypeVO, tuple[type[object], ...]]] = {
+        FieldTypeVO.ACTOR: (ActorFieldSettings,),
+        FieldTypeVO.ADDRESS: (AddressFieldSettings,),
+        FieldTypeVO.ARRAY: (ArrayFieldSettings,),
         FieldTypeVO.UUID: tuple(),
         FieldTypeVO.STRING: (StringFieldSettings,),
         FieldTypeVO.TEXT: (StringFieldSettings,),
         FieldTypeVO.INTEGER: (IntegerFieldSettings,),
         FieldTypeVO.BOOLEAN: tuple(),
+        FieldTypeVO.CURRENCY: (CurrencyFieldSettings,),
         FieldTypeVO.DATE_TIME: (DateTimeFieldSettings,),
+        FieldTypeVO.EMAILS: (EmailsFieldSettings,),
+        FieldTypeVO.FULL_NAME: (FullNameFieldSettings,),
         FieldTypeVO.JSON: (JsonFieldSettings,),
+        FieldTypeVO.LINKS: (LinksFieldSettings,),
+        FieldTypeVO.PHONES: (PhonesFieldSettings,),
         FieldTypeVO.SELECT: tuple(),
         FieldTypeVO.MULTI_SELECT: tuple(),
         FieldTypeVO.RELATION: (RelationFieldSettings,),
     }
     _EXPECTED_DEFAULT_BY_TYPE: ClassVar[dict[FieldTypeVO, type[object]]] = {
+        FieldTypeVO.ACTOR: ActorDefaultValue,
+        FieldTypeVO.ADDRESS: AddressDefaultValue,
+        FieldTypeVO.ARRAY: ArrayDefaultValue,
         FieldTypeVO.UUID: UuidDefaultValue,
         FieldTypeVO.STRING: StringDefaultValue,
         FieldTypeVO.TEXT: StringDefaultValue,
         FieldTypeVO.INTEGER: IntegerDefaultValue,
         FieldTypeVO.BOOLEAN: BooleanDefaultValue,
+        FieldTypeVO.CURRENCY: CurrencyDefaultValue,
         FieldTypeVO.DATE_TIME: DateTimeDefaultValue,
+        FieldTypeVO.EMAILS: EmailsDefaultValue,
+        FieldTypeVO.FULL_NAME: FullNameDefaultValue,
         FieldTypeVO.JSON: JsonDefaultValue,
+        FieldTypeVO.LINKS: LinksDefaultValue,
+        FieldTypeVO.PHONES: PhonesDefaultValue,
         FieldTypeVO.SELECT: SelectDefaultValue,
         FieldTypeVO.MULTI_SELECT: MultiSelectDefaultValue,
         FieldTypeVO.RELATION: RelationDefaultValue,
@@ -316,6 +352,166 @@ class FieldMetadataEntity:
                 type(self.default_value).__name__,
             )
 
+        if self.field_type == FieldTypeVO.ADDRESS:
+            assert isinstance(self.default_value, AddressDefaultValue)
+            settings = (
+                self.settings
+                if isinstance(self.settings, AddressFieldSettings)
+                else AddressFieldSettings()
+            )
+            if settings.require_country and not self.default_value.country:
+                raise FieldDefaultValueInvalidError("address country is required")
+            if settings.require_region and not self.default_value.region:
+                raise FieldDefaultValueInvalidError("address region is required")
+            if settings.require_city and not self.default_value.city:
+                raise FieldDefaultValueInvalidError("address city is required")
+            if settings.require_address_line and not self.default_value.address_line:
+                raise FieldDefaultValueInvalidError("address line is required")
+            if settings.require_post_code and not self.default_value.post_code:
+                raise FieldDefaultValueInvalidError("address post_code is required")
+            return
+
+        if self.field_type == FieldTypeVO.ARRAY:
+            assert isinstance(self.default_value, ArrayDefaultValue)
+            settings = (
+                self.settings
+                if isinstance(self.settings, ArrayFieldSettings)
+                else ArrayFieldSettings()
+            )
+            self._validate_collection_size(
+                size=len(self.default_value.values),
+                max_items=settings.max_items,
+                field_name=self.field_type.value,
+            )
+            if (
+                not settings.allow_duplicates
+                and len(set(self.default_value.values)) != len(self.default_value.values)
+            ):
+                raise FieldDefaultValueInvalidError("array default contains duplicates")
+            for item in self.default_value.values:
+                if not self._is_array_item_valid(item=item, item_type=settings.item_type):
+                    raise FieldDefaultValueInvalidError(
+                        f"array item '{item}' does not match item_type '{settings.item_type.value}'"
+                    )
+            return
+
+        if self.field_type == FieldTypeVO.CURRENCY:
+            assert isinstance(self.default_value, CurrencyDefaultValue)
+            settings = (
+                self.settings
+                if isinstance(self.settings, CurrencyFieldSettings)
+                else CurrencyFieldSettings()
+            )
+            if (
+                settings.allowed_currencies is not None
+                and self.default_value.currency not in settings.allowed_currencies
+            ):
+                raise FieldDefaultValueInvalidError(
+                    f"currency '{self.default_value.currency}' is not allowed"
+                )
+            if self.default_value.display_value is not None:
+                fraction_digits = self._fraction_digits(self.default_value.display_value)
+                if fraction_digits > settings.display_scale:
+                    raise FieldDefaultValueInvalidError(
+                        f"currency display value has {fraction_digits} digits after decimal; max is {settings.display_scale}"
+                    )
+            return
+
+        if self.field_type == FieldTypeVO.DATE_TIME:
+            assert isinstance(self.default_value, DateTimeDefaultValue)
+            settings = (
+                self.settings
+                if isinstance(self.settings, DateTimeFieldSettings)
+                else DateTimeFieldSettings()
+            )
+            if settings.timezone_aware and self.default_value.value.tzinfo is None:
+                raise FieldDefaultValueInvalidError(
+                    "date_time default must be timezone-aware"
+                )
+            if not settings.timezone_aware and self.default_value.value.tzinfo is not None:
+                raise FieldDefaultValueInvalidError(
+                    "date_time default must be naive when timezone_aware is false"
+                )
+            if settings.require_utc:
+                offset = self.default_value.value.utcoffset()
+                if offset != timedelta(0):
+                    raise FieldDefaultValueInvalidError(
+                        "date_time default must be normalized to UTC"
+                    )
+            return
+
+        if self.field_type == FieldTypeVO.EMAILS:
+            assert isinstance(self.default_value, EmailsDefaultValue)
+            settings = (
+                self.settings
+                if isinstance(self.settings, EmailsFieldSettings)
+                else EmailsFieldSettings()
+            )
+            self._validate_collection_size(
+                size=len(self.default_value.emails),
+                max_items=settings.max_items,
+                field_name=self.field_type.value,
+            )
+            if (
+                not settings.allow_duplicates
+                and len(set(self.default_value.emails)) != len(self.default_value.emails)
+            ):
+                raise FieldDefaultValueInvalidError("emails default contains duplicates")
+            return
+
+        if self.field_type == FieldTypeVO.FULL_NAME:
+            assert isinstance(self.default_value, FullNameDefaultValue)
+            settings = (
+                self.settings
+                if isinstance(self.settings, FullNameFieldSettings)
+                else FullNameFieldSettings()
+            )
+            if settings.require_last_name and not self.default_value.last_name:
+                raise FieldDefaultValueInvalidError("full_name last_name is required")
+            if settings.require_middle_name and not self.default_value.middle_name:
+                raise FieldDefaultValueInvalidError("full_name middle_name is required")
+            if settings.require_first_name and not self.default_value.first_name:
+                raise FieldDefaultValueInvalidError("full_name first_name is required")
+            return
+
+        if self.field_type == FieldTypeVO.LINKS:
+            assert isinstance(self.default_value, LinksDefaultValue)
+            settings = (
+                self.settings
+                if isinstance(self.settings, LinksFieldSettings)
+                else LinksFieldSettings()
+            )
+            self._validate_collection_size(
+                size=len(self.default_value.links),
+                max_items=settings.max_items,
+                field_name=self.field_type.value,
+            )
+            if (
+                not settings.allow_duplicates
+                and len(set(self.default_value.links)) != len(self.default_value.links)
+            ):
+                raise FieldDefaultValueInvalidError("links default contains duplicates")
+            return
+
+        if self.field_type == FieldTypeVO.PHONES:
+            assert isinstance(self.default_value, PhonesDefaultValue)
+            settings = (
+                self.settings
+                if isinstance(self.settings, PhonesFieldSettings)
+                else PhonesFieldSettings()
+            )
+            self._validate_collection_size(
+                size=len(self.default_value.phones),
+                max_items=settings.max_items,
+                field_name=self.field_type.value,
+            )
+            if (
+                not settings.allow_duplicates
+                and len(set(self.default_value.phones)) != len(self.default_value.phones)
+            ):
+                raise FieldDefaultValueInvalidError("phones default contains duplicates")
+            return
+
         if self.field_type == FieldTypeVO.SELECT:
             assert isinstance(self.options, SelectFieldOptions)
             assert isinstance(self.default_value, SelectDefaultValue)
@@ -346,6 +542,48 @@ class FieldMetadataEntity:
                 or self.default_value.target_field_id != self.relation_target_field_id
             ):
                 raise FieldDefaultRelationTargetMismatchError()
+
+    @staticmethod
+    def _validate_collection_size(
+        *,
+        size: int,
+        max_items: int | None,
+        field_name: str,
+    ) -> None:
+        if max_items is not None and size > max_items:
+            raise FieldDefaultValueInvalidError(
+                f"{field_name} default contains {size} values, max is {max_items}"
+            )
+
+    @staticmethod
+    def _is_array_item_valid(*, item: object, item_type: ArrayItemTypeVO) -> bool:
+        if item_type == ArrayItemTypeVO.STRING:
+            return isinstance(item, str)
+        if item_type == ArrayItemTypeVO.INTEGER:
+            return isinstance(item, int) and not isinstance(item, bool)
+        if item_type == ArrayItemTypeVO.BOOLEAN:
+            return isinstance(item, bool)
+        if item_type == ArrayItemTypeVO.UUID:
+            if isinstance(item, UUID):
+                return True
+            if not isinstance(item, str):
+                return False
+            try:
+                UUID(item)
+            except ValueError:
+                return False
+            return True
+        if item_type == ArrayItemTypeVO.DATE_TIME:
+            return isinstance(item, datetime)
+        if item_type == ArrayItemTypeVO.NUMBER:
+            return isinstance(item, (int, float, Decimal)) and not isinstance(item, bool)
+        return False
+
+    @staticmethod
+    def _fraction_digits(value: str) -> int:
+        if "." not in value:
+            return 0
+        return len(value.split(".", 1)[1])
 
 
 __all__ = ["FieldMetadataEntity"]
