@@ -3,6 +3,7 @@ from decimal import Decimal
 from typing import Self
 from uuid import UUID
 
+from modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.crm.domain.deal.value_objects import DealIdVO, DealTitleVO
 from src.modules.crm.domain.error import ProductRowNotFoundError
 from src.modules.crm.domain.product_row.entity import ProductRowEntity
@@ -11,7 +12,6 @@ from src.modules.crm.domain.product_row.value_objects import (
     ProductRowEntityIdVO,
     ProductRowIdVO,
 )
-from src.modules.crm.domain.shared.crm_entity_id import CrmEntityIdVO
 
 
 @dataclass(slots=True)
@@ -31,14 +31,16 @@ class DealEntity:
         self,
         *,
         product_name: str,
-        product_id: CrmEntityIdVO | UUID | str | None = None,
+        product_id: EntityIdVO | UUID | str | None = None,
         price: Decimal | int | float | str = 0,
         price_account: Decimal | int | float | str = 0,
         price_exclusive: Decimal | int | float | str = 0,
         price_netto: Decimal | int | float | str = 0,
         price_brutto: Decimal | int | float | str = 0,
         quantity: Decimal | int | float | str = 1,
-        discount_type_id: ProductRowDiscountTypeVO | str = ProductRowDiscountTypeVO.PERCENT,
+        discount_type_id: (
+            ProductRowDiscountTypeVO | str
+        ) = ProductRowDiscountTypeVO.PERCENT,
         discount_rate: Decimal | int | float | str = 0,
         discount_sum: Decimal | int | float | str = 0,
         tax_rate: Decimal | int | float | str = 0,

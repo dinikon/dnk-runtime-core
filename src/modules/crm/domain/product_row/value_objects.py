@@ -1,14 +1,14 @@
 from dataclasses import dataclass
 from typing import ClassVar, Self
 
+from modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.crm.domain.error import (
     ProductRowDiscountTypeNotSupportedError,
     ProductRowEntityIdRequiredError,
 )
-from src.modules.crm.domain.shared.crm_entity_id import CrmEntityIdVO
 
 
-class ProductRowIdVO(CrmEntityIdVO): ...
+class ProductRowIdVO(EntityIdVO): ...
 
 
 @dataclass(frozen=True, slots=True)

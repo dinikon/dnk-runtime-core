@@ -1,4 +1,4 @@
-from modules.runtime_schema.domain.object.object_entity import (
+from modules.runtime_schema.domain.object.entity import (
     ObjectMetadataEntity,
 )
 

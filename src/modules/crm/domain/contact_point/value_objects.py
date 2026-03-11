@@ -1,9 +1,7 @@
 from dataclasses import dataclass, replace
-from typing import Self
-from uuid import UUID
 
-import uuid6
 
+from modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.crm.domain.error import (
     ContactPointKindNotSupportedError,
     ContactPointTypeCodeRequiredError,
@@ -11,22 +9,7 @@ from src.modules.crm.domain.error import (
 )
 
 
-@dataclass(frozen=True, slots=True)
-class ContactPointIdVO:
-    value: UUID
-
-    @classmethod
-    def new(cls) -> Self:
-        return cls(value=uuid6.uuid7())
-
-    @classmethod
-    def from_value(cls, value: UUID | str) -> Self:
-        if isinstance(value, str):
-            value = UUID(value)
-        return cls(value=value)
-
-    def __str__(self) -> str:
-        return str(self.value)
+class ContactPointIdVO(EntityIdVO): ...
 
 
 @dataclass(frozen=True, slots=True)

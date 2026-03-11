@@ -3,6 +3,7 @@ from decimal import Decimal
 from typing import Self
 from uuid import UUID
 
+from modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.crm.domain.company.entity import CompanyEntity
 from src.modules.crm.domain.contact.entity import ContactEntity
 from src.modules.crm.domain.contact_point.contact_point_entity import (
@@ -29,7 +30,6 @@ from src.modules.crm.domain.product_row.value_objects import (
     ProductRowEntityIdVO,
     ProductRowIdVO,
 )
-from src.modules.crm.domain.shared.crm_entity_id import CrmEntityIdVO
 from src.modules.crm.domain.lead.conversion.mode import LeadConversionModeVO
 from src.modules.crm.domain.lead.conversion.result import LeadConversionResultVO
 from src.modules.crm.domain.lead.value_objects import LeadIdVO, LeadTitleVO
@@ -133,7 +133,9 @@ class LeadEntity:
         self._reset_primary_for_kind(kind=target.kind)
         target.mark_as_primary()
 
-    def change_contact_point_value(self, point_id: ContactPointIdVO, value: str) -> None:
+    def change_contact_point_value(
+        self, point_id: ContactPointIdVO, value: str
+    ) -> None:
         target = self.get_contact_point(point_id)
         target.change_value(value)
 
@@ -186,14 +188,16 @@ class LeadEntity:
         self,
         *,
         product_name: str,
-        product_id: CrmEntityIdVO | UUID | str | None = None,
+        product_id: EntityIdVO | UUID | str | None = None,
         price: Decimal | int | float | str = 0,
         price_account: Decimal | int | float | str = 0,
         price_exclusive: Decimal | int | float | str = 0,
         price_netto: Decimal | int | float | str = 0,
         price_brutto: Decimal | int | float | str = 0,
         quantity: Decimal | int | float | str = 1,
-        discount_type_id: ProductRowDiscountTypeVO | str = ProductRowDiscountTypeVO.PERCENT,
+        discount_type_id: (
+            ProductRowDiscountTypeVO | str
+        ) = ProductRowDiscountTypeVO.PERCENT,
         discount_rate: Decimal | int | float | str = 0,
         discount_sum: Decimal | int | float | str = 0,
         tax_rate: Decimal | int | float | str = 0,

@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 
+from modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.crm.domain.error import DealTitleRequiredError
-from src.modules.crm.domain.shared.crm_entity_id import CrmEntityIdVO
 
 
-class DealIdVO(CrmEntityIdVO): ...
+class DealIdVO(EntityIdVO): ...
 
 
 @dataclass(frozen=True, slots=True)

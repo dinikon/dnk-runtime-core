@@ -3,6 +3,7 @@ from decimal import Decimal, InvalidOperation
 from typing import TypeAlias
 from uuid import UUID
 
+from modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.crm.domain.error import (
     ProductRowFieldMustBeNonNegativeError,
     ProductRowMeasureCodeRequiredError,
@@ -15,18 +16,17 @@ from src.modules.crm.domain.product_row.value_objects import (
     ProductRowEntityIdVO,
     ProductRowIdVO,
 )
-from src.modules.crm.domain.shared.crm_entity_id import CrmEntityIdVO
 
 DecimalLike: TypeAlias = Decimal | int | float | str
-ProductIdLike: TypeAlias = CrmEntityIdVO | UUID | str | None
+ProductIdLike: TypeAlias = EntityIdVO | UUID | str | None
 
 
 @dataclass(slots=True)
 class ProductRowEntity:
     id: ProductRowIdVO
     entity_id: ProductRowEntityIdVO
-    entity_uuid: CrmEntityIdVO
-    product_id: CrmEntityIdVO | None
+    entity_uuid: EntityIdVO
+    product_id: EntityIdVO | None
     product_name: str
     price: Decimal
     price_account: Decimal
@@ -49,7 +49,7 @@ class ProductRowEntity:
         cls,
         *,
         entity_id: ProductRowEntityIdVO,
-        entity_uuid: CrmEntityIdVO,
+        entity_uuid: EntityIdVO,
         product_name: str,
         product_id: ProductIdLike = None,
         price: DecimalLike = 0,
@@ -58,7 +58,9 @@ class ProductRowEntity:
         price_netto: DecimalLike = 0,
         price_brutto: DecimalLike = 0,
         quantity: DecimalLike = 1,
-        discount_type_id: ProductRowDiscountTypeVO | str = ProductRowDiscountTypeVO.PERCENT,
+        discount_type_id: (
+            ProductRowDiscountTypeVO | str
+        ) = ProductRowDiscountTypeVO.PERCENT,
         discount_rate: DecimalLike = 0,
         discount_sum: DecimalLike = 0,
         tax_rate: DecimalLike = 0,
@@ -132,7 +134,7 @@ class ProductRowEntity:
         self,
         *,
         entity_id: ProductRowEntityIdVO,
-        entity_uuid: CrmEntityIdVO,
+        entity_uuid: EntityIdVO,
     ) -> None:
         self.entity_id = entity_id
         self.entity_uuid = entity_uuid
@@ -141,7 +143,7 @@ class ProductRowEntity:
         self,
         *,
         entity_id: ProductRowEntityIdVO,
-        entity_uuid: CrmEntityIdVO,
+        entity_uuid: EntityIdVO,
     ) -> "ProductRowEntity":
         return ProductRowEntity.create(
             entity_id=entity_id,
@@ -166,12 +168,12 @@ class ProductRowEntity:
         )
 
     @staticmethod
-    def _normalize_product_id(product_id: ProductIdLike) -> CrmEntityIdVO | None:
+    def _normalize_product_id(product_id: ProductIdLike) -> EntityIdVO | None:
         if product_id is None:
             return None
-        if isinstance(product_id, CrmEntityIdVO):
+        if isinstance(product_id, EntityIdVO):
             return product_id
-        return CrmEntityIdVO.from_value(product_id)
+        return EntityIdVO.from_value(product_id)
 
     @staticmethod
     def _normalize_discount_type(
