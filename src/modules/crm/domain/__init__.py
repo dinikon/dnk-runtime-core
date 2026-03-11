@@ -22,7 +22,7 @@ from src.modules.crm.domain.product_row import (
     ProductRowEntityIdVO,
     ProductRowIdVO,
 )
-from src.modules.crm.domain.shared import CompanyNameVO, CrmEntityIdVO, PersonNameVO
+from src.modules.crm.domain.shared import CompanyNameVO, PersonNameVO
 
 __all__ = [
     "CompanyEntity",
@@ -37,7 +37,6 @@ __all__ = [
     "ContactPointTypeVO",
     "ContactPointTypeCodeVO",
     "ContactPointTypeDictionaryEntity",
-    "CrmEntityIdVO",
     "DealEntity",
     "DealIdVO",
     "DealTitleVO",
