@@ -5,7 +5,7 @@ from uuid import UUID
 
 
 class TenantRuntimeSchemaBootstrapperProtocol(Protocol):
-    async def bootstrap_system_objects(
+    async def bootstrap_tenant_system_schema(
         self,
         *,
         tenant_id: UUID,

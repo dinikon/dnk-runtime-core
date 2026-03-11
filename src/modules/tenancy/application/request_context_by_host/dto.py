@@ -3,7 +3,7 @@ from uuid import UUID
 
 
 @dataclass(frozen=True, slots=True)
-class GetTenantRequestContextByHostQueryDTO:
+class ResolveTenantRequestContextByHostQueryDTO:
     host: str
 
 

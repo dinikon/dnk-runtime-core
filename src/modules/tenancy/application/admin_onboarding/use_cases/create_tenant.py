@@ -55,17 +55,17 @@ class CreateTenantUseCase:
                 dto.tenant_name,
                 dto.external_id,
             )
-            tenant_domain = await self._tenant_domain_service.create_primary_domain(
+            tenant_domain = await self._tenant_domain_service.create_primary_console_domain(
                 tenant_id=tenant.id,
                 host=dto.tenant_domain_host,
             )
-            tenant_schema = self._tenant_schema_name_service.build(tenant.id)
+            tenant_schema = self._tenant_schema_name_service.build_schema_name(tenant.id)
             await self._tenant_schema_provisioner.create_schema(tenant_schema)
-            data_source = await self._tenant_data_source_service.register_primary_local_data_source(
+            data_source = await self._tenant_data_source_service.create_primary_local_data_source(
                 tenant_id=tenant.id,
                 schema=tenant_schema,
             )
-            await self._runtime_schema_bootstrapper.bootstrap_system_objects(
+            await self._runtime_schema_bootstrapper.bootstrap_tenant_system_schema(
                 tenant_id=tenant.id,
                 data_source_id=data_source.id,
                 schema=data_source.schema,

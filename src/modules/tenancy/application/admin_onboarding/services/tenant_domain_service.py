@@ -11,7 +11,7 @@ from src.modules.tenancy.domain.errors import TenantDomainHostAlreadyExistsError
 
 
 class TenantDomainServiceProtocol(Protocol):
-    async def create_primary_domain(
+    async def create_primary_console_domain(
         self,
         tenant_id: UUID,
         host: str,
@@ -22,7 +22,7 @@ class TenantDomainService:
     def __init__(self, tenant_domains_repository: TenantDomainRepositoryProtocol):
         self._tenant_domains_repository = tenant_domains_repository
 
-    async def create_primary_domain(
+    async def create_primary_console_domain(
         self,
         tenant_id: UUID,
         host: str,
@@ -31,7 +31,7 @@ class TenantDomainService:
         if await self._tenant_domains_repository.exists_by_host(normalized_host):
             raise TenantDomainHostAlreadyExistsError(normalized_host)
 
-        tenant_domain = TenantDomain.create_primary(
+        tenant_domain = TenantDomain.create_primary_console_domain(
             tenant_id=tenant_id,
             host=normalized_host,
         )

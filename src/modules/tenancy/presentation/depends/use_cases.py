@@ -8,7 +8,7 @@ from src.modules.tenancy.application.admin_onboarding.use_cases.create_tenant im
     CreateTenantUseCase,
 )
 from src.modules.tenancy.application.request_context_by_host.use_case import (
-    GetTenantRequestContextByHostUseCase,
+    ResolveTenantRequestContextByHostUseCase,
 )
 from src.modules.tenancy.application.resolve_tenant_by_host.use_case import (
     ResolveTenantByHostUseCase,
@@ -76,15 +76,15 @@ ResolveTenantByHostUseCaseDep = Annotated[
 def get_tenant_request_context_by_host_use_case(
     tenants_repository: TenantsRepositoryDep,
     tenant_domains_repository: TenantDomainsRepositoryDep,
-) -> GetTenantRequestContextByHostUseCase:
-    return GetTenantRequestContextByHostUseCase(
+) -> ResolveTenantRequestContextByHostUseCase:
+    return ResolveTenantRequestContextByHostUseCase(
         tenants_repository=tenants_repository,
         tenant_domains_repository=tenant_domains_repository,
     )
 
 
 TenantRequestContextByHostUseCaseDep = Annotated[
-    GetTenantRequestContextByHostUseCase,
+    ResolveTenantRequestContextByHostUseCase,
     Depends(get_tenant_request_context_by_host_use_case),
 ]
 

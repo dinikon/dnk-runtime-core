@@ -14,7 +14,7 @@ from src.modules.tenancy.domain.errors import (
 
 
 class TenantDataSourceServiceProtocol(Protocol):
-    async def register_primary_local_data_source(
+    async def create_primary_local_data_source(
         self,
         *,
         tenant_id: UUID,
@@ -29,7 +29,7 @@ class TenantDataSourceService:
     ):
         self._tenant_data_sources_repository = tenant_data_sources_repository
 
-    async def register_primary_local_data_source(
+    async def create_primary_local_data_source(
         self,
         tenant_id: UUID,
         schema: str,
@@ -42,7 +42,7 @@ class TenantDataSourceService:
         ):
             raise TenantDataSourceSchemaAlreadyExistsError(normalized_schema)
 
-        data_source = TenantDataSource.create_primary(
+        data_source = TenantDataSource.create_primary_local_data_source(
             tenant_id=tenant_id,
             schema=normalized_schema,
             dsn=None,

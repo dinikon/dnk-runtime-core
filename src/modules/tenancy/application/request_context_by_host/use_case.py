@@ -5,20 +5,20 @@ from src.modules.tenancy.application.admin_onboarding.ports.repositories import 
     TenantRepositoryProtocol,
 )
 from src.modules.tenancy.application.request_context_by_host.dto import (
-    GetTenantRequestContextByHostQueryDTO,
+    ResolveTenantRequestContextByHostQueryDTO,
     TenantRequestContextDTO,
 )
 from src.modules.tenancy.domain.errors import (
     TenantHostNotFoundError,
     TenantLoginUnavailableError,
 )
-from src.modules.tenancy.domain.value_objects.tenant_domian_status import (
+from src.modules.tenancy.domain.value_objects.tenant_domain_status import (
     TenantDomainStatus,
 )
 from src.modules.shared.http.host import normalize_host
 
 
-class GetTenantRequestContextByHostUseCase:
+class ResolveTenantRequestContextByHostUseCase:
     def __init__(
         self,
         tenants_repository: TenantRepositoryProtocol,
@@ -29,7 +29,7 @@ class GetTenantRequestContextByHostUseCase:
 
     async def execute(
         self,
-        dto: GetTenantRequestContextByHostQueryDTO,
+        dto: ResolveTenantRequestContextByHostQueryDTO,
     ) -> TenantRequestContextDTO:
         normalized_host = normalize_host(dto.host)
         if not normalized_host:

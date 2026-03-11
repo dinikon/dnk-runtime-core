@@ -16,7 +16,7 @@ from src.modules.tenancy.domain.value_objects.tenant_domain_tls_mode import (
 from src.modules.tenancy.domain.value_objects.tenant_domain_verification_status import (
     TenantDomainVerificationStatus,
 )
-from src.modules.tenancy.domain.value_objects.tenant_domian_status import (
+from src.modules.tenancy.domain.value_objects.tenant_domain_status import (
     TenantDomainStatus,
 )
 from src.modules.tenancy.domain.value_objects.tenant_service_type import (
@@ -85,7 +85,11 @@ class TenantDomain:
     updated_at: datetime
 
     @classmethod
-    def create_primary(cls, tenant_id: UUID, host: str) -> "TenantDomain":
+    def create_primary_console_domain(
+        cls,
+        tenant_id: UUID,
+        host: str,
+    ) -> "TenantDomain":
         normalized_host = host.strip().lower()
         if not normalized_host:
             raise ValidationError("Tenant domain host must not be empty.")
@@ -123,7 +127,7 @@ class TenantDataSource:
     updated_at: datetime
 
     @classmethod
-    def create_primary(
+    def create_primary_local_data_source(
         cls,
         *,
         tenant_id: UUID,

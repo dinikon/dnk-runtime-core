@@ -17,7 +17,7 @@ class RuntimeSchemaBootstrapperAdapter(TenantRuntimeSchemaBootstrapperProtocol):
     def __init__(self, use_case: BootstrapTenantSystemSchemaUseCase):
         self._use_case = use_case
 
-    async def bootstrap_system_objects(
+    async def bootstrap_tenant_system_schema(
         self,
         *,
         tenant_id: UUID,

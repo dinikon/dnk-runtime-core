@@ -1,13 +1,13 @@
 from src.modules.tenancy.application.request_context_by_host.dto import (
-    GetTenantRequestContextByHostQueryDTO,
+    ResolveTenantRequestContextByHostQueryDTO,
     TenantRequestContextDTO,
 )
 from src.modules.tenancy.application.request_context_by_host.use_case import (
-    GetTenantRequestContextByHostUseCase,
+    ResolveTenantRequestContextByHostUseCase,
 )
 
 __all__ = [
-    "GetTenantRequestContextByHostQueryDTO",
-    "GetTenantRequestContextByHostUseCase",
+    "ResolveTenantRequestContextByHostQueryDTO",
+    "ResolveTenantRequestContextByHostUseCase",
     "TenantRequestContextDTO",
 ]

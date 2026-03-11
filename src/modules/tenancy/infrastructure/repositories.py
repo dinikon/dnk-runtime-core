@@ -14,7 +14,7 @@ from src.modules.tenancy.domain.value_objects.tenant_domain_tls_mode import (
 from src.modules.tenancy.domain.value_objects.tenant_domain_verification_status import (
     TenantDomainVerificationStatus,
 )
-from src.modules.tenancy.domain.value_objects.tenant_domian_status import (
+from src.modules.tenancy.domain.value_objects.tenant_domain_status import (
     TenantDomainStatus,
 )
 from src.modules.tenancy.domain.value_objects.tenant_service_type import (
