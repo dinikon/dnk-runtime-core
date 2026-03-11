@@ -1,3 +1,17 @@
-from src.modules.runtime_schema.domain import ObjectMetadataEntity
+from .domain import (
+    FieldIdVO,
+    FieldMetadataEntity,
+    FieldName,
+    FieldTypeVO,
+    ObjectIdVO,
+    ObjectMetadataEntity,
+)
 
-__all__ = ["ObjectMetadataEntity"]
+__all__ = [
+    "FieldIdVO",
+    "FieldMetadataEntity",
+    "FieldName",
+    "FieldTypeVO",
+    "ObjectIdVO",
+    "ObjectMetadataEntity",
+]
