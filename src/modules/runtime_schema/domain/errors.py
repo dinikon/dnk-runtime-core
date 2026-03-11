@@ -125,7 +125,72 @@ class FieldDefaultValueInvalidError(ValidationError):
         super().__init__(message)
 
 
+class ObjectNameRequiredError(ValidationError):
+    def __init__(self, field_name: str) -> None:
+        super().__init__(f"object {field_name} is required")
+
+
+class ObjectNameInvalidFormatError(ValidationError):
+    def __init__(self, value: str) -> None:
+        super().__init__(
+            f"object name '{value}' has invalid format; expected snake_case"
+        )
+
+
+class ObjectLabelRequiredError(ValidationError):
+    def __init__(self, field_name: str) -> None:
+        super().__init__(f"object {field_name} label is required")
+
+
+class ObjectSystemCustomFlagsInvalidError(ValidationError):
+    def __init__(self) -> None:
+        super().__init__("exactly one of object is_system/is_custom must be true")
+
+
+class ObjectTimestampOrderError(ValidationError):
+    def __init__(self) -> None:
+        super().__init__("object updated_at must be greater or equal to created_at")
+
+
+class DataSourceTypeNotSupportedError(ValidationError):
+    def __init__(self, value: str) -> None:
+        super().__init__(f"data source type '{value}' is not supported")
+
+
+class DataSourceSchemaRequiredError(ValidationError):
+    def __init__(self) -> None:
+        super().__init__("data source schema is required")
+
+
+class DataSourceSchemaInvalidFormatError(ValidationError):
+    def __init__(self, value: str) -> None:
+        super().__init__(
+            f"data source schema '{value}' has invalid format; expected [a-z_][a-z0-9_]* up to 63 chars"
+        )
+
+
+class DataSourceDsnInvalidError(ValidationError):
+    def __init__(self, value: str) -> None:
+        super().__init__(f"data source dsn '{value}' is invalid")
+
+
+class DataSourceRemoteDsnRequiredError(ValidationError):
+    def __init__(self) -> None:
+        super().__init__("remote data source requires dsn")
+
+
+class DataSourceTimestampOrderError(ValidationError):
+    def __init__(self) -> None:
+        super().__init__("data source updated_at must be greater or equal to created_at")
+
+
 __all__ = [
+    "DataSourceDsnInvalidError",
+    "DataSourceRemoteDsnRequiredError",
+    "DataSourceSchemaInvalidFormatError",
+    "DataSourceSchemaRequiredError",
+    "DataSourceTimestampOrderError",
+    "DataSourceTypeNotSupportedError",
     "FieldDefaultExceedsMaxItemsError",
     "FieldDefaultOptionNotFoundError",
     "FieldDefaultRelationTargetMismatchError",
@@ -148,4 +213,9 @@ __all__ = [
     "FieldSystemCustomFlagsInvalidError",
     "FieldTimestampOrderError",
     "FieldUniqueMustBeIndexedError",
+    "ObjectLabelRequiredError",
+    "ObjectNameInvalidFormatError",
+    "ObjectNameRequiredError",
+    "ObjectSystemCustomFlagsInvalidError",
+    "ObjectTimestampOrderError",
 ]

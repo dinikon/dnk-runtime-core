@@ -1,17 +1,31 @@
 from .domain import (
+    DataSource,
+    DataSourceDsnVO,
+    DataSourceIdVO,
+    DataSourceSchemaVO,
+    DataSourceTypeVO,
     FieldIdVO,
     FieldMetadataEntity,
     FieldName,
     FieldTypeVO,
     ObjectIdVO,
+    ObjectLabelVO,
     ObjectMetadataEntity,
+    ObjectNameVO,
 )
 
 __all__ = [
+    "DataSource",
+    "DataSourceDsnVO",
+    "DataSourceIdVO",
+    "DataSourceSchemaVO",
+    "DataSourceTypeVO",
     "FieldIdVO",
     "FieldMetadataEntity",
     "FieldName",
     "FieldTypeVO",
     "ObjectIdVO",
+    "ObjectLabelVO",
     "ObjectMetadataEntity",
+    "ObjectNameVO",
 ]

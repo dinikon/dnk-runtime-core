@@ -7,6 +7,7 @@ from typing import TypeAlias
 from urllib.parse import urlparse
 from uuid import UUID
 
+from modules.shared.domain.value_object.currency import CurrencyCodeVO
 from ..errors import (
     FieldDefaultValueInvalidError,
     FieldMaxItemsInvalidError,
@@ -21,7 +22,6 @@ from .value_object import FieldIdVO
 
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 PHONE_ALLOWED_PATTERN = re.compile(r"^\+?[0-9()\-\s]+$")
-CURRENCY_CODE_PATTERN = re.compile(r"^[A-Z]{3}$")
 
 
 def _normalize_non_empty(value: str, *, field_name: str) -> str:
@@ -253,7 +253,7 @@ class ArrayFieldSettings:
 
 @dataclass(frozen=True, slots=True)
 class CurrencyFieldSettings:
-    allowed_currencies: tuple[str, ...] | None = None
+    allowed_currencies: tuple[CurrencyCodeVO | str, ...] | None = None
     display_scale: int = 2
 
     def __post_init__(self) -> None:
@@ -265,12 +265,9 @@ class CurrencyFieldSettings:
         if not self.allowed_currencies:
             raise FieldSettingBoundsError("allowed_currencies must not be empty")
 
-        normalized_codes = tuple(code.strip().upper() for code in self.allowed_currencies)
-        for code in normalized_codes:
-            if not CURRENCY_CODE_PATTERN.match(code):
-                raise FieldSettingBoundsError(
-                    f"currency code '{code}' must be ISO-4217 uppercase format"
-                )
+        normalized_codes = tuple(
+            CurrencyCodeVO.from_value(code) for code in self.allowed_currencies
+        )
         if len(set(normalized_codes)) != len(normalized_codes):
             raise FieldSettingBoundsError("allowed_currencies must not contain duplicates")
         object.__setattr__(self, "allowed_currencies", normalized_codes)
@@ -404,18 +401,14 @@ class ArrayDefaultValue:
 @dataclass(frozen=True, slots=True)
 class CurrencyDefaultValue:
     amount_minor: int
-    currency: str
+    currency: CurrencyCodeVO | str
     display_value: str | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.amount_minor, bool) or not isinstance(self.amount_minor, int):
             raise FieldDefaultValueInvalidError("amount_minor must be integer")
 
-        normalized_currency = self.currency.strip().upper()
-        if not CURRENCY_CODE_PATTERN.match(normalized_currency):
-            raise FieldDefaultValueInvalidError(
-                "currency must be ISO-4217 uppercase format (e.g. UAH, USD)"
-            )
+        normalized_currency = CurrencyCodeVO.from_value(self.currency)
 
         normalized_display = (
             self.display_value.strip() if self.display_value is not None else None
@@ -527,6 +520,7 @@ __all__ = [
     "BooleanDefaultValue",
     "CurrencyDefaultValue",
     "CurrencyFieldSettings",
+    "CurrencyCodeVO",
     "DateTimeDefaultValue",
     "DateTimeFieldSettings",
     "EmailsDefaultValue",
