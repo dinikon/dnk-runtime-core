@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from src.modules.shared import EntityIdVO
@@ -15,14 +16,14 @@ from src.modules.shorter.domain.errors import (
     LinkCodeLengthNotSupportedError,
 )
 from src.modules.shorter.domain.link.entity import LinkEntity
-from src.modules.shorter.domain.shared.services import TemplateCreationService
 from src.modules.shorter.domain.template.entity import TemplateEntity
+from src.modules.shorter.domain.template.services import TemplateCreationService
 from src.modules.shorter.domain.template.value_object import (
     TemplateEntityTypeVO,
     TemplateTargetModuleTypeVO,
 )
-from src.modules.shorter.infrastructure.services.link_code_generator import (
-    LinkCodeGeneratorService,
+from src.modules.shorter.infrastructure.services.random_link_code_generator import (
+    RandomLinkCodeGenerator,
 )
 
 
@@ -46,6 +47,14 @@ class _DeterministicCodeGenerator:
         return self._values.pop(0)
 
 
+class _FixedClock:
+    def __init__(self, now_value: datetime):
+        self._now_value = now_value
+
+    def now(self) -> datetime:
+        return self._now_value
+
+
 class _InMemoryTemplateRepository:
     def __init__(self):
         self.items: list[TemplateEntity] = []
@@ -65,7 +74,9 @@ class _InMemoryLinkRepository:
 class TestTemplateCreationService(unittest.TestCase):
     def test_create_with_explicit_code(self) -> None:
         checker = _InMemoryLinkUniquenessChecker()
+        now = datetime(2026, 3, 12, 12, 0, tzinfo=UTC)
         service = TemplateCreationService(
+            clock=_FixedClock(now),
             link_uniqueness_checker=checker,
             code_generator=_DeterministicCodeGenerator(values=["unused"]),
         )
@@ -86,12 +97,16 @@ class TestTemplateCreationService(unittest.TestCase):
         self.assertEqual(result.template.default_code, result.link.id)
         self.assertEqual(result.template.created_by, created_by)
         self.assertEqual(result.link.domain_id, domain_id)
+        self.assertEqual(result.link.created_at, now)
+        self.assertEqual(result.template.created_at, now)
         self.assertEqual(checker.calls, ["MyCode42"])
 
     def test_create_with_duplicate_explicit_code_raises(self) -> None:
         domain_id = EntityIdVO.from_value(uuid4())
         checker = _InMemoryLinkUniquenessChecker(taken={(str(domain_id), "dup12345")})
+        now = datetime(2026, 3, 12, 12, 0, tzinfo=UTC)
         service = TemplateCreationService(
+            clock=_FixedClock(now),
             link_uniqueness_checker=checker,
             code_generator=_DeterministicCodeGenerator(values=["unused"]),
         )
@@ -117,7 +132,9 @@ class TestTemplateCreationService(unittest.TestCase):
         generator = _DeterministicCodeGenerator(
             values=["AAAA1111", "BBBB2222", "CCCC3333"]
         )
+        now = datetime(2026, 3, 12, 12, 0, tzinfo=UTC)
         service = TemplateCreationService(
+            clock=_FixedClock(now),
             link_uniqueness_checker=checker,
             code_generator=generator,
         )
@@ -139,9 +156,11 @@ class TestTemplateCreationService(unittest.TestCase):
     def test_create_service_rejects_invalid_attempts_limit(self) -> None:
         checker = _InMemoryLinkUniquenessChecker()
         generator = _DeterministicCodeGenerator(values=["AAAA1111"])
+        now = datetime(2026, 3, 12, 12, 0, tzinfo=UTC)
 
         with self.assertRaises(ValueError):
             TemplateCreationService(
+                clock=_FixedClock(now),
                 link_uniqueness_checker=checker,
                 code_generator=generator,
                 generation_attempts_limit=0,
@@ -152,7 +171,9 @@ class TestCreateTemplateUseCase(unittest.TestCase):
     def test_execute_returns_dto_and_persists_entities(self) -> None:
         checker = _InMemoryLinkUniquenessChecker()
         generator = _DeterministicCodeGenerator(values=["UVWX7788"])
+        now = datetime(2026, 3, 12, 12, 0, tzinfo=UTC)
         service = TemplateCreationService(
+            clock=_FixedClock(now),
             link_uniqueness_checker=checker,
             code_generator=generator,
         )
@@ -182,16 +203,16 @@ class TestCreateTemplateUseCase(unittest.TestCase):
         self.assertEqual(link_repository.items[0].id.value, result.link_id)
 
 
-class TestLinkCodeGeneratorService(unittest.TestCase):
+class TestRandomLinkCodeGenerator(unittest.TestCase):
     def test_generate_supported_lengths(self) -> None:
-        generator = LinkCodeGeneratorService()
+        generator = RandomLinkCodeGenerator()
         for length in (4, 6, 8, 16):
             code = generator.generate(length=length)
             self.assertEqual(len(code), length)
             self.assertTrue(code.isalnum())
 
     def test_generate_with_unsupported_length_raises(self) -> None:
-        generator = LinkCodeGeneratorService()
+        generator = RandomLinkCodeGenerator()
         with self.assertRaises(LinkCodeLengthNotSupportedError):
             generator.generate(length=5)
 

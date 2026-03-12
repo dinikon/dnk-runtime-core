@@ -8,7 +8,7 @@ from src.modules.shorter.domain.errors import LinkCodeLengthNotSupportedError
 from src.modules.shorter.domain.shared.ports import LinkCodeGeneratorPort
 
 
-class LinkCodeGeneratorService(LinkCodeGeneratorPort):
+class RandomLinkCodeGenerator(LinkCodeGeneratorPort):
     _ALLOWED_LENGTHS: frozenset[int] = frozenset({4, 6, 8, 16})
     _DEFAULT_ALPHABET = string.ascii_letters + string.digits
 
@@ -35,4 +35,4 @@ class LinkCodeGeneratorService(LinkCodeGeneratorPort):
         return self.generate(length=16)
 
 
-__all__ = ["LinkCodeGeneratorService"]
+__all__ = ["RandomLinkCodeGenerator"]

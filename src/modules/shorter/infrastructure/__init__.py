@@ -1,3 +1,3 @@
-from .services import LinkCodeGeneratorService
+from .services import RandomLinkCodeGenerator
 
-__all__ = ["LinkCodeGeneratorService"]
+__all__ = ["RandomLinkCodeGenerator"]

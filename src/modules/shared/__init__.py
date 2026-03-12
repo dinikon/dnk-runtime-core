@@ -1,3 +1,10 @@
 from .domain import CurrencyCodeVO, EntityIdVO, ValidationError
+from .time import ClockProtocol, UtcSystemClock
 
-__all__ = ["CurrencyCodeVO", "EntityIdVO", "ValidationError"]
+__all__ = [
+    "ClockProtocol",
+    "CurrencyCodeVO",
+    "EntityIdVO",
+    "UtcSystemClock",
+    "ValidationError",
+]

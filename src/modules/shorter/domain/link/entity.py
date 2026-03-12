@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 
 from src.modules.shared import EntityIdVO
 from ..errors import LinkCodeRequiredError
@@ -19,16 +19,14 @@ class LinkEntity:
         *,
         domain_id: EntityIdVO,
         code: str,
-        created_at: datetime | None = None,
+        created_at: datetime,
     ) -> "LinkEntity":
         normalized_code = code.strip()
         if not normalized_code:
             raise LinkCodeRequiredError()
-
-        now = created_at or datetime.now(UTC)
         return cls(
             id=LinkIdVO.new(),
-            created_at=now,
+            created_at=created_at,
             domain_id=domain_id,
             code=normalized_code,
         )

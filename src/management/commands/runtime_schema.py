@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
@@ -73,10 +71,12 @@ def register_runtime_schema_commands(
 
 async def _handle_sync_command(args: argparse.Namespace) -> int:
     explicit_single_target = any(
-        value is not None for value in (args.tenant_id, args.data_source_id, args.schema)
+        value is not None
+        for value in (args.tenant_id, args.data_source_id, args.schema)
     )
     if explicit_single_target and not all(
-        value is not None for value in (args.tenant_id, args.data_source_id, args.schema)
+        value is not None
+        for value in (args.tenant_id, args.data_source_id, args.schema)
     ):
         print(
             "error: for single target sync provide all: "

@@ -9,9 +9,9 @@ from src.modules.shorter.application.template.dto.result_create_template import 
 )
 from src.modules.shorter.domain.shared import (
     LinkRepositoryPort,
-    TemplateCreationService,
     TemplateRepositoryPort,
 )
+from src.modules.shorter.domain.template import TemplateCreationService
 from src.modules.shorter.domain.template.value_object import (
     TemplateEntityTypeVO,
     TemplateTargetModuleTypeVO,

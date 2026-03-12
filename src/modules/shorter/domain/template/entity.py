@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 
 from src.modules.shared import EntityIdVO
 from ..link.value_object import LinkIdVO
@@ -32,16 +32,15 @@ class TemplateEntity:
         target_module: TemplateTargetModuleTypeVO,
         target_entity: TemplateEntityTypeVO,
         target_entity_id: EntityIdVO,
-        default_code: LinkIdVO | None = None,
-        created_at: datetime | None = None,
+        default_code: LinkIdVO,
+        created_at: datetime,
     ) -> "TemplateEntity":
-        now = created_at or datetime.now(UTC)
         return cls(
             id=TemplateIdVO.new(),
-            created_at=now,
-            updated_at=now,
+            created_at=created_at,
+            updated_at=created_at,
             created_by=user_id,
-            default_code=default_code or LinkIdVO.new(),
+            default_code=default_code,
             target_module=target_module,
             target_entity=target_entity,
             target_entity_id=target_entity_id,
