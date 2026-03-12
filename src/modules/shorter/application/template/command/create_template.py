@@ -9,4 +9,4 @@ class CreateTemplateCommand:
     target_module: str
     target_entity: str
     target_entity_id: UUID
-    code: str | None = None
+    code: str

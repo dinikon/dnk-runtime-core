@@ -25,7 +25,6 @@ class CreateTemplateUseCaseProtocol(Protocol):
 class CreateTemplateUseCase:
     def __init__(
         self,
-        *,
         service: TemplateCreationService,
         template_repository: TemplateRepositoryPort,
         link_repository: LinkRepositoryPort,
@@ -41,9 +40,7 @@ class CreateTemplateUseCase:
             target_module=TemplateTargetModuleTypeVO(
                 command.target_module.strip().lower()
             ),
-            target_entity=TemplateEntityTypeVO(
-                command.target_entity.strip().lower()
-            ),
+            target_entity=TemplateEntityTypeVO(command.target_entity.strip().lower()),
             target_entity_id=EntityIdVO.from_value(command.target_entity_id),
             code=command.code,
         )
