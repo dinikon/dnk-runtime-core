@@ -14,7 +14,9 @@ from src.modules.shorter.domain.errors import (
     LinkCodeAlreadyExistsError,
     LinkCodeLengthNotSupportedError,
 )
+from src.modules.shorter.domain.link.entity import LinkEntity
 from src.modules.shorter.domain.shared.services import TemplateCreationService
+from src.modules.shorter.domain.template.entity import TemplateEntity
 from src.modules.shorter.domain.template.value_object import (
     TemplateEntityTypeVO,
     TemplateTargetModuleTypeVO,
@@ -43,39 +45,47 @@ class _DeterministicCodeGenerator:
         self.lengths.append(length)
         return self._values.pop(0)
 
-    def generate_8(self) -> str:
-        return self.generate(length=8)
+
+class _InMemoryTemplateRepository:
+    def __init__(self):
+        self.items: list[TemplateEntity] = []
+
+    def save(self, template: TemplateEntity) -> None:
+        self.items.append(template)
 
 
-class TestTemplateCreateService(unittest.TestCase):
+class _InMemoryLinkRepository:
+    def __init__(self):
+        self.items: list[LinkEntity] = []
+
+    def save(self, link: LinkEntity) -> None:
+        self.items.append(link)
+
+
+class TestTemplateCreationService(unittest.TestCase):
     def test_create_with_explicit_code(self) -> None:
         checker = _InMemoryLinkUniquenessChecker()
         service = TemplateCreationService(
             link_uniqueness_checker=checker,
             code_generator=_DeterministicCodeGenerator(values=["unused"]),
         )
-        command = CreateTemplateCommand(
-            created_by=EntityIdVO.from_value(uuid4()),
-            domain_id=EntityIdVO.from_value(uuid4()),
+        created_by = EntityIdVO.from_value(uuid4())
+        domain_id = EntityIdVO.from_value(uuid4())
+        target_entity_id = EntityIdVO.from_value(uuid4())
+
+        result = service.create(
+            created_by=created_by,
+            domain_id=domain_id,
             code="MyCode42",
             target_module=TemplateTargetModuleTypeVO.SHORTER,
             target_entity=TemplateEntityTypeVO.REDIRECT,
-            target_entity_id=EntityIdVO.from_value(uuid4()),
-        )
-
-        result = service.create(
-            created_by=command.created_by,
-            domain_id=command.domain_id,
-            target_module=command.target_module,
-            target_entity=command.target_entity,
-            target_entity_id=command.target_entity_id,
-            code=command.code,
+            target_entity_id=target_entity_id,
         )
 
         self.assertEqual(result.link.code, "MyCode42")
         self.assertEqual(result.template.default_code, result.link.id)
-        self.assertEqual(result.template.created_by, command.created_by)
-        self.assertEqual(result.link.domain_id, command.domain_id)
+        self.assertEqual(result.template.created_by, created_by)
+        self.assertEqual(result.link.domain_id, domain_id)
         self.assertEqual(checker.calls, ["MyCode42"])
 
     def test_create_with_duplicate_explicit_code_raises(self) -> None:
@@ -85,23 +95,15 @@ class TestTemplateCreateService(unittest.TestCase):
             link_uniqueness_checker=checker,
             code_generator=_DeterministicCodeGenerator(values=["unused"]),
         )
-        command = CreateTemplateCommand(
-            created_by=EntityIdVO.from_value(uuid4()),
-            domain_id=domain_id,
-            code="dup12345",
-            target_module=TemplateTargetModuleTypeVO.SHORTER,
-            target_entity=TemplateEntityTypeVO.REDIRECT,
-            target_entity_id=EntityIdVO.from_value(uuid4()),
-        )
 
         with self.assertRaises(LinkCodeAlreadyExistsError):
             service.create(
-                created_by=command.created_by,
-                domain_id=command.domain_id,
-                target_module=command.target_module,
-                target_entity=command.target_entity,
-                target_entity_id=command.target_entity_id,
-                code=command.code,
+                created_by=EntityIdVO.from_value(uuid4()),
+                domain_id=domain_id,
+                code="dup12345",
+                target_module=TemplateTargetModuleTypeVO.SHORTER,
+                target_entity=TemplateEntityTypeVO.REDIRECT,
+                target_entity_id=EntityIdVO.from_value(uuid4()),
             )
 
     def test_create_without_code_generates_until_unique(self) -> None:
@@ -119,22 +121,14 @@ class TestTemplateCreateService(unittest.TestCase):
             link_uniqueness_checker=checker,
             code_generator=generator,
         )
-        command = CreateTemplateCommand(
+
+        result = service.create(
             created_by=EntityIdVO.from_value(uuid4()),
             domain_id=domain_id,
             code=None,
             target_module=TemplateTargetModuleTypeVO.SHORTER,
             target_entity=TemplateEntityTypeVO.REDIRECT,
             target_entity_id=EntityIdVO.from_value(uuid4()),
-        )
-
-        result = service.create(
-            created_by=command.created_by,
-            domain_id=command.domain_id,
-            target_module=command.target_module,
-            target_entity=command.target_entity,
-            target_entity_id=command.target_entity_id,
-            code=command.code,
         )
 
         self.assertEqual(result.link.code, "CCCC3333")
@@ -155,27 +149,37 @@ class TestTemplateCreateService(unittest.TestCase):
 
 
 class TestCreateTemplateUseCase(unittest.TestCase):
-    def test_execute_returns_dto(self) -> None:
+    def test_execute_returns_dto_and_persists_entities(self) -> None:
         checker = _InMemoryLinkUniquenessChecker()
         generator = _DeterministicCodeGenerator(values=["UVWX7788"])
         service = TemplateCreationService(
             link_uniqueness_checker=checker,
             code_generator=generator,
         )
-        use_case = CreateTemplateUseCase(service=service)
+        template_repository = _InMemoryTemplateRepository()
+        link_repository = _InMemoryLinkRepository()
+        use_case = CreateTemplateUseCase(
+            service=service,
+            template_repository=template_repository,
+            link_repository=link_repository,
+        )
         command = CreateTemplateCommand(
-            created_by=EntityIdVO.from_value(uuid4()),
-            domain_id=EntityIdVO.from_value(uuid4()),
+            created_by=uuid4(),
+            domain_id=uuid4(),
             code=None,
-            target_module=TemplateTargetModuleTypeVO.SHORTER,
-            target_entity=TemplateEntityTypeVO.REDIRECT,
-            target_entity_id=EntityIdVO.from_value(uuid4()),
+            target_module="SHORTER",
+            target_entity="redirect",
+            target_entity_id=uuid4(),
         )
 
         result = use_case.execute(command)
 
         self.assertEqual(result.code, "UVWX7788")
-        self.assertEqual(result.domain_id, command.domain_id.value)
+        self.assertEqual(result.domain_id, command.domain_id)
+        self.assertEqual(len(template_repository.items), 1)
+        self.assertEqual(len(link_repository.items), 1)
+        self.assertEqual(template_repository.items[0].id.value, result.template_id)
+        self.assertEqual(link_repository.items[0].id.value, result.link_id)
 
 
 class TestLinkCodeGeneratorService(unittest.TestCase):

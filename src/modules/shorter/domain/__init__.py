@@ -8,20 +8,29 @@ from .link import LinkEntity, LinkIdVO
 from .shared import (
     LinkCodeGeneratorPort,
     LinkCodeUniquenessCheckerPort,
+    LinkRepositoryPort,
+    TemplateRepositoryPort,
     TemplateCreationResult,
     TemplateCreationService,
 )
-from .template import TemplateEntity, TemplateEntityTypeVO, TemplateIdVO, TemplateTargetModuleTypeVO
+from .template import (
+    TemplateEntity,
+    TemplateEntityTypeVO,
+    TemplateIdVO,
+    TemplateTargetModuleTypeVO,
+)
 
 __all__ = [
     "LinkCodeAlreadyExistsError",
     "LinkCodeGeneratorPort",
     "LinkCodeGenerationAttemptsExceededError",
     "LinkCodeLengthNotSupportedError",
+    "LinkRepositoryPort",
     "LinkCodeUniquenessCheckerPort",
     "LinkCodeRequiredError",
     "LinkEntity",
     "LinkIdVO",
+    "TemplateRepositoryPort",
     "TemplateCreationResult",
     "TemplateCreationService",
     "TemplateEntity",

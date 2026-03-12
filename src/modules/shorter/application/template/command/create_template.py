@@ -1,17 +1,12 @@
 from dataclasses import dataclass
-
-from src.modules.shared import EntityIdVO
-from src.modules.shorter.domain.template.value_object import (
-    TemplateEntityTypeVO,
-    TemplateTargetModuleTypeVO,
-)
+from uuid import UUID
 
 
 @dataclass(frozen=True, slots=True)
 class CreateTemplateCommand:
-    created_by: EntityIdVO
-    domain_id: EntityIdVO
-    target_module: TemplateTargetModuleTypeVO
-    target_entity: TemplateEntityTypeVO
-    target_entity_id: EntityIdVO
+    created_by: UUID
+    domain_id: UUID
+    target_module: str
+    target_entity: str
+    target_entity_id: UUID
     code: str | None = None
