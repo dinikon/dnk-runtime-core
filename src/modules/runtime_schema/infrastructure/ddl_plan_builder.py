@@ -129,14 +129,12 @@ class DdlPlanBuilder(DdlPlanBuilderProtocol):
         default_sql = f" DEFAULT {column.default_sql}" if column.default_sql else ""
         reference_sql = ""
         if column.references_table and column.references_column:
-            target_table = column.references_table
-            if self._dialect_name != "postgresql" and schema is not None:
-                target_table = self._physical_table(
-                    schema=schema,
-                    table_name=column.references_table,
-                )
+            target_table = self._reference_target_table_sql(
+                schema=schema,
+                references_table=column.references_table,
+            )
             reference_sql = (
-                f" REFERENCES {self._quote_identifier(target_table)}"
+                f" REFERENCES {target_table}"
                 f"({self._quote_identifier(column.references_column)})"
             )
             if column.on_delete:
@@ -225,6 +223,27 @@ class DdlPlanBuilder(DdlPlanBuilderProtocol):
         if self._dialect_name == "postgresql":
             return table_name
         return f"{schema}__{table_name}"
+
+    def _reference_target_table_sql(
+        self,
+        *,
+        schema: str | None,
+        references_table: str,
+    ) -> str:
+        if self._dialect_name == "postgresql":
+            if not schema:
+                return self._quote_identifier(references_table)
+            return (
+                f"{self._quote_identifier(schema)}."
+                f"{self._quote_identifier(references_table)}"
+            )
+        if schema:
+            physical_table = self._physical_table(
+                schema=schema,
+                table_name=references_table,
+            )
+            return self._quote_identifier(physical_table)
+        return self._quote_identifier(references_table)
 
     @staticmethod
     def _map_on_delete_action(value: str) -> str:

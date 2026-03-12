@@ -32,7 +32,8 @@ class SqlAlchemyDdlExecutor(DdlExecutorProtocol):
         journal_entries: list[MigrationJournalEntry] = []
         for operation in operations:
             try:
-                await self._session.execute(text(operation.sql))
+                async with self._session.begin_nested():
+                    await self._session.execute(text(operation.sql))
             except Exception as exc:
                 journal_entries.append(
                     MigrationJournalEntry.failed(
