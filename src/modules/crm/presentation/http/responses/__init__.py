@@ -1,4 +1,4 @@
-from src.modules.crm.presentation.api.responses.contact import (
+from src.modules.crm.presentation.http.responses.contact import (
     GetContactResponseSchema,
 )
 

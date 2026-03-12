@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from src.modules.crm.application.use_case.contact.get_contact_use_case import (
+from src.modules.crm.application.contact.use_case import (
     GetContactUseCase,
 )
 from src.modules.runtime_record.infrastructure.factory import (

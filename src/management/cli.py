@@ -31,7 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="dnk-manage",
         description="Management commands for dnk-runtime-core.",
     )
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers = parser.add_subparsers(dest="commands", required=True)
     register_runtime_schema_commands(subparsers)
     return parser
 

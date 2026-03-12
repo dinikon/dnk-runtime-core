@@ -3,5 +3,5 @@ from enum import StrEnum
 
 class TenantServiceType(StrEnum):
     CONSOLE = "console"
-    API = "api"
+    API = "http"
     SHORTLINKS = "shortlinks"

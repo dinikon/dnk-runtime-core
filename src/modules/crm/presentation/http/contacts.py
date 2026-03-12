@@ -4,12 +4,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
 
-from src.modules.crm.application.use_case.contact.get_contact_use_case import (
-    GetContactQueryDTO,
+from src.modules.crm.application.contact.dto import (
     GetContactResultDTO,
 )
+from src.modules.crm.application.contact.queries import (
+    GetContactQueryDTO,
+)
 from src.modules.crm.domain.error import ContactNotFoundError
-from src.modules.crm.presentation.api.responses.contact import (
+from src.modules.crm.presentation.http.responses.contact import (
     GetContactResponseSchema,
 )
 from src.modules.crm.presentation.depends.use_cases import (

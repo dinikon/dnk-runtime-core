@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from uuid import UUID
-
+from src.modules.crm.application.contact.dto.get_contact_result_dto import (
+    GetContactResultDTO,
+)
+from src.modules.crm.application.contact.queries.get_contact_query_dto import (
+    GetContactQueryDTO,
+)
 from src.modules.crm.domain.contact.entity import ContactEntity
 from src.modules.crm.domain.contact.value_objects import ContactIdVO, PersonNameVO
 from src.modules.crm.domain.error import ContactNotFoundError
@@ -10,18 +13,6 @@ from src.modules.runtime_record.application.ports.storage import (
     RuntimeRecordReaderPort,
 )
 from src.modules.shared.domain.errors import ValidationError
-
-
-@dataclass(frozen=True, slots=True)
-class GetContactQueryDTO:
-    tenant_id: UUID
-    contact_id: UUID
-
-
-@dataclass(frozen=True, slots=True)
-class GetContactResultDTO:
-    contact: ContactEntity
-    custom_fields: dict[str, object]
 
 
 class GetContactUseCase:

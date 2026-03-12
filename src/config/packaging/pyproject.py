@@ -8,7 +8,7 @@ class PyProjectConfig(BaseModel):
 
 class PyProjectTomlConfig(BaseSettings):
     """
-    configs in api/pyproject.toml
+    configs in http/pyproject.toml
     """
 
     project: PyProjectConfig = Field(

@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from src.modules.crm.presentation.api.router import router as crm_router
+from src.modules.crm.presentation.http.router import router as crm_router
 from src.modules.identity.presentation.api.router import router as identity_router
 from src.modules.tenancy.presentation.api.router import router as tenancy_router
 
