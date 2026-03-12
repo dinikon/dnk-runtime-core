@@ -1,5 +1,6 @@
 from .ports import LinkCodeGeneratorPort, LinkCodeUniquenessCheckerPort
-from .repositories import LinkRepositoryPort, TemplateRepositoryPort
+from src.modules.shorter.domain.link.repositories import LinkRepositoryPort
+from src.modules.shorter.domain.template.repositories import TemplateRepositoryPort
 
 __all__ = [
     "LinkCodeGeneratorPort",
