@@ -6,10 +6,13 @@ from uuid import UUID
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.modules.runtime_record.application.contracts import (
+    GetRuntimeRecordQuery,
+    RuntimeRecordPayload,
+)
 from src.modules.runtime_record.application.ports.storage import (
     RuntimeRecordReaderPort,
 )
-from src.modules.runtime_record.domain.entities import RuntimeRecord
 from src.modules.runtime_record.domain.errors import (
     RuntimeRecordDataSourceNotFoundError,
     RuntimeRecordObjectNotFoundError,
@@ -45,12 +48,11 @@ class SqlAlchemyRuntimeRecordReader(RuntimeRecordReaderPort):
 
     async def get_record(
         self,
-        *,
-        tenant_id: UUID,
-        object_name_singular: str,
-        record_id: UUID,
-    ) -> RuntimeRecord | None:
-        normalized_object_name = object_name_singular.strip().lower()
+        query: GetRuntimeRecordQuery,
+    ) -> RuntimeRecordPayload | None:
+        tenant_id = query.tenant_id
+        record_id = query.record_id
+        normalized_object_name = query.object_name_singular.strip().lower()
         data_source_model = await self._session.scalar(
             select(TenantDataSourceModel)
             .where(TenantDataSourceModel.tenant_id == str(tenant_id))
@@ -110,7 +112,7 @@ class SqlAlchemyRuntimeRecordReader(RuntimeRecordReaderPort):
         parsed_record_id = (
             raw_record_id if isinstance(raw_record_id, UUID) else UUID(str(raw_record_id))
         )
-        return RuntimeRecord(
+        return RuntimeRecordPayload(
             tenant_id=tenant_id,
             object_name_singular=object_entity.object_name.name_singular,
             record_id=parsed_record_id,

@@ -8,13 +8,15 @@ from sqlalchemy import select, text
 from src.modules.crm.application.contact.queries import (
     GetContactQueryDTO,
 )
+from src.modules.crm.application.contact.services import ContactRuntimeRecordMapper
 from src.modules.crm.application.contact.use_case import (
     GetContactUseCase,
 )
 from src.modules.crm.domain.error import ContactNotFoundError
-from src.modules.runtime_record.infrastructure.factory import (
-    build_runtime_record_reader,
+from src.modules.crm.infrastructure.contact.repositories import (
+    RuntimeRecordContactRepository,
 )
+from src.modules.runtime_record.infrastructure.factory import build_runtime_record_reader
 from src.modules.runtime_schema.application.field_definition.dto import (
     CreateFieldCommandDTO,
 )
@@ -105,7 +107,11 @@ class TestGetContactUseCase(unittest.IsolatedAsyncioTestCase):
             await session.flush()
 
             runtime_record_reader = build_runtime_record_reader(session=session)
-            use_case = GetContactUseCase(runtime_record_reader=runtime_record_reader)
+            repository = RuntimeRecordContactRepository(
+                runtime_record_reader=runtime_record_reader,
+                mapper=ContactRuntimeRecordMapper(),
+            )
+            use_case = GetContactUseCase(repository=repository)
 
             result = await use_case.execute(
                 GetContactQueryDTO(
@@ -144,7 +150,11 @@ class TestGetContactUseCase(unittest.IsolatedAsyncioTestCase):
             )
 
             runtime_record_reader = build_runtime_record_reader(session=session)
-            use_case = GetContactUseCase(runtime_record_reader=runtime_record_reader)
+            repository = RuntimeRecordContactRepository(
+                runtime_record_reader=runtime_record_reader,
+                mapper=ContactRuntimeRecordMapper(),
+            )
+            use_case = GetContactUseCase(repository=repository)
 
             with self.assertRaises(ContactNotFoundError):
                 await use_case.execute(

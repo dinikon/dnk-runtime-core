@@ -8,10 +8,16 @@ from src.modules.crm.application.contact.dto import (
     ListContactItemDTO,
     ListContactsResultDTO,
 )
+from src.modules.crm.application.contact.ports import (
+    ContactRecord,
+    ContactRecordRepositoryPort,
+    GetContactRecordQuery,
+)
 from src.modules.crm.application.contact.queries import (
     GetContactQueryDTO,
     ListContactsQueryDTO,
 )
+from src.modules.crm.application.contact.services import ContactRuntimeRecordMapper
 from src.modules.crm.application.contact.use_case import (
     GetContactUseCase,
 )
@@ -19,7 +25,11 @@ from src.modules.crm.application.contact.use_case import (
 __all__ = [
     "AddContactCommandDTO",
     "DeleteContactCommandDTO",
+    "ContactRecord",
+    "ContactRecordRepositoryPort",
+    "ContactRuntimeRecordMapper",
     "GetContactQueryDTO",
+    "GetContactRecordQuery",
     "GetContactResultDTO",
     "GetContactUseCase",
     "ListContactItemDTO",
