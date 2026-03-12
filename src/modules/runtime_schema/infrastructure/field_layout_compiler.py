@@ -34,6 +34,11 @@ class FieldLayoutCompiler(FieldLayoutCompilerProtocol):
         objects: list[ObjectMetadataEntity],
         fields: list[FieldMetadataEntity],
     ) -> SchemaSnapshot:
+        object_table_name_by_id: dict[str, str] = {
+            str(object_entity.id.value): object_entity.object_name.name_plural
+            for object_entity in objects
+            if object_entity.is_active
+        }
         fields_by_object: dict[str, list[FieldMetadataEntity]] = {}
         for field in fields:
             fields_by_object.setdefault(str(field.object_metadata_id.value), []).append(
@@ -53,7 +58,10 @@ class FieldLayoutCompiler(FieldLayoutCompilerProtocol):
             for field_entity in object_fields:
                 if not field_entity.is_active:
                     continue
-                compiled_columns = self._compile_field_columns(field_entity)
+                compiled_columns = self._compile_field_columns(
+                    field_entity,
+                    object_table_name_by_id=object_table_name_by_id,
+                )
                 if compiled_columns.is_virtual:
                     continue
                 columns.extend(compiled_columns.columns)
@@ -140,7 +148,12 @@ class FieldLayoutCompiler(FieldLayoutCompilerProtocol):
             )
         return SchemaSnapshot(tables=tables)
 
-    def _compile_field_columns(self, field: FieldMetadataEntity) -> _CompiledColumns:
+    def _compile_field_columns(
+        self,
+        field: FieldMetadataEntity,
+        *,
+        object_table_name_by_id: dict[str, str] | None = None,
+    ) -> _CompiledColumns:
         field_name = field.field_name.value
         nullable = field.is_nullable
 
@@ -305,14 +318,25 @@ class FieldLayoutCompiler(FieldLayoutCompilerProtocol):
             )
             if relation_settings.max_links != 1:
                 return _CompiledColumns(columns=tuple(), is_virtual=True)
+            target_table = None
+            target_column = None
+            if (
+                field.relation_target_object_id is not None
+                and object_table_name_by_id is not None
+            ):
+                target_table = object_table_name_by_id.get(
+                    str(field.relation_target_object_id.value)
+                )
+                if target_table is not None:
+                    target_column = "id"
             return _CompiledColumns(
                 columns=(
                     ColumnSpec(
                         name=field_name,
                         sql_type="uuid",
                         nullable=nullable,
-                        references_table=None,
-                        references_column=None,
+                        references_table=target_table,
+                        references_column=target_column,
                         on_delete=relation_settings.on_delete,
                     ),
                 )

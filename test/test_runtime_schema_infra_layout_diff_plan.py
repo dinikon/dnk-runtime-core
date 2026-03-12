@@ -106,6 +106,8 @@ class TestLayoutDiffPlan(unittest.TestCase):
         self.assertTrue(columns_by_name["name_last_name"].nullable)
         self.assertTrue(columns_by_name["name_middle_name"].nullable)
         self.assertFalse(columns_by_name["name_first_name"].nullable)
+        self.assertEqual(columns_by_name["owner_id"].references_table, "leads")
+        self.assertEqual(columns_by_name["owner_id"].references_column, "id")
 
     def test_ddl_diff_engine(self) -> None:
         expected = SchemaSnapshot(

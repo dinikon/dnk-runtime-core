@@ -1,4 +1,4 @@
-version: "2026.03.11"
+version: "2026.03.12"
 module: "crm"
 
 objects:
@@ -166,6 +166,75 @@ objects:
         settings:
           on_delete: "cascade"
           max_links: null
+          enforce_tenant_scope: true
+      - name: "custom_note"
+        type: "string"
+        label: "Custom Note"
+        description: "Custom free-form text field for contact."
+        is_system: false
+        is_custom: true
+        is_active: true
+        is_nullable: true
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: true
+        settings:
+          min_length: 1
+          max_length: 255
+      - name: "custom_budget"
+        type: "currency"
+        label: "Custom Budget"
+        description: "Custom currency field for contact."
+        is_system: false
+        is_custom: true
+        is_active: true
+        is_nullable: true
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        settings:
+          allowed_currencies: ["USD", "EUR", "GBP", "UAH", "PLN"]
+          display_scale: 2
+      - name: "custom_source"
+        type: "select"
+        label: "Custom Source"
+        description: "Custom select field for contact source."
+        is_system: false
+        is_custom: true
+        is_active: true
+        is_nullable: true
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+        options:
+          items:
+            - code: "web"
+              label: "Web"
+            - code: "referral"
+              label: "Referral"
+            - code: "event"
+              label: "Event"
+          allow_custom: false
+      - name: "deal_id"
+        type: "relation"
+        label: "Deal"
+        description: "Many contacts to one deal relation."
+        is_system: false
+        is_custom: true
+        is_active: true
+        is_nullable: true
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+        relation_target_object: "crm_deal"
+        relation_target_field: "id"
+        settings:
+          on_delete: "set_null"
+          max_links: 1
           enforce_tenant_scope: true
 
   - key: "crm_company"

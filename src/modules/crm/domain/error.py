@@ -6,6 +6,11 @@ class ContactPointNotFoundError(ValidationError):
         super().__init__(f"Contact point not found: {point_id}")
 
 
+class ContactNotFoundError(ValidationError):
+    def __init__(self, contact_id: str):
+        super().__init__(f"Contact not found: {contact_id}")
+
+
 class ContactPointKindNotSupportedError(ValidationError):
     def __init__(self, kind: str):
         super().__init__(f"Unsupported contact point kind: {kind}")
@@ -127,6 +132,7 @@ __all__ = [
     "ProductRowProductNameRequiredError",
     "ProductRowQuantityMustBePositiveError",
     "ContactPointKindNotSupportedError",
+    "ContactNotFoundError",
     "ContactPointNotFoundError",
     "ContactPointTypeAlreadyExistsError",
     "ContactPointTypeCodeRequiredError",
