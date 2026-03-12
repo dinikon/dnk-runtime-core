@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from src.modules.runtime_schema.domain.field.configuration import (
+    FullNameFieldSettings,
     RelationFieldSettings,
     StringFieldSettings,
 )
@@ -35,7 +36,9 @@ class FieldLayoutCompiler(FieldLayoutCompilerProtocol):
     ) -> SchemaSnapshot:
         fields_by_object: dict[str, list[FieldMetadataEntity]] = {}
         for field in fields:
-            fields_by_object.setdefault(str(field.object_metadata_id.value), []).append(field)
+            fields_by_object.setdefault(str(field.object_metadata_id.value), []).append(
+                field
+            )
 
         tables: dict[str, TableSpec] = {}
         for object_entity in objects:
@@ -79,6 +82,12 @@ class FieldLayoutCompiler(FieldLayoutCompilerProtocol):
                                 unique=False,
                             )
                         )
+
+            self._append_entity_owner_index(
+                table_name=table_name,
+                columns=columns,
+                indexes=indexes,
+            )
 
             if not any(column.name == "id" for column in columns):
                 columns.insert(
@@ -151,29 +160,39 @@ class FieldLayoutCompiler(FieldLayoutCompilerProtocol):
             elif field.field_type == FieldTypeVO.STRING:
                 sql_type = "varchar(255)"
             return _CompiledColumns(
-                columns=(ColumnSpec(name=field_name, sql_type=sql_type, nullable=nullable),)
+                columns=(
+                    ColumnSpec(name=field_name, sql_type=sql_type, nullable=nullable),
+                )
             )
 
         if field.field_type == FieldTypeVO.INTEGER:
             return _CompiledColumns(
-                columns=(ColumnSpec(name=field_name, sql_type="bigint", nullable=nullable),)
+                columns=(
+                    ColumnSpec(name=field_name, sql_type="bigint", nullable=nullable),
+                )
             )
 
         if field.field_type == FieldTypeVO.BOOLEAN:
             return _CompiledColumns(
-                columns=(ColumnSpec(name=field_name, sql_type="boolean", nullable=nullable),)
+                columns=(
+                    ColumnSpec(name=field_name, sql_type="boolean", nullable=nullable),
+                )
             )
 
         if field.field_type == FieldTypeVO.DATE_TIME:
             return _CompiledColumns(
                 columns=(
-                    ColumnSpec(name=field_name, sql_type="timestamp_tz", nullable=nullable),
+                    ColumnSpec(
+                        name=field_name, sql_type="timestamp_tz", nullable=nullable
+                    ),
                 )
             )
 
         if field.field_type == FieldTypeVO.JSON:
             return _CompiledColumns(
-                columns=(ColumnSpec(name=field_name, sql_type="json", nullable=nullable),)
+                columns=(
+                    ColumnSpec(name=field_name, sql_type="json", nullable=nullable),
+                )
             )
 
         if field.field_type in {
@@ -184,19 +203,25 @@ class FieldLayoutCompiler(FieldLayoutCompilerProtocol):
             FieldTypeVO.PHONES,
         }:
             return _CompiledColumns(
-                columns=(ColumnSpec(name=field_name, sql_type="json", nullable=nullable),)
+                columns=(
+                    ColumnSpec(name=field_name, sql_type="json", nullable=nullable),
+                )
             )
 
         if field.field_type == FieldTypeVO.SELECT:
             return _CompiledColumns(
                 columns=(
-                    ColumnSpec(name=field_name, sql_type="varchar(128)", nullable=nullable),
+                    ColumnSpec(
+                        name=field_name, sql_type="varchar(128)", nullable=nullable
+                    ),
                 )
             )
 
         if field.field_type == FieldTypeVO.ACTOR:
             return _CompiledColumns(
-                columns=(ColumnSpec(name=field_name, sql_type="uuid", nullable=nullable),)
+                columns=(
+                    ColumnSpec(name=field_name, sql_type="uuid", nullable=nullable),
+                )
             )
 
         if field.field_type == FieldTypeVO.ADDRESS:
@@ -231,22 +256,27 @@ class FieldLayoutCompiler(FieldLayoutCompilerProtocol):
             )
 
         if field.field_type == FieldTypeVO.FULL_NAME:
+            full_name_settings = (
+                field.settings
+                if isinstance(field.settings, FullNameFieldSettings)
+                else FullNameFieldSettings()
+            )
             return _CompiledColumns(
                 columns=(
                     ColumnSpec(
                         name=f"{field_name}_last_name",
                         sql_type="varchar(128)",
-                        nullable=nullable,
+                        nullable=nullable or not full_name_settings.require_last_name,
                     ),
                     ColumnSpec(
                         name=f"{field_name}_middle_name",
                         sql_type="varchar(128)",
-                        nullable=nullable,
+                        nullable=nullable or not full_name_settings.require_middle_name,
                     ),
                     ColumnSpec(
                         name=f"{field_name}_first_name",
                         sql_type="varchar(128)",
-                        nullable=nullable,
+                        nullable=nullable or not full_name_settings.require_first_name,
                     ),
                 )
             )
@@ -291,10 +321,43 @@ class FieldLayoutCompiler(FieldLayoutCompilerProtocol):
         return _CompiledColumns(columns=tuple(), is_virtual=True)
 
     @staticmethod
-    def _index_name(*, prefix: str, table_name: str, column_names: tuple[str, ...]) -> str:
+    def _index_name(
+        *, prefix: str, table_name: str, column_names: tuple[str, ...]
+    ) -> str:
         suffix = "_".join(column_names)
         normalized = f"{prefix}_{table_name}_{suffix}".lower()
         return normalized[:63]
+
+    def _append_entity_owner_index(
+        self,
+        *,
+        table_name: str,
+        columns: list[ColumnSpec],
+        indexes: list[IndexSpec],
+    ) -> None:
+        """
+        Owner composite key for polymorphic children:
+        (entity_name, entity_uuid).
+        """
+        owner_columns = ("entity_name", "entity_uuid")
+        if not all(
+            any(column.name == owner_column for column in columns)
+            for owner_column in owner_columns
+        ):
+            return
+        if any(index.columns == owner_columns for index in indexes):
+            return
+        indexes.append(
+            IndexSpec(
+                name=self._index_name(
+                    prefix="ix",
+                    table_name=table_name,
+                    column_names=owner_columns,
+                ),
+                columns=owner_columns,
+                unique=False,
+            )
+        )
 
 
 __all__ = ["FieldLayoutCompiler"]

@@ -415,60 +415,39 @@ objects:
         is_searchable: false
         default_value:
           value: true
-      - name: "lead_id"
-        type: "relation"
-        label: "Lead"
-        description: "Owner lead (one of lead/contact/company should be set)."
+      - name: "entity_name"
+        type: "select"
+        label: "Entity Name"
+        description: "Owner aggregate name for ContactPoint: lead, contact, company."
         is_system: true
         is_custom: false
         is_active: true
-        is_nullable: true
+        is_nullable: false
         is_unique: false
         is_index: true
         is_ui_read_only: false
         is_searchable: false
-        relation_target_object: "crm_lead"
-        relation_target_field: "id"
-        settings:
-          on_delete: "cascade"
-          max_links: 1
-          enforce_tenant_scope: true
-      - name: "contact_id"
-        type: "relation"
-        label: "Contact"
-        description: "Owner contact (one of lead/contact/company should be set)."
+        options:
+          items:
+            - code: "lead"
+              label: "Lead"
+            - code: "contact"
+              label: "Contact"
+            - code: "company"
+              label: "Company"
+          allow_custom: false
+      - name: "entity_uuid"
+        type: "uuid"
+        label: "Entity UUID"
+        description: "Owner aggregate identifier paired with entity_name."
         is_system: true
         is_custom: false
         is_active: true
-        is_nullable: true
+        is_nullable: false
         is_unique: false
         is_index: true
         is_ui_read_only: false
         is_searchable: false
-        relation_target_object: "crm_contact"
-        relation_target_field: "id"
-        settings:
-          on_delete: "cascade"
-          max_links: 1
-          enforce_tenant_scope: true
-      - name: "company_id"
-        type: "relation"
-        label: "Company"
-        description: "Owner company (one of lead/contact/company should be set)."
-        is_system: true
-        is_custom: false
-        is_active: true
-        is_nullable: true
-        is_unique: false
-        is_index: true
-        is_ui_read_only: false
-        is_searchable: false
-        relation_target_object: "crm_company"
-        relation_target_field: "id"
-        settings:
-          on_delete: "cascade"
-          max_links: 1
-          enforce_tenant_scope: true
 
   - key: "crm_contact_point_type"
     name:
