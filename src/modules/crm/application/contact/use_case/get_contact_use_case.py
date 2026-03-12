@@ -74,7 +74,5 @@ class GetContactUseCase:
 
 
 __all__ = [
-    "GetContactQueryDTO",
-    "GetContactResultDTO",
     "GetContactUseCase",
 ]

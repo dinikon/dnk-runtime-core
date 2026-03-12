@@ -302,7 +302,7 @@ class TestInfraExtendedComponents(unittest.TestCase):
         self.assertTrue(any("DROP COLUMN" in operation.sql for operation in pg_plan.operations))
         self.assertTrue(
             any(
-                'REFERENCES "users"("id") ON DELETE CASCADE' in operation.sql
+                'REFERENCES "tenant"."users"("id") ON DELETE CASCADE' in operation.sql
                 for operation in pg_plan.operations
             )
         )
