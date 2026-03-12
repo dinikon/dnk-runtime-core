@@ -1,4 +1,4 @@
-from modules.shared import EntityIdVO
+from src.modules.shared import EntityIdVO
 
 
 class LinkIdVO(EntityIdVO): ...

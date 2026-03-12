@@ -1,6 +1,6 @@
 from enum import StrEnum
 
-from modules.shared import EntityIdVO
+from src.modules.shared import EntityIdVO
 
 
 class TemplateIdVO(EntityIdVO): ...

@@ -1,9 +1,9 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 
-from modules.shared import EntityIdVO
-from modules.shorter.domain.link.value_object import LinkIdVO
-from modules.shorter.domain.template.value_object import (
+from src.modules.shared import EntityIdVO
+from ..link.value_object import LinkIdVO
+from .value_object import (
     TemplateIdVO,
     TemplateTargetModuleTypeVO,
     TemplateEntityTypeVO,
@@ -28,18 +28,19 @@ class TemplateEntity:
     def create(
         cls,
         user_id: EntityIdVO,
-        code: str,
         target_module: TemplateTargetModuleTypeVO,
         target_entity: TemplateEntityTypeVO,
         target_entity_id: EntityIdVO,
-    ):
-        now = datetime.now()
+        default_code: LinkIdVO | None = None,
+        created_at: datetime | None = None,
+    ) -> "TemplateEntity":
+        now = created_at or datetime.now(UTC)
         return cls(
             id=TemplateIdVO.new(),
             created_at=now,
             updated_at=now,
             created_by=user_id,
-            default_code=LinkIdVO.new(),
+            default_code=default_code or LinkIdVO.new(),
             target_module=target_module,
             target_entity=target_entity,
             target_entity_id=target_entity_id,
