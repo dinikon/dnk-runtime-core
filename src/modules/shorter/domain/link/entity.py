@@ -16,6 +16,7 @@ class LinkEntity:
     @classmethod
     def create(
         cls,
+        *,
         domain_id: EntityIdVO,
         code: str,
         created_at: datetime | None = None,

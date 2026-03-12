@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import secrets
 import string
-from typing import Sequence
+from collections.abc import Sequence
 
-from modules.shorter.domain import LinkCodeLengthNotSupportedError
+from src.modules.shorter.domain.errors import LinkCodeLengthNotSupportedError
+from src.modules.shorter.domain.link.port import LinkCodeGeneratorPort
 
 
-class LinkCodeGeneratorService:
+class LinkCodeGeneratorService(LinkCodeGeneratorPort):
     _ALLOWED_LENGTHS: frozenset[int] = frozenset({4, 6, 8, 16})
     _DEFAULT_ALPHABET = string.ascii_letters + string.digits
 
@@ -32,3 +33,6 @@ class LinkCodeGeneratorService:
 
     def generate_16(self) -> str:
         return self.generate(length=16)
+
+
+__all__ = ["LinkCodeGeneratorService"]

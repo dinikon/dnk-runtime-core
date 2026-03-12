@@ -27,6 +27,7 @@ class TemplateEntity:
     @classmethod
     def create(
         cls,
+        *,
         user_id: EntityIdVO,
         target_module: TemplateTargetModuleTypeVO,
         target_entity: TemplateEntityTypeVO,

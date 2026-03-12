@@ -1,6 +1,3 @@
-from ..infrastructure.infrastructure.services.link_code_generator import (
-    LinkCodeGeneratorService,
-)
 from .errors import (
     LinkCodeAlreadyExistsError,
     LinkCodeGenerationAttemptsExceededError,
@@ -8,26 +5,26 @@ from .errors import (
     LinkCodeRequiredError,
 )
 from .link import LinkEntity, LinkIdVO
+from .link.port import LinkCodeGeneratorPort, LinkCodeUniquenessCheckerPort
 from .template import (
-    CreateTemplateCommand,
-    CreateTemplateResult,
+    TemplateCreateResult,
+    TemplateCreateService,
     TemplateEntity,
     TemplateEntityTypeVO,
     TemplateIdVO,
     TemplateTargetModuleTypeVO,
 )
-from . import LinkCodeUniquenessCheckerPort, TemplateCreateService
 
 __all__ = [
-    "CreateTemplateCommand",
-    "CreateTemplateResult",
     "LinkCodeAlreadyExistsError",
+    "LinkCodeGeneratorPort",
     "LinkCodeGenerationAttemptsExceededError",
     "LinkCodeLengthNotSupportedError",
-    "LinkCodeRequiredError",
     "LinkCodeUniquenessCheckerPort",
+    "LinkCodeRequiredError",
     "LinkEntity",
     "LinkIdVO",
+    "TemplateCreateResult",
     "TemplateCreateService",
     "TemplateEntity",
     "TemplateEntityTypeVO",

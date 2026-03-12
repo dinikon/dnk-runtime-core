@@ -1,7 +1,10 @@
 from dataclasses import dataclass
 
-from modules.shared import EntityIdVO
-from modules.shorter.domain import TemplateTargetModuleTypeVO, TemplateEntityTypeVO
+from src.modules.shared import EntityIdVO
+from src.modules.shorter.domain.template.value_object import (
+    TemplateEntityTypeVO,
+    TemplateTargetModuleTypeVO,
+)
 
 
 @dataclass(frozen=True, slots=True)
