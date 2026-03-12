@@ -5,15 +5,13 @@ from .errors import (
     LinkCodeRequiredError,
 )
 from .link import LinkEntity, LinkIdVO
-from .link.port import LinkCodeGeneratorPort, LinkCodeUniquenessCheckerPort
-from .template import (
-    TemplateCreateResult,
-    TemplateCreateService,
-    TemplateEntity,
-    TemplateEntityTypeVO,
-    TemplateIdVO,
-    TemplateTargetModuleTypeVO,
+from .shared import (
+    LinkCodeGeneratorPort,
+    LinkCodeUniquenessCheckerPort,
+    TemplateCreationResult,
+    TemplateCreationService,
 )
+from .template import TemplateEntity, TemplateEntityTypeVO, TemplateIdVO, TemplateTargetModuleTypeVO
 
 __all__ = [
     "LinkCodeAlreadyExistsError",
@@ -24,8 +22,8 @@ __all__ = [
     "LinkCodeRequiredError",
     "LinkEntity",
     "LinkIdVO",
-    "TemplateCreateResult",
-    "TemplateCreateService",
+    "TemplateCreationResult",
+    "TemplateCreationService",
     "TemplateEntity",
     "TemplateEntityTypeVO",
     "TemplateIdVO",

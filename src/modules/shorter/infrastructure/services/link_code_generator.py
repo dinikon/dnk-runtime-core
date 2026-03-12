@@ -5,7 +5,7 @@ import string
 from collections.abc import Sequence
 
 from src.modules.shorter.domain.errors import LinkCodeLengthNotSupportedError
-from src.modules.shorter.domain.link.port import LinkCodeGeneratorPort
+from src.modules.shorter.domain.shared.ports import LinkCodeGeneratorPort
 
 
 class LinkCodeGeneratorService(LinkCodeGeneratorPort):

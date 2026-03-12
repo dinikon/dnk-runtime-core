@@ -8,7 +8,7 @@ from src.modules.shorter.domain.errors import (
     LinkCodeGenerationAttemptsExceededError,
 )
 from src.modules.shorter.domain.link.entity import LinkEntity
-from src.modules.shorter.domain.link.port import (
+from src.modules.shorter.domain.shared.ports import (
     LinkCodeGeneratorPort,
     LinkCodeUniquenessCheckerPort,
 )
@@ -20,12 +20,12 @@ from src.modules.shorter.domain.template.value_object import (
 
 
 @dataclass(frozen=True, slots=True)
-class TemplateCreateResult:
+class TemplateCreationResult:
     template: TemplateEntity
     link: LinkEntity
 
 
-class TemplateCreateService:
+class TemplateCreationService:
     def __init__(
         self,
         *,
@@ -48,7 +48,7 @@ class TemplateCreateService:
         target_entity: TemplateEntityTypeVO,
         target_entity_id: EntityIdVO,
         code: str | None = None,
-    ) -> TemplateCreateResult:
+    ) -> TemplateCreationResult:
         resolved_code = self._resolve_code(
             domain_id=domain_id,
             raw_code=code,
@@ -64,7 +64,7 @@ class TemplateCreateService:
             target_entity=target_entity,
             target_entity_id=target_entity_id,
         )
-        return TemplateCreateResult(template=template, link=link)
+        return TemplateCreationResult(template=template, link=link)
 
     def _resolve_code(self, *, domain_id: EntityIdVO, raw_code: str | None) -> str:
         code = raw_code.strip() if raw_code is not None else ""
@@ -98,6 +98,6 @@ class TemplateCreateService:
 
 
 __all__ = [
-    "TemplateCreateResult",
-    "TemplateCreateService",
+    "TemplateCreationResult",
+    "TemplateCreationService",
 ]

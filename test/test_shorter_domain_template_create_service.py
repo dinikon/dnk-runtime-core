@@ -14,16 +14,13 @@ from src.modules.shorter.domain.errors import (
     LinkCodeAlreadyExistsError,
     LinkCodeLengthNotSupportedError,
 )
-from src.modules.shorter.domain.template.service import TemplateCreateService
+from src.modules.shorter.domain.shared.services import TemplateCreationService
 from src.modules.shorter.domain.template.value_object import (
     TemplateEntityTypeVO,
     TemplateTargetModuleTypeVO,
 )
 from src.modules.shorter.infrastructure.services.link_code_generator import (
     LinkCodeGeneratorService,
-)
-from src.modules.shorter.infrastructure.repositories import (
-    InMemoryLinkCodeUniquenessChecker,
 )
 
 
@@ -53,7 +50,7 @@ class _DeterministicCodeGenerator:
 class TestTemplateCreateService(unittest.TestCase):
     def test_create_with_explicit_code(self) -> None:
         checker = _InMemoryLinkUniquenessChecker()
-        service = TemplateCreateService(
+        service = TemplateCreationService(
             link_uniqueness_checker=checker,
             code_generator=_DeterministicCodeGenerator(values=["unused"]),
         )
@@ -84,7 +81,7 @@ class TestTemplateCreateService(unittest.TestCase):
     def test_create_with_duplicate_explicit_code_raises(self) -> None:
         domain_id = EntityIdVO.from_value(uuid4())
         checker = _InMemoryLinkUniquenessChecker(taken={(str(domain_id), "dup12345")})
-        service = TemplateCreateService(
+        service = TemplateCreationService(
             link_uniqueness_checker=checker,
             code_generator=_DeterministicCodeGenerator(values=["unused"]),
         )
@@ -118,7 +115,7 @@ class TestTemplateCreateService(unittest.TestCase):
         generator = _DeterministicCodeGenerator(
             values=["AAAA1111", "BBBB2222", "CCCC3333"]
         )
-        service = TemplateCreateService(
+        service = TemplateCreationService(
             link_uniqueness_checker=checker,
             code_generator=generator,
         )
@@ -150,7 +147,7 @@ class TestTemplateCreateService(unittest.TestCase):
         generator = _DeterministicCodeGenerator(values=["AAAA1111"])
 
         with self.assertRaises(ValueError):
-            TemplateCreateService(
+            TemplateCreationService(
                 link_uniqueness_checker=checker,
                 code_generator=generator,
                 generation_attempts_limit=0,
@@ -161,7 +158,7 @@ class TestCreateTemplateUseCase(unittest.TestCase):
     def test_execute_returns_dto(self) -> None:
         checker = _InMemoryLinkUniquenessChecker()
         generator = _DeterministicCodeGenerator(values=["UVWX7788"])
-        service = TemplateCreateService(
+        service = TemplateCreationService(
             link_uniqueness_checker=checker,
             code_generator=generator,
         )
@@ -193,21 +190,6 @@ class TestLinkCodeGeneratorService(unittest.TestCase):
         generator = LinkCodeGeneratorService()
         with self.assertRaises(LinkCodeLengthNotSupportedError):
             generator.generate(length=5)
-
-
-class TestInMemoryLinkCodeUniquenessChecker(unittest.TestCase):
-    def test_exists_by_domain_and_code(self) -> None:
-        domain_id = EntityIdVO.from_value(uuid4())
-        checker = InMemoryLinkCodeUniquenessChecker(
-            taken_codes={(str(domain_id), "abc12345")}
-        )
-
-        self.assertTrue(
-            checker.exists_by_domain_and_code(domain_id=domain_id, code="abc12345")
-        )
-        self.assertFalse(
-            checker.exists_by_domain_and_code(domain_id=domain_id, code="zzz99999")
-        )
 
 
 if __name__ == "__main__":

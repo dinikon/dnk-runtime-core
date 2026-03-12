@@ -6,7 +6,7 @@ from src.modules.shorter.application.template.command.create_template import (
 from src.modules.shorter.application.template.dto.result_create_template import (
     ResultCreateTemplateDTO,
 )
-from src.modules.shorter.domain.template.service import TemplateCreateService
+from src.modules.shorter.domain.shared.services import TemplateCreationService
 
 
 class CreateTemplateUseCaseProtocol(Protocol):
@@ -14,7 +14,7 @@ class CreateTemplateUseCaseProtocol(Protocol):
 
 
 class CreateTemplateUseCase:
-    def __init__(self, service: TemplateCreateService):
+    def __init__(self, service: TemplateCreationService):
         self._service = service
 
     def execute(self, command: CreateTemplateCommand) -> ResultCreateTemplateDTO:
