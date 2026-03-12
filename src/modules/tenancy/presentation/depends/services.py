@@ -40,6 +40,13 @@ from src.modules.tenancy.application.admin_onboarding.services.tenant_service im
 from src.modules.tenancy.infrastructure.schema_provisioner import (
     SqlAlchemyTenantSchemaProvisioner,
 )
+from src.modules.tenancy.infrastructure.runtime_schema_bootstrapper import (
+    RuntimeSchemaBootstrapperAdapter,
+)
+from src.modules.runtime_schema.application.bootstrap_tenant_system_schema.use_case import (
+    BootstrapTenantSystemSchemaUseCase,
+)
+from src.modules.runtime_schema.infrastructure.factory import build_ddl_orchestrator
 from src.modules.tenancy.presentation.depends.repositories import (
     TenantDataSourcesRepositoryDep,
     TenantDomainsRepositoryDep,
@@ -140,8 +147,12 @@ TenantDataSourceServiceDep = Annotated[
 ]
 
 
-def get_runtime_schema_bootstrapper() -> TenantRuntimeSchemaBootstrapperProtocol:
-    return NoOpTenantRuntimeSchemaBootstrapper()
+def get_runtime_schema_bootstrapper(
+    uow: UoWDep,
+) -> TenantRuntimeSchemaBootstrapperProtocol:
+    orchestrator = build_ddl_orchestrator(session=uow.session)
+    use_case = BootstrapTenantSystemSchemaUseCase(orchestrator=orchestrator)
+    return RuntimeSchemaBootstrapperAdapter(use_case=use_case)
 
 
 TenantRuntimeSchemaBootstrapperDep = Annotated[
