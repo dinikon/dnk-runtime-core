@@ -943,3 +943,182 @@ objects:
           min_value: 0
         default_value:
           value: 0
+
+  - key: "shorter_link"
+    name:
+      singular: "shorter_link"
+      plural: "shorter_links"
+    label:
+      singular: "Shorter Link"
+      plural: "Shorter Links"
+    description: "Short link entity from shorter domain."
+    is_system: true
+    is_custom: false
+    is_active: true
+    is_ui_read_only: false
+    fields:
+      - name: "id"
+        type: "uuid"
+        label: "ID"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: true
+        is_index: true
+        is_ui_read_only: true
+        is_searchable: false
+      - name: "created_at"
+        type: "date_time"
+        label: "Created At"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: true
+        is_searchable: false
+      - name: "domain_id"
+        type: "uuid"
+        label: "Domain ID"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+      - name: "code"
+        type: "string"
+        label: "Code"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: true
+        settings:
+          min_length: 1
+          max_length: 255
+
+  - key: "shorter_template"
+    name:
+      singular: "shorter_template"
+      plural: "shorter_templates"
+    label:
+      singular: "Shorter Template"
+      plural: "Shorter Templates"
+    description: "Template entity from shorter domain."
+    is_system: true
+    is_custom: false
+    is_active: true
+    is_ui_read_only: false
+    fields:
+      - name: "id"
+        type: "uuid"
+        label: "ID"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: true
+        is_index: true
+        is_ui_read_only: true
+        is_searchable: false
+      - name: "created_at"
+        type: "date_time"
+        label: "Created At"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: true
+        is_searchable: false
+      - name: "updated_at"
+        type: "date_time"
+        label: "Updated At"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: true
+        is_searchable: false
+      - name: "created_by"
+        type: "actor"
+        label: "Created By"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+      - name: "default_code"
+        type: "relation"
+        label: "Default Code"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+        relation_target_object: "shorter_link"
+        relation_target_field: "id"
+        settings:
+          on_delete: "restrict"
+          max_links: 1
+          enforce_tenant_scope: true
+      - name: "target_module"
+        type: "select"
+        label: "Target Module"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+        options:
+          items:
+            - code: "shorter"
+              label: "Shorter"
+          allow_custom: false
+      - name: "target_entity"
+        type: "select"
+        label: "Target Entity"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+        options:
+          items:
+            - code: "redirect"
+              label: "Redirect"
+          allow_custom: false
+      - name: "target_entity_id"
+        type: "uuid"
+        label: "Target Entity ID"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false

@@ -19,7 +19,10 @@ from src.modules.shorter.domain.template.value_object import (
 
 
 class CreateTemplateUseCaseProtocol(Protocol):
-    def execute(self, command: CreateTemplateCommand) -> ResultCreateTemplateDTO: ...
+    async def execute(
+        self,
+        command: CreateTemplateCommand,
+    ) -> ResultCreateTemplateDTO: ...
 
 
 class CreateTemplateUseCase:
@@ -33,8 +36,8 @@ class CreateTemplateUseCase:
         self._template_repository = template_repository
         self._link_repository = link_repository
 
-    def execute(self, command: CreateTemplateCommand) -> ResultCreateTemplateDTO:
-        result = self._service.create(
+    async def execute(self, command: CreateTemplateCommand) -> ResultCreateTemplateDTO:
+        result = await self._service.create(
             created_by=EntityIdVO.from_value(command.created_by),
             domain_id=EntityIdVO.from_value(command.domain_id),
             target_module=TemplateTargetModuleTypeVO(
@@ -44,8 +47,8 @@ class CreateTemplateUseCase:
             target_entity_id=EntityIdVO.from_value(command.target_entity_id),
             code=command.code,
         )
-        self._template_repository.save(result.template)
-        self._link_repository.save(result.link)
+        await self._template_repository.save(result.template)
+        await self._link_repository.save(result.link)
         return ResultCreateTemplateDTO(
             template_id=result.template.id.value,
             link_id=result.link.id.value,

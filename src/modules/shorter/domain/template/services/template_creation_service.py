@@ -42,7 +42,7 @@ class TemplateCreationService:
         self._code_generator = code_generator
         self._generation_attempts_limit = generation_attempts_limit
 
-    def create(
+    async def create(
         self,
         *,
         created_by: EntityIdVO,
@@ -53,7 +53,7 @@ class TemplateCreationService:
         code: str | None = None,
     ) -> TemplateCreationResult:
         created_at = self._clock.now()
-        resolved_code = self._resolve_code(
+        resolved_code = await self._resolve_code(
             domain_id=domain_id,
             raw_code=code,
         )
@@ -72,30 +72,35 @@ class TemplateCreationService:
         )
         return TemplateCreationResult(template=template, link=link)
 
-    def _resolve_code(self, *, domain_id: EntityIdVO, raw_code: str | None) -> str:
+    async def _resolve_code(
+        self,
+        *,
+        domain_id: EntityIdVO,
+        raw_code: str | None,
+    ) -> str:
         code = raw_code.strip() if raw_code is not None else ""
         if code:
-            self._ensure_unique_code(domain_id=domain_id, code=code)
+            await self._ensure_unique_code(domain_id=domain_id, code=code)
             return code
-        return self._generate_unique_code(domain_id=domain_id)
+        return await self._generate_unique_code(domain_id=domain_id)
 
-    def _generate_unique_code(self, *, domain_id: EntityIdVO) -> str:
+    async def _generate_unique_code(self, *, domain_id: EntityIdVO) -> str:
         for _ in range(self._generation_attempts_limit):
             generated_code = self._code_generator.generate(
                 length=LinkCodePolicy.DEFAULT_LENGTH
             )
-            if not self._link_uniqueness_checker.exists_by_domain_and_code(
+            if not await self._link_uniqueness_checker.exists_by_domain_and_code(
                 domain_id=domain_id,
                 code=generated_code,
             ):
                 return generated_code
         raise LinkCodeGenerationAttemptsExceededError(
-            domain_id=str(domain_id),
-            attempts=self._generation_attempts_limit,
+                domain_id=str(domain_id),
+                attempts=self._generation_attempts_limit,
         )
 
-    def _ensure_unique_code(self, *, domain_id: EntityIdVO, code: str) -> None:
-        if self._link_uniqueness_checker.exists_by_domain_and_code(
+    async def _ensure_unique_code(self, *, domain_id: EntityIdVO, code: str) -> None:
+        if await self._link_uniqueness_checker.exists_by_domain_and_code(
             domain_id=domain_id,
             code=code,
         ):
