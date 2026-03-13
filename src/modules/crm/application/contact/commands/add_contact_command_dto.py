@@ -1,16 +1,8 @@
-from __future__ import annotations
-
-from dataclasses import dataclass, field
-from uuid import UUID
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True, slots=True)
 class AddContactCommandDTO:
-    tenant_id: UUID
     first_name: str
     last_name: str | None = None
     middle_name: str | None = None
-    custom_fields: dict[str, object] = field(default_factory=dict)
-
-
-__all__ = ["AddContactCommandDTO"]

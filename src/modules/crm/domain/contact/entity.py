@@ -16,13 +16,16 @@ class ContactEntity:
     @classmethod
     def create(
         cls,
-        *,
+        created_at: datetime,
+        updated_at: datetime,
         first_name: str,
         last_name: str | None = None,
         middle_name: str | None = None,
     ) -> Self:
         return cls(
             id=ContactIdVO.new(),
+            created_at=created_at,
+            updated_at=updated_at,
             name=PersonNameVO(
                 first_name=first_name,
                 last_name=last_name,

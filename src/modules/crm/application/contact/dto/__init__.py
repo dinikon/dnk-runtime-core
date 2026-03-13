@@ -1,15 +1,4 @@
-from src.modules.crm.application.contact.dto.get_contact_result_dto import (
-    GetContactResultDTO,
-)
-from src.modules.crm.application.contact.dto.list_contact_item_dto import (
-    ListContactItemDTO,
-)
-from src.modules.crm.application.contact.dto.list_contacts_result_dto import (
-    ListContactsResultDTO,
-)
+from modules.crm.application.contact.dto.contact_dto import ContactDTO
+from modules.crm.application.contact.dto.contact_list_dto import ContactListItemDTO
 
-__all__ = [
-    "GetContactResultDTO",
-    "ListContactItemDTO",
-    "ListContactsResultDTO",
-]
+__all__ = ["ContactDTO", "ContactListItemDTO"]
