@@ -82,4 +82,5 @@ class RequestEmailOtpUseCase:
         return RequestEmailOtpResultDTO(
             token=generated.token,
             expires_in=self._otp_ttl_seconds,
+            code=generated.code,
         )

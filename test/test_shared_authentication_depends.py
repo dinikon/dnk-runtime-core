@@ -5,7 +5,6 @@ import unittest
 from fastapi import HTTPException
 from starlette.requests import Request
 
-from src.config.auth_config import IdentityAuthSettings
 from src.modules.shared.depends.authentication import (
     AuthenticateBySessionCommand,
     AuthenticationProcessProtocol,
@@ -64,7 +63,6 @@ class TestSharedAuthenticationDepends(unittest.IsolatedAsyncioTestCase):
 
         context = await get_optional_request_context(
             request=request,
-            settings=IdentityAuthSettings(session_cookie_name="dnk_session"),
             authentication_process=process,
         )
 
@@ -108,7 +106,6 @@ class TestSharedAuthenticationDepends(unittest.IsolatedAsyncioTestCase):
 
         context = await get_optional_request_context(
             request=request,
-            settings=IdentityAuthSettings(session_cookie_name="dnk_session"),
             authentication_process=process,
         )
 

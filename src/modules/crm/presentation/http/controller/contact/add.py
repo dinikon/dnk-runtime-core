@@ -9,6 +9,9 @@ from src.modules.crm.presentation.http.requests.contact.add import (
 from src.modules.crm.presentation.http.responses.contact.add import (
     AddContactResponseSchema,
 )
+from src.modules.shared.depends.authentication import (
+    AuthenticatedRequestContextDep,
+)
 
 router = APIRouter(tags=["crm.contact"])
 
@@ -16,7 +19,9 @@ router = APIRouter(tags=["crm.contact"])
 @router.post("/contact/add", response_model=AddContactResponseSchema)
 async def add_contact(
     payload: AddContactRequestSchema,
+    request_context: AuthenticatedRequestContextDep,
 ) -> AddContactResponseSchema:
+    print(request_context)
     timestamp = datetime.now()
     return AddContactResponseSchema(
         id=uuid4(),

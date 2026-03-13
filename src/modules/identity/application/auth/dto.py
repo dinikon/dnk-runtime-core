@@ -12,6 +12,7 @@ class RequestEmailOtpCommandDTO:
 class RequestEmailOtpResultDTO:
     token: str
     expires_in: int
+    code: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

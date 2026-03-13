@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
+from src.config import dnk_config
 from src.modules.identity.application.auth.dto import (
     ConfirmEmailOtpCommandDTO,
     GetCurrentUserCommandDTO,
@@ -80,9 +81,14 @@ def _to_current_user_response(
     )
 
 
+def _is_dev_mode() -> bool:
+    return dnk_config.DEPLOY_ENV == "DEVELOPMENT"
+
+
 @router.post(
     "/request-otp",
     response_model=RequestEmailOtpResponseSchema,
+    response_model_exclude_none=True,
 )
 async def request_email_otp(
     payload: RequestEmailOtpRequestSchema,
@@ -112,6 +118,7 @@ async def request_email_otp(
     return RequestEmailOtpResponseSchema(
         token=result.token,
         expires_in=result.expires_in,
+        code=result.code if _is_dev_mode() else None,
     )
 
 

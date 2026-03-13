@@ -14,6 +14,7 @@ from pydantic_settings import (
 from src.libs.file_utils import search_file_upwards
 from .auth_config import IdentityAuthConfig
 from .control_plane import ControlPlaneConfig
+from .deploy import DeploymentConfig
 from .infrastructure import DatabaseConfig
 from .redis_config import RedisConfig
 
@@ -98,7 +99,7 @@ class DnkConfig(
     # Packaging info
     PackagingInfo,
     # Deployment configs
-    # DeploymentConfig,
+    DeploymentConfig,
     # Feature configs
     # FeatureConfig,
     # Middleware configs
