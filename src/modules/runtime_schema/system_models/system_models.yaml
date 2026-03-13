@@ -1122,3 +1122,174 @@ objects:
         is_index: true
         is_ui_read_only: false
         is_searchable: false
+
+  - key: "shorter_redirect"
+    name:
+      singular: "shorter_redirect"
+      plural: "shorter_redirects"
+    label:
+      singular: "Shorter Redirect"
+      plural: "Shorter Redirects"
+    description: "Redirect entity from shorter domain."
+    is_system: true
+    is_custom: false
+    is_active: true
+    is_ui_read_only: false
+    fields:
+      - name: "id"
+        type: "uuid"
+        label: "ID"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: true
+        is_index: true
+        is_ui_read_only: true
+        is_searchable: false
+      - name: "created_at"
+        type: "date_time"
+        label: "Created At"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: true
+        is_searchable: false
+      - name: "updated_at"
+        type: "date_time"
+        label: "Updated At"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: true
+        is_searchable: false
+      - name: "target_url"
+        type: "string"
+        label: "Target URL"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: true
+        settings:
+          min_length: 8
+          max_length: 2048
+      - name: "utm_source"
+        type: "string"
+        label: "UTM Source"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: true
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        settings:
+          min_length: 1
+          max_length: 255
+      - name: "utm_medium"
+        type: "string"
+        label: "UTM Medium"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: true
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        settings:
+          min_length: 1
+          max_length: 255
+      - name: "utm_campaign"
+        type: "string"
+        label: "UTM Campaign"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: true
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        settings:
+          min_length: 1
+          max_length: 255
+      - name: "utm_id"
+        type: "string"
+        label: "UTM ID"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: true
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        settings:
+          min_length: 1
+          max_length: 255
+      - name: "utm_term"
+        type: "string"
+        label: "UTM Term"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: true
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        settings:
+          min_length: 1
+          max_length: 255
+      - name: "utm_content"
+        type: "string"
+        label: "UTM Content"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: true
+        is_unique: false
+        is_index: false
+        is_ui_read_only: false
+        is_searchable: false
+        settings:
+          min_length: 1
+          max_length: 255
+      - name: "is_override"
+        type: "boolean"
+        label: "Is Override"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+        default_value:
+          value: false
+      - name: "is_append"
+        type: "boolean"
+        label: "Is Append"
+        is_system: true
+        is_custom: false
+        is_active: true
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: false
+        is_searchable: false
+        default_value:
+          value: false

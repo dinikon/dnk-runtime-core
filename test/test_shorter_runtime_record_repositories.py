@@ -5,8 +5,10 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from src.modules.runtime_record import (
+    DeleteRuntimeRecordCommand,
     FindRuntimeRecordQuery,
     GetRuntimeRecordQuery,
+    ListRuntimeRecordsQuery,
     UpsertRuntimeRecordCommand,
 )
 from src.modules.runtime_record.infrastructure.factory import build_runtime_record_storage
@@ -16,6 +18,11 @@ from src.modules.runtime_schema.application.sync_tenant_system_schema.dto import
 from src.modules.runtime_schema.infrastructure.factory import build_ddl_orchestrator
 from src.modules.shared import EntityIdVO
 from src.modules.shorter.domain.link.entity import LinkEntity
+from src.modules.shorter.domain.redirect import (
+    RedirectEntity,
+    RedirectTargetUrlVO,
+    RedirectUtmParametersVO,
+)
 from src.modules.shorter.domain.template.entity import TemplateEntity
 from src.modules.shorter.domain.template.value_object import (
     TemplateEntityTypeVO,
@@ -23,6 +30,9 @@ from src.modules.shorter.domain.template.value_object import (
 )
 from src.modules.shorter.infrastructure.link.repositories import (
     RuntimeRecordLinkRepository,
+)
+from src.modules.shorter.infrastructure.redirect.repositories import (
+    RuntimeRecordRedirectRepository,
 )
 from src.modules.shorter.infrastructure.template.repositories import (
     RuntimeRecordTemplateRepository,
@@ -70,7 +80,7 @@ def _as_datetime(value: object) -> datetime:
 
 
 class TestRuntimeRecordStorageForShorter(unittest.IsolatedAsyncioTestCase):
-    async def test_upsert_get_and_find_by_fields(self) -> None:
+    async def test_upsert_get_list_find_and_delete(self) -> None:
         tenant_id = uuid4()
         data_source_id = uuid4()
         schema = "tenant_shorter_storage"
@@ -129,13 +139,41 @@ class TestRuntimeRecordStorageForShorter(unittest.IsolatedAsyncioTestCase):
             assert found is not None
             self.assertEqual(found.record_id, link_id)
 
+            listed = await runtime_storage.list_records(
+                ListRuntimeRecordsQuery(
+                    tenant_id=tenant_id,
+                    object_name_singular="shorter_link",
+                )
+            )
+            self.assertEqual(len(listed), 1)
+            self.assertEqual(listed[0].record_id, link_id)
+
+            deleted = await runtime_storage.delete_record(
+                DeleteRuntimeRecordCommand(
+                    tenant_id=tenant_id,
+                    object_name_singular="shorter_link",
+                    record_id=link_id,
+                )
+            )
+            self.assertTrue(deleted)
+
+            missing = await runtime_storage.get_record(
+                GetRuntimeRecordQuery(
+                    tenant_id=tenant_id,
+                    object_name_singular="shorter_link",
+                    record_id=link_id,
+                )
+            )
+            self.assertIsNone(missing)
+
 
 class TestShorterRuntimeRecordRepositories(unittest.IsolatedAsyncioTestCase):
-    async def test_link_and_template_repositories_read_write(self) -> None:
+    async def test_link_template_and_redirect_repositories_read_write(self) -> None:
         tenant_id = uuid4()
         data_source_id = uuid4()
         schema = "tenant_shorter_repositories"
         now = datetime(2026, 3, 12, 12, 0, tzinfo=UTC)
+        later = datetime(2026, 3, 12, 13, 0, tzinfo=UTC)
 
         async with sqlite_session() as session:
             await _bootstrap_runtime_schema(
@@ -147,6 +185,10 @@ class TestShorterRuntimeRecordRepositories(unittest.IsolatedAsyncioTestCase):
             runtime_storage = build_runtime_record_storage(session=session)
 
             link_repository = RuntimeRecordLinkRepository(runtime_storage)
+            redirect_repository = RuntimeRecordRedirectRepository(
+                tenant_id=EntityIdVO.from_value(tenant_id),
+                runtime_record_storage=runtime_storage,
+            )
             template_repository = RuntimeRecordTemplateRepository(
                 tenant_id=EntityIdVO.from_value(tenant_id),
                 runtime_record_storage=runtime_storage,
@@ -176,11 +218,65 @@ class TestShorterRuntimeRecordRepositories(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(loaded_link.domain_id, link.domain_id)
             self.assertEqual(loaded_link.created_at, link.created_at)
 
+            redirect = RedirectEntity.create(
+                target_url=RedirectTargetUrlVO(
+                    "https://example.com/landing?foo=1&utm_source=existing"
+                ),
+                utm_parameters=RedirectUtmParametersVO(
+                    utm_campaign="launch",
+                    utm_medium="email",
+                ),
+                is_override=True,
+                is_append=True,
+                created_at=now,
+            )
+            await redirect_repository.save(redirect)
+
+            loaded_redirect = await redirect_repository.get_by_id(
+                redirect_id=redirect.id,
+            )
+            self.assertIsNotNone(loaded_redirect)
+            assert loaded_redirect is not None
+            self.assertEqual(loaded_redirect.id, redirect.id)
+            self.assertEqual(loaded_redirect.target_url, redirect.target_url)
+            self.assertEqual(
+                loaded_redirect.utm_parameters.as_dict(),
+                redirect.utm_parameters.as_dict(),
+            )
+            self.assertTrue(loaded_redirect.is_override)
+            self.assertTrue(loaded_redirect.is_append)
+
+            redirect.update(
+                target_url=RedirectTargetUrlVO("https://example.com/updated"),
+                utm_parameters=RedirectUtmParametersVO(
+                    utm_source="adwords",
+                    utm_content="banner-a",
+                ),
+                is_override=False,
+                is_append=True,
+                updated_at=later,
+            )
+            await redirect_repository.save(redirect)
+
+            listed_redirects = await redirect_repository.list()
+            self.assertEqual(len(listed_redirects), 1)
+            self.assertEqual(listed_redirects[0].id, redirect.id)
+            self.assertEqual(listed_redirects[0].updated_at, later)
+            self.assertEqual(
+                listed_redirects[0].utm_parameters.as_dict(),
+                {
+                    "utm_source": "adwords",
+                    "utm_content": "banner-a",
+                },
+            )
+            self.assertFalse(listed_redirects[0].is_override)
+            self.assertTrue(listed_redirects[0].is_append)
+
             template = TemplateEntity.create(
                 user_id=EntityIdVO.from_value(uuid4()),
                 target_module=TemplateTargetModuleTypeVO.SHORTER,
                 target_entity=TemplateEntityTypeVO.REDIRECT,
-                target_entity_id=EntityIdVO.from_value(uuid4()),
+                target_entity_id=EntityIdVO.from_value(redirect.id.value),
                 default_code=link.id,
                 created_at=now,
             )
@@ -199,6 +295,13 @@ class TestShorterRuntimeRecordRepositories(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(loaded_template.target_entity_id, template.target_entity_id)
             self.assertEqual(loaded_template.created_at, template.created_at)
             self.assertEqual(loaded_template.updated_at, template.updated_at)
+
+            deleted = await redirect_repository.delete_by_id(redirect_id=redirect.id)
+            self.assertTrue(deleted)
+            missing_redirect = await redirect_repository.get_by_id(
+                redirect_id=redirect.id,
+            )
+            self.assertIsNone(missing_redirect)
 
 
 if __name__ == "__main__":

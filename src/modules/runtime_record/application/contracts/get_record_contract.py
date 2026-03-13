@@ -12,6 +12,14 @@ class GetRuntimeRecordQuery:
 
 
 @dataclass(frozen=True, slots=True)
+class ListRuntimeRecordsQuery:
+    tenant_id: UUID
+    object_name_singular: str
+    filters: dict[str, object] | None = None
+    limit: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class RuntimeRecordPayload:
     tenant_id: UUID
     object_name_singular: str
@@ -22,5 +30,6 @@ class RuntimeRecordPayload:
 
 __all__ = [
     "GetRuntimeRecordQuery",
+    "ListRuntimeRecordsQuery",
     "RuntimeRecordPayload",
 ]

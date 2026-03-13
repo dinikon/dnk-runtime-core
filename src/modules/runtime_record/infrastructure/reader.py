@@ -8,8 +8,10 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.runtime_record.application.contracts import (
+    DeleteRuntimeRecordCommand,
     FindRuntimeRecordQuery,
     GetRuntimeRecordQuery,
+    ListRuntimeRecordsQuery,
     RuntimeRecordPayload,
     UpsertRuntimeRecordCommand,
 )
@@ -78,6 +80,36 @@ class SqlAlchemyRuntimeRecordReader(RuntimeRecordStoragePort):
         return self._build_payload(
             resolved=resolved,
             row=row,
+        )
+
+    async def list_records(
+        self,
+        query: ListRuntimeRecordsQuery,
+    ) -> tuple[RuntimeRecordPayload, ...]:
+        resolved = await self._resolve_runtime_object(
+            tenant_id=query.tenant_id,
+            object_name_singular=query.object_name_singular,
+        )
+        where_values = (
+            self._serialize_filter_values(
+                object_name_singular=resolved.object_entity.object_name.name_singular,
+                field_mappings=resolved.field_mappings,
+                filters=query.filters,
+            )
+            if query.filters
+            else {}
+        )
+        rows = await self._select_rows(
+            resolved=resolved,
+            where_values=where_values,
+            limit=query.limit,
+        )
+        return tuple(
+            self._build_payload(
+                resolved=resolved,
+                row=row,
+            )
+            for row in rows
         )
 
     async def get_record_by_fields(
@@ -169,6 +201,29 @@ class SqlAlchemyRuntimeRecordReader(RuntimeRecordStoragePort):
         await self._session.execute(text(sql), parameters)
         await self._session.flush()
 
+    async def delete_record(
+        self,
+        command: DeleteRuntimeRecordCommand,
+    ) -> bool:
+        resolved = await self._resolve_runtime_object(
+            tenant_id=command.tenant_id,
+            object_name_singular=command.object_name_singular,
+        )
+        table_reference = self._qualified_table(
+            schema=resolved.data_source_model.schema,
+            table_name=resolved.object_entity.object_name.name_plural,
+        )
+        sql = (
+            f"DELETE FROM {table_reference} "
+            f"WHERE {self._quote_identifier('id')} = :record_id"
+        )
+        result = await self._session.execute(
+            text(sql),
+            {"record_id": self._bind_sql_value(command.record_id)},
+        )
+        await self._session.flush()
+        return bool(result.rowcount and result.rowcount > 0)
+
     async def _resolve_runtime_object(
         self,
         *,
@@ -244,6 +299,59 @@ class SqlAlchemyRuntimeRecordReader(RuntimeRecordStoragePort):
         )
         result = await self._session.execute(text(sql), parameters)
         return result.mappings().first()
+
+    async def _select_rows(
+        self,
+        *,
+        resolved: _ResolvedRuntimeObject,
+        where_values: dict[str, object],
+        limit: int | None,
+    ):
+        selected_columns = {"id"}
+        for mapping in resolved.field_mappings:
+            selected_columns.update(mapping.columns)
+
+        table_reference = self._qualified_table(
+            schema=resolved.data_source_model.schema,
+            table_name=resolved.object_entity.object_name.name_plural,
+        )
+        columns_sql = ", ".join(
+            self._quote_identifier(column_name)
+            for column_name in sorted(selected_columns)
+        )
+
+        where_sql = ""
+        parameters: dict[str, object] = {}
+        if where_values:
+            where_clauses: list[str] = []
+            for index, (column_name, column_value) in enumerate(
+                sorted(where_values.items())
+            ):
+                quoted_column = self._quote_identifier(column_name)
+                if column_value is None:
+                    where_clauses.append(f"{quoted_column} IS NULL")
+                    continue
+                parameter_name = f"p_{index}"
+                where_clauses.append(f"{quoted_column} = :{parameter_name}")
+                parameters[parameter_name] = self._bind_sql_value(column_value)
+            where_sql = " WHERE " + " AND ".join(where_clauses)
+
+        limit_sql = ""
+        if limit is not None:
+            if limit < 1:
+                raise ValidationError("limit must be greater than zero")
+            limit_sql = " LIMIT :limit"
+            parameters["limit"] = limit
+
+        sql = (
+            f"SELECT {columns_sql} "
+            f"FROM {table_reference}"
+            f"{where_sql} "
+            f"ORDER BY {self._quote_identifier('id')}"
+            f"{limit_sql}"
+        )
+        result = await self._session.execute(text(sql), parameters)
+        return result.mappings().all()
 
     def _build_payload(
         self,

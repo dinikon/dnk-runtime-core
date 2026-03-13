@@ -3,8 +3,10 @@ from __future__ import annotations
 from typing import Protocol
 
 from src.modules.runtime_record.application.contracts import (
+    DeleteRuntimeRecordCommand,
     FindRuntimeRecordQuery,
     GetRuntimeRecordQuery,
+    ListRuntimeRecordsQuery,
     RuntimeRecordPayload,
     UpsertRuntimeRecordCommand,
 )
@@ -15,6 +17,13 @@ class RuntimeRecordReaderPort(Protocol):
         self,
         query: GetRuntimeRecordQuery,
     ) -> RuntimeRecordPayload | None: ...
+
+
+class RuntimeRecordListerPort(Protocol):
+    async def list_records(
+        self,
+        query: ListRuntimeRecordsQuery,
+    ) -> tuple[RuntimeRecordPayload, ...]: ...
 
 
 class RuntimeRecordFinderPort(Protocol):
@@ -31,9 +40,18 @@ class RuntimeRecordWriterPort(Protocol):
     ) -> None: ...
 
 
+class RuntimeRecordDeleterPort(Protocol):
+    async def delete_record(
+        self,
+        command: DeleteRuntimeRecordCommand,
+    ) -> bool: ...
+
+
 class RuntimeRecordStoragePort(
     RuntimeRecordReaderPort,
+    RuntimeRecordListerPort,
     RuntimeRecordFinderPort,
     RuntimeRecordWriterPort,
+    RuntimeRecordDeleterPort,
     Protocol,
 ): ...

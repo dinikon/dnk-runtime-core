@@ -13,6 +13,13 @@ class UpsertRuntimeRecordCommand:
 
 
 @dataclass(frozen=True, slots=True)
+class DeleteRuntimeRecordCommand:
+    tenant_id: UUID
+    object_name_singular: str
+    record_id: UUID
+
+
+@dataclass(frozen=True, slots=True)
 class FindRuntimeRecordQuery:
     tenant_id: UUID
     object_name_singular: str
@@ -20,6 +27,7 @@ class FindRuntimeRecordQuery:
 
 
 __all__ = [
+    "DeleteRuntimeRecordCommand",
     "FindRuntimeRecordQuery",
     "UpsertRuntimeRecordCommand",
 ]

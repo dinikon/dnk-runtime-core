@@ -27,9 +27,23 @@ class LinkCodeGenerationAttemptsExceededError(ValidationError):
         )
 
 
+class RedirectTargetUrlInvalidError(ValidationError):
+    def __init__(self, *, target_url: str):
+        super().__init__(
+            f"redirect target_url must be a valid https URL, got '{target_url}'"
+        )
+
+
+class RedirectNotFoundError(ValidationError):
+    def __init__(self, *, redirect_id: str):
+        super().__init__(f"redirect '{redirect_id}' was not found")
+
+
 __all__ = [
     "LinkCodeAlreadyExistsError",
     "LinkCodeGenerationAttemptsExceededError",
     "LinkCodeLengthNotSupportedError",
     "LinkCodeRequiredError",
+    "RedirectNotFoundError",
+    "RedirectTargetUrlInvalidError",
 ]
