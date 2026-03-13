@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import Annotated
 
 from fastapi import Depends, Request
@@ -12,5 +10,3 @@ def get_request_host(request: Request) -> str:
 
 
 RequestHostDep = Annotated[str, Depends(get_request_host)]
-
-__all__ = ["get_request_host", "RequestHostDep"]
