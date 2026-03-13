@@ -7,93 +7,53 @@ from fastapi import Depends, HTTPException, Request, status
 
 from src.config import dnk_config
 from src.config.auth_config import IdentityAuthSettings
-from src.modules.identity.presentation.depends.auth_repositories import (
-    AuthUsersRepositoryDep,
-    SessionStoreDep,
-    TenantContextReaderDep,
+from src.modules.identity.application.auth.use_cases.authenticate_by_session import (
+    AuthenticateBySessionCommand as AuthenticateBySessionUseCaseCommand,
+    SessionPrincipal,
+)
+from src.modules.identity.presentation.depends.auth_use_cases import (
+    AuthenticateBySessionUseCaseDep,
 )
 from src.modules.shared.http.host import extract_request_host
-from src.modules.tenancy.domain.errors import (
-    TenantHostNotFoundError,
-    TenantLoginUnavailableError,
-)
+from src.modules.shared.kernel.principal import Principal
+from src.modules.shared.kernel.request_context import RequestContext
 
 
 @dataclass(frozen=True, slots=True)
-class Principal:
-    user_id: str
-    tenant_id: str | None
-    session_id: str
-    roles: tuple[str, ...]
-    permissions: tuple[str, ...] = ()
-    is_authenticated: bool = True
-
-
-@dataclass(frozen=True, slots=True)
-class RequestContext:
-    principal: Principal | None
-    request_id: str | None
+class AuthenticateBySessionCommand:
+    host: str | None
+    session_token: str | None
     ip: str | None
     user_agent: str | None
 
 
 class AuthenticationProcessProtocol(Protocol):
-    async def authenticate(self, request: Request) -> Principal | None: ...
 
-
-class SessionAuthenticationProcess(AuthenticationProcessProtocol):
-    def __init__(
+    async def authenticate(
         self,
-        *,
-        settings: IdentityAuthSettings,
-        tenant_context_reader: TenantContextReaderDep,
-        session_store: SessionStoreDep,
-        users_repository: AuthUsersRepositoryDep,
-    ) -> None:
-        self._settings = settings
-        self._tenant_context_reader = tenant_context_reader
-        self._session_store = session_store
-        self._users_repository = users_repository
+        command: AuthenticateBySessionCommand,
+    ) -> Principal | None: ...
 
-    async def authenticate(self, request: Request) -> Principal | None:
-        host = extract_request_host(request)
-        session_token = request.cookies.get(self._settings.session_cookie_name)
 
-        if not host or not session_token:
-            return None
+class AuthenticateBySessionUseCaseAdapter(AuthenticationProcessProtocol):
+    def __init__(self, use_case: AuthenticateBySessionUseCaseDep) -> None:
+        self._use_case = use_case
 
-        try:
-            tenant_context = await self._tenant_context_reader.get_by_host(host)
-        except (TenantHostNotFoundError, TenantLoginUnavailableError):
-            return None
-
-        session = await self._session_store.get_session(
-            tenant_context.tenant_id,
-            session_token,
+    async def authenticate(
+        self,
+        command: AuthenticateBySessionCommand,
+    ) -> Principal | None:
+        principal = await self._use_case.execute(
+            AuthenticateBySessionUseCaseCommand(
+                host=command.host,
+                session_token=command.session_token,
+                ip=command.ip,
+                user_agent=command.user_agent,
+            )
         )
-        if session is None:
+        if principal is None:
             return None
-        if (
-            session.tenant_id != tenant_context.tenant_id
-            or session.tenant_domain_id != tenant_context.tenant_domain_id
-            or session.host != tenant_context.host
-        ):
-            return None
-
-        user = await self._users_repository.get_by_id(session.user_id)
-        if user is None or user.tenant_id != tenant_context.tenant_id:
-            return None
-        if not user.can_login():
-            return None
-
-        return Principal(
-            user_id=str(user.id),
-            tenant_id=str(tenant_context.tenant_id),
-            session_id=session.session_id,
-            roles=(),
-            permissions=(),
-            is_authenticated=True,
-        )
+        return _map_principal(principal)
 
 
 def get_authentication_settings() -> IdentityAuthSettings:
@@ -108,20 +68,12 @@ AuthenticationSettingsDep = Annotated[
 
 def get_authentication_process(
     request: Request,
-    settings: AuthenticationSettingsDep,
-    tenant_context_reader: TenantContextReaderDep,
-    session_store: SessionStoreDep,
-    users_repository: AuthUsersRepositoryDep,
+    use_case: AuthenticateBySessionUseCaseDep,
 ) -> AuthenticationProcessProtocol:
     from_state = getattr(request.app.state, "authentication_process", None)
     if from_state is not None:
         return from_state
-    return SessionAuthenticationProcess(
-        settings=settings,
-        tenant_context_reader=tenant_context_reader,
-        session_store=session_store,
-        users_repository=users_repository,
-    )
+    return AuthenticateBySessionUseCaseAdapter(use_case)
 
 
 AuthenticationProcessDep = Annotated[
@@ -130,21 +82,28 @@ AuthenticationProcessDep = Annotated[
 ]
 
 
-async def get_authentication_option(
+async def get_optional_request_context(
     request: Request,
+    settings: AuthenticationSettingsDep,
     authentication_process: AuthenticationProcessDep,
 ) -> RequestContext:
-    principal = await authentication_process.authenticate(request)
-    return RequestContext(
-        principal=principal,
-        request_id=_extract_request_id(request),
+    command = AuthenticateBySessionCommand(
+        host=extract_request_host(request),
+        session_token=request.cookies.get(settings.session_cookie_name),
         ip=_extract_request_ip(request),
         user_agent=request.headers.get("user-agent"),
     )
+    principal = await authentication_process.authenticate(command)
+    return RequestContext(
+        principal=principal,
+        request_id=_extract_request_id(request),
+        ip=command.ip,
+        user_agent=command.user_agent,
+    )
 
 
-async def get_authentication_strict(
-    context: Annotated[RequestContext, Depends(get_authentication_option)],
+async def require_authenticated_request_context(
+    context: Annotated[RequestContext, Depends(get_optional_request_context)],
 ) -> RequestContext:
     if context.principal is None or not context.principal.is_authenticated:
         raise HTTPException(
@@ -154,13 +113,13 @@ async def get_authentication_strict(
     return context
 
 
-AuthenticationOptionDep = Annotated[
+OptionalRequestContextDep = Annotated[
     RequestContext,
-    Depends(get_authentication_option),
+    Depends(get_optional_request_context),
 ]
-AuthenticationStrictDep = Annotated[
+AuthenticatedRequestContextDep = Annotated[
     RequestContext,
-    Depends(get_authentication_strict),
+    Depends(require_authenticated_request_context),
 ]
 
 
@@ -183,17 +142,29 @@ def _extract_request_ip(request: Request) -> str | None:
     return client.host
 
 
+def _map_principal(principal: SessionPrincipal) -> Principal:
+    return Principal(
+        user_id=principal.user_id,
+        tenant_id=principal.tenant_id,
+        session_id=principal.session_id,
+        roles=principal.roles,
+        permissions=principal.permissions,
+        is_authenticated=principal.is_authenticated,
+    )
+
+
 __all__ = [
-    "AuthenticationOptionDep",
+    "AuthenticatedRequestContextDep",
+    "AuthenticateBySessionCommand",
     "AuthenticationProcessDep",
     "AuthenticationProcessProtocol",
     "AuthenticationSettingsDep",
-    "AuthenticationStrictDep",
+    "AuthenticateBySessionUseCaseAdapter",
+    "OptionalRequestContextDep",
     "Principal",
     "RequestContext",
-    "SessionAuthenticationProcess",
-    "get_authentication_option",
     "get_authentication_process",
     "get_authentication_settings",
-    "get_authentication_strict",
+    "get_optional_request_context",
+    "require_authenticated_request_context",
 ]

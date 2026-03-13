@@ -1,3 +1,9 @@
+from src.modules.identity.application.auth.use_cases.authenticate_by_session import (
+    AuthenticateBySessionCommand,
+    AuthenticateBySessionUseCase,
+    AuthenticateBySessionUseCaseProtocol,
+    SessionPrincipal,
+)
 from src.modules.identity.application.auth.use_cases.confirm_email_otp import (
     ConfirmEmailOtpUseCase,
 )
@@ -15,9 +21,13 @@ from src.modules.identity.application.auth.use_cases.update_current_user_profile
 )
 
 __all__ = [
+    "AuthenticateBySessionCommand",
+    "AuthenticateBySessionUseCase",
+    "AuthenticateBySessionUseCaseProtocol",
     "ConfirmEmailOtpUseCase",
     "GetCurrentUserUseCase",
     "LogoutCurrentSessionUseCase",
     "RequestEmailOtpUseCase",
+    "SessionPrincipal",
     "UpdateCurrentUserProfileUseCase",
 ]

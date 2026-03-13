@@ -30,11 +30,13 @@ from src.modules.identity.presentation.depends.auth_services import (
     get_token_manager,
 )
 from src.modules.identity.presentation.depends.auth_use_cases import (
+    AuthenticateBySessionUseCaseDep,
     ConfirmEmailOtpUseCaseDep,
     GetCurrentUserUseCaseDep,
     LogoutCurrentSessionUseCaseDep,
     RequestEmailOtpUseCaseDep,
     UpdateCurrentUserProfileUseCaseDep,
+    get_authenticate_by_session_use_case,
     get_confirm_email_otp_use_case,
     get_current_user_use_case,
     get_logout_current_session_use_case,
@@ -68,6 +70,8 @@ __all__ = [
     "InMemoryEmailSender",
     "get_request_email_otp_use_case",
     "RequestEmailOtpUseCaseDep",
+    "get_authenticate_by_session_use_case",
+    "AuthenticateBySessionUseCaseDep",
     "get_confirm_email_otp_use_case",
     "ConfirmEmailOtpUseCaseDep",
     "get_current_user_use_case",

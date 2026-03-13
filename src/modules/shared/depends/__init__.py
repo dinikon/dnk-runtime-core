@@ -7,18 +7,17 @@ from src.modules.shared.depends.request_host import RequestHostDep, get_request_
 from src.modules.shared.depends.uow import UoWDep, get_uow
 
 _AUTH_EXPORTS = {
-    "AuthenticationOptionDep",
+    "AuthenticatedRequestContextDep",
+    "AuthenticateBySessionCommand",
     "AuthenticationProcessDep",
     "AuthenticationProcessProtocol",
-    "AuthenticationSettingsDep",
-    "AuthenticationStrictDep",
+    "AuthenticateBySessionUseCaseAdapter",
+    "OptionalRequestContextDep",
     "Principal",
     "RequestContext",
-    "SessionAuthenticationProcess",
-    "get_authentication_option",
     "get_authentication_process",
-    "get_authentication_settings",
-    "get_authentication_strict",
+    "get_optional_request_context",
+    "require_authenticated_request_context",
 }
 
 __all__ = [

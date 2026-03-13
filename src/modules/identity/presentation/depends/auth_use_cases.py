@@ -4,6 +4,10 @@ from typing import Annotated
 
 from fastapi import Depends
 
+from src.modules.identity.application.auth.use_cases.authenticate_by_session import (
+    AuthenticateBySessionUseCase,
+    AuthenticateBySessionUseCaseProtocol,
+)
 from src.modules.identity.application.auth.use_cases.confirm_email_otp import (
     ConfirmEmailOtpUseCase,
 )
@@ -55,6 +59,24 @@ def get_request_email_otp_use_case(
 RequestEmailOtpUseCaseDep = Annotated[
     RequestEmailOtpUseCase,
     Depends(get_request_email_otp_use_case),
+]
+
+
+def get_authenticate_by_session_use_case(
+    tenant_context_reader: TenantContextReaderDep,
+    users_repository: AuthUsersRepositoryDep,
+    session_store: SessionStoreDep,
+) -> AuthenticateBySessionUseCaseProtocol:
+    return AuthenticateBySessionUseCase(
+        tenant_context_reader=tenant_context_reader,
+        users_repository=users_repository,
+        session_store=session_store,
+    )
+
+
+AuthenticateBySessionUseCaseDep = Annotated[
+    AuthenticateBySessionUseCaseProtocol,
+    Depends(get_authenticate_by_session_use_case),
 ]
 
 
@@ -141,11 +163,13 @@ LogoutCurrentSessionUseCaseDep = Annotated[
 
 
 __all__ = [
+    "AuthenticateBySessionUseCaseDep",
     "ConfirmEmailOtpUseCaseDep",
     "GetCurrentUserUseCaseDep",
     "LogoutCurrentSessionUseCaseDep",
     "RequestEmailOtpUseCaseDep",
     "UpdateCurrentUserProfileUseCaseDep",
+    "get_authenticate_by_session_use_case",
     "get_confirm_email_otp_use_case",
     "get_current_user_use_case",
     "get_logout_current_session_use_case",
