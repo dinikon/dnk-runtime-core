@@ -91,8 +91,8 @@ class TestLayoutDiffPlan(unittest.TestCase):
         self.assertIn("name_last_name", column_names)
         self.assertIn("name_middle_name", column_names)
         self.assertIn("name_first_name", column_names)
-        self.assertIn("created_at", column_names)
-        self.assertIn("updated_at", column_names)
+        self.assertNotIn("created_at", column_names)
+        self.assertNotIn("updated_at", column_names)
         self.assertTrue(any(index.columns == ("title",) for index in lead_table.indexes))
         columns_by_name = {column.name: column for column in lead_table.columns}
         self.assertTrue(columns_by_name["name_last_name"].nullable)
@@ -128,6 +128,7 @@ class TestLayoutDiffPlan(unittest.TestCase):
                     columns=(
                         ColumnSpec(name="id", sql_type="uuid", nullable=False, is_primary_key=True),
                         ColumnSpec(name="title", sql_type="varchar(255)", nullable=False),
+                        ColumnSpec(name="created_at", sql_type="timestamp_tz", nullable=False),
                         ColumnSpec(name="legacy", sql_type="text", nullable=True),
                     ),
                     indexes=tuple(),
@@ -140,7 +141,7 @@ class TestLayoutDiffPlan(unittest.TestCase):
             actual=actual_with_extra,
             allow_destructive=True,
         )
-        self.assertEqual(len(destructive_diff.columns_to_drop), 1)
+        self.assertEqual(len(destructive_diff.columns_to_drop), 2)
         self.assertEqual(len(destructive_diff.tables_to_drop), 1)
 
     def test_field_layout_compiler_adds_entity_owner_composite_index(self) -> None:

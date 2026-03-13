@@ -155,6 +155,8 @@ class YamlSystemModelRegistryReader(SystemModelRegistryReaderProtocol):
         options = payload.get("options")
         settings = payload.get("settings")
         default_value = payload.get("default_value")
+        if default_value is None and "default_values" in payload:
+            default_value = payload.get("default_values")
 
         return SystemFieldDefinition(
             name=name,
@@ -171,8 +173,8 @@ class YamlSystemModelRegistryReader(SystemModelRegistryReaderProtocol):
             is_searchable=bool(payload.get("is_searchable", False)),
             options=dict(options) if isinstance(options, dict) else None,
             settings=dict(settings) if isinstance(settings, dict) else None,
-            default_value=(
-                dict(default_value) if isinstance(default_value, dict) else None
+            default_value=YamlSystemModelRegistryReader._normalize_default_value(
+                default_value
             ),
             relation_target_object=(
                 str(payload.get("relation_target_object")).strip()
@@ -185,6 +187,17 @@ class YamlSystemModelRegistryReader(SystemModelRegistryReaderProtocol):
                 else None
             ),
         )
+
+    @staticmethod
+    def _normalize_default_value(value: object) -> dict[str, object] | None:
+        if isinstance(value, dict):
+            return dict(value)
+        if isinstance(value, str):
+            normalized = value.strip()
+            if normalized == "":
+                return None
+            return {"value": normalized}
+        return None
 
 
 __all__ = ["YamlSystemModelRegistryReader"]

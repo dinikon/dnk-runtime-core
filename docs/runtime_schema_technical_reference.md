@@ -354,6 +354,8 @@ DTO уровня инфраструктуры:
 - валидирует обязательные части (`version`, `objects`, `name`, `label`, `fields`);
 - проверяет дубль object keys;
 - проверяет дубли field names внутри объекта (case-insensitive);
+- для `default_value` поддерживает shorthand-строку: `"value"` конвертируется в `{"value": "value"}`;
+- принимает alias `default_values` (как fallback к `default_value`);
 - вычисляет `manifest_hash = sha256(raw_text)`.
 
 ## 6.4 Metadata compiler
@@ -380,6 +382,7 @@ DTO уровня инфраструктуры:
 Примечания:
 
 - для JSON default есть backward compatibility: payload может быть как `{"value": ...}`, так и "плоский" dict.
+- для `date_time` поддерживается `{"value": "now"}` (резолвится в текущий UTC datetime).
 - unsupported комбинации options/settings -> `ValueError`.
 
 ## 6.6 Field layout compiler
@@ -389,7 +392,7 @@ DTO уровня инфраструктуры:
 `FieldLayoutCompiler.compile_layout(...)`:
 
 - строит `SchemaSnapshot` из активных object+field metadata;
-- добавляет системные колонки `id`, `created_at`, `updated_at` при отсутствии;
+- гарантирует системную колонку `id` (если она не описана полем, добавляется как PK);
 - строит индексы на основании `is_index`/`is_unique`.
 
 Маппинг field type -> storage:
@@ -419,7 +422,7 @@ DTO уровня инфраструктуры:
 - находит таблицы для создания;
 - находит недостающие колонки и индексы;
 - при `allow_destructive=True`:
-  - находит лишние колонки (кроме `id/created_at/updated_at`) для drop;
+  - находит лишние колонки (кроме `id`) для drop;
   - находит лишние таблицы для drop.
 
 Важно:

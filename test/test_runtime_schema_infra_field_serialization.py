@@ -161,6 +161,13 @@ class TestFieldSerialization(unittest.TestCase):
         )
         self.assertIsNotNone(dt_default.value.tzinfo)
 
+        dt_now_default = deserialize_field_default(
+            field_type=FieldTypeVO.DATE_TIME,
+            payload={"value": "now"},
+        )
+        self.assertIsNotNone(dt_now_default.value.tzinfo)
+        self.assertEqual(dt_now_default.value.utcoffset(), datetime.now(UTC).utcoffset())
+
     def test_deserialize_default_values_for_extended_types(self) -> None:
         actor_default = deserialize_field_default(
             field_type=FieldTypeVO.ACTOR,

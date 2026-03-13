@@ -56,11 +56,7 @@ class DdlDiffEngine(DdlDiffEngineProtocol):
 
             if allow_destructive:
                 for column_name in actual_columns_by_name:
-                    if column_name not in expected_columns_by_name and column_name not in {
-                        "id",
-                        "created_at",
-                        "updated_at",
-                    }:
+                    if column_name not in expected_columns_by_name and column_name != "id":
                         columns_to_drop.append(
                             ColumnToDrop(
                                 table_name=table_name,

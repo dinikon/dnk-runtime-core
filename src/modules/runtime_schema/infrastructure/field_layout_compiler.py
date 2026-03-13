@@ -116,25 +116,6 @@ class FieldLayoutCompiler(FieldLayoutCompilerProtocol):
                     for column in columns
                 ]
 
-            if not any(column.name == "created_at" for column in columns):
-                columns.append(
-                    ColumnSpec(
-                        name="created_at",
-                        sql_type="timestamp_tz",
-                        nullable=False,
-                        default_sql="CURRENT_TIMESTAMP",
-                    )
-                )
-            if not any(column.name == "updated_at" for column in columns):
-                columns.append(
-                    ColumnSpec(
-                        name="updated_at",
-                        sql_type="timestamp_tz",
-                        nullable=False,
-                        default_sql="CURRENT_TIMESTAMP",
-                    )
-                )
-
             tables[table_name] = TableSpec(
                 name=table_name,
                 columns=tuple(columns),

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 from uuid import UUID
@@ -188,7 +188,10 @@ def deserialize_field_default(
         return UuidDefaultValue(value=UUID(str(payload.get("value"))))
     if field_type == FieldTypeVO.DATE_TIME:
         raw = payload.get("value")
-        value = raw if isinstance(raw, datetime) else datetime.fromisoformat(str(raw))
+        if isinstance(raw, str) and raw.strip().lower() == "now":
+            value = datetime.now(UTC)
+        else:
+            value = raw if isinstance(raw, datetime) else datetime.fromisoformat(str(raw))
         return DateTimeDefaultValue(value=value)
     if field_type == FieldTypeVO.JSON:
         if "value" in payload:

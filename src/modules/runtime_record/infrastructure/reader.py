@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select, text
@@ -152,12 +151,6 @@ class SqlAlchemyRuntimeRecordReader(RuntimeRecordStoragePort):
         row_values: dict[str, object] = {"id": command.record_id}
         row_values.update(serialized_values)
 
-        now = datetime.now(UTC)
-        if "created_at" not in row_values:
-            row_values["created_at"] = now
-        if "updated_at" not in row_values:
-            row_values["updated_at"] = now
-
         ordered_columns = sorted(row_values)
         table_reference = self._qualified_table(
             schema=resolved.data_source_model.schema,
@@ -171,7 +164,7 @@ class SqlAlchemyRuntimeRecordReader(RuntimeRecordStoragePort):
         update_columns = [
             column_name
             for column_name in ordered_columns
-            if column_name not in {"id", "created_at"}
+            if column_name != "id"
         ]
         if update_columns:
             updates_sql = ", ".join(

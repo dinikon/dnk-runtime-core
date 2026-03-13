@@ -19,6 +19,35 @@ objects:
         is_index: true
         is_ui_read_only: true
         is_searchable: false
+
+      - name: "created_at"
+        type: "date_time"
+        label: "Created At"
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: true
+        is_searchable: false
+        settings:
+          timezone_aware: true
+          require_utc: true
+        default_value:
+          value: "now"
+
+      - name: "updated_at"
+        type: "date_time"
+        label: "Updated At"
+        is_nullable: false
+        is_unique: false
+        is_index: true
+        is_ui_read_only: true
+        is_searchable: false
+        settings:
+          timezone_aware: true
+          require_utc: true
+        default_value:
+          value: "now"
+
       - name: "name"
         type: "full_name"
         label: "Name"
