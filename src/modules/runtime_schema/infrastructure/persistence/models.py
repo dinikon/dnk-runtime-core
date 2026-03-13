@@ -33,31 +33,6 @@ class ObjectMetadataModel(Base):
     icon: Mapped[str | None] = mapped_column(String(255), nullable=True)
     shortcut: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
-    is_remote: Mapped[bool] = mapped_column(
-        sa.Boolean,
-        nullable=False,
-        server_default=sa.text("'false'"),
-    )
-    is_system: Mapped[bool] = mapped_column(
-        sa.Boolean,
-        nullable=False,
-        server_default=sa.text("'false'"),
-    )
-    is_custom: Mapped[bool] = mapped_column(
-        sa.Boolean,
-        nullable=False,
-        server_default=sa.text("'true'"),
-    )
-    is_active: Mapped[bool] = mapped_column(
-        sa.Boolean,
-        nullable=False,
-        server_default=sa.text("'true'"),
-    )
-    is_ui_read_only: Mapped[bool] = mapped_column(
-        sa.Boolean,
-        nullable=False,
-        server_default=sa.text("'false'"),
-    )
     duplicate_criteria: Mapped[dict[str, object] | None] = mapped_column(
         PortableJSON,
         nullable=True,
@@ -107,16 +82,6 @@ class FieldMetadataModel(Base):
     label: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(LongText, nullable=True)
     icon: Mapped[str | None] = mapped_column(String(255), nullable=True)
-
-    is_system: Mapped[bool] = mapped_column(
-        sa.Boolean, nullable=False, server_default=sa.text("'false'")
-    )
-    is_custom: Mapped[bool] = mapped_column(
-        sa.Boolean, nullable=False, server_default=sa.text("'true'")
-    )
-    is_active: Mapped[bool] = mapped_column(
-        sa.Boolean, nullable=False, server_default=sa.text("'true'")
-    )
 
     is_unique: Mapped[bool] = mapped_column(
         sa.Boolean, nullable=False, server_default=sa.text("'false'")
@@ -320,4 +285,3 @@ class SchemaMigrationJournalModel(Base):
             "created_at",
         ),
     )
-

@@ -15,9 +15,6 @@ class SystemFieldDefinition:
     label: str
     description: str | None = None
     icon: str | None = None
-    is_system: bool = True
-    is_custom: bool = False
-    is_active: bool = True
     is_unique: bool = False
     is_index: bool = False
     is_nullable: bool = True
@@ -40,11 +37,6 @@ class SystemObjectDefinition:
     description: str | None = None
     icon: str | None = None
     shortcut: str | None = None
-    is_remote: bool = False
-    is_system: bool = True
-    is_custom: bool = False
-    is_active: bool = True
-    is_ui_read_only: bool = False
     duplicate_criteria: dict[str, object] | None = None
     fields: tuple[SystemFieldDefinition, ...] = field(default_factory=tuple)
 
@@ -229,4 +221,3 @@ class ExecutionReport:
     @property
     def applied_operations(self) -> int:
         return len(self.operations)
-

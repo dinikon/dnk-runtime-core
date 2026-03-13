@@ -45,8 +45,6 @@ class TestLayoutDiffPlan(unittest.TestCase):
             tenant_id=tenant_id,
             data_source_id=source_id,
             object_name=ObjectNameVO(name_singular="lead", name_plural="leads"),
-            is_system=True,
-            is_custom=False,
         )
         field_title = FieldMetadataEntity.create(
             tenant_id=tenant_id,
@@ -54,8 +52,6 @@ class TestLayoutDiffPlan(unittest.TestCase):
             field_type=FieldTypeVO.STRING,
             field_name=FieldName("title"),
             label="Title",
-            is_system=True,
-            is_custom=False,
             is_nullable=False,
             is_index=True,
         )
@@ -65,8 +61,6 @@ class TestLayoutDiffPlan(unittest.TestCase):
             field_type=FieldTypeVO.RELATION,
             field_name=FieldName("owner_id"),
             label="Owner",
-            is_system=True,
-            is_custom=False,
             is_nullable=True,
             settings=RelationFieldSettings(max_links=1),
             relation_target_object_id=object_entity.id,
@@ -77,8 +71,6 @@ class TestLayoutDiffPlan(unittest.TestCase):
             field_type=FieldTypeVO.FULL_NAME,
             field_name=FieldName("name"),
             label="Name",
-            is_system=True,
-            is_custom=False,
             is_nullable=False,
             settings=FullNameFieldSettings(
                 require_last_name=False,
@@ -161,8 +153,6 @@ class TestLayoutDiffPlan(unittest.TestCase):
                 name_singular="contact_point",
                 name_plural="contact_points",
             ),
-            is_system=True,
-            is_custom=False,
         )
         entity_name_field = FieldMetadataEntity.create(
             tenant_id=tenant_id,
@@ -170,8 +160,6 @@ class TestLayoutDiffPlan(unittest.TestCase):
             field_type=FieldTypeVO.SELECT,
             field_name=FieldName("entity_name"),
             label="Entity Name",
-            is_system=True,
-            is_custom=False,
             is_nullable=False,
             options=SelectFieldOptions(
                 items=(
@@ -186,8 +174,6 @@ class TestLayoutDiffPlan(unittest.TestCase):
             field_type=FieldTypeVO.UUID,
             field_name=FieldName("entity_uuid"),
             label="Entity UUID",
-            is_system=True,
-            is_custom=False,
             is_nullable=False,
         )
         snapshot = FieldLayoutCompiler().compile_layout(

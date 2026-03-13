@@ -37,7 +37,6 @@ class FieldLayoutCompiler(FieldLayoutCompilerProtocol):
         object_table_name_by_id: dict[str, str] = {
             str(object_entity.id.value): object_entity.object_name.name_plural
             for object_entity in objects
-            if object_entity.is_active
         }
         fields_by_object: dict[str, list[FieldMetadataEntity]] = {}
         for field in fields:
@@ -47,17 +46,12 @@ class FieldLayoutCompiler(FieldLayoutCompilerProtocol):
 
         tables: dict[str, TableSpec] = {}
         for object_entity in objects:
-            if not object_entity.is_active:
-                continue
-
             table_name = object_entity.object_name.name_plural
             object_fields = fields_by_object.get(str(object_entity.id.value), [])
 
             columns: list[ColumnSpec] = []
             indexes: list[IndexSpec] = []
             for field_entity in object_fields:
-                if not field_entity.is_active:
-                    continue
                 compiled_columns = self._compile_field_columns(
                     field_entity,
                     object_table_name_by_id=object_table_name_by_id,

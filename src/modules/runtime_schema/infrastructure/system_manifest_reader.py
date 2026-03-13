@@ -127,11 +127,6 @@ class YamlSystemModelRegistryReader(SystemModelRegistryReaderProtocol):
             ),
             icon=str(icon_raw).strip() if icon_raw is not None else None,
             shortcut=str(shortcut_raw).strip() if shortcut_raw is not None else None,
-            is_remote=bool(payload.get("is_remote", False)),
-            is_system=bool(payload.get("is_system", True)),
-            is_custom=bool(payload.get("is_custom", False)),
-            is_active=bool(payload.get("is_active", True)),
-            is_ui_read_only=bool(payload.get("is_ui_read_only", False)),
             duplicate_criteria=(
                 dict(payload.get("duplicate_criteria"))
                 if isinstance(payload.get("duplicate_criteria"), dict)
@@ -169,9 +164,6 @@ class YamlSystemModelRegistryReader(SystemModelRegistryReaderProtocol):
                 str(description_raw).strip() if description_raw is not None else None
             ),
             icon=str(icon_raw).strip() if icon_raw is not None else None,
-            is_system=bool(payload.get("is_system", True)),
-            is_custom=bool(payload.get("is_custom", False)),
-            is_active=bool(payload.get("is_active", True)),
             is_unique=bool(payload.get("is_unique", False)),
             is_index=bool(payload.get("is_index", False)),
             is_nullable=bool(payload.get("is_nullable", True)),

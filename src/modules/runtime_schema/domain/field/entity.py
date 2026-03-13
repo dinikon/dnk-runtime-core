@@ -16,7 +16,6 @@ from ..errors import (
     FieldRelationTargetNotAllowedError,
     FieldRelationTargetRequiredError,
     FieldSettingsTypeMismatchError,
-    FieldSystemCustomFlagsInvalidError,
     FieldTimestampOrderError,
     FieldUniqueMustBeIndexedError,
 )
@@ -124,10 +123,6 @@ class FieldMetadataEntity:
     description: str | None
     icon: str | None
 
-    is_system: bool
-    is_custom: bool
-    is_active: bool
-
     is_unique: bool
     is_index: bool
     is_nullable: bool
@@ -151,11 +146,8 @@ class FieldMetadataEntity:
         field_type: FieldTypeVO,
         field_name: FieldName,
         label: str,
-        is_system: bool,
-        is_custom: bool,
         description: str | None = None,
         icon: str | None = None,
-        is_active: bool = True,
         is_unique: bool = False,
         is_index: bool = False,
         is_nullable: bool = True,
@@ -181,9 +173,6 @@ class FieldMetadataEntity:
             label=label,
             description=description,
             icon=icon,
-            is_system=is_system,
-            is_custom=is_custom,
-            is_active=is_active,
             is_unique=is_unique,
             is_index=is_index,
             is_nullable=is_nullable,
@@ -281,8 +270,6 @@ class FieldMetadataEntity:
             raise FieldTimestampOrderError()
 
     def _validate_flags(self) -> None:
-        if self.is_system == self.is_custom:
-            raise FieldSystemCustomFlagsInvalidError()
         if self.is_unique and not self.is_index:
             raise FieldUniqueMustBeIndexedError()
 

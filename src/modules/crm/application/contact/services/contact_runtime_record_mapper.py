@@ -8,11 +8,13 @@ from src.modules.runtime_record.application.contracts import RuntimeRecordPayloa
 
 
 class ContactRuntimeRecordMapper:
+    _SYSTEM_FIELD_NAMES = frozenset({"id", "name", "contact_points", "deal_id"})
+
     def map_payload(
         self,
         payload: RuntimeRecordPayload,
     ) -> ContactRecord:
-        name_payload = payload.system_values.get("name")
+        name_payload = payload.values.get("name")
         if not isinstance(name_payload, dict):
             raise ValidationError(
                 f"contact '{payload.record_id}' has invalid name payload."
@@ -38,9 +40,14 @@ class ContactRuntimeRecordMapper:
             name=person_name,
             contact_points=[],
         )
+        custom_fields = {
+            field_name: field_value
+            for field_name, field_value in payload.values.items()
+            if field_name not in self._SYSTEM_FIELD_NAMES
+        }
         return ContactRecord(
             contact=contact,
-            custom_fields=dict(payload.custom_values),
+            custom_fields=custom_fields,
         )
 
     @staticmethod

@@ -244,12 +244,11 @@ class SqlAlchemyRuntimeRecordReader(RuntimeRecordStoragePort):
             data_source_id=DataSourceIdVO.from_value(data_source_model.id),
             object_name_singular=normalized_object_name,
         )
-        if object_entity is None or not object_entity.is_active:
+        if object_entity is None:
             raise RuntimeRecordObjectNotFoundError(normalized_object_name)
 
         fields = await self._field_repository.list_by_object(object_id=object_entity.id)
-        active_fields = [field for field in fields if field.is_active]
-        field_mappings = tuple(self._build_field_mappings(fields=active_fields))
+        field_mappings = tuple(self._build_field_mappings(fields=fields))
         return _ResolvedRuntimeObject(
             tenant_id=tenant_id,
             object_entity=object_entity,
@@ -359,14 +358,10 @@ class SqlAlchemyRuntimeRecordReader(RuntimeRecordStoragePort):
         resolved: _ResolvedRuntimeObject,
         row,
     ) -> RuntimeRecordPayload:
-        system_values: dict[str, object] = {}
-        custom_values: dict[str, object] = {}
+        values: dict[str, object] = {}
         for mapping in resolved.field_mappings:
             value = self._deserialize_field_value(mapping=mapping, row=row)
-            if mapping.field.is_custom:
-                custom_values[mapping.field.field_name.value] = value
-            else:
-                system_values[mapping.field.field_name.value] = value
+            values[mapping.field.field_name.value] = value
 
         raw_record_id = row["id"]
         parsed_record_id = (
@@ -376,8 +371,7 @@ class SqlAlchemyRuntimeRecordReader(RuntimeRecordStoragePort):
             tenant_id=resolved.tenant_id,
             object_name_singular=resolved.object_entity.object_name.name_singular,
             record_id=parsed_record_id,
-            system_values=system_values,
-            custom_values=custom_values,
+            values=values,
         )
 
     def _build_field_mappings(

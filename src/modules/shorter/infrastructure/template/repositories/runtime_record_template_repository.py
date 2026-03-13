@@ -67,7 +67,7 @@ class RuntimeRecordTemplateRepository(TemplateRepositoryPort):
         return self._map_payload(payload)
 
     def _map_payload(self, payload: RuntimeRecordPayload) -> TemplateEntity:
-        values = payload.system_values
+        values = payload.values
         created_at = values.get("created_at")
         updated_at = values.get("updated_at")
         created_by = values.get("created_by")

@@ -142,8 +142,6 @@ class TestSqlAlchemyInfrastructure(unittest.IsolatedAsyncioTestCase):
                 tenant_id=tenant_id,
                 data_source_id=data_source_id,
                 object_name=ObjectNameVO(name_singular="note", name_plural="notes"),
-                is_system=False,
-                is_custom=True,
                 description="desc",
             )
             await object_repo.add(object_entity)
@@ -158,8 +156,6 @@ class TestSqlAlchemyInfrastructure(unittest.IsolatedAsyncioTestCase):
                 field_type=FieldTypeVO.SELECT,
                 field_name=FieldName("status"),
                 label="Status",
-                is_system=False,
-                is_custom=True,
                 is_index=True,
                 options=SelectFieldOptions(
                     items=(FieldOption(code="new", label="New"),),
@@ -180,8 +176,6 @@ class TestSqlAlchemyInfrastructure(unittest.IsolatedAsyncioTestCase):
                 tenant_id=tenant_id,
                 data_source_id=data_source_id,
                 object_name=ObjectNameVO(name_singular="account", name_plural="accounts"),
-                is_system=False,
-                is_custom=True,
             )
             await object_repo.add(relation_object)
             relation_target = FieldMetadataEntity.create(
@@ -190,8 +184,6 @@ class TestSqlAlchemyInfrastructure(unittest.IsolatedAsyncioTestCase):
                 field_type=FieldTypeVO.UUID,
                 field_name=FieldName("owner_id"),
                 label="Owner Id",
-                is_system=False,
-                is_custom=True,
             )
             await field_repo.add(relation_target)
             relation_field = FieldMetadataEntity.create(
@@ -200,8 +192,6 @@ class TestSqlAlchemyInfrastructure(unittest.IsolatedAsyncioTestCase):
                 field_type=FieldTypeVO.RELATION,
                 field_name=FieldName("account_id"),
                 label="Account",
-                is_system=False,
-                is_custom=True,
                 settings=RelationFieldSettings(max_links=1),
                 relation_target_object_id=relation_object.id,
                 relation_target_field_id=relation_target.id,

@@ -15,9 +15,6 @@ class CreateFieldCommandDTO:
     schema: str | None = None
     description: str | None = None
     icon: str | None = None
-    is_system: bool = False
-    is_custom: bool = True
-    is_active: bool = True
     is_unique: bool = False
     is_index: bool = False
     is_nullable: bool = True
@@ -38,7 +35,6 @@ class UpdateFieldCommandDTO:
     label: str | None = None
     description: str | None = None
     icon: str | None = None
-    is_active: bool | None = None
     is_unique: bool | None = None
     is_index: bool | None = None
     is_nullable: bool | None = None
@@ -69,9 +65,6 @@ class FieldDefinitionDTO:
     label: str
     description: str | None
     icon: str | None
-    is_system: bool
-    is_custom: bool
-    is_active: bool
     is_unique: bool
     is_index: bool
     is_nullable: bool

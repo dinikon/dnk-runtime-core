@@ -122,11 +122,6 @@ class SqlAlchemyObjectMetadataRepository(ObjectMetadataRepositoryProtocol):
             description=entity.description,
             icon=entity.icon,
             shortcut=entity.shortcut,
-            is_remote=entity.is_remote,
-            is_system=entity.is_system,
-            is_custom=entity.is_custom,
-            is_active=entity.is_active,
-            is_ui_read_only=entity.is_ui_read_only,
             duplicate_criteria=entity.duplicate_criteria or {},
             created_at=entity.created_at,
             updated_at=entity.updated_at,
@@ -147,11 +142,6 @@ class SqlAlchemyObjectMetadataRepository(ObjectMetadataRepositoryProtocol):
         model.description = entity.description
         model.icon = entity.icon
         model.shortcut = entity.shortcut
-        model.is_remote = entity.is_remote
-        model.is_system = entity.is_system
-        model.is_custom = entity.is_custom
-        model.is_active = entity.is_active
-        model.is_ui_read_only = entity.is_ui_read_only
         model.duplicate_criteria = entity.duplicate_criteria or {}
         model.updated_at = entity.updated_at
 
@@ -174,11 +164,6 @@ class SqlAlchemyObjectMetadataRepository(ObjectMetadataRepositoryProtocol):
             description=model.description,
             icon=model.icon,
             shortcut=model.shortcut,
-            is_remote=model.is_remote,
-            is_system=model.is_system,
-            is_custom=model.is_custom,
-            is_active=model.is_active,
-            is_ui_read_only=model.is_ui_read_only,
             duplicate_criteria=model.duplicate_criteria or {},
         )
 
@@ -270,9 +255,6 @@ class SqlAlchemyFieldMetadataRepository(FieldMetadataRepositoryProtocol):
             label=entity.label,
             description=entity.description,
             icon=entity.icon,
-            is_system=entity.is_system,
-            is_custom=entity.is_custom,
-            is_active=entity.is_active,
             is_unique=entity.is_unique,
             is_index=entity.is_index,
             is_nullable=entity.is_nullable,
@@ -304,9 +286,6 @@ class SqlAlchemyFieldMetadataRepository(FieldMetadataRepositoryProtocol):
         model.label = entity.label
         model.description = entity.description
         model.icon = entity.icon
-        model.is_system = entity.is_system
-        model.is_custom = entity.is_custom
-        model.is_active = entity.is_active
         model.is_unique = entity.is_unique
         model.is_index = entity.is_index
         model.is_nullable = entity.is_nullable
@@ -348,9 +327,6 @@ class SqlAlchemyFieldMetadataRepository(FieldMetadataRepositoryProtocol):
             label=model.label,
             description=model.description,
             icon=model.icon,
-            is_system=model.is_system,
-            is_custom=model.is_custom,
-            is_active=model.is_active,
             is_unique=model.is_unique,
             is_index=model.is_index,
             is_nullable=model.is_nullable,

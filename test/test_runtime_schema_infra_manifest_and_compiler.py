@@ -31,19 +31,13 @@ objects:
     label:
       singular: "Lead"
       plural: "Leads"
-    is_system: true
-    is_custom: false
     fields:
       - name: "id"
         type: "uuid"
         label: "ID"
-        is_system: true
-        is_custom: false
       - name: "status"
         type: "select"
         label: "Status"
-        is_system: true
-        is_custom: false
         options:
           items:
             - code: "new"
@@ -129,19 +123,13 @@ objects:
   - key: "lead"
     name: {singular: "lead", plural: "leads"}
     label: {singular: "Lead", plural: "Leads"}
-    is_system: true
-    is_custom: false
     fields:
       - name: "id"
         type: "uuid"
         label: "ID"
-        is_system: true
-        is_custom: false
       - name: "company_id"
         type: "relation"
         label: "Company"
-        is_system: true
-        is_custom: false
         relation_target_object: "company"
         relation_target_field: "id"
         settings:
@@ -149,14 +137,10 @@ objects:
   - key: "company"
     name: {singular: "company", plural: "companies"}
     label: {singular: "Company", plural: "Companies"}
-    is_system: true
-    is_custom: false
     fields:
       - name: "id"
         type: "uuid"
         label: "ID"
-        is_system: true
-        is_custom: false
 """.strip(),
                 encoding="utf-8",
             )
@@ -185,14 +169,10 @@ objects:
   - key: "lead"
     name: {singular: "lead", plural: "leads"}
     label: {singular: "Lead", plural: "Leads"}
-    is_system: true
-    is_custom: false
     fields:
       - name: "bad"
         type: "unknown"
         label: "Bad"
-        is_system: true
-        is_custom: false
 """.strip(),
                 encoding="utf-8",
             )
@@ -212,14 +192,10 @@ objects:
   - key: "lead"
     name: {singular: "lead", plural: "leads"}
     label: {singular: "Lead", plural: "Leads"}
-    is_system: true
-    is_custom: false
     fields:
       - name: "owner_id"
         type: "relation"
         label: "Owner"
-        is_system: true
-        is_custom: false
         relation_target_object: "missing_object"
 """.strip(),
                 encoding="utf-8",

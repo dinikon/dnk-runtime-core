@@ -119,9 +119,9 @@ class TestRuntimeRecordStorageForShorter(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(payload)
             assert payload is not None
             self.assertEqual(payload.record_id, link_id)
-            self.assertEqual(payload.system_values["code"], "ABCD1234")
+            self.assertEqual(payload.values["code"], "ABCD1234")
             self.assertEqual(
-                _as_datetime(payload.system_values["created_at"]),
+                _as_datetime(payload.values["created_at"]),
                 now,
             )
 

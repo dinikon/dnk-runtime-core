@@ -17,11 +17,6 @@ class CreateObjectCommandDTO:
     description: str | None = None
     icon: str | None = None
     shortcut: str | None = None
-    is_remote: bool = False
-    is_system: bool = False
-    is_custom: bool = True
-    is_active: bool = True
-    is_ui_read_only: bool = False
     duplicate_criteria: dict[str, object] | None = None
 
 
@@ -37,8 +32,6 @@ class UpdateObjectCommandDTO:
     description: str | None = None
     icon: str | None = None
     shortcut: str | None = None
-    is_active: bool | None = None
-    is_ui_read_only: bool | None = None
     duplicate_criteria: dict[str, object] | None = None
     allow_ddl_rename: bool = False
 
@@ -63,10 +56,5 @@ class ObjectDefinitionDTO:
     description: str | None
     icon: str | None
     shortcut: str | None
-    is_remote: bool
-    is_system: bool
-    is_custom: bool
-    is_active: bool
-    is_ui_read_only: bool
     created_at: datetime
     updated_at: datetime

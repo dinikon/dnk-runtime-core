@@ -123,8 +123,6 @@ class TestCrmContactEndpoint(unittest.IsolatedAsyncioTestCase):
                     field_type="string",
                     field_name="nickname",
                     label="Nickname",
-                    is_system=False,
-                    is_custom=True,
                     is_nullable=True,
                 )
             )

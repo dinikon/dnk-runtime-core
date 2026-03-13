@@ -59,11 +59,6 @@ class MetadataCompiler(MetadataCompilerProtocol):
                 description=object_definition.description,
                 icon=object_definition.icon,
                 shortcut=object_definition.shortcut,
-                is_remote=object_definition.is_remote,
-                is_system=object_definition.is_system,
-                is_custom=object_definition.is_custom,
-                is_active=object_definition.is_active,
-                is_ui_read_only=object_definition.is_ui_read_only,
                 duplicate_criteria=object_definition.duplicate_criteria,
             )
             objects_by_key[object_definition.key] = object_entity
@@ -181,9 +176,6 @@ class MetadataCompiler(MetadataCompilerProtocol):
             label=field_definition.label,
             description=field_definition.description,
             icon=field_definition.icon,
-            is_system=field_definition.is_system,
-            is_custom=field_definition.is_custom,
-            is_active=field_definition.is_active,
             is_unique=field_definition.is_unique,
             is_index=field_definition.is_index,
             is_nullable=field_definition.is_nullable,

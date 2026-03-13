@@ -197,11 +197,6 @@ class DdlOrchestratorService(DdlOrchestratorServiceProtocol):
             description=dto.description,
             icon=dto.icon,
             shortcut=dto.shortcut,
-            is_remote=dto.is_remote,
-            is_system=dto.is_system,
-            is_custom=dto.is_custom,
-            is_active=dto.is_active,
-            is_ui_read_only=dto.is_ui_read_only,
             duplicate_criteria=dto.duplicate_criteria,
         )
         await self._object_metadata_repository.add(object_entity)
@@ -263,10 +258,6 @@ class DdlOrchestratorService(DdlOrchestratorServiceProtocol):
             object_entity.icon = dto.icon
         if dto.shortcut is not None:
             object_entity.shortcut = dto.shortcut
-        if dto.is_active is not None:
-            object_entity.is_active = dto.is_active
-        if dto.is_ui_read_only is not None:
-            object_entity.is_ui_read_only = dto.is_ui_read_only
         if dto.duplicate_criteria is not None:
             object_entity.duplicate_criteria = dto.duplicate_criteria
         object_entity.touch()
@@ -316,11 +307,6 @@ class DdlOrchestratorService(DdlOrchestratorServiceProtocol):
         if object_entity.tenant_id != tenant_id:
             raise ValidationError("object tenant mismatch")
 
-        if not dto.allow_destructive:
-            object_entity.deactivate()
-            await self._object_metadata_repository.save(object_entity)
-            return
-
         object_fields = await self._field_metadata_repository.list_by_object(
             object_id=object_entity.id
         )
@@ -333,7 +319,7 @@ class DdlOrchestratorService(DdlOrchestratorServiceProtocol):
                 tenant_id=tenant_id,
                 data_source_id=object_entity.data_source_id,
                 schema=dto.schema,
-                allow_destructive=True,
+                allow_destructive=dto.allow_destructive,
             )
 
     async def create_field_definition(
@@ -390,9 +376,6 @@ class DdlOrchestratorService(DdlOrchestratorServiceProtocol):
             label=dto.label,
             description=dto.description,
             icon=dto.icon,
-            is_system=dto.is_system,
-            is_custom=dto.is_custom,
-            is_active=dto.is_active,
             is_unique=dto.is_unique,
             is_index=dto.is_index,
             is_nullable=dto.is_nullable,
@@ -433,8 +416,6 @@ class DdlOrchestratorService(DdlOrchestratorServiceProtocol):
             field_entity.description = dto.description
         if dto.icon is not None:
             field_entity.icon = dto.icon
-        if dto.is_active is not None:
-            field_entity.is_active = dto.is_active
         if dto.is_unique is not None:
             field_entity.is_unique = dto.is_unique
         if dto.is_index is not None:
@@ -525,12 +506,6 @@ class DdlOrchestratorService(DdlOrchestratorServiceProtocol):
         if field_entity.tenant_id != tenant_id:
             raise ValidationError("field tenant mismatch")
 
-        if not dto.allow_destructive:
-            field_entity.is_active = False
-            field_entity.touch()
-            await self._field_metadata_repository.save(field_entity)
-            return
-
         await self._field_metadata_repository.delete(field_id=field_entity.id)
 
         object_entity = await self._object_metadata_repository.get_by_id(
@@ -543,7 +518,7 @@ class DdlOrchestratorService(DdlOrchestratorServiceProtocol):
                 tenant_id=tenant_id,
                 data_source_id=object_entity.data_source_id,
                 schema=dto.schema,
-                allow_destructive=True,
+                allow_destructive=dto.allow_destructive,
             )
 
     async def _apply_bundle_to_schema(
@@ -795,11 +770,6 @@ class DdlOrchestratorService(DdlOrchestratorServiceProtocol):
             description=entity.description,
             icon=entity.icon,
             shortcut=entity.shortcut,
-            is_remote=entity.is_remote,
-            is_system=entity.is_system,
-            is_custom=entity.is_custom,
-            is_active=entity.is_active,
-            is_ui_read_only=entity.is_ui_read_only,
             created_at=entity.created_at,
             updated_at=entity.updated_at,
         )
@@ -815,9 +785,6 @@ class DdlOrchestratorService(DdlOrchestratorServiceProtocol):
             label=entity.label,
             description=entity.description,
             icon=entity.icon,
-            is_system=entity.is_system,
-            is_custom=entity.is_custom,
-            is_active=entity.is_active,
             is_unique=entity.is_unique,
             is_index=entity.is_index,
             is_nullable=entity.is_nullable,
@@ -836,8 +803,6 @@ class DdlOrchestratorService(DdlOrchestratorServiceProtocol):
             field.description = field.description.strip() or None
         if field.icon is not None:
             field.icon = field.icon.strip() or None
-        if field.is_system == field.is_custom:
-            raise ValidationError("exactly one of is_system/is_custom must be true")
         if field.is_unique and not field.is_index:
             raise ValidationError("unique field must also be indexed")
 

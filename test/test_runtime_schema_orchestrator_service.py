@@ -54,19 +54,13 @@ objects:
   - key: "note"
     name: {singular: "note", plural: "notes"}
     label: {singular: "Note", plural: "Notes"}
-    is_system: true
-    is_custom: false
     fields:
       - name: "id"
         type: "uuid"
         label: "ID"
-        is_system: true
-        is_custom: false
       - name: "title"
         type: "string"
         label: "Title"
-        is_system: true
-        is_custom: false
         is_nullable: false
         is_index: true
 """.strip(),
@@ -114,14 +108,10 @@ objects:
   - key: "lead"
     name: {singular: "lead", plural: "leads"}
     label: {singular: "Lead", plural: "Leads"}
-    is_system: true
-    is_custom: false
     fields:
       - name: "id"
         type: "uuid"
         label: "ID"
-        is_system: true
-        is_custom: false
 """.strip(),
                 encoding="utf-8",
             )
@@ -146,8 +136,6 @@ objects:
                         schema=self.schema,
                         object_name_singular="custom_note",
                         object_name_plural="custom_notes",
-                        is_system=False,
-                        is_custom=True,
                     )
                 )
                 self.assertEqual(created_object.object_name_singular, "custom_note")
@@ -158,7 +146,6 @@ objects:
                         object_id=created_object.id,
                         schema=self.schema,
                         description="Updated",
-                        is_active=True,
                     )
                 )
                 self.assertEqual(updated_object.description, "Updated")
@@ -171,8 +158,6 @@ objects:
                         field_type="string",
                         field_name="title",
                         label="Title",
-                        is_system=False,
-                        is_custom=True,
                         is_nullable=False,
                         is_index=True,
                     )
@@ -217,14 +202,10 @@ objects:
   - key: "lead"
     name: {singular: "lead", plural: "leads"}
     label: {singular: "Lead", plural: "Leads"}
-    is_system: true
-    is_custom: false
     fields:
       - name: "id"
         type: "uuid"
         label: "ID"
-        is_system: true
-        is_custom: false
 """.strip(),
                 encoding="utf-8",
             )
@@ -249,8 +230,6 @@ objects:
                         schema=self.schema,
                         object_name_singular="custom_task",
                         object_name_plural="custom_tasks",
-                        is_system=False,
-                        is_custom=True,
                     )
                 )
 
@@ -273,8 +252,6 @@ objects:
                         field_type="string",
                         field_name="name",
                         label="Name",
-                        is_system=False,
-                        is_custom=True,
                     )
                 )
 
@@ -298,14 +275,10 @@ objects:
   - key: "seed"
     name: {singular: "seed", plural: "seeds"}
     label: {singular: "Seed", plural: "Seeds"}
-    is_system: true
-    is_custom: false
     fields:
       - name: "id"
         type: "uuid"
         label: "ID"
-        is_system: true
-        is_custom: false
 """.strip(),
                 encoding="utf-8",
             )
@@ -328,8 +301,6 @@ objects:
                         schema=self.schema,
                         object_name_singular="legacy_task",
                         object_name_plural="legacy_tasks",
-                        is_system=False,
-                        is_custom=True,
                     )
                 )
                 updated_object = await orchestrator.update_object_definition(
@@ -343,7 +314,6 @@ objects:
                         object_label_plural="Tasks",
                         icon="icon-task",
                         shortcut="T",
-                        is_ui_read_only=True,
                         duplicate_criteria={"code": "task_code"},
                         allow_ddl_rename=True,
                     )
@@ -362,14 +332,10 @@ objects:
   - key: "seed"
     name: {singular: "seed", plural: "seeds"}
     label: {singular: "Seed", plural: "Seeds"}
-    is_system: true
-    is_custom: false
     fields:
       - name: "id"
         type: "uuid"
         label: "ID"
-        is_system: true
-        is_custom: false
 """.strip(),
                 encoding="utf-8",
             )
@@ -401,8 +367,6 @@ objects:
                         schema=self.schema,
                         object_name_singular="ticket",
                         object_name_plural="tickets",
-                        is_system=False,
-                        is_custom=True,
                     )
                 )
                 target_object = await orchestrator.create_object_definition(
@@ -412,8 +376,6 @@ objects:
                         schema=self.schema,
                         object_name_singular="account",
                         object_name_plural="accounts",
-                        is_system=False,
-                        is_custom=True,
                     )
                 )
                 alternate_object = await orchestrator.create_object_definition(
@@ -423,8 +385,6 @@ objects:
                         schema=self.schema,
                         object_name_singular="profile",
                         object_name_plural="profiles",
-                        is_system=False,
-                        is_custom=True,
                     )
                 )
                 target_field = await orchestrator.create_field_definition(
@@ -435,8 +395,6 @@ objects:
                         field_type="uuid",
                         field_name="external_id",
                         label="External Id",
-                        is_system=False,
-                        is_custom=True,
                     )
                 )
                 alternate_field = await orchestrator.create_field_definition(
@@ -447,8 +405,6 @@ objects:
                         field_type="uuid",
                         field_name="external_id",
                         label="External Id",
-                        is_system=False,
-                        is_custom=True,
                     )
                 )
 
@@ -461,8 +417,6 @@ objects:
                             field_type="relation",
                             field_name="missing_object",
                             label="Missing Object",
-                            is_system=False,
-                            is_custom=True,
                             relation_target_object_id=uuid4(),
                         )
                     )
@@ -475,8 +429,6 @@ objects:
                             field_type="relation",
                             field_name="missing_field",
                             label="Missing Field",
-                            is_system=False,
-                            is_custom=True,
                             relation_target_object_id=target_object.id,
                             relation_target_field_id=uuid4(),
                         )
@@ -490,8 +442,6 @@ objects:
                             field_type="relation",
                             field_name="mismatch_field",
                             label="Mismatch Field",
-                            is_system=False,
-                            is_custom=True,
                             relation_target_object_id=target_object.id,
                             relation_target_field_id=alternate_field.id,
                         )
@@ -505,8 +455,6 @@ objects:
                         schema=self.schema,
                         object_name_singular="foreign_account",
                         object_name_plural="foreign_accounts",
-                        is_system=False,
-                        is_custom=True,
                     )
                 )
                 with self.assertRaises(ValidationError):
@@ -518,8 +466,6 @@ objects:
                             field_type="relation",
                             field_name="foreign_object",
                             label="Foreign Object",
-                            is_system=False,
-                            is_custom=True,
                             relation_target_object_id=foreign_object.id,
                         )
                     )
@@ -532,8 +478,6 @@ objects:
                         field_type="relation",
                         field_name="account_id",
                         label="Account",
-                        is_system=False,
-                        is_custom=True,
                         relation_target_object_id=target_object.id,
                         relation_target_field_id=target_field.id,
                     )

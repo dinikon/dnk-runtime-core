@@ -93,16 +93,11 @@ class TestInfraExtendedComponents(unittest.TestCase):
             tenant_id=tenant_id,
             data_source_id=data_source_id,
             object_name=ObjectNameVO(name_singular="contact", name_plural="contacts"),
-            is_system=True,
-            is_custom=False,
         )
         inactive_object = ObjectMetadataEntity.create(
             tenant_id=tenant_id,
             data_source_id=data_source_id,
             object_name=ObjectNameVO(name_singular="archive", name_plural="archives"),
-            is_system=True,
-            is_custom=False,
-            is_active=False,
         )
 
         fields = [
@@ -112,8 +107,6 @@ class TestInfraExtendedComponents(unittest.TestCase):
                 field_type=FieldTypeVO.UUID,
                 field_name=FieldName("id"),
                 label="Id",
-                is_system=True,
-                is_custom=False,
             ),
             FieldMetadataEntity.create(
                 tenant_id=tenant_id,
@@ -121,8 +114,6 @@ class TestInfraExtendedComponents(unittest.TestCase):
                 field_type=FieldTypeVO.STRING,
                 field_name=FieldName("title"),
                 label="Title",
-                is_system=True,
-                is_custom=False,
                 settings=StringFieldSettings(max_length=40),
                 is_unique=True,
                 is_index=True,
@@ -133,8 +124,6 @@ class TestInfraExtendedComponents(unittest.TestCase):
                 field_type=FieldTypeVO.INTEGER,
                 field_name=FieldName("priority"),
                 label="Priority",
-                is_system=True,
-                is_custom=False,
             ),
             FieldMetadataEntity.create(
                 tenant_id=tenant_id,
@@ -142,8 +131,6 @@ class TestInfraExtendedComponents(unittest.TestCase):
                 field_type=FieldTypeVO.BOOLEAN,
                 field_name=FieldName("is_active"),
                 label="Active",
-                is_system=True,
-                is_custom=False,
             ),
             FieldMetadataEntity.create(
                 tenant_id=tenant_id,
@@ -151,8 +138,6 @@ class TestInfraExtendedComponents(unittest.TestCase):
                 field_type=FieldTypeVO.DATE_TIME,
                 field_name=FieldName("planned_at"),
                 label="Planned At",
-                is_system=True,
-                is_custom=False,
             ),
             FieldMetadataEntity.create(
                 tenant_id=tenant_id,
@@ -160,8 +145,6 @@ class TestInfraExtendedComponents(unittest.TestCase):
                 field_type=FieldTypeVO.JSON,
                 field_name=FieldName("payload"),
                 label="Payload",
-                is_system=True,
-                is_custom=False,
             ),
             FieldMetadataEntity.create(
                 tenant_id=tenant_id,
@@ -169,8 +152,6 @@ class TestInfraExtendedComponents(unittest.TestCase):
                 field_type=FieldTypeVO.ARRAY,
                 field_name=FieldName("items"),
                 label="Items",
-                is_system=True,
-                is_custom=False,
             ),
             FieldMetadataEntity.create(
                 tenant_id=tenant_id,
@@ -178,8 +159,6 @@ class TestInfraExtendedComponents(unittest.TestCase):
                 field_type=FieldTypeVO.MULTI_SELECT,
                 field_name=FieldName("tags"),
                 label="Tags",
-                is_system=True,
-                is_custom=False,
                 options=MultiSelectFieldOptions(items=(FieldOption(code="a", label="A"),)),
             ),
             FieldMetadataEntity.create(
@@ -188,8 +167,6 @@ class TestInfraExtendedComponents(unittest.TestCase):
                 field_type=FieldTypeVO.SELECT,
                 field_name=FieldName("status"),
                 label="Status",
-                is_system=True,
-                is_custom=False,
                 options=SelectFieldOptions(items=(FieldOption(code="new", label="New"),)),
             ),
             FieldMetadataEntity.create(
@@ -198,8 +175,6 @@ class TestInfraExtendedComponents(unittest.TestCase):
                 field_type=FieldTypeVO.ACTOR,
                 field_name=FieldName("owner_id"),
                 label="Owner",
-                is_system=True,
-                is_custom=False,
             ),
             FieldMetadataEntity.create(
                 tenant_id=tenant_id,
@@ -207,8 +182,6 @@ class TestInfraExtendedComponents(unittest.TestCase):
                 field_type=FieldTypeVO.ADDRESS,
                 field_name=FieldName("address"),
                 label="Address",
-                is_system=True,
-                is_custom=False,
             ),
             FieldMetadataEntity.create(
                 tenant_id=tenant_id,
@@ -216,8 +189,6 @@ class TestInfraExtendedComponents(unittest.TestCase):
                 field_type=FieldTypeVO.FULL_NAME,
                 field_name=FieldName("person_name"),
                 label="Person Name",
-                is_system=True,
-                is_custom=False,
             ),
             FieldMetadataEntity.create(
                 tenant_id=tenant_id,
@@ -225,8 +196,6 @@ class TestInfraExtendedComponents(unittest.TestCase):
                 field_type=FieldTypeVO.CURRENCY,
                 field_name=FieldName("amount"),
                 label="Amount",
-                is_system=True,
-                is_custom=False,
             ),
             FieldMetadataEntity.create(
                 tenant_id=tenant_id,
@@ -234,11 +203,8 @@ class TestInfraExtendedComponents(unittest.TestCase):
                 field_type=FieldTypeVO.RELATION,
                 field_name=FieldName("account_links"),
                 label="Account Links",
-                is_system=True,
-                is_custom=False,
                 settings=RelationFieldSettings(max_links=2),
                 relation_target_object_id=object_entity.id,
-                is_active=True,
             ),
             FieldMetadataEntity.create(
                 tenant_id=tenant_id,
@@ -246,9 +212,6 @@ class TestInfraExtendedComponents(unittest.TestCase):
                 field_type=FieldTypeVO.STRING,
                 field_name=FieldName("inactive_note"),
                 label="Inactive Note",
-                is_system=True,
-                is_custom=False,
-                is_active=False,
             ),
         ]
 
@@ -256,7 +219,7 @@ class TestInfraExtendedComponents(unittest.TestCase):
             objects=[object_entity, inactive_object],
             fields=fields,
         )
-        self.assertNotIn("archives", snapshot.tables)
+        self.assertIn("archives", snapshot.tables)
         self.assertIn("contacts", snapshot.tables)
         table = snapshot.tables["contacts"]
         column_names = {column.name for column in table.columns}
@@ -270,7 +233,7 @@ class TestInfraExtendedComponents(unittest.TestCase):
         self.assertIn("person_name_first_name", column_names)
         self.assertIn("amount_currency", column_names)
         self.assertNotIn("account_links", column_names)
-        self.assertNotIn("inactive_note", column_names)
+        self.assertIn("inactive_note", column_names)
         self.assertTrue(any(index.unique for index in table.indexes))
 
     def test_ddl_plan_builder_destructive_and_references(self) -> None:

@@ -14,10 +14,8 @@ from src.modules.runtime_schema.domain.errors import (
     FieldOptionsRequiredError,
     FieldRelationTargetNotAllowedError,
     FieldRelationTargetRequiredError,
-    FieldSystemCustomFlagsInvalidError,
     FieldTimestampOrderError,
     FieldUniqueMustBeIndexedError,
-    ObjectSystemCustomFlagsInvalidError,
     ObjectTimestampOrderError,
 )
 from src.modules.runtime_schema.domain.field.configuration import (
@@ -73,7 +71,6 @@ class TestDomainEntities(unittest.TestCase):
             tenant_id=tenant_id,
             source_type="postgresql",
             schema="tenant_schema",
-            is_system=True,
             is_remote=False,
         )
         self.assertEqual(source.tenant_id, tenant_id)
@@ -116,8 +113,6 @@ class TestDomainEntities(unittest.TestCase):
             tenant_id=_tenant_id(),
             data_source_id=_source_id(),
             object_name=ObjectNameVO(name_singular="lead", name_plural="leads"),
-            is_system=True,
-            is_custom=False,
             description="  desc  ",
             icon="  icon  ",
             shortcut="  L  ",
@@ -125,7 +120,6 @@ class TestDomainEntities(unittest.TestCase):
         self.assertEqual(entity.description, "desc")
         self.assertEqual(entity.icon, "icon")
         self.assertEqual(entity.shortcut, "L")
-        self.assertTrue(entity.is_active)
 
         previous_updated_at = entity.updated_at
         entity.rename(
@@ -133,11 +127,6 @@ class TestDomainEntities(unittest.TestCase):
         )
         self.assertEqual(entity.object_name.name_singular, "deal")
         self.assertGreaterEqual(entity.updated_at, previous_updated_at)
-
-        entity.deactivate()
-        self.assertFalse(entity.is_active)
-        entity.activate()
-        self.assertTrue(entity.is_active)
 
         now = datetime.now(UTC)
         with self.assertRaises(ObjectTimestampOrderError):
@@ -152,27 +141,11 @@ class TestDomainEntities(unittest.TestCase):
                     tenant_id=_tenant_id(),
                     data_source_id=_source_id(),
                     object_name=ObjectNameVO(name_singular="y", name_plural="ys"),
-                    is_system=True,
-                    is_custom=False,
                 ).object_label,
                 description=None,
                 icon=None,
                 shortcut=None,
-                is_remote=False,
-                is_system=True,
-                is_custom=False,
-                is_active=True,
-                is_ui_read_only=False,
                 duplicate_criteria={},
-            )
-
-        with self.assertRaises(ObjectSystemCustomFlagsInvalidError):
-            ObjectMetadataEntity.create(
-                tenant_id=_tenant_id(),
-                data_source_id=_source_id(),
-                object_name=ObjectNameVO(name_singular="contact", name_plural="contacts"),
-                is_system=True,
-                is_custom=True,
             )
 
     def test_field_metadata_entity_create_and_mutations(self) -> None:
@@ -188,8 +161,6 @@ class TestDomainEntities(unittest.TestCase):
             field_type=FieldTypeVO.SELECT,
             field_name=FieldName("status"),
             label="  Status  ",
-            is_system=True,
-            is_custom=False,
             is_index=True,
             options=options,
             default_value=SelectDefaultValue(code="new"),
@@ -223,9 +194,6 @@ class TestDomainEntities(unittest.TestCase):
                 label="Title",
                 description=None,
                 icon=None,
-                is_system=True,
-                is_custom=False,
-                is_active=True,
                 is_unique=False,
                 is_index=False,
                 is_nullable=True,
@@ -238,17 +206,6 @@ class TestDomainEntities(unittest.TestCase):
                 relation_target_field_id=None,
             )
 
-        with self.assertRaises(FieldSystemCustomFlagsInvalidError):
-            FieldMetadataEntity.create(
-                tenant_id=tenant_id,
-                object_metadata_id=object_id,
-                field_type=FieldTypeVO.STRING,
-                field_name=FieldName("title"),
-                label="Title",
-                is_system=True,
-                is_custom=True,
-            )
-
         with self.assertRaises(FieldUniqueMustBeIndexedError):
             FieldMetadataEntity.create(
                 tenant_id=tenant_id,
@@ -256,8 +213,6 @@ class TestDomainEntities(unittest.TestCase):
                 field_type=FieldTypeVO.STRING,
                 field_name=FieldName("code"),
                 label="Code",
-                is_system=True,
-                is_custom=False,
                 is_unique=True,
                 is_index=False,
             )
@@ -269,8 +224,6 @@ class TestDomainEntities(unittest.TestCase):
                 field_type=FieldTypeVO.RELATION,
                 field_name=FieldName("owner"),
                 label="Owner",
-                is_system=True,
-                is_custom=False,
             )
 
         with self.assertRaises(FieldRelationTargetNotAllowedError):
@@ -280,8 +233,6 @@ class TestDomainEntities(unittest.TestCase):
                 field_type=FieldTypeVO.STRING,
                 field_name=FieldName("title"),
                 label="Title",
-                is_system=True,
-                is_custom=False,
                 relation_target_object_id=_object_id(),
             )
 
@@ -292,8 +243,6 @@ class TestDomainEntities(unittest.TestCase):
                 field_type=FieldTypeVO.SELECT,
                 field_name=FieldName("status"),
                 label="Status",
-                is_system=True,
-                is_custom=False,
                 options=None,
             )
 
@@ -304,8 +253,6 @@ class TestDomainEntities(unittest.TestCase):
                 field_type=FieldTypeVO.STRING,
                 field_name=FieldName("title"),
                 label="Title",
-                is_system=True,
-                is_custom=False,
                 options=SelectFieldOptions(items=(FieldOption(code="a", label="A"),)),
             )
 
@@ -320,8 +267,6 @@ class TestDomainEntities(unittest.TestCase):
                 field_type=FieldTypeVO.SELECT,
                 field_name=FieldName("status"),
                 label="Status",
-                is_system=True,
-                is_custom=False,
                 options=SelectFieldOptions(items=(FieldOption(code="new", label="New"),)),
                 default_value=SelectDefaultValue(code="archived"),
             )
@@ -333,8 +278,6 @@ class TestDomainEntities(unittest.TestCase):
                 field_type=FieldTypeVO.DATE_TIME,
                 field_name=FieldName("planned_at"),
                 label="Planned At",
-                is_system=True,
-                is_custom=False,
                 settings=DateTimeFieldSettings(timezone_aware=True, require_utc=True),
                 default_value=DateTimeDefaultValue(
                     value=datetime.now().replace(tzinfo=None)
@@ -348,8 +291,6 @@ class TestDomainEntities(unittest.TestCase):
                 field_type=FieldTypeVO.ARRAY,
                 field_name=FieldName("numbers"),
                 label="Numbers",
-                is_system=True,
-                is_custom=False,
                 settings=ArrayFieldSettings(item_type=ArrayItemTypeVO.INTEGER),
                 default_value=ArrayDefaultValue(values=("x",)),
             )
@@ -364,8 +305,6 @@ class TestDomainEntities(unittest.TestCase):
                 field_type=FieldTypeVO.MULTI_SELECT,
                 field_name=FieldName("tags"),
                 label="Tags",
-                is_system=True,
-                is_custom=False,
                 options=MultiSelectFieldOptions(
                     items=(
                         FieldOption(code="a", label="A"),
@@ -385,8 +324,6 @@ class TestDomainEntities(unittest.TestCase):
             field_type=FieldTypeVO.STRING,
             field_name=FieldName("title"),
             label="Title",
-            is_system=True,
-            is_custom=False,
             settings=StringFieldSettings(min_length=1, max_length=20),
             default_value=StringDefaultValue(value="ok"),
         )

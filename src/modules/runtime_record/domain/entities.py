@@ -9,6 +9,4 @@ class RuntimeRecord:
     tenant_id: UUID
     object_name_singular: str
     record_id: UUID
-    system_values: dict[str, object]
-    custom_values: dict[str, object]
-
+    values: dict[str, object]

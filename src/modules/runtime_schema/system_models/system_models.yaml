@@ -10,17 +10,10 @@ objects:
       singular: "Lead"
       plural: "Leads"
     description: "Lead aggregate from CRM domain."
-    is_system: true
-    is_custom: false
-    is_active: true
-    is_ui_read_only: false
     fields:
       - name: "id"
         type: "uuid"
         label: "ID"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: true
         is_index: true
@@ -30,9 +23,6 @@ objects:
         type: "string"
         label: "Title"
         description: "Lead title from LeadTitleVO."
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -45,9 +35,6 @@ objects:
         type: "full_name"
         label: "Person Name"
         description: "Optional person name (last, middle, first)."
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: true
         is_unique: false
         is_index: false
@@ -61,9 +48,6 @@ objects:
         type: "string"
         label: "Company Name"
         description: "Optional company name from CompanyNameVO."
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: true
         is_unique: false
         is_index: true
@@ -76,9 +60,6 @@ objects:
         type: "relation"
         label: "Contact Points"
         description: "Collection of lead contact points."
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: true
         is_unique: false
         is_index: false
@@ -94,9 +75,6 @@ objects:
         type: "relation"
         label: "Product Rows"
         description: "Collection of lead product rows."
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: true
         is_unique: false
         is_index: false
@@ -117,17 +95,10 @@ objects:
       singular: "Contact"
       plural: "Contacts"
     description: "Contact aggregate from CRM domain."
-    is_system: true
-    is_custom: false
-    is_active: true
-    is_ui_read_only: false
     fields:
       - name: "id"
         type: "uuid"
         label: "ID"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: true
         is_index: true
@@ -137,9 +108,6 @@ objects:
         type: "full_name"
         label: "Name"
         description: "Contact full name from PersonNameVO."
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: false
@@ -153,9 +121,6 @@ objects:
         type: "relation"
         label: "Contact Points"
         description: "Collection of contact points."
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: true
         is_unique: false
         is_index: false
@@ -171,9 +136,6 @@ objects:
         type: "string"
         label: "Custom Note"
         description: "Custom free-form text field for contact."
-        is_system: false
-        is_custom: true
-        is_active: true
         is_nullable: true
         is_unique: false
         is_index: false
@@ -186,9 +148,6 @@ objects:
         type: "currency"
         label: "Custom Budget"
         description: "Custom currency field for contact."
-        is_system: false
-        is_custom: true
-        is_active: true
         is_nullable: true
         is_unique: false
         is_index: false
@@ -201,9 +160,6 @@ objects:
         type: "select"
         label: "Custom Source"
         description: "Custom select field for contact source."
-        is_system: false
-        is_custom: true
-        is_active: true
         is_nullable: true
         is_unique: false
         is_index: true
@@ -222,9 +178,6 @@ objects:
         type: "relation"
         label: "Deal"
         description: "Many contacts to one deal relation."
-        is_system: false
-        is_custom: true
-        is_active: true
         is_nullable: true
         is_unique: false
         is_index: true
@@ -245,17 +198,10 @@ objects:
       singular: "Company"
       plural: "Companies"
     description: "Company aggregate from CRM domain."
-    is_system: true
-    is_custom: false
-    is_active: true
-    is_ui_read_only: false
     fields:
       - name: "id"
         type: "uuid"
         label: "ID"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: true
         is_index: true
@@ -265,9 +211,6 @@ objects:
         type: "string"
         label: "Name"
         description: "Company name from CompanyNameVO."
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -280,9 +223,6 @@ objects:
         type: "relation"
         label: "Contact Points"
         description: "Collection of company contact points."
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: true
         is_unique: false
         is_index: false
@@ -303,17 +243,10 @@ objects:
       singular: "Deal"
       plural: "Deals"
     description: "Deal aggregate from CRM domain."
-    is_system: true
-    is_custom: false
-    is_active: true
-    is_ui_read_only: false
     fields:
       - name: "id"
         type: "uuid"
         label: "ID"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: true
         is_index: true
@@ -323,9 +256,6 @@ objects:
         type: "string"
         label: "Title"
         description: "Deal title from DealTitleVO."
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -338,9 +268,6 @@ objects:
         type: "relation"
         label: "Product Rows"
         description: "Collection of deal product rows."
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: true
         is_unique: false
         is_index: false
@@ -361,17 +288,10 @@ objects:
       singular: "Contact Point"
       plural: "Contact Points"
     description: "Child entity for phones, emails, links and messengers."
-    is_system: true
-    is_custom: false
-    is_active: true
-    is_ui_read_only: false
     fields:
       - name: "id"
         type: "uuid"
         label: "ID"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: true
         is_index: true
@@ -381,9 +301,6 @@ objects:
         type: "select"
         label: "Kind"
         description: "ContactPointKindVO: phone, email, site, messenger."
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -404,9 +321,6 @@ objects:
         type: "string"
         label: "Value"
         description: "Raw contact value, validated by business services."
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: false
@@ -419,9 +333,6 @@ objects:
         type: "string"
         label: "Type Code"
         description: "Dictionary code (work, mobile, personal, telegram)."
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -433,9 +344,6 @@ objects:
       - name: "is_primary"
         type: "boolean"
         label: "Is Primary"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -446,9 +354,6 @@ objects:
       - name: "is_verified"
         type: "boolean"
         label: "Is Verified"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -459,9 +364,6 @@ objects:
       - name: "sort_order"
         type: "integer"
         label: "Sort Order"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -474,9 +376,6 @@ objects:
       - name: "is_active"
         type: "boolean"
         label: "Is Active"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -488,9 +387,6 @@ objects:
         type: "select"
         label: "Entity Name"
         description: "Owner aggregate name for ContactPoint: lead, contact, company."
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -509,9 +405,6 @@ objects:
         type: "uuid"
         label: "Entity UUID"
         description: "Owner aggregate identifier paired with entity_name."
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -526,17 +419,10 @@ objects:
       singular: "Contact Point Type"
       plural: "Contact Point Types"
     description: "Dictionary rows for ContactPoint type_code per kind."
-    is_system: true
-    is_custom: false
-    is_active: true
-    is_ui_read_only: false
     fields:
       - name: "id"
         type: "uuid"
         label: "ID"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: true
         is_index: true
@@ -546,9 +432,6 @@ objects:
         type: "select"
         label: "Kind"
         description: "Kind of contact point."
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -569,9 +452,6 @@ objects:
         type: "string"
         label: "Code"
         description: "Type code within kind (mobile, work, telegram, etc)."
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -584,9 +464,6 @@ objects:
         type: "string"
         label: "Title"
         description: "Human-readable title for the type."
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: false
@@ -598,9 +475,6 @@ objects:
       - name: "is_system"
         type: "boolean"
         label: "Is System"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -611,9 +485,6 @@ objects:
       - name: "is_active"
         type: "boolean"
         label: "Is Active"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -624,9 +495,6 @@ objects:
       - name: "sort_order"
         type: "integer"
         label: "Sort Order"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -645,17 +513,10 @@ objects:
       singular: "Product Row"
       plural: "Product Rows"
     description: "Product row line item used by lead/deal."
-    is_system: true
-    is_custom: false
-    is_active: true
-    is_ui_read_only: false
     fields:
       - name: "id"
         type: "uuid"
         label: "ID"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: true
         is_index: true
@@ -665,9 +526,6 @@ objects:
         type: "select"
         label: "Owner Entity Type"
         description: "ProductRowEntityIdVO: 1=lead, 2=deal."
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -684,9 +542,6 @@ objects:
         type: "uuid"
         label: "Owner Entity UUID"
         description: "ID of owner entity according to entity_id."
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -696,9 +551,6 @@ objects:
         type: "uuid"
         label: "Product ID"
         description: "Optional product reference."
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: true
         is_unique: false
         is_index: true
@@ -707,9 +559,6 @@ objects:
       - name: "product_name"
         type: "string"
         label: "Product Name"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: false
@@ -721,9 +570,6 @@ objects:
       - name: "price"
         type: "currency"
         label: "Price"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: false
@@ -735,9 +581,6 @@ objects:
       - name: "price_account"
         type: "currency"
         label: "Price Account"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: false
@@ -749,9 +592,6 @@ objects:
       - name: "price_exclusive"
         type: "currency"
         label: "Price Exclusive"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: false
@@ -763,9 +603,6 @@ objects:
       - name: "price_netto"
         type: "currency"
         label: "Price Netto"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: false
@@ -777,9 +614,6 @@ objects:
       - name: "price_brutto"
         type: "currency"
         label: "Price Brutto"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: false
@@ -792,9 +626,6 @@ objects:
         type: "integer"
         label: "Quantity"
         description: "Quantity; should be positive."
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: false
@@ -807,9 +638,6 @@ objects:
       - name: "discount_type_id"
         type: "select"
         label: "Discount Type"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: false
@@ -828,9 +656,6 @@ objects:
         type: "integer"
         label: "Discount Rate"
         description: "Non-negative value."
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: false
@@ -843,9 +668,6 @@ objects:
       - name: "discount_sum"
         type: "currency"
         label: "Discount Sum"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: false
@@ -858,9 +680,6 @@ objects:
         type: "integer"
         label: "Tax Rate"
         description: "Non-negative value."
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: false
@@ -873,9 +692,6 @@ objects:
       - name: "tax_included"
         type: "boolean"
         label: "Tax Included"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: false
@@ -886,9 +702,6 @@ objects:
       - name: "customized"
         type: "boolean"
         label: "Customized"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: false
@@ -899,9 +712,6 @@ objects:
       - name: "measure_code"
         type: "string"
         label: "Measure Code"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: false
@@ -915,9 +725,6 @@ objects:
       - name: "measure_name"
         type: "string"
         label: "Measure Name"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: false
@@ -931,9 +738,6 @@ objects:
       - name: "sort"
         type: "integer"
         label: "Sort"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -952,17 +756,10 @@ objects:
       singular: "Shorter Link"
       plural: "Shorter Links"
     description: "Short link entity from shorter domain."
-    is_system: true
-    is_custom: false
-    is_active: true
-    is_ui_read_only: false
     fields:
       - name: "id"
         type: "uuid"
         label: "ID"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: true
         is_index: true
@@ -971,9 +768,6 @@ objects:
       - name: "created_at"
         type: "date_time"
         label: "Created At"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -982,9 +776,6 @@ objects:
       - name: "domain_id"
         type: "uuid"
         label: "Domain ID"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -993,9 +784,6 @@ objects:
       - name: "code"
         type: "string"
         label: "Code"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -1013,17 +801,10 @@ objects:
       singular: "Shorter Template"
       plural: "Shorter Templates"
     description: "Template entity from shorter domain."
-    is_system: true
-    is_custom: false
-    is_active: true
-    is_ui_read_only: false
     fields:
       - name: "id"
         type: "uuid"
         label: "ID"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: true
         is_index: true
@@ -1032,9 +813,6 @@ objects:
       - name: "created_at"
         type: "date_time"
         label: "Created At"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -1043,9 +821,6 @@ objects:
       - name: "updated_at"
         type: "date_time"
         label: "Updated At"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -1054,9 +829,6 @@ objects:
       - name: "created_by"
         type: "actor"
         label: "Created By"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -1065,9 +837,6 @@ objects:
       - name: "default_code"
         type: "relation"
         label: "Default Code"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -1082,9 +851,6 @@ objects:
       - name: "target_module"
         type: "select"
         label: "Target Module"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -1098,9 +864,6 @@ objects:
       - name: "target_entity"
         type: "select"
         label: "Target Entity"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -1114,9 +877,6 @@ objects:
       - name: "target_entity_id"
         type: "uuid"
         label: "Target Entity ID"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -1131,17 +891,10 @@ objects:
       singular: "Shorter Redirect"
       plural: "Shorter Redirects"
     description: "Redirect entity from shorter domain."
-    is_system: true
-    is_custom: false
-    is_active: true
-    is_ui_read_only: false
     fields:
       - name: "id"
         type: "uuid"
         label: "ID"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: true
         is_index: true
@@ -1150,9 +903,6 @@ objects:
       - name: "created_at"
         type: "date_time"
         label: "Created At"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -1161,9 +911,6 @@ objects:
       - name: "updated_at"
         type: "date_time"
         label: "Updated At"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -1172,9 +919,6 @@ objects:
       - name: "target_url"
         type: "string"
         label: "Target URL"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -1186,9 +930,6 @@ objects:
       - name: "utm_source"
         type: "string"
         label: "UTM Source"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: true
         is_unique: false
         is_index: false
@@ -1200,9 +941,6 @@ objects:
       - name: "utm_medium"
         type: "string"
         label: "UTM Medium"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: true
         is_unique: false
         is_index: false
@@ -1214,9 +952,6 @@ objects:
       - name: "utm_campaign"
         type: "string"
         label: "UTM Campaign"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: true
         is_unique: false
         is_index: false
@@ -1228,9 +963,6 @@ objects:
       - name: "utm_id"
         type: "string"
         label: "UTM ID"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: true
         is_unique: false
         is_index: false
@@ -1242,9 +974,6 @@ objects:
       - name: "utm_term"
         type: "string"
         label: "UTM Term"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: true
         is_unique: false
         is_index: false
@@ -1256,9 +985,6 @@ objects:
       - name: "utm_content"
         type: "string"
         label: "UTM Content"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: true
         is_unique: false
         is_index: false
@@ -1270,9 +996,6 @@ objects:
       - name: "is_override"
         type: "boolean"
         label: "Is Override"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true
@@ -1283,9 +1006,6 @@ objects:
       - name: "is_append"
         type: "boolean"
         label: "Is Append"
-        is_system: true
-        is_custom: false
-        is_active: true
         is_nullable: false
         is_unique: false
         is_index: true

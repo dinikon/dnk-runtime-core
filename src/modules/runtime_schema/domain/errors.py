@@ -18,11 +18,6 @@ class FieldLabelRequiredError(ValidationError):
         super().__init__("field label is required")
 
 
-class FieldSystemCustomFlagsInvalidError(ValidationError):
-    def __init__(self) -> None:
-        super().__init__("exactly one of is_system/is_custom must be true")
-
-
 class FieldUniqueMustBeIndexedError(ValidationError):
     def __init__(self) -> None:
         super().__init__("unique field must also be indexed")
@@ -142,11 +137,6 @@ class ObjectLabelRequiredError(ValidationError):
         super().__init__(f"object {field_name} label is required")
 
 
-class ObjectSystemCustomFlagsInvalidError(ValidationError):
-    def __init__(self) -> None:
-        super().__init__("exactly one of object is_system/is_custom must be true")
-
-
 class ObjectTimestampOrderError(ValidationError):
     def __init__(self) -> None:
         super().__init__("object updated_at must be greater or equal to created_at")
@@ -210,12 +200,10 @@ __all__ = [
     "FieldRelationTargetRequiredError",
     "FieldSettingsTypeMismatchError",
     "FieldSettingBoundsError",
-    "FieldSystemCustomFlagsInvalidError",
     "FieldTimestampOrderError",
     "FieldUniqueMustBeIndexedError",
     "ObjectLabelRequiredError",
     "ObjectNameInvalidFormatError",
     "ObjectNameRequiredError",
-    "ObjectSystemCustomFlagsInvalidError",
     "ObjectTimestampOrderError",
 ]

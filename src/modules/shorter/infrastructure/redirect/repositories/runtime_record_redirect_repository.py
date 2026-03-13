@@ -93,7 +93,7 @@ class RuntimeRecordRedirectRepository(RedirectRepositoryPort):
         )
 
     def _map_payload(self, payload: RuntimeRecordPayload) -> RedirectEntity:
-        values = payload.system_values
+        values = payload.values
         created_at = values.get("created_at")
         updated_at = values.get("updated_at")
         target_url = values.get("target_url")

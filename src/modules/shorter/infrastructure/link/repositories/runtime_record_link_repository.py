@@ -79,7 +79,7 @@ class RuntimeRecordLinkRepository(
         return payload is not None
 
     def _map_payload(self, payload: RuntimeRecordPayload) -> LinkEntity:
-        values = payload.system_values
+        values = payload.values
         created_at = values.get("created_at")
         domain_id = values.get("domain_id")
         code = values.get("code")

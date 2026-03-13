@@ -74,8 +74,6 @@ class TestDomainFieldEntityExtended(unittest.TestCase):
             label=" Title ",
             description=" ",
             icon=" ",
-            is_system=True,
-            is_custom=False,
             settings=StringFieldSettings(min_length=1, max_length=10),
             default_value=StringDefaultValue(value="abc"),
         )
@@ -103,8 +101,6 @@ class TestDomainFieldEntityExtended(unittest.TestCase):
             field_type=FieldTypeVO.SELECT,
             field_name=FieldName("status"),
             label="Status",
-            is_system=True,
-            is_custom=False,
             is_index=True,
             options=SelectFieldOptions(items=(FieldOption(code="new", label="New"),)),
             default_value=SelectDefaultValue(code="new"),
@@ -123,8 +119,6 @@ class TestDomainFieldEntityExtended(unittest.TestCase):
                 field_type=FieldTypeVO.ADDRESS,
                 field_name=FieldName("shipping_address"),
                 label="Shipping Address",
-                is_system=True,
-                is_custom=False,
                 settings=AddressFieldSettings(require_country=True),
                 default_value=AddressDefaultValue(
                     country="",
@@ -142,8 +136,6 @@ class TestDomainFieldEntityExtended(unittest.TestCase):
                 field_type=FieldTypeVO.CURRENCY,
                 field_name=FieldName("budget"),
                 label="Budget",
-                is_system=True,
-                is_custom=False,
                 settings=CurrencyFieldSettings(allowed_currencies=("USD",), display_scale=2),
                 default_value=CurrencyDefaultValue(
                     amount_minor=1000,
@@ -159,8 +151,6 @@ class TestDomainFieldEntityExtended(unittest.TestCase):
                 field_type=FieldTypeVO.CURRENCY,
                 field_name=FieldName("amount"),
                 label="Amount",
-                is_system=True,
-                is_custom=False,
                 settings=CurrencyFieldSettings(display_scale=2),
                 default_value=CurrencyDefaultValue(
                     amount_minor=1050,
@@ -176,8 +166,6 @@ class TestDomainFieldEntityExtended(unittest.TestCase):
                 field_type=FieldTypeVO.DATE_TIME,
                 field_name=FieldName("planned_at"),
                 label="Planned At",
-                is_system=True,
-                is_custom=False,
                 settings=DateTimeFieldSettings(timezone_aware=False, require_utc=False),
                 default_value=DateTimeDefaultValue(value=datetime.now(UTC)),
             )
@@ -189,8 +177,6 @@ class TestDomainFieldEntityExtended(unittest.TestCase):
                 field_type=FieldTypeVO.DATE_TIME,
                 field_name=FieldName("run_at"),
                 label="Run At",
-                is_system=True,
-                is_custom=False,
                 settings=DateTimeFieldSettings(timezone_aware=True, require_utc=True),
                 default_value=DateTimeDefaultValue(
                     value=datetime(2025, 1, 1, 10, 0, tzinfo=timezone(timedelta(hours=2)))
@@ -205,8 +191,6 @@ class TestDomainFieldEntityExtended(unittest.TestCase):
                 field_type=FieldTypeVO.EMAILS,
                 field_name=FieldName("emails"),
                 label="Emails",
-                is_system=True,
-                is_custom=False,
                 settings=EmailsFieldSettings(max_items=1, allow_duplicates=False),
                 default_value=EmailsDefaultValue(
                     emails=("one@example.com", "one@example.com"),
@@ -220,8 +204,6 @@ class TestDomainFieldEntityExtended(unittest.TestCase):
                 field_type=FieldTypeVO.LINKS,
                 field_name=FieldName("links"),
                 label="Links",
-                is_system=True,
-                is_custom=False,
                 settings=LinksFieldSettings(max_items=1, allow_duplicates=False),
                 default_value=LinksDefaultValue(
                     links=("https://example.com", "https://example.com"),
@@ -235,8 +217,6 @@ class TestDomainFieldEntityExtended(unittest.TestCase):
                 field_type=FieldTypeVO.PHONES,
                 field_name=FieldName("phones"),
                 label="Phones",
-                is_system=True,
-                is_custom=False,
                 settings=PhonesFieldSettings(max_items=1, allow_duplicates=False),
                 default_value=PhonesDefaultValue(phones=("+15551234567", "+15551234567")),
             )
@@ -248,8 +228,6 @@ class TestDomainFieldEntityExtended(unittest.TestCase):
                 field_type=FieldTypeVO.ARRAY,
                 field_name=FieldName("numbers"),
                 label="Numbers",
-                is_system=True,
-                is_custom=False,
                 settings=ArrayFieldSettings(
                     item_type=ArrayItemTypeVO.INTEGER,
                     allow_duplicates=False,
@@ -266,8 +244,6 @@ class TestDomainFieldEntityExtended(unittest.TestCase):
                 field_type=FieldTypeVO.RELATION,
                 field_name=FieldName("owner_id"),
                 label="Owner",
-                is_system=True,
-                is_custom=False,
                 relation_target_object_id=target_object_id,
                 relation_target_field_id=target_field_id,
                 default_value=RelationDefaultValue(
@@ -283,8 +259,6 @@ class TestDomainFieldEntityExtended(unittest.TestCase):
                 field_type=FieldTypeVO.MULTI_SELECT,
                 field_name=FieldName("tags"),
                 label="Tags",
-                is_system=True,
-                is_custom=False,
                 options=MultiSelectFieldOptions(
                     items=(FieldOption(code="a", label="A"),),
                     allow_duplicates=False,
@@ -300,8 +274,6 @@ class TestDomainFieldEntityExtended(unittest.TestCase):
                 field_type=FieldTypeVO.STRING,
                 field_name=FieldName("title"),
                 label=" ",
-                is_system=True,
-                is_custom=False,
             )
 
         with self.assertRaises(FieldOptionsRequiredError):
@@ -311,8 +283,6 @@ class TestDomainFieldEntityExtended(unittest.TestCase):
                 field_type=FieldTypeVO.MULTI_SELECT,
                 field_name=FieldName("tags"),
                 label="Tags",
-                is_system=True,
-                is_custom=False,
                 options=None,
             )
 
@@ -323,8 +293,6 @@ class TestDomainFieldEntityExtended(unittest.TestCase):
                 field_type=FieldTypeVO.UUID,
                 field_name=FieldName("token"),
                 label="Token",
-                is_system=True,
-                is_custom=False,
                 settings=StringFieldSettings(min_length=1, max_length=5),
             )
 
@@ -335,8 +303,6 @@ class TestDomainFieldEntityExtended(unittest.TestCase):
                 field_type=FieldTypeVO.FULL_NAME,
                 field_name=FieldName("full_name"),
                 label="Full Name",
-                is_system=True,
-                is_custom=False,
                 settings=FullNameFieldSettings(require_first_name=True),
                 default_value=FullNameDefaultValue(
                     last_name="Doe",
