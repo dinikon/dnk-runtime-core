@@ -179,7 +179,6 @@ class MetadataCompiler(MetadataCompilerProtocol):
             is_unique=field_definition.is_unique,
             is_index=field_definition.is_index,
             is_nullable=field_definition.is_nullable,
-            is_ui_read_only=field_definition.is_ui_read_only,
             is_searchable=field_definition.is_searchable,
             options=options,
             settings=settings,

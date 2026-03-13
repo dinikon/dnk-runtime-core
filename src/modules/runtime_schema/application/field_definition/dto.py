@@ -18,7 +18,6 @@ class CreateFieldCommandDTO:
     is_unique: bool = False
     is_index: bool = False
     is_nullable: bool = True
-    is_ui_read_only: bool = False
     is_searchable: bool = False
     options: dict[str, object] | None = None
     settings: dict[str, object] | None = None
@@ -38,7 +37,6 @@ class UpdateFieldCommandDTO:
     is_unique: bool | None = None
     is_index: bool | None = None
     is_nullable: bool | None = None
-    is_ui_read_only: bool | None = None
     is_searchable: bool | None = None
     options: dict[str, object] | None = None
     settings: dict[str, object] | None = None
@@ -68,7 +66,6 @@ class FieldDefinitionDTO:
     is_unique: bool
     is_index: bool
     is_nullable: bool
-    is_ui_read_only: bool
     is_searchable: bool
     created_at: datetime
     updated_at: datetime

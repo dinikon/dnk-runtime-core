@@ -169,7 +169,6 @@ class YamlSystemModelRegistryReader(SystemModelRegistryReaderProtocol):
             is_unique=bool(payload.get("is_unique", False)),
             is_index=bool(payload.get("is_index", False)),
             is_nullable=bool(payload.get("is_nullable", True)),
-            is_ui_read_only=bool(payload.get("is_ui_read_only", False)),
             is_searchable=bool(payload.get("is_searchable", False)),
             options=dict(options) if isinstance(options, dict) else None,
             settings=dict(settings) if isinstance(settings, dict) else None,

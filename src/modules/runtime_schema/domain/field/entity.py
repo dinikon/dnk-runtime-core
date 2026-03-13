@@ -127,7 +127,6 @@ class FieldMetadataEntity:
     is_index: bool
     is_nullable: bool
 
-    is_ui_read_only: bool
     is_searchable: bool
 
     options: FieldOptions | None
@@ -151,7 +150,6 @@ class FieldMetadataEntity:
         is_unique: bool = False,
         is_index: bool = False,
         is_nullable: bool = True,
-        is_ui_read_only: bool = False,
         is_searchable: bool = False,
         options: FieldOptions | None = None,
         settings: FieldSettings | None = None,
@@ -176,7 +174,6 @@ class FieldMetadataEntity:
             is_unique=is_unique,
             is_index=is_index,
             is_nullable=is_nullable,
-            is_ui_read_only=is_ui_read_only,
             is_searchable=is_searchable,
             options=options,
             settings=settings,

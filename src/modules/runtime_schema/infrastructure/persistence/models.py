@@ -92,9 +92,6 @@ class FieldMetadataModel(Base):
     is_nullable: Mapped[bool] = mapped_column(
         sa.Boolean, nullable=False, server_default=sa.text("'true'")
     )
-    is_ui_read_only: Mapped[bool] = mapped_column(
-        sa.Boolean, nullable=False, server_default=sa.text("'false'")
-    )
     is_searchable: Mapped[bool] = mapped_column(
         sa.Boolean, nullable=False, server_default=sa.text("'false'")
     )

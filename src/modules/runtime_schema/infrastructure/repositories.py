@@ -258,7 +258,6 @@ class SqlAlchemyFieldMetadataRepository(FieldMetadataRepositoryProtocol):
             is_unique=entity.is_unique,
             is_index=entity.is_index,
             is_nullable=entity.is_nullable,
-            is_ui_read_only=entity.is_ui_read_only,
             is_searchable=entity.is_searchable,
             options=serialize_field_options(entity.options),
             settings=serialize_field_settings(entity.settings),
@@ -289,7 +288,6 @@ class SqlAlchemyFieldMetadataRepository(FieldMetadataRepositoryProtocol):
         model.is_unique = entity.is_unique
         model.is_index = entity.is_index
         model.is_nullable = entity.is_nullable
-        model.is_ui_read_only = entity.is_ui_read_only
         model.is_searchable = entity.is_searchable
         model.options = serialize_field_options(entity.options)
         model.settings = serialize_field_settings(entity.settings)
@@ -330,7 +328,6 @@ class SqlAlchemyFieldMetadataRepository(FieldMetadataRepositoryProtocol):
             is_unique=model.is_unique,
             is_index=model.is_index,
             is_nullable=model.is_nullable,
-            is_ui_read_only=model.is_ui_read_only,
             is_searchable=model.is_searchable,
             options=options,
             settings=settings,

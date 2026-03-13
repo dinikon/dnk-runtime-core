@@ -379,7 +379,6 @@ class DdlOrchestratorService(DdlOrchestratorServiceProtocol):
             is_unique=dto.is_unique,
             is_index=dto.is_index,
             is_nullable=dto.is_nullable,
-            is_ui_read_only=dto.is_ui_read_only,
             is_searchable=dto.is_searchable,
             options=options,
             settings=settings,
@@ -422,8 +421,6 @@ class DdlOrchestratorService(DdlOrchestratorServiceProtocol):
             field_entity.is_index = dto.is_index
         if dto.is_nullable is not None:
             field_entity.is_nullable = dto.is_nullable
-        if dto.is_ui_read_only is not None:
-            field_entity.is_ui_read_only = dto.is_ui_read_only
         if dto.is_searchable is not None:
             field_entity.is_searchable = dto.is_searchable
 
@@ -788,7 +785,6 @@ class DdlOrchestratorService(DdlOrchestratorServiceProtocol):
             is_unique=entity.is_unique,
             is_index=entity.is_index,
             is_nullable=entity.is_nullable,
-            is_ui_read_only=entity.is_ui_read_only,
             is_searchable=entity.is_searchable,
             created_at=entity.created_at,
             updated_at=entity.updated_at,

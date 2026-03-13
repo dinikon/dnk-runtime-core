@@ -197,7 +197,6 @@ class TestDomainEntities(unittest.TestCase):
                 is_unique=False,
                 is_index=False,
                 is_nullable=True,
-                is_ui_read_only=False,
                 is_searchable=False,
                 options=None,
                 settings=None,

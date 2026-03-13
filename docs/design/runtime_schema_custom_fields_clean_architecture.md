@@ -317,7 +317,6 @@ Use case'ы:
 - `is_active`
 - `is_nullable`
 - `is_unique`
-- `is_ui_read_only`
 
 ### `field_storage_metadata`
 

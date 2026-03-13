@@ -18,7 +18,6 @@ class SystemFieldDefinition:
     is_unique: bool = False
     is_index: bool = False
     is_nullable: bool = True
-    is_ui_read_only: bool = False
     is_searchable: bool = False
     options: dict[str, object] | None = None
     settings: dict[str, object] | None = None
