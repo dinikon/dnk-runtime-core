@@ -17,7 +17,7 @@ router = APIRouter(tags=["console-tenants"])
 
 
 @router.get(
-    "/api/console/tenants/resolve",
+    "/console/tenants/resolve",
     response_model=ResolveTenantResponseSchema,
 )
 async def resolve_tenant(

@@ -10,7 +10,7 @@ from src.modules.universal_access.presentation.http.responses.update_crm_item im
 router = APIRouter(tags=["crm.item"])
 
 
-@router.post("/universal-access/crm.item.update")
+@router.post("/crm.item.update")
 def crm_update_item(
     request: UpdateCrmItemRequestSchema,
 ) -> UpdateCrmItemResponseSchema:

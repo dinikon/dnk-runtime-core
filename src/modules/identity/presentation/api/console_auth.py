@@ -81,7 +81,7 @@ def _to_current_user_response(
 
 
 @router.post(
-    "/api/console/auth/request-otp",
+    "/request-otp",
     response_model=RequestEmailOtpResponseSchema,
 )
 async def request_email_otp(
@@ -116,7 +116,7 @@ async def request_email_otp(
 
 
 @router.post(
-    "/api/console/auth/confirm-otp",
+    "/confirm-otp",
     response_model=ConfirmEmailOtpResponseSchema,
 )
 async def confirm_email_otp(
@@ -169,7 +169,7 @@ async def confirm_email_otp(
 
 
 @router.get(
-    "/api/console/auth/me",
+    "/me",
     response_model=CurrentUserResponseSchema,
 )
 async def get_current_user(
@@ -205,7 +205,7 @@ async def get_current_user(
 
 
 @router.patch(
-    "/api/console/auth/me",
+    "/me",
     response_model=CurrentUserResponseSchema,
 )
 async def update_current_user_profile(
@@ -253,7 +253,7 @@ async def update_current_user_profile(
 
 
 @router.post(
-    "/api/console/auth/logout",
+    "/logout",
     response_model=LogoutCurrentSessionResponseSchema,
 )
 async def logout_current_session(

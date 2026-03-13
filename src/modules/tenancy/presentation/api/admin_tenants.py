@@ -27,7 +27,7 @@ router = APIRouter(tags=["admin-tenants"])
 
 
 @router.post(
-    "/api/admin/create-tenant",
+    "/admin/create-tenant",
     response_model=AdminCreateTenantResponseSchema,
 )
 async def create_tenant(

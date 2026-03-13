@@ -10,7 +10,7 @@ from src.modules.crm.presentation.http.responses.contact.delete import (
 router = APIRouter(tags=["crm.contact"])
 
 
-@router.post("/crm/contact/delete", response_model=DeleteContactResponseSchema)
+@router.post("/contact/delete", response_model=DeleteContactResponseSchema)
 async def delete_contact(
     payload: DeleteContactRequestSchema,
 ) -> DeleteContactResponseSchema:

@@ -14,7 +14,7 @@ from src.modules.crm.presentation.http.responses.contact.list import (
 router = APIRouter(tags=["crm.contact"])
 
 
-@router.post("/crm/contact/list", response_model=ListContactsResponseSchema)
+@router.post("/contact/list", response_model=ListContactsResponseSchema)
 async def list_contacts(
     payload: ListContactsRequestSchema,
 ) -> ListContactsResponseSchema:

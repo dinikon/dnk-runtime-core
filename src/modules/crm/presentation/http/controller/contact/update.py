@@ -12,7 +12,7 @@ from src.modules.crm.presentation.http.responses.contact.update import (
 router = APIRouter(tags=["crm.contact"])
 
 
-@router.post("/crm/contact/update", response_model=UpdateContactResponseSchema)
+@router.post("/contact/update", response_model=UpdateContactResponseSchema)
 async def update_contact(
     payload: UpdateContactRequestSchema,
 ) -> UpdateContactResponseSchema:

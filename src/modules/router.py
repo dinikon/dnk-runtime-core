@@ -8,11 +8,12 @@ from src.modules.universal_access.presentation.http.router import (
     router as universal_access_router,
 )
 
-router = APIRouter()
+router = APIRouter(prefix="/api")
+
 router.include_router(tenancy_router)
-router.include_router(identity_router)
-router.include_router(crm_router)
-router.include_router(universal_access_router)
+router.include_router(identity_router, prefix="/console/auth")
+router.include_router(crm_router, prefix="/console/crm")
+router.include_router(universal_access_router, prefix="/console/universal-access")
 
 
 __all__ = ["router"]

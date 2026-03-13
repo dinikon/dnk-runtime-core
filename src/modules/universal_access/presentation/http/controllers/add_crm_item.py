@@ -12,7 +12,7 @@ from src.modules.universal_access.presentation.http.responses.add_crm_item impor
 router = APIRouter(tags=["crm.item"])
 
 
-@router.post("/universal-access/crm.item.add")
+@router.post("/crm.item.add")
 def crm_add_item(
     request: AddCrmItemRequestSchema,
 ) -> AddCrmItemResponseSchema:

@@ -12,7 +12,7 @@ from src.modules.crm.presentation.http.responses.contact.get import (
 router = APIRouter(tags=["crm.contact"])
 
 
-@router.post("/crm/contact/get", response_model=GetContactResponseSchema)
+@router.post("/contact/get", response_model=GetContactResponseSchema)
 async def get_contact(
     payload: GetContactRequestSchema,
 ) -> GetContactResponseSchema:

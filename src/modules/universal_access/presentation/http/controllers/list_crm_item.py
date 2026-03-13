@@ -13,7 +13,7 @@ from src.modules.universal_access.presentation.http.responses.list_crm_item impo
 router = APIRouter(tags=["crm.item"])
 
 
-@router.post("/universal-access/crm.item.list")
+@router.post("/crm.item.list")
 def crm_list_item(
     request: ListCrmItemRequestSchema,
 ) -> ListCrmItemResponseSchema:

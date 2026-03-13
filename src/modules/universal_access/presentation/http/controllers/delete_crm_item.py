@@ -10,7 +10,7 @@ from src.modules.universal_access.presentation.http.responses.delete_crm_item im
 router = APIRouter(tags=["crm.item"])
 
 
-@router.post("/universal-access/crm.item.delete")
+@router.post("/crm.item.delete")
 def crm_delete_item(
     request: DeleteCrmItemRequestSchema,
 ) -> DeleteCrmItemResponseSchema:

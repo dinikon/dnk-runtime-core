@@ -10,7 +10,7 @@ from src.modules.universal_access.presentation.http.responses.get_crm_item impor
 router = APIRouter(tags=["crm.item"])
 
 
-@router.post("/universal-access/crm.item.get")
+@router.post("/crm.item.get")
 def crm_get_item(
     request: GetCrmItemRequestSchema,
 ) -> GetCrmItemResponseSchema:
