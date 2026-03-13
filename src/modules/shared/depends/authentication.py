@@ -6,7 +6,6 @@ from typing import Annotated, Protocol
 from fastapi import Depends, HTTPException, Request, status
 
 from src.config import dnk_config
-from src.config.auth_config import IdentityAuthSettings
 from src.modules.identity.application.auth.use_cases.authenticate_by_session import (
     AuthenticateBySessionCommand as AuthenticateBySessionUseCaseCommand,
     SessionPrincipal,
@@ -56,16 +55,6 @@ class AuthenticateBySessionUseCaseAdapter(AuthenticationProcessProtocol):
         return _map_principal(principal)
 
 
-def get_authentication_settings() -> IdentityAuthSettings:
-    return dnk_config.AUTH
-
-
-AuthenticationSettingsDep = Annotated[
-    IdentityAuthSettings,
-    Depends(get_authentication_settings),
-]
-
-
 def get_authentication_process(
     request: Request,
     use_case: AuthenticateBySessionUseCaseDep,
@@ -84,12 +73,12 @@ AuthenticationProcessDep = Annotated[
 
 async def get_optional_request_context(
     request: Request,
-    settings: AuthenticationSettingsDep,
     authentication_process: AuthenticationProcessDep,
 ) -> RequestContext:
+    auth_settings = dnk_config.AUTH
     command = AuthenticateBySessionCommand(
         host=extract_request_host(request),
-        session_token=request.cookies.get(settings.session_cookie_name),
+        session_token=request.cookies.get(auth_settings.session_cookie_name),
         ip=_extract_request_ip(request),
         user_agent=request.headers.get("user-agent"),
     )
@@ -158,13 +147,11 @@ __all__ = [
     "AuthenticateBySessionCommand",
     "AuthenticationProcessDep",
     "AuthenticationProcessProtocol",
-    "AuthenticationSettingsDep",
     "AuthenticateBySessionUseCaseAdapter",
     "OptionalRequestContextDep",
     "Principal",
     "RequestContext",
     "get_authentication_process",
-    "get_authentication_settings",
     "get_optional_request_context",
     "require_authenticated_request_context",
 ]
