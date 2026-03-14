@@ -21,7 +21,6 @@ async def add_contact(
     payload: AddContactRequestSchema,
     request_context: AuthenticatedRequestContextDep,
 ) -> AddContactResponseSchema:
-    print(request_context)
     timestamp = datetime.now()
     return AddContactResponseSchema(
         id=uuid4(),
