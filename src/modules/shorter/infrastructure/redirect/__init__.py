@@ -1,3 +1,1 @@
-from .repositories import RuntimeRecordRedirectRepository
-
-__all__ = ["RuntimeRecordRedirectRepository"]
+__all__: list[str] = []

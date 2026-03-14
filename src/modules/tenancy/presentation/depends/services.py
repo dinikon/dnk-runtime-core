@@ -15,9 +15,6 @@ from src.modules.tenancy.application.admin_onboarding.ports.identity import (
     IdentityProvisioningServiceProtocol,
     ProvisionedTenantAdmin,
 )
-from src.modules.tenancy.application.admin_onboarding.ports.runtime_schema import (
-    TenantRuntimeSchemaBootstrapperProtocol,
-)
 from src.modules.tenancy.application.admin_onboarding.ports.storage import (
     TenantSchemaProvisionerProtocol,
 )
@@ -40,13 +37,6 @@ from src.modules.tenancy.application.admin_onboarding.services.tenant_service im
 from src.modules.tenancy.infrastructure.schema_provisioner import (
     SqlAlchemyTenantSchemaProvisioner,
 )
-from src.modules.tenancy.infrastructure.runtime_schema_bootstrapper import (
-    RuntimeSchemaBootstrapperAdapter,
-)
-from src.modules.runtime_schema.application.bootstrap_tenant_system_schema.use_case import (
-    BootstrapTenantSystemSchemaUseCase,
-)
-from src.modules.runtime_schema.infrastructure.factory import build_ddl_orchestrator
 from src.modules.tenancy.presentation.depends.repositories import (
     TenantDataSourcesRepositoryDep,
     TenantDomainsRepositoryDep,
@@ -76,17 +66,6 @@ class IdentityProvisioningServiceAdapter(IdentityProvisioningServiceProtocol):
             user_email_id=created_admin.user_email_id,
             user_status=created_admin.user_status,
         )
-
-
-class NoOpTenantRuntimeSchemaBootstrapper(TenantRuntimeSchemaBootstrapperProtocol):
-    async def bootstrap_tenant_system_schema(
-        self,
-        *,
-        tenant_id: UUID,
-        data_source_id: UUID,
-        schema: str,
-    ) -> None:
-        return None
 
 
 def get_tenant_service(
@@ -147,20 +126,6 @@ TenantDataSourceServiceDep = Annotated[
 ]
 
 
-def get_runtime_schema_bootstrapper(
-    uow: UoWDep,
-) -> TenantRuntimeSchemaBootstrapperProtocol:
-    orchestrator = build_ddl_orchestrator(session=uow.session)
-    use_case = BootstrapTenantSystemSchemaUseCase(orchestrator=orchestrator)
-    return RuntimeSchemaBootstrapperAdapter(use_case=use_case)
-
-
-TenantRuntimeSchemaBootstrapperDep = Annotated[
-    TenantRuntimeSchemaBootstrapperProtocol,
-    Depends(get_runtime_schema_bootstrapper),
-]
-
-
 def get_identity_provisioning_service(
     uow: UoWDep,
 ) -> IdentityProvisioningServiceProtocol:
@@ -175,7 +140,6 @@ IdentityProvisioningServiceDep = Annotated[
 
 __all__ = [
     "IdentityProvisioningServiceAdapter",
-    "NoOpTenantRuntimeSchemaBootstrapper",
     "get_tenant_service",
     "TenantServiceDep",
     "get_tenant_domain_service",
@@ -186,8 +150,6 @@ __all__ = [
     "TenantSchemaProvisionerDep",
     "get_tenant_data_source_service",
     "TenantDataSourceServiceDep",
-    "get_runtime_schema_bootstrapper",
-    "TenantRuntimeSchemaBootstrapperDep",
     "get_identity_provisioning_service",
     "IdentityProvisioningServiceDep",
 ]

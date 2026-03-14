@@ -14,7 +14,6 @@ from src.modules.crm.application.contact.queries import (
     GetContactQueryDTO,
     ListContactsQueryDTO,
 )
-from src.modules.crm.application.contact.services import ContactRuntimeRecordMapper
 
 __all__ = [
     "ContactDTO",
@@ -22,7 +21,6 @@ __all__ = [
     "DeleteContactCommandDTO",
     "ContactRecord",
     "ContactRecordRepositoryPort",
-    "ContactRuntimeRecordMapper",
     "GetContactQueryDTO",
     "GetContactRecordQuery",
     "ListContactsQueryDTO",

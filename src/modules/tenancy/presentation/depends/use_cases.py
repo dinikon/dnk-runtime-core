@@ -21,7 +21,6 @@ from src.modules.tenancy.presentation.depends.services import (
     IdentityProvisioningServiceDep,
     TenantDataSourceServiceDep,
     TenantDomainServiceDep,
-    TenantRuntimeSchemaBootstrapperDep,
     TenantSchemaNameServiceDep,
     TenantSchemaProvisionerDep,
     TenantServiceDep,
@@ -37,7 +36,6 @@ def get_create_tenant_use_case(
     tenant_schema_name_service: TenantSchemaNameServiceDep,
     tenant_schema_provisioner: TenantSchemaProvisionerDep,
     tenant_data_source_service: TenantDataSourceServiceDep,
-    runtime_schema_bootstrapper: TenantRuntimeSchemaBootstrapperDep,
 ) -> CreateTenantUseCase:
     return CreateTenantUseCase(
         uow=uow,
@@ -47,7 +45,6 @@ def get_create_tenant_use_case(
         tenant_schema_name_service=tenant_schema_name_service,
         tenant_schema_provisioner=tenant_schema_provisioner,
         tenant_data_source_service=tenant_data_source_service,
-        runtime_schema_bootstrapper=runtime_schema_bootstrapper,
     )
 
 
