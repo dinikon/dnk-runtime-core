@@ -3,6 +3,7 @@ from src.modules.runtime_schema.application.schema.dto import (
     CreateSchemaResultDTO,
 )
 from src.modules.runtime_schema.application.schema.ports import (
+    CreateSchemaPort,
     CreateSchemaUseCaseProtocol,
     DataSourceWriteRepositoryProtocol,
     DatabaseSchemaRepositoryProtocol,
@@ -13,8 +14,8 @@ __all__ = [
     "CreateSchemaCommandDTO",
     "CreateSchemaResultDTO",
     "CreateSchemaUseCase",
+    "CreateSchemaPort",
     "CreateSchemaUseCaseProtocol",
     "DataSourceWriteRepositoryProtocol",
     "DatabaseSchemaRepositoryProtocol",
 ]
-

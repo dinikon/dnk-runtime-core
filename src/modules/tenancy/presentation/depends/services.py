@@ -15,23 +15,13 @@ from src.modules.tenancy.application.admin_onboarding.ports.identity import (
     IdentityProvisioningServiceProtocol,
     ProvisionedTenantAdmin,
 )
-from src.modules.tenancy.application.admin_onboarding.ports.storage import (
-    TenantSchemaProvisionerProtocol,
-)
 from src.modules.tenancy.application.admin_onboarding.services.tenant_domain_service import (
     TenantDomainService,
     TenantDomainServiceProtocol,
 )
-from src.modules.tenancy.application.admin_onboarding.services.tenant_schema_name_service import (
-    TenantSchemaNameService,
-    TenantSchemaNameServiceProtocol,
-)
 from src.modules.tenancy.application.admin_onboarding.services.tenant_service import (
     TenantService,
     TenantServiceProtocol,
-)
-from src.modules.tenancy.infrastructure.schema_provisioner import (
-    SqlAlchemyTenantSchemaProvisioner,
 )
 from src.modules.tenancy.presentation.depends.repositories import (
     TenantDomainsRepositoryDep,
@@ -87,28 +77,6 @@ TenantDomainServiceDep = Annotated[
 ]
 
 
-def get_tenant_schema_name_service() -> TenantSchemaNameServiceProtocol:
-    return TenantSchemaNameService()
-
-
-TenantSchemaNameServiceDep = Annotated[
-    TenantSchemaNameServiceProtocol,
-    Depends(get_tenant_schema_name_service),
-]
-
-
-def get_tenant_schema_provisioner(
-    uow: UoWDep,
-) -> TenantSchemaProvisionerProtocol:
-    return SqlAlchemyTenantSchemaProvisioner(uow.session)
-
-
-TenantSchemaProvisionerDep = Annotated[
-    TenantSchemaProvisionerProtocol,
-    Depends(get_tenant_schema_provisioner),
-]
-
-
 def get_identity_provisioning_service(
     uow: UoWDep,
 ) -> IdentityProvisioningServiceProtocol:
@@ -127,10 +95,6 @@ __all__ = [
     "TenantServiceDep",
     "get_tenant_domain_service",
     "TenantDomainServiceDep",
-    "get_tenant_schema_name_service",
-    "TenantSchemaNameServiceDep",
-    "get_tenant_schema_provisioner",
-    "TenantSchemaProvisionerDep",
     "get_identity_provisioning_service",
     "IdentityProvisioningServiceDep",
 ]

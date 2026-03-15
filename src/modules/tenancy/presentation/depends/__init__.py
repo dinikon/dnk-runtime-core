@@ -18,13 +18,9 @@ from src.modules.tenancy.presentation.depends.repositories import (
 from src.modules.tenancy.presentation.depends.services import (
     IdentityProvisioningServiceDep,
     TenantDomainServiceDep,
-    TenantSchemaNameServiceDep,
-    TenantSchemaProvisionerDep,
     TenantServiceDep,
     get_identity_provisioning_service,
     get_tenant_domain_service,
-    get_tenant_schema_name_service,
-    get_tenant_schema_provisioner,
     get_tenant_service,
 )
 from src.modules.tenancy.presentation.depends.use_cases import (
@@ -52,10 +48,6 @@ __all__ = [
     "TenantServiceDep",
     "get_tenant_domain_service",
     "TenantDomainServiceDep",
-    "get_tenant_schema_name_service",
-    "TenantSchemaNameServiceDep",
-    "get_tenant_schema_provisioner",
-    "TenantSchemaProvisionerDep",
     "get_identity_provisioning_service",
     "IdentityProvisioningServiceDep",
     "get_create_tenant_use_case",

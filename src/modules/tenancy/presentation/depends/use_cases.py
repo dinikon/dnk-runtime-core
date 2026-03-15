@@ -20,8 +20,6 @@ from src.modules.tenancy.presentation.depends.repositories import (
 from src.modules.tenancy.presentation.depends.services import (
     IdentityProvisioningServiceDep,
     TenantDomainServiceDep,
-    TenantSchemaNameServiceDep,
-    TenantSchemaProvisionerDep,
     TenantServiceDep,
 )
 from src.modules.shared.depends.uow import UoWDep
@@ -32,16 +30,12 @@ def get_create_tenant_use_case(
     tenant_service: TenantServiceDep,
     identity_provisioning_service: IdentityProvisioningServiceDep,
     tenant_domain_service: TenantDomainServiceDep,
-    tenant_schema_name_service: TenantSchemaNameServiceDep,
-    tenant_schema_provisioner: TenantSchemaProvisionerDep,
 ) -> CreateTenantUseCase:
     return CreateTenantUseCase(
         uow=uow,
         tenant_service=tenant_service,
         identity_provisioning_service=identity_provisioning_service,
         tenant_domain_service=tenant_domain_service,
-        tenant_schema_name_service=tenant_schema_name_service,
-        tenant_schema_provisioner=tenant_schema_provisioner,
     )
 
 
