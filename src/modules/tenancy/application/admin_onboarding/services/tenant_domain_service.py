@@ -6,8 +6,8 @@ from uuid import UUID
 from src.modules.tenancy.application.admin_onboarding.ports.repositories import (
     TenantDomainRepositoryProtocol,
 )
-from src.modules.tenancy.domain.entities import TenantDomain
-from src.modules.tenancy.domain.errors import TenantDomainHostAlreadyExistsError
+from src.modules.tenancy.domain.domain.entity import TenantDomain
+from src.modules.tenancy.domain.domain.errors import TenantDomainHostAlreadyExistsError
 
 
 class TenantDomainServiceProtocol(Protocol):

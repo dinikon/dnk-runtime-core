@@ -12,3 +12,5 @@ class DataSourceEntity:
     updated_at: datetime
     type: str
     schema: str
+    dsn_url: str
+    is_remote: bool

@@ -42,7 +42,7 @@ from src.modules.identity.presentation.depends.auth_use_cases import (
 )
 from src.modules.shared.domain.errors import ValidationError as DomainValidationError
 from src.modules.shared.depends.request_host import RequestHostDep
-from src.modules.tenancy.domain.errors import (
+from src.modules.tenancy.domain.domain.errors import (
     TenantHostNotFoundError,
     TenantLoginUnavailableError,
 )

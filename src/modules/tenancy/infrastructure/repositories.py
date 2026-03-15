@@ -5,27 +5,28 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.tenancy.domain.value_objects.tenant_domain_kind import (
+from src.modules.tenancy.domain.domain.value_objects.tenant_domain_kind import (
     TenantDomainKind,
 )
-from src.modules.tenancy.domain.value_objects.tenant_domain_tls_mode import (
+from src.modules.tenancy.domain.domain.value_objects.tenant_domain_tls_mode import (
     TenantDomainTlsMode,
 )
-from src.modules.tenancy.domain.value_objects.tenant_domain_verification_status import (
+from src.modules.tenancy.domain.domain.value_objects.tenant_domain_verification_status import (
     TenantDomainVerificationStatus,
 )
-from src.modules.tenancy.domain.value_objects.tenant_domain_status import (
+from src.modules.tenancy.domain.domain.value_objects.tenant_domain_status import (
     TenantDomainStatus,
 )
-from src.modules.tenancy.domain.value_objects.tenant_service_type import (
+from src.modules.tenancy.domain.domain.value_objects.tenant_service_type import (
     TenantServiceType,
 )
-from src.modules.tenancy.domain.value_objects.tenant_status import TenantStatus
+from src.modules.tenancy.domain.tenant.value_objects.tenant_status import TenantStatus
 from src.modules.tenancy.application.admin_onboarding.ports.repositories import (
     TenantDomainRepositoryProtocol,
     TenantRepositoryProtocol,
 )
-from src.modules.tenancy.domain.entities import Tenant, TenantDomain
+from src.modules.tenancy.domain.domain.entity import TenantDomain
+from src.modules.tenancy.domain.tenant.entity import Tenant
 from src.modules.tenancy.infrastructure.persistence.tenant import TenantModel
 from src.modules.tenancy.infrastructure.persistence.tenant_domain import (
     TenantDomainModel,

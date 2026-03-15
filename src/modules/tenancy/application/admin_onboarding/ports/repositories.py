@@ -3,7 +3,8 @@ from __future__ import annotations
 from typing import Protocol
 from uuid import UUID
 
-from src.modules.tenancy.domain.entities import Tenant, TenantDomain
+from src.modules.tenancy.domain.domain.entity import TenantDomain
+from src.modules.tenancy.domain.tenant.entity import Tenant
 
 
 class TenantRepositoryProtocol(Protocol):

@@ -8,11 +8,11 @@ from src.modules.tenancy.application.request_context_by_host.dto import (
     ResolveTenantRequestContextByHostQueryDTO,
     TenantRequestContextDTO,
 )
-from src.modules.tenancy.domain.errors import (
+from src.modules.tenancy.domain.domain.errors import (
     TenantHostNotFoundError,
     TenantLoginUnavailableError,
 )
-from src.modules.tenancy.domain.value_objects.tenant_domain_status import (
+from src.modules.tenancy.domain.domain.value_objects.tenant_domain_status import (
     TenantDomainStatus,
 )
 from src.modules.shared.http.host import normalize_host

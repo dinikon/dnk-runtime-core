@@ -5,8 +5,8 @@ from typing import Protocol
 from src.modules.tenancy.application.admin_onboarding.ports.repositories import (
     TenantRepositoryProtocol,
 )
-from src.modules.tenancy.domain.entities import Tenant
-from src.modules.tenancy.domain.errors import (
+from src.modules.tenancy.domain.tenant.entity import Tenant
+from src.modules.tenancy.domain.tenant.errors import (
     TenantExternalIdAlreadyExistsError,
     TenantNameAlreadyExistsError,
 )

@@ -4,8 +4,10 @@ from fastapi import APIRouter, HTTPException, status
 
 from src.modules.identity.domain.errors import UserEmailAlreadyExistsError
 from src.modules.shared.domain.errors import ValidationError as DomainValidationError
-from src.modules.tenancy.domain.errors import (
+from src.modules.tenancy.domain.domain.errors import (
     TenantDomainHostAlreadyExistsError,
+)
+from src.modules.tenancy.domain.tenant.errors import (
     TenantExternalIdAlreadyExistsError,
     TenantNameAlreadyExistsError,
 )
