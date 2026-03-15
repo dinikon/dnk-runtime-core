@@ -7,7 +7,7 @@ from typing import Annotated
 from fastapi import Depends, Request
 
 from src.config import dnk_config
-from src.config.auth_config import IdentityAuthSettings
+from config.feature.identity.auth_config import IdentityAuthSettings
 from src.modules.identity.application.auth.ports.email_sender import EmailSenderPort
 from src.modules.identity.application.auth.services.otp_service import (
     OtpService,

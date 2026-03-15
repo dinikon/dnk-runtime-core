@@ -3,6 +3,7 @@ from pydantic_settings import BaseSettings
 
 
 class RuntimeSchema(BaseSettings):
+
     SCHEMA_PREFIX: str = Field(
         default="dnk_",
         min_length=4,
