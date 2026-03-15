@@ -1,15 +1,14 @@
-from __future__ import annotations
-
-from dataclasses import dataclass
+import uuid
+from dataclasses import dataclass, field
 from typing import Self
 from uuid import UUID
 
-from src.modules.runtime_schema.domain.data_source.error import InvalidSchemaIdError
+from src.modules.runtime_schema.domain.schema.error import InvalidSchemaIdError
 
 
 @dataclass(frozen=True, slots=True)
 class SchemaIdVO:
-    value: UUID
+    value: UUID = field(default_factory=uuid.uuid4)
 
     def __post_init__(self) -> None:
         if not isinstance(self.value, UUID):

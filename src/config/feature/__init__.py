@@ -1,4 +1,4 @@
-from config.feature.runtime_schema import RuntimeSchema
+from src.config.feature.runtime_schema import RuntimeSchema
 
 
 class FeatureConfig(

@@ -2,13 +2,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Self
 
-from src.modules.runtime_schema.domain.data_source.value_object.schama_name import (
+from src.modules.runtime_schema.domain.schema.value_object.schama_name import (
     SchemaNameVO,
 )
-from src.modules.runtime_schema.domain.data_source.value_object.schema_id import (
+from src.modules.runtime_schema.domain.schema.value_object.schema_id import (
     SchemaIdVO,
 )
-from src.modules.runtime_schema.domain.data_source.value_object.schema_type import (
+from src.modules.runtime_schema.domain.schema.value_object.schema_type import (
     SchemaTypeVO,
 )
 from src.modules.shared import EntityIdVO
@@ -26,14 +26,15 @@ class DataSourceEntity:
     @classmethod
     def create(
         cls,
-        _id: SchemaIdVO,
+        *,
+        id: SchemaIdVO,
         tenant_id: EntityIdVO,
         type: SchemaTypeVO,
         schema_name: SchemaNameVO,
         now: datetime,
     ) -> Self:
         return cls(
-            id=_id,
+            id=id,
             tenant_id=tenant_id,
             created_at=now,
             updated_at=now,

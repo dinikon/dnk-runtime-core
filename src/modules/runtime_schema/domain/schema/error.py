@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from src.modules.shared.domain.errors import DomainError
 
 
@@ -17,10 +15,3 @@ class InvalidSchemaIdError(RuntimeSchemaDomainError):
         super().__init__(
             f"SchemaIdVO value must be UUID or UUID string, got: {type(value).__name__}"
         )
-
-
-__all__ = [
-    "InvalidSchemaIdError",
-    "InvalidSchemaNameFormatError",
-    "RuntimeSchemaDomainError",
-]

@@ -1,7 +1,7 @@
 import re
 from dataclasses import dataclass
 
-from src.modules.runtime_schema.domain.data_source.error import (
+from src.modules.runtime_schema.domain.schema.error import (
     InvalidSchemaNameFormatError,
 )
 

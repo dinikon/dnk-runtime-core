@@ -1,4 +1,4 @@
-from src.modules.runtime_schema.domain.data_source import (
+from src.modules.runtime_schema.domain.schema import (
     DataSourceEntity,
     DataSourceRepository,
     InvalidSchemaIdError,
