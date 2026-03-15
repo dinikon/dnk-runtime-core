@@ -3,7 +3,6 @@ from src.modules.tenancy.application.admin_onboarding.ports.identity import (
     ProvisionedTenantAdmin,
 )
 from src.modules.tenancy.application.admin_onboarding.ports.repositories import (
-    TenantDataSourceRepositoryProtocol,
     TenantDomainRepositoryProtocol,
     TenantRepositoryProtocol,
 )
@@ -16,6 +15,5 @@ __all__ = [
     "ProvisionedTenantAdmin",
     "TenantRepositoryProtocol",
     "TenantDomainRepositoryProtocol",
-    "TenantDataSourceRepositoryProtocol",
     "TenantSchemaProvisionerProtocol",
 ]
