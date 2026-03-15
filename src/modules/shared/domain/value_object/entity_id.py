@@ -9,6 +9,10 @@ import uuid6
 class EntityIdVO:
     value: UUID
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.value, UUID):
+            raise TypeError("EntityIdVO value must be UUID")
+
     @classmethod
     def new(cls) -> Self:
         return cls(value=uuid6.uuid7())
