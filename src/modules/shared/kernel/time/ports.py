@@ -4,5 +4,5 @@ from datetime import datetime
 from typing import Protocol
 
 
-class ClockProtocol(Protocol):
+class ClockPort(Protocol):
     def now(self) -> datetime: ...

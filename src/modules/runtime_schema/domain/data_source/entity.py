@@ -23,15 +23,13 @@ class DataSourceEntity:
     @classmethod
     def create(
         cls,
-        *,
-        id: EntityIdVO,
         tenant_id: EntityIdVO,
         type: SchemaTypeVO,
         schema_name: SchemaNameVO,
         now: datetime,
     ) -> Self:
         return cls(
-            id=id,
+            id=EntityIdVO.new(),
             tenant_id=tenant_id,
             created_at=now,
             updated_at=now,

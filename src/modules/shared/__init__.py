@@ -1,13 +1,13 @@
 from .domain import CurrencyCodeVO, EntityIdVO, ValidationError
 from .kernel import Principal, RequestContext
-from .time import ClockProtocol, UtcSystemClock
+from modules.shared.kernel.time import ClockPort, UtcClock
 
 __all__ = [
-    "ClockProtocol",
+    "ClockPort",
     "CurrencyCodeVO",
     "EntityIdVO",
     "Principal",
     "RequestContext",
-    "UtcSystemClock",
+    "UtcClock",
     "ValidationError",
 ]
