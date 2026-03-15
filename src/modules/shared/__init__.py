@@ -1,4 +1,4 @@
-from .domain import CurrencyCodeVO, EntityIdVO, DomainError, DomainError
+from .domain import CurrencyCodeVO, EntityIdVO, DomainError
 from .kernel import Principal, RequestContext
 from src.modules.shared.infrastructure.time import UtcClock
 from src.modules.shared.kernel.time import ClockPort
@@ -11,5 +11,4 @@ __all__ = [
     "Principal",
     "RequestContext",
     "UtcClock",
-    "DomainError",
 ]

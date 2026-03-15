@@ -1,8 +1,10 @@
 from src.modules.runtime_schema.domain.schema import (
     DataSourceEntity,
     DataSourceRepository,
+    DataSourceRepositoryProtocol,
     InvalidSchemaIdError,
     InvalidSchemaNameFormatError,
+    InvalidSchemaTypeError,
     RuntimeSchemaDomainError,
     SchemaIdVO,
     SchemaNameVO,
@@ -12,8 +14,10 @@ from src.modules.runtime_schema.domain.schema import (
 __all__ = [
     "DataSourceEntity",
     "DataSourceRepository",
+    "DataSourceRepositoryProtocol",
     "InvalidSchemaIdError",
     "InvalidSchemaNameFormatError",
+    "InvalidSchemaTypeError",
     "RuntimeSchemaDomainError",
     "SchemaIdVO",
     "SchemaNameVO",

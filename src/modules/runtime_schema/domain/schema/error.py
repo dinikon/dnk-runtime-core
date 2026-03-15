@@ -15,3 +15,16 @@ class InvalidSchemaIdError(RuntimeSchemaDomainError):
         super().__init__(
             f"SchemaIdVO value must be UUID or UUID string, got: {type(value).__name__}"
         )
+
+
+class InvalidSchemaTypeError(RuntimeSchemaDomainError):
+    def __init__(self, value: str):
+        super().__init__(f"Schema type '{value}' is not supported.")
+
+
+__all__ = [
+    "InvalidSchemaIdError",
+    "InvalidSchemaNameFormatError",
+    "InvalidSchemaTypeError",
+    "RuntimeSchemaDomainError",
+]
