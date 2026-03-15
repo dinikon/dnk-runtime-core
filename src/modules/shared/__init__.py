@@ -1,6 +1,7 @@
 from .domain import CurrencyCodeVO, EntityIdVO, ValidationError
 from .kernel import Principal, RequestContext
-from modules.shared.kernel.time import ClockPort, UtcClock
+from src.modules.shared.infrastructure.time import UtcClock
+from src.modules.shared.kernel.time import ClockPort
 
 __all__ = [
     "ClockPort",

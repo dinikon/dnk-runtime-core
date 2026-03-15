@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.modules.shared.uow import UnitOfWorkProtocol
+from modules.shared.db.uow import UnitOfWorkProtocol
 from src.modules.tenancy.application.admin_onboarding.dto import (
     CreateTenantCommandDTO,
     CreateTenantResultDTO,
@@ -45,11 +45,15 @@ class CreateTenantUseCase:
                 dto.tenant_name,
                 dto.external_id,
             )
-            tenant_domain = await self._tenant_domain_service.create_primary_console_domain(
-                tenant_id=tenant.id,
-                host=dto.tenant_domain_host,
+            tenant_domain = (
+                await self._tenant_domain_service.create_primary_console_domain(
+                    tenant_id=tenant.id,
+                    host=dto.tenant_domain_host,
+                )
             )
-            tenant_schema = self._tenant_schema_name_service.build_schema_name(tenant.id)
+            tenant_schema = self._tenant_schema_name_service.build_schema_name(
+                tenant.id
+            )
             await self._tenant_schema_provisioner.create_schema(tenant_schema)
             user = await self._identity_provisioning_service.create_tenant_admin(
                 tenant_id=tenant.id,

@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+from typing import Protocol
 from uuid import UUID
 
-from src.modules.shared.access.protocols import AuthorizationServiceProtocol
 
-
-class AllowAllAuthorizationService:
+class AuthorizationServiceProtocol(Protocol):
     async def can(
         self,
         *,
@@ -14,5 +13,5 @@ class AllowAllAuthorizationService:
         action: str,
         resource_type: str,
         resource_id: UUID | None = None,
-    ) -> bool:
-        return True
+    ) -> bool: ...
+

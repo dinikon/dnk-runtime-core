@@ -21,7 +21,7 @@ from src.modules.identity.application.auth.ports.token_store import (
     SessionStorePort,
 )
 from src.modules.identity.presentation.depends.repositories import UsersRepositoryDep
-from src.modules.shared.tokens import TokenManager
+from src.modules.shared.kernel.tokens import TokenManager
 from src.modules.tenancy.application.request_context_by_host.dto import (
     ResolveTenantRequestContextByHostQueryDTO,
 )
@@ -29,7 +29,7 @@ from src.modules.tenancy.presentation.depends.use_cases import (
     TenantRequestContextByHostUseCaseDep,
 )
 
-from src.modules.identity.presentation.depends.auth_services import TokenManagerDep
+from src.modules.shared.depends.token_manager import TokenManagerDep
 
 
 class TenancyTenantContextReaderAdapter(TenantContextReaderPort):

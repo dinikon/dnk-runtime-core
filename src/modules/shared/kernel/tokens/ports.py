@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 from typing import Protocol
 
-from src.modules.shared.tokens.models import StoredToken
+from src.modules.shared.kernel.tokens.models import StoredToken
 
 
 class TokenBackendProtocol(Protocol):
     async def set(self, key: str, value: StoredToken) -> None: ...
     async def get(self, key: str) -> StoredToken | None: ...
     async def delete(self, key: str) -> None: ...
+

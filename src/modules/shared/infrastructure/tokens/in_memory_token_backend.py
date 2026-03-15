@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.modules.shared.tokens.models import StoredToken
+from src.modules.shared.kernel.tokens.models import StoredToken
 
 
 class InMemoryTokenBackend:
@@ -24,3 +24,4 @@ class InMemoryTokenBackend:
 
     def clear(self) -> None:
         self._storage.clear()
+

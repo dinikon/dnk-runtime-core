@@ -1,4 +1,3 @@
-from modules.shared.kernel.time.ports import ClockPort
-from modules.shared.infrastructure.time.utc_clock import UtcClock
+from src.modules.shared.kernel.time.ports import ClockPort
 
-__all__ = ["ClockPort", "UtcClock"]
+__all__ = ["ClockPort"]

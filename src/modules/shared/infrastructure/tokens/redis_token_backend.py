@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from src.modules.shared.tokens.models import StoredToken
-from src.modules.shared.tokens.redis_repository import RedisTokenRepository
+from src.modules.shared.infrastructure.tokens.redis_token_repository import (
+    RedisTokenRepository,
+)
+from src.modules.shared.kernel.tokens.models import StoredToken
 
 
 class RedisTokenBackend:
@@ -14,7 +16,9 @@ class RedisTokenBackend:
 
     async def set(self, key: str, value: StoredToken) -> None:
         await self._repository.set_json(
-            key=key, payload=value.to_dict(), ttl=_ttl(value)
+            key=key,
+            payload=value.to_dict(),
+            ttl=_ttl(value),
         )
 
     async def get(self, key: str) -> StoredToken | None:
@@ -36,3 +40,4 @@ def _ttl(value: StoredToken) -> int:
 
     ttl = int((value.expires_at - datetime.now(UTC)).total_seconds())
     return max(ttl, 1)
+

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from src.modules.shared.tokens.models import StoredToken
-from src.modules.shared.tokens.protocols import TokenBackendProtocol
+from src.modules.shared.kernel.tokens.models import StoredToken
+from src.modules.shared.kernel.tokens.ports import TokenBackendProtocol
 
 
 class TokenManager:
@@ -66,3 +66,4 @@ class TokenManager:
     @staticmethod
     def _build_key(*, prefix: str, suffix: str, token: str) -> str:
         return f"{prefix}:{suffix}:{token}"
+

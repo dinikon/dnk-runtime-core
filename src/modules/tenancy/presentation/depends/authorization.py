@@ -5,21 +5,11 @@ from uuid import UUID
 
 from fastapi import Depends, Header, HTTPException, status
 
-from src.modules.shared.access import (
-    AllowAllAuthorizationService,
-    AuthorizationServiceProtocol,
+from src.modules.shared.depends.authorization import (
+    AuthorizationServiceDep,
+    get_authorization_service,
 )
 from src.modules.tenancy.domain.permissions import TenancyAction
-
-
-def get_authorization_service() -> AuthorizationServiceProtocol:
-    return AllowAllAuthorizationService()
-
-
-AuthorizationServiceDep = Annotated[
-    AuthorizationServiceProtocol,
-    Depends(get_authorization_service),
-]
 
 
 async def authorize_admin_create_tenant(
