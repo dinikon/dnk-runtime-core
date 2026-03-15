@@ -1,2 +1,2 @@
-class ValidationError(ValueError):
-    """Base domain validation error."""
+class DomainError(Exception):
+    """Global base error for the whole project."""

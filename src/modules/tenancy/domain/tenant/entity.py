@@ -6,7 +6,7 @@ from uuid import UUID
 
 import uuid6
 
-from src.modules.shared.domain.errors import ValidationError
+from src.modules.shared.domain.errors import DomainError
 from src.modules.tenancy.domain.tenant.value_objects.tenant_status import TenantStatus
 
 
@@ -34,9 +34,9 @@ class Tenant:
         normalized_name = name.strip()
         normalized_external_id = external_id.strip()
         if not normalized_name:
-            raise ValidationError("Tenant name must not be empty.")
+            raise DomainError("Tenant name must not be empty.")
         if not normalized_external_id:
-            raise ValidationError("Tenant external_id must not be empty.")
+            raise DomainError("Tenant external_id must not be empty.")
 
         now = datetime.now(UTC)
         return cls(

@@ -6,7 +6,7 @@ from uuid import UUID
 
 import uuid6
 
-from src.modules.shared.domain.errors import ValidationError
+from src.modules.shared.domain.errors import DomainError
 from src.modules.tenancy.domain.domain.value_objects.tenant_domain_kind import (
     TenantDomainKind,
 )
@@ -51,7 +51,7 @@ class TenantDomain:
     ) -> "TenantDomain":
         normalized_host = host.strip().lower()
         if not normalized_host:
-            raise ValidationError("Tenant domain host must not be empty.")
+            raise DomainError("Tenant domain host must not be empty.")
 
         now = datetime.now(UTC)
         return cls(

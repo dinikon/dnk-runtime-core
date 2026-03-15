@@ -40,7 +40,7 @@ from src.modules.identity.presentation.depends.auth_use_cases import (
     RequestEmailOtpUseCaseDep,
     UpdateCurrentUserProfileUseCaseDep,
 )
-from src.modules.shared.domain.errors import ValidationError as DomainValidationError
+from src.modules.shared.domain.errors import DomainError
 from src.modules.shared.depends.request_host import RequestHostDep
 from src.modules.tenancy.domain.domain.errors import (
     TenantHostNotFoundError,
@@ -250,7 +250,7 @@ async def update_current_user_profile(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(exc),
         ) from exc
-    except DomainValidationError as exc:
+    except DomainError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),

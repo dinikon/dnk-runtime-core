@@ -1,4 +1,4 @@
-from modules.runtime_schema.domain.data_source.entity import DataSourceEntity
+from src.modules.runtime_schema.domain.data_source.entity import DataSourceEntity
 
 
 class DataSourceRepository:

@@ -1,121 +1,119 @@
-from src.modules.shared.domain.errors import ValidationError
+from src.modules.shared.domain.errors import DomainError
 
 
-class ContactPointNotFoundError(ValidationError):
+class ContactPointNotFoundError(DomainError):
     def __init__(self, point_id: str):
         super().__init__(f"Contact point not found: {point_id}")
 
 
-class ContactNotFoundError(ValidationError):
+class ContactNotFoundError(DomainError):
     def __init__(self, contact_id: str):
         super().__init__(f"Contact not found: {contact_id}")
 
 
-class ContactPointKindNotSupportedError(ValidationError):
+class ContactPointKindNotSupportedError(DomainError):
     def __init__(self, kind: str):
         super().__init__(f"Unsupported contact point kind: {kind}")
 
 
-class ContactPointValueRequiredError(ValidationError):
+class ContactPointValueRequiredError(DomainError):
     def __init__(self):
         super().__init__("Contact point value cannot be empty")
 
 
-class ContactPointTypeCodeRequiredError(ValidationError):
+class ContactPointTypeCodeRequiredError(DomainError):
     def __init__(self):
         super().__init__("Contact point type code cannot be empty")
 
 
-class ContactPointTypeTitleRequiredError(ValidationError):
+class ContactPointTypeTitleRequiredError(DomainError):
     def __init__(self):
         super().__init__("Contact point type title cannot be empty")
 
 
-class ContactPointTypeAlreadyExistsError(ValidationError):
+class ContactPointTypeAlreadyExistsError(DomainError):
     def __init__(self, kind: str, code: str):
-        super().__init__(
-            f"Contact point type already exists: kind={kind}, code={code}"
-        )
+        super().__init__(f"Contact point type already exists: kind={kind}, code={code}")
 
 
-class ContactPointTypeNotFoundError(ValidationError):
+class ContactPointTypeNotFoundError(DomainError):
     def __init__(self, kind: str, code: str):
         super().__init__(f"Contact point type not found: kind={kind}, code={code}")
 
 
-class ContactPointTypeInactiveError(ValidationError):
+class ContactPointTypeInactiveError(DomainError):
     def __init__(self, kind: str, code: str):
         super().__init__(f"Contact point type is inactive: kind={kind}, code={code}")
 
 
-class ContactPointTypeSystemLockedError(ValidationError):
+class ContactPointTypeSystemLockedError(DomainError):
     def __init__(self, kind: str, code: str):
         super().__init__(
             f"System contact point type cannot be modified: kind={kind}, code={code}"
         )
 
 
-class CompanyNameRequiredError(ValidationError):
+class CompanyNameRequiredError(DomainError):
     def __init__(self):
         super().__init__("company_name cannot be empty")
 
 
-class LeadTitleRequiredError(ValidationError):
+class LeadTitleRequiredError(DomainError):
     def __init__(self):
         super().__init__("title cannot be empty")
 
 
-class LeadPersonNameRequiredForConversionError(ValidationError):
+class LeadPersonNameRequiredForConversionError(DomainError):
     def __init__(self):
         super().__init__("person_name is required to convert lead to contact")
 
 
-class LeadCompanyNameRequiredForConversionError(ValidationError):
+class LeadCompanyNameRequiredForConversionError(DomainError):
     def __init__(self):
         super().__init__("company_name is required to convert lead to company")
 
 
-class DealTitleRequiredError(ValidationError):
+class DealTitleRequiredError(DomainError):
     def __init__(self):
         super().__init__("deal title cannot be empty")
 
 
-class ProductRowNotFoundError(ValidationError):
+class ProductRowNotFoundError(DomainError):
     def __init__(self, row_id: str):
         super().__init__(f"Product row not found: {row_id}")
 
 
-class ProductRowEntityIdRequiredError(ValidationError):
+class ProductRowEntityIdRequiredError(DomainError):
     def __init__(self):
         super().__init__("entity_id must be greater than zero")
 
 
-class ProductRowProductNameRequiredError(ValidationError):
+class ProductRowProductNameRequiredError(DomainError):
     def __init__(self):
         super().__init__("product_name cannot be empty")
 
 
-class ProductRowMeasureCodeRequiredError(ValidationError):
+class ProductRowMeasureCodeRequiredError(DomainError):
     def __init__(self):
         super().__init__("measure_code cannot be empty")
 
 
-class ProductRowMeasureNameRequiredError(ValidationError):
+class ProductRowMeasureNameRequiredError(DomainError):
     def __init__(self):
         super().__init__("measure_name cannot be empty")
 
 
-class ProductRowQuantityMustBePositiveError(ValidationError):
+class ProductRowQuantityMustBePositiveError(DomainError):
     def __init__(self):
         super().__init__("quantity must be greater than zero")
 
 
-class ProductRowFieldMustBeNonNegativeError(ValidationError):
+class ProductRowFieldMustBeNonNegativeError(DomainError):
     def __init__(self, field_name: str):
         super().__init__(f"{field_name} must be non-negative")
 
 
-class ProductRowDiscountTypeNotSupportedError(ValidationError):
+class ProductRowDiscountTypeNotSupportedError(DomainError):
     def __init__(self, value: str):
         super().__init__(f"Unsupported discount type: {value}")
 

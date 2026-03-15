@@ -240,7 +240,7 @@
 
 Файл: `domain/errors.py`
 
-33 специализированных исключения-наследника `ValidationError`, сгруппированные по группам:
+33 специализированных исключения-наследника `DomainError`, сгруппированные по группам:
 
 - field name/label;
 - field flags/options/settings/default/relation/time;
@@ -539,7 +539,7 @@ Dialect-особенности:
 
 Особенности:
 
-- падение DDL преобразуется в `ValidationError("ddl execution failed: ...")`;
+- падение DDL преобразуется в `DomainError("ddl execution failed: ...")`;
 - в случае DDL ошибки failed journal пишется в репозиторий;
 - при sync системных моделей IDs объектов/полей ремапятся на уже существующие записи, чтобы не терять ссылочную целостность relation targets.
 
@@ -657,7 +657,7 @@ Dialect-особенности:
 - `src/modules/runtime_schema/domain/__init__.py`
   - агрегированный экспорт domain-типов.
 - `src/modules/runtime_schema/domain/errors.py`
-  - 33 специализированных `ValidationError`.
+  - 33 специализированных `DomainError`.
 - `src/modules/runtime_schema/domain/source/__init__.py`
   - `__all__` placeholder.
 - `src/modules/runtime_schema/domain/source/value_object.py`

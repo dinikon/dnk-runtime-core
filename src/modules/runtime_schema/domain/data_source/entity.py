@@ -2,11 +2,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Self
 
-from modules.runtime_schema.domain.data_source.value_object.schama_name import (
+from src.modules.runtime_schema.domain.data_source.value_object.schama_name import (
     SchemaNameVO,
 )
-from modules.runtime_schema.domain.data_source.value_object.schema_id import SchemaIdVO
-from modules.runtime_schema.domain.data_source.value_object.schema_type import (
+from src.modules.runtime_schema.domain.data_source.value_object.schema_id import (
+    SchemaIdVO,
+)
+from src.modules.runtime_schema.domain.data_source.value_object.schema_type import (
     SchemaTypeVO,
 )
 from src.modules.shared import EntityIdVO

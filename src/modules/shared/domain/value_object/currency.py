@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from ..errors import ValidationError
+from ..errors import DomainError
 
 
-class CurrencyCodeNotSupportedError(ValidationError):
+class CurrencyCodeNotSupportedError(DomainError):
     def __init__(self, value: str) -> None:
         super().__init__(f"currency code '{value}' is not supported")
 

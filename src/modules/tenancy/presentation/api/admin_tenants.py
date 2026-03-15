@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, status
 
 from src.modules.identity.domain.errors import UserEmailAlreadyExistsError
-from src.modules.shared.domain.errors import ValidationError as DomainValidationError
+from src.modules.shared.domain.errors import DomainError as DomainDomainError
 from src.modules.tenancy.domain.domain.errors import (
     TenantDomainHostAlreadyExistsError,
 )
@@ -58,7 +58,7 @@ async def create_tenant(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
-    except DomainValidationError as exc:
+    except DomainDomainError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),

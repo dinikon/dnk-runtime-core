@@ -1,31 +1,31 @@
-from src.modules.shared.domain.errors import ValidationError
+from src.modules.shared.domain.errors import DomainError
 
 
-class UserEmailAlreadyExistsError(ValidationError):
+class UserEmailAlreadyExistsError(DomainError):
     def __init__(self, email: str):
         super().__init__(f"User email '{email}' already exists in tenant.")
 
 
-class PrimaryUserEmailNotFoundError(ValidationError):
+class PrimaryUserEmailNotFoundError(DomainError):
     def __init__(self, email: str):
         super().__init__(f"Primary user email '{email}' was not found in tenant.")
 
 
-class UserLoginUnavailableError(ValidationError):
+class UserLoginUnavailableError(DomainError):
     def __init__(self):
         super().__init__("User is not available for login.")
 
 
-class InvalidOtpChallengeError(ValidationError):
+class InvalidOtpChallengeError(DomainError):
     def __init__(self):
         super().__init__("OTP challenge is invalid or expired.")
 
 
-class InvalidOtpCodeError(ValidationError):
+class InvalidOtpCodeError(DomainError):
     def __init__(self):
         super().__init__("OTP code is invalid.")
 
 
-class InvalidSessionError(ValidationError):
+class InvalidSessionError(DomainError):
     def __init__(self):
         super().__init__("Session is invalid or expired.")
