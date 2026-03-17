@@ -6,7 +6,6 @@ from uuid import UUID
 @dataclass(slots=True, frozen=True)
 class ContactDTO:
     id: UUID
-    tenant_id: UUID
     created_at: datetime
     updated_at: datetime
     last_name: str

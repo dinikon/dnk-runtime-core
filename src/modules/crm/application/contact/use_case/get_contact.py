@@ -6,6 +6,7 @@ from modules.crm.domain.contact.service import ContactService
 
 
 class GetContactUseCaseProtocol(Protocol):
+
     async def __call__(self, query: GetContactQuery) -> ContactDTO: ...
 
 
@@ -15,12 +16,10 @@ class GetContactUseCase:
 
     async def __call__(self, query: GetContactQuery) -> ContactDTO:
         contact = await self._service.get_contact(
-            tenant_id=query.tenant_id,
             contact_id=query.contact_id,
         )
         return ContactDTO(
             id=contact.id.value,
-            tenant_id=contact.tenant_id,
             created_at=contact.created_at,
             updated_at=contact.updated_at,
             last_name=contact.contact_name.last_name,

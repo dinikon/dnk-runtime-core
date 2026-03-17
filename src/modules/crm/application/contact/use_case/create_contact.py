@@ -19,7 +19,6 @@ class CreateContactUseCase:
 
         contact = await self._service.create_contact(
             contact_id=command.contact_id,
-            tenant_id=command.tenant_id,
             now=command.now,
             last_name=command.last_name,
             first_name=command.first_name,
@@ -27,7 +26,6 @@ class CreateContactUseCase:
         )
         return ContactDTO(
             id=contact.id.value,
-            tenant_id=contact.tenant_id,
             created_at=contact.created_at,
             updated_at=contact.updated_at,
             last_name=contact.contact_name.last_name,

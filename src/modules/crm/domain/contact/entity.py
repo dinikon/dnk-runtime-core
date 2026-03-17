@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from datetime import datetime
-from uuid import UUID
 
 from src.modules.crm.domain.contact.value_object.contact_name import ContactNameVO
 from src.modules.crm.domain.contact.value_object.contact_id import ContactIdVO
@@ -9,7 +8,6 @@ from src.modules.crm.domain.contact.value_object.contact_id import ContactIdVO
 @dataclass(slots=True)
 class ContactEntity:
     id: ContactIdVO
-    tenant_id: UUID
     created_at: datetime
     updated_at: datetime
     contact_name: ContactNameVO
@@ -18,7 +16,6 @@ class ContactEntity:
     def create(
         cls,
         id_: ContactIdVO,
-        tenant_id: UUID,
         now: datetime,
         last_name: str,
         first_name: str | None = None,
@@ -26,7 +23,6 @@ class ContactEntity:
     ):
         return cls(
             id=id_,
-            tenant_id=tenant_id,
             created_at=now,
             updated_at=now,
             contact_name=ContactNameVO(
