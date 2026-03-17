@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 from typing import Annotated
-from uuid import UUID
-
 from fastapi import Depends, HTTPException, status
 
 from src.modules.crm.domain.repositories import (
     CompanyRepositoryProtocol,
     ContactRepositoryProtocol,
 )
+from src.modules.crm.presentation.depends.security import CrmTenantIdDep
 from src.modules.crm.infrastructure.repositories import (
     SqlAlchemyCompanyRepository,
     SqlAlchemyContactRepository,
@@ -29,7 +28,7 @@ from src.modules.runtime_schema.infrastructure.repositories import (
 from src.modules.shared.depends.uow import UoWDep
 
 
-async def get_tenant_schema_name(tenant_id: UUID, uow: UoWDep) -> str:
+async def get_tenant_schema_name(tenant_id: CrmTenantIdDep, uow: UoWDep) -> str:
     data_source_repository = SqlAlchemyDataSourceRepository(uow.session)
     data_sources = await data_source_repository.list_by_tenant_id(tenant_id)
     if not data_sources:

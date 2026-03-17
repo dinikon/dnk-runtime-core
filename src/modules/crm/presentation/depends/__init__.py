@@ -29,8 +29,15 @@ from src.modules.crm.presentation.depends.infrastructure import (
     get_contact_repository,
     get_tenant_schema_name,
 )
+from src.modules.crm.presentation.depends.security import (
+    CrmAuthenticatedRequestContextDep,
+    CrmTenantIdDep,
+    get_authenticated_tenant_id,
+)
 
 __all__ = [
+    "CrmAuthenticatedRequestContextDep",
+    "CrmTenantIdDep",
     "CompanyRepositoryDep",
     "ContactRepositoryDep",
     "CreateCompanyUseCaseDep",
@@ -51,6 +58,7 @@ __all__ = [
     "get_create_contact_use_case",
     "get_delete_company_use_case",
     "get_delete_contact_use_case",
+    "get_authenticated_tenant_id",
     "get_get_company_use_case",
     "get_get_contact_use_case",
     "get_list_companies_use_case",

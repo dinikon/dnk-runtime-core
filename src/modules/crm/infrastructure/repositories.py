@@ -23,7 +23,6 @@ class SqlAlchemyContactRepository(ContactRepositoryProtocol):
         *,
         schema_name: str | None = None,
     ) -> None:
-        self._session = session
         self._schema_name = schema_name
         self._runtime_values = SqlAlchemyRuntimeValueRepository(session)
 
@@ -111,7 +110,6 @@ class SqlAlchemyCompanyRepository(CompanyRepositoryProtocol):
         *,
         schema_name: str | None = None,
     ) -> None:
-        self._session = session
         self._schema_name = schema_name
         self._runtime_values = SqlAlchemyRuntimeValueRepository(session)
 

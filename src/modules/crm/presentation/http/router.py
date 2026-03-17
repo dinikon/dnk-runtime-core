@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from src.modules.crm.application import (
     CreateCompanyCommand,
@@ -30,6 +30,7 @@ from src.modules.crm.presentation.depends.application import (
     UpdateCompanyUseCaseDep,
     UpdateContactUseCaseDep,
 )
+from src.modules.crm.presentation.depends.security import CrmTenantIdDep
 from src.modules.crm.presentation.http.requests import (
     CreateCompanyRequestSchema,
     CreateContactRequestSchema,
@@ -46,18 +47,22 @@ from src.modules.runtime_record.domain.errors import (
     RuntimeRecordNotFoundError,
     RuntimeRecordValidationError,
 )
+from src.modules.shared.depends import require_authenticated_request_context
 from src.modules.shared.domain.errors import DomainError
 
 router = APIRouter(prefix="/crm", tags=["crm"])
+crud_router = APIRouter(
+    dependencies=[Depends(require_authenticated_request_context)],
+)
 
 
-@router.post(
-    "/tenants/{tenant_id}/contacts",
+@crud_router.post(
+    "/contacts",
     response_model=ContactResponseSchema,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_contact(
-    tenant_id: UUID,
+    tenant_id: CrmTenantIdDep,
     payload: CreateContactRequestSchema,
     use_case: CreateContactUseCaseDep,
 ) -> ContactResponseSchema:
@@ -77,12 +82,12 @@ async def create_contact(
     return _contact_to_response(result)
 
 
-@router.get(
-    "/tenants/{tenant_id}/contacts/{contact_id}",
+@crud_router.get(
+    "/contacts/{contact_id}",
     response_model=ContactResponseSchema,
 )
 async def get_contact(
-    tenant_id: UUID,
+    tenant_id: CrmTenantIdDep,
     contact_id: UUID,
     use_case: GetContactUseCaseDep,
 ) -> ContactResponseSchema:
@@ -99,12 +104,12 @@ async def get_contact(
     return _contact_to_response(result)
 
 
-@router.get(
-    "/tenants/{tenant_id}/contacts",
+@crud_router.get(
+    "/contacts",
     response_model=list[ContactResponseSchema],
 )
 async def list_contacts(
-    tenant_id: UUID,
+    tenant_id: CrmTenantIdDep,
     use_case: ListContactsUseCaseDep,
 ) -> list[ContactResponseSchema]:
     try:
@@ -115,12 +120,12 @@ async def list_contacts(
     return [_contact_to_response(item) for item in results]
 
 
-@router.patch(
-    "/tenants/{tenant_id}/contacts/{contact_id}",
+@crud_router.patch(
+    "/contacts/{contact_id}",
     response_model=ContactResponseSchema,
 )
 async def update_contact(
-    tenant_id: UUID,
+    tenant_id: CrmTenantIdDep,
     contact_id: UUID,
     payload: UpdateContactRequestSchema,
     use_case: UpdateContactUseCaseDep,
@@ -142,16 +147,14 @@ async def update_contact(
     return _contact_to_response(result)
 
 
-@router.delete(
-    "/tenants/{tenant_id}/contacts/{contact_id}",
+@crud_router.delete(
+    "/contacts/{contact_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_contact(
-    tenant_id: UUID,
     contact_id: UUID,
     use_case: DeleteContactUseCaseDep,
 ) -> Response:
-    _ = tenant_id
     try:
         await use_case.execute(DeleteContactCommand(contact_id=contact_id))
     except Exception as exc:  # noqa: BLE001
@@ -159,13 +162,13 @@ async def delete_contact(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post(
-    "/tenants/{tenant_id}/companies",
+@crud_router.post(
+    "/companies",
     response_model=CompanyResponseSchema,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_company(
-    tenant_id: UUID,
+    tenant_id: CrmTenantIdDep,
     payload: CreateCompanyRequestSchema,
     use_case: CreateCompanyUseCaseDep,
 ) -> CompanyResponseSchema:
@@ -184,12 +187,12 @@ async def create_company(
     return _company_to_response(result)
 
 
-@router.get(
-    "/tenants/{tenant_id}/companies/{company_id}",
+@crud_router.get(
+    "/companies/{company_id}",
     response_model=CompanyResponseSchema,
 )
 async def get_company(
-    tenant_id: UUID,
+    tenant_id: CrmTenantIdDep,
     company_id: UUID,
     use_case: GetCompanyUseCaseDep,
 ) -> CompanyResponseSchema:
@@ -206,12 +209,12 @@ async def get_company(
     return _company_to_response(result)
 
 
-@router.get(
-    "/tenants/{tenant_id}/companies",
+@crud_router.get(
+    "/companies",
     response_model=list[CompanyResponseSchema],
 )
 async def list_companies(
-    tenant_id: UUID,
+    tenant_id: CrmTenantIdDep,
     use_case: ListCompaniesUseCaseDep,
 ) -> list[CompanyResponseSchema]:
     try:
@@ -222,12 +225,12 @@ async def list_companies(
     return [_company_to_response(item) for item in results]
 
 
-@router.patch(
-    "/tenants/{tenant_id}/companies/{company_id}",
+@crud_router.patch(
+    "/companies/{company_id}",
     response_model=CompanyResponseSchema,
 )
 async def update_company(
-    tenant_id: UUID,
+    tenant_id: CrmTenantIdDep,
     company_id: UUID,
     payload: UpdateCompanyRequestSchema,
     use_case: UpdateCompanyUseCaseDep,
@@ -248,16 +251,14 @@ async def update_company(
     return _company_to_response(result)
 
 
-@router.delete(
-    "/tenants/{tenant_id}/companies/{company_id}",
+@crud_router.delete(
+    "/companies/{company_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_company(
-    tenant_id: UUID,
     company_id: UUID,
     use_case: DeleteCompanyUseCaseDep,
 ) -> Response:
-    _ = tenant_id
     try:
         await use_case.execute(DeleteCompanyCommand(company_id=company_id))
     except Exception as exc:  # noqa: BLE001
@@ -268,6 +269,9 @@ async def delete_company(
 @router.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok", "module": "crm"}
+
+
+router.include_router(crud_router)
 
 
 def _contact_to_response(dto: ContactDTO) -> ContactResponseSchema:
