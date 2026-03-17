@@ -1,4 +1,5 @@
 from src.modules.crm.domain.contact.entity import ContactEntity
+from src.modules.crm.domain.contact.error import ContactNotFoundError
 from src.modules.crm.domain.contact.repository import (
     ContactCommandRepositoryProtocol,
     ContactQueryRepositoryProtocol,
@@ -7,11 +8,8 @@ from src.modules.crm.domain.contact.value_object.contact_id import ContactIdVO
 from src.modules.shared.kernel.time.ports import ClockPort
 
 
-class ContactNotFoundError(Exception):
-    pass
-
-
 class ContactService:
+
     def __init__(
         self,
         *,
@@ -51,7 +49,7 @@ class ContactService:
             contact_id=contact_id,
         )
         if contact is None:
-            raise ContactNotFoundError(f"Contact {contact_id} not found")
+            raise ContactNotFoundError(str(contact_id))
 
         return contact
 
@@ -79,7 +77,7 @@ class ContactService:
             contact_id=contact_id,
         )
         if contact is None:
-            raise ContactNotFoundError(f"Contact {contact_id} not found")
+            raise ContactNotFoundError(str(contact_id))
 
         contact.rename(
             now=now,
@@ -93,6 +91,6 @@ class ContactService:
     async def delete_contact(self, *, contact_id: ContactIdVO) -> None:
         contact = await self._query_repository.get_by_id(contact_id=contact_id)
         if contact is None:
-            raise ContactNotFoundError(f"Contact {contact_id} not found")
+            raise ContactNotFoundError(str(contact_id))
 
         await self._command_repository.delete(contact_id=contact_id)

@@ -7,9 +7,10 @@ from fastapi import APIRouter, HTTPException, Response, status
 from src.modules.crm.application.contact.command.delete_contact_command import (
     DeleteContactCommand,
 )
-from src.modules.crm.domain.contact.service import ContactNotFoundError
+from src.modules.crm.domain.contact.error import ContactNotFoundError
 from src.modules.crm.domain.contact.value_object.contact_id import ContactIdVO
 from src.modules.crm.presentation.depends.application import DeleteContactUseCaseDep
+from src.modules.shared.domain.errors import DomainError
 from src.modules.shared.depends import AuthenticatedRequestContextDep
 
 router = APIRouter(prefix="/crm/contacts", tags=["crm-contacts"])
@@ -31,6 +32,11 @@ async def delete_contact(
     except ContactNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except DomainError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),
         ) from exc
 

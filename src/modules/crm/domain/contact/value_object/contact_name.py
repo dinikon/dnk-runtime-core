@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from src.modules.crm.domain.contact.error import InvalidContactNameError
+
 
 @dataclass(slots=True, frozen=True)
 class ContactNameVO:
@@ -9,4 +11,4 @@ class ContactNameVO:
 
     def __post_init__(self) -> None:
         if not self.last_name:
-            raise ValueError("last_name cannot be empty")
+            raise InvalidContactNameError()

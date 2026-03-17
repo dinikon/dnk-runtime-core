@@ -14,6 +14,7 @@ from src.modules.crm.presentation.http.contact.requests import (
 from src.modules.crm.presentation.http.contact.responses import (
     ContactResponseSchema,
 )
+from src.modules.shared.domain.errors import DomainError
 from src.modules.shared.depends import AuthenticatedRequestContextDep
 
 router = APIRouter(prefix="/crm/contacts", tags=["crm-contacts"])
@@ -38,7 +39,7 @@ async def create_contact(
 
     try:
         result = await use_case(command)
-    except (TypeError, ValueError) as exc:
+    except DomainError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),
