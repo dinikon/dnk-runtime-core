@@ -2,81 +2,24 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
-from re import Pattern, compile as re_compile
 from uuid import UUID
 
 import uuid6
 
-from src.modules.runtime_schema.domain.errors import (
-    InvalidDataSourceSchemaError,
-    InvalidDataSourceTypeError,
-    InvalidFieldNameError,
-    InvalidFieldTypeError,
-    InvalidObjectOwnershipKindError,
-    ObjectOwnershipKindImmutableError,
-)
+from src.modules.runtime_schema.domain.errors import ObjectOwnershipKindImmutableError
 from src.modules.runtime_schema.domain.value_objects import (
-    FIELD_NAME_MAX_LENGTH,
+    DataSourceSchemaVO,
     DataSourceType,
+    FieldNameVO,
     FieldType,
     ObjectOwnershipKind,
-)
-
-_FIELD_NAME_PATTERN: Pattern[str] = re_compile(
-    rf"^[a-z][a-z0-9_]{{0,{FIELD_NAME_MAX_LENGTH - 1}}}$"
+    normalize_optional_text,
+    normalize_required_text,
 )
 
 
 def _now_utc() -> datetime:
     return datetime.now(UTC)
-
-
-def _parse_data_source_type(value: DataSourceType | str) -> DataSourceType:
-    try:
-        parsed = value if isinstance(value, DataSourceType) else DataSourceType(value)
-    except ValueError as exc:
-        raise InvalidDataSourceTypeError(str(value)) from exc
-
-    if parsed is not DataSourceType.POSTGRESQL:
-        raise InvalidDataSourceTypeError(str(value))
-
-    return parsed
-
-
-def _parse_ownership_kind(
-    value: ObjectOwnershipKind | str,
-) -> ObjectOwnershipKind:
-    try:
-        return (
-            value
-            if isinstance(value, ObjectOwnershipKind)
-            else ObjectOwnershipKind(value)
-        )
-    except ValueError as exc:
-        raise InvalidObjectOwnershipKindError(str(value)) from exc
-
-
-def _parse_field_type(value: FieldType | str) -> FieldType:
-    try:
-        return value if isinstance(value, FieldType) else FieldType(value)
-    except ValueError as exc:
-        raise InvalidFieldTypeError(str(value)) from exc
-
-
-def _validate_schema_uuid(value: str) -> str:
-    normalized = value.strip()
-    try:
-        UUID(normalized)
-    except ValueError as exc:
-        raise InvalidDataSourceSchemaError(value) from exc
-    return normalized
-
-
-def _validate_field_name(value: str) -> str:
-    normalized = value.strip()
-    if not _FIELD_NAME_PATTERN.fullmatch(normalized):
-        raise InvalidFieldNameError(value)
-    return normalized
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +32,11 @@ class DataSource:
     schema: str
     url: str
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "type", DataSourceType.parse(self.type))
+        object.__setattr__(self, "schema", DataSourceSchemaVO(self.schema).value)
+        object.__setattr__(self, "url", normalize_required_text(self.url))
+
     @classmethod
     def create(
         cls,
@@ -100,17 +48,16 @@ class DataSource:
         now: datetime | None = None,
     ) -> "DataSource":
         created_at = now or _now_utc()
-        resolved_schema = _validate_schema_uuid(schema or str(uuid6.uuid7()))
-        resolved_type = _parse_data_source_type(source_type)
+        resolved_schema = schema if schema is not None else str(uuid6.uuid7())
 
         return cls(
             id=uuid6.uuid7(),
             created_at=created_at,
             updated_at=created_at,
             tenant_id=tenant_id,
-            type=resolved_type,
+            type=source_type,
             schema=resolved_schema,
-            url=url.strip(),
+            url=url,
         )
 
 
@@ -132,6 +79,39 @@ class ObjectMetadata:
     shortcut: str | None
     ownership_kind: ObjectOwnershipKind
     allows_custom_fields: bool
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "name_singular",
+            normalize_required_text(self.name_singular),
+        )
+        object.__setattr__(
+            self, "name_plural", normalize_required_text(self.name_plural)
+        )
+        object.__setattr__(
+            self,
+            "label_singular",
+            normalize_required_text(self.label_singular),
+        )
+        object.__setattr__(
+            self, "label_plural", normalize_required_text(self.label_plural)
+        )
+        object.__setattr__(
+            self, "description", normalize_optional_text(self.description)
+        )
+        object.__setattr__(self, "icon", normalize_optional_text(self.icon))
+        object.__setattr__(
+            self,
+            "duplicate_criteria",
+            normalize_optional_text(self.duplicate_criteria),
+        )
+        object.__setattr__(self, "shortcut", normalize_optional_text(self.shortcut))
+        object.__setattr__(
+            self,
+            "ownership_kind",
+            ObjectOwnershipKind.parse(self.ownership_kind),
+        )
 
     @classmethod
     def create(
@@ -159,16 +139,16 @@ class ObjectMetadata:
             updated_at=created_at,
             tenant_id=tenant_id,
             data_source_id=data_source_id,
-            name_singular=name_singular.strip(),
-            name_plural=name_plural.strip(),
-            label_singular=label_singular.strip(),
-            label_plural=label_plural.strip(),
+            name_singular=name_singular,
+            name_plural=name_plural,
+            label_singular=label_singular,
+            label_plural=label_plural,
             description=description,
             icon=icon,
             is_system=is_system,
             duplicate_criteria=duplicate_criteria,
             shortcut=shortcut,
-            ownership_kind=_parse_ownership_kind(ownership_kind),
+            ownership_kind=ownership_kind,
             allows_custom_fields=allows_custom_fields,
         )
 
@@ -176,7 +156,7 @@ class ObjectMetadata:
         self,
         next_ownership_kind: ObjectOwnershipKind | str,
     ) -> None:
-        if _parse_ownership_kind(next_ownership_kind) != self.ownership_kind:
+        if ObjectOwnershipKind.parse(next_ownership_kind) != self.ownership_kind:
             raise ObjectOwnershipKindImmutableError()
 
 
@@ -197,7 +177,22 @@ class FieldMetadata:
     is_active: bool
     is_nullable: bool
     is_unique: bool
-    workspace_id: UUID | None
+    tenant_id: UUID
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "type", FieldType.parse(self.type))
+        object.__setattr__(self, "name", FieldNameVO(self.name).value)
+        object.__setattr__(self, "label", normalize_required_text(self.label))
+        object.__setattr__(
+            self, "description", normalize_optional_text(self.description)
+        )
+        object.__setattr__(self, "icon", normalize_optional_text(self.icon))
+        object.__setattr__(
+            self,
+            "options",
+            tuple(normalize_required_text(option) for option in self.options),
+        )
+        object.__setattr__(self, "settings", dict(self.settings))
 
     @classmethod
     def create(
@@ -215,7 +210,7 @@ class FieldMetadata:
         is_active: bool = True,
         is_nullable: bool = True,
         is_unique: bool = False,
-        workspace_id: UUID | None = None,
+        tenant_id: UUID,
         now: datetime | None = None,
     ) -> "FieldMetadata":
         created_at = now or _now_utc()
@@ -225,9 +220,9 @@ class FieldMetadata:
             created_at=created_at,
             updated_at=created_at,
             object_metadata_id=object_metadata_id,
-            type=_parse_field_type(field_type),
-            name=_validate_field_name(name),
-            label=label.strip(),
+            type=field_type,
+            name=name,
+            label=label,
             default_value=default_value,
             description=description,
             icon=icon,
@@ -236,7 +231,7 @@ class FieldMetadata:
             is_active=is_active,
             is_nullable=is_nullable,
             is_unique=is_unique,
-            workspace_id=workspace_id,
+            tenant_id=tenant_id,
         )
 
     def deactivate(self, *, now: datetime | None = None) -> "FieldMetadata":

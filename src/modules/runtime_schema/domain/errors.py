@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from src.modules.shared.domain.errors import DomainError
 
 
@@ -40,11 +42,23 @@ class InvalidFieldTypeError(DomainError):
         super().__init__(f"Invalid field type '{value}'.")
 
 
+class DataSourceNotFoundError(DomainError):
+    def __init__(self, data_source_id: UUID):
+        super().__init__(f"Data source '{data_source_id}' was not found.")
+
+
+class ObjectMetadataNotFoundError(DomainError):
+    def __init__(self, identifier: str):
+        super().__init__(f"Object metadata '{identifier}' was not found.")
+
+
 __all__ = [
+    "DataSourceNotFoundError",
     "InvalidDataSourceSchemaError",
     "InvalidDataSourceTypeError",
     "InvalidFieldNameError",
     "InvalidFieldTypeError",
     "InvalidObjectOwnershipKindError",
+    "ObjectMetadataNotFoundError",
     "ObjectOwnershipKindImmutableError",
 ]

@@ -54,6 +54,7 @@ class TestRuntimeSchemaDomainStep2(unittest.TestCase):
     def test_field_metadata_accepts_snake_case_name(self) -> None:
         field = FieldMetadata.create(
             object_metadata_id=uuid4(),
+            tenant_id=uuid4(),
             field_type=FieldType.STRING,
             name="telegram_handle",
             label="Telegram",
@@ -76,6 +77,7 @@ class TestRuntimeSchemaDomainStep2(unittest.TestCase):
                 with self.assertRaises(InvalidFieldNameError):
                     FieldMetadata.create(
                         object_metadata_id=uuid4(),
+                        tenant_id=uuid4(),
                         field_type=FieldType.STRING,
                         name=invalid_name,
                         label="Label",
@@ -85,6 +87,7 @@ class TestRuntimeSchemaDomainStep2(unittest.TestCase):
         with self.assertRaises(InvalidFieldTypeError):
             FieldMetadata.create(
                 object_metadata_id=uuid4(),
+                tenant_id=uuid4(),
                 field_type="UNKNOWN",
                 name="valid_name",
                 label="Label",
@@ -125,6 +128,7 @@ class TestRuntimeSchemaDomainStep2(unittest.TestCase):
     def test_field_metadata_is_immutable(self) -> None:
         field = FieldMetadata.create(
             object_metadata_id=uuid4(),
+            tenant_id=uuid4(),
             field_type=FieldType.BOOLEAN,
             name="is_vip",
             label="VIP",
