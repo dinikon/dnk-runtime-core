@@ -23,6 +23,14 @@ class DeleteDataSourceResultDTO:
 
 
 @dataclass(frozen=True, slots=True)
+class DeleteCustomFieldResultDTO:
+    field_metadata_id: UUID
+    hard_delete: bool
+    deleted: bool
+    is_active: bool
+
+
+@dataclass(frozen=True, slots=True)
 class FieldMetadataDTO:
     id: UUID
     created_at: datetime
@@ -76,6 +84,7 @@ class ListObjectFieldDefinitionsResultDTO:
 
 __all__ = [
     "DataSourceDTO",
+    "DeleteCustomFieldResultDTO",
     "DeleteDataSourceResultDTO",
     "FieldMetadataDTO",
     "ListObjectFieldDefinitionsResultDTO",

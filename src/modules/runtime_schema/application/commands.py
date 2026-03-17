@@ -27,6 +27,11 @@ class CreateCustomFieldCommand:
     name: str
     label: str
     default_value: object | None = None
+    description: str | None = None
+    icon: str | None = None
+    options: tuple[str, ...] = ()
+    settings: dict[str, object] | None = None
+    is_active: bool = True
     is_nullable: bool = True
     is_unique: bool = False
 

@@ -123,6 +123,19 @@ class SqlAlchemyFieldMetadataRepository(FieldMetadataRepositoryProtocol):
         self._session.add(field_metadata_to_model(field_metadata))
         await self._session.flush()
 
+    async def deactivate(self, field_metadata: FieldMetadata) -> None:
+        model = await self._session.scalar(
+            select(RuntimeFieldMetadataModel).where(
+                RuntimeFieldMetadataModel.id == str(field_metadata.id)
+            )
+        )
+        if model is None:
+            return
+
+        model.updated_at = field_metadata.updated_at
+        model.is_active = field_metadata.is_active
+        await self._session.flush()
+
     async def get_by_id(self, field_metadata_id: UUID) -> FieldMetadata | None:
         model = await self._session.scalar(
             select(RuntimeFieldMetadataModel).where(

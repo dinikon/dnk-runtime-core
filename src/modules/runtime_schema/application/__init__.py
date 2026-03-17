@@ -6,6 +6,7 @@ from src.modules.runtime_schema.application.commands import (
 )
 from src.modules.runtime_schema.application.dto import (
     DataSourceDTO,
+    DeleteCustomFieldResultDTO,
     DeleteDataSourceResultDTO,
     FieldMetadataDTO,
     ListObjectFieldDefinitionsResultDTO,
@@ -17,7 +18,9 @@ from src.modules.runtime_schema.application.queries import (
     ListObjectFieldDefinitionsQuery,
 )
 from src.modules.runtime_schema.application.use_cases import (
+    CreateCustomFieldUseCase,
     CreateDataSourceUseCase,
+    DeleteCustomFieldUseCase,
     DeleteDataSourceUseCase,
     GetObjectRuntimeSchemaUseCase,
     ListObjectFieldDefinitionsUseCase,
@@ -25,10 +28,13 @@ from src.modules.runtime_schema.application.use_cases import (
 
 __all__ = [
     "CreateCustomFieldCommand",
+    "CreateCustomFieldUseCase",
     "CreateDataSourceCommand",
     "CreateDataSourceUseCase",
     "DataSourceDTO",
     "DeleteCustomFieldCommand",
+    "DeleteCustomFieldResultDTO",
+    "DeleteCustomFieldUseCase",
     "DeleteDataSourceCommand",
     "DeleteDataSourceResultDTO",
     "DeleteDataSourceUseCase",

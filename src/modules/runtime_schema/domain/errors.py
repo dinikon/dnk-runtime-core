@@ -52,8 +52,14 @@ class ObjectMetadataNotFoundError(DomainError):
         super().__init__(f"Object metadata '{identifier}' was not found.")
 
 
+class FieldMetadataNotFoundError(DomainError):
+    def __init__(self, field_metadata_id: UUID):
+        super().__init__(f"Field metadata '{field_metadata_id}' was not found.")
+
+
 __all__ = [
     "DataSourceNotFoundError",
+    "FieldMetadataNotFoundError",
     "InvalidDataSourceSchemaError",
     "InvalidDataSourceTypeError",
     "InvalidFieldNameError",

@@ -5,6 +5,7 @@ from src.modules.runtime_schema.domain.entities import (
 )
 from src.modules.runtime_schema.domain.errors import (
     DataSourceNotFoundError,
+    FieldMetadataNotFoundError,
     InvalidDataSourceSchemaError,
     InvalidDataSourceTypeError,
     InvalidFieldNameError,
@@ -36,6 +37,7 @@ __all__ = [
     "FIELD_NAME_MAX_LENGTH",
     "FieldNameVO",
     "FieldMetadata",
+    "FieldMetadataNotFoundError",
     "FieldMetadataRepositoryProtocol",
     "FieldType",
     "InvalidDataSourceSchemaError",
