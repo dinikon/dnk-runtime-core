@@ -19,7 +19,6 @@ class CreateContactUseCase:
 
         contact = await self._service.create_contact(
             contact_id=command.contact_id,
-            now=command.now,
             last_name=command.last_name,
             first_name=command.first_name,
             middle_name=command.middle_name,

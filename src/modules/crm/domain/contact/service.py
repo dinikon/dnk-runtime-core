@@ -1,11 +1,10 @@
-from datetime import datetime
-
 from src.modules.crm.domain.contact.entity import ContactEntity
 from src.modules.crm.domain.contact.repository import (
     ContactCommandRepositoryProtocol,
     ContactQueryRepositoryProtocol,
 )
 from src.modules.crm.domain.contact.value_object.contact_id import ContactIdVO
+from src.modules.shared.kernel.time.ports import ClockPort
 
 
 class ContactNotFoundError(Exception):
@@ -18,19 +17,21 @@ class ContactService:
         *,
         query_repository: ContactQueryRepositoryProtocol,
         command_repository: ContactCommandRepositoryProtocol,
+        clock: ClockPort,
     ) -> None:
         self._query_repository = query_repository
         self._command_repository = command_repository
+        self._clock = clock
 
     async def create_contact(
         self,
         *,
         contact_id: ContactIdVO,
-        now: datetime,
         last_name: str,
         first_name: str | None = None,
         middle_name: str | None = None,
     ) -> ContactEntity:
+        now = self._clock.now()
         contact = ContactEntity.create(
             id_=contact_id,
             now=now,
@@ -69,11 +70,11 @@ class ContactService:
         self,
         *,
         contact_id: ContactIdVO,
-        now: datetime,
         last_name: str,
         first_name: str | None = None,
         middle_name: str | None = None,
     ) -> ContactEntity:
+        now = self._clock.now()
         contact = await self._query_repository.get_by_id(
             contact_id=contact_id,
         )

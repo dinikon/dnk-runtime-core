@@ -16,15 +16,18 @@ from src.modules.crm.presentation.depends.infrastructure import (
     ContactCommandRepositoryDep,
     ContactQueryRepositoryDep,
 )
+from src.modules.shared.depends import ClockDep
 
 
 def get_contact_service(
     query_repository: ContactQueryRepositoryDep,
     command_repository: ContactCommandRepositoryDep,
+    clock: ClockDep,
 ) -> ContactService:
     return ContactService(
         query_repository=query_repository,
         command_repository=command_repository,
+        clock=clock,
     )
 
 

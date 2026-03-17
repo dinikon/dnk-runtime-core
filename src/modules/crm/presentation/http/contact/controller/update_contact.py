@@ -15,7 +15,6 @@ from src.modules.crm.presentation.http.contact.requests import (
 )
 from src.modules.crm.presentation.http.contact.responses import ContactResponseSchema
 from src.modules.shared.depends import AuthenticatedRequestContextDep
-from src.modules.shared.depends.clock import ClockDep
 
 router = APIRouter(prefix="/crm/contacts", tags=["crm-contacts"])
 
@@ -28,12 +27,10 @@ async def update_contact(
     contact_id: UUID,
     payload: UpdateContactRequestSchema,
     _: AuthenticatedRequestContextDep,
-    clock: ClockDep,
     use_case: UpdateContactUseCaseDep,
 ) -> ContactResponseSchema:
     command = RenameContactCommand(
         contact_id=ContactIdVO.from_value(contact_id),
-        now=clock.now(),
         last_name=payload.last_name,
         first_name=payload.first_name,
         middle_name=payload.middle_name,
