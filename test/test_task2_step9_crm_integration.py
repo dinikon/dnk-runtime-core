@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from src.modules.crm.application import (
@@ -44,6 +45,29 @@ class TestCrmIntegrationStep9(unittest.IsolatedAsyncioTestCase):
 
         async with self._engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
+            await connection.execute(
+                text(
+                    "CREATE TABLE contacts ("
+                    "id CHAR(36) PRIMARY KEY, "
+                    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL, "
+                    "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL, "
+                    "last_name VARCHAR(255) NOT NULL, "
+                    "first_name VARCHAR(255) NOT NULL, "
+                    "middle_name VARCHAR(255)"
+                    ")"
+                )
+            )
+            await connection.execute(
+                text(
+                    "CREATE TABLE companies ("
+                    "id CHAR(36) PRIMARY KEY, "
+                    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL, "
+                    "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL, "
+                    "last_name VARCHAR(255) NOT NULL, "
+                    "company_name VARCHAR(255) NOT NULL"
+                    ")"
+                )
+            )
 
     async def asyncTearDown(self) -> None:
         await self._engine.dispose()

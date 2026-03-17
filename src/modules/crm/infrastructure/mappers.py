@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from src.modules.crm.domain.entities import CompanyEntity, ContactEntity
-from src.modules.crm.infrastructure.persistence import CompanyModel, ContactModel
+from src.modules.crm.infrastructure.persistence.company import CompanyModel
+from src.modules.crm.infrastructure.persistence.contact import ContactModel
 
 
 def contact_to_model(contact: ContactEntity) -> ContactModel:

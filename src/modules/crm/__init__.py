@@ -29,8 +29,6 @@ from src.modules.crm.domain import (
     InvalidContactMiddleNameError,
 )
 from src.modules.crm.infrastructure import (
-    CompanyModel,
-    ContactModel,
     SqlAlchemyCompanyRepository,
     SqlAlchemyContactRepository,
 )
@@ -39,12 +37,10 @@ __all__ = [
     "CRM_TEXT_MAX_LENGTH",
     "CompanyDTO",
     "CompanyEntity",
-    "CompanyModel",
     "CompanyNotFoundError",
     "CompanyRepositoryProtocol",
     "ContactDTO",
     "ContactEntity",
-    "ContactModel",
     "ContactNotFoundError",
     "ContactRepositoryProtocol",
     "CreateCompanyCommand",

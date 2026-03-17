@@ -56,6 +56,29 @@ class TestCrmRuntimeRecordIntegrationStep10(unittest.IsolatedAsyncioTestCase):
 
         async with self._engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
+            await connection.execute(
+                text(
+                    "CREATE TABLE contacts ("
+                    "id CHAR(36) PRIMARY KEY, "
+                    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL, "
+                    "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL, "
+                    "last_name VARCHAR(255) NOT NULL, "
+                    "first_name VARCHAR(255) NOT NULL, "
+                    "middle_name VARCHAR(255)"
+                    ")"
+                )
+            )
+            await connection.execute(
+                text(
+                    "CREATE TABLE companies ("
+                    "id CHAR(36) PRIMARY KEY, "
+                    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL, "
+                    "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL, "
+                    "last_name VARCHAR(255) NOT NULL, "
+                    "company_name VARCHAR(255) NOT NULL"
+                    ")"
+                )
+            )
             await connection.execute(text('ALTER TABLE "contacts" ADD COLUMN "telegram" VARCHAR(255)'))
             await connection.execute(text('ALTER TABLE "contacts" ADD COLUMN "tags" JSON'))
             await connection.execute(text('ALTER TABLE "companies" ADD COLUMN "category" VARCHAR(255)'))

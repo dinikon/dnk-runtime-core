@@ -7,11 +7,11 @@ import uuid6
 from sqlalchemy import DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.modules.shared.db.base import Base
+from src.modules.shared.db.base import TenantBase
 from src.modules.shared.db.types import StringUUID
 
 
-class ContactModel(Base):
+class ContactModel(TenantBase):
     __tablename__ = "contacts"
 
     id: Mapped[UUID] = mapped_column(
