@@ -9,6 +9,7 @@ from src.modules.crm.domain.contact.service import ContactNotFoundError
 from src.modules.crm.domain.contact.value_object.contact_id import ContactIdVO
 from src.modules.crm.presentation.depends.application import GetContactUseCaseDep
 from src.modules.crm.presentation.http.contact.responses import ContactResponseSchema
+from src.modules.shared.depends import AuthenticatedRequestContextDep
 
 router = APIRouter(prefix="/crm/contacts", tags=["crm-contacts"])
 
@@ -19,6 +20,7 @@ router = APIRouter(prefix="/crm/contacts", tags=["crm-contacts"])
 )
 async def get_contact(
     contact_id: UUID,
+    _: AuthenticatedRequestContextDep,
     use_case: GetContactUseCaseDep,
 ) -> ContactResponseSchema:
     try:

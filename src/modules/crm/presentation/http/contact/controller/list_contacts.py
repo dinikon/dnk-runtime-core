@@ -10,6 +10,7 @@ from src.modules.crm.presentation.http.contact.responses import (
     ContactResponseSchema,
     ListContactsResponseSchema,
 )
+from src.modules.shared.depends import AuthenticatedRequestContextDep
 
 router = APIRouter(prefix="/crm/contacts", tags=["crm-contacts"])
 
@@ -19,6 +20,7 @@ router = APIRouter(prefix="/crm/contacts", tags=["crm-contacts"])
     response_model=ListContactsResponseSchema,
 )
 async def list_contacts(
+    _: AuthenticatedRequestContextDep,
     use_case: ListContactsUseCaseDep,
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
