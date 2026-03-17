@@ -46,8 +46,8 @@ class RuntimeRecordApplicationService:
     ) -> RuntimeRecordValuesDTO:
         if getattr(self._uow, "session", None) is None:
             async with self._uow:
-                return await self._write_within_transaction(command)
-        return await self._write_within_transaction(command)
+                return await self._write_within_transaction(command, commit=True)
+        return await self._write_within_transaction(command, commit=False)
 
     async def read_values(
         self,
@@ -61,6 +61,8 @@ class RuntimeRecordApplicationService:
     async def _write_within_transaction(
         self,
         command: WriteRuntimeValuesCommand,
+        *,
+        commit: bool,
     ) -> RuntimeRecordValuesDTO:
         object_metadata, schema_name = await self._resolve_object_and_schema(
             tenant_id=command.tenant_id,
@@ -81,7 +83,8 @@ class RuntimeRecordApplicationService:
             record_id=command.record_id,
             values=validated_values,
         )
-        await self._uow.commit()
+        if commit:
+            await self._uow.commit()
 
         return RuntimeRecordValuesDTO(
             tenant_id=command.tenant_id,

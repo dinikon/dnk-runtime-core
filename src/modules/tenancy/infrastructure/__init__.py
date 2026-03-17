@@ -9,9 +9,13 @@ from src.modules.tenancy.infrastructure.repositories import (
     SqlAlchemyTenantDomainRepository,
     SqlAlchemyTenantRepository,
 )
+from src.modules.tenancy.infrastructure.runtime_schema_bootstrapper import (
+    SqlAlchemyRuntimeSchemaBootstrapper,
+)
 
 __all__ = [
     "IdentityProvisioningServiceAdapter",
+    "SqlAlchemyRuntimeSchemaBootstrapper",
     "TenantModel",
     "TenantDomainModel",
     "SqlAlchemyTenantRepository",

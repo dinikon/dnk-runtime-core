@@ -121,6 +121,7 @@ class TestCreateCustomFieldUseCaseStep6(unittest.IsolatedAsyncioTestCase):
 
         async with self._engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
+            await connection.execute(text("DROP TABLE IF EXISTS contacts"))
             await connection.execute(
                 text(
                     "CREATE TABLE contacts ("

@@ -12,6 +12,7 @@ from src.modules.tenancy.application.use_cases import (
 )
 from src.modules.tenancy.presentation.depends.infrastructure import (
     IdentityProvisioningServiceDep,
+    RuntimeSchemaBootstrapperDep,
     TenantDomainsRepositoryDep,
     TenantsRepositoryDep,
 )
@@ -22,12 +23,14 @@ def get_create_tenant_use_case(
     tenants_repository: TenantsRepositoryDep,
     tenant_domains_repository: TenantDomainsRepositoryDep,
     identity_provisioning_service: IdentityProvisioningServiceDep,
+    runtime_schema_bootstrapper: RuntimeSchemaBootstrapperDep,
 ) -> CreateTenantUseCase:
     return CreateTenantUseCase(
         uow=uow,
         tenants_repository=tenants_repository,
         tenant_domains_repository=tenant_domains_repository,
         identity_provisioning_service=identity_provisioning_service,
+        runtime_schema_bootstrapper=runtime_schema_bootstrapper,
     )
 
 
