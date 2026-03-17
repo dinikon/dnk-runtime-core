@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
+from src.config import dnk_config
 from src.modules.identity.application.auth.dto import (
     ConfirmEmailOtpCommandDTO,
     GetCurrentUserCommandDTO,
@@ -39,7 +40,7 @@ from src.modules.identity.presentation.depends.auth_use_cases import (
     RequestEmailOtpUseCaseDep,
     UpdateCurrentUserProfileUseCaseDep,
 )
-from src.modules.shared.domain.errors import ValidationError as DomainValidationError
+from src.modules.shared.domain.errors import DomainError
 from src.modules.shared.depends.request_host import RequestHostDep
 from src.modules.tenancy.domain.errors import (
     TenantHostNotFoundError,
@@ -80,9 +81,14 @@ def _to_current_user_response(
     )
 
 
+def _is_dev_mode() -> bool:
+    return dnk_config.DEPLOY_ENV == "DEVELOPMENT"
+
+
 @router.post(
-    "/api/console/auth/request-otp",
+    "/request-otp",
     response_model=RequestEmailOtpResponseSchema,
+    response_model_exclude_none=True,
 )
 async def request_email_otp(
     payload: RequestEmailOtpRequestSchema,
@@ -112,11 +118,12 @@ async def request_email_otp(
     return RequestEmailOtpResponseSchema(
         token=result.token,
         expires_in=result.expires_in,
+        code=result.code if _is_dev_mode() else None,
     )
 
 
 @router.post(
-    "/api/console/auth/confirm-otp",
+    "/confirm-otp",
     response_model=ConfirmEmailOtpResponseSchema,
 )
 async def confirm_email_otp(
@@ -169,7 +176,7 @@ async def confirm_email_otp(
 
 
 @router.get(
-    "/api/console/auth/me",
+    "/me",
     response_model=CurrentUserResponseSchema,
 )
 async def get_current_user(
@@ -205,7 +212,7 @@ async def get_current_user(
 
 
 @router.patch(
-    "/api/console/auth/me",
+    "/me",
     response_model=CurrentUserResponseSchema,
 )
 async def update_current_user_profile(
@@ -243,7 +250,7 @@ async def update_current_user_profile(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(exc),
         ) from exc
-    except DomainValidationError as exc:
+    except DomainError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),
@@ -253,7 +260,7 @@ async def update_current_user_profile(
 
 
 @router.post(
-    "/api/console/auth/logout",
+    "/logout",
     response_model=LogoutCurrentSessionResponseSchema,
 )
 async def logout_current_session(

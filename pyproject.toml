@@ -18,3 +18,8 @@ dev = [
     "aiosqlite>=0.22.1",
     "black>=26.1.0",
 ]
+[project.scripts]
+dnk-manage = "management.cli:main"
+
+[tool.uv]
+package = true

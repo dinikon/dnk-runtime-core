@@ -6,7 +6,7 @@ from uuid import UUID
 
 import uuid6
 
-from src.modules.shared.domain.errors import ValidationError
+from src.modules.shared.domain.errors import DomainError
 
 
 @dataclass(slots=True)
@@ -58,9 +58,9 @@ class User:
         normalized_first_name = first_name.strip()
         normalized_last_name = last_name.strip()
         if not normalized_first_name:
-            raise ValidationError("User first name must not be empty.")
+            raise DomainError("User first name must not be empty.")
         if not normalized_last_name:
-            raise ValidationError("User last name must not be empty.")
+            raise DomainError("User last name must not be empty.")
 
         now = datetime.now(UTC)
         return cls(
@@ -91,10 +91,10 @@ class User:
     ) -> UserEmail:
         normalized_email = email.strip().lower()
         if not normalized_email:
-            raise ValidationError("User email must not be empty.")
+            raise DomainError("User email must not be empty.")
 
         if is_primary and any(existing.is_primary for existing in self.emails):
-            raise ValidationError("User already has a primary email.")
+            raise DomainError("User already has a primary email.")
 
         now = datetime.now(UTC)
         user_email = UserEmail(
@@ -131,7 +131,7 @@ class User:
                 email.mark_verified()
                 self.updated_at = datetime.now(UTC)
                 return
-        raise ValidationError(f"User email '{user_email_id}' was not found.")
+        raise DomainError(f"User email '{user_email_id}' was not found.")
 
     def update_profile(
         self,
@@ -155,26 +155,28 @@ class User:
         normalized_timezone = timezone.strip()
 
         if not normalized_last_name:
-            raise ValidationError("User last name must not be empty.")
+            raise DomainError("User last name must not be empty.")
         if not normalized_first_name:
-            raise ValidationError("User first name must not be empty.")
+            raise DomainError("User first name must not be empty.")
         if normalized_middle_name == "":
             normalized_middle_name = None
 
         if normalized_interface_language not in {"uk", "en"}:
-            raise ValidationError(
-                "User interface language must be one of: uk, en."
-            )
-        if normalized_interface_theme is not None and normalized_interface_theme not in {
-            "system",
-            "dark",
-            "light",
-        }:
-            raise ValidationError(
+            raise DomainError("User interface language must be one of: uk, en.")
+        if (
+            normalized_interface_theme is not None
+            and normalized_interface_theme
+            not in {
+                "system",
+                "dark",
+                "light",
+            }
+        ):
+            raise DomainError(
                 "User interface theme must be one of: system, dark, light."
             )
         if normalized_timezone not in {"Europe/Kyiv", "Europe/Warsaw"}:
-            raise ValidationError(
+            raise DomainError(
                 "User timezone must be one of: Europe/Kyiv, Europe/Warsaw."
             )
 

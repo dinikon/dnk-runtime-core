@@ -4,9 +4,11 @@ from sqlalchemy.orm import DeclarativeBase
 
 TENANT_SCHEMA_ALIAS = "tenant"
 
+
 class Base(DeclarativeBase):
     __abstract__ = True
     metadata = MetaData()
+
 
 class TenantBase(DeclarativeBase):
     __abstract__ = True

@@ -12,10 +12,12 @@ from pydantic_settings import (
 )
 
 from src.libs.file_utils import search_file_upwards
-from .auth_config import IdentityAuthConfig
-from .control_plane import ControlPlaneConfig
-from .infrastructure import DatabaseConfig
-from .redis_config import RedisConfig
+from src.config.feature.identity.auth_config import IdentityAuthConfig
+from src.config.deploy.control_plane import ControlPlaneConfig
+from src.config.deploy import DeploymentConfig
+from src.config.feature import FeatureConfig
+from src.config.infrastructure import DatabaseConfig
+from src.config.infrastructure.redis_config import RedisConfig
 
 # from .deploy import DeploymentConfig
 # from .enterprise import EnterpriseFeatureConfig
@@ -23,7 +25,7 @@ from .redis_config import RedisConfig
 # from .feature import FeatureConfig
 # from .middleware import MiddlewareConfig
 # from .observability import ObservabilityConfig
-from .packaging import PackagingInfo
+from src.config.packaging import PackagingInfo
 
 # from .remote_settings_sources import (
 #     RemoteSettingsSource,
@@ -98,9 +100,9 @@ class DnkConfig(
     # Packaging info
     PackagingInfo,
     # Deployment configs
-    # DeploymentConfig,
+    DeploymentConfig,
     # Feature configs
-    # FeatureConfig,
+    FeatureConfig,
     # Middleware configs
     # MiddlewareConfig,
     # Extra service configs

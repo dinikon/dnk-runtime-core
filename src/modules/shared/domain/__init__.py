@@ -1,3 +1,13 @@
-from src.modules.shared.domain.errors import ValidationError
+from src.modules.shared.domain.errors import DomainError
+from src.modules.shared.domain.value_object import (
+    CurrencyCodeNotSupportedError,
+    CurrencyCodeVO,
+    EntityIdVO,
+)
 
-__all__ = ["ValidationError"]
+__all__ = [
+    "CurrencyCodeNotSupportedError",
+    "CurrencyCodeVO",
+    "EntityIdVO",
+    "DomainError",
+]

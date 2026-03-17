@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 class RequestEmailOtpResponseSchema(BaseModel):
     token: str
     expires_in: int
+    code: str | None = None
 
 
 class ConfirmEmailOtpResponseSchema(BaseModel):

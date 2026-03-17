@@ -1,38 +1,53 @@
-from uuid import UUID
-
-from src.modules.shared.domain.errors import ValidationError
+from src.modules.shared.domain.errors import DomainError
 
 
-class TenantNameAlreadyExistsError(ValidationError):
+class InvalidTenantNameError(DomainError):
+    def __init__(self):
+        super().__init__("Tenant name must not be empty.")
+
+
+class InvalidTenantExternalIdError(DomainError):
+    def __init__(self):
+        super().__init__("Tenant external_id must not be empty.")
+
+
+class InvalidTenantDomainHostError(DomainError):
+    def __init__(self):
+        super().__init__("Tenant domain host must not be empty.")
+
+
+class TenantNameAlreadyExistsError(DomainError):
     def __init__(self, name: str):
         super().__init__(f"Tenant with name '{name}' already exists.")
 
 
-class TenantExternalIdAlreadyExistsError(ValidationError):
+class TenantExternalIdAlreadyExistsError(DomainError):
     def __init__(self, external_id: str):
         super().__init__(f"Tenant with external_id '{external_id}' already exists.")
 
 
-class TenantDomainHostAlreadyExistsError(ValidationError):
+class TenantDomainHostAlreadyExistsError(DomainError):
     def __init__(self, host: str):
         super().__init__(f"Tenant domain host '{host}' already exists.")
 
 
-class TenantHostNotFoundError(ValidationError):
+class TenantHostNotFoundError(DomainError):
     def __init__(self, host: str):
         super().__init__(f"Tenant for host '{host}' was not found.")
 
 
-class TenantLoginUnavailableError(ValidationError):
+class TenantLoginUnavailableError(DomainError):
     def __init__(self, host: str):
         super().__init__(f"Tenant for host '{host}' is not available for login.")
 
 
-class TenantDataSourceAlreadyExistsError(ValidationError):
-    def __init__(self, tenant_id: UUID):
-        super().__init__(f"Tenant data source for tenant '{tenant_id}' already exists.")
-
-
-class TenantDataSourceSchemaAlreadyExistsError(ValidationError):
-    def __init__(self, schema: str):
-        super().__init__(f"Tenant data source schema '{schema}' already exists.")
+__all__ = [
+    "InvalidTenantDomainHostError",
+    "InvalidTenantExternalIdError",
+    "InvalidTenantNameError",
+    "TenantDomainHostAlreadyExistsError",
+    "TenantExternalIdAlreadyExistsError",
+    "TenantHostNotFoundError",
+    "TenantLoginUnavailableError",
+    "TenantNameAlreadyExistsError",
+]

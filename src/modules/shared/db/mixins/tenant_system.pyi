@@ -4,8 +4,8 @@ import uuid6
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from modules.shared.db import StringUUID
-from modules.shared.db.mixins.audiense import AudienceMixin
+from src.modules.shared.db import StringUUID
+from src.modules.shared.db.mixins.audiense import AudienceMixin
 
 class TenantSystemMixin(AudienceMixin):
     id: Mapped[UUID] = mapped_column(
