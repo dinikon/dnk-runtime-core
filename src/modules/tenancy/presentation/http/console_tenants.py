@@ -4,10 +4,10 @@ from fastapi import APIRouter
 
 from src.modules.tenancy.application.queries import ResolveTenantByHostQuery
 from src.modules.shared.depends.request_host import RequestHostDep
-from src.modules.tenancy.presentation.api.responses.console_tenants import (
+from src.modules.tenancy.presentation.http.responses.console_tenants import (
     ResolveTenantResponseSchema,
 )
-from src.modules.tenancy.wiring import (
+from src.modules.tenancy.presentation.depends.application import (
     ResolveTenantByHostUseCaseDep,
 )
 

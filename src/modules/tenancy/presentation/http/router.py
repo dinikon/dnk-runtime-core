@@ -1,9 +1,9 @@
 from fastapi import APIRouter
 
-from src.modules.tenancy.presentation.api.admin_tenants import (
+from src.modules.tenancy.presentation.http.admin_tenants import (
     router as admin_tenants_router,
 )
-from src.modules.tenancy.presentation.api.console_tenants import (
+from src.modules.tenancy.presentation.http.console_tenants import (
     router as console_tenants_router,
 )
 

@@ -1,4 +1,4 @@
-from src.modules.tenancy.presentation.api.requests.admin_tenants import (
+from src.modules.tenancy.presentation.http.requests.admin_tenants import (
     AdminCreateTenantRequestSchema,
 )
 

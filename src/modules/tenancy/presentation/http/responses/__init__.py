@@ -1,7 +1,7 @@
-from src.modules.tenancy.presentation.api.responses.admin_tenants import (
+from src.modules.tenancy.presentation.http.responses.admin_tenants import (
     AdminCreateTenantResponseSchema,
 )
-from src.modules.tenancy.presentation.api.responses.console_tenants import (
+from src.modules.tenancy.presentation.http.responses.console_tenants import (
     ResolveTenantResponseSchema,
 )
 

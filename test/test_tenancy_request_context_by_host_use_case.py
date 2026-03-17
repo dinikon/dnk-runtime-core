@@ -85,7 +85,7 @@ class TestResolveTenantRequestContextByHostUseCase(unittest.IsolatedAsyncioTestC
             tenants_repository=FakeTenantRepository([tenant]),
             tenant_domains_repository=FakeTenantDomainRepository(
                 [domain],
-                api_host="api.acme.local",
+                api_host="http.acme.local",
             ),
         )
 
@@ -98,7 +98,7 @@ class TestResolveTenantRequestContextByHostUseCase(unittest.IsolatedAsyncioTestC
         self.assertEqual(result.host, "console.acme.local")
         self.assertEqual(result.tenant_status, "active")
         self.assertEqual(result.domain_status, "active")
-        self.assertEqual(result.api_host, "api.acme.local")
+        self.assertEqual(result.api_host, "http.acme.local")
 
     async def test_execute_raises_not_found_for_unknown_host(self) -> None:
         use_case = ResolveTenantRequestContextByHostUseCase(
@@ -127,4 +127,3 @@ class TestResolveTenantRequestContextByHostUseCase(unittest.IsolatedAsyncioTestC
             await use_case.execute(
                 ResolveTenantRequestContextByHostQuery(host="console.acme.local")
             )
-

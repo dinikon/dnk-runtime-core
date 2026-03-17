@@ -10,15 +10,17 @@ from src.modules.tenancy.domain.errors import (
     TenantExternalIdAlreadyExistsError,
     TenantNameAlreadyExistsError,
 )
-from src.modules.tenancy.presentation.api.requests.admin_tenants import (
+from src.modules.tenancy.presentation.http.requests.admin_tenants import (
     AdminCreateTenantRequestSchema,
 )
-from src.modules.tenancy.presentation.api.responses.admin_tenants import (
+from src.modules.tenancy.presentation.http.responses.admin_tenants import (
     AdminCreateTenantResponseSchema,
 )
-from src.modules.tenancy.wiring import (
-    AdminCreateTenantAuthorizationDep,
+from src.modules.tenancy.presentation.depends.application import (
     CreateTenantUseCaseDep,
+)
+from src.modules.tenancy.presentation.depends.security import (
+    AdminCreateTenantAuthorizationDep,
 )
 
 router = APIRouter(tags=["admin-tenants"])

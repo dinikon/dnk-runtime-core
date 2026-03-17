@@ -43,17 +43,24 @@ src/modules/
 │   ├── domain/
 │   ├── application/
 │   ├── presentation/
+│   │   ├── http/
+│   │   └── depends/
+│   │       ├── application.py
+│   │       ├── infrastructure.py
+│   │       └── security.py
 │   ├── infrastructure/
-│   └── wiring.py
+│   └── ...
 │
 ├── message/
 │   ├── domain/
 │   ├── application/
 │   ├── presentation/
-│   │   ├── wiring.py
 │   │   └── router.py
+│   │   └── depends/
+│   │       ├── application.py
+│   │       └── infrastructure.py
 │   ├── infrastructure/
-│   └── wiring.py
+│   └── ...
 ```
 ---
 
@@ -250,6 +257,7 @@ DTO не должны быть ORM моделями и не должны быт�
 ## 7.1. В Presentation разрешено размещать
 
 * controllers / routers
+* `depends/*` wiring-композицию по слоям (application/infrastructure/security)
 * request schema
 * response schema
 * mapping transport → command/query
@@ -345,10 +353,11 @@ Infrastructure не должна принимать бизнес-решения.
 # 9. Правила для Wiring
 
 `Wiring` — это отдельное место для сборки зависимостей.
+В проекте wiring размещается в `presentation/depends/*` и декомпозируется по слоям.
 
 ## 9.1. Wiring обязан быть явным
 
-Все зависимости собираются только в wiring.
+Все зависимости собираются только в `presentation/depends/*`.
 
 Примеры:
 
@@ -382,7 +391,7 @@ async def create():
 
 ## 9.3. Wiring — единственная точка композиции
 
-Только wiring знает о concrete classes.
+Только wiring (`presentation/depends/*`) знает о concrete classes.
 
 ---
 
@@ -511,8 +520,13 @@ channel/
 │       └── list_channels.py
 │
 ├── presentation/
-│   ├── schemas.py
-│   └── controller.py
+│   ├── http/
+│   │   ├── schemas.py
+│   │   └── controller.py
+│   └── depends/
+│       ├── application.py
+│       ├── infrastructure.py
+│       └── security.py
 │
 ├── infrastructure/
 │   ├── persistence/
@@ -538,7 +552,7 @@ presentation -> application
 application -> domain
 infrastructure -> domain
 infrastructure -> application
-wiring -> application + infrastructure + presentation + domain
+presentation/depends (wiring) -> application + infrastructure + domain
 ```
 
 ## 14.2. Запрещённые направления зависимостей
@@ -556,7 +570,8 @@ application -> presentation
 presentation -> infrastructure
 ```
 
-Presentation может знать только entry point abstraction через wiring, но не concrete infra classes.
+`presentation/http/*` может знать только application abstractions.
+`presentation/depends/*` как wiring может знать concrete infra classes.
 
 ---
 
@@ -642,7 +657,7 @@ Agent обязан:
 
 * создавать отдельный модуль
 * создавать все 4 слоя
-* добавлять `wiring.py`
+* добавлять `presentation/depends/*` для wiring
 * не смешивать код других контекстов
 
 ## 18.2. При добавлении новой сущности
@@ -719,7 +734,7 @@ Agent не должен:
 
 ## Шаг 6. Сделать Wiring
 
-Собрать зависимости и подключить модуль к приложению.
+Собрать зависимости в `presentation/depends/*` и подключить модуль к приложению.
 
 ---
 
@@ -746,7 +761,7 @@ Agent не должен:
 
 1. **Один контекст = один отдельный модуль**
 2. **В модуле всегда 4 слоя: Domain, Application, Presentation, Infrastructure**
-3. **Все зависимости собираются только в Wiring**
+3. **Все зависимости собираются только в `presentation/depends/*` (wiring)**
 4. **Domain не знает ни о чём кроме бизнес-модели**
 5. **Application оркестрирует сценарии и работает только через абстракции**
 6. **Presentation только принимает/отдаёт данные**

@@ -25,7 +25,7 @@ from src.modules.shared.kernel.tokens import TokenManager
 from src.modules.tenancy.application.queries import (
     ResolveTenantRequestContextByHostQuery,
 )
-from src.modules.tenancy.wiring import (
+from src.modules.tenancy.presentation.depends.application import (
     TenantRequestContextByHostUseCaseDep,
 )
 

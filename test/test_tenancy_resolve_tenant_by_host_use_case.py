@@ -93,7 +93,7 @@ class TestResolveTenantByHostUseCase(unittest.IsolatedAsyncioTestCase):
             tenants_repository=FakeTenantRepository([tenant]),
             tenant_domains_repository=FakeTenantDomainRepository(
                 [domain],
-                api_hosts={tenant.id: "api.acme.local"},
+                api_hosts={tenant.id: "http.acme.local"},
             ),
         )
 
@@ -105,7 +105,7 @@ class TestResolveTenantByHostUseCase(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result.available)
         self.assertEqual(result.status, "active")
         self.assertEqual(result.tenant_id, tenant.id)
-        self.assertEqual(result.api_host, "api.acme.local")
+        self.assertEqual(result.api_host, "http.acme.local")
 
     async def test_execute_returns_unavailable_for_freeze_tenant(self) -> None:
         tenant = Tenant.create(name="Acme", external_id="acme-ext")
