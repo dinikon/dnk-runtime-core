@@ -32,7 +32,9 @@ class ResolveTenantByHostUseCase:
                 api_host=None,
             )
 
-        tenant_domain = await self._tenant_domains_repository.get_by_host(normalized_host)
+        tenant_domain = await self._tenant_domains_repository.get_by_host(
+            normalized_host
+        )
         if tenant_domain is None:
             return ResolveTenantByHostResultDTO(
                 exists=False,

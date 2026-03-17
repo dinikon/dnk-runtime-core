@@ -24,4 +24,3 @@ def __getattr__(name: str) -> Any:
         )
     module = import_module(module_path)
     return getattr(module, name)
-

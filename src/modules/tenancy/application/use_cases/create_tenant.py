@@ -7,9 +7,7 @@ from src.modules.tenancy.application.dto import CreateTenantResultDTO
 from src.modules.tenancy.application.ports.identity import (
     IdentityProvisioningServiceProtocol,
 )
-from src.modules.tenancy.application.ports.runtime_schema_bootstrapper import (
-    RuntimeSchemaBootstrapperProtocol,
-)
+
 from src.modules.tenancy.domain.entities import Tenant, TenantDomain
 from src.modules.tenancy.domain.errors import (
     InvalidTenantDomainHostError,
@@ -30,13 +28,11 @@ class CreateTenantUseCase:
         tenants_repository: TenantRepositoryProtocol,
         tenant_domains_repository: TenantDomainRepositoryProtocol,
         identity_provisioning_service: IdentityProvisioningServiceProtocol,
-        runtime_schema_bootstrapper: RuntimeSchemaBootstrapperProtocol | None = None,
     ):
         self._uow = uow
         self._tenants_repository = tenants_repository
         self._tenant_domains_repository = tenant_domains_repository
         self._identity_provisioning_service = identity_provisioning_service
-        self._runtime_schema_bootstrapper = runtime_schema_bootstrapper
 
     async def execute(self, command: CreateTenantCommand) -> CreateTenantResultDTO:
         if getattr(self._uow, "session", None) is None:
@@ -72,9 +68,6 @@ class CreateTenantUseCase:
             host=normalized_host,
         )
         await self._tenant_domains_repository.add(tenant_domain)
-
-        if self._runtime_schema_bootstrapper is not None:
-            await self._runtime_schema_bootstrapper.bootstrap_tenant(tenant.id)
 
         user = await self._identity_provisioning_service.create_tenant_admin(
             tenant_id=tenant.id,

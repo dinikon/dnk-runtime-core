@@ -24,4 +24,3 @@ class InMemoryTokenBackend:
 
     def clear(self) -> None:
         self._storage.clear()
-

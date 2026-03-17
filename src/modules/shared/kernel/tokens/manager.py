@@ -66,4 +66,3 @@ class TokenManager:
     @staticmethod
     def _build_key(*, prefix: str, suffix: str, token: str) -> str:
         return f"{prefix}:{suffix}:{token}"
-

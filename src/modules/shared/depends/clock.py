@@ -20,4 +20,3 @@ def get_clock(request: Request) -> ClockPort:
 ClockDep = Annotated[ClockPort, Depends(get_clock)]
 
 __all__ = ["ClockDep", "default_clock", "get_clock"]
-

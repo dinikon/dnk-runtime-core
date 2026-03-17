@@ -3,4 +3,3 @@ from src.modules.shared.infrastructure.access.allow_all_authorization_service im
 )
 
 __all__ = ["AllowAllAuthorizationService"]
-

@@ -10,7 +10,10 @@ from src.modules.tenancy.domain.repositories import (
     TenantDomainRepositoryProtocol,
     TenantRepositoryProtocol,
 )
-from src.modules.tenancy.domain.value_objects import TenantDomainStatus, TenantServiceType
+from src.modules.tenancy.domain.value_objects import (
+    TenantDomainStatus,
+    TenantServiceType,
+)
 from src.modules.tenancy.infrastructure.mappers import (
     tenant_domain_model_to_entity,
     tenant_domain_to_model,
@@ -60,6 +63,7 @@ class SqlAlchemyTenantRepository(TenantRepositoryProtocol):
             select(TenantModel.id).where(TenantModel.name == name).limit(1)
         )
         return tenant_id is not None
+
 
 class SqlAlchemyTenantDomainRepository(TenantDomainRepositoryProtocol):
     def __init__(self, session: AsyncSession):

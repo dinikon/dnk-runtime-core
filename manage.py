@@ -9,6 +9,5 @@ if src_path_str not in sys.path:
 
 from management.cli import main
 
-
 if __name__ == "__main__":
     main()

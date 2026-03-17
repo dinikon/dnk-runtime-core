@@ -14,4 +14,3 @@ class AuthorizationServiceProtocol(Protocol):
         resource_type: str,
         resource_id: UUID | None = None,
     ) -> bool: ...
-

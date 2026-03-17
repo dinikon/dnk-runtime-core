@@ -33,14 +33,19 @@ class ResolveTenantRequestContextByHostUseCase:
         if not normalized_host:
             raise TenantHostNotFoundError(normalized_host)
 
-        tenant_domain = await self._tenant_domains_repository.get_by_host(normalized_host)
+        tenant_domain = await self._tenant_domains_repository.get_by_host(
+            normalized_host
+        )
         if tenant_domain is None:
             raise TenantHostNotFoundError(normalized_host)
 
         tenant = await self._tenants_repository.get_by_id(tenant_domain.tenant_id)
         if tenant is None:
             raise TenantHostNotFoundError(normalized_host)
-        if tenant_domain.status != TenantDomainStatus.ACTIVE or not tenant.allows_login():
+        if (
+            tenant_domain.status != TenantDomainStatus.ACTIVE
+            or not tenant.allows_login()
+        ):
             raise TenantLoginUnavailableError(normalized_host)
 
         api_host = await self._tenant_domains_repository.get_api_host_by_tenant_id(

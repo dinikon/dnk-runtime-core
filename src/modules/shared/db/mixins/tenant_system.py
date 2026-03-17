@@ -20,4 +20,3 @@ class TenantSystemMixin(AudienceMixin):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     created_by: Mapped[UUID] = mapped_column(StringUUID, nullable=False)
     updated_by: Mapped[UUID] = mapped_column(StringUUID, nullable=False)
-

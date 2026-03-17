@@ -8,11 +8,9 @@ from src.modules.tenancy.presentation.depends.application import (
 )
 from src.modules.tenancy.presentation.depends.infrastructure import (
     IdentityProvisioningServiceDep,
-    RuntimeSchemaBootstrapperDep,
     TenantDomainsRepositoryDep,
     TenantsRepositoryDep,
     get_identity_provisioning_service,
-    get_runtime_schema_bootstrapper,
     get_tenant_domains_repository,
     get_tenants_repository,
 )
@@ -28,7 +26,6 @@ __all__ = [
     "ControlPlaneApiKeyDep",
     "CreateTenantUseCaseDep",
     "IdentityProvisioningServiceDep",
-    "RuntimeSchemaBootstrapperDep",
     "ResolveTenantByHostUseCaseDep",
     "TenantDomainsRepositoryDep",
     "TenantRequestContextByHostUseCaseDep",
@@ -37,7 +34,6 @@ __all__ = [
     "get_control_plane_api_key",
     "get_create_tenant_use_case",
     "get_identity_provisioning_service",
-    "get_runtime_schema_bootstrapper",
     "get_resolve_tenant_by_host_use_case",
     "get_tenant_domains_repository",
     "get_tenant_request_context_by_host_use_case",

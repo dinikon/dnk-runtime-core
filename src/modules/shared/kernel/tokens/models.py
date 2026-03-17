@@ -67,4 +67,3 @@ def _deserialize_value(value: object) -> object:
     if isinstance(value, list):
         return [_deserialize_value(item) for item in value]
     return value
-

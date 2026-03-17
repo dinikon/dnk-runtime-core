@@ -40,4 +40,3 @@ def _ttl(value: StoredToken) -> int:
 
     ttl = int((value.expires_at - datetime.now(UTC)).total_seconds())
     return max(ttl, 1)
-

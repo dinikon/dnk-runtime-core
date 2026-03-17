@@ -44,4 +44,3 @@ class RedisTokenRepository:
 
     async def delete(self, key: str) -> None:
         await self._client.delete(key)
-

@@ -5,7 +5,10 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
-from src.modules.shared.infrastructure.tokens import InMemoryTokenBackend, RedisTokenBackend
+from src.modules.shared.infrastructure.tokens import (
+    InMemoryTokenBackend,
+    RedisTokenBackend,
+)
 from src.modules.shared.kernel.tokens import TokenManager
 
 log = logging.getLogger(__name__)
