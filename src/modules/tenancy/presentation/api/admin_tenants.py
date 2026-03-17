@@ -4,15 +4,11 @@ from fastapi import APIRouter, HTTPException, status
 
 from src.modules.identity.domain.errors import UserEmailAlreadyExistsError
 from src.modules.shared.domain.errors import DomainError as DomainDomainError
-from src.modules.tenancy.domain.domain.errors import (
+from src.modules.tenancy.application.commands import CreateTenantCommand
+from src.modules.tenancy.domain.errors import (
     TenantDomainHostAlreadyExistsError,
-)
-from src.modules.tenancy.domain.tenant.errors import (
     TenantExternalIdAlreadyExistsError,
     TenantNameAlreadyExistsError,
-)
-from src.modules.tenancy.application.admin_onboarding.dto import (
-    CreateTenantCommandDTO,
 )
 from src.modules.tenancy.presentation.api.requests.admin_tenants import (
     AdminCreateTenantRequestSchema,
@@ -20,10 +16,10 @@ from src.modules.tenancy.presentation.api.requests.admin_tenants import (
 from src.modules.tenancy.presentation.api.responses.admin_tenants import (
     AdminCreateTenantResponseSchema,
 )
-from src.modules.tenancy.presentation.depends.control_plane_auth import (
+from src.modules.tenancy.wiring import (
     AdminCreateTenantAuthorizationDep,
+    CreateTenantUseCaseDep,
 )
-from src.modules.tenancy.presentation.depends.use_cases import CreateTenantUseCaseDep
 
 router = APIRouter(tags=["admin-tenants"])
 
@@ -37,7 +33,7 @@ async def create_tenant(
     _: AdminCreateTenantAuthorizationDep,
     use_case: CreateTenantUseCaseDep,
 ) -> AdminCreateTenantResponseSchema:
-    dto = CreateTenantCommandDTO(
+    dto = CreateTenantCommand(
         tenant_name=payload.tenant.name,
         external_id=payload.tenant.external_id,
         tenant_domain_host=payload.tenant_domain.host,

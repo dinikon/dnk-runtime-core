@@ -307,6 +307,9 @@ Controller не должен:
 * внешние gateway implementations
 * integrations
 
+ORM-модели должны храниться в `src/modules/*/infrastructure/persistence/*` каждого модуля.
+Прямые импорты ORM допустимы только из `infrastructure/persistence/*`.
+
 ## 8.2. В Infrastructure запрещено размещать бизнес-логику
 
 Infrastructure не должна принимать бизнес-решения.
@@ -512,7 +515,9 @@ channel/
 │   └── controller.py
 │
 ├── infrastructure/
-│   ├── models.py
+│   ├── persistence/
+│   │   ├── channel.py
+│   │   └── message.py
 │   ├── mappers.py
 │   ├── repositories.py
 │   └── session.py

@@ -39,7 +39,7 @@ class TestConsoleAuthRequestOtpResponse(unittest.IsolatedAsyncioTestCase):
             )
         )
 
-        with patch.object(dnk_config, "COMMIT_SHA", "dev"):
+        with patch.object(dnk_config, "DEPLOY_ENV", "DEVELOPMENT"):
             response = await request_email_otp(
                 payload=RequestEmailOtpRequestSchema(email="user@example.com"),
                 host="acme.local",
@@ -66,7 +66,7 @@ class TestConsoleAuthRequestOtpResponse(unittest.IsolatedAsyncioTestCase):
             )
         )
 
-        with patch.object(dnk_config, "COMMIT_SHA", "1a2b3c4d"):
+        with patch.object(dnk_config, "DEPLOY_ENV", "PRODUCTION"):
             response = await request_email_otp(
                 payload=RequestEmailOtpRequestSchema(email="user@example.com"),
                 host="acme.local",

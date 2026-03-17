@@ -2,14 +2,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from src.modules.tenancy.application.resolve_tenant_by_host.dto import (
-    ResolveTenantByHostQueryDTO,
-)
+from src.modules.tenancy.application.queries import ResolveTenantByHostQuery
 from src.modules.shared.depends.request_host import RequestHostDep
 from src.modules.tenancy.presentation.api.responses.console_tenants import (
     ResolveTenantResponseSchema,
 )
-from src.modules.tenancy.presentation.depends.use_cases import (
+from src.modules.tenancy.wiring import (
     ResolveTenantByHostUseCaseDep,
 )
 
@@ -24,7 +22,7 @@ async def resolve_tenant(
     host: RequestHostDep,
     use_case: ResolveTenantByHostUseCaseDep,
 ) -> ResolveTenantResponseSchema:
-    result = await use_case.execute(ResolveTenantByHostQueryDTO(host=host))
+    result = await use_case.execute(ResolveTenantByHostQuery(host=host))
     return ResolveTenantResponseSchema(
         exists=result.exists,
         available=result.available,

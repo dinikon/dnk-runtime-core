@@ -1,5 +1,9 @@
-from src.modules.tenancy.infrastructure.identity_provisioning_service import (
+from src.modules.tenancy.infrastructure.identity_provisioning import (
     IdentityProvisioningServiceAdapter,
+)
+from src.modules.tenancy.infrastructure.persistence.tenant import TenantModel
+from src.modules.tenancy.infrastructure.persistence.tenant_domain import (
+    TenantDomainModel,
 )
 from src.modules.tenancy.infrastructure.repositories import (
     SqlAlchemyTenantDomainRepository,
@@ -8,6 +12,8 @@ from src.modules.tenancy.infrastructure.repositories import (
 
 __all__ = [
     "IdentityProvisioningServiceAdapter",
+    "TenantModel",
+    "TenantDomainModel",
     "SqlAlchemyTenantRepository",
     "SqlAlchemyTenantDomainRepository",
 ]

@@ -14,7 +14,7 @@ from src.modules.identity.application.auth.use_cases.authenticate_by_session imp
     AuthenticateBySessionUseCase,
     SessionPrincipal,
 )
-from src.modules.tenancy.domain.domain.errors import TenantHostNotFoundError
+from src.modules.tenancy.domain.errors import TenantHostNotFoundError
 
 
 @dataclass(slots=True)

@@ -1,7 +1,11 @@
 from src.modules.tenancy.presentation.api.admin_tenants import (
-    AdminCreateTenantRequestSchema,
-    AdminCreateTenantResponseSchema,
     router as admin_tenants_router,
+)
+from src.modules.tenancy.presentation.api.requests.admin_tenants import (
+    AdminCreateTenantRequestSchema,
+)
+from src.modules.tenancy.presentation.api.responses.admin_tenants import (
+    AdminCreateTenantResponseSchema,
 )
 from src.modules.tenancy.presentation.api.router import router
 

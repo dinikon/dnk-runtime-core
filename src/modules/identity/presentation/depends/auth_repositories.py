@@ -22,10 +22,10 @@ from src.modules.identity.application.auth.ports.token_store import (
 )
 from src.modules.identity.presentation.depends.repositories import UsersRepositoryDep
 from src.modules.shared.kernel.tokens import TokenManager
-from src.modules.tenancy.application.request_context_by_host.dto import (
-    ResolveTenantRequestContextByHostQueryDTO,
+from src.modules.tenancy.application.queries import (
+    ResolveTenantRequestContextByHostQuery,
 )
-from src.modules.tenancy.presentation.depends.use_cases import (
+from src.modules.tenancy.wiring import (
     TenantRequestContextByHostUseCaseDep,
 )
 
@@ -38,7 +38,7 @@ class TenancyTenantContextReaderAdapter(TenantContextReaderPort):
 
     async def get_by_host(self, host: str) -> TenantRequestContext:
         result = await self._use_case.execute(
-            ResolveTenantRequestContextByHostQueryDTO(host=host)
+            ResolveTenantRequestContextByHostQuery(host=host)
         )
         return TenantRequestContext(
             tenant_id=result.tenant_id,

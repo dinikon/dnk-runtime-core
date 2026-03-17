@@ -1,19 +1,44 @@
-from src.modules.tenancy.domain.domain.entity import TenantDomain
-from src.modules.tenancy.domain.domain.errors import (
+from src.modules.tenancy.domain.entities import Tenant, TenantDomain
+from src.modules.tenancy.domain.errors import (
+    InvalidTenantDomainHostError,
+    InvalidTenantExternalIdError,
+    InvalidTenantNameError,
     TenantDomainHostAlreadyExistsError,
+    TenantExternalIdAlreadyExistsError,
     TenantHostNotFoundError,
     TenantLoginUnavailableError,
-)
-from src.modules.tenancy.domain.tenant.entity import Tenant
-from src.modules.tenancy.domain.tenant.errors import (
-    TenantExternalIdAlreadyExistsError,
     TenantNameAlreadyExistsError,
 )
 from src.modules.tenancy.domain.permissions import TenancyAction
+from src.modules.tenancy.domain.repositories import (
+    TenantDomainRepositoryProtocol,
+    TenantRepositoryProtocol,
+)
+from src.modules.tenancy.domain.value_objects import (
+    TenantApiAuthMode,
+    TenantDomainKind,
+    TenantDomainStatus,
+    TenantDomainTlsMode,
+    TenantDomainVerificationStatus,
+    TenantServiceType,
+    TenantStatus,
+)
 
 __all__ = [
     "Tenant",
     "TenantDomain",
+    "TenantStatus",
+    "TenantDomainKind",
+    "TenantDomainStatus",
+    "TenantDomainTlsMode",
+    "TenantDomainVerificationStatus",
+    "TenantServiceType",
+    "TenantApiAuthMode",
+    "TenantRepositoryProtocol",
+    "TenantDomainRepositoryProtocol",
+    "InvalidTenantNameError",
+    "InvalidTenantExternalIdError",
+    "InvalidTenantDomainHostError",
     "TenantNameAlreadyExistsError",
     "TenantExternalIdAlreadyExistsError",
     "TenantDomainHostAlreadyExistsError",

@@ -5,28 +5,18 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.tenancy.domain.domain.value_objects.tenant_domain_kind import (
-    TenantDomainKind,
-)
-from src.modules.tenancy.domain.domain.value_objects.tenant_domain_tls_mode import (
-    TenantDomainTlsMode,
-)
-from src.modules.tenancy.domain.domain.value_objects.tenant_domain_verification_status import (
-    TenantDomainVerificationStatus,
-)
-from src.modules.tenancy.domain.domain.value_objects.tenant_domain_status import (
-    TenantDomainStatus,
-)
-from src.modules.tenancy.domain.domain.value_objects.tenant_service_type import (
-    TenantServiceType,
-)
-from src.modules.tenancy.domain.tenant.value_objects.tenant_status import TenantStatus
-from src.modules.tenancy.application.admin_onboarding.ports.repositories import (
+from src.modules.tenancy.domain.entities import Tenant, TenantDomain
+from src.modules.tenancy.domain.repositories import (
     TenantDomainRepositoryProtocol,
     TenantRepositoryProtocol,
 )
-from src.modules.tenancy.domain.domain.entity import TenantDomain
-from src.modules.tenancy.domain.tenant.entity import Tenant
+from src.modules.tenancy.domain.value_objects import TenantDomainStatus, TenantServiceType
+from src.modules.tenancy.infrastructure.mappers import (
+    tenant_domain_model_to_entity,
+    tenant_domain_to_model,
+    tenant_model_to_entity,
+    tenant_to_model,
+)
 from src.modules.tenancy.infrastructure.persistence.tenant import TenantModel
 from src.modules.tenancy.infrastructure.persistence.tenant_domain import (
     TenantDomainModel,
@@ -38,17 +28,7 @@ class SqlAlchemyTenantRepository(TenantRepositoryProtocol):
         self._session = session
 
     async def add(self, tenant: Tenant) -> None:
-        self._session.add(
-            TenantModel(
-                id=tenant.id,
-                name=tenant.name,
-                external_id=tenant.external_id,
-                status=tenant.status,
-                custom_config=tenant.custom_config,
-                created_at=tenant.created_at,
-                updated_at=tenant.updated_at,
-            )
-        )
+        self._session.add(tenant_to_model(tenant))
         await self._session.flush()
 
     async def get_by_id(self, tenant_id: UUID) -> Tenant | None:
@@ -57,7 +37,7 @@ class SqlAlchemyTenantRepository(TenantRepositoryProtocol):
         )
         if model is None:
             return None
-        return self._map_tenant(model)
+        return tenant_model_to_entity(model)
 
     async def get_by_name(self, name: str) -> Tenant | None:
         model = await self._session.scalar(
@@ -65,7 +45,7 @@ class SqlAlchemyTenantRepository(TenantRepositoryProtocol):
         )
         if model is None:
             return None
-        return self._map_tenant(model)
+        return tenant_model_to_entity(model)
 
     async def exists_by_external_id(self, external_id: str) -> bool:
         tenant_id = await self._session.scalar(
@@ -81,44 +61,12 @@ class SqlAlchemyTenantRepository(TenantRepositoryProtocol):
         )
         return tenant_id is not None
 
-    @staticmethod
-    def _map_tenant(model: TenantModel) -> Tenant:
-        return Tenant(
-            id=_to_uuid(model.id),
-            name=model.name,
-            external_id=model.external_id,
-            status=TenantStatus(model.status),
-            custom_config=model.custom_config,
-            created_at=model.created_at,
-            updated_at=model.updated_at,
-        )
-
-
 class SqlAlchemyTenantDomainRepository(TenantDomainRepositoryProtocol):
     def __init__(self, session: AsyncSession):
         self._session = session
 
     async def add(self, domain: TenantDomain) -> None:
-        self._session.add(
-            TenantDomainModel(
-                id=domain.id,
-                tenant_id=str(domain.tenant_id),
-                service_type=domain.service_type,
-                kind=domain.kind,
-                host=domain.host,
-                base_path=domain.base_path,
-                auth_mode=domain.auth_mode,
-                status=domain.status,
-                is_primary=domain.is_primary,
-                is_wildcard=domain.is_wildcard,
-                parent_domain=domain.parent_domain,
-                verification_status=domain.verification_status,
-                tls_mode=domain.tls_mode,
-                metadata_json=domain.metadata_json,
-                created_at=domain.created_at,
-                updated_at=domain.updated_at,
-            )
-        )
+        self._session.add(tenant_domain_to_model(domain))
         await self._session.flush()
 
     async def get_by_id(self, domain_id: UUID) -> TenantDomain | None:
@@ -127,7 +75,7 @@ class SqlAlchemyTenantDomainRepository(TenantDomainRepositoryProtocol):
         )
         if model is None:
             return None
-        return self._map_domain(model)
+        return tenant_domain_model_to_entity(model)
 
     async def get_by_host(self, host: str) -> TenantDomain | None:
         model = await self._session.scalar(
@@ -137,7 +85,7 @@ class SqlAlchemyTenantDomainRepository(TenantDomainRepositoryProtocol):
         )
         if model is None:
             return None
-        return self._map_domain(model)
+        return tenant_domain_model_to_entity(model)
 
     async def get_api_host_by_tenant_id(self, tenant_id: UUID) -> str | None:
         return await self._session.scalar(
@@ -157,32 +105,3 @@ class SqlAlchemyTenantDomainRepository(TenantDomainRepositoryProtocol):
             .limit(1)
         )
         return domain_id is not None
-
-    @staticmethod
-    def _map_domain(model: TenantDomainModel) -> TenantDomain:
-        return TenantDomain(
-            id=_to_uuid(model.id),
-            tenant_id=_to_uuid(model.tenant_id),
-            service_type=TenantServiceType(model.service_type),
-            kind=TenantDomainKind(model.kind),
-            host=model.host,
-            base_path=model.base_path,
-            auth_mode=model.auth_mode,
-            status=TenantDomainStatus(model.status),
-            is_primary=model.is_primary,
-            is_wildcard=model.is_wildcard,
-            parent_domain=model.parent_domain,
-            verification_status=TenantDomainVerificationStatus(
-                model.verification_status
-            ),
-            tls_mode=TenantDomainTlsMode(model.tls_mode),
-            metadata_json=model.metadata_json,
-            created_at=model.created_at,
-            updated_at=model.updated_at,
-        )
-
-
-def _to_uuid(value: UUID | str) -> UUID:
-    if isinstance(value, UUID):
-        return value
-    return UUID(value)
