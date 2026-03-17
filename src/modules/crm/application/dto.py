@@ -26,7 +26,21 @@ class CompanyDTO:
     custom_fields: dict[str, object | None] = field(default_factory=dict)
 
 
+@dataclass(frozen=True, slots=True)
+class DeleteContactResultDTO:
+    contact_id: UUID
+    deleted: bool
+
+
+@dataclass(frozen=True, slots=True)
+class DeleteCompanyResultDTO:
+    company_id: UUID
+    deleted: bool
+
+
 __all__ = [
     "CompanyDTO",
     "ContactDTO",
+    "DeleteCompanyResultDTO",
+    "DeleteContactResultDTO",
 ]

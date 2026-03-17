@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime
-from re import Pattern, compile as re_compile
 from uuid import UUID
 
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.crm.domain.entities import CompanyEntity, ContactEntity
@@ -12,9 +10,10 @@ from src.modules.crm.domain.repositories import (
     CompanyRepositoryProtocol,
     ContactRepositoryProtocol,
 )
-
-_IDENTIFIER_PATTERN: Pattern[str] = re_compile(r"^[a-z_][a-z0-9_]{0,62}$")
-_SCHEMA_PATTERN: Pattern[str] = re_compile(r"^[A-Za-z0-9_-]{1,128}$")
+from src.modules.runtime_record.domain.errors import RuntimeRecordNotFoundError
+from src.modules.runtime_record.infrastructure.runtime_value_repository import (
+    SqlAlchemyRuntimeValueRepository,
+)
 
 
 class SqlAlchemyContactRepository(ContactRepositoryProtocol):
@@ -26,20 +25,13 @@ class SqlAlchemyContactRepository(ContactRepositoryProtocol):
     ) -> None:
         self._session = session
         self._schema_name = schema_name
+        self._runtime_values = SqlAlchemyRuntimeValueRepository(session)
 
     async def add(self, contact: ContactEntity) -> None:
-        table_ref = _qualified_table(
-            session=self._session,
+        await self._runtime_values.create_record(
             schema_name=self._schema_name,
             table_name="contacts",
-        )
-        await self._session.execute(
-            text(
-                f"INSERT INTO {table_ref} "
-                "(id, created_at, updated_at, last_name, first_name, middle_name) "
-                "VALUES (:id, :created_at, :updated_at, :last_name, :first_name, :middle_name)"
-            ),
-            {
+            values={
                 "id": str(contact.id),
                 "created_at": contact.created_at,
                 "updated_at": contact.updated_at,
@@ -48,58 +40,67 @@ class SqlAlchemyContactRepository(ContactRepositoryProtocol):
                 "middle_name": contact.middle_name,
             },
         )
-        await self._session.flush()
 
     async def update(self, contact: ContactEntity) -> None:
-        table_ref = _qualified_table(
-            session=self._session,
+        await self._runtime_values.write_values(
             schema_name=self._schema_name,
             table_name="contacts",
-        )
-        await self._session.execute(
-            text(
-                f"UPDATE {table_ref} "
-                "SET updated_at = :updated_at, "
-                "last_name = :last_name, "
-                "first_name = :first_name, "
-                "middle_name = :middle_name "
-                "WHERE id = :id"
-            ),
-            {
-                "id": str(contact.id),
+            record_id=contact.id,
+            values={
                 "updated_at": contact.updated_at,
                 "last_name": contact.last_name,
                 "first_name": contact.first_name,
                 "middle_name": contact.middle_name,
             },
         )
-        await self._session.flush()
 
     async def get_by_id(self, contact_id: UUID) -> ContactEntity | None:
-        table_ref = _qualified_table(
-            session=self._session,
-            schema_name=self._schema_name,
-            table_name="contacts",
-        )
-        rows = await self._session.execute(
-            text(
-                f"SELECT id, created_at, updated_at, last_name, first_name, middle_name "
-                f"FROM {table_ref} "
-                "WHERE id = :id"
-            ),
-            {"id": str(contact_id)},
-        )
-        row = rows.first()
-        if row is None:
+        try:
+            values = await self._runtime_values.read_values(
+                schema_name=self._schema_name,
+                table_name="contacts",
+                record_id=contact_id,
+                field_names=_CONTACT_FIELDS,
+            )
+        except RuntimeRecordNotFoundError:
             return None
 
         return ContactEntity(
-            id=_parse_uuid(row[0]),
-            created_at=_parse_datetime(row[1]),
-            updated_at=_parse_datetime(row[2]),
-            last_name=str(row[3]),
-            first_name=str(row[4]),
-            middle_name=str(row[5]) if row[5] is not None else None,
+            id=_parse_uuid(values["id"]),
+            created_at=_parse_datetime(values["created_at"]),
+            updated_at=_parse_datetime(values["updated_at"]),
+            last_name=str(values["last_name"]),
+            first_name=str(values["first_name"]),
+            middle_name=(
+                str(values["middle_name"]) if values["middle_name"] is not None else None
+            ),
+        )
+
+    async def list(self) -> tuple[ContactEntity, ...]:
+        items = await self._runtime_values.list_values(
+            schema_name=self._schema_name,
+            table_name="contacts",
+            field_names=_CONTACT_FIELDS,
+        )
+        return tuple(
+            ContactEntity(
+                id=_parse_uuid(item["id"]),
+                created_at=_parse_datetime(item["created_at"]),
+                updated_at=_parse_datetime(item["updated_at"]),
+                last_name=str(item["last_name"]),
+                first_name=str(item["first_name"]),
+                middle_name=(
+                    str(item["middle_name"]) if item["middle_name"] is not None else None
+                ),
+            )
+            for item in items
+        )
+
+    async def delete_by_id(self, contact_id: UUID) -> bool:
+        return await self._runtime_values.delete_record(
+            schema_name=self._schema_name,
+            table_name="contacts",
+            record_id=contact_id,
         )
 
 
@@ -112,20 +113,13 @@ class SqlAlchemyCompanyRepository(CompanyRepositoryProtocol):
     ) -> None:
         self._session = session
         self._schema_name = schema_name
+        self._runtime_values = SqlAlchemyRuntimeValueRepository(session)
 
     async def add(self, company: CompanyEntity) -> None:
-        table_ref = _qualified_table(
-            session=self._session,
+        await self._runtime_values.create_record(
             schema_name=self._schema_name,
             table_name="companies",
-        )
-        await self._session.execute(
-            text(
-                f"INSERT INTO {table_ref} "
-                "(id, created_at, updated_at, last_name, company_name) "
-                "VALUES (:id, :created_at, :updated_at, :last_name, :company_name)"
-            ),
-            {
+            values={
                 "id": str(company.id),
                 "created_at": company.created_at,
                 "updated_at": company.updated_at,
@@ -133,86 +127,61 @@ class SqlAlchemyCompanyRepository(CompanyRepositoryProtocol):
                 "company_name": company.company_name,
             },
         )
-        await self._session.flush()
 
     async def update(self, company: CompanyEntity) -> None:
-        table_ref = _qualified_table(
-            session=self._session,
+        await self._runtime_values.write_values(
             schema_name=self._schema_name,
             table_name="companies",
-        )
-        await self._session.execute(
-            text(
-                f"UPDATE {table_ref} "
-                "SET updated_at = :updated_at, "
-                "last_name = :last_name, "
-                "company_name = :company_name "
-                "WHERE id = :id"
-            ),
-            {
-                "id": str(company.id),
+            record_id=company.id,
+            values={
                 "updated_at": company.updated_at,
                 "last_name": company.last_name,
                 "company_name": company.company_name,
             },
         )
-        await self._session.flush()
 
     async def get_by_id(self, company_id: UUID) -> CompanyEntity | None:
-        table_ref = _qualified_table(
-            session=self._session,
-            schema_name=self._schema_name,
-            table_name="companies",
-        )
-        rows = await self._session.execute(
-            text(
-                f"SELECT id, created_at, updated_at, last_name, company_name "
-                f"FROM {table_ref} "
-                "WHERE id = :id"
-            ),
-            {"id": str(company_id)},
-        )
-        row = rows.first()
-        if row is None:
+        try:
+            values = await self._runtime_values.read_values(
+                schema_name=self._schema_name,
+                table_name="companies",
+                record_id=company_id,
+                field_names=_COMPANY_FIELDS,
+            )
+        except RuntimeRecordNotFoundError:
             return None
 
         return CompanyEntity(
-            id=_parse_uuid(row[0]),
-            created_at=_parse_datetime(row[1]),
-            updated_at=_parse_datetime(row[2]),
-            last_name=str(row[3]),
-            company_name=str(row[4]),
+            id=_parse_uuid(values["id"]),
+            created_at=_parse_datetime(values["created_at"]),
+            updated_at=_parse_datetime(values["updated_at"]),
+            last_name=str(values["last_name"]),
+            company_name=str(values["company_name"]),
         )
 
+    async def list(self) -> tuple[CompanyEntity, ...]:
+        items = await self._runtime_values.list_values(
+            schema_name=self._schema_name,
+            table_name="companies",
+            field_names=_COMPANY_FIELDS,
+        )
+        return tuple(
+            CompanyEntity(
+                id=_parse_uuid(item["id"]),
+                created_at=_parse_datetime(item["created_at"]),
+                updated_at=_parse_datetime(item["updated_at"]),
+                last_name=str(item["last_name"]),
+                company_name=str(item["company_name"]),
+            )
+            for item in items
+        )
 
-def _qualified_table(
-    *,
-    session: AsyncSession,
-    schema_name: str | None,
-    table_name: str,
-) -> str:
-    quoted_table = _quoted_identifier(table_name)
-    dialect_name = session.bind.dialect.name if session.bind else ""
-
-    if not schema_name or dialect_name == "sqlite":
-        return quoted_table
-
-    return f"{_quoted_schema_name(schema_name)}.{quoted_table}"
-
-
-def _quoted_identifier(value: str) -> str:
-    normalized = value.strip().lower()
-    if not _IDENTIFIER_PATTERN.fullmatch(normalized):
-        raise ValueError(f"Invalid SQL identifier: '{value}'")
-    return f'"{normalized}"'
-
-
-def _quoted_schema_name(value: str) -> str:
-    normalized = value.strip()
-    if not _SCHEMA_PATTERN.fullmatch(normalized):
-        raise ValueError(f"Invalid schema name: '{value}'")
-    escaped = normalized.replace('"', '""')
-    return f'"{escaped}"'
+    async def delete_by_id(self, company_id: UUID) -> bool:
+        return await self._runtime_values.delete_record(
+            schema_name=self._schema_name,
+            table_name="companies",
+            record_id=company_id,
+        )
 
 
 def _parse_uuid(value: object) -> UUID:
@@ -232,6 +201,24 @@ def _parse_datetime(value: object) -> datetime:
         normalized = normalized.replace(" ", "T", 1)
 
     return datetime.fromisoformat(normalized)
+
+
+_CONTACT_FIELDS: tuple[str, ...] = (
+    "id",
+    "created_at",
+    "updated_at",
+    "last_name",
+    "first_name",
+    "middle_name",
+)
+
+_COMPANY_FIELDS: tuple[str, ...] = (
+    "id",
+    "created_at",
+    "updated_at",
+    "last_name",
+    "company_name",
+)
 
 
 __all__ = [

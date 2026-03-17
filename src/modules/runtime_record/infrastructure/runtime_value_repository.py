@@ -19,6 +19,41 @@ class SqlAlchemyRuntimeValueRepository(RuntimeValueRepositoryProtocol):
     def __init__(self, session: AsyncSession):
         self._session = session
 
+    async def create_record(
+        self,
+        *,
+        schema_name: str | None,
+        table_name: str,
+        values: dict[str, object | None],
+    ) -> None:
+        table_ref = _qualified_table(
+            session=self._session,
+            schema_name=schema_name,
+            table_name=table_name,
+        )
+        if not values:
+            raise ValueError("Cannot create record without values.")
+
+        columns: list[str] = []
+        placeholders: list[str] = []
+        params: dict[str, object | None] = {}
+
+        for index, (column_name, value) in enumerate(values.items()):
+            parameter_name = f"value_{index}"
+            columns.append(_quoted_identifier(column_name))
+            placeholders.append(f":{parameter_name}")
+            params[parameter_name] = _serialize_runtime_value(value)
+
+        await self._session.execute(
+            text(
+                f"INSERT INTO {table_ref} "
+                f"({', '.join(columns)}) "
+                f"VALUES ({', '.join(placeholders)})"
+            ),
+            params,
+        )
+        await self._session.flush()
+
     async def write_values(
         self,
         *,
@@ -91,6 +126,57 @@ class SqlAlchemyRuntimeValueRepository(RuntimeValueRepositoryProtocol):
             field_names[index]: row[index]
             for index in range(len(field_names))
         }
+
+    async def list_values(
+        self,
+        *,
+        schema_name: str | None,
+        table_name: str,
+        field_names: tuple[str, ...],
+    ) -> tuple[dict[str, object | None], ...]:
+        table_ref = _qualified_table(
+            session=self._session,
+            schema_name=schema_name,
+            table_name=table_name,
+        )
+        if not field_names:
+            return ()
+
+        quoted_fields = ", ".join(_quoted_identifier(field_name) for field_name in field_names)
+        rows = await self._session.execute(
+            text(
+                f"SELECT {quoted_fields} "
+                f"FROM {table_ref} "
+                'ORDER BY "id"'
+            )
+        )
+        items = rows.fetchall()
+        return tuple(
+            {
+                field_names[index]: row[index]
+                for index in range(len(field_names))
+            }
+            for row in items
+        )
+
+    async def delete_record(
+        self,
+        *,
+        schema_name: str | None,
+        table_name: str,
+        record_id: UUID,
+    ) -> bool:
+        table_ref = _qualified_table(
+            session=self._session,
+            schema_name=schema_name,
+            table_name=table_name,
+        )
+        result = await self._session.execute(
+            text(f'DELETE FROM {table_ref} WHERE "id" = :record_id'),
+            {"record_id": str(record_id)},
+        )
+        await self._session.flush()
+        return bool(result.rowcount)
 
     async def _assert_record_exists(self, *, table_ref: str, record_id: UUID) -> None:
         rows = await self._session.execute(

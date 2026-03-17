@@ -56,6 +56,10 @@ class TestTask2Step1SmokeImports(unittest.TestCase):
         }
 
         self.assertIn("/api/crm/health", route_paths)
+        self.assertIn("/api/crm/tenants/{tenant_id}/contacts", route_paths)
+        self.assertIn("/api/crm/tenants/{tenant_id}/contacts/{contact_id}", route_paths)
+        self.assertIn("/api/crm/tenants/{tenant_id}/companies", route_paths)
+        self.assertIn("/api/crm/tenants/{tenant_id}/companies/{company_id}", route_paths)
         self.assertIn("/api/runtime-schema/health", route_paths)
         self.assertIn("/api/runtime-record/health", route_paths)
 

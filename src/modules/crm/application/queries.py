@@ -16,7 +16,19 @@ class GetCompanyQuery:
     tenant_id: UUID | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class ListContactsQuery:
+    tenant_id: UUID | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ListCompaniesQuery:
+    tenant_id: UUID | None = None
+
+
 __all__ = [
     "GetCompanyQuery",
     "GetContactQuery",
+    "ListCompaniesQuery",
+    "ListContactsQuery",
 ]

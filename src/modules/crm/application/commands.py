@@ -40,9 +40,21 @@ class UpdateCompanyCommand:
     custom_fields: dict[str, object | None] | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class DeleteContactCommand:
+    contact_id: UUID
+
+
+@dataclass(frozen=True, slots=True)
+class DeleteCompanyCommand:
+    company_id: UUID
+
+
 __all__ = [
     "CreateCompanyCommand",
     "CreateContactCommand",
+    "DeleteCompanyCommand",
+    "DeleteContactCommand",
     "UpdateCompanyCommand",
     "UpdateContactCommand",
 ]

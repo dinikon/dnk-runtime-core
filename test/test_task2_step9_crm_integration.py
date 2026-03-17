@@ -12,15 +12,24 @@ from src.modules.crm.application import (
     CreateCompanyUseCase,
     CreateContactCommand,
     CreateContactUseCase,
+    DeleteCompanyCommand,
+    DeleteCompanyUseCase,
+    DeleteContactCommand,
+    DeleteContactUseCase,
     GetCompanyQuery,
     GetCompanyUseCase,
     GetContactQuery,
     GetContactUseCase,
+    ListCompaniesQuery,
+    ListCompaniesUseCase,
+    ListContactsQuery,
+    ListContactsUseCase,
     UpdateCompanyCommand,
     UpdateCompanyUseCase,
     UpdateContactCommand,
     UpdateContactUseCase,
 )
+from src.modules.crm.domain.errors import CompanyNotFoundError, ContactNotFoundError
 from src.modules.crm.infrastructure import (
     SqlAlchemyCompanyRepository,
     SqlAlchemyContactRepository,
@@ -109,6 +118,23 @@ class TestCrmIntegrationStep9(unittest.IsolatedAsyncioTestCase):
             repository = SqlAlchemyContactRepository(session)
             get_use_case = GetContactUseCase(contact_repository=repository)
             fetched = await get_use_case.execute(GetContactQuery(contact_id=created.id))
+            list_use_case = ListContactsUseCase(contact_repository=repository)
+            listed = await list_use_case.execute(ListContactsQuery())
+
+        uow = UnitOfWork(self._session_factory)
+        async with uow:
+            repository = SqlAlchemyContactRepository(uow.session)
+            delete_use_case = DeleteContactUseCase(
+                uow=uow,
+                contact_repository=repository,
+            )
+            await delete_use_case.execute(DeleteContactCommand(contact_id=created.id))
+
+        async with self._session_factory() as session:
+            repository = SqlAlchemyContactRepository(session)
+            get_use_case = GetContactUseCase(contact_repository=repository)
+            with self.assertRaises(ContactNotFoundError):
+                await get_use_case.execute(GetContactQuery(contact_id=created.id))
 
         self.assertEqual(created.last_name, "Doe")
         self.assertEqual(created.first_name, "John")
@@ -123,6 +149,7 @@ class TestCrmIntegrationStep9(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(fetched.last_name, "Roe")
         self.assertEqual(fetched.first_name, "Jane")
         self.assertIsNone(fetched.middle_name)
+        self.assertEqual(len(listed), 1)
 
     async def test_company_core_create_update_get(self) -> None:
         uow = UnitOfWork(self._session_factory)
@@ -158,6 +185,23 @@ class TestCrmIntegrationStep9(unittest.IsolatedAsyncioTestCase):
             repository = SqlAlchemyCompanyRepository(session)
             get_use_case = GetCompanyUseCase(company_repository=repository)
             fetched = await get_use_case.execute(GetCompanyQuery(company_id=created.id))
+            list_use_case = ListCompaniesUseCase(company_repository=repository)
+            listed = await list_use_case.execute(ListCompaniesQuery())
+
+        uow = UnitOfWork(self._session_factory)
+        async with uow:
+            repository = SqlAlchemyCompanyRepository(uow.session)
+            delete_use_case = DeleteCompanyUseCase(
+                uow=uow,
+                company_repository=repository,
+            )
+            await delete_use_case.execute(DeleteCompanyCommand(company_id=created.id))
+
+        async with self._session_factory() as session:
+            repository = SqlAlchemyCompanyRepository(session)
+            get_use_case = GetCompanyUseCase(company_repository=repository)
+            with self.assertRaises(CompanyNotFoundError):
+                await get_use_case.execute(GetCompanyQuery(company_id=created.id))
 
         self.assertEqual(created.last_name, "Owner")
         self.assertEqual(created.company_name, "Acme")
@@ -169,6 +213,7 @@ class TestCrmIntegrationStep9(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(fetched.id, created.id)
         self.assertEqual(fetched.last_name, "Director")
         self.assertEqual(fetched.company_name, "Acme Corp")
+        self.assertEqual(len(listed), 1)
 
 
 if __name__ == "__main__":
