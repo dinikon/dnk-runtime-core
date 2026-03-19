@@ -1,10 +1,10 @@
+from src.modules.shared import EntityIdVO
 from src.modules.crm.domain.contact.entity import ContactEntity
 from src.modules.crm.domain.contact.error import ContactNotFoundError
 from src.modules.crm.domain.contact.repository import (
     ContactCommandRepositoryProtocol,
     ContactQueryRepositoryProtocol,
 )
-from src.modules.crm.domain.contact.value_object.contact_id import ContactIdVO
 from src.modules.shared.kernel.time.ports import ClockPort
 
 
@@ -24,7 +24,7 @@ class ContactService:
     async def create_contact(
         self,
         *,
-        contact_id: ContactIdVO,
+        contact_id: EntityIdVO,
         last_name: str,
         first_name: str | None = None,
         middle_name: str | None = None,
@@ -43,7 +43,7 @@ class ContactService:
     async def get_contact(
         self,
         *,
-        contact_id: ContactIdVO,
+        contact_id: EntityIdVO,
     ) -> ContactEntity:
         contact = await self._query_repository.get_by_id(
             contact_id=contact_id,
@@ -67,7 +67,7 @@ class ContactService:
     async def rename_contact(
         self,
         *,
-        contact_id: ContactIdVO,
+        contact_id: EntityIdVO,
         last_name: str,
         first_name: str | None = None,
         middle_name: str | None = None,
@@ -88,7 +88,7 @@ class ContactService:
 
         return await self._command_repository.save(contact)
 
-    async def delete_contact(self, *, contact_id: ContactIdVO) -> None:
+    async def delete_contact(self, *, contact_id: EntityIdVO) -> None:
         contact = await self._query_repository.get_by_id(contact_id=contact_id)
         if contact is None:
             raise ContactNotFoundError(str(contact_id))

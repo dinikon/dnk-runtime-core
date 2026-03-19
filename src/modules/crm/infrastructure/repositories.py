@@ -5,12 +5,12 @@ from uuid import UUID
 
 import uuid6
 
+from src.modules.shared import EntityIdVO
 from src.modules.crm.domain.contact.entity import ContactEntity
 from src.modules.crm.domain.contact.repository import (
     ContactCommandRepositoryProtocol,
     ContactQueryRepositoryProtocol,
 )
-from src.modules.crm.domain.contact.value_object.contact_id import ContactIdVO
 
 
 class _FakeContactsStorage:
@@ -23,14 +23,14 @@ class _FakeContactsStorage:
     def _build_seed_contacts() -> tuple[ContactEntity, ...]:
         return (
             ContactEntity.create(
-                id_=ContactIdVO.from_value(uuid6.uuid7()),
+                id_=EntityIdVO.from_value(uuid6.uuid7()),
                 now=datetime(2026, 1, 10, 9, 0, tzinfo=UTC),
                 last_name="Smith",
                 first_name="John",
                 middle_name=None,
             ),
             ContactEntity.create(
-                id_=ContactIdVO.from_value(uuid6.uuid7()),
+                id_=EntityIdVO.from_value(uuid6.uuid7()),
                 now=datetime(2026, 2, 5, 14, 30, tzinfo=UTC),
                 last_name="Johnson",
                 first_name="Emily",
@@ -38,7 +38,7 @@ class _FakeContactsStorage:
             ),
         )
 
-    def get(self, contact_id: ContactIdVO) -> ContactEntity | None:
+    def get(self, contact_id: EntityIdVO) -> ContactEntity | None:
         return self._contacts.get(contact_id.value)
 
     def list(self, *, limit: int, offset: int) -> list[ContactEntity]:
@@ -52,7 +52,7 @@ class _FakeContactsStorage:
         self._contacts[contact.id.value] = contact
         return contact
 
-    def delete(self, contact_id: ContactIdVO) -> None:
+    def delete(self, contact_id: EntityIdVO) -> None:
         self._contacts.pop(contact_id.value, None)
 
 
@@ -63,10 +63,10 @@ class FakeContactQueryRepository(ContactQueryRepositoryProtocol):
     def __init__(self, storage: _FakeContactsStorage) -> None:
         self._storage = storage
 
-    async def get_by_id(self, *, contact_id: ContactIdVO) -> ContactEntity | None:
+    async def get_by_id(self, contact_id: EntityIdVO) -> ContactEntity | None:
         return self._storage.get(contact_id)
 
-    async def list(self, *, limit: int, offset: int) -> list[ContactEntity]:
+    async def list(self, limit: int, offset: int) -> list[ContactEntity]:
         return self._storage.list(limit=limit, offset=offset)
 
 
@@ -77,7 +77,7 @@ class FakeContactCommandRepository(ContactCommandRepositoryProtocol):
     async def save(self, contact: ContactEntity) -> ContactEntity:
         return self._storage.save(contact)
 
-    async def delete(self, contact_id: ContactIdVO) -> None:
+    async def delete(self, contact_id: EntityIdVO) -> None:
         self._storage.delete(contact_id)
 
 
