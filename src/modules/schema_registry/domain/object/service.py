@@ -9,7 +9,7 @@ from modules.schema_registry.domain.field.entity import FieldEntity
 from modules.schema_registry.domain.field.value_object.field_type import FieldTypeVO
 from modules.schema_registry.domain.object.entity import ObjectEntity
 from modules.schema_registry.domain.object.repository import ObjectRepositoryProtocol
-from modules.schema_registry.field_seed import FieldSeed
+from modules.schema_registry.domain.field_seed import FieldSeed
 from modules.shared import EntityIdVO
 
 

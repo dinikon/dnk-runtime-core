@@ -12,8 +12,7 @@ from modules.schema_registry.domain.object.value_object.object_label import (
     ObjectLabelVO,
 )
 from modules.schema_registry.domain.object.value_object.object_name import ObjectNameVO
-from modules.schema_registry.field_seed import FieldSeed
-from modules.shared import DomainError
+from modules.schema_registry.domain.field_seed import FieldSeed
 from src.modules.shared import EntityIdVO
 
 
