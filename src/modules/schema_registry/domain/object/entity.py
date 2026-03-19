@@ -1,7 +1,19 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Sequence
 
-
+from modules.schema_registry.domain.error import (
+    FieldNotFoundError,
+    FieldAlreadyExistsError,
+)
+from modules.schema_registry.domain.field.entity import FieldEntity
+from modules.schema_registry.domain.field.value_object.field_type import FieldTypeVO
+from modules.schema_registry.domain.object.value_object.object_label import (
+    ObjectLabelVO,
+)
+from modules.schema_registry.domain.object.value_object.object_name import ObjectNameVO
+from modules.schema_registry.field_seed import FieldSeed
+from modules.shared import DomainError
 from src.modules.shared import EntityIdVO
 
 
@@ -13,34 +25,196 @@ class ObjectEntity:
 
     tenant_id: EntityIdVO
 
-    singular_name: str
-    plural_name: str
-
-    label_singular: str
-    label_plural: str
+    object_name: ObjectNameVO
+    object_label: ObjectLabelVO
 
     description: str
+
+    fields: list[FieldEntity] = field(default_factory=list)
+
+    @property
+    def model_name(self) -> str:
+        return self.plural_name
 
     @classmethod
     def create(
         cls,
+        *,
         id_: EntityIdVO,
         tenant_id: EntityIdVO,
         now: datetime,
-        singular_name: str,
-        plural_name: str,
-        label_singular: str,
-        label_plural: str,
+        object_name: ObjectNameVO,
+        object_label: ObjectLabelVO,
         description: str,
-    ):
+    ) -> "ObjectEntity":
         return cls(
             id=id_,
-            tenant_id=tenant_id,
             created_at=now,
             updated_at=now,
-            singular_name=singular_name,
-            plural_name=plural_name,
-            label_singular=label_singular,
-            label_plural=label_plural,
+            tenant_id=tenant_id,
+            object_name=object_name,
+            object_label=object_label,
+            description=description.strip(),
+            fields=[],
+        )
+
+    def rename(
+        self,
+        *,
+        now: datetime,
+        object_name: ObjectNameVO,
+        object_label: ObjectLabelVO,
+        description: str,
+    ) -> None:
+        self.object_name = object_name
+        self.object_label = object_label
+        self.description = description.strip()
+        self.updated_at = now
+
+    def add_field(
+        self,
+        *,
+        field_id: EntityIdVO,
+        now: datetime,
+        field_name: str,
+        field_type: FieldTypeVO,
+        label: str,
+        description: str,
+        is_nullable: bool,
+        options: dict[str, str] | None = None,
+        settings: dict[str, str] | None = None,
+    ) -> FieldEntity:
+        self._ensure_field_name_is_unique(field_name=field_name)
+
+        field_entity = FieldEntity.create(
+            id_=field_id,
+            object_id=self.id,
+            now=now,
+            field_name=field_name,
+            field_type=field_type,
+            label=label,
+            description=description,
+            is_nullable=is_nullable,
+            options=options,
+            settings=settings,
+        )
+        self.fields.append(field_entity)
+        self.updated_at = now
+        return field_entity
+
+    def add_fields_from_seed(
+        self,
+        *,
+        now: datetime,
+        seeds: Sequence[FieldSeed],
+    ) -> None:
+        for seed in seeds:
+            self.add_field(
+                field_id=seed.id,
+                now=now,
+                field_name=seed.field_name,
+                field_type=seed.field_type,
+                label=seed.label,
+                description=seed.description,
+                is_nullable=seed.is_nullable,
+                options=seed.options,
+                settings=seed.settings,
+            )
+
+    def rename_field(
+        self,
+        *,
+        field_id: EntityIdVO,
+        now: datetime,
+        field_name: str,
+        label: str,
+        description: str,
+    ) -> None:
+        field_entity = self.get_field(field_id)
+
+        self._ensure_field_name_is_unique(
+            field_name=field_name,
+            exclude_field_id=field_id,
+        )
+
+        field_entity.rename(
+            now=now,
+            field_name=field_name,
+            label=label,
             description=description,
         )
+        self.updated_at = now
+
+    def remove_field(
+        self,
+        *,
+        field_id: EntityIdVO,
+        now: datetime,
+    ) -> FieldEntity:
+        field_entity = self.get_field(field_id)
+        self.fields = [field for field in self.fields if field.id != field_id]
+        self.updated_at = now
+        return field_entity
+
+    def replace_field_settings(
+        self,
+        *,
+        field_id: EntityIdVO,
+        now: datetime,
+        settings: dict[str, str],
+    ) -> None:
+        field_entity = self.get_field(field_id)
+        field_entity.replace_settings(now=now, settings=settings)
+        self.updated_at = now
+
+    def merge_field_settings(
+        self,
+        *,
+        field_id: EntityIdVO,
+        now: datetime,
+        patch: dict[str, str],
+    ) -> None:
+        field_entity = self.get_field(field_id)
+        field_entity.merge_settings(now=now, patch=patch)
+        self.updated_at = now
+
+    def replace_field_options(
+        self,
+        *,
+        field_id: EntityIdVO,
+        now: datetime,
+        options: dict[str, str],
+    ) -> None:
+        field_entity = self.get_field(field_id)
+        field_entity.replace_options(now=now, options=options)
+        self.updated_at = now
+
+    def get_field(self, field_id: EntityIdVO) -> FieldEntity:
+        for field_entity in self.fields:
+            if field_entity.id == field_id:
+                return field_entity
+        raise FieldNotFoundError(f"Field {field_id} not found.")
+
+    def get_field_by_name(self, field_name: str) -> FieldEntity | None:
+        normalized = field_name.strip()
+        for field_entity in self.fields:
+            if field_entity.field_name == normalized:
+                return field_entity
+        return None
+
+    def _ensure_field_name_is_unique(
+        self,
+        *,
+        field_name: str,
+        exclude_field_id: EntityIdVO | None = None,
+    ) -> None:
+        normalized = field_name.strip()
+
+        for field_entity in self.fields:
+            if exclude_field_id is not None and field_entity.id == exclude_field_id:
+                continue
+
+            if field_entity.field_name == normalized:
+                raise FieldAlreadyExistsError(
+                    f"Field with name '{normalized}' already exists in object '{self.id}'."
+                )
