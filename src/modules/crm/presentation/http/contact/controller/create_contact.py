@@ -3,10 +3,10 @@ from __future__ import annotations
 import uuid6
 from fastapi import APIRouter, HTTPException, status
 
+from src.modules.shared import EntityIdVO
 from src.modules.crm.application.contact.command.create_contact_command import (
     CreateContactCommand,
 )
-from src.modules.crm.domain.contact.value_object.contact_id import ContactIdVO
 from src.modules.crm.presentation.depends.application import CreateContactUseCaseDep
 from src.modules.crm.presentation.http.contact.requests import (
     CreateContactRequestSchema,
@@ -31,7 +31,7 @@ async def create_contact(
     use_case: CreateContactUseCaseDep,
 ) -> ContactResponseSchema:
     command = CreateContactCommand(
-        contact_id=ContactIdVO.from_value(uuid6.uuid7()),
+        contact_id=EntityIdVO.from_value(uuid6.uuid7()),
         last_name=payload.last_name,
         first_name=payload.first_name,
         middle_name=payload.middle_name,
