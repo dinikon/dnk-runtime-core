@@ -1,23 +1,17 @@
 from src.modules.shared import EntityIdVO
 from src.modules.crm.domain.contact.entity import ContactEntity
 from src.modules.crm.domain.contact.error import ContactNotFoundError
-from src.modules.crm.domain.contact.repository import (
-    ContactCommandRepositoryProtocol,
-    ContactQueryRepositoryProtocol,
-)
+from src.modules.crm.domain.contact.repository import ContactCommandRepositoryProtocol
 from src.modules.shared.kernel.time.ports import ClockPort
 
 
 class ContactService:
-
     def __init__(
         self,
         *,
-        query_repository: ContactQueryRepositoryProtocol,
         command_repository: ContactCommandRepositoryProtocol,
         clock: ClockPort,
     ) -> None:
-        self._query_repository = query_repository
         self._command_repository = command_repository
         self._clock = clock
 
@@ -38,31 +32,14 @@ class ContactService:
             middle_name=middle_name,
         )
 
-        return await self._command_repository.save(contact)
+        return await self._command_repository.save(contact=contact)
 
-    async def get_contact(
-        self,
-        *,
-        contact_id: EntityIdVO,
-    ) -> ContactEntity:
-        contact = await self._query_repository.get_by_id(
-            contact_id=contact_id,
-        )
+    async def get_contact(self, *, contact_id: EntityIdVO) -> ContactEntity:
+        contact = await self._command_repository.load(contact_id=contact_id)
         if contact is None:
             raise ContactNotFoundError(str(contact_id))
 
         return contact
-
-    async def list_contacts(
-        self,
-        *,
-        limit: int,
-        offset: int,
-    ) -> list[ContactEntity]:
-        return await self._query_repository.list(
-            limit=limit,
-            offset=offset,
-        )
 
     async def rename_contact(
         self,
@@ -73,11 +50,7 @@ class ContactService:
         middle_name: str | None = None,
     ) -> ContactEntity:
         now = self._clock.now()
-        contact = await self._query_repository.get_by_id(
-            contact_id=contact_id,
-        )
-        if contact is None:
-            raise ContactNotFoundError(str(contact_id))
+        contact = await self.get_contact(contact_id=contact_id)
 
         contact.rename(
             now=now,
@@ -86,11 +59,9 @@ class ContactService:
             middle_name=middle_name,
         )
 
-        return await self._command_repository.save(contact)
+        return await self._command_repository.save(contact=contact)
 
     async def delete_contact(self, *, contact_id: EntityIdVO) -> None:
-        contact = await self._query_repository.get_by_id(contact_id=contact_id)
-        if contact is None:
-            raise ContactNotFoundError(str(contact_id))
+        await self.get_contact(contact_id=contact_id)
 
         await self._command_repository.delete(contact_id=contact_id)

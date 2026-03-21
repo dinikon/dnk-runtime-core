@@ -4,19 +4,16 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from src.modules.crm.domain.contact.repository import (
-    ContactCommandRepositoryProtocol,
+from src.modules.crm.application.contact.query.repository import (
     ContactQueryRepositoryProtocol,
 )
-from src.modules.crm.infrastructure import (
-    FakeContactCommandRepository,
-    FakeContactQueryRepository,
-    get_fake_contacts_storage,
+from src.modules.crm.domain.contact.repository import (
+    ContactCommandRepositoryProtocol,
 )
 
 
 def get_contact_query_repository() -> ContactQueryRepositoryProtocol:
-    return FakeContactQueryRepository(get_fake_contacts_storage())
+    raise NotImplementedError("CRM contact query repository is not configured.")
 
 
 ContactQueryRepositoryDep = Annotated[
@@ -26,7 +23,7 @@ ContactQueryRepositoryDep = Annotated[
 
 
 def get_contact_command_repository() -> ContactCommandRepositoryProtocol:
-    return FakeContactCommandRepository(get_fake_contacts_storage())
+    raise NotImplementedError("CRM contact command repository is not configured.")
 
 
 ContactCommandRepositoryDep = Annotated[

@@ -20,12 +20,10 @@ from src.modules.shared.depends import ClockDep
 
 
 def get_contact_service(
-    query_repository: ContactQueryRepositoryDep,
     command_repository: ContactCommandRepositoryDep,
     clock: ClockDep,
 ) -> ContactService:
     return ContactService(
-        query_repository=query_repository,
         command_repository=command_repository,
         clock=clock,
     )
@@ -59,9 +57,9 @@ GetContactUseCaseDep = Annotated[
 
 
 def get_list_contacts_use_case(
-    service: ContactServiceDep,
+    query_repository: ContactQueryRepositoryDep,
 ) -> ListContactsUseCase:
-    return ListContactsUseCase(service)
+    return ListContactsUseCase(query_repository)
 
 
 ListContactsUseCaseDep = Annotated[
