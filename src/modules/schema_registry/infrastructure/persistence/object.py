@@ -43,7 +43,10 @@ class ObjectORM(Base):
     object_type: Mapped[str] = mapped_column(
         String(255), nullable=False, server_default="object"
     )
-    object_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    singular_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    plural_name: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    singular_label: Mapped[str] = mapped_column(String(255), nullable=False)
+    plural_label: Mapped[str] = mapped_column(String(255), nullable=False)
 
     description: Mapped[str] = mapped_column(String(255), nullable=False)

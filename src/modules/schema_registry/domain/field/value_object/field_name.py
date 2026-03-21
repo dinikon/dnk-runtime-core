@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import re
+import re
 
 from modules.schema_registry.domain.error import InvalidValueObjectError
 

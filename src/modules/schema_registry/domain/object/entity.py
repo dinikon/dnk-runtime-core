@@ -1,18 +1,24 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Sequence
+from typing import Sequence, Self
 
-from modules.schema_registry.domain.error import (
+from src.modules.schema_registry.domain.error import (
     FieldNotFoundError,
     FieldAlreadyExistsError,
 )
-from modules.schema_registry.domain.field.entity import FieldEntity
-from modules.schema_registry.domain.field.value_object.field_type import FieldTypeVO
-from modules.schema_registry.domain.object.value_object.object_label import (
+from src.modules.schema_registry.domain.field.entity import FieldEntity
+from src.modules.schema_registry.domain.field.value_object.field_label import (
+    FieldLabelVO,
+)
+from src.modules.schema_registry.domain.field.value_object.field_name import FieldNameVO
+from src.modules.schema_registry.domain.field.value_object.field_type import FieldTypeVO
+from src.modules.schema_registry.domain.object.value_object.object_label import (
     ObjectLabelVO,
 )
-from modules.schema_registry.domain.object.value_object.object_name import ObjectNameVO
-from modules.schema_registry.domain.field_seed import FieldSeed
+from src.modules.schema_registry.domain.object.value_object.object_name import (
+    ObjectNameVO,
+)
+from src.modules.schema_registry.domain.field_seed import FieldSeed
 from src.modules.shared import EntityIdVO
 
 
@@ -33,7 +39,7 @@ class ObjectEntity:
 
     @property
     def model_name(self) -> str:
-        return self.plural_name
+        return self.object_name.singular
 
     @classmethod
     def create(
@@ -45,7 +51,7 @@ class ObjectEntity:
         object_name: ObjectNameVO,
         object_label: ObjectLabelVO,
         description: str,
-    ) -> "ObjectEntity":
+    ) -> Self:
         return cls(
             id=id_,
             created_at=now,
@@ -89,9 +95,9 @@ class ObjectEntity:
             id_=field_id,
             object_id=self.id,
             now=now,
-            field_name=field_name,
+            field_name=FieldNameVO(field_name),
             field_type=field_type,
-            label=label,
+            label=FieldLabelVO(label),
             description=description,
             is_nullable=is_nullable,
             options=options,
@@ -138,8 +144,8 @@ class ObjectEntity:
 
         field_entity.rename(
             now=now,
-            field_name=field_name,
-            label=label,
+            field_name=FieldNameVO(field_name),
+            label=FieldLabelVO(label),
             description=description,
         )
         self.updated_at = now
