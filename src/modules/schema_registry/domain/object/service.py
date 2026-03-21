@@ -7,11 +7,17 @@ from src.modules.schema_registry.domain.error import (
 )
 from src.modules.schema_registry.domain.field.entity import FieldEntity
 from src.modules.schema_registry.domain.field.value_object.field_type import FieldTypeVO
+from src.modules.schema_registry.domain.field_seed import FieldSeed
 from src.modules.schema_registry.domain.object.entity import ObjectEntity
 from src.modules.schema_registry.domain.object.repository import (
     ObjectRepositoryProtocol,
 )
-from src.modules.schema_registry.domain.field_seed import FieldSeed
+from src.modules.schema_registry.domain.object.value_object.object_label import (
+    ObjectLabelVO,
+)
+from src.modules.schema_registry.domain.object.value_object.object_name import (
+    ObjectNameVO,
+)
 from src.modules.shared import EntityIdVO
 
 
@@ -45,10 +51,14 @@ class SchemaRegistryDomainService:
             id_=object_id,
             tenant_id=tenant_id,
             now=now,
-            singular_name=singular_name,
-            plural_name=plural_name,
-            label_singular=label_singular,
-            label_plural=label_plural,
+            object_name=ObjectNameVO(
+                singular=singular_name,
+                plural=plural_name,
+            ),
+            object_label=ObjectLabelVO(
+                singular=label_singular,
+                plural=label_plural,
+            ),
             description=description,
         )
 
@@ -85,10 +95,14 @@ class SchemaRegistryDomainService:
 
         object_entity.rename(
             now=now,
-            singular_name=singular_name,
-            plural_name=plural_name,
-            label_singular=label_singular,
-            label_plural=label_plural,
+            object_name=ObjectNameVO(
+                singular=singular_name,
+                plural=plural_name,
+            ),
+            object_label=ObjectLabelVO(
+                singular=label_singular,
+                plural=label_plural,
+            ),
             description=description,
         )
         self._object_repository.save(object_entity)
