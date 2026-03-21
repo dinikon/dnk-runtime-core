@@ -1,16 +1,18 @@
 from datetime import datetime
 from typing import Sequence
 
-from modules.schema_registry.domain.error import (
+from src.modules.schema_registry.domain.error import (
     ObjectNameAlreadyExistsError,
     ObjectNotFoundError,
 )
-from modules.schema_registry.domain.field.entity import FieldEntity
-from modules.schema_registry.domain.field.value_object.field_type import FieldTypeVO
-from modules.schema_registry.domain.object.entity import ObjectEntity
-from modules.schema_registry.domain.object.repository import ObjectRepositoryProtocol
-from modules.schema_registry.domain.field_seed import FieldSeed
-from modules.shared import EntityIdVO
+from src.modules.schema_registry.domain.field.entity import FieldEntity
+from src.modules.schema_registry.domain.field.value_object.field_type import FieldTypeVO
+from src.modules.schema_registry.domain.object.entity import ObjectEntity
+from src.modules.schema_registry.domain.object.repository import (
+    ObjectRepositoryProtocol,
+)
+from src.modules.schema_registry.domain.field_seed import FieldSeed
+from src.modules.shared import EntityIdVO
 
 
 class SchemaRegistryDomainService:
@@ -218,7 +220,7 @@ class SchemaRegistryDomainService:
         return object_entity
 
     def _get_required_object(self, object_id: EntityIdVO) -> ObjectEntity:
-        object_entity = self._object_repository.get_by_id(object_id)
+        object_entity = self._object_repository.load(object_id)
         if object_entity is None:
             raise ObjectNotFoundError(f"Object {object_id} not found.")
         return object_entity
