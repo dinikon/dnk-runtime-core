@@ -18,7 +18,7 @@ from src.modules.schema_registry.domain.object.value_object.object_label import 
 from src.modules.schema_registry.domain.object.value_object.object_name import (
     ObjectNameVO,
 )
-from modules.schema_registry.domain.field_seed import FieldSeed
+from src.modules.schema_registry.domain.field_seed import FieldSeed
 from src.modules.shared import EntityIdVO
 
 
@@ -89,6 +89,7 @@ class ObjectEntity:
         label: str,
         description: str,
         is_nullable: bool,
+        default_value: str | None = None,
         options: dict[str, str] | None = None,
         settings: dict[str, str] | None = None,
     ) -> FieldEntity:
@@ -103,6 +104,7 @@ class ObjectEntity:
             label=FieldLabelVO(label),
             description=description,
             is_nullable=is_nullable,
+            default_value=default_value,
             options=options,
             settings=settings,
         )
@@ -125,6 +127,7 @@ class ObjectEntity:
                 label=seed.label,
                 description=seed.description,
                 is_nullable=seed.is_nullable,
+                default_value=None,
                 options=seed.options,
                 settings=seed.settings,
             )

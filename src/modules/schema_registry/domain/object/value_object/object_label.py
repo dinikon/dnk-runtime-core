@@ -1,8 +1,6 @@
 from dataclasses import dataclass
 
-from src.modules.schema_registry.domain.object.value_object.object_name import (
-    InvalidValueObjectError,
-)
+from src.modules.schema_registry.domain.error import InvalidValueObjectError
 
 
 def _validate_label(value: str, *, field_name: str, max_length: int = 16) -> str:

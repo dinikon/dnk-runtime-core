@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import re
 
-from modules.schema_registry.domain.error import InvalidValueObjectError
+from src.modules.schema_registry.domain.error import InvalidValueObjectError
 
 _PG_IDENTIFIER_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 

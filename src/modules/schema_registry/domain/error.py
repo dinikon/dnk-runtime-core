@@ -1,29 +1,45 @@
 from src.modules.shared import DomainError
 
 
-class ObjectNotFoundError(DomainError):
+class SchemaRegistryError(DomainError):
     pass
 
 
-class ObjectAlreadyDeletedError(DomainError):
+class ObjectNotFoundError(SchemaRegistryError):
     pass
 
 
-class FieldNotFoundError(DomainError):
+class ObjectAlreadyDeletedError(SchemaRegistryError):
     pass
 
 
-class FieldAlreadyExistsError(DomainError):
+class FieldNotFoundError(SchemaRegistryError):
     pass
 
 
-class ObjectNameAlreadyExistsError(DomainError):
+class FieldAlreadyExistsError(SchemaRegistryError):
     pass
 
 
-class InvalidFieldOperationError(DomainError):
+class ObjectNameAlreadyExistsError(SchemaRegistryError):
     pass
 
 
-class InvalidValueObjectError(DomainError):
+class InvalidFieldOperationError(SchemaRegistryError):
+    pass
+
+
+class InvalidValueObjectError(SchemaRegistryError):
+    pass
+
+
+class SeedValidationError(SchemaRegistryError):
+    pass
+
+
+class UnsupportedSchemaBackendError(SchemaRegistryError):
+    pass
+
+
+class UnsupportedSchemaChangeError(SchemaRegistryError):
     pass

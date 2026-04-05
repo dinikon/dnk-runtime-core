@@ -26,6 +26,7 @@ class FieldEntity:
     description: str
 
     is_nullable: bool
+    default_value: str | None
 
     options: dict[str, str]
     settings: dict[str, str]
@@ -42,12 +43,14 @@ class FieldEntity:
         label: FieldLabelVO,
         description: str,
         is_nullable: bool,
+        default_value: str | None = None,
         options: dict[str, str] | None = None,
         settings: dict[str, str] | None = None,
     ) -> Self:
         normalized_description = description.strip()
         normalized_options = dict(options or {})
         normalized_settings = dict(settings or {})
+        normalized_default_value = default_value.strip() if default_value else None
 
         if normalized_options and not field_type.is_select_like():
             raise InvalidFieldOperationError(
@@ -64,6 +67,7 @@ class FieldEntity:
             label=label,
             description=normalized_description,
             is_nullable=is_nullable,
+            default_value=normalized_default_value,
             options=normalized_options,
             settings=normalized_settings,
         )
