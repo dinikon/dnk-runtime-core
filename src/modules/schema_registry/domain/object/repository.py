@@ -17,3 +17,14 @@ class ObjectRepositoryProtocol(Protocol):
     def save(self, object_entity: ObjectEntity) -> ObjectEntity: ...
 
     def delete(self, object_id: EntityIdVO) -> None: ...
+
+    async def list_by_tenant_id(
+        self, *, tenant_id: EntityIdVO
+    ) -> list[ObjectEntity]: ...
+
+    async def replace_all_for_tenant(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        objects: list[ObjectEntity],
+    ) -> None: ...

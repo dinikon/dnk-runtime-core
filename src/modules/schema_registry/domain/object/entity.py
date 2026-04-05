@@ -29,6 +29,7 @@ class ObjectEntity:
     updated_at: datetime
 
     tenant_id: EntityIdVO
+    data_source_id: EntityIdVO
 
     object_name: ObjectNameVO
     object_label: ObjectLabelVO
@@ -47,6 +48,7 @@ class ObjectEntity:
         *,
         id_: EntityIdVO,
         tenant_id: EntityIdVO,
+        data_source_id: EntityIdVO,
         now: datetime,
         object_name: ObjectNameVO,
         object_label: ObjectLabelVO,
@@ -57,6 +59,7 @@ class ObjectEntity:
             created_at=now,
             updated_at=now,
             tenant_id=tenant_id,
+            data_source_id=data_source_id,
             object_name=object_name,
             object_label=object_label,
             description=description.strip(),
