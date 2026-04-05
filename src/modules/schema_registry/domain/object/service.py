@@ -7,7 +7,7 @@ from src.modules.schema_registry.domain.error import (
 )
 from src.modules.schema_registry.domain.field.entity import FieldEntity
 from src.modules.schema_registry.domain.field.value_object.field_type import FieldTypeVO
-from src.modules.schema_registry.domain.field_seed import FieldSeed
+from modules.schema_registry.domain.field_seed import FieldSeed
 from src.modules.schema_registry.domain.object.entity import ObjectEntity
 from src.modules.schema_registry.domain.object.repository import (
     ObjectRepositoryProtocol,

@@ -18,7 +18,7 @@ from src.modules.schema_registry.domain.object.value_object.object_label import 
 from src.modules.schema_registry.domain.object.value_object.object_name import (
     ObjectNameVO,
 )
-from src.modules.schema_registry.domain.field_seed import FieldSeed
+from modules.schema_registry.domain.field_seed import FieldSeed
 from src.modules.shared import EntityIdVO
 
 
