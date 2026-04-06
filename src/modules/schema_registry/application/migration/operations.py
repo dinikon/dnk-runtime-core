@@ -40,6 +40,14 @@ class DropColumnOperation:
 
 
 @dataclass(frozen=True, slots=True)
+class AlterColumnDefaultOperation:
+    schema_name: str
+    table_name: str
+    column_name: str
+    default_value: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class CreateIndexOperation:
     schema_name: str
     table_name: str
@@ -79,6 +87,7 @@ MigrationOperation = (
     | DropTableOperation
     | AddColumnOperation
     | DropColumnOperation
+    | AlterColumnDefaultOperation
     | CreateIndexOperation
     | DropIndexOperation
     | AddForeignKeyOperation

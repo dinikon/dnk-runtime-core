@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from src.modules.schema_registry.application.migration.operations import (
     AddColumnOperation,
+    AlterColumnDefaultOperation,
     AddForeignKeyOperation,
     CreateIndexOperation,
     CreateSchemaOperation,
@@ -108,6 +109,7 @@ class PostgresSchemaPlanService:
         desired_schema = self._build_desired_schema(seed=seed, schema_name=schema_name)
         actual_tables = {table.name: table for table in actual_schema.tables}
         desired_tables = {table.name: table for table in desired_schema.tables}
+        alter_default_operations: list[AlterColumnDefaultOperation] = []
 
         for actual_table in sorted(actual_schema.tables, key=lambda item: item.name):
             desired_table = desired_tables.get(actual_table.name)
@@ -171,11 +173,19 @@ class PostgresSchemaPlanService:
                 if (
                     desired_column.sql_preset != column.sql_preset
                     or desired_column.is_nullable != column.is_nullable
-                    or desired_column.default_value != column.default_value
                 ):
                     raise UnsupportedSchemaChangeError(
                         "Unsupported retained column change "
                         f"for '{actual_table.name}.{column.name}'."
+                    )
+                if desired_column.default_value != column.default_value:
+                    alter_default_operations.append(
+                        AlterColumnDefaultOperation(
+                            schema_name=schema_name,
+                            table_name=actual_table.name,
+                            column_name=column.name,
+                            default_value=desired_column.default_value,
+                        )
                     )
 
         for actual_table in sorted(actual_schema.tables, key=lambda item: item.name):
@@ -214,6 +224,9 @@ class PostgresSchemaPlanService:
                         default_value=column.default_value,
                     )
                 )
+
+        for operation in alter_default_operations:
+            plan.add(operation)
 
         for desired_table in desired_schema.tables:
             actual_table = actual_tables.get(desired_table.name)

@@ -5,6 +5,7 @@ import unittest
 from src.modules.schema_registry.application.migration.operations import (
     AddColumnOperation,
     AddForeignKeyOperation,
+    AlterColumnDefaultOperation,
     CreateTableOperation,
     DropColumnOperation,
     DropForeignKeyOperation,
@@ -250,6 +251,63 @@ class PostgresSchemaPlanServiceTests(unittest.TestCase):
                 isinstance(item, DropForeignKeyOperation)
                 and item.constraint_name == "deals_company_id_fk"
                 for item in plan.destructive_operations
+            )
+        )
+
+    def test_build_diff_plan_allows_retained_column_default_change(self) -> None:
+        seed = SchemaSeed(
+            version=None,
+            code="crm",
+            label="CRM",
+            objects=(
+                ObjectSeed(
+                    singular_name="contact",
+                    plural_name="contacts",
+                    singular_label="Contact",
+                    plural_label="Contacts",
+                    description="Contacts.",
+                    fields=(
+                        FieldSeed(
+                            name="id",
+                            type="uuid",
+                            label="ID",
+                            is_nullable=False,
+                            default="gen_random_uuid()",
+                        ),
+                    ),
+                ),
+            ),
+        )
+        actual_schema = PhysicalSchemaSnapshot(
+            schema_name="dnk_test",
+            tables=(
+                TableSnapshot(
+                    name="contacts",
+                    columns=(
+                        ColumnSnapshot(
+                            name="id",
+                            sql_preset=SqlTypePresetEnum.UUID,
+                            is_nullable=False,
+                            default_value=None,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        plan = self.service.build_diff_plan(
+            schema_name="dnk_test",
+            seed=seed,
+            actual_schema=actual_schema,
+        )
+
+        self.assertTrue(
+            any(
+                isinstance(item, AlterColumnDefaultOperation)
+                and item.table_name == "contacts"
+                and item.column_name == "id"
+                and item.default_value == "gen_random_uuid()"
+                for item in plan.operations
             )
         )
         self.assertTrue(
