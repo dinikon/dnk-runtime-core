@@ -2,15 +2,17 @@ from src.modules.shared import EntityIdVO
 from src.modules.schema_registry.application.command.create_schema_command import (
     CreateSchemaCommand,
 )
+from src.modules.schema_registry.application.metadata.schema_registry_metadata_write_service import (
+    SchemaRegistryMetadataWriteService,
+)
+from src.modules.schema_registry.application.migration.postgres_schema_plan_service import (
+    PostgresSchemaPlanService,
+)
 from src.modules.schema_registry.application.service.postgres_schema_service import (
     PostgresSchemaService,
 )
 from src.modules.schema_registry.application.service.schema_seed_service import (
     SchemaSeedService,
-)
-from src.modules.schema_registry.domain.migration.diff_service import SchemaDiffService
-from src.modules.schema_registry.domain.service.schema_registry_metadata_write_service import (
-    SchemaRegistryMetadataWriteService,
 )
 
 
@@ -20,12 +22,12 @@ class CreateSchemaUseCase:
         self,
         *,
         schema_seed_service: SchemaSeedService,
-        schema_diff_service: SchemaDiffService,
+        schema_plan_service: PostgresSchemaPlanService,
         postgres_schema_service: PostgresSchemaService,
         schema_registry_metadata_write_service: SchemaRegistryMetadataWriteService,
     ) -> None:
         self._schema_seed_service = schema_seed_service
-        self._schema_diff_service = schema_diff_service
+        self._schema_plan_service = schema_plan_service
         self._postgres_schema_service = postgres_schema_service
         self._schema_registry_metadata_write_service = (
             schema_registry_metadata_write_service
@@ -37,7 +39,7 @@ class CreateSchemaUseCase:
         await self._postgres_schema_service.ensure_schema_absent(
             schema_name=command.schema_name
         )
-        plan = self._schema_diff_service.build_create_plan(
+        plan = self._schema_plan_service.build_create_plan(
             schema_name=command.schema_name,
             seed=seed,
         )

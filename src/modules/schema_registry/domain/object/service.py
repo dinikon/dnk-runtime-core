@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from src.modules.shared import ClockPort, EntityIdVO
-from src.modules.schema_registry.domain.field.service import FieldTypeService
+from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
 from src.modules.schema_registry.domain.object.entity import ObjectEntity
 from src.modules.schema_registry.domain.object.repository import (
     ObjectRepositoryProtocol,
@@ -18,17 +18,18 @@ from src.modules.schema_registry.domain.seed.schema_seed import SchemaSeed
 
 
 class ObjectService:
+
     def __init__(
         self,
         object_repository: ObjectRepositoryProtocol,
         clock: ClockPort,
         id_provider: Callable[[], EntityIdVO],
-        field_type_service: FieldTypeService,
+        field_type_catalog: FieldTypeCatalog,
     ) -> None:
         self._object_repository = object_repository
         self._clock = clock
         self._id_provider = id_provider
-        self._field_type_service = field_type_service
+        self._field_type_catalog = field_type_catalog
 
     async def replace_all_for_tenant_from_seed(
         self,
@@ -60,7 +61,7 @@ class ObjectService:
                 now=now,
                 seeds=object_seed.fields,
                 field_id_provider=self._id_provider,
-                field_type_mapper=self._field_type_service.from_seed_type,
+                field_type_mapper=self._field_type_catalog.from_seed_type,
             )
             objects.append(object_entity)
 

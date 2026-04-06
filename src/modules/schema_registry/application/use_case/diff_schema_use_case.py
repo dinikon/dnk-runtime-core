@@ -5,18 +5,20 @@ from src.modules.schema_registry.application.command.diff_schema_command import 
     DiffSchemaCommand,
 )
 from src.modules.schema_registry.application.dto import DiffSchemaResultDTO
+from src.modules.schema_registry.application.metadata.schema_registry_metadata_read_service import (
+    SchemaRegistryMetadataReadService,
+)
+from src.modules.schema_registry.application.metadata.schema_registry_metadata_write_service import (
+    SchemaRegistryMetadataWriteService,
+)
+from src.modules.schema_registry.application.migration.postgres_schema_plan_service import (
+    PostgresSchemaPlanService,
+)
 from src.modules.schema_registry.application.service.postgres_schema_service import (
     PostgresSchemaService,
 )
 from src.modules.schema_registry.application.service.schema_seed_service import (
     SchemaSeedService,
-)
-from src.modules.schema_registry.domain.migration.diff_service import SchemaDiffService
-from src.modules.schema_registry.domain.service.schema_registry_metadata_read_service import (
-    SchemaRegistryMetadataReadService,
-)
-from src.modules.schema_registry.domain.service.schema_registry_metadata_write_service import (
-    SchemaRegistryMetadataWriteService,
 )
 
 
@@ -27,7 +29,7 @@ class DiffSchemaUseCase:
         *,
         schema_seed_service: SchemaSeedService,
         schema_registry_metadata_read_service: SchemaRegistryMetadataReadService,
-        schema_diff_service: SchemaDiffService,
+        schema_plan_service: PostgresSchemaPlanService,
         postgres_schema_service: PostgresSchemaService,
         schema_registry_metadata_write_service: SchemaRegistryMetadataWriteService,
     ) -> None:
@@ -35,7 +37,7 @@ class DiffSchemaUseCase:
         self._schema_registry_metadata_read_service = (
             schema_registry_metadata_read_service
         )
-        self._schema_diff_service = schema_diff_service
+        self._schema_plan_service = schema_plan_service
         self._postgres_schema_service = postgres_schema_service
         self._schema_registry_metadata_write_service = (
             schema_registry_metadata_write_service
@@ -52,7 +54,7 @@ class DiffSchemaUseCase:
         actual_schema = await self._postgres_schema_service.inspect_required_schema(
             schema_name=metadata_snapshot.datasource.schema_name.value
         )
-        plan = self._schema_diff_service.build_diff_plan(
+        plan = self._schema_plan_service.build_diff_plan(
             schema_name=metadata_snapshot.datasource.schema_name.value,
             seed=seed,
             actual_schema=actual_schema,

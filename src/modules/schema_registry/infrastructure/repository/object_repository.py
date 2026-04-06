@@ -11,9 +11,6 @@ from src.modules.schema_registry.domain.field.enum.field_type import FieldTypeEn
 from src.modules.schema_registry.domain.field.enum.field_type_mode import (
     FieldTypeModeEnum,
 )
-from src.modules.schema_registry.domain.field.enum.sql_type_preset import (
-    SqlTypePresetEnum,
-)
 from src.modules.schema_registry.domain.field.value_object.field_label import (
     FieldLabelVO,
 )
@@ -185,11 +182,7 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
             field_type_code=field_entity.field_type.code.value,
             field_type_mode=field_entity.field_type.mode.value,
             field_type_literal_value=field_entity.field_type.literal_value,
-            field_type_sql_preset=(
-                field_entity.field_type.sql_preset.value
-                if field_entity.field_type.sql_preset is not None
-                else None
-            ),
+            field_type_sql_preset=None,
             label=field_entity.label.value,
             description=field_entity.description,
             is_nullable=field_entity.is_nullable,
@@ -233,11 +226,6 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
                 code=FieldTypeEnum(model.field_type_code),
                 mode=FieldTypeModeEnum(model.field_type_mode),
                 literal_value=model.field_type_literal_value,
-                sql_preset=(
-                    SqlTypePresetEnum(model.field_type_sql_preset)
-                    if model.field_type_sql_preset is not None
-                    else None
-                ),
             ),
             label=FieldLabelVO(model.label),
             description=model.description,

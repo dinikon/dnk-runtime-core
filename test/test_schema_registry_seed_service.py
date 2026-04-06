@@ -8,6 +8,7 @@ from src.modules.schema_registry.application.service.schema_seed_service import 
     SchemaSeedService,
 )
 from src.modules.schema_registry.domain.error import SeedValidationError
+from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
 from src.modules.schema_registry.domain.seed.field_seed import FieldSeed
 from src.modules.schema_registry.domain.seed.object_seed import ObjectSeed
 from src.modules.schema_registry.domain.seed.schema_seed import SchemaSeed
@@ -52,7 +53,10 @@ class SchemaSeedServiceTests(unittest.IsolatedAsyncioTestCase):
         sys.modules[module_name] = module
 
         try:
-            service = SchemaSeedService(PythonModuleSeedReader())
+            service = SchemaSeedService(
+                PythonModuleSeedReader(),
+                FieldTypeCatalog(),
+            )
             seed = await service.load(seed_path=module_name)
         finally:
             sys.modules.pop(module_name, None)
@@ -76,7 +80,10 @@ class SchemaSeedServiceTests(unittest.IsolatedAsyncioTestCase):
         sys.modules[module_name] = module
 
         try:
-            service = SchemaSeedService(PythonModuleSeedReader())
+            service = SchemaSeedService(
+                PythonModuleSeedReader(),
+                FieldTypeCatalog(),
+            )
             with self.assertRaises(SeedValidationError):
                 await service.load(seed_path=module_name)
         finally:

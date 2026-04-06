@@ -7,10 +7,10 @@ from uuid import uuid4
 from src.modules.schema_registry.application.command.create_schema_command import (
     CreateSchemaCommand,
 )
+from src.modules.schema_registry.application.migration.plan import MigrationPlan
 from src.modules.schema_registry.application.use_case.create_schema_use_case import (
     CreateSchemaUseCase,
 )
-from src.modules.schema_registry.domain.migration.plan import MigrationPlan
 from src.modules.schema_registry.domain.seed.schema_seed import SchemaSeed
 
 
@@ -54,7 +54,7 @@ class CreateSchemaUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
         use_case = CreateSchemaUseCase(
             schema_seed_service=SeedService(),
-            schema_diff_service=DiffService(),
+            schema_plan_service=DiffService(),
             postgres_schema_service=PostgresService(),
             schema_registry_metadata_write_service=MetadataService(),
         )

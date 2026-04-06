@@ -1,12 +1,14 @@
 from dataclasses import dataclass, field
 
-from src.modules.schema_registry.domain.migration.operations import MigrationOperation
+from src.modules.schema_registry.application.migration.operations import (
+    MigrationOperation,
+)
 
 
 @dataclass(slots=True)
 class MigrationPlan:
-    operations: list[MigrationOperation,] = field(default_factory=list)
-    destructive_operations: list[MigrationOperation,] = field(default_factory=list)
+    operations: list[MigrationOperation] = field(default_factory=list)
+    destructive_operations: list[MigrationOperation] = field(default_factory=list)
 
     def add(self, operation: MigrationOperation) -> None:
         self.operations.append(operation)

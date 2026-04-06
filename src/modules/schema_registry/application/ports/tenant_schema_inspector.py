@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from src.modules.schema_registry.domain.migration.snapshot import (
+from src.modules.schema_registry.application.migration.physical_schema_snapshot import (
     PhysicalSchemaSnapshot,
 )
 

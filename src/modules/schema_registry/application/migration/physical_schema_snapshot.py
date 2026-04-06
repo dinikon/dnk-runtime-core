@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.modules.schema_registry.domain.field.enum.sql_type_preset import (
+from src.modules.schema_registry.application.migration.sql_type_preset import (
     SqlTypePresetEnum,
 )
 

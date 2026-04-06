@@ -1,16 +1,13 @@
 from __future__ import annotations
 
-from src.config import dnk_config
-from src.modules.schema_registry.application.command.create_schema_command import (
-    CreateSchemaCommand,
-)
-from src.modules.schema_registry.application.use_case.create_schema_use_case import (
-    CreateSchemaUseCase,
-)
 from src.modules.tenancy.application.commands import CreateTenantCommand
 from src.modules.tenancy.application.dto import CreateTenantResultDTO
 from src.modules.tenancy.application.ports.identity import (
     IdentityProvisioningServiceProtocol,
+)
+from src.modules.tenancy.application.ports.schema_bootstrap import (
+    TenantSchemaBootstrapContextFactory,
+    TenantSchemaBootstrapPort,
 )
 from src.modules.tenancy.domain.services import TenantOnboardingService
 
@@ -21,11 +18,15 @@ class CreateTenantUseCase:
         self,
         tenant_onboarding_service: TenantOnboardingService,
         identity_provisioning_service: IdentityProvisioningServiceProtocol,
-        create_schema_use_case: CreateSchemaUseCase,
+        tenant_schema_bootstrap_context_factory: TenantSchemaBootstrapContextFactory,
+        tenant_schema_bootstrap_port: TenantSchemaBootstrapPort,
     ):
         self._tenant_onboarding_service = tenant_onboarding_service
         self._identity_provisioning_service = identity_provisioning_service
-        self._create_schema_use_case = create_schema_use_case
+        self._tenant_schema_bootstrap_context_factory = (
+            tenant_schema_bootstrap_context_factory
+        )
+        self._tenant_schema_bootstrap_port = tenant_schema_bootstrap_port
 
     async def execute(self, command: CreateTenantCommand) -> CreateTenantResultDTO:
         onboarding = (
@@ -42,11 +43,9 @@ class CreateTenantUseCase:
             last_name=command.user_last_name,
             email=command.user_email,
         )
-        await self._create_schema_use_case.execute(
-            CreateSchemaCommand(
+        await self._tenant_schema_bootstrap_port.bootstrap(
+            context=self._tenant_schema_bootstrap_context_factory.build(
                 tenant_id=onboarding.tenant.id,
-                schema_name=f"{dnk_config.SCHEMA_PREFIX}{onboarding.tenant.id.hex}",
-                seed_path=dnk_config.DEFAULT_SEED_MODULE,
             )
         )
 

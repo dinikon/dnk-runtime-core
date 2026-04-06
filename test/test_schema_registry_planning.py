@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from src.modules.schema_registry.domain.migration.diff_service import SchemaDiffService
-from src.modules.schema_registry.domain.migration.plan import MigrationPlan
-from src.modules.schema_registry.domain.migration.operations import (
+from src.modules.schema_registry.application.migration.operations import (
     AddColumnOperation,
     AddForeignKeyOperation,
     CreateTableOperation,
@@ -12,27 +10,36 @@ from src.modules.schema_registry.domain.migration.operations import (
     DropForeignKeyOperation,
     DropTableOperation,
 )
-from src.modules.schema_registry.domain.migration.snapshot import (
+from src.modules.schema_registry.application.migration.physical_schema_snapshot import (
     ColumnSnapshot,
     ForeignKeySnapshot,
     PhysicalSchemaSnapshot,
     TableSnapshot,
 )
-from src.modules.schema_registry.domain.error import UnsupportedSchemaChangeError
-from src.modules.schema_registry.domain.field.enum.sql_type_preset import (
+from src.modules.schema_registry.application.migration.postgres_field_canonicalizer import (
+    PostgresFieldCanonicalizer,
+)
+from src.modules.schema_registry.application.migration.postgres_schema_plan_service import (
+    PostgresSchemaPlanService,
+)
+from src.modules.schema_registry.application.migration.sql_type_preset import (
     SqlTypePresetEnum,
 )
-from src.modules.schema_registry.domain.field.service import FieldTypeService
+from src.modules.schema_registry.domain.error import UnsupportedSchemaChangeError
+from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
 from src.modules.schema_registry.domain.seed.field_seed import FieldSeed
 from src.modules.schema_registry.domain.seed.object_seed import ObjectSeed
 from src.modules.schema_registry.domain.seed.relation_seed import RelationSeed
 from src.modules.schema_registry.domain.seed.schema_seed import SchemaSeed
 
 
-class SchemaDiffServiceTests(unittest.TestCase):
+class PostgresSchemaPlanServiceTests(unittest.TestCase):
 
     def setUp(self) -> None:
-        self.service = SchemaDiffService(field_type_service=FieldTypeService())
+        self.service = PostgresSchemaPlanService(
+            field_type_catalog=FieldTypeCatalog(),
+            postgres_field_canonicalizer=PostgresFieldCanonicalizer(),
+        )
 
     def test_build_create_plan_uses_plural_name_for_tables(self) -> None:
         seed = SchemaSeed(

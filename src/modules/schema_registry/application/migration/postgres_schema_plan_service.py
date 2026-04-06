@@ -1,33 +1,41 @@
 from __future__ import annotations
 
-from src.modules.schema_registry.domain.migration.plan import MigrationPlan
-from src.modules.schema_registry.domain.migration.operations import (
+from src.modules.schema_registry.application.migration.operations import (
     AddColumnOperation,
     AddForeignKeyOperation,
+    CreateIndexOperation,
     CreateSchemaOperation,
     CreateTableOperation,
-    CreateIndexOperation,
     DropColumnOperation,
     DropForeignKeyOperation,
     DropIndexOperation,
     DropTableOperation,
 )
-from src.modules.schema_registry.domain.migration.snapshot import (
+from src.modules.schema_registry.application.migration.physical_schema_snapshot import (
     ColumnSnapshot,
     ForeignKeySnapshot,
     IndexSnapshot,
     PhysicalSchemaSnapshot,
     TableSnapshot,
 )
+from src.modules.schema_registry.application.migration.plan import MigrationPlan
+from src.modules.schema_registry.application.migration.postgres_field_canonicalizer import (
+    PostgresFieldCanonicalizer,
+)
 from src.modules.schema_registry.domain.error import UnsupportedSchemaChangeError
-from src.modules.schema_registry.domain.field.service import FieldTypeService
+from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
 from src.modules.schema_registry.domain.seed.schema_seed import SchemaSeed
 
 
-class SchemaDiffService:
-
-    def __init__(self, field_type_service: FieldTypeService) -> None:
-        self._field_type_service = field_type_service
+class PostgresSchemaPlanService:
+    def __init__(
+        self,
+        *,
+        field_type_catalog: FieldTypeCatalog,
+        postgres_field_canonicalizer: PostgresFieldCanonicalizer,
+    ) -> None:
+        self._field_type_catalog = field_type_catalog
+        self._postgres_field_canonicalizer = postgres_field_canonicalizer
 
     def build_create_plan(
         self,
@@ -297,12 +305,15 @@ class SchemaDiffService:
         return PhysicalSchemaSnapshot(schema_name=schema_name, tables=tuple(tables))
 
     def _build_column_snapshot(self, field_seed) -> ColumnSnapshot:
-        sql_preset = self._field_type_service.sql_preset_from_seed_type(field_seed.type)
+        field_type = self._field_type_catalog.from_seed_type(field_seed.type)
+        sql_preset = self._postgres_field_canonicalizer.sql_preset_from_field_type(
+            field_type
+        )
         return ColumnSnapshot(
             name=field_seed.name,
             sql_preset=sql_preset,
             is_nullable=field_seed.is_nullable,
-            default_value=self._field_type_service.normalize_seed_default(
+            default_value=self._postgres_field_canonicalizer.normalize_seed_default(
                 raw_default=field_seed.default,
                 sql_preset=sql_preset,
             ),

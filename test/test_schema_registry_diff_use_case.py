@@ -7,11 +7,11 @@ from src.modules.schema_registry.application.command.diff_schema_command import 
     DiffSchemaCommand,
 )
 from src.modules.schema_registry.application.dto import DiffSchemaResultDTO
+from src.modules.schema_registry.application.migration.plan import MigrationPlan
 from src.modules.schema_registry.application.use_case.diff_schema_use_case import (
     DiffSchemaUseCase,
 )
 from src.modules.schema_registry.domain.error import UnsupportedSchemaChangeError
-from src.modules.schema_registry.domain.migration.plan import MigrationPlan
 from src.modules.schema_registry.domain.seed.schema_seed import SchemaSeed
 
 
@@ -68,7 +68,7 @@ class DiffSchemaUseCaseTests(unittest.IsolatedAsyncioTestCase):
         use_case = DiffSchemaUseCase(
             schema_seed_service=SeedService(),
             schema_registry_metadata_read_service=MetadataReadServiceStub(),
-            schema_diff_service=DiffService(),
+            schema_plan_service=DiffService(),
             postgres_schema_service=PostgresService(),
             schema_registry_metadata_write_service=MetadataWriteService(),
         )
@@ -137,7 +137,7 @@ class DiffSchemaUseCaseTests(unittest.IsolatedAsyncioTestCase):
         use_case = DiffSchemaUseCase(
             schema_seed_service=SeedService(),
             schema_registry_metadata_read_service=MetadataReadServiceStub(),
-            schema_diff_service=DiffService(),
+            schema_plan_service=DiffService(),
             postgres_schema_service=PostgresService(),
             schema_registry_metadata_write_service=MetadataWriteService(),
         )

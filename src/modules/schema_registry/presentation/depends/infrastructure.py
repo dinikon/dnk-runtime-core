@@ -9,6 +9,9 @@ from fastapi import Depends
 from src.modules.shared import EntityIdVO
 from src.modules.shared.depends.clock import ClockDep
 from src.modules.shared.depends.uow import UoWDep
+from src.modules.schema_registry.application.migration.postgres_field_canonicalizer import (
+    PostgresFieldCanonicalizer,
+)
 from src.modules.schema_registry.application.ports.seed_reader import SeedReaderPort
 from src.modules.schema_registry.application.ports.tenant_schema_executor import (
     TenantSchemaExecutorPort,
@@ -20,7 +23,7 @@ from src.modules.schema_registry.domain.datasource.repository import (
     DataSourceRepositoryProtocol,
 )
 from src.modules.schema_registry.domain.datasource.service import DataSourceService
-from src.modules.schema_registry.domain.field.service import FieldTypeService
+from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
 from src.modules.schema_registry.domain.object.repository import (
     ObjectRepositoryProtocol,
 )
@@ -54,9 +57,9 @@ SchemaSeedReaderDep = Annotated[
 
 def get_tenant_schema_inspector(
     uow: UoWDep,
-    field_type_service: FieldTypeServiceDep,
+    postgres_field_canonicalizer: PostgresFieldCanonicalizerDep,
 ) -> TenantSchemaInspectorPort:
-    return PostgresTenantSchemaInspector(uow.session, field_type_service)
+    return PostgresTenantSchemaInspector(uow.session, postgres_field_canonicalizer)
 
 
 TenantSchemaInspectorDep = Annotated[
@@ -67,9 +70,9 @@ TenantSchemaInspectorDep = Annotated[
 
 def get_tenant_schema_executor(
     uow: UoWDep,
-    field_type_service: FieldTypeServiceDep,
+    postgres_field_canonicalizer: PostgresFieldCanonicalizerDep,
 ) -> TenantSchemaExecutorPort:
-    return PostgresTenantSchemaExecutor(uow.session, field_type_service)
+    return PostgresTenantSchemaExecutor(uow.session, postgres_field_canonicalizer)
 
 
 TenantSchemaExecutorDep = Annotated[
@@ -102,13 +105,23 @@ def get_entity_id_provider() -> Callable[[], EntityIdVO]:
     return lambda: EntityIdVO.from_value(uuid6.uuid7())
 
 
-def get_field_type_service() -> FieldTypeService:
-    return FieldTypeService()
+def get_field_type_catalog() -> FieldTypeCatalog:
+    return FieldTypeCatalog()
 
 
-FieldTypeServiceDep = Annotated[
-    FieldTypeService,
-    Depends(get_field_type_service),
+FieldTypeCatalogDep = Annotated[
+    FieldTypeCatalog,
+    Depends(get_field_type_catalog),
+]
+
+
+def get_postgres_field_canonicalizer() -> PostgresFieldCanonicalizer:
+    return PostgresFieldCanonicalizer()
+
+
+PostgresFieldCanonicalizerDep = Annotated[
+    PostgresFieldCanonicalizer,
+    Depends(get_postgres_field_canonicalizer),
 ]
 
 
@@ -132,13 +145,13 @@ DataSourceServiceDep = Annotated[
 def get_object_service(
     repository: ObjectRepositoryDep,
     clock: ClockDep,
-    field_type_service: FieldTypeServiceDep,
+    field_type_catalog: FieldTypeCatalogDep,
 ) -> ObjectService:
     return ObjectService(
         object_repository=repository,
         clock=clock,
         id_provider=get_entity_id_provider(),
-        field_type_service=field_type_service,
+        field_type_catalog=field_type_catalog,
     )
 
 
@@ -151,17 +164,19 @@ ObjectServiceDep = Annotated[
 __all__ = [
     "DataSourceRepositoryDep",
     "DataSourceServiceDep",
-    "FieldTypeServiceDep",
     "ObjectRepositoryDep",
     "ObjectServiceDep",
+    "FieldTypeCatalogDep",
+    "PostgresFieldCanonicalizerDep",
     "SchemaSeedReaderDep",
     "TenantSchemaExecutorDep",
     "TenantSchemaInspectorDep",
     "get_data_source_repository",
     "get_data_source_service",
-    "get_field_type_service",
     "get_object_repository",
     "get_object_service",
+    "get_field_type_catalog",
+    "get_postgres_field_canonicalizer",
     "get_schema_seed_reader",
     "get_tenant_schema_executor",
     "get_tenant_schema_inspector",

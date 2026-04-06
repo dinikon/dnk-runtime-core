@@ -8,15 +8,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.schema_registry.application.ports.tenant_schema_inspector import (
     TenantSchemaInspectorPort,
 )
-from src.modules.schema_registry.domain.field.service import FieldTypeService
-from src.modules.schema_registry.domain.error import UnsupportedSchemaBackendError
-from src.modules.schema_registry.domain.migration.snapshot import (
+from src.modules.schema_registry.application.migration.physical_schema_snapshot import (
     ColumnSnapshot,
     ForeignKeySnapshot,
     IndexSnapshot,
     PhysicalSchemaSnapshot,
     TableSnapshot,
 )
+from src.modules.schema_registry.application.migration.postgres_field_canonicalizer import (
+    PostgresFieldCanonicalizer,
+)
+from src.modules.schema_registry.domain.error import UnsupportedSchemaBackendError
 
 
 class PostgresTenantSchemaInspector(TenantSchemaInspectorPort):
@@ -24,10 +26,10 @@ class PostgresTenantSchemaInspector(TenantSchemaInspectorPort):
     def __init__(
         self,
         session: AsyncSession,
-        field_type_service: FieldTypeService,
+        postgres_field_canonicalizer: PostgresFieldCanonicalizer,
     ):
         self._session = session
-        self._field_type_service = field_type_service
+        self._postgres_field_canonicalizer = postgres_field_canonicalizer
 
     async def schema_exists(self, *, schema_name: str) -> bool:
         self._ensure_postgres()
@@ -115,15 +117,17 @@ class PostgresTenantSchemaInspector(TenantSchemaInspectorPort):
         ).all()
         grouped: dict[str, list[ColumnSnapshot]] = defaultdict(list)
         for row in rows:
-            sql_preset = self._field_type_service.sql_preset_from_postgres_type(
-                row.format_type
+            sql_preset = (
+                self._postgres_field_canonicalizer.sql_preset_from_postgres_type(
+                    row.format_type
+                )
             )
             grouped[row.table_name].append(
                 ColumnSnapshot(
                     name=row.column_name,
                     sql_preset=sql_preset,
                     is_nullable=bool(row.is_nullable),
-                    default_value=self._field_type_service.normalize_postgres_default(
+                    default_value=self._postgres_field_canonicalizer.normalize_postgres_default(
                         raw_default=row.column_default,
                         sql_preset=sql_preset,
                     ),

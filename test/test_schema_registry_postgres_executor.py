@@ -2,11 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from src.modules.schema_registry.domain.field.enum.sql_type_preset import (
-    SqlTypePresetEnum,
-)
-from src.modules.schema_registry.domain.field.service import FieldTypeService
-from src.modules.schema_registry.domain.migration.operations import (
+from src.modules.schema_registry.application.migration.operations import (
     AddColumnOperation,
     CreateIndexOperation,
     CreateTableOperation,
@@ -15,7 +11,13 @@ from src.modules.schema_registry.domain.migration.operations import (
     DropIndexOperation,
     DropTableOperation,
 )
-from src.modules.schema_registry.domain.migration.plan import MigrationPlan
+from src.modules.schema_registry.application.migration.plan import MigrationPlan
+from src.modules.schema_registry.application.migration.postgres_field_canonicalizer import (
+    PostgresFieldCanonicalizer,
+)
+from src.modules.schema_registry.application.migration.sql_type_preset import (
+    SqlTypePresetEnum,
+)
 from src.modules.schema_registry.infrastructure.postgres.tenant_schema_executor import (
     PostgresTenantSchemaExecutor,
 )
@@ -43,7 +45,7 @@ class PostgresTenantSchemaExecutorTests(unittest.IsolatedAsyncioTestCase):
 
         executor = PostgresTenantSchemaExecutor(
             SessionStub(),
-            FieldTypeService(),
+            PostgresFieldCanonicalizer(),
         )
         plan = MigrationPlan(
             operations=[

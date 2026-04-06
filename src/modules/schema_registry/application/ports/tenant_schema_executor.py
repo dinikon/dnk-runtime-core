@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from src.modules.schema_registry.domain.migration.plan import MigrationPlan
+from src.modules.schema_registry.application.migration.plan import MigrationPlan
 
 
 class TenantSchemaExecutorPort(Protocol):

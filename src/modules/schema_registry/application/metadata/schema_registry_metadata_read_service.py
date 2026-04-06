@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from src.modules.shared import EntityIdVO
+from src.modules.schema_registry.application.metadata.schema_registry_metadata_snapshot import (
+    SchemaRegistryMetadataSnapshot,
+)
 from src.modules.schema_registry.domain.datasource.service import DataSourceService
 from src.modules.schema_registry.domain.error import (
     SchemaRegistryMetadataInconsistentError,
 )
 from src.modules.schema_registry.domain.object.service import ObjectService
-from src.modules.schema_registry.domain.service.schema_registry_metadata_snapshot import (
-    SchemaRegistryMetadataSnapshot,
-)
 
 
 class SchemaRegistryMetadataReadService:

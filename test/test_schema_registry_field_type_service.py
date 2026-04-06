@@ -2,35 +2,42 @@ from __future__ import annotations
 
 import unittest
 
-from src.modules.schema_registry.domain.error import UnsupportedSchemaChangeError
-from src.modules.schema_registry.domain.field.enum.sql_type_preset import (
+from src.modules.schema_registry.application.migration.postgres_field_canonicalizer import (
+    PostgresFieldCanonicalizer,
+)
+from src.modules.schema_registry.application.migration.sql_type_preset import (
     SqlTypePresetEnum,
 )
-from src.modules.schema_registry.domain.field.service import FieldTypeService
+from src.modules.schema_registry.domain.error import UnsupportedSchemaChangeError
+from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
 
 
-class FieldTypeServiceTests(unittest.TestCase):
+class FieldTypeCatalogTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.service = FieldTypeService()
+        self.catalog = FieldTypeCatalog()
+        self.canonicalizer = PostgresFieldCanonicalizer()
 
     def test_canonicalizes_seed_and_postgres_types_to_same_sql_preset(self) -> None:
+        field_type = self.catalog.from_seed_type("datetime")
         self.assertEqual(
-            self.service.sql_preset_from_seed_type("datetime"),
+            self.canonicalizer.sql_preset_from_field_type(field_type),
             SqlTypePresetEnum.TIMESTAMP,
         )
         self.assertEqual(
-            self.service.sql_preset_from_postgres_type("timestamp without time zone"),
+            self.canonicalizer.sql_preset_from_postgres_type(
+                "timestamp without time zone"
+            ),
             SqlTypePresetEnum.TIMESTAMP,
         )
 
     def test_canonicalizes_seed_and_postgres_defaults_to_same_timestamp_value(
         self,
     ) -> None:
-        seed_default = self.service.normalize_seed_default(
+        seed_default = self.canonicalizer.normalize_seed_default(
             raw_default="now()",
             sql_preset=SqlTypePresetEnum.TIMESTAMP,
         )
-        postgres_default = self.service.normalize_postgres_default(
+        postgres_default = self.canonicalizer.normalize_postgres_default(
             raw_default="(now())",
             sql_preset=SqlTypePresetEnum.TIMESTAMP,
         )
@@ -40,4 +47,4 @@ class FieldTypeServiceTests(unittest.TestCase):
 
     def test_rejects_unknown_postgres_type(self) -> None:
         with self.assertRaises(UnsupportedSchemaChangeError):
-            self.service.sql_preset_from_postgres_type("numeric(18,2)")
+            self.canonicalizer.sql_preset_from_postgres_type("numeric(18,2)")

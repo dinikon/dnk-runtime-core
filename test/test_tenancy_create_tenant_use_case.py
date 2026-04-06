@@ -4,8 +4,10 @@ import unittest
 from dataclasses import dataclass
 from uuid import uuid4
 
-from src.config import dnk_config
 from src.modules.tenancy.application.commands import CreateTenantCommand
+from src.modules.tenancy.application.ports.schema_bootstrap import (
+    TenantSchemaBootstrapContextFactory,
+)
 from src.modules.tenancy.application.use_cases.create_tenant import CreateTenantUseCase
 from src.modules.tenancy.domain.services import TenantOnboardingDraft
 from src.modules.tenancy.domain.entities import Tenant, TenantDomain
@@ -28,7 +30,7 @@ class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):
         )
         created_user_id = uuid4()
         created_user_email_id = uuid4()
-        recorded_command = None
+        recorded_context = None
 
         class TenantOnboardingServiceStub:
 
@@ -52,15 +54,19 @@ class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):
                     },
                 )()
 
-        class CreateSchemaUseCaseStub:
-            async def execute(self, command):
-                nonlocal recorded_command
-                recorded_command = command
+        class TenantSchemaBootstrapPortStub:
+            async def bootstrap(self, *, context):
+                nonlocal recorded_context
+                recorded_context = context
 
         use_case = CreateTenantUseCase(
             tenant_onboarding_service=TenantOnboardingServiceStub(),
             identity_provisioning_service=IdentityProvisioningServiceStub(),
-            create_schema_use_case=CreateSchemaUseCaseStub(),
+            tenant_schema_bootstrap_context_factory=TenantSchemaBootstrapContextFactory(
+                schema_prefix="dnk_",
+                default_seed_path="seed.module",
+            ),
+            tenant_schema_bootstrap_port=TenantSchemaBootstrapPortStub(),
         )
 
         result = await use_case.execute(
@@ -74,11 +80,11 @@ class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):
             )
         )
 
-        self.assertIsNotNone(recorded_command)
+        self.assertIsNotNone(recorded_context)
         self.assertEqual(
-            recorded_command.schema_name,
-            f"{dnk_config.SCHEMA_PREFIX}{tenant.id.hex}",
+            recorded_context.schema_name,
+            f"dnk_{tenant.id.hex}",
         )
-        self.assertEqual(recorded_command.seed_path, dnk_config.DEFAULT_SEED_MODULE)
+        self.assertEqual(recorded_context.seed_path, "seed.module")
         self.assertEqual(result.tenant_id, tenant.id)
         self.assertEqual(result.user_id, created_user_id)

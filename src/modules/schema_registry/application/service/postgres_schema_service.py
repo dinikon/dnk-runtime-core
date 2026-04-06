@@ -10,8 +10,10 @@ from src.modules.schema_registry.domain.error import (
     PhysicalSchemaAlreadyExistsError,
     PhysicalSchemaNotFoundError,
 )
-from src.modules.schema_registry.domain.migration.plan import MigrationPlan
-from src.modules.schema_registry.domain.migration.snapshot import PhysicalSchemaSnapshot
+from src.modules.schema_registry.application.migration.plan import MigrationPlan
+from src.modules.schema_registry.application.migration.physical_schema_snapshot import (
+    PhysicalSchemaSnapshot,
+)
 
 
 class PostgresSchemaService:

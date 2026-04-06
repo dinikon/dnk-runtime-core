@@ -4,7 +4,7 @@ import re
 
 from src.modules.schema_registry.application.ports.seed_reader import SeedReaderPort
 from src.modules.schema_registry.domain.error import SeedValidationError
-from src.modules.schema_registry.domain.field.enum.field_type import FieldTypeEnum
+from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
 from src.modules.schema_registry.domain.field.value_object.field_label import (
     FieldLabelVO,
 )
@@ -21,8 +21,14 @@ _IDENTIFIER_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 class SchemaSeedService:
-    def __init__(self, seed_reader: SeedReaderPort) -> None:
+
+    def __init__(
+        self,
+        seed_reader: SeedReaderPort,
+        field_type_catalog: FieldTypeCatalog,
+    ) -> None:
         self._seed_reader = seed_reader
+        self._field_type_catalog = field_type_catalog
 
     async def load(self, *, seed_path: str) -> SchemaSeed:
         seed = await self._seed_reader.read(seed_path=seed_path)
@@ -59,13 +65,7 @@ class SchemaSeedService:
             for field_seed in object_seed.fields:
                 FieldNameVO(field_seed.name)
                 FieldLabelVO(field_seed.label)
-                if field_seed.type.strip().lower() not in {
-                    item.value for item in FieldTypeEnum
-                }:
-                    raise SeedValidationError(
-                        f"Unsupported field type '{field_seed.type}' "
-                        f"for object '{object_seed.plural_name}'."
-                    )
+                self._field_type_catalog.from_seed_type(field_seed.type)
                 if field_seed.name in field_names:
                     raise SeedValidationError(
                         f"Duplicate field '{field_seed.name}' "

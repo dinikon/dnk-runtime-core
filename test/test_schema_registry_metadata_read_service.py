@@ -17,7 +17,7 @@ from src.modules.schema_registry.domain.object.value_object.object_label import 
 from src.modules.schema_registry.domain.object.value_object.object_name import (
     ObjectNameVO,
 )
-from src.modules.schema_registry.domain.service.schema_registry_metadata_read_service import (
+from src.modules.schema_registry.application.metadata.schema_registry_metadata_read_service import (
     SchemaRegistryMetadataReadService,
 )
 from src.modules.shared import EntityIdVO

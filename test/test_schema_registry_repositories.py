@@ -10,7 +10,7 @@ from src.modules.schema_registry.domain.datasource.entity import DataSourceEntit
 from src.modules.schema_registry.domain.datasource.value_object.schema_name import (
     SchemaNameVO,
 )
-from src.modules.schema_registry.domain.field.service import FieldTypeService
+from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
 from src.modules.schema_registry.domain.object.entity import ObjectEntity
 from src.modules.schema_registry.domain.object.value_object.object_label import (
     ObjectLabelVO,
@@ -81,7 +81,7 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
                 field_id=EntityIdVO.from_value(uuid4()),
                 now=now,
                 field_name="last_name",
-                field_type=FieldTypeService().from_seed_type("text"),
+                field_type=FieldTypeCatalog().from_seed_type("text"),
                 label="Last Name",
                 description="Contact last name.",
                 is_nullable=False,
@@ -119,7 +119,7 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
             field_id=EntityIdVO.from_value(uuid4()),
             now=now,
             field_name="last_name",
-            field_type=FieldTypeService().from_seed_type("text"),
+            field_type=FieldTypeCatalog().from_seed_type("text"),
             label="Last Name",
             description="Contact last name.",
             is_nullable=False,

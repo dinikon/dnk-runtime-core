@@ -6,9 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.schema_registry.application.ports.tenant_schema_executor import (
     TenantSchemaExecutorPort,
 )
-from src.modules.schema_registry.domain.field.service import FieldTypeService
-from src.modules.schema_registry.domain.error import UnsupportedSchemaBackendError
-from src.modules.schema_registry.domain.migration.operations import (
+from src.modules.schema_registry.application.migration.operations import (
     AddColumnOperation,
     AddForeignKeyOperation,
     CreateIndexOperation,
@@ -20,7 +18,11 @@ from src.modules.schema_registry.domain.migration.operations import (
     DropTableOperation,
     MigrationOperation,
 )
-from src.modules.schema_registry.domain.migration.plan import MigrationPlan
+from src.modules.schema_registry.application.migration.plan import MigrationPlan
+from src.modules.schema_registry.application.migration.postgres_field_canonicalizer import (
+    PostgresFieldCanonicalizer,
+)
+from src.modules.schema_registry.domain.error import UnsupportedSchemaBackendError
 
 
 class PostgresTenantSchemaExecutor(TenantSchemaExecutorPort):
@@ -28,10 +30,10 @@ class PostgresTenantSchemaExecutor(TenantSchemaExecutorPort):
     def __init__(
         self,
         session: AsyncSession,
-        field_type_service: FieldTypeService,
+        postgres_field_canonicalizer: PostgresFieldCanonicalizer,
     ):
         self._session = session
-        self._field_type_service = field_type_service
+        self._postgres_field_canonicalizer = postgres_field_canonicalizer
 
     async def execute(self, *, plan: MigrationPlan) -> None:
         self._ensure_postgres()
@@ -56,7 +58,7 @@ class PostgresTenantSchemaExecutor(TenantSchemaExecutorPort):
             return
 
         if isinstance(operation, AddColumnOperation):
-            column_type = self._field_type_service.render_sql_preset(
+            column_type = self._postgres_field_canonicalizer.render_sql_preset(
                 operation.sql_preset
             )
             sql = (

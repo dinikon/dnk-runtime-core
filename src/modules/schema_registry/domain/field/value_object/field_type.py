@@ -5,9 +5,6 @@ from src.modules.schema_registry.domain.field.enum.field_type import FieldTypeEn
 from src.modules.schema_registry.domain.field.enum.field_type_mode import (
     FieldTypeModeEnum,
 )
-from src.modules.schema_registry.domain.field.enum.sql_type_preset import (
-    SqlTypePresetEnum,
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,7 +12,6 @@ class FieldTypeVO:
     code: FieldTypeEnum
     mode: FieldTypeModeEnum
     literal_value: str | None = None
-    sql_preset: SqlTypePresetEnum | None = None
 
     @classmethod
     def literal(cls, code: FieldTypeEnum, literal_value: str) -> "FieldTypeVO":
@@ -27,16 +23,14 @@ class FieldTypeVO:
             code=code,
             mode=FieldTypeModeEnum.LITERAL,
             literal_value=literal_value.strip(),
-            sql_preset=None,
         )
 
     @classmethod
-    def sql(cls, code: FieldTypeEnum, sql_preset: SqlTypePresetEnum) -> "FieldTypeVO":
+    def sql(cls, code: FieldTypeEnum) -> "FieldTypeVO":
         return cls(
             code=code,
             mode=FieldTypeModeEnum.SQL,
             literal_value=None,
-            sql_preset=sql_preset,
         )
 
     def is_select_like(self) -> bool:
