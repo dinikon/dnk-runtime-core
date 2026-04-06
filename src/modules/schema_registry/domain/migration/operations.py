@@ -1,6 +1,8 @@
 from dataclasses import dataclass
-from typing import Literal
 
+from src.modules.schema_registry.domain.field.enum.sql_type_preset import (
+    SqlTypePresetEnum,
+)
 
 @dataclass(frozen=True, slots=True)
 class CreateSchemaOperation:
@@ -24,9 +26,9 @@ class AddColumnOperation:
     schema_name: str
     table_name: str
     column_name: str
-    column_type: str
+    sql_preset: SqlTypePresetEnum
     is_nullable: bool
-    default: str | None = None
+    default_value: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +65,13 @@ class AddForeignKeyOperation:
     on_delete: str
 
 
+@dataclass(frozen=True, slots=True)
+class DropForeignKeyOperation:
+    schema_name: str
+    table_name: str
+    constraint_name: str
+
+
 MigrationOperation = (
     CreateSchemaOperation
     | CreateTableOperation
@@ -72,4 +81,5 @@ MigrationOperation = (
     | CreateIndexOperation
     | DropIndexOperation
     | AddForeignKeyOperation
+    | DropForeignKeyOperation
 )

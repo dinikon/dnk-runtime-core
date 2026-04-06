@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.schema_registry.application.ports.tenant_schema_executor import (
     TenantSchemaExecutorPort,
 )
+from src.modules.schema_registry.domain.field.service import FieldTypeService
 from src.modules.schema_registry.domain.error import UnsupportedSchemaBackendError
 from src.modules.schema_registry.domain.migration.operations import (
     AddColumnOperation,
@@ -13,14 +14,24 @@ from src.modules.schema_registry.domain.migration.operations import (
     CreateIndexOperation,
     CreateSchemaOperation,
     CreateTableOperation,
+    DropColumnOperation,
+    DropForeignKeyOperation,
+    DropIndexOperation,
+    DropTableOperation,
     MigrationOperation,
 )
 from src.modules.schema_registry.domain.migration.plan import MigrationPlan
 
 
 class PostgresTenantSchemaExecutor(TenantSchemaExecutorPort):
-    def __init__(self, session: AsyncSession):
+
+    def __init__(
+        self,
+        session: AsyncSession,
+        field_type_service: FieldTypeService,
+    ):
         self._session = session
+        self._field_type_service = field_type_service
 
     async def execute(self, *, plan: MigrationPlan) -> None:
         self._ensure_postgres()
@@ -45,16 +56,29 @@ class PostgresTenantSchemaExecutor(TenantSchemaExecutorPort):
             return
 
         if isinstance(operation, AddColumnOperation):
+            column_type = self._field_type_service.render_sql_preset(
+                operation.sql_preset
+            )
             sql = (
                 "ALTER TABLE "
                 f"{self._qualified_table(operation.schema_name, operation.table_name)} "
-                f"ADD COLUMN {self._qi(operation.column_name)} {operation.column_type}"
+                f"ADD COLUMN {self._qi(operation.column_name)} {column_type}"
             )
             if not operation.is_nullable:
                 sql += " NOT NULL"
-            if operation.default is not None:
-                sql += f" DEFAULT {operation.default}"
+            if operation.default_value is not None:
+                sql += f" DEFAULT {operation.default_value}"
             await self._session.execute(text(sql))
+            return
+
+        if isinstance(operation, DropColumnOperation):
+            await self._session.execute(
+                text(
+                    "ALTER TABLE "
+                    f"{self._qualified_table(operation.schema_name, operation.table_name)} "
+                    f"DROP COLUMN {self._qi(operation.column_name)}"
+                )
+            )
             return
 
         if isinstance(operation, CreateIndexOperation):
@@ -65,6 +89,14 @@ class PostgresTenantSchemaExecutor(TenantSchemaExecutorPort):
                     f"CREATE {unique}INDEX {self._qi(operation.index_name)} "
                     f"ON {self._qualified_table(operation.schema_name, operation.table_name)} "
                     f"({columns})"
+                )
+            )
+            return
+
+        if isinstance(operation, DropIndexOperation):
+            await self._session.execute(
+                text(
+                    f"DROP INDEX {self._qualified_index(operation.schema_name, operation.index_name)}"
                 )
             )
             return
@@ -80,6 +112,25 @@ class PostgresTenantSchemaExecutor(TenantSchemaExecutorPort):
                     f"REFERENCES {self._qualified_table(operation.target_schema_name, operation.target_table_name)} "
                     f"({self._qi(operation.target_column_name)}) "
                     f"ON DELETE {on_delete}"
+                )
+            )
+            return
+
+        if isinstance(operation, DropForeignKeyOperation):
+            await self._session.execute(
+                text(
+                    "ALTER TABLE "
+                    f"{self._qualified_table(operation.schema_name, operation.table_name)} "
+                    f"DROP CONSTRAINT {self._qi(operation.constraint_name)}"
+                )
+            )
+            return
+
+        if isinstance(operation, DropTableOperation):
+            await self._session.execute(
+                text(
+                    "DROP TABLE "
+                    f"{self._qualified_table(operation.schema_name, operation.table_name)}"
                 )
             )
             return
@@ -102,6 +153,10 @@ class PostgresTenantSchemaExecutor(TenantSchemaExecutorPort):
     @classmethod
     def _qualified_table(cls, schema_name: str, table_name: str) -> str:
         return f"{cls._qi(schema_name)}.{cls._qi(table_name)}"
+
+    @classmethod
+    def _qualified_index(cls, schema_name: str, index_name: str) -> str:
+        return f"{cls._qi(schema_name)}.{cls._qi(index_name)}"
 
     @staticmethod
     def _normalize_on_delete(value: str) -> str:

@@ -52,8 +52,11 @@ SchemaSeedReaderDep = Annotated[
 ]
 
 
-def get_tenant_schema_inspector(uow: UoWDep) -> TenantSchemaInspectorPort:
-    return PostgresTenantSchemaInspector(uow.session)
+def get_tenant_schema_inspector(
+    uow: UoWDep,
+    field_type_service: FieldTypeServiceDep,
+) -> TenantSchemaInspectorPort:
+    return PostgresTenantSchemaInspector(uow.session, field_type_service)
 
 
 TenantSchemaInspectorDep = Annotated[
@@ -62,8 +65,11 @@ TenantSchemaInspectorDep = Annotated[
 ]
 
 
-def get_tenant_schema_executor(uow: UoWDep) -> TenantSchemaExecutorPort:
-    return PostgresTenantSchemaExecutor(uow.session)
+def get_tenant_schema_executor(
+    uow: UoWDep,
+    field_type_service: FieldTypeServiceDep,
+) -> TenantSchemaExecutorPort:
+    return PostgresTenantSchemaExecutor(uow.session, field_type_service)
 
 
 TenantSchemaExecutorDep = Annotated[

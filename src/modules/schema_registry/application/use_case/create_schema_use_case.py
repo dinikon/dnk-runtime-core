@@ -9,8 +9,8 @@ from src.modules.schema_registry.application.service.schema_seed_service import 
     SchemaSeedService,
 )
 from src.modules.schema_registry.domain.migration.diff_service import SchemaDiffService
-from src.modules.schema_registry.domain.service.schema_registry_metadata_service import (
-    SchemaRegistryMetadataService,
+from src.modules.schema_registry.domain.service.schema_registry_metadata_write_service import (
+    SchemaRegistryMetadataWriteService,
 )
 
 
@@ -22,12 +22,14 @@ class CreateSchemaUseCase:
         schema_seed_service: SchemaSeedService,
         schema_diff_service: SchemaDiffService,
         postgres_schema_service: PostgresSchemaService,
-        schema_registry_metadata_service: SchemaRegistryMetadataService,
+        schema_registry_metadata_write_service: SchemaRegistryMetadataWriteService,
     ) -> None:
         self._schema_seed_service = schema_seed_service
         self._schema_diff_service = schema_diff_service
         self._postgres_schema_service = postgres_schema_service
-        self._schema_registry_metadata_service = schema_registry_metadata_service
+        self._schema_registry_metadata_write_service = (
+            schema_registry_metadata_write_service
+        )
 
     async def execute(self, command: CreateSchemaCommand) -> None:
         tenant_id = EntityIdVO.from_value(command.tenant_id)
@@ -40,7 +42,7 @@ class CreateSchemaUseCase:
             seed=seed,
         )
         await self._postgres_schema_service.apply_plan(plan=plan)
-        await self._schema_registry_metadata_service.create_from_seed(
+        await self._schema_registry_metadata_write_service.create_from_seed(
             tenant_id=tenant_id,
             schema_name=command.schema_name,
             seed=seed,

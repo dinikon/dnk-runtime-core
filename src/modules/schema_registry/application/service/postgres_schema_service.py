@@ -6,9 +6,12 @@ from src.modules.schema_registry.application.ports.tenant_schema_executor import
 from src.modules.schema_registry.application.ports.tenant_schema_inspector import (
     TenantSchemaInspectorPort,
 )
-from src.modules.schema_registry.domain.error import PhysicalSchemaAlreadyExistsError
+from src.modules.schema_registry.domain.error import (
+    PhysicalSchemaAlreadyExistsError,
+    PhysicalSchemaNotFoundError,
+)
 from src.modules.schema_registry.domain.migration.plan import MigrationPlan
-
+from src.modules.schema_registry.domain.migration.snapshot import PhysicalSchemaSnapshot
 
 class PostgresSchemaService:
     def __init__(
@@ -24,7 +27,14 @@ class PostgresSchemaService:
         if exists:
             raise PhysicalSchemaAlreadyExistsError(schema_name)
 
-    async def inspect_schema(self, *, schema_name: str):
+    async def inspect_required_schema(
+        self,
+        *,
+        schema_name: str,
+    ) -> PhysicalSchemaSnapshot:
+        exists = await self._inspector.schema_exists(schema_name=schema_name)
+        if not exists:
+            raise PhysicalSchemaNotFoundError(schema_name)
         return await self._inspector.inspect(schema_name=schema_name)
 
     async def apply_plan(self, *, plan: MigrationPlan) -> None:

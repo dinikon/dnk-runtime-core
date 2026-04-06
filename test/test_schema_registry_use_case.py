@@ -56,7 +56,7 @@ class CreateSchemaUseCaseTests(unittest.IsolatedAsyncioTestCase):
             schema_seed_service=SeedService(),
             schema_diff_service=DiffService(),
             postgres_schema_service=PostgresService(),
-            schema_registry_metadata_service=MetadataService(),
+            schema_registry_metadata_write_service=MetadataService(),
         )
 
         tenant_id = uuid4()

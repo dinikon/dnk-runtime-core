@@ -69,3 +69,10 @@ class ObjectService:
             objects=objects,
         )
         return objects
+
+    async def list_by_tenant_id(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+    ) -> list[ObjectEntity]:
+        return await self._object_repository.list_by_tenant_id(tenant_id=tenant_id)

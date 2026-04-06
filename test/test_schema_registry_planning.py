@@ -3,10 +3,26 @@ from __future__ import annotations
 import unittest
 
 from src.modules.schema_registry.domain.migration.diff_service import SchemaDiffService
+from src.modules.schema_registry.domain.migration.plan import MigrationPlan
 from src.modules.schema_registry.domain.migration.operations import (
+    AddColumnOperation,
     AddForeignKeyOperation,
     CreateTableOperation,
+    DropColumnOperation,
+    DropForeignKeyOperation,
+    DropTableOperation,
 )
+from src.modules.schema_registry.domain.migration.snapshot import (
+    ColumnSnapshot,
+    ForeignKeySnapshot,
+    PhysicalSchemaSnapshot,
+    TableSnapshot,
+)
+from src.modules.schema_registry.domain.error import UnsupportedSchemaChangeError
+from src.modules.schema_registry.domain.field.enum.sql_type_preset import (
+    SqlTypePresetEnum,
+)
+from src.modules.schema_registry.domain.field.service import FieldTypeService
 from src.modules.schema_registry.domain.seed.field_seed import FieldSeed
 from src.modules.schema_registry.domain.seed.object_seed import ObjectSeed
 from src.modules.schema_registry.domain.seed.relation_seed import RelationSeed
@@ -14,6 +30,10 @@ from src.modules.schema_registry.domain.seed.schema_seed import SchemaSeed
 
 
 class SchemaDiffServiceTests(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.service = SchemaDiffService(field_type_service=FieldTypeService())
+
     def test_build_create_plan_uses_plural_name_for_tables(self) -> None:
         seed = SchemaSeed(
             version=None,
@@ -61,7 +81,7 @@ class SchemaDiffServiceTests(unittest.TestCase):
             ),
         )
 
-        plan = SchemaDiffService().build_create_plan(
+        plan = self.service.build_create_plan(
             schema_name="dnk_test",
             seed=seed,
         )
@@ -80,3 +100,139 @@ class SchemaDiffServiceTests(unittest.TestCase):
         self.assertEqual(create_tables, ["companies", "contacts"])
         self.assertEqual(foreign_keys[0].table_name, "contacts")
         self.assertEqual(foreign_keys[0].target_table_name, "companies")
+
+    def test_build_diff_plan_full_sync_marks_destructive_operations(self) -> None:
+        seed = SchemaSeed(
+            version=None,
+            code="crm",
+            label="CRM",
+            objects=(
+                ObjectSeed(
+                    singular_name="contact",
+                    plural_name="contacts",
+                    singular_label="Contact",
+                    plural_label="Contacts",
+                    description="Contacts.",
+                    fields=(
+                        FieldSeed(
+                            name="id", type="uuid", label="ID", is_nullable=False
+                        ),
+                        FieldSeed(
+                            name="last_name",
+                            type="text",
+                            label="Last Name",
+                            is_nullable=False,
+                        ),
+                    ),
+                    relations=(),
+                ),
+            ),
+        )
+        actual_schema = PhysicalSchemaSnapshot(
+            schema_name="dnk_test",
+            tables=(
+                TableSnapshot(
+                    name="contacts",
+                    columns=(
+                        ColumnSnapshot(
+                            name="id",
+                            sql_preset=SqlTypePresetEnum.UUID,
+                            is_nullable=False,
+                            default_value=None,
+                        ),
+                        ColumnSnapshot(
+                            name="legacy_name",
+                            sql_preset=SqlTypePresetEnum.TEXT,
+                            is_nullable=True,
+                            default_value=None,
+                        ),
+                    ),
+                    foreign_keys=(
+                        ForeignKeySnapshot(
+                            name="contacts_legacy_fk",
+                            source_columns=("legacy_name",),
+                            target_table_name="legacy",
+                            target_columns=("id",),
+                            on_delete="restrict",
+                        ),
+                    ),
+                ),
+                TableSnapshot(
+                    name="legacy",
+                    columns=(),
+                ),
+            ),
+        )
+
+        plan = self.service.build_diff_plan(
+            schema_name="dnk_test",
+            seed=seed,
+            actual_schema=actual_schema,
+        )
+
+        self.assertTrue(plan.has_destructive_changes)
+        self.assertTrue(
+            any(
+                isinstance(item, DropForeignKeyOperation)
+                for item in plan.destructive_operations
+            )
+        )
+        self.assertTrue(
+            any(
+                isinstance(item, DropColumnOperation)
+                for item in plan.destructive_operations
+            )
+        )
+        self.assertTrue(
+            any(
+                isinstance(item, DropTableOperation)
+                for item in plan.destructive_operations
+            )
+        )
+        self.assertTrue(
+            any(isinstance(item, AddColumnOperation) for item in plan.operations)
+        )
+
+    def test_build_diff_plan_fails_on_retained_column_shape_mismatch(self) -> None:
+        seed = SchemaSeed(
+            version=None,
+            code="crm",
+            label="CRM",
+            objects=(
+                ObjectSeed(
+                    singular_name="contact",
+                    plural_name="contacts",
+                    singular_label="Contact",
+                    plural_label="Contacts",
+                    description="Contacts.",
+                    fields=(
+                        FieldSeed(
+                            name="id", type="uuid", label="ID", is_nullable=False
+                        ),
+                    ),
+                ),
+            ),
+        )
+        actual_schema = PhysicalSchemaSnapshot(
+            schema_name="dnk_test",
+            tables=(
+                TableSnapshot(
+                    name="contacts",
+                    columns=(
+                        ColumnSnapshot(
+                            name="id",
+                            sql_preset=SqlTypePresetEnum.TEXT,
+                            is_nullable=False,
+                            default_value=None,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        with self.assertRaises(UnsupportedSchemaChangeError):
+            self.service.build_diff_plan(
+                schema_name="dnk_test",
+                seed=seed,
+                actual_schema=actual_schema,
+            )

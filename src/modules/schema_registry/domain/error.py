@@ -56,6 +56,15 @@ class PhysicalSchemaAlreadyExistsError(SchemaRegistryError):
         super().__init__(f"PostgreSQL schema '{schema_name}' already exists.")
 
 
+class PhysicalSchemaNotFoundError(SchemaRegistryError):
+    def __init__(self, schema_name: str):
+        super().__init__(f"PostgreSQL schema '{schema_name}' was not found.")
+
+
+class SchemaRegistryMetadataInconsistentError(SchemaRegistryError):
+    pass
+
+
 class UnsupportedSchemaBackendError(SchemaRegistryError):
     pass
 

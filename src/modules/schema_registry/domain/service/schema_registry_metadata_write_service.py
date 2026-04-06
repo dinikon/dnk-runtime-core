@@ -7,7 +7,7 @@ from src.modules.schema_registry.domain.object.service import ObjectService
 from src.modules.schema_registry.domain.seed.schema_seed import SchemaSeed
 
 
-class SchemaRegistryMetadataService:
+class SchemaRegistryMetadataWriteService:
     def __init__(
         self,
         data_source_service: DataSourceService,

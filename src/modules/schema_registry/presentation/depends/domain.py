@@ -5,33 +5,55 @@ from typing import Annotated
 from fastapi import Depends
 
 from src.modules.schema_registry.domain.migration.diff_service import SchemaDiffService
-from src.modules.schema_registry.domain.service.schema_registry_metadata_service import (
-    SchemaRegistryMetadataService,
+from src.modules.schema_registry.domain.service.schema_registry_metadata_read_service import (
+    SchemaRegistryMetadataReadService,
+)
+from src.modules.schema_registry.domain.service.schema_registry_metadata_write_service import (
+    SchemaRegistryMetadataWriteService,
 )
 from src.modules.schema_registry.presentation.depends.infrastructure import (
     DataSourceServiceDep,
+    FieldTypeServiceDep,
     ObjectServiceDep,
 )
 
 
-def get_schema_registry_metadata_service(
+def get_schema_registry_metadata_read_service(
     data_source_service: DataSourceServiceDep,
     object_service: ObjectServiceDep,
-) -> SchemaRegistryMetadataService:
-    return SchemaRegistryMetadataService(
+) -> SchemaRegistryMetadataReadService:
+    return SchemaRegistryMetadataReadService(
         data_source_service=data_source_service,
         object_service=object_service,
     )
 
 
-SchemaRegistryMetadataServiceDep = Annotated[
-    SchemaRegistryMetadataService,
-    Depends(get_schema_registry_metadata_service),
+SchemaRegistryMetadataReadServiceDep = Annotated[
+    SchemaRegistryMetadataReadService,
+    Depends(get_schema_registry_metadata_read_service),
 ]
 
 
-def get_schema_diff_service() -> SchemaDiffService:
-    return SchemaDiffService()
+def get_schema_registry_metadata_write_service(
+    data_source_service: DataSourceServiceDep,
+    object_service: ObjectServiceDep,
+) -> SchemaRegistryMetadataWriteService:
+    return SchemaRegistryMetadataWriteService(
+        data_source_service=data_source_service,
+        object_service=object_service,
+    )
+
+
+SchemaRegistryMetadataWriteServiceDep = Annotated[
+    SchemaRegistryMetadataWriteService,
+    Depends(get_schema_registry_metadata_write_service),
+]
+
+
+def get_schema_diff_service(
+    field_type_service: FieldTypeServiceDep,
+) -> SchemaDiffService:
+    return SchemaDiffService(field_type_service=field_type_service)
 
 
 SchemaDiffServiceDep = Annotated[
@@ -42,7 +64,9 @@ SchemaDiffServiceDep = Annotated[
 
 __all__ = [
     "SchemaDiffServiceDep",
-    "SchemaRegistryMetadataServiceDep",
+    "SchemaRegistryMetadataReadServiceDep",
+    "SchemaRegistryMetadataWriteServiceDep",
     "get_schema_diff_service",
-    "get_schema_registry_metadata_service",
+    "get_schema_registry_metadata_read_service",
+    "get_schema_registry_metadata_write_service",
 ]
