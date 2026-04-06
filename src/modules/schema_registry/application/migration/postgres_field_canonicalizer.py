@@ -130,6 +130,8 @@ class PostgresFieldCanonicalizer:
             return self._quote_sql_string(self._extract_literal(value))
 
         if sql_preset == SqlTypePresetEnum.UUID:
+            if lowered in {"gen_random_uuid()", "uuid_generate_v4()"}:
+                return lowered
             return f"{self._quote_sql_string(self._extract_literal(value))}::uuid"
 
         if sql_preset == SqlTypePresetEnum.DATE:

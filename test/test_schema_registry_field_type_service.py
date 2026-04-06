@@ -48,3 +48,19 @@ class FieldTypeCatalogTests(unittest.TestCase):
     def test_rejects_unknown_postgres_type(self) -> None:
         with self.assertRaises(UnsupportedSchemaChangeError):
             self.canonicalizer.sql_preset_from_postgres_type("numeric(18,2)")
+
+    def test_normalizes_uuid_generator_default(self) -> None:
+        self.assertEqual(
+            self.canonicalizer.normalize_seed_default(
+                raw_default="gen_random_uuid()",
+                sql_preset=SqlTypePresetEnum.UUID,
+            ),
+            "gen_random_uuid()",
+        )
+        self.assertEqual(
+            self.canonicalizer.normalize_postgres_default(
+                raw_default="(gen_random_uuid())",
+                sql_preset=SqlTypePresetEnum.UUID,
+            ),
+            "gen_random_uuid()",
+        )

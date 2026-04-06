@@ -20,6 +20,7 @@ SCHEMA_SEED = SchemaSeed(
                     label="ID",
                     description="Contact identifier.",
                     is_nullable=False,
+                    default="gen_random_uuid()",
                 ),
                 FieldSeed(
                     name="last_name",
