@@ -34,6 +34,9 @@ from src.modules.schema_registry.presentation.depends.infrastructure import (
     get_tenant_schema_executor,
     get_tenant_schema_inspector,
 )
+from src.modules.schema_registry.presentation.depends.management import (
+    build_diff_schema_use_case,
+)
 
 __all__ = [
     "CreateSchemaUseCaseDep",
@@ -51,6 +54,7 @@ __all__ = [
     "SchemaSeedServiceDep",
     "TenantSchemaExecutorDep",
     "TenantSchemaInspectorDep",
+    "build_diff_schema_use_case",
     "get_create_schema_use_case",
     "get_data_source_repository",
     "get_data_source_service",

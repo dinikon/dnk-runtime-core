@@ -6,6 +6,7 @@ from uuid import uuid4
 from src.modules.schema_registry.application.command.diff_schema_command import (
     DiffSchemaCommand,
 )
+from src.modules.schema_registry.application.dto import DiffSchemaResultDTO
 from src.modules.schema_registry.application.use_case.diff_schema_use_case import (
     DiffSchemaUseCase,
 )
@@ -72,7 +73,7 @@ class DiffSchemaUseCaseTests(unittest.IsolatedAsyncioTestCase):
             schema_registry_metadata_write_service=MetadataWriteService(),
         )
 
-        await use_case.execute(
+        result = await use_case.execute(
             DiffSchemaCommand(
                 tenant_id=tenant_id,
                 seed_path="seed.module",
@@ -90,6 +91,11 @@ class DiffSchemaUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 f"metadata:{tenant_id}:crm",
             ],
         )
+        self.assertIsInstance(result, DiffSchemaResultDTO)
+        self.assertEqual(result.schema_name, "dnk_crm")
+        self.assertEqual(result.seed_path, "seed.module")
+        self.assertEqual(result.total_operations, 0)
+        self.assertFalse(result.has_changes)
 
     async def test_does_not_write_metadata_if_physical_stage_fails(self) -> None:
         tenant_id = uuid4()

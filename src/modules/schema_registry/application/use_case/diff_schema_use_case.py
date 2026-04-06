@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 from src.modules.shared import EntityIdVO
 from src.modules.schema_registry.application.command.diff_schema_command import (
     DiffSchemaCommand,
 )
+from src.modules.schema_registry.application.dto import DiffSchemaResultDTO
 from src.modules.schema_registry.application.service.postgres_schema_service import (
     PostgresSchemaService,
 )
@@ -38,7 +41,7 @@ class DiffSchemaUseCase:
             schema_registry_metadata_write_service
         )
 
-    async def execute(self, command: DiffSchemaCommand) -> None:
+    async def execute(self, command: DiffSchemaCommand) -> DiffSchemaResultDTO:
         tenant_id = EntityIdVO.from_value(command.tenant_id)
         seed = await self._schema_seed_service.load(seed_path=command.seed_path)
         metadata_snapshot = (
@@ -58,4 +61,16 @@ class DiffSchemaUseCase:
         await self._schema_registry_metadata_write_service.replace_from_seed(
             tenant_id=tenant_id,
             seed=seed,
+        )
+        destructive_operations = len(plan.destructive_operations)
+        total_operations = len(plan.operations)
+        return DiffSchemaResultDTO(
+            tenant_id=command.tenant_id,
+            schema_name=metadata_snapshot.datasource.schema_name.value,
+            seed_path=command.seed_path,
+            total_operations=total_operations,
+            destructive_operations=destructive_operations,
+            non_destructive_operations=total_operations - destructive_operations,
+            has_changes=not plan.is_empty,
+            has_destructive_changes=plan.has_destructive_changes,
         )
