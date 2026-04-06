@@ -41,7 +41,6 @@ class FieldORM(Base):
         String(255),
         nullable=True,
     )
-    field_type_sql_preset: Mapped[str | None] = mapped_column(String(64), nullable=True)
     label: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(String(255), nullable=False)
     is_nullable: Mapped[bool] = mapped_column(Boolean, nullable=False)

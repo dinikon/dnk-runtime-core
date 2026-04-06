@@ -182,7 +182,6 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
             field_type_code=field_entity.field_type.code.value,
             field_type_mode=field_entity.field_type.mode.value,
             field_type_literal_value=field_entity.field_type.literal_value,
-            field_type_sql_preset=None,
             label=field_entity.label.value,
             description=field_entity.description,
             is_nullable=field_entity.is_nullable,
