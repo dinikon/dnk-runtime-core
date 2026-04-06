@@ -31,6 +31,7 @@ class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):
         recorded_command = None
 
         class TenantOnboardingServiceStub:
+
             async def create_tenant_with_primary_domain(
                 self, **kwargs
             ) -> TenantOnboardingDraft:

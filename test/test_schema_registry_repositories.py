@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import unittest
 from datetime import UTC, datetime
-from types import SimpleNamespace
 from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine

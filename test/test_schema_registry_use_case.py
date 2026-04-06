@@ -31,6 +31,7 @@ class CreateSchemaUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 return seed
 
         class DiffService:
+
             def build_create_plan(
                 self, *, schema_name: str, seed: SchemaSeed
             ) -> MigrationPlan:
@@ -45,6 +46,7 @@ class CreateSchemaUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 calls.append(f"apply:{len(plan.operations)}")
 
         class MetadataService:
+
             async def create_from_seed(
                 self, *, tenant_id, schema_name: str, seed: SchemaSeed
             ) -> None:

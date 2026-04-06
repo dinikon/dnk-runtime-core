@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 from src.modules.schema_registry.domain.error import InvalidValueObjectError
 
+
 @dataclass(frozen=True, slots=True)
 class SchemaNameVO:
     value: str
