@@ -18,6 +18,7 @@ from src.modules.schema_registry.domain.migration.snapshot import (
     TableSnapshot,
 )
 
+
 class PostgresTenantSchemaInspector(TenantSchemaInspectorPort):
 
     def __init__(

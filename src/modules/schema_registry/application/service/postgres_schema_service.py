@@ -13,6 +13,7 @@ from src.modules.schema_registry.domain.error import (
 from src.modules.schema_registry.domain.migration.plan import MigrationPlan
 from src.modules.schema_registry.domain.migration.snapshot import PhysicalSchemaSnapshot
 
+
 class PostgresSchemaService:
     def __init__(
         self,

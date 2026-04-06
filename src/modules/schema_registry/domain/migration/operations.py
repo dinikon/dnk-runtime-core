@@ -4,6 +4,7 @@ from src.modules.schema_registry.domain.field.enum.sql_type_preset import (
     SqlTypePresetEnum,
 )
 
+
 @dataclass(frozen=True, slots=True)
 class CreateSchemaOperation:
     schema_name: str
