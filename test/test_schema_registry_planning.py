@@ -193,6 +193,65 @@ class SchemaDiffServiceTests(unittest.TestCase):
             any(isinstance(item, AddColumnOperation) for item in plan.operations)
         )
 
+    def test_build_diff_plan_drops_foreign_keys_for_removed_table(self) -> None:
+        seed = SchemaSeed(
+            version=None,
+            code="crm",
+            label="CRM",
+            objects=(),
+        )
+        actual_schema = PhysicalSchemaSnapshot(
+            schema_name="dnk_test",
+            tables=(
+                TableSnapshot(
+                    name="deals",
+                    columns=(
+                        ColumnSnapshot(
+                            name="id",
+                            sql_preset=SqlTypePresetEnum.UUID,
+                            is_nullable=False,
+                            default_value=None,
+                        ),
+                        ColumnSnapshot(
+                            name="company_id",
+                            sql_preset=SqlTypePresetEnum.UUID,
+                            is_nullable=False,
+                            default_value=None,
+                        ),
+                    ),
+                    foreign_keys=(
+                        ForeignKeySnapshot(
+                            name="deals_company_id_fk",
+                            source_columns=("company_id",),
+                            target_table_name="companies",
+                            target_columns=("id",),
+                            on_delete="restrict",
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        plan = self.service.build_diff_plan(
+            schema_name="dnk_test",
+            seed=seed,
+            actual_schema=actual_schema,
+        )
+
+        self.assertTrue(
+            any(
+                isinstance(item, DropForeignKeyOperation)
+                and item.constraint_name == "deals_company_id_fk"
+                for item in plan.destructive_operations
+            )
+        )
+        self.assertTrue(
+            any(
+                isinstance(item, DropTableOperation) and item.table_name == "deals"
+                for item in plan.destructive_operations
+            )
+        )
+
     def test_build_diff_plan_fails_on_retained_column_shape_mismatch(self) -> None:
         seed = SchemaSeed(
             version=None,
