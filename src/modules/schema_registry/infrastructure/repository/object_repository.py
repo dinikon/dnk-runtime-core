@@ -8,9 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.shared import EntityIdVO
 from src.modules.schema_registry.domain.field.entity import FieldEntity
 from src.modules.schema_registry.domain.field.enum.field_type import FieldTypeEnum
-from src.modules.schema_registry.domain.field.enum.field_type_mode import (
-    FieldTypeModeEnum,
-)
 from src.modules.schema_registry.domain.field.value_object.field_label import (
     FieldLabelVO,
 )
@@ -180,8 +177,6 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
             object_id=field_entity.object_id.value,
             field_name=field_entity.field_name.value,
             field_type_code=field_entity.field_type.code.value,
-            field_type_mode=field_entity.field_type.mode.value,
-            field_type_literal_value=field_entity.field_type.literal_value,
             label=field_entity.label.value,
             description=field_entity.description,
             is_nullable=field_entity.is_nullable,
@@ -221,11 +216,7 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
             updated_at=model.updated_at,
             object_id=EntityIdVO.from_value(model.object_id),
             field_name=FieldNameVO(model.field_name),
-            field_type=FieldTypeVO(
-                code=FieldTypeEnum(model.field_type_code),
-                mode=FieldTypeModeEnum(model.field_type_mode),
-                literal_value=model.field_type_literal_value,
-            ),
+            field_type=FieldTypeVO(code=FieldTypeEnum(model.field_type_code)),
             label=FieldLabelVO(model.label),
             description=model.description,
             is_nullable=model.is_nullable,
