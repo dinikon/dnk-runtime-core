@@ -39,7 +39,6 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
 
     async def get_by_tenant_and_plural_name(
         self,
-        *,
         tenant_id: EntityIdVO,
         plural_name: str,
     ) -> ObjectEntity | None:
@@ -55,7 +54,7 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
         field_models = await self._load_fields([model.id])
         return self._map_model(model, field_models.get(model.id, []))
 
-    async def get_by_id(self, *, object_id: EntityIdVO) -> ObjectEntity | None:
+    async def get_by_id(self, object_id: EntityIdVO) -> ObjectEntity | None:
         model = await self._session.get(ObjectORM, object_id.value)
         if model is None:
             return None
@@ -67,6 +66,7 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
         await self._session.execute(
             delete(FieldORM).where(FieldORM.object_id == object_entity.id.value)
         )
+        await self._session.flush()
 
         model = await self._session.get(ObjectORM, object_entity.id.value)
         if model is None:
@@ -81,6 +81,8 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
             model.plural_label = object_entity.object_label.plural
             model.description = object_entity.description
             model.updated_at = object_entity.updated_at
+
+        await self._session.flush()
 
         for field_entity in object_entity.fields:
             self._session.add(self._to_field_model(field_entity))
@@ -126,9 +128,14 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
         await self._session.execute(
             delete(ObjectORM).where(ObjectORM.tenant_id == tenant_id.value)
         )
+        await self._session.flush()
 
         for object_entity in objects:
             self._session.add(self._to_model(object_entity))
+
+        await self._session.flush()
+
+        for object_entity in objects:
             for field_entity in object_entity.fields:
                 self._session.add(self._to_field_model(field_entity))
 

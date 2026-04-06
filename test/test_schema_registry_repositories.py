@@ -156,5 +156,5 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             session.flush_snapshots,
-            [["ObjectORM"], ["ObjectORM", "FieldORM"]],
+            [[], ["ObjectORM"], ["ObjectORM", "FieldORM"]],
         )
