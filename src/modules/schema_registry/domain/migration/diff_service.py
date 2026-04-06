@@ -106,7 +106,11 @@ class SchemaDiffService:
             for foreign_key in sorted(
                 actual_table.foreign_keys, key=lambda item: item.name
             ):
-                desired_foreign_key = desired_table.get_foreign_key(foreign_key.name)
+                desired_foreign_key = (
+                    None
+                    if desired_table is None
+                    else desired_table.get_foreign_key(foreign_key.name)
+                )
                 if (
                     desired_table is None
                     or desired_foreign_key is None
