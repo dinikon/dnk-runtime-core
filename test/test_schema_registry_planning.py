@@ -253,6 +253,12 @@ class PostgresSchemaPlanServiceTests(unittest.TestCase):
                 for item in plan.destructive_operations
             )
         )
+        self.assertTrue(
+            any(
+                isinstance(item, DropTableOperation) and item.table_name == "deals"
+                for item in plan.destructive_operations
+            )
+        )
 
     def test_build_diff_plan_allows_retained_column_default_change(self) -> None:
         seed = SchemaSeed(
@@ -308,12 +314,6 @@ class PostgresSchemaPlanServiceTests(unittest.TestCase):
                 and item.column_name == "id"
                 and item.default_value == "gen_random_uuid()"
                 for item in plan.operations
-            )
-        )
-        self.assertTrue(
-            any(
-                isinstance(item, DropTableOperation) and item.table_name == "deals"
-                for item in plan.destructive_operations
             )
         )
 
