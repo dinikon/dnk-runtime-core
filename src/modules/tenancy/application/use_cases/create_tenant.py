@@ -1,90 +1,63 @@
 from __future__ import annotations
 
-from src.modules.shared.db.uow import UnitOfWorkProtocol
-from src.modules.shared.http.host import normalize_host
+from src.config import dnk_config
+from src.modules.schema_registry.application.command.create_schema_command import (
+    CreateSchemaCommand,
+)
+from src.modules.schema_registry.application.use_case.create_schema_use_case import (
+    CreateSchemaUseCase,
+)
 from src.modules.tenancy.application.commands import CreateTenantCommand
 from src.modules.tenancy.application.dto import CreateTenantResultDTO
 from src.modules.tenancy.application.ports.identity import (
     IdentityProvisioningServiceProtocol,
 )
-
-from src.modules.tenancy.domain.entities import Tenant, TenantDomain
-from src.modules.tenancy.domain.errors import (
-    InvalidTenantDomainHostError,
-    TenantDomainHostAlreadyExistsError,
-    TenantExternalIdAlreadyExistsError,
-    TenantNameAlreadyExistsError,
-)
-from src.modules.tenancy.domain.repositories import (
-    TenantDomainRepositoryProtocol,
-    TenantRepositoryProtocol,
-)
+from src.modules.tenancy.domain.services import TenantOnboardingService
 
 
 class CreateTenantUseCase:
+
     def __init__(
         self,
-        uow: UnitOfWorkProtocol,
-        tenants_repository: TenantRepositoryProtocol,
-        tenant_domains_repository: TenantDomainRepositoryProtocol,
+        tenant_onboarding_service: TenantOnboardingService,
         identity_provisioning_service: IdentityProvisioningServiceProtocol,
+        create_schema_use_case: CreateSchemaUseCase,
     ):
-        self._uow = uow
-        self._tenants_repository = tenants_repository
-        self._tenant_domains_repository = tenant_domains_repository
+        self._tenant_onboarding_service = tenant_onboarding_service
         self._identity_provisioning_service = identity_provisioning_service
+        self._create_schema_use_case = create_schema_use_case
 
     async def execute(self, command: CreateTenantCommand) -> CreateTenantResultDTO:
-        if getattr(self._uow, "session", None) is None:
-            async with self._uow:
-                return await self._create_within_transaction(command)
-        return await self._create_within_transaction(command)
-
-    async def _create_within_transaction(
-        self,
-        command: CreateTenantCommand,
-    ) -> CreateTenantResultDTO:
-        normalized_name = command.tenant_name.strip()
-        normalized_external_id = command.external_id.strip()
-        normalized_host = normalize_host(command.tenant_domain_host)
-        if not normalized_host:
-            raise InvalidTenantDomainHostError()
-
-        if await self._tenants_repository.exists_by_name(normalized_name):
-            raise TenantNameAlreadyExistsError(normalized_name)
-        if await self._tenants_repository.exists_by_external_id(normalized_external_id):
-            raise TenantExternalIdAlreadyExistsError(normalized_external_id)
-        if await self._tenant_domains_repository.exists_by_host(normalized_host):
-            raise TenantDomainHostAlreadyExistsError(normalized_host)
-
-        tenant = Tenant.create(
-            name=normalized_name,
-            external_id=normalized_external_id,
+        onboarding = (
+            await self._tenant_onboarding_service.create_tenant_with_primary_domain(
+                tenant_name=command.tenant_name,
+                external_id=command.external_id,
+                tenant_domain_host=command.tenant_domain_host,
+            )
         )
-        await self._tenants_repository.add(tenant)
-
-        tenant_domain = TenantDomain.create_primary_console_domain(
-            tenant_id=tenant.id,
-            host=normalized_host,
-        )
-        await self._tenant_domains_repository.add(tenant_domain)
 
         user = await self._identity_provisioning_service.create_tenant_admin(
-            tenant_id=tenant.id,
+            tenant_id=onboarding.tenant.id,
             first_name=command.user_first_name,
             last_name=command.user_last_name,
             email=command.user_email,
         )
-        await self._uow.commit()
+        await self._create_schema_use_case.execute(
+            CreateSchemaCommand(
+                tenant_id=onboarding.tenant.id,
+                schema_name=f"{dnk_config.SCHEMA_PREFIX}{onboarding.tenant.id.hex}",
+                seed_path=dnk_config.DEFAULT_SEED_MODULE,
+            )
+        )
 
         return CreateTenantResultDTO(
-            tenant_id=tenant.id,
+            tenant_id=onboarding.tenant.id,
             user_id=user.user_id,
             user_email_id=user.user_email_id,
-            tenant_domain_id=tenant_domain.id,
-            tenant_status=tenant.status.value,
+            tenant_domain_id=onboarding.tenant_domain.id,
+            tenant_status=onboarding.tenant.status.value,
             user_status=user.user_status,
-            tenant_domain_host=tenant_domain.host,
+            tenant_domain_host=onboarding.tenant_domain.host,
         )
 
 

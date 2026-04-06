@@ -1,6 +1,7 @@
 import re
 from dataclasses import dataclass
 
+from src.modules.schema_registry.domain.error import InvalidValueObjectError
 
 @dataclass(frozen=True, slots=True)
 class SchemaNameVO:
@@ -12,13 +13,15 @@ class SchemaNameVO:
         normalized = self.value.strip()
 
         if not normalized:
-            raise ValueError("Schema name cannot be empty.")
+            raise InvalidValueObjectError("Schema name cannot be empty.")
 
         if normalized != self.value:
-            raise ValueError("Schema name must not contain leading or trailing spaces.")
+            raise InvalidValueObjectError(
+                "Schema name must not contain leading or trailing spaces."
+            )
 
         if not self._PATTERN.fullmatch(normalized):
-            raise ValueError(
+            raise InvalidValueObjectError(
                 "Schema name must start with a lowercase letter and contain only "
                 "lowercase letters, digits, and underscores, max length 63."
             )

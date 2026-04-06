@@ -9,9 +9,11 @@ from src.modules.tenancy.presentation.depends.application import (
 from src.modules.tenancy.presentation.depends.infrastructure import (
     IdentityProvisioningServiceDep,
     TenantDomainsRepositoryDep,
+    TenantOnboardingServiceDep,
     TenantsRepositoryDep,
     get_identity_provisioning_service,
     get_tenant_domains_repository,
+    get_tenant_onboarding_service,
     get_tenants_repository,
 )
 from src.modules.tenancy.presentation.depends.security import (
@@ -28,6 +30,7 @@ __all__ = [
     "IdentityProvisioningServiceDep",
     "ResolveTenantByHostUseCaseDep",
     "TenantDomainsRepositoryDep",
+    "TenantOnboardingServiceDep",
     "TenantRequestContextByHostUseCaseDep",
     "TenantsRepositoryDep",
     "authorize_control_plane_request",
@@ -36,6 +39,7 @@ __all__ = [
     "get_identity_provisioning_service",
     "get_resolve_tenant_by_host_use_case",
     "get_tenant_domains_repository",
+    "get_tenant_onboarding_service",
     "get_tenant_request_context_by_host_use_case",
     "get_tenants_repository",
 ]

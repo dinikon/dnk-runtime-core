@@ -11,7 +11,8 @@ class SchemaSeed:
     objects: tuple[ObjectSeed, ...]
 
     def get_object(self, object_name: str) -> ObjectSeed | None:
+        normalized = object_name.strip()
         for item in self.objects:
-            if item.name == object_name:
+            if item.singular_name == normalized or item.plural_name == normalized:
                 return item
         return None

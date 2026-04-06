@@ -4,7 +4,9 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from src.modules.shared.depends.uow import UoWDep
+from src.modules.schema_registry.presentation.depends.application import (
+    CreateSchemaUseCaseDep,
+)
 from src.modules.tenancy.application.use_cases import (
     CreateTenantUseCase,
     ResolveTenantByHostUseCase,
@@ -13,21 +15,20 @@ from src.modules.tenancy.application.use_cases import (
 from src.modules.tenancy.presentation.depends.infrastructure import (
     IdentityProvisioningServiceDep,
     TenantDomainsRepositoryDep,
+    TenantOnboardingServiceDep,
     TenantsRepositoryDep,
 )
 
 
 def get_create_tenant_use_case(
-    uow: UoWDep,
-    tenants_repository: TenantsRepositoryDep,
-    tenant_domains_repository: TenantDomainsRepositoryDep,
+    tenant_onboarding_service: TenantOnboardingServiceDep,
     identity_provisioning_service: IdentityProvisioningServiceDep,
+    create_schema_use_case: CreateSchemaUseCaseDep,
 ) -> CreateTenantUseCase:
     return CreateTenantUseCase(
-        uow=uow,
-        tenants_repository=tenants_repository,
-        tenant_domains_repository=tenant_domains_repository,
+        tenant_onboarding_service=tenant_onboarding_service,
         identity_provisioning_service=identity_provisioning_service,
+        create_schema_use_case=create_schema_use_case,
     )
 
 

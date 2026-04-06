@@ -2,16 +2,13 @@ from datetime import datetime
 from uuid import UUID
 
 import uuid6
-from sqlalchemy import DateTime, func, ForeignKey, String
+from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-
-from src.modules.shared.db import StringUUID
-from src.modules.shared.db import Base
+from src.modules.shared.db import Base, StringUUID
 
 
 class ObjectORM(Base):
-
     __tablename__ = "objects"
 
     id: Mapped[UUID] = mapped_column(
@@ -39,6 +36,12 @@ class ObjectORM(Base):
         nullable=False,
         index=True,
     )
+    data_source_id: Mapped[UUID] = mapped_column(
+        StringUUID,
+        ForeignKey("data_sources.id"),
+        nullable=False,
+        index=True,
+    )
 
     object_type: Mapped[str] = mapped_column(
         String(255), nullable=False, server_default="object"
@@ -50,3 +53,9 @@ class ObjectORM(Base):
     plural_label: Mapped[str] = mapped_column(String(255), nullable=False)
 
     description: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "plural_name", name="uq_objects_tenant_plural_name"
+        ),
+    )

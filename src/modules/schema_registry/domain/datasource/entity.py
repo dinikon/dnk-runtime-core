@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Self
-from uuid import UUID
 
 from src.modules.schema_registry.domain.datasource.value_object.connection_dsn import (
     ConnectionDsnVO,

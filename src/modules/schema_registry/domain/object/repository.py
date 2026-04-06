@@ -6,17 +6,16 @@ from src.modules.shared import EntityIdVO
 
 class ObjectRepositoryProtocol(Protocol):
 
-    def get_by_tenant_and_plural_name(
+    async def get_by_tenant_and_plural_name(
         self,
+        *,
         tenant_id: EntityIdVO,
         plural_name: str,
     ) -> ObjectEntity | None: ...
 
-    def load(self, object_id: EntityIdVO) -> ObjectEntity | None: ...
+    async def get_by_id(self, *, object_id: EntityIdVO) -> ObjectEntity | None: ...
 
-    def save(self, object_entity: ObjectEntity) -> ObjectEntity: ...
-
-    def delete(self, object_id: EntityIdVO) -> None: ...
+    async def save(self, object_entity: ObjectEntity) -> None: ...
 
     async def list_by_tenant_id(
         self, *, tenant_id: EntityIdVO

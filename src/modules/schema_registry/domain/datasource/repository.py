@@ -5,7 +5,6 @@ from src.modules.shared import EntityIdVO
 
 
 class DataSourceRepositoryProtocol(Protocol):
-
     async def get_by_tenant_id(
         self, *, tenant_id: EntityIdVO
     ) -> DataSourceEntity | None: ...

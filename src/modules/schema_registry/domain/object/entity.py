@@ -18,7 +18,7 @@ from src.modules.schema_registry.domain.object.value_object.object_label import 
 from src.modules.schema_registry.domain.object.value_object.object_name import (
     ObjectNameVO,
 )
-from src.modules.schema_registry.domain.field_seed import FieldSeed
+from src.modules.schema_registry.domain.seed.field_seed import FieldSeed
 from src.modules.shared import EntityIdVO
 
 
@@ -117,17 +117,19 @@ class ObjectEntity:
         *,
         now: datetime,
         seeds: Sequence[FieldSeed],
+        field_id_provider,
+        field_type_mapper,
     ) -> None:
         for seed in seeds:
             self.add_field(
-                field_id=seed.id,
+                field_id=field_id_provider(),
                 now=now,
-                field_name=seed.field_name,
-                field_type=seed.field_type,
+                field_name=seed.name,
+                field_type=field_type_mapper(seed.type),
                 label=seed.label,
                 description=seed.description,
                 is_nullable=seed.is_nullable,
-                default_value=None,
+                default_value=seed.default,
                 options=seed.options,
                 settings=seed.settings,
             )
@@ -209,7 +211,7 @@ class ObjectEntity:
     def get_field_by_name(self, field_name: str) -> FieldEntity | None:
         normalized = field_name.strip()
         for field_entity in self.fields:
-            if field_entity.field_name == normalized:
+            if field_entity.field_name.value == normalized:
                 return field_entity
         return None
 
@@ -225,7 +227,7 @@ class ObjectEntity:
             if exclude_field_id is not None and field_entity.id == exclude_field_id:
                 continue
 
-            if field_entity.field_name == normalized:
+            if field_entity.field_name.value == normalized:
                 raise FieldAlreadyExistsError(
                     f"Field with name '{normalized}' already exists in object '{self.id}'."
                 )

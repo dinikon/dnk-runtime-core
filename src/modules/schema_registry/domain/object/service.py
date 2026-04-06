@@ -1,13 +1,9 @@
-from datetime import datetime
-from typing import Sequence
+from __future__ import annotations
 
-from src.modules.schema_registry.domain.error import (
-    ObjectNameAlreadyExistsError,
-    ObjectNotFoundError,
-)
-from src.modules.schema_registry.domain.field.entity import FieldEntity
-from src.modules.schema_registry.domain.field.value_object.field_type import FieldTypeVO
-from modules.schema_registry.domain.field_seed import FieldSeed
+from collections.abc import Callable
+
+from src.modules.shared import ClockPort, EntityIdVO
+from src.modules.schema_registry.domain.field.service import FieldTypeService
 from src.modules.schema_registry.domain.object.entity import ObjectEntity
 from src.modules.schema_registry.domain.object.repository import (
     ObjectRepositoryProtocol,
@@ -18,223 +14,58 @@ from src.modules.schema_registry.domain.object.value_object.object_label import 
 from src.modules.schema_registry.domain.object.value_object.object_name import (
     ObjectNameVO,
 )
-from src.modules.shared import EntityIdVO
+from src.modules.schema_registry.domain.seed.schema_seed import SchemaSeed
 
 
-class SchemaRegistryDomainService:
-    def __init__(self, object_repository: ObjectRepositoryProtocol) -> None:
+class ObjectService:
+    def __init__(
+        self,
+        object_repository: ObjectRepositoryProtocol,
+        clock: ClockPort,
+        id_provider: Callable[[], EntityIdVO],
+        field_type_service: FieldTypeService,
+    ) -> None:
         self._object_repository = object_repository
+        self._clock = clock
+        self._id_provider = id_provider
+        self._field_type_service = field_type_service
 
-    def create_object(
+    async def replace_all_for_tenant_from_seed(
         self,
         *,
-        object_id: EntityIdVO,
         tenant_id: EntityIdVO,
-        now: datetime,
-        singular_name: str,
-        plural_name: str,
-        label_singular: str,
-        label_plural: str,
-        description: str,
-        fields: Sequence[FieldSeed] = (),
-    ) -> ObjectEntity:
-        existing = self._object_repository.get_by_tenant_and_plural_name(
-            tenant_id=tenant_id,
-            plural_name=plural_name,
-        )
-        if existing is not None:
-            raise ObjectNameAlreadyExistsError(
-                f"Object with plural_name '{plural_name}' already exists."
+        data_source_id: EntityIdVO,
+        seed: SchemaSeed,
+    ) -> list[ObjectEntity]:
+        now = self._clock.now()
+        objects: list[ObjectEntity] = []
+
+        for object_seed in seed.objects:
+            object_entity = ObjectEntity.create(
+                id_=self._id_provider(),
+                tenant_id=tenant_id,
+                data_source_id=data_source_id,
+                now=now,
+                object_name=ObjectNameVO(
+                    singular=object_seed.singular_name,
+                    plural=object_seed.plural_name,
+                ),
+                object_label=ObjectLabelVO(
+                    singular=object_seed.singular_label,
+                    plural=object_seed.plural_label,
+                ),
+                description=object_seed.description,
             )
-
-        object_entity = ObjectEntity.create(
-            id_=object_id,
-            tenant_id=tenant_id,
-            now=now,
-            object_name=ObjectNameVO(
-                singular=singular_name,
-                plural=plural_name,
-            ),
-            object_label=ObjectLabelVO(
-                singular=label_singular,
-                plural=label_plural,
-            ),
-            description=description,
-        )
-
-        if fields:
             object_entity.add_fields_from_seed(
                 now=now,
-                seeds=fields,
+                seeds=object_seed.fields,
+                field_id_provider=self._id_provider,
+                field_type_mapper=self._field_type_service.from_seed_type,
             )
+            objects.append(object_entity)
 
-        self._object_repository.save(object_entity)
-        return object_entity
-
-    def rename_object(
-        self,
-        *,
-        object_id: EntityIdVO,
-        now: datetime,
-        singular_name: str,
-        plural_name: str,
-        label_singular: str,
-        label_plural: str,
-        description: str,
-    ) -> ObjectEntity:
-        object_entity = self._get_required_object(object_id)
-
-        existing = self._object_repository.get_by_tenant_and_plural_name(
-            tenant_id=object_entity.tenant_id,
-            plural_name=plural_name,
+        await self._object_repository.replace_all_for_tenant(
+            tenant_id=tenant_id,
+            objects=objects,
         )
-        if existing is not None and existing.id != object_entity.id:
-            raise ObjectNameAlreadyExistsError(
-                f"Object with plural_name '{plural_name}' already exists."
-            )
-
-        object_entity.rename(
-            now=now,
-            object_name=ObjectNameVO(
-                singular=singular_name,
-                plural=plural_name,
-            ),
-            object_label=ObjectLabelVO(
-                singular=label_singular,
-                plural=label_plural,
-            ),
-            description=description,
-        )
-        self._object_repository.save(object_entity)
-        return object_entity
-
-    def delete_object(
-        self,
-        *,
-        object_id: EntityIdVO,
-    ) -> None:
-        object_entity = self._get_required_object(object_id)
-        self._object_repository.delete(object_entity.id)
-
-    def add_field(
-        self,
-        *,
-        object_id: EntityIdVO,
-        field_id: EntityIdVO,
-        now: datetime,
-        field_name: str,
-        field_type: FieldTypeVO,
-        label: str,
-        description: str,
-        is_nullable: bool,
-        options: dict[str, str] | None = None,
-        settings: dict[str, str] | None = None,
-    ) -> FieldEntity:
-        object_entity = self._get_required_object(object_id)
-
-        field_entity = object_entity.add_field(
-            field_id=field_id,
-            now=now,
-            field_name=field_name,
-            field_type=field_type,
-            label=label,
-            description=description,
-            is_nullable=is_nullable,
-            options=options,
-            settings=settings,
-        )
-        self._object_repository.save(object_entity)
-        return field_entity
-
-    def rename_field(
-        self,
-        *,
-        object_id: EntityIdVO,
-        field_id: EntityIdVO,
-        now: datetime,
-        field_name: str,
-        label: str,
-        description: str,
-    ) -> ObjectEntity:
-        object_entity = self._get_required_object(object_id)
-        object_entity.rename_field(
-            field_id=field_id,
-            now=now,
-            field_name=field_name,
-            label=label,
-            description=description,
-        )
-        self._object_repository.save(object_entity)
-        return object_entity
-
-    def delete_field(
-        self,
-        *,
-        object_id: EntityIdVO,
-        field_id: EntityIdVO,
-        now: datetime,
-    ) -> ObjectEntity:
-        object_entity = self._get_required_object(object_id)
-        object_entity.remove_field(
-            field_id=field_id,
-            now=now,
-        )
-        self._object_repository.save(object_entity)
-        return object_entity
-
-    def replace_field_settings(
-        self,
-        *,
-        object_id: EntityIdVO,
-        field_id: EntityIdVO,
-        now: datetime,
-        settings: dict[str, str],
-    ) -> ObjectEntity:
-        object_entity = self._get_required_object(object_id)
-        object_entity.replace_field_settings(
-            field_id=field_id,
-            now=now,
-            settings=settings,
-        )
-        self._object_repository.save(object_entity)
-        return object_entity
-
-    def merge_field_settings(
-        self,
-        *,
-        object_id: EntityIdVO,
-        field_id: EntityIdVO,
-        now: datetime,
-        patch: dict[str, str],
-    ) -> ObjectEntity:
-        object_entity = self._get_required_object(object_id)
-        object_entity.merge_field_settings(
-            field_id=field_id,
-            now=now,
-            patch=patch,
-        )
-        self._object_repository.save(object_entity)
-        return object_entity
-
-    def replace_field_options(
-        self,
-        *,
-        object_id: EntityIdVO,
-        field_id: EntityIdVO,
-        now: datetime,
-        options: dict[str, str],
-    ) -> ObjectEntity:
-        object_entity = self._get_required_object(object_id)
-        object_entity.replace_field_options(
-            field_id=field_id,
-            now=now,
-            options=options,
-        )
-        self._object_repository.save(object_entity)
-        return object_entity
-
-    def _get_required_object(self, object_id: EntityIdVO) -> ObjectEntity:
-        object_entity = self._object_repository.load(object_id)
-        if object_entity is None:
-            raise ObjectNotFoundError(f"Object {object_id} not found.")
-        return object_entity
+        return objects
