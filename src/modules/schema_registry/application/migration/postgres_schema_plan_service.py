@@ -37,6 +37,7 @@ from src.modules.schema_registry.domain.seed.validated_schema_spec import (
     ValidatedSchemaSpec,
 )
 
+
 class PostgresSchemaPlanService:
     def __init__(
         self,
