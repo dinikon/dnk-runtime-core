@@ -12,6 +12,9 @@ from src.modules.schema_registry.application.migration.postgres_field_canonicali
 from src.modules.schema_registry.application.migration.postgres_schema_plan_service import (
     PostgresSchemaPlanService,
 )
+from src.modules.schema_registry.application.migration.schema_naming_strategy import (
+    SchemaNamingStrategy,
+)
 from src.modules.schema_registry.application.migration.sql_type_preset import (
     SqlTypePresetEnum,
 )
@@ -24,6 +27,7 @@ __all__ = [
     "PhysicalSchemaSnapshot",
     "PostgresFieldCanonicalizer",
     "PostgresSchemaPlanService",
+    "SchemaNamingStrategy",
     "SqlTypePresetEnum",
     "TableSnapshot",
 ]

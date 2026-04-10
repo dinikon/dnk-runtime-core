@@ -123,6 +123,52 @@ class FieldEntity:
         self.options = {}
         self.updated_at = now
 
+    def update_from_spec(
+        self,
+        *,
+        now: datetime,
+        field_name: FieldNameVO,
+        field_type: FieldTypeVO,
+        label: FieldLabelVO,
+        description: str,
+        is_nullable: bool,
+        default_value: str | None,
+        options: dict[str, str],
+        settings: dict[str, str],
+    ) -> bool:
+        if options and not field_type.is_select_like():
+            raise InvalidFieldOperationError(
+                "Options are allowed only for select/multiselect fields."
+            )
+
+        normalized_description = description.strip()
+        normalized_default_value = default_value.strip() if default_value else None
+        normalized_options = dict(options)
+        normalized_settings = dict(settings)
+
+        if (
+            self.field_name == field_name
+            and self.field_type == field_type
+            and self.label == label
+            and self.description == normalized_description
+            and self.is_nullable == is_nullable
+            and self.default_value == normalized_default_value
+            and self.options == normalized_options
+            and self.settings == normalized_settings
+        ):
+            return False
+
+        self.field_name = field_name
+        self.field_type = field_type
+        self.label = label
+        self.description = normalized_description
+        self.is_nullable = is_nullable
+        self.default_value = normalized_default_value
+        self.options = normalized_options
+        self.settings = normalized_settings
+        self.updated_at = now
+        return True
+
     def change_type(self, *args, **kwargs) -> None:
         raise InvalidFieldOperationError(
             "Changing field type is forbidden for existing field in MVP."

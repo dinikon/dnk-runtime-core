@@ -25,7 +25,11 @@ from src.modules.schema_registry.application.migration.postgres_field_canonicali
 )
 from src.modules.schema_registry.domain.error import UnsupportedSchemaChangeError
 from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
+from src.modules.schema_registry.domain.seed.relation_type import RelationTypeEnum
 from src.modules.schema_registry.domain.seed.schema_seed import SchemaSeed
+from src.modules.schema_registry.domain.seed.validated_schema_spec import (
+    ValidatedSchemaSpec,
+)
 
 
 class PostgresSchemaPlanService:
@@ -42,7 +46,7 @@ class PostgresSchemaPlanService:
         self,
         *,
         schema_name: str,
-        seed: SchemaSeed,
+        seed: SchemaSeed | ValidatedSchemaSpec,
     ) -> MigrationPlan:
         plan = MigrationPlan()
         plan.add(CreateSchemaOperation(schema_name=schema_name))
@@ -102,7 +106,7 @@ class PostgresSchemaPlanService:
         self,
         *,
         schema_name: str,
-        seed: SchemaSeed,
+        seed: SchemaSeed | ValidatedSchemaSpec,
         actual_schema: PhysicalSchemaSnapshot,
     ) -> MigrationPlan:
         plan = MigrationPlan()
@@ -214,6 +218,15 @@ class PostgresSchemaPlanService:
                     and actual_table.get_column(column.name) is not None
                 ):
                     continue
+                if (
+                    actual_table is not None
+                    and not column.is_nullable
+                    and column.default_value is None
+                ):
+                    raise UnsupportedSchemaChangeError(
+                        "Adding required column without default is unsafe "
+                        f"for existing table '{desired_table.name}.{column.name}'."
+                    )
                 plan.add(
                     AddColumnOperation(
                         schema_name=schema_name,
@@ -274,7 +287,7 @@ class PostgresSchemaPlanService:
     def _build_desired_schema(
         self,
         *,
-        seed: SchemaSeed,
+        seed: SchemaSeed | ValidatedSchemaSpec,
         schema_name: str,
     ) -> PhysicalSchemaSnapshot:
         tables: list[TableSnapshot] = []
@@ -293,6 +306,16 @@ class PostgresSchemaPlanService:
             )
             foreign_keys: list[ForeignKeySnapshot] = []
             for relation_seed in object_seed.relations:
+                relation_type = self._normalize_relation_type(
+                    relation_seed.relation_type
+                )
+                if (
+                    relation_type == RelationTypeEnum.ONE_TO_ONE
+                    and getattr(relation_seed, "unique_index_name", None) is None
+                ):
+                    raise UnsupportedSchemaChangeError(
+                        "one_to_one relations require normalized schema spec."
+                    )
                 target_object = seed.get_object(relation_seed.target_object)
                 if target_object is None:
                     raise UnsupportedSchemaChangeError(
@@ -318,7 +341,9 @@ class PostgresSchemaPlanService:
         return PhysicalSchemaSnapshot(schema_name=schema_name, tables=tuple(tables))
 
     def _build_column_snapshot(self, field_seed) -> ColumnSnapshot:
-        field_type = self._field_type_catalog.from_seed_type(field_seed.type)
+        field_type = getattr(field_seed, "field_type", None)
+        if field_type is None:
+            field_type = self._field_type_catalog.from_seed_type(field_seed.type)
         sql_preset = self._postgres_field_canonicalizer.sql_preset_from_field_type(
             field_type
         )
@@ -342,4 +367,25 @@ class PostgresSchemaPlanService:
             "no action": "no action",
             "no_action": "no action",
         }
-        return mapping.get(value.strip().lower(), "restrict")
+        try:
+            return mapping[value.strip().lower()]
+        except KeyError as exc:
+            raise UnsupportedSchemaChangeError(
+                f"Unsupported relation on_delete '{value}'."
+            ) from exc
+
+    @staticmethod
+    def _normalize_relation_type(raw_type) -> RelationTypeEnum:
+        normalized = str(raw_type.value if hasattr(raw_type, "value") else raw_type)
+        normalized = normalized.strip().lower()
+        try:
+            relation_type = RelationTypeEnum(normalized)
+        except ValueError as exc:
+            raise UnsupportedSchemaChangeError(
+                f"Unsupported relation_type '{raw_type}'."
+            ) from exc
+        if not relation_type.is_source_owned_fk():
+            raise UnsupportedSchemaChangeError(
+                f"Unsupported relation_type '{relation_type.value}' for MVP."
+            )
+        return relation_type

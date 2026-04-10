@@ -27,3 +27,10 @@ class ObjectRepositoryProtocol(Protocol):
         tenant_id: EntityIdVO,
         objects: list[ObjectEntity],
     ) -> None: ...
+
+    async def reconcile_for_tenant(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        objects: list[ObjectEntity],
+    ) -> None: ...

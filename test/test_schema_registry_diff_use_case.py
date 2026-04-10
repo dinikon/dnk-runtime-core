@@ -62,7 +62,10 @@ class DiffSchemaUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 calls.append(f"apply:{len(plan.operations)}")
 
         class MetadataWriteService:
-            async def replace_from_seed(self, *, tenant_id, seed: SchemaSeed) -> None:
+
+            async def reconcile_from_spec(
+                self, *, tenant_id, schema_spec: SchemaSeed
+            ) -> None:
                 calls.append(f"metadata:{tenant_id}:{seed.code}")
 
         use_case = DiffSchemaUseCase(
@@ -131,7 +134,10 @@ class DiffSchemaUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 return {"schema_name": schema_name}
 
         class MetadataWriteService:
-            async def replace_from_seed(self, *, tenant_id, seed: SchemaSeed) -> None:
+
+            async def reconcile_from_spec(
+                self, *, tenant_id, schema_spec: SchemaSeed
+            ) -> None:
                 calls.append("metadata-write")
 
         use_case = DiffSchemaUseCase(

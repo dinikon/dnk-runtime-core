@@ -22,10 +22,12 @@ This page maps current tests to the behaviors they protect.
     - seed loading and validation
 - `test/test_schema_registry_metadata_read_service.py`
     - metadata snapshot consistency
+- `test/test_schema_registry_metadata_write_service.py`
+    - metadata reconcile identity preservation
 - `test/test_schema_registry_diff_use_case.py`
     - diff orchestration rules
 - `test/test_schema_registry_planning.py`
-    - create/diff plan building
+    - create/diff plan building, relation uniqueness, unsafe required-column rejection
 - `test/test_schema_registry_postgres_executor.py`
     - SQL rendering/execution behavior for migration operations
 - `test/test_schema_registry_repositories.py`
