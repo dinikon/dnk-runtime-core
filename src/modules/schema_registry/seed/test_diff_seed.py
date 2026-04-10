@@ -91,14 +91,14 @@ SCHEMA_SEED = SchemaSeed(
                     type="uuid",
                     label="Company ID",
                     description="Owning company identifier.",
-                    is_nullable=False,
+                    is_nullable=True,
                 ),
                 FieldSeed(
                     name="email",
                     type="text",
                     label="Email",
                     description="Primary email.",
-                    is_nullable=False,
+                    is_nullable=True,
                 ),
                 FieldSeed(
                     name="first_name",
