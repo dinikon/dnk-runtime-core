@@ -18,7 +18,6 @@ class SchemaRegistryTenantSchemaBootstrapAdapter(TenantSchemaBootstrapPort):
 
     async def bootstrap(
         self,
-        *,
         context: TenantSchemaBootstrapContext,
     ) -> None:
         await self._create_schema_use_case.execute(

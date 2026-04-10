@@ -10,9 +10,6 @@ from src.modules.schema_registry.application.metadata.schema_registry_metadata_r
 from src.modules.schema_registry.application.metadata.schema_registry_metadata_write_service import (
     SchemaRegistryMetadataWriteService,
 )
-from src.modules.schema_registry.application.migration.postgres_field_canonicalizer import (
-    PostgresFieldCanonicalizer,
-)
 from src.modules.schema_registry.application.migration.postgres_schema_plan_service import (
     PostgresSchemaPlanService,
 )

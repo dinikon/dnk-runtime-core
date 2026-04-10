@@ -169,7 +169,7 @@ class FieldEntity:
         self.updated_at = now
         return True
 
-    def change_type(self, *args, **kwargs) -> None:
+    def change_type(self, *args: object, **kwargs: object) -> None:
         raise InvalidFieldOperationError(
             "Changing field type is forbidden for existing field in MVP."
         )

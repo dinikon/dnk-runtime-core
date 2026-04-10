@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from uuid import UUID
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,11 +29,13 @@ from src.modules.schema_registry.infrastructure.persistence.object import Object
 
 
 class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
-    def __init__(self, session: AsyncSession):
+
+    def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
     async def get_by_tenant_and_plural_name(
         self,
+        *,
         tenant_id: EntityIdVO,
         plural_name: str,
     ) -> ObjectEntity | None:
@@ -48,7 +51,7 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
         field_models = await self._load_fields([model.id])
         return self._map_model(model, field_models.get(model.id, []))
 
-    async def get_by_id(self, object_id: EntityIdVO) -> ObjectEntity | None:
+    async def get_by_id(self, *, object_id: EntityIdVO) -> ObjectEntity | None:
         model = await self._session.get(ObjectORM, object_id.value)
         if model is None:
             return None
@@ -206,9 +209,7 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
 
         await self._session.flush()
 
-    async def _load_fields(
-        self, object_ids: list[object]
-    ) -> dict[object, list[FieldORM]]:
+    async def _load_fields(self, object_ids: list[UUID]) -> dict[UUID, list[FieldORM]]:
         if not object_ids:
             return {}
 
@@ -219,7 +220,7 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
                 .order_by(FieldORM.created_at, FieldORM.id)
             )
         ).all()
-        grouped: dict[object, list[FieldORM]] = defaultdict(list)
+        grouped: dict[UUID, list[FieldORM]] = defaultdict(list)
         for model in models:
             grouped[model.object_id].append(model)
         return grouped

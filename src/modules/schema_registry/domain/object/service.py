@@ -20,6 +20,7 @@ from src.modules.schema_registry.domain.object.value_object.object_label import 
 from src.modules.schema_registry.domain.object.value_object.object_name import (
     ObjectNameVO,
 )
+from src.modules.schema_registry.domain.seed.field_seed import FieldSeed
 from src.modules.schema_registry.domain.seed.schema_seed import SchemaSeed
 from src.modules.schema_registry.domain.seed.validated_schema_spec import (
     ValidatedFieldSpec,
@@ -51,29 +52,42 @@ class ObjectService:
         now = self._clock.now()
         objects: list[ObjectEntity] = []
 
-        for object_seed in seed.objects:
-            object_entity = ObjectEntity.create(
-                id_=self._id_provider(),
-                tenant_id=tenant_id,
-                data_source_id=data_source_id,
-                now=now,
-                object_name=ObjectNameVO(
-                    singular=object_seed.singular_name,
-                    plural=object_seed.plural_name,
-                ),
-                object_label=ObjectLabelVO(
-                    singular=object_seed.singular_label,
-                    plural=object_seed.plural_label,
-                ),
-                description=object_seed.description,
-            )
-            object_entity.add_fields_from_seed(
-                now=now,
-                seeds=object_seed.fields,
-                field_id_provider=self._id_provider,
-                field_type_mapper=self._field_type_catalog.from_seed_type,
-            )
-            objects.append(object_entity)
+        if isinstance(seed, ValidatedSchemaSpec):
+            for object_spec in seed.objects:
+                object_entity = self._create_object_entity(
+                    tenant_id=tenant_id,
+                    data_source_id=data_source_id,
+                    now=now,
+                    singular_name=object_spec.singular_name,
+                    plural_name=object_spec.plural_name,
+                    singular_label=object_spec.singular_label,
+                    plural_label=object_spec.plural_label,
+                    description=object_spec.description,
+                )
+                self._append_fields_from_spec(
+                    object_entity=object_entity,
+                    field_specs=object_spec.fields,
+                    now=now,
+                )
+                objects.append(object_entity)
+        else:
+            for object_seed in seed.objects:
+                object_entity = self._create_object_entity(
+                    tenant_id=tenant_id,
+                    data_source_id=data_source_id,
+                    now=now,
+                    singular_name=object_seed.singular_name,
+                    plural_name=object_seed.plural_name,
+                    singular_label=object_seed.singular_label,
+                    plural_label=object_seed.plural_label,
+                    description=object_seed.description,
+                )
+                self._append_fields_from_seed(
+                    object_entity=object_entity,
+                    field_seeds=object_seed.fields,
+                    now=now,
+                )
+                objects.append(object_entity)
 
         await self._object_repository.replace_all_for_tenant(
             tenant_id=tenant_id,
@@ -208,6 +222,69 @@ class ObjectService:
             object_entity.fields = reconciled_fields
             changed = True
         return changed
+
+    def _create_object_entity(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        data_source_id: EntityIdVO,
+        now: datetime,
+        singular_name: str,
+        plural_name: str,
+        singular_label: str,
+        plural_label: str,
+        description: str,
+    ) -> ObjectEntity:
+        return ObjectEntity.create(
+            id_=self._id_provider(),
+            tenant_id=tenant_id,
+            data_source_id=data_source_id,
+            now=now,
+            object_name=ObjectNameVO(
+                singular=singular_name,
+                plural=plural_name,
+            ),
+            object_label=ObjectLabelVO(
+                singular=singular_label,
+                plural=plural_label,
+            ),
+            description=description,
+        )
+
+    def _append_fields_from_seed(
+        self,
+        *,
+        object_entity: ObjectEntity,
+        field_seeds: tuple[FieldSeed, ...],
+        now: datetime,
+    ) -> None:
+        object_entity.add_fields_from_seed(
+            now=now,
+            seeds=field_seeds,
+            field_id_provider=self._id_provider,
+            field_type_mapper=self._field_type_catalog.from_seed_type,
+        )
+
+    def _append_fields_from_spec(
+        self,
+        *,
+        object_entity: ObjectEntity,
+        field_specs: tuple[ValidatedFieldSpec, ...],
+        now: datetime,
+    ) -> None:
+        for field_spec in field_specs:
+            object_entity.add_field(
+                field_id=self._id_provider(),
+                now=now,
+                field_name=field_spec.name,
+                field_type=field_spec.field_type,
+                label=field_spec.label,
+                description=field_spec.description,
+                is_nullable=field_spec.is_nullable,
+                default_value=field_spec.default,
+                options=field_spec.options,
+                settings=field_spec.settings,
+            )
 
     @staticmethod
     def _update_object_metadata(

@@ -16,6 +16,7 @@ from src.modules.schema_registry.domain.object.value_object.object_label import 
 from src.modules.schema_registry.domain.object.value_object.object_name import (
     ObjectNameVO,
 )
+from src.modules.schema_registry.domain.seed.object_seed import ObjectSeed
 from src.modules.schema_registry.domain.seed.schema_seed import SchemaSeed
 from src.modules.schema_registry.domain.seed.relation_type import RelationTypeEnum
 from src.modules.schema_registry.domain.seed.validated_schema_spec import (
@@ -47,7 +48,7 @@ class SchemaSeedService:
         global_index_names: set[str] = set()
         object_partials: list[
             tuple[
-                object,
+                ObjectSeed,
                 ObjectNameVO,
                 ObjectLabelVO,
                 tuple[ValidatedFieldSpec, ...],
@@ -244,8 +245,10 @@ class SchemaSeedService:
         return SchemaNamingStrategy.validate_identifier(value, title=title)
 
     @staticmethod
-    def _normalize_relation_type(raw_type) -> RelationTypeEnum:
-        normalized = str(raw_type.value if hasattr(raw_type, "value") else raw_type)
+    def _normalize_relation_type(raw_type: str | RelationTypeEnum) -> RelationTypeEnum:
+        normalized = str(
+            raw_type.value if isinstance(raw_type, RelationTypeEnum) else raw_type
+        )
         normalized = normalized.strip().lower()
         try:
             relation_type = RelationTypeEnum(normalized)

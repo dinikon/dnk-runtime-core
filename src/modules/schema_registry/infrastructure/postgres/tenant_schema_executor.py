@@ -32,7 +32,7 @@ class PostgresTenantSchemaExecutor(TenantSchemaExecutorPort):
         self,
         session: AsyncSession,
         postgres_field_canonicalizer: PostgresFieldCanonicalizer,
-    ):
+    ) -> None:
         self._session = session
         self._postgres_field_canonicalizer = postgres_field_canonicalizer
 

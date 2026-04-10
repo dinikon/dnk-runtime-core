@@ -23,7 +23,8 @@ from src.modules.schema_registry.infrastructure.persistence.data_source import (
 
 
 class SqlAlchemyDataSourceRepository(DataSourceRepositoryProtocol):
-    def __init__(self, session: AsyncSession):
+
+    def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
     async def get_by_tenant_id(

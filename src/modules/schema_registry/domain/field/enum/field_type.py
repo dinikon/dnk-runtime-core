@@ -1,5 +1,4 @@
-from enum import StrEnum, Enum
-
+from enum import Enum
 
 class FieldTypeEnum(str, Enum):
     TEXT = "text"
