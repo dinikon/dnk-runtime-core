@@ -4,16 +4,17 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
 
-from src.modules.shared import EntityIdVO
 from src.modules.crm.application.contact.command.rename_contact_command import (
     RenameContactCommand,
 )
 from src.modules.crm.domain.contact.error import ContactNotFoundError
+from src.modules.crm.domain.contact.value_object import ContactIdVO
 from src.modules.crm.presentation.depends.application import UpdateContactUseCaseDep
 from src.modules.crm.presentation.http.contact.requests import (
     UpdateContactRequestSchema,
 )
 from src.modules.crm.presentation.http.contact.responses import ContactResponseSchema
+from src.modules.shared import EntityIdVO
 from src.modules.shared.domain.errors import DomainError
 from src.modules.shared.depends import AuthenticatedRequestContextDep
 
@@ -27,11 +28,19 @@ router = APIRouter(prefix="/crm/contacts", tags=["crm-contacts"])
 async def update_contact(
     contact_id: UUID,
     payload: UpdateContactRequestSchema,
-    _: AuthenticatedRequestContextDep,
+    context: AuthenticatedRequestContextDep,
     use_case: UpdateContactUseCaseDep,
 ) -> ContactResponseSchema:
+    tenant_id_raw = context.principal.tenant_id if context.principal else None
+    if tenant_id_raw is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized.",
+        )
+
     command = RenameContactCommand(
-        contact_id=EntityIdVO.from_value(contact_id),
+        tenant_id=EntityIdVO.from_value(tenant_id_raw),
+        contact_id=ContactIdVO.from_value(contact_id),
         last_name=payload.last_name,
         first_name=payload.first_name,
         middle_name=payload.middle_name,

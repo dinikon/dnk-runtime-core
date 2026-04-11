@@ -23,6 +23,22 @@ SCHEMA_SEED = SchemaSeed(
                     default="gen_random_uuid()",
                 ),
                 FieldSeed(
+                    name="created_at",
+                    type="datetime",
+                    label="Created At",
+                    description="Record creation timestamp.",
+                    is_nullable=False,
+                    default="CURRENT_TIMESTAMP",
+                ),
+                FieldSeed(
+                    name="updated_at",
+                    type="datetime",
+                    label="Updated At",
+                    description="Record update timestamp.",
+                    is_nullable=False,
+                    default="CURRENT_TIMESTAMP",
+                ),
+                FieldSeed(
                     name="last_name",
                     type="text",
                     label="Last Name",

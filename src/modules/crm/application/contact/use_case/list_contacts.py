@@ -17,6 +17,7 @@ class ListContactsUseCase:
 
     async def __call__(self, query: ListContactsQuery) -> list[ContactDTO]:
         return await self._query_repository.list(
+            tenant_id=query.tenant_id,
             limit=query.limit,
             offset=query.offset,
         )

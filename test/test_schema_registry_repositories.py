@@ -19,7 +19,9 @@ from src.modules.schema_registry.domain.object.value_object.object_label import 
 from src.modules.schema_registry.domain.object.value_object.object_name import (
     ObjectNameVO,
 )
-from src.modules.schema_registry.infrastructure.persistence.data_source import DataSourceORM
+from src.modules.schema_registry.infrastructure.persistence.data_source import (
+    DataSourceORM,
+)
 from src.modules.schema_registry.infrastructure.persistence.field import FieldORM
 from src.modules.schema_registry.infrastructure.persistence.object import ObjectORM
 from src.modules.schema_registry.infrastructure.repository.data_source_repository import (
@@ -94,7 +96,9 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(objects), 1)
         self.assertEqual(objects[0].tenant_id, EntityIdVO.from_value(tenant_id))
-        self.assertEqual(objects[0].data_source_id, EntityIdVO.from_value(datasource_id))
+        self.assertEqual(
+            objects[0].data_source_id, EntityIdVO.from_value(datasource_id)
+        )
         self.assertEqual(objects[0].fields[0].field_name.value, "last_name")
 
     async def test_data_source_repository_add_maps_entity_to_orm_model(self) -> None:
@@ -193,70 +197,96 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
     async def test_reconcile_preserves_existing_field_identity(self) -> None:
         tenant_id = uuid4()
         now = datetime.now(UTC)
+        object_id = uuid4()
+        field_id = uuid4()
+        data_source_id = uuid4()
 
-        async with self._session_factory() as session:
-            session.add(
-                TenantModel(
-                    id=tenant_id,
-                    name="tenant",
-                    external_id="tenant-1",
-                    status="active",
-                    custom_config=None,
-                    created_at=now,
-                    updated_at=now,
-                )
-            )
-            await session.flush()
+        object_entity = ObjectEntity.create(
+            id_=EntityIdVO.from_value(object_id),
+            tenant_id=EntityIdVO.from_value(tenant_id),
+            data_source_id=EntityIdVO.from_value(data_source_id),
+            now=now,
+            object_name=ObjectNameVO(singular="contact", plural="contacts"),
+            object_label=ObjectLabelVO(singular="Contact", plural="Contacts"),
+            description="Tenant contacts.",
+        )
+        object_entity.add_field(
+            field_id=EntityIdVO.from_value(field_id),
+            now=now,
+            field_name="last_name",
+            field_type=FieldTypeCatalog().from_seed_type("text"),
+            label="Surname",
+            description="Contact last name.",
+            is_nullable=False,
+        )
 
-            datasource_repository = SqlAlchemyDataSourceRepository(session)
-            object_repository = SqlAlchemyObjectRepository(session)
+        object_model = ObjectORM(
+            id=object_id,
+            created_at=now,
+            updated_at=now,
+            tenant_id=tenant_id,
+            data_source_id=data_source_id,
+            object_type="object",
+            singular_name="contact",
+            plural_name="contacts",
+            singular_label="Contact",
+            plural_label="Contacts",
+            description="Tenant contacts.",
+        )
+        field_model = FieldORM(
+            id=field_id,
+            created_at=now,
+            updated_at=now,
+            object_id=object_id,
+            field_name="last_name",
+            field_type_code="text",
+            label="Last Name",
+            description="Contact last name.",
+            is_nullable=False,
+            default_value=None,
+            options={},
+            settings={},
+        )
 
-            datasource = DataSourceEntity.create(
-                id_=EntityIdVO.from_value(uuid4()),
-                now=now,
-                tenant_id=EntityIdVO.from_value(tenant_id),
-                schema_name=SchemaNameVO("dnk_test"),
-            )
-            await datasource_repository.add(datasource)
+        class SessionSpy:
+            def __init__(self) -> None:
+                self.scalars_calls = 0
+                self.added_models: list[object] = []
 
-            object_entity = ObjectEntity.create(
-                id_=EntityIdVO.from_value(uuid4()),
-                tenant_id=EntityIdVO.from_value(tenant_id),
-                data_source_id=datasource.id,
-                now=now,
-                object_name=ObjectNameVO(singular="contact", plural="contacts"),
-                object_label=ObjectLabelVO(singular="Contact", plural="Contacts"),
-                description="Tenant contacts.",
-            )
-            object_entity.add_field(
-                field_id=EntityIdVO.from_value(uuid4()),
-                now=now,
-                field_name="last_name",
-                field_type=FieldTypeCatalog().from_seed_type("text"),
-                label="Last Name",
-                description="Contact last name.",
-                is_nullable=False,
-            )
-            original_field_id = object_entity.fields[0].id
+            async def scalars(self, *_args, **_kwargs):
+                self.scalars_calls += 1
+                if self.scalars_calls == 1:
+                    return ScalarsResult([object_id])
+                if self.scalars_calls == 2:
+                    return ScalarsResult([field_id])
+                return ScalarsResult([])
 
-            await object_repository.replace_all_for_tenant(
-                tenant_id=EntityIdVO.from_value(tenant_id),
-                objects=[object_entity],
-            )
+            async def execute(self, *_args, **_kwargs) -> None:
+                return None
 
-            objects = await object_repository.list_by_tenant_id(
-                tenant_id=EntityIdVO.from_value(tenant_id)
-            )
-            objects[0].fields[0].label = FieldLabelVO("Surname")
+            async def get(self, model_cls, model_id):
+                if model_cls is ObjectORM and model_id == object_id:
+                    return object_model
+                if model_cls is FieldORM and model_id == field_id:
+                    return field_model
+                return None
 
-            await object_repository.reconcile_for_tenant(
-                tenant_id=EntityIdVO.from_value(tenant_id),
-                objects=objects,
-            )
+            def add(self, model) -> None:
+                self.added_models.append(model)
 
-            reconciled_objects = await object_repository.list_by_tenant_id(
-                tenant_id=EntityIdVO.from_value(tenant_id)
-            )
+            async def flush(self) -> None:
+                return None
 
-        self.assertEqual(reconciled_objects[0].fields[0].id, original_field_id)
-        self.assertEqual(reconciled_objects[0].fields[0].label.value, "Surname")
+        session = SessionSpy()
+        object_repository = SqlAlchemyObjectRepository(session)  # type: ignore[arg-type]
+
+        await object_repository.reconcile_for_tenant(
+            tenant_id=EntityIdVO.from_value(tenant_id),
+            objects=[object_entity],
+        )
+
+        self.assertEqual(field_model.id, field_id)
+        self.assertEqual(field_model.label, "Surname")
+        self.assertFalse(
+            any(isinstance(model, FieldORM) for model in session.added_models)
+        )

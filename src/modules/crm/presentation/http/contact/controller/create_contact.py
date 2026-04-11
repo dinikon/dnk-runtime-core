@@ -3,10 +3,11 @@ from __future__ import annotations
 import uuid6
 from fastapi import APIRouter, HTTPException, status
 
-from src.modules.shared import EntityIdVO
 from src.modules.crm.application.contact.command.create_contact_command import (
     CreateContactCommand,
 )
+from src.modules.crm.domain.contact.value_object import ContactIdVO
+from src.modules.shared import EntityIdVO
 from src.modules.crm.presentation.depends.application import CreateContactUseCaseDep
 from src.modules.crm.presentation.http.contact.requests import (
     CreateContactRequestSchema,
@@ -27,11 +28,19 @@ router = APIRouter(prefix="/crm/contacts", tags=["crm-contacts"])
 )
 async def create_contact(
     payload: CreateContactRequestSchema,
-    _: AuthenticatedRequestContextDep,
+    context: AuthenticatedRequestContextDep,
     use_case: CreateContactUseCaseDep,
 ) -> ContactResponseSchema:
+    tenant_id_raw = context.principal.tenant_id if context.principal else None
+    if tenant_id_raw is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized.",
+        )
+
     command = CreateContactCommand(
-        contact_id=EntityIdVO.from_value(uuid6.uuid7()),
+        tenant_id=EntityIdVO.from_value(tenant_id_raw),
+        contact_id=ContactIdVO.from_value(uuid6.uuid7()),
         last_name=payload.last_name,
         first_name=payload.first_name,
         middle_name=payload.middle_name,

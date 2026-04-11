@@ -1,13 +1,12 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from src.modules.shared import EntityIdVO
-from src.modules.crm.domain.contact.value_object.contact_name import ContactNameVO
+from src.modules.crm.domain.contact.value_object import ContactIdVO, ContactNameVO
 
 
 @dataclass(slots=True)
 class ContactEntity:
-    id: EntityIdVO
+    id: ContactIdVO
     created_at: datetime
     updated_at: datetime
     contact_name: ContactNameVO
@@ -15,7 +14,7 @@ class ContactEntity:
     @classmethod
     def create(
         cls,
-        id_: EntityIdVO,
+        id_: ContactIdVO,
         now: datetime,
         last_name: str,
         first_name: str | None = None,

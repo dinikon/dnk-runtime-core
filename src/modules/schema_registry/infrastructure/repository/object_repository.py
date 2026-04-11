@@ -33,6 +33,24 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    async def get_by_tenant_and_singular_name(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        singular_name: str,
+    ) -> ObjectEntity | None:
+        model = await self._session.scalar(
+            select(ObjectORM)
+            .where(ObjectORM.tenant_id == tenant_id.value)
+            .where(ObjectORM.singular_name == singular_name.strip())
+            .limit(1)
+        )
+        if model is None:
+            return None
+
+        field_models = await self._load_fields([model.id])
+        return self._map_model(model, field_models.get(model.id, []))
+
     async def get_by_tenant_and_plural_name(
         self,
         *,

@@ -15,4 +15,7 @@ class DeleteContactUseCase:
         self._service = service
 
     async def __call__(self, command: DeleteContactCommand) -> None:
-        await self._service.delete_contact(contact_id=command.contact_id)
+        await self._service.delete_contact(
+            tenant_id=command.tenant_id,
+            contact_id=command.contact_id,
+        )

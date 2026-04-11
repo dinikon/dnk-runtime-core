@@ -18,13 +18,14 @@ class CreateContactUseCase:
     async def __call__(self, command: CreateContactCommand) -> ContactDTO:
 
         contact = await self._service.create_contact(
+            tenant_id=command.tenant_id,
             contact_id=command.contact_id,
             last_name=command.last_name,
             first_name=command.first_name,
             middle_name=command.middle_name,
         )
         return ContactDTO(
-            id=contact.id.value,
+            id=contact.id.uuid,
             created_at=contact.created_at,
             updated_at=contact.updated_at,
             last_name=contact.contact_name.last_name,
