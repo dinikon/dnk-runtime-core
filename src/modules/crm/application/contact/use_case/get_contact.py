@@ -6,7 +6,6 @@ from modules.crm.domain.contact.service import ContactService
 
 
 class GetContactUseCaseProtocol(Protocol):
-
     async def __call__(self, query: GetContactQuery) -> ContactDTO: ...
 
 

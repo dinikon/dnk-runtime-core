@@ -1,0 +1,46 @@
+# Documentation Index
+
+This documentation describes the current implementation of `dnk-runtime-core` as it exists in `src/` and `test/`.
+
+## Architecture
+
+- [Overview](architecture/overview.md)
+- [Project structure](architecture/project-structure.md)
+- [Request lifecycle](architecture/request-lifecycle.md)
+- [Dependency injection](architecture/dependency-injection.md)
+- [Persistence and Unit of Work](architecture/persistence-and-uow.md)
+
+## Modules
+
+- [Tenancy](modules/tenancy.md)
+- [Identity](modules/identity.md)
+- [CRM](modules/crm.md)
+- [Schema Registry](modules/schema-registry.md)
+- [Shared](modules/shared.md)
+
+## Interfaces
+
+- [HTTP API](interfaces/http-api.md)
+- [Management CLI](interfaces/management-cli.md)
+- [Configuration](interfaces/configuration.md)
+
+## Data And Runtime Model
+
+- [Domain models](data/domain-models.md)
+- [Runtime schema](data/runtime-schema.md)
+
+## Quality And Constraints
+
+- [Test map](quality/test-map.md)
+- [Constraints and conventions](quality/constraints-and-conventions.md)
+- [Develop style](develop-style.md)
+
+## Related
+
+- [README](../README.md)
+
+## Source Of Truth
+
+- `src/app_factory.py`
+- `src/modules/router.py`
+- `src/management/cli.py`

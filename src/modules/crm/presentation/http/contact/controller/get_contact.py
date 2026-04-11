@@ -4,9 +4,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
 
+from src.modules.shared import EntityIdVO
 from src.modules.crm.application.contact.query.get_contact_query import GetContactQuery
 from src.modules.crm.domain.contact.error import ContactNotFoundError
-from src.modules.crm.domain.contact.value_object.contact_id import ContactIdVO
 from src.modules.crm.presentation.depends.application import GetContactUseCaseDep
 from src.modules.crm.presentation.http.contact.responses import ContactResponseSchema
 from src.modules.shared.domain.errors import DomainError
@@ -26,7 +26,7 @@ async def get_contact(
 ) -> ContactResponseSchema:
     try:
         result = await use_case(
-            GetContactQuery(contact_id=ContactIdVO.from_value(contact_id))
+            GetContactQuery(contact_id=EntityIdVO.from_value(contact_id))
         )
     except ContactNotFoundError as exc:
         raise HTTPException(

@@ -36,7 +36,7 @@
 - pydantic / pydantic-settings
 - uuid6
 - Redis как целевое хранилище token/session state
-- aiosqlite для локальной разработки и тестов
+- PostgreSQL (asyncpg) как единственный SQL backend
 - unittest как текущий test runner
 
 Основные зависимости описаны в [pyproject.toml](/Users/inikon/PycharmProjects/dnk-runtime-core/pyproject.toml).

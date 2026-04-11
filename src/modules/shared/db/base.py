@@ -1,4 +1,4 @@
-from sqlalchemy import JSON, MetaData
+from sqlalchemy import MetaData
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase
 
@@ -15,4 +15,4 @@ class TenantBase(DeclarativeBase):
     metadata = MetaData(schema=TENANT_SCHEMA_ALIAS)
 
 
-PortableJSON = JSON().with_variant(JSONB(), "postgresql")
+PortableJSON = JSONB()

@@ -13,11 +13,11 @@ from src.modules.shared.depends.uow import UoWDep
 from src.modules.tenancy.application.ports.identity import (
     IdentityProvisioningServiceProtocol,
 )
-
 from src.modules.tenancy.domain.repositories import (
     TenantDomainRepositoryProtocol,
     TenantRepositoryProtocol,
 )
+from src.modules.tenancy.domain.services import TenantOnboardingService
 from src.modules.tenancy.infrastructure.identity_provisioning import (
     IdentityProvisioningServiceAdapter,
 )
@@ -60,11 +60,29 @@ IdentityProvisioningServiceDep = Annotated[
 ]
 
 
+def get_tenant_onboarding_service(
+    tenants_repository: TenantsRepositoryDep,
+    tenant_domains_repository: TenantDomainsRepositoryDep,
+) -> TenantOnboardingService:
+    return TenantOnboardingService(
+        tenants_repository=tenants_repository,
+        tenant_domains_repository=tenant_domains_repository,
+    )
+
+
+TenantOnboardingServiceDep = Annotated[
+    TenantOnboardingService,
+    Depends(get_tenant_onboarding_service),
+]
+
+
 __all__ = [
     "IdentityProvisioningServiceDep",
     "TenantDomainsRepositoryDep",
+    "TenantOnboardingServiceDep",
     "TenantsRepositoryDep",
     "get_identity_provisioning_service",
     "get_tenant_domains_repository",
+    "get_tenant_onboarding_service",
     "get_tenants_repository",
 ]

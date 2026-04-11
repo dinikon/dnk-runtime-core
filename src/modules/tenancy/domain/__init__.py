@@ -14,6 +14,10 @@ from src.modules.tenancy.domain.repositories import (
     TenantDomainRepositoryProtocol,
     TenantRepositoryProtocol,
 )
+from src.modules.tenancy.domain.services import (
+    TenantOnboardingDraft,
+    TenantOnboardingService,
+)
 from src.modules.tenancy.domain.value_objects import (
     TenantApiAuthMode,
     TenantDomainKind,
@@ -36,6 +40,8 @@ __all__ = [
     "TenantApiAuthMode",
     "TenantRepositoryProtocol",
     "TenantDomainRepositoryProtocol",
+    "TenantOnboardingDraft",
+    "TenantOnboardingService",
     "InvalidTenantNameError",
     "InvalidTenantExternalIdError",
     "InvalidTenantDomainHostError",

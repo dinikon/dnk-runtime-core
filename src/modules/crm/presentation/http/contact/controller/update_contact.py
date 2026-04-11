@@ -4,11 +4,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
 
+from src.modules.shared import EntityIdVO
 from src.modules.crm.application.contact.command.rename_contact_command import (
     RenameContactCommand,
 )
 from src.modules.crm.domain.contact.error import ContactNotFoundError
-from src.modules.crm.domain.contact.value_object.contact_id import ContactIdVO
 from src.modules.crm.presentation.depends.application import UpdateContactUseCaseDep
 from src.modules.crm.presentation.http.contact.requests import (
     UpdateContactRequestSchema,
@@ -31,7 +31,7 @@ async def update_contact(
     use_case: UpdateContactUseCaseDep,
 ) -> ContactResponseSchema:
     command = RenameContactCommand(
-        contact_id=ContactIdVO.from_value(contact_id),
+        contact_id=EntityIdVO.from_value(contact_id),
         last_name=payload.last_name,
         first_name=payload.first_name,
         middle_name=payload.middle_name,

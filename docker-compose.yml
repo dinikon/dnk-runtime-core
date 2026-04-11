@@ -9,7 +9,7 @@ services:
       - .env
 
     environment:
-      # DB_DATABASE у тебя сейчас = ./dev.sqlite3, поэтому для Postgres лучше отдельная переменная
+      # Для Postgres используем отдельную переменную POSTGRES_DB.
       POSTGRES_DB: ${POSTGRES_DB:-dnk_runtime_core}
       POSTGRES_USER: ${DB_USERNAME:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}

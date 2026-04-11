@@ -1,90 +1,62 @@
 from __future__ import annotations
 
-from src.modules.shared.db.uow import UnitOfWorkProtocol
-from src.modules.shared.http.host import normalize_host
 from src.modules.tenancy.application.commands import CreateTenantCommand
 from src.modules.tenancy.application.dto import CreateTenantResultDTO
 from src.modules.tenancy.application.ports.identity import (
     IdentityProvisioningServiceProtocol,
 )
-
-from src.modules.tenancy.domain.entities import Tenant, TenantDomain
-from src.modules.tenancy.domain.errors import (
-    InvalidTenantDomainHostError,
-    TenantDomainHostAlreadyExistsError,
-    TenantExternalIdAlreadyExistsError,
-    TenantNameAlreadyExistsError,
+from src.modules.tenancy.application.ports.schema_bootstrap import (
+    TenantSchemaBootstrapContextFactory,
+    TenantSchemaBootstrapPort,
 )
-from src.modules.tenancy.domain.repositories import (
-    TenantDomainRepositoryProtocol,
-    TenantRepositoryProtocol,
-)
+from src.modules.tenancy.domain.services import TenantOnboardingService
 
 
 class CreateTenantUseCase:
+
     def __init__(
         self,
-        uow: UnitOfWorkProtocol,
-        tenants_repository: TenantRepositoryProtocol,
-        tenant_domains_repository: TenantDomainRepositoryProtocol,
+        tenant_onboarding_service: TenantOnboardingService,
         identity_provisioning_service: IdentityProvisioningServiceProtocol,
+        tenant_schema_bootstrap_context_factory: TenantSchemaBootstrapContextFactory,
+        tenant_schema_bootstrap_port: TenantSchemaBootstrapPort,
     ):
-        self._uow = uow
-        self._tenants_repository = tenants_repository
-        self._tenant_domains_repository = tenant_domains_repository
+        self._tenant_onboarding_service = tenant_onboarding_service
         self._identity_provisioning_service = identity_provisioning_service
+        self._tenant_schema_bootstrap_context_factory = (
+            tenant_schema_bootstrap_context_factory
+        )
+        self._tenant_schema_bootstrap_port = tenant_schema_bootstrap_port
 
     async def execute(self, command: CreateTenantCommand) -> CreateTenantResultDTO:
-        if getattr(self._uow, "session", None) is None:
-            async with self._uow:
-                return await self._create_within_transaction(command)
-        return await self._create_within_transaction(command)
-
-    async def _create_within_transaction(
-        self,
-        command: CreateTenantCommand,
-    ) -> CreateTenantResultDTO:
-        normalized_name = command.tenant_name.strip()
-        normalized_external_id = command.external_id.strip()
-        normalized_host = normalize_host(command.tenant_domain_host)
-        if not normalized_host:
-            raise InvalidTenantDomainHostError()
-
-        if await self._tenants_repository.exists_by_name(normalized_name):
-            raise TenantNameAlreadyExistsError(normalized_name)
-        if await self._tenants_repository.exists_by_external_id(normalized_external_id):
-            raise TenantExternalIdAlreadyExistsError(normalized_external_id)
-        if await self._tenant_domains_repository.exists_by_host(normalized_host):
-            raise TenantDomainHostAlreadyExistsError(normalized_host)
-
-        tenant = Tenant.create(
-            name=normalized_name,
-            external_id=normalized_external_id,
+        onboarding = (
+            await self._tenant_onboarding_service.create_tenant_with_primary_domain(
+                tenant_name=command.tenant_name,
+                external_id=command.external_id,
+                tenant_domain_host=command.tenant_domain_host,
+            )
         )
-        await self._tenants_repository.add(tenant)
-
-        tenant_domain = TenantDomain.create_primary_console_domain(
-            tenant_id=tenant.id,
-            host=normalized_host,
-        )
-        await self._tenant_domains_repository.add(tenant_domain)
 
         user = await self._identity_provisioning_service.create_tenant_admin(
-            tenant_id=tenant.id,
+            tenant_id=onboarding.tenant.id,
             first_name=command.user_first_name,
             last_name=command.user_last_name,
             email=command.user_email,
         )
-        await self._uow.commit()
+        await self._tenant_schema_bootstrap_port.bootstrap(
+            context=self._tenant_schema_bootstrap_context_factory.build(
+                tenant_id=onboarding.tenant.id,
+            )
+        )
 
         return CreateTenantResultDTO(
-            tenant_id=tenant.id,
+            tenant_id=onboarding.tenant.id,
             user_id=user.user_id,
             user_email_id=user.user_email_id,
-            tenant_domain_id=tenant_domain.id,
-            tenant_status=tenant.status.value,
+            tenant_domain_id=onboarding.tenant_domain.id,
+            tenant_status=onboarding.tenant.status.value,
             user_status=user.user_status,
-            tenant_domain_host=tenant_domain.host,
+            tenant_domain_host=onboarding.tenant_domain.host,
         )
 
 

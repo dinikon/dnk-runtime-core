@@ -4,6 +4,8 @@ from uuid import UUID
 
 import uuid6
 
+from src.modules.shared.domain.errors import EntityIdTypeError
+
 
 @dataclass(frozen=True, slots=True)
 class EntityIdVO:
@@ -11,11 +13,7 @@ class EntityIdVO:
 
     def __post_init__(self) -> None:
         if not isinstance(self.value, UUID):
-            raise TypeError("EntityIdVO value must be UUID")
-
-    @classmethod
-    def new(cls) -> Self:
-        return cls(value=uuid6.uuid7())
+            raise EntityIdTypeError("EntityIdVO value must be UUID")
 
     @classmethod
     def from_value(cls, value: UUID | str) -> Self:
