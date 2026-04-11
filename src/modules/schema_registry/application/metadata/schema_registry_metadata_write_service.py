@@ -5,6 +5,9 @@ from src.modules.schema_registry.domain.datasource.entity import DataSourceEntit
 from src.modules.schema_registry.domain.datasource.service import DataSourceService
 from src.modules.schema_registry.domain.object.service import ObjectService
 from src.modules.schema_registry.domain.seed.schema_seed import SchemaSeed
+from src.modules.schema_registry.domain.seed.validated_schema_spec import (
+    ValidatedSchemaSpec,
+)
 
 
 class SchemaRegistryMetadataWriteService:
@@ -21,7 +24,7 @@ class SchemaRegistryMetadataWriteService:
         *,
         tenant_id: EntityIdVO,
         schema_name: str,
-        seed: SchemaSeed,
+        seed: SchemaSeed | ValidatedSchemaSpec,
     ) -> DataSourceEntity:
         datasource = await self._data_source_service.create(
             tenant_id=tenant_id,
@@ -38,7 +41,7 @@ class SchemaRegistryMetadataWriteService:
         self,
         *,
         tenant_id: EntityIdVO,
-        seed: SchemaSeed,
+        seed: SchemaSeed | ValidatedSchemaSpec,
     ) -> DataSourceEntity:
         datasource = await self._data_source_service.get_required_by_tenant(
             tenant_id=tenant_id
@@ -47,5 +50,21 @@ class SchemaRegistryMetadataWriteService:
             tenant_id=tenant_id,
             data_source_id=datasource.id,
             seed=seed,
+        )
+        return datasource
+
+    async def reconcile_from_spec(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        schema_spec: ValidatedSchemaSpec,
+    ) -> DataSourceEntity:
+        datasource = await self._data_source_service.get_required_by_tenant(
+            tenant_id=tenant_id
+        )
+        await self._object_service.reconcile_for_tenant_from_spec(
+            tenant_id=tenant_id,
+            data_source_id=datasource.id,
+            schema_spec=schema_spec,
         )
         return datasource

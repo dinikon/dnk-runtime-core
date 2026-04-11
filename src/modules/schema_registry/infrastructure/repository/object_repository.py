@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from uuid import UUID
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,11 +29,13 @@ from src.modules.schema_registry.infrastructure.persistence.object import Object
 
 
 class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
-    def __init__(self, session: AsyncSession):
+
+    def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
     async def get_by_tenant_and_plural_name(
         self,
+        *,
         tenant_id: EntityIdVO,
         plural_name: str,
     ) -> ObjectEntity | None:
@@ -48,7 +51,7 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
         field_models = await self._load_fields([model.id])
         return self._map_model(model, field_models.get(model.id, []))
 
-    async def get_by_id(self, object_id: EntityIdVO) -> ObjectEntity | None:
+    async def get_by_id(self, *, object_id: EntityIdVO) -> ObjectEntity | None:
         model = await self._session.get(ObjectORM, object_id.value)
         if model is None:
             return None
@@ -135,9 +138,78 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
 
         await self._session.flush()
 
-    async def _load_fields(
-        self, object_ids: list[object]
-    ) -> dict[object, list[FieldORM]]:
+    async def reconcile_for_tenant(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        objects: list[ObjectEntity],
+    ) -> None:
+        existing_object_ids = (
+            await self._session.scalars(
+                select(ObjectORM.id).where(ObjectORM.tenant_id == tenant_id.value)
+            )
+        ).all()
+        desired_object_ids = {object_entity.id.value for object_entity in objects}
+        removed_object_ids = [
+            object_id
+            for object_id in existing_object_ids
+            if object_id not in desired_object_ids
+        ]
+        if removed_object_ids:
+            await self._session.execute(
+                delete(FieldORM).where(
+                    FieldORM.object_id.in_(tuple(removed_object_ids))
+                )
+            )
+            await self._session.execute(
+                delete(ObjectORM).where(ObjectORM.id.in_(tuple(removed_object_ids)))
+            )
+
+        await self._session.flush()
+
+        for object_entity in objects:
+            model = await self._session.get(ObjectORM, object_entity.id.value)
+            if model is None:
+                self._session.add(self._to_model(object_entity))
+            else:
+                self._update_object_model(model, object_entity)
+
+        await self._session.flush()
+
+        desired_field_ids = {
+            field_entity.id.value
+            for object_entity in objects
+            for field_entity in object_entity.fields
+        }
+        if desired_object_ids:
+            existing_field_ids = (
+                await self._session.scalars(
+                    select(FieldORM.id).where(
+                        FieldORM.object_id.in_(tuple(desired_object_ids))
+                    )
+                )
+            ).all()
+            removed_field_ids = [
+                field_id
+                for field_id in existing_field_ids
+                if field_id not in desired_field_ids
+            ]
+            if removed_field_ids:
+                await self._session.execute(
+                    delete(FieldORM).where(FieldORM.id.in_(tuple(removed_field_ids)))
+                )
+
+        for object_entity in objects:
+            for field_entity in object_entity.fields:
+                model = await self._session.get(FieldORM, field_entity.id.value)
+                if model is None:
+                    self._session.add(self._to_field_model(field_entity))
+                else:
+                    self._update_field_model(model, field_entity)
+
+        await self._session.flush()
+
+    async def _load_fields(self, object_ids: list[UUID]) -> dict[UUID, list[FieldORM]]:
         if not object_ids:
             return {}
 
@@ -148,7 +220,7 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
                 .order_by(FieldORM.created_at, FieldORM.id)
             )
         ).all()
-        grouped: dict[object, list[FieldORM]] = defaultdict(list)
+        grouped: dict[UUID, list[FieldORM]] = defaultdict(list)
         for model in models:
             grouped[model.object_id].append(model)
         return grouped
@@ -184,6 +256,30 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
             options=field_entity.options,
             settings=field_entity.settings,
         )
+
+    @staticmethod
+    def _update_object_model(model: ObjectORM, object_entity: ObjectEntity) -> None:
+        model.tenant_id = object_entity.tenant_id.value
+        model.data_source_id = object_entity.data_source_id.value
+        model.singular_name = object_entity.object_name.singular
+        model.plural_name = object_entity.object_name.plural
+        model.singular_label = object_entity.object_label.singular
+        model.plural_label = object_entity.object_label.plural
+        model.description = object_entity.description
+        model.updated_at = object_entity.updated_at
+
+    @staticmethod
+    def _update_field_model(model: FieldORM, field_entity: FieldEntity) -> None:
+        model.object_id = field_entity.object_id.value
+        model.field_name = field_entity.field_name.value
+        model.field_type_code = field_entity.field_type.code.value
+        model.label = field_entity.label.value
+        model.description = field_entity.description
+        model.is_nullable = field_entity.is_nullable
+        model.default_value = field_entity.default_value
+        model.options = field_entity.options
+        model.settings = field_entity.settings
+        model.updated_at = field_entity.updated_at
 
     @staticmethod
     def _map_model(model: ObjectORM, field_models: list[FieldORM]) -> ObjectEntity:

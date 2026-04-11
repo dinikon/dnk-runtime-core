@@ -9,6 +9,9 @@ from src.modules.schema_registry.domain.datasource.value_object.schema_name impo
     SchemaNameVO,
 )
 from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
+from src.modules.schema_registry.domain.field.value_object.field_label import (
+    FieldLabelVO,
+)
 from src.modules.schema_registry.domain.object.entity import ObjectEntity
 from src.modules.schema_registry.domain.object.value_object.object_label import (
     ObjectLabelVO,
@@ -186,3 +189,74 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
             session.flush_snapshots,
             [[], ["ObjectORM"], ["ObjectORM", "FieldORM"]],
         )
+
+    async def test_reconcile_preserves_existing_field_identity(self) -> None:
+        tenant_id = uuid4()
+        now = datetime.now(UTC)
+
+        async with self._session_factory() as session:
+            session.add(
+                TenantModel(
+                    id=tenant_id,
+                    name="tenant",
+                    external_id="tenant-1",
+                    status="active",
+                    custom_config=None,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            await session.flush()
+
+            datasource_repository = SqlAlchemyDataSourceRepository(session)
+            object_repository = SqlAlchemyObjectRepository(session)
+
+            datasource = DataSourceEntity.create(
+                id_=EntityIdVO.from_value(uuid4()),
+                now=now,
+                tenant_id=EntityIdVO.from_value(tenant_id),
+                schema_name=SchemaNameVO("dnk_test"),
+            )
+            await datasource_repository.add(datasource)
+
+            object_entity = ObjectEntity.create(
+                id_=EntityIdVO.from_value(uuid4()),
+                tenant_id=EntityIdVO.from_value(tenant_id),
+                data_source_id=datasource.id,
+                now=now,
+                object_name=ObjectNameVO(singular="contact", plural="contacts"),
+                object_label=ObjectLabelVO(singular="Contact", plural="Contacts"),
+                description="Tenant contacts.",
+            )
+            object_entity.add_field(
+                field_id=EntityIdVO.from_value(uuid4()),
+                now=now,
+                field_name="last_name",
+                field_type=FieldTypeCatalog().from_seed_type("text"),
+                label="Last Name",
+                description="Contact last name.",
+                is_nullable=False,
+            )
+            original_field_id = object_entity.fields[0].id
+
+            await object_repository.replace_all_for_tenant(
+                tenant_id=EntityIdVO.from_value(tenant_id),
+                objects=[object_entity],
+            )
+
+            objects = await object_repository.list_by_tenant_id(
+                tenant_id=EntityIdVO.from_value(tenant_id)
+            )
+            objects[0].fields[0].label = FieldLabelVO("Surname")
+
+            await object_repository.reconcile_for_tenant(
+                tenant_id=EntityIdVO.from_value(tenant_id),
+                objects=objects,
+            )
+
+            reconciled_objects = await object_repository.list_by_tenant_id(
+                tenant_id=EntityIdVO.from_value(tenant_id)
+            )
+
+        self.assertEqual(reconciled_objects[0].fields[0].id, original_field_id)
+        self.assertEqual(reconciled_objects[0].fields[0].label.value, "Surname")

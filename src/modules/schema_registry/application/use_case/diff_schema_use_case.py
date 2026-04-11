@@ -60,9 +60,9 @@ class DiffSchemaUseCase:
             actual_schema=actual_schema,
         )
         await self._postgres_schema_service.apply_plan(plan=plan)
-        await self._schema_registry_metadata_write_service.replace_from_seed(
+        await self._schema_registry_metadata_write_service.reconcile_from_spec(
             tenant_id=tenant_id,
-            seed=seed,
+            schema_spec=seed,
         )
         destructive_operations = len(plan.destructive_operations)
         total_operations = len(plan.operations)

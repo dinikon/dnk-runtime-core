@@ -52,6 +52,7 @@ This is the actual PostgreSQL schema for a tenant:
 
 - top-level manifest
 - contains code, label and object list
+- loaded as raw input, then normalized and semantically validated before planning
 
 ### `ObjectSeed`
 
@@ -72,6 +73,9 @@ This is the actual PostgreSQL schema for a tenant:
 
 - named relation that maps one source field to target object field
 - used to build foreign keys in PostgreSQL planning
+- `many_to_one` is supported as a source-owned foreign key
+- `one_to_one` is supported as a source-owned foreign key plus unique source-field index
+- `one_to_many` and `many_to_many` are rejected as unsupported in the current MVP
 
 ## Create Flow
 
@@ -92,7 +96,7 @@ This is the actual PostgreSQL schema for a tenant:
 3. inspects current PostgreSQL tenant schema
 4. builds diff plan
 5. applies DDL
-6. replaces metadata snapshot
+6. reconciles metadata snapshot while preserving matching object and field ids
 
 ## Current MVP Constraints
 
@@ -100,7 +104,10 @@ This is the actual PostgreSQL schema for a tenant:
 - backend is PostgreSQL-only
 - metadata graph is intentionally incomplete
 - retained column type/nullability changes are restricted
+- adding a required column to an existing table without a default is rejected as unsafe
 - default changes for retained columns are supported through explicit migration operation
+- metadata rename is not inferred heuristically; renamed natural keys behave as remove/add until explicit rename support
+  exists
 - nested bootstrap and diff must work in one active `UoW / AsyncSession`
 
 ## Related

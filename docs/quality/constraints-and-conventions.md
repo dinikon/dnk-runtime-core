@@ -33,6 +33,11 @@
 ## Schema Registry Rules
 
 - seed describes desired runtime structure
+- seed must be semantically validated and normalized before physical planning
+- all seed errors that do not require live database inspection should fail before planner/executor
+- `one_to_one` relations require a physical uniqueness guarantee on the owning/source field
+- required columns must not be added to existing tables without an explicit safe strategy or compatible default
+- diff metadata sync must preserve matching object and field ids; rename is not inferred heuristically
 - PostgreSQL planning and canonicalization belong outside `schema_registry.domain`
 - metadata snapshot in MVP stores only datasource, objects and fields
 

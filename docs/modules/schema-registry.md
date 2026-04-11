@@ -57,10 +57,18 @@ fields. It is responsible for bootstrap from seed and schema diff against existi
 
 - default seed module is `src.modules.schema_registry.seed.schema_seed`
 - test seed modules exist for diff experimentation
+- seed loading returns a validated and normalized schema spec before planning
+- `many_to_one` relations materialize as foreign keys
+- `one_to_one` relations materialize as foreign keys plus a deterministic unique index on the owning/source field
+- `one_to_many` and `many_to_many` are known relation types but are rejected as unsupported in the current MVP
 - metadata graph in MVP stores only:
     - datasource
     - objects
     - fields
+- diff metadata sync reconciles by stable natural keys:
+    - objects by plural name
+    - fields by field name inside the object
+- no-op diff preserves matching metadata ids; rename is not inferred heuristically
 - indexes, relations and constraints are inferred from seed and physical schema, not stored as full metadata graph
 
 ## Dependencies On Other Modules

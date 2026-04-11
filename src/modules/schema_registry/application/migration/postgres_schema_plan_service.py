@@ -25,7 +25,17 @@ from src.modules.schema_registry.application.migration.postgres_field_canonicali
 )
 from src.modules.schema_registry.domain.error import UnsupportedSchemaChangeError
 from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
+from src.modules.schema_registry.domain.seed.field_seed import FieldSeed
+from src.modules.schema_registry.domain.seed.object_seed import ObjectSeed
+from src.modules.schema_registry.domain.seed.relation_seed import RelationSeed
+from src.modules.schema_registry.domain.seed.relation_type import RelationTypeEnum
 from src.modules.schema_registry.domain.seed.schema_seed import SchemaSeed
+from src.modules.schema_registry.domain.seed.validated_schema_spec import (
+    ValidatedFieldSpec,
+    ValidatedObjectSpec,
+    ValidatedRelationSpec,
+    ValidatedSchemaSpec,
+)
 
 
 class PostgresSchemaPlanService:
@@ -42,7 +52,7 @@ class PostgresSchemaPlanService:
         self,
         *,
         schema_name: str,
-        seed: SchemaSeed,
+        seed: SchemaSeed | ValidatedSchemaSpec,
     ) -> MigrationPlan:
         plan = MigrationPlan()
         plan.add(CreateSchemaOperation(schema_name=schema_name))
@@ -102,7 +112,7 @@ class PostgresSchemaPlanService:
         self,
         *,
         schema_name: str,
-        seed: SchemaSeed,
+        seed: SchemaSeed | ValidatedSchemaSpec,
         actual_schema: PhysicalSchemaSnapshot,
     ) -> MigrationPlan:
         plan = MigrationPlan()
@@ -214,6 +224,15 @@ class PostgresSchemaPlanService:
                     and actual_table.get_column(column.name) is not None
                 ):
                     continue
+                if (
+                    actual_table is not None
+                    and not column.is_nullable
+                    and column.default_value is None
+                ):
+                    raise UnsupportedSchemaChangeError(
+                        "Adding required column without default is unsafe "
+                        f"for existing table '{desired_table.name}.{column.name}'."
+                    )
                 plan.add(
                     AddColumnOperation(
                         schema_name=schema_name,
@@ -274,50 +293,127 @@ class PostgresSchemaPlanService:
     def _build_desired_schema(
         self,
         *,
+        seed: SchemaSeed | ValidatedSchemaSpec,
+        schema_name: str,
+    ) -> PhysicalSchemaSnapshot:
+        if isinstance(seed, ValidatedSchemaSpec):
+            return self._build_desired_schema_from_spec(
+                schema_spec=seed,
+                schema_name=schema_name,
+            )
+        return self._build_desired_schema_from_seed(seed=seed, schema_name=schema_name)
+
+    def _build_desired_schema_from_seed(
+        self,
+        *,
         seed: SchemaSeed,
         schema_name: str,
     ) -> PhysicalSchemaSnapshot:
         tables: list[TableSnapshot] = []
         for object_seed in seed.objects:
-            columns = tuple(
-                self._build_column_snapshot(field_seed)
-                for field_seed in object_seed.fields
-            )
-            indexes = tuple(
-                IndexSnapshot(
-                    name=index_seed.name,
-                    columns=index_seed.fields,
-                    is_unique=index_seed.is_unique,
-                )
-                for index_seed in object_seed.indexes
-            )
-            foreign_keys: list[ForeignKeySnapshot] = []
-            for relation_seed in object_seed.relations:
-                target_object = seed.get_object(relation_seed.target_object)
-                if target_object is None:
-                    raise UnsupportedSchemaChangeError(
-                        f"Target object '{relation_seed.target_object}' not found in seed."
-                    )
-                foreign_keys.append(
-                    ForeignKeySnapshot(
-                        name=relation_seed.name,
-                        source_columns=(relation_seed.source_field,),
-                        target_table_name=target_object.plural_name,
-                        target_columns=(relation_seed.target_field,),
-                        on_delete=self._normalize_on_delete(relation_seed.on_delete),
-                    )
-                )
             tables.append(
-                TableSnapshot(
-                    name=object_seed.plural_name,
-                    columns=columns,
-                    indexes=indexes,
-                    foreign_keys=tuple(foreign_keys),
+                self._build_table_snapshot_from_seed(seed=seed, object_seed=object_seed)
+            )
+        return PhysicalSchemaSnapshot(schema_name=schema_name, tables=tuple(tables))
+
+    def _build_desired_schema_from_spec(
+        self,
+        *,
+        schema_spec: ValidatedSchemaSpec,
+        schema_name: str,
+    ) -> PhysicalSchemaSnapshot:
+        tables: list[TableSnapshot] = []
+        for object_spec in schema_spec.objects:
+            tables.append(
+                self._build_table_snapshot_from_spec(
+                    schema_spec=schema_spec,
+                    object_spec=object_spec,
                 )
             )
         return PhysicalSchemaSnapshot(schema_name=schema_name, tables=tuple(tables))
 
-    def _build_column_snapshot(self, field_seed) -> ColumnSnapshot:
+    def _build_table_snapshot_from_seed(
+        self,
+        *,
+        seed: SchemaSeed,
+        object_seed: ObjectSeed,
+    ) -> TableSnapshot:
+        columns = tuple(
+            self._build_column_snapshot_from_seed(field_seed)
+            for field_seed in object_seed.fields
+        )
+        indexes = tuple(
+            IndexSnapshot(
+                name=index_seed.name,
+                columns=index_seed.fields,
+                is_unique=index_seed.is_unique,
+            )
+            for index_seed in object_seed.indexes
+        )
+        foreign_keys: list[ForeignKeySnapshot] = []
+        for relation_seed in object_seed.relations:
+            relation_type = self._normalize_relation_type(relation_seed.relation_type)
+            if relation_type == RelationTypeEnum.ONE_TO_ONE:
+                raise UnsupportedSchemaChangeError(
+                    "one_to_one relations require normalized schema spec."
+                )
+            target_object = seed.get_object(relation_seed.target_object)
+            if target_object is None:
+                raise UnsupportedSchemaChangeError(
+                    f"Target object '{relation_seed.target_object}' not found in seed."
+                )
+            foreign_keys.append(
+                self._build_foreign_key_snapshot(
+                    relation_seed=relation_seed,
+                    target_table_name=target_object.plural_name,
+                )
+            )
+        return TableSnapshot(
+            name=object_seed.plural_name,
+            columns=columns,
+            indexes=indexes,
+            foreign_keys=tuple(foreign_keys),
+        )
+
+    def _build_table_snapshot_from_spec(
+        self,
+        *,
+        schema_spec: ValidatedSchemaSpec,
+        object_spec: ValidatedObjectSpec,
+    ) -> TableSnapshot:
+        columns = tuple(
+            self._build_column_snapshot_from_spec(field_spec)
+            for field_spec in object_spec.fields
+        )
+        indexes = tuple(
+            IndexSnapshot(
+                name=index_spec.name,
+                columns=index_spec.fields,
+                is_unique=index_spec.is_unique,
+            )
+            for index_spec in object_spec.indexes
+        )
+        foreign_keys: list[ForeignKeySnapshot] = []
+        for relation_spec in object_spec.relations:
+            target_object = schema_spec.get_object(relation_spec.target_object)
+            if target_object is None:
+                raise UnsupportedSchemaChangeError(
+                    f"Target object '{relation_spec.target_object}' not found in seed."
+                )
+            foreign_keys.append(
+                self._build_foreign_key_snapshot(
+                    relation_seed=relation_spec,
+                    target_table_name=target_object.plural_name,
+                )
+            )
+        return TableSnapshot(
+            name=object_spec.plural_name,
+            columns=columns,
+            indexes=indexes,
+            foreign_keys=tuple(foreign_keys),
+        )
+
+    def _build_column_snapshot_from_seed(self, field_seed: FieldSeed) -> ColumnSnapshot:
         field_type = self._field_type_catalog.from_seed_type(field_seed.type)
         sql_preset = self._postgres_field_canonicalizer.sql_preset_from_field_type(
             field_type
@@ -332,6 +428,46 @@ class PostgresSchemaPlanService:
             ),
         )
 
+    def _build_column_snapshot_from_spec(
+        self,
+        field_spec: ValidatedFieldSpec,
+    ) -> ColumnSnapshot:
+        sql_preset = self._postgres_field_canonicalizer.sql_preset_from_field_type(
+            field_spec.field_type
+        )
+        return ColumnSnapshot(
+            name=field_spec.name,
+            sql_preset=sql_preset,
+            is_nullable=field_spec.is_nullable,
+            default_value=self._postgres_field_canonicalizer.normalize_seed_default(
+                raw_default=field_spec.default,
+                sql_preset=sql_preset,
+            ),
+        )
+
+    def _build_foreign_key_snapshot(
+        self,
+        *,
+        relation_seed: RelationSeed | ValidatedRelationSpec,
+        target_table_name: str,
+    ) -> ForeignKeySnapshot:
+        relation_type = self._normalize_relation_type(relation_seed.relation_type)
+        if (
+            relation_type == RelationTypeEnum.ONE_TO_ONE
+            and isinstance(relation_seed, ValidatedRelationSpec)
+            and relation_seed.unique_index_name is None
+        ):
+            raise UnsupportedSchemaChangeError(
+                "one_to_one relations require normalized schema spec."
+            )
+        return ForeignKeySnapshot(
+            name=relation_seed.name,
+            source_columns=(relation_seed.source_field,),
+            target_table_name=target_table_name,
+            target_columns=(relation_seed.target_field,),
+            on_delete=self._normalize_on_delete(relation_seed.on_delete),
+        )
+
     @staticmethod
     def _normalize_on_delete(value: str) -> str:
         mapping = {
@@ -342,4 +478,27 @@ class PostgresSchemaPlanService:
             "no action": "no action",
             "no_action": "no action",
         }
-        return mapping.get(value.strip().lower(), "restrict")
+        try:
+            return mapping[value.strip().lower()]
+        except KeyError as exc:
+            raise UnsupportedSchemaChangeError(
+                f"Unsupported relation on_delete '{value}'."
+            ) from exc
+
+    @staticmethod
+    def _normalize_relation_type(raw_type: str | RelationTypeEnum) -> RelationTypeEnum:
+        normalized = str(
+            raw_type.value if isinstance(raw_type, RelationTypeEnum) else raw_type
+        )
+        normalized = normalized.strip().lower()
+        try:
+            relation_type = RelationTypeEnum(normalized)
+        except ValueError as exc:
+            raise UnsupportedSchemaChangeError(
+                f"Unsupported relation_type '{raw_type}'."
+            ) from exc
+        if not relation_type.is_source_owned_fk():
+            raise UnsupportedSchemaChangeError(
+                f"Unsupported relation_type '{relation_type.value}' for MVP."
+            )
+        return relation_type

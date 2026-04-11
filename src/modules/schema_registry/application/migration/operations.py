@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import TypeAlias
 
 from src.modules.schema_registry.application.migration.sql_type_preset import (
     SqlTypePresetEnum,
@@ -81,7 +82,7 @@ class DropForeignKeyOperation:
     constraint_name: str
 
 
-MigrationOperation = (
+MigrationOperation: TypeAlias = (
     CreateSchemaOperation
     | CreateTableOperation
     | DropTableOperation

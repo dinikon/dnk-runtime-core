@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Sequence, Self
+from collections.abc import Callable, Sequence
+from typing import Self
 
 from src.modules.schema_registry.domain.error import (
     FieldNotFoundError,
@@ -117,8 +118,8 @@ class ObjectEntity:
         *,
         now: datetime,
         seeds: Sequence[FieldSeed],
-        field_id_provider,
-        field_type_mapper,
+        field_id_provider: Callable[[], EntityIdVO],
+        field_type_mapper: Callable[[str], FieldTypeVO],
     ) -> None:
         for seed in seeds:
             self.add_field(
@@ -165,7 +166,7 @@ class ObjectEntity:
         now: datetime,
     ) -> FieldEntity:
         field_entity = self.get_field(field_id)
-        self.fields = [field for field in self.fields if field.id != field_id]
+        self.fields = [_field for _field in self.fields if _field.id != field_id]
         self.updated_at = now
         return field_entity
 
