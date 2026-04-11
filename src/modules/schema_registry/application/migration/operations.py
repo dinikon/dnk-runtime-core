@@ -49,6 +49,14 @@ class AlterColumnDefaultOperation:
 
 
 @dataclass(frozen=True, slots=True)
+class AlterColumnNullableOperation:
+    schema_name: str
+    table_name: str
+    column_name: str
+    is_nullable: bool
+
+
+@dataclass(frozen=True, slots=True)
 class CreateIndexOperation:
     schema_name: str
     table_name: str
@@ -89,6 +97,7 @@ MigrationOperation: TypeAlias = (
     | AddColumnOperation
     | DropColumnOperation
     | AlterColumnDefaultOperation
+    | AlterColumnNullableOperation
     | CreateIndexOperation
     | DropIndexOperation
     | AddForeignKeyOperation

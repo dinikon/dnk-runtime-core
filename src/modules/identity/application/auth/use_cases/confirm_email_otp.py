@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from modules.shared.db.uow import UnitOfWorkProtocol
+from src.modules.shared.db.uow import UnitOfWorkProtocol
 from src.modules.identity.application.auth.dto import (
     ConfirmEmailOtpCommandDTO,
     ConfirmEmailOtpResultDTO,

@@ -25,6 +25,10 @@ from src.modules.schema_registry.application.use_case.create_schema_use_case imp
 from src.modules.schema_registry.application.use_case.diff_schema_use_case import (
     DiffSchemaUseCase,
 )
+from src.modules.schema_registry.runtime import (
+    RuntimeObjectResolverProtocol,
+    SchemaRegistryRuntimeObjectResolver,
+)
 from src.modules.schema_registry.presentation.depends.infrastructure import (
     DataSourceServiceDep,
     FieldTypeCatalogDep,
@@ -158,11 +162,28 @@ DiffSchemaUseCaseDep = Annotated[
 ]
 
 
+def get_runtime_object_resolver(
+    data_source_service: DataSourceServiceDep,
+    object_service: ObjectServiceDep,
+) -> RuntimeObjectResolverProtocol:
+    return SchemaRegistryRuntimeObjectResolver(
+        data_source_service=data_source_service,
+        object_service=object_service,
+    )
+
+
+RuntimeObjectResolverDep = Annotated[
+    RuntimeObjectResolverProtocol,
+    Depends(get_runtime_object_resolver),
+]
+
+
 __all__ = [
     "CreateSchemaUseCaseDep",
     "DiffSchemaUseCaseDep",
     "PostgresSchemaServiceDep",
     "PostgresSchemaPlanServiceDep",
+    "RuntimeObjectResolverDep",
     "SchemaSeedServiceDep",
     "SchemaRegistryMetadataReadServiceDep",
     "SchemaRegistryMetadataWriteServiceDep",
@@ -172,5 +193,6 @@ __all__ = [
     "get_postgres_schema_plan_service",
     "get_schema_registry_metadata_read_service",
     "get_schema_registry_metadata_write_service",
+    "get_runtime_object_resolver",
     "get_schema_seed_service",
 ]

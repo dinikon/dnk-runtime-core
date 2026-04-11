@@ -108,7 +108,6 @@ class SchemaSeedService:
                         label=field_label.value,
                         description=field_seed.description.strip(),
                         is_nullable=field_seed.is_nullable,
-                        is_system=field_seed.is_system,
                         default=self._normalize_default(field_seed.default),
                         options=dict(field_seed.options),
                         settings=dict(field_seed.settings),

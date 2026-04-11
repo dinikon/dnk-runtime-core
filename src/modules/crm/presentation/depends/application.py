@@ -45,9 +45,9 @@ CreateContactUseCaseDep = Annotated[
 
 
 def get_get_contact_use_case(
-    service: ContactServiceDep,
+    query_repository: ContactQueryRepositoryDep,
 ) -> GetContactUseCase:
-    return GetContactUseCase(service)
+    return GetContactUseCase(query_repository)
 
 
 GetContactUseCaseDep = Annotated[

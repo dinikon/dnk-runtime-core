@@ -19,7 +19,7 @@ from src.modules.identity.domain.errors import (
     UserLoginUnavailableError,
 )
 from src.modules.shared.http.host import normalize_host
-from modules.shared.db.uow import UnitOfWorkProtocol
+from src.modules.shared.db.uow import UnitOfWorkProtocol
 
 
 class UpdateCurrentUserProfileUseCase:

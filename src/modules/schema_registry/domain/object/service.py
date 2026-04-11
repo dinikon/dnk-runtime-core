@@ -171,6 +171,17 @@ class ObjectService:
     ) -> list[ObjectEntity]:
         return await self._object_repository.list_by_tenant_id(tenant_id=tenant_id)
 
+    async def get_by_tenant_and_singular_name(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        singular_name: str,
+    ) -> ObjectEntity | None:
+        return await self._object_repository.get_by_tenant_and_singular_name(
+            tenant_id=tenant_id,
+            singular_name=singular_name,
+        )
+
     def _reconcile_fields(
         self,
         *,

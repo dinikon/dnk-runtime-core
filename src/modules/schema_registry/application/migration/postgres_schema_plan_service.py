@@ -3,6 +3,7 @@ from __future__ import annotations
 from src.modules.schema_registry.application.migration.operations import (
     AddColumnOperation,
     AlterColumnDefaultOperation,
+    AlterColumnNullableOperation,
     AddForeignKeyOperation,
     CreateIndexOperation,
     CreateSchemaOperation,
@@ -120,6 +121,7 @@ class PostgresSchemaPlanService:
         actual_tables = {table.name: table for table in actual_schema.tables}
         desired_tables = {table.name: table for table in desired_schema.tables}
         alter_default_operations: list[AlterColumnDefaultOperation] = []
+        alter_nullable_operations: list[AlterColumnNullableOperation] = []
 
         for actual_table in sorted(actual_schema.tables, key=lambda item: item.name):
             desired_table = desired_tables.get(actual_table.name)
@@ -180,14 +182,26 @@ class PostgresSchemaPlanService:
                     )
                     continue
 
-                if (
-                    desired_column.sql_preset != column.sql_preset
-                    or desired_column.is_nullable != column.is_nullable
-                ):
+                if desired_column.sql_preset != column.sql_preset:
                     raise UnsupportedSchemaChangeError(
                         "Unsupported retained column change "
                         f"for '{actual_table.name}.{column.name}'."
                     )
+                if desired_column.is_nullable != column.is_nullable:
+                    if desired_column.is_nullable and not column.is_nullable:
+                        alter_nullable_operations.append(
+                            AlterColumnNullableOperation(
+                                schema_name=schema_name,
+                                table_name=actual_table.name,
+                                column_name=column.name,
+                                is_nullable=True,
+                            )
+                        )
+                    else:
+                        raise UnsupportedSchemaChangeError(
+                            "Unsupported retained column nullability change "
+                            f"for '{actual_table.name}.{column.name}'."
+                        )
                 if desired_column.default_value != column.default_value:
                     alter_default_operations.append(
                         AlterColumnDefaultOperation(
@@ -243,6 +257,9 @@ class PostgresSchemaPlanService:
                         default_value=column.default_value,
                     )
                 )
+
+        for operation in alter_nullable_operations:
+            plan.add(operation)
 
         for operation in alter_default_operations:
             plan.add(operation)

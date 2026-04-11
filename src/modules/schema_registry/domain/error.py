@@ -75,3 +75,14 @@ class UnsupportedSchemaBackendError(SchemaRegistryError):
 
 class UnsupportedSchemaChangeError(SchemaRegistryError):
     pass
+
+
+class RuntimeObjectNotFoundError(SchemaRegistryError):
+    def __init__(self, *, tenant_id: str, object_name: str) -> None:
+        super().__init__(
+            "Runtime object " f"'{object_name}' was not found for tenant '{tenant_id}'."
+        )
+
+
+class RuntimeObjectDescriptorError(SchemaRegistryError):
+    pass

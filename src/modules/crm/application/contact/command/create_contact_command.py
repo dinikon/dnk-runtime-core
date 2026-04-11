@@ -1,12 +1,14 @@
 from dataclasses import dataclass
 
 
+from src.modules.crm.domain.contact.value_object import ContactIdVO
 from src.modules.shared import EntityIdVO
 
 
 @dataclass(slots=True, frozen=True)
 class CreateContactCommand:
-    contact_id: EntityIdVO
-    last_name: str
-    first_name: str | None = None
+    tenant_id: EntityIdVO
+    contact_id: ContactIdVO
+    first_name: str
+    last_name: str | None = None
     middle_name: str | None = None

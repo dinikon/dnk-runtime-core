@@ -6,6 +6,13 @@ from src.modules.shared import EntityIdVO
 
 class ObjectRepositoryProtocol(Protocol):
 
+    async def get_by_tenant_and_singular_name(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        singular_name: str,
+    ) -> ObjectEntity | None: ...
+
     async def get_by_tenant_and_plural_name(
         self,
         *,

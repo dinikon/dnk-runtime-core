@@ -16,7 +16,6 @@ class ValidatedFieldSpec:
     label: str
     description: str
     is_nullable: bool
-    is_system: bool
     default: str | None
     options: dict[str, str]
     settings: dict[str, str]

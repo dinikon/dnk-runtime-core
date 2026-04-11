@@ -6,6 +6,7 @@ from src.modules.schema_registry.application.migration.operations import (
     AddColumnOperation,
     AddForeignKeyOperation,
     AlterColumnDefaultOperation,
+    AlterColumnNullableOperation,
     CreateIndexOperation,
     CreateTableOperation,
     DropColumnOperation,
@@ -627,6 +628,127 @@ class PostgresSchemaPlanServiceTests(unittest.TestCase):
                             name="id",
                             sql_preset=SqlTypePresetEnum.TEXT,
                             is_nullable=False,
+                            default_value=None,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        with self.assertRaises(UnsupportedSchemaChangeError):
+            self.service.build_diff_plan(
+                schema_name="dnk_test",
+                seed=seed,
+                actual_schema=actual_schema,
+            )
+
+    def test_build_diff_plan_allows_retained_column_drop_not_null(self) -> None:
+        seed = SchemaSeed(
+            version=None,
+            code="crm",
+            label="CRM",
+            objects=(
+                ObjectSeed(
+                    singular_name="contact",
+                    plural_name="contacts",
+                    singular_label="Contact",
+                    plural_label="Contacts",
+                    description="Contacts.",
+                    fields=(
+                        FieldSeed(
+                            name="id", type="uuid", label="ID", is_nullable=False
+                        ),
+                        FieldSeed(
+                            name="last_name",
+                            type="text",
+                            label="Last Name",
+                            is_nullable=True,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        actual_schema = PhysicalSchemaSnapshot(
+            schema_name="dnk_test",
+            tables=(
+                TableSnapshot(
+                    name="contacts",
+                    columns=(
+                        ColumnSnapshot(
+                            name="id",
+                            sql_preset=SqlTypePresetEnum.UUID,
+                            is_nullable=False,
+                            default_value=None,
+                        ),
+                        ColumnSnapshot(
+                            name="last_name",
+                            sql_preset=SqlTypePresetEnum.TEXT,
+                            is_nullable=False,
+                            default_value=None,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        plan = self.service.build_diff_plan(
+            schema_name="dnk_test",
+            seed=seed,
+            actual_schema=actual_schema,
+        )
+
+        self.assertTrue(
+            any(
+                isinstance(item, AlterColumnNullableOperation)
+                and item.table_name == "contacts"
+                and item.column_name == "last_name"
+                and item.is_nullable
+                for item in plan.operations
+            )
+        )
+
+    def test_build_diff_plan_fails_on_retained_column_set_not_null(self) -> None:
+        seed = SchemaSeed(
+            version=None,
+            code="crm",
+            label="CRM",
+            objects=(
+                ObjectSeed(
+                    singular_name="contact",
+                    plural_name="contacts",
+                    singular_label="Contact",
+                    plural_label="Contacts",
+                    description="Contacts.",
+                    fields=(
+                        FieldSeed(
+                            name="id", type="uuid", label="ID", is_nullable=False
+                        ),
+                        FieldSeed(
+                            name="last_name",
+                            type="text",
+                            label="Last Name",
+                            is_nullable=False,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        actual_schema = PhysicalSchemaSnapshot(
+            schema_name="dnk_test",
+            tables=(
+                TableSnapshot(
+                    name="contacts",
+                    columns=(
+                        ColumnSnapshot(
+                            name="id",
+                            sql_preset=SqlTypePresetEnum.UUID,
+                            is_nullable=False,
+                            default_value=None,
+                        ),
+                        ColumnSnapshot(
+                            name="last_name",
+                            sql_preset=SqlTypePresetEnum.TEXT,
+                            is_nullable=True,
                             default_value=None,
                         ),
                     ),

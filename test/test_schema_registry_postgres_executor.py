@@ -5,6 +5,7 @@ import unittest
 from src.modules.schema_registry.application.migration.operations import (
     AddColumnOperation,
     AlterColumnDefaultOperation,
+    AlterColumnNullableOperation,
     CreateIndexOperation,
     CreateTableOperation,
     DropColumnOperation,
@@ -92,6 +93,12 @@ class PostgresTenantSchemaExecutorTests(unittest.IsolatedAsyncioTestCase):
                     column_name="legacy_name",
                     default_value=None,
                 ),
+                AlterColumnNullableOperation(
+                    schema_name="dnk_crm",
+                    table_name="contacts",
+                    column_name="legacy_name",
+                    is_nullable=True,
+                ),
                 CreateIndexOperation(
                     schema_name="dnk_crm",
                     table_name="contacts",
@@ -115,6 +122,7 @@ class PostgresTenantSchemaExecutorTests(unittest.IsolatedAsyncioTestCase):
                 'ALTER TABLE "dnk_crm"."contacts" ADD COLUMN "last_name" text NOT NULL DEFAULT \'unknown\'',
                 'ALTER TABLE "dnk_crm"."contacts" ALTER COLUMN "id" SET DEFAULT gen_random_uuid()',
                 'ALTER TABLE "dnk_crm"."contacts" ALTER COLUMN "legacy_name" DROP DEFAULT',
+                'ALTER TABLE "dnk_crm"."contacts" ALTER COLUMN "legacy_name" DROP NOT NULL',
                 'CREATE INDEX "contacts_last_name_idx" ON "dnk_crm"."contacts" ("last_name")',
             ],
         )
