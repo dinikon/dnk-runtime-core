@@ -15,7 +15,6 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "aiosqlite>=0.22.1",
     "black>=26.1.0",
 ]
 [project.scripts]

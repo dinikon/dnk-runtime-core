@@ -16,7 +16,7 @@ Project configuration is assembled by `DnkConfig`, which combines multiple setti
     - DB connection parts: host, port, username, password, database
     - SQLAlchemy URI scheme
     - engine options, pool sizing, echo, connection extras
-    - sqlite vs postgresql URI building
+    - PostgreSQL URI building
 - Critical for local run:
     - `DB_*`
     - `SQLALCHEMY_DATABASE_URI_SCHEME`

@@ -3,7 +3,6 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 import src.modules.persistence  # noqa: F401
-from sqlalchemy import make_url
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -15,10 +14,6 @@ from src.config import dnk_config
 from src.modules.shared.db.base import Base
 
 log = logging.getLogger(__name__)
-
-
-def uses_sqlite() -> bool:
-    return make_url(dnk_config.SQLALCHEMY_DATABASE_URI).get_backend_name() == "sqlite"
 
 
 class DatabaseHelper:

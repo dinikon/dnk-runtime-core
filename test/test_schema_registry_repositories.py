@@ -4,8 +4,6 @@ import unittest
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from src.modules.schema_registry.domain.datasource.entity import DataSourceEntity
 from src.modules.schema_registry.domain.datasource.value_object.schema_name import (
     SchemaNameVO,
@@ -18,6 +16,9 @@ from src.modules.schema_registry.domain.object.value_object.object_label import 
 from src.modules.schema_registry.domain.object.value_object.object_name import (
     ObjectNameVO,
 )
+from src.modules.schema_registry.infrastructure.persistence.data_source import DataSourceORM
+from src.modules.schema_registry.infrastructure.persistence.field import FieldORM
+from src.modules.schema_registry.infrastructure.persistence.object import ObjectORM
 from src.modules.schema_registry.infrastructure.repository.data_source_repository import (
     SqlAlchemyDataSourceRepository,
 )
@@ -25,81 +26,112 @@ from src.modules.schema_registry.infrastructure.repository.object_repository imp
     SqlAlchemyObjectRepository,
 )
 from src.modules.shared import EntityIdVO
-from src.modules.shared.db.base import Base
-from src.modules.tenancy.infrastructure.persistence.tenant import TenantModel
+
+
+class ScalarsResult:
+    def __init__(self, values: list[object]) -> None:
+        self._values = values
+
+    def all(self) -> list[object]:
+        return list(self._values)
 
 
 class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
-    async def asyncSetUp(self) -> None:
-        self._engine = create_async_engine("sqlite+aiosqlite:///:memory:")
-        self._session_factory = async_sessionmaker(self._engine, expire_on_commit=False)
-        async with self._engine.begin() as connection:
-            await connection.run_sync(Base.metadata.create_all)
-
-    async def asyncTearDown(self) -> None:
-        await self._engine.dispose()
-
     async def test_object_repository_preserves_tenant_and_data_source_ids(self) -> None:
         tenant_id = uuid4()
+        datasource_id = uuid4()
+        object_id = uuid4()
+        field_id = uuid4()
         now = datetime.now(UTC)
 
-        async with self._session_factory() as session:
-            session.add(
-                TenantModel(
-                    id=tenant_id,
-                    name="tenant",
-                    external_id="tenant-1",
-                    status="active",
-                    custom_config=None,
-                    created_at=now,
-                    updated_at=now,
-                )
-            )
-            await session.flush()
+        object_model = ObjectORM(
+            id=object_id,
+            created_at=now,
+            updated_at=now,
+            tenant_id=tenant_id,
+            data_source_id=datasource_id,
+            object_type="object",
+            singular_name="contact",
+            plural_name="contacts",
+            singular_label="Contact",
+            plural_label="Contacts",
+            description="Tenant contacts.",
+        )
+        field_model = FieldORM(
+            id=field_id,
+            created_at=now,
+            updated_at=now,
+            object_id=object_id,
+            field_name="last_name",
+            field_type_code="text",
+            label="Last Name",
+            description="Contact last name.",
+            is_nullable=False,
+            default_value=None,
+            options={},
+            settings={},
+        )
 
-            datasource_repository = SqlAlchemyDataSourceRepository(session)
-            object_repository = SqlAlchemyObjectRepository(session)
+        class SessionStub:
+            def __init__(self) -> None:
+                self.scalars_call_count = 0
 
-            datasource = DataSourceEntity.create(
-                id_=EntityIdVO.from_value(uuid4()),
-                now=now,
-                tenant_id=EntityIdVO.from_value(tenant_id),
-                schema_name=SchemaNameVO("dnk_test"),
-            )
-            await datasource_repository.add(datasource)
+            async def scalars(self, *_args, **_kwargs):
+                self.scalars_call_count += 1
+                if self.scalars_call_count == 1:
+                    return ScalarsResult([object_model])
+                if self.scalars_call_count == 2:
+                    return ScalarsResult([field_model])
+                return ScalarsResult([])
 
-            object_entity = ObjectEntity.create(
-                id_=EntityIdVO.from_value(uuid4()),
-                tenant_id=EntityIdVO.from_value(tenant_id),
-                data_source_id=datasource.id,
-                now=now,
-                object_name=ObjectNameVO(singular="contact", plural="contacts"),
-                object_label=ObjectLabelVO(singular="Contact", plural="Contacts"),
-                description="Tenant contacts.",
-            )
-            object_entity.add_field(
-                field_id=EntityIdVO.from_value(uuid4()),
-                now=now,
-                field_name="last_name",
-                field_type=FieldTypeCatalog().from_seed_type("text"),
-                label="Last Name",
-                description="Contact last name.",
-                is_nullable=False,
-            )
-
-            await object_repository.replace_all_for_tenant(
-                tenant_id=EntityIdVO.from_value(tenant_id),
-                objects=[object_entity],
-            )
-
-            objects = await object_repository.list_by_tenant_id(
-                tenant_id=EntityIdVO.from_value(tenant_id)
-            )
+        repository = SqlAlchemyObjectRepository(SessionStub())  # type: ignore[arg-type]
+        objects = await repository.list_by_tenant_id(
+            tenant_id=EntityIdVO.from_value(tenant_id)
+        )
 
         self.assertEqual(len(objects), 1)
         self.assertEqual(objects[0].tenant_id, EntityIdVO.from_value(tenant_id))
-        self.assertEqual(objects[0].data_source_id, datasource.id)
+        self.assertEqual(objects[0].data_source_id, EntityIdVO.from_value(datasource_id))
         self.assertEqual(objects[0].fields[0].field_name.value, "last_name")
+
+    async def test_data_source_repository_add_maps_entity_to_orm_model(self) -> None:
+        tenant_id = uuid4()
+        datasource_id = uuid4()
+        now = datetime.now(UTC)
+
+        datasource = DataSourceEntity.create(
+            id_=EntityIdVO.from_value(datasource_id),
+            now=now,
+            tenant_id=EntityIdVO.from_value(tenant_id),
+            schema_name=SchemaNameVO("dnk_test"),
+        )
+
+        class SessionSpy:
+            def __init__(self) -> None:
+                self.added_models: list[object] = []
+                self.flush_count = 0
+
+            def add(self, model) -> None:
+                self.added_models.append(model)
+
+            async def flush(self) -> None:
+                self.flush_count += 1
+
+        session = SessionSpy()
+        repository = SqlAlchemyDataSourceRepository(session)  # type: ignore[arg-type]
+
+        await repository.add(datasource)
+
+        self.assertEqual(session.flush_count, 1)
+        self.assertEqual(len(session.added_models), 1)
+        model = session.added_models[0]
+        self.assertIsInstance(model, DataSourceORM)
+        assert isinstance(model, DataSourceORM)
+        self.assertEqual(model.id, datasource.id.value)
+        self.assertEqual(model.tenant_id, datasource.tenant_id.value)
+        self.assertEqual(model.data_source_type, datasource.data_source_type.value)
+        self.assertEqual(model.schema_name, datasource.schema_name.value)
+        self.assertEqual(model.connection_dsn, None)
 
     async def test_replace_all_flushes_objects_before_fields(self) -> None:
         tenant_id = uuid4()
@@ -125,17 +157,13 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
             is_nullable=False,
         )
 
-        class ScalarsResult:
-            def all(self) -> list[object]:
-                return []
-
         class SessionSpy:
             def __init__(self) -> None:
                 self.flush_snapshots: list[list[str]] = []
                 self.added_types: list[str] = []
 
             async def scalars(self, *_args, **_kwargs):
-                return ScalarsResult()
+                return ScalarsResult([])
 
             async def execute(self, *_args, **_kwargs) -> None:
                 return None
