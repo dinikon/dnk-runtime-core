@@ -25,7 +25,6 @@ def _contact_descriptor() -> RuntimeObjectDescriptor:
                 type_code="uuid",
                 is_nullable=False,
                 default_value="gen_random_uuid()",
-                is_system=True,
                 options={},
                 settings={},
             ),
@@ -34,7 +33,6 @@ def _contact_descriptor() -> RuntimeObjectDescriptor:
                 type_code="datetime",
                 is_nullable=False,
                 default_value="CURRENT_TIMESTAMP",
-                is_system=True,
                 options={},
                 settings={},
             ),
@@ -43,25 +41,22 @@ def _contact_descriptor() -> RuntimeObjectDescriptor:
                 type_code="datetime",
                 is_nullable=False,
                 default_value="CURRENT_TIMESTAMP",
-                is_system=True,
                 options={},
                 settings={},
             ),
             RuntimeFieldDescriptor(
                 name="last_name",
                 type_code="text",
-                is_nullable=False,
+                is_nullable=True,
                 default_value=None,
-                is_system=False,
                 options={},
                 settings={},
             ),
             RuntimeFieldDescriptor(
                 name="first_name",
                 type_code="text",
-                is_nullable=True,
+                is_nullable=False,
                 default_value=None,
-                is_system=False,
                 options={},
                 settings={},
             ),
@@ -70,7 +65,6 @@ def _contact_descriptor() -> RuntimeObjectDescriptor:
                 type_code="text",
                 is_nullable=True,
                 default_value=None,
-                is_system=False,
                 options={},
                 settings={},
             ),
@@ -79,7 +73,6 @@ def _contact_descriptor() -> RuntimeObjectDescriptor:
                 type_code="decimal",
                 is_nullable=True,
                 default_value=None,
-                is_system=False,
                 options={},
                 settings={},
             ),
@@ -88,7 +81,6 @@ def _contact_descriptor() -> RuntimeObjectDescriptor:
                 type_code="bool",
                 is_nullable=False,
                 default_value="true",
-                is_system=False,
                 options={},
                 settings={},
             ),
@@ -121,14 +113,14 @@ class RuntimeFieldTypePolicyTests(unittest.TestCase):
         with self.assertRaises(RuntimeDataValidationError):
             policy.coerce_patch_payload(
                 descriptor=descriptor,
-                patch={"last_name": None},
+                patch={"first_name": None},
             )
 
         coerced = policy.coerce_patch_payload(
             descriptor=descriptor,
-            patch={"first_name": None, "score": "10.25", "is_active": "true"},
+            patch={"last_name": None, "score": "10.25", "is_active": "true"},
         )
-        self.assertIsNone(coerced["first_name"])
+        self.assertIsNone(coerced["last_name"])
         self.assertEqual(coerced["score"], Decimal("10.25"))
         self.assertEqual(coerced["is_active"], True)
 
@@ -153,7 +145,7 @@ class RuntimeFieldTypePolicyTests(unittest.TestCase):
                 "created_at": datetime(2026, 1, 1, 12, 0, 0),
                 "updated_at": datetime(2026, 1, 1, 13, 0, 0, tzinfo=UTC),
                 "last_name": "Doe",
-                "first_name": None,
+                "first_name": "Jane",
                 "middle_name": None,
                 "score": None,
                 "is_active": True,
@@ -162,3 +154,14 @@ class RuntimeFieldTypePolicyTests(unittest.TestCase):
 
         self.assertIsNotNone(normalized["created_at"].tzinfo)
         self.assertEqual(normalized["updated_at"].tzinfo, UTC)
+
+    def test_non_nullable_text_accepts_empty_string(self) -> None:
+        policy = RuntimeFieldTypePolicy()
+        descriptor = _contact_descriptor()
+
+        coerced = policy.coerce_patch_payload(
+            descriptor=descriptor,
+            patch={"first_name": ""},
+        )
+
+        self.assertEqual(coerced["first_name"], "")

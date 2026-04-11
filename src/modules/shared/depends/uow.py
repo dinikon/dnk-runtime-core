@@ -7,7 +7,7 @@ from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.modules.shared.db.helper import db_helper
-from modules.shared.db.uow import UnitOfWork, UnitOfWorkProtocol
+from src.modules.shared.db.uow import UnitOfWork, UnitOfWorkProtocol
 
 
 async def get_uow(request: Request) -> AsyncGenerator[UnitOfWorkProtocol, None]:

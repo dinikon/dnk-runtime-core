@@ -11,7 +11,6 @@ class RuntimeFieldDescriptor:
     type_code: str
     is_nullable: bool
     default_value: str | None
-    is_system: bool
     options: Mapping[str, str]
     settings: Mapping[str, str]
 

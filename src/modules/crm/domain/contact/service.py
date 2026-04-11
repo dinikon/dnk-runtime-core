@@ -21,16 +21,16 @@ class ContactService:
         *,
         tenant_id: EntityIdVO,
         contact_id: ContactIdVO,
-        last_name: str,
-        first_name: str | None = None,
+        first_name: str,
+        last_name: str | None = None,
         middle_name: str | None = None,
     ) -> ContactEntity:
         now = self._clock.now()
         contact = ContactEntity.create(
             id_=contact_id,
             now=now,
-            last_name=last_name,
             first_name=first_name,
+            last_name=last_name,
             middle_name=middle_name,
         )
 
@@ -59,8 +59,8 @@ class ContactService:
         *,
         tenant_id: EntityIdVO,
         contact_id: ContactIdVO,
-        last_name: str,
-        first_name: str | None = None,
+        first_name: str,
+        last_name: str | None = None,
         middle_name: str | None = None,
     ) -> ContactEntity:
         now = self._clock.now()
@@ -71,8 +71,8 @@ class ContactService:
 
         contact.rename(
             now=now,
-            last_name=last_name,
             first_name=first_name,
+            last_name=last_name,
             middle_name=middle_name,
         )
 

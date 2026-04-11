@@ -43,7 +43,7 @@ SCHEMA_SEED = SchemaSeed(
                     type="text",
                     label="Last Name",
                     description="Contact last name.",
-                    is_nullable=False,
+                    is_nullable=True,
                 ),
                 FieldSeed(
                     name="first_name",

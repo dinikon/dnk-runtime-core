@@ -8,7 +8,7 @@ class ContactNotFoundError(DomainError):
 
 class InvalidContactNameError(DomainError):
     def __init__(self):
-        super().__init__("Contact last name must not be empty.")
+        super().__init__("Contact first name must not be null.")
 
 
 __all__ = [

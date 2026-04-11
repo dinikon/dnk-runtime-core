@@ -105,7 +105,6 @@ class SchemaRegistryMetadataWriteServiceTests(unittest.IsolatedAsyncioTestCase):
                             label="Last Name",
                             description="Last name.",
                             is_nullable=False,
-                            is_system=True,
                             default=None,
                             options={},
                             settings={},

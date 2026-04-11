@@ -78,7 +78,6 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
                     type_code="uuid",
                     is_nullable=False,
                     default_value="gen_random_uuid()",
-                    is_system=True,
                     options={},
                     settings={},
                 ),
@@ -87,7 +86,6 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
                     type_code="datetime",
                     is_nullable=False,
                     default_value="CURRENT_TIMESTAMP",
-                    is_system=True,
                     options={},
                     settings={},
                 ),
@@ -96,25 +94,22 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
                     type_code="datetime",
                     is_nullable=False,
                     default_value="CURRENT_TIMESTAMP",
-                    is_system=True,
                     options={},
                     settings={},
                 ),
                 RuntimeFieldDescriptor(
                     name="last_name",
                     type_code="text",
-                    is_nullable=False,
+                    is_nullable=True,
                     default_value=None,
-                    is_system=False,
                     options={},
                     settings={},
                 ),
                 RuntimeFieldDescriptor(
                     name="first_name",
                     type_code="text",
-                    is_nullable=True,
+                    is_nullable=False,
                     default_value=None,
-                    is_system=False,
                     options={},
                     settings={},
                 ),
@@ -129,7 +124,7 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
             "created_at": datetime(2026, 1, 1, 10, 0, 0),
             "updated_at": datetime(2026, 1, 1, 10, 0, 0),
             "last_name": "Doe",
-            "first_name": None,
+            "first_name": "Jane",
         }
         session = _SessionSpy([_MappingsResult([response_row])])
         gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
@@ -139,7 +134,7 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
             payload={
                 "id": str(contact_id),
                 "last_name": "Doe",
-                "first_name": None,
+                "first_name": "Jane",
             },
         )
 
@@ -160,7 +155,7 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
             "created_at": datetime(2026, 1, 1, 10, 0, 0),
             "updated_at": datetime(2026, 1, 1, 11, 0, 0),
             "last_name": "Roe",
-            "first_name": None,
+            "first_name": "Jane",
         }
         session = _SessionSpy([_MappingsResult([response_row])])
         gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]

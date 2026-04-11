@@ -1,9 +1,9 @@
 from typing import Protocol
 
-from modules.crm.application.contact.command.delete_contact_command import (
+from src.modules.crm.application.contact.command.delete_contact_command import (
     DeleteContactCommand,
 )
-from modules.crm.domain.contact.service import ContactService
+from src.modules.crm.domain.contact.service import ContactService
 
 
 class DeleteContactUseCaseProtocol(Protocol):

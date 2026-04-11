@@ -1,10 +1,10 @@
 from typing import Protocol
 
-from modules.crm.application.contact.command.rename_contact_command import (
+from src.modules.crm.application.contact.command.rename_contact_command import (
     RenameContactCommand,
 )
-from modules.crm.application.contact.dto.contact_dto import ContactDTO
-from modules.crm.domain.contact.service import ContactService
+from src.modules.crm.application.contact.dto.contact_dto import ContactDTO
+from src.modules.crm.domain.contact.service import ContactService
 
 
 class UpdateContactUseCaseProtocol(Protocol):

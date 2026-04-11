@@ -10,6 +10,7 @@ from src.modules.schema_registry.application.migration.operations import (
     AddColumnOperation,
     AddForeignKeyOperation,
     AlterColumnDefaultOperation,
+    AlterColumnNullableOperation,
     CreateIndexOperation,
     CreateSchemaOperation,
     CreateTableOperation,
@@ -94,6 +95,19 @@ class PostgresTenantSchemaExecutor(TenantSchemaExecutorPort):
                 sql += "DROP DEFAULT"
             else:
                 sql += f"SET DEFAULT {operation.default_value}"
+            await self._session.execute(text(sql))
+            return
+
+        if isinstance(operation, AlterColumnNullableOperation):
+            sql = (
+                "ALTER TABLE "
+                f"{self._qualified_table(operation.schema_name, operation.table_name)} "
+                f"ALTER COLUMN {self._qi(operation.column_name)} "
+            )
+            if operation.is_nullable:
+                sql += "DROP NOT NULL"
+            else:
+                sql += "SET NOT NULL"
             await self._session.execute(text(sql))
             return
 

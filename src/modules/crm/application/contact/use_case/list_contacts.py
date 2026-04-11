@@ -1,8 +1,8 @@
 from typing import Protocol
 
-from modules.crm.application.contact.dto.contact_dto import ContactDTO
-from modules.crm.application.contact.query.list_contacts_query import ListContactsQuery
-from modules.crm.application.contact.query.repository import (
+from src.modules.crm.application.contact.dto.contact_dto import ContactDTO
+from src.modules.crm.application.contact.query.list_contacts_query import ListContactsQuery
+from src.modules.crm.application.contact.query.repository import (
     ContactQueryRepositoryProtocol,
 )
 

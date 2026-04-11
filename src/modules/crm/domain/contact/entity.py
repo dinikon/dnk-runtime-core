@@ -16,8 +16,8 @@ class ContactEntity:
         cls,
         id_: ContactIdVO,
         now: datetime,
-        last_name: str,
-        first_name: str | None = None,
+        first_name: str,
+        last_name: str | None = None,
         middle_name: str | None = None,
     ):
         return cls(
@@ -35,8 +35,8 @@ class ContactEntity:
         self,
         *,
         now: datetime,
-        last_name: str,
-        first_name: str | None = None,
+        first_name: str,
+        last_name: str | None = None,
         middle_name: str | None = None,
     ) -> None:
         new_contact_name = ContactNameVO(

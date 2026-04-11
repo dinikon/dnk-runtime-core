@@ -8,8 +8,8 @@ class ContactResponseSchema(BaseModel):
     id: UUID
     created_at: datetime
     updated_at: datetime
-    last_name: str
-    first_name: str | None
+    last_name: str | None
+    first_name: str
     middle_name: str | None
 
 

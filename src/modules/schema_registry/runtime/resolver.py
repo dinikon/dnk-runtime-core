@@ -70,7 +70,6 @@ class SchemaRegistryRuntimeObjectResolver(RuntimeObjectResolverProtocol):
                 type_code=field.field_type.code.value,
                 is_nullable=field.is_nullable,
                 default_value=field.default_value,
-                is_system=True,
                 options=dict(field.options),
                 settings=dict(field.settings),
             )

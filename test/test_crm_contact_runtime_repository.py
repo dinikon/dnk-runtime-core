@@ -27,7 +27,6 @@ def _descriptor() -> RuntimeObjectDescriptor:
                 type_code="uuid",
                 is_nullable=False,
                 default_value="gen_random_uuid()",
-                is_system=True,
                 options={},
                 settings={},
             ),
@@ -36,7 +35,6 @@ def _descriptor() -> RuntimeObjectDescriptor:
                 type_code="datetime",
                 is_nullable=False,
                 default_value="CURRENT_TIMESTAMP",
-                is_system=True,
                 options={},
                 settings={},
             ),
@@ -45,25 +43,22 @@ def _descriptor() -> RuntimeObjectDescriptor:
                 type_code="datetime",
                 is_nullable=False,
                 default_value="CURRENT_TIMESTAMP",
-                is_system=True,
                 options={},
                 settings={},
             ),
             RuntimeFieldDescriptor(
                 name="last_name",
                 type_code="text",
-                is_nullable=False,
+                is_nullable=True,
                 default_value=None,
-                is_system=False,
                 options={},
                 settings={},
             ),
             RuntimeFieldDescriptor(
                 name="first_name",
                 type_code="text",
-                is_nullable=True,
+                is_nullable=False,
                 default_value=None,
-                is_system=False,
                 options={},
                 settings={},
             ),
@@ -72,7 +67,6 @@ def _descriptor() -> RuntimeObjectDescriptor:
                 type_code="text",
                 is_nullable=True,
                 default_value=None,
-                is_system=False,
                 options={},
                 settings={},
             ),
@@ -111,7 +105,7 @@ class ContactRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
                     "created_at": now,
                     "updated_at": now,
                     "last_name": "Doe",
-                    "first_name": None,
+                    "first_name": "Jane",
                     "middle_name": None,
                 }
 
@@ -139,7 +133,7 @@ class ContactRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
                         (),
                         {
                             "last_name": "Doe",
-                            "first_name": None,
+                            "first_name": "Jane",
                             "middle_name": None,
                         },
                     )(),
@@ -240,3 +234,54 @@ class ContactRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
                 tenant_id=tenant_id,
                 contact_id=contact_id,
             )
+
+    async def test_get_by_id_allows_nullable_last_name(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        contact_id = ContactIdVO.from_value(uuid4())
+        now = datetime.now(UTC)
+
+        class ResolverStub:
+            async def resolve(self, *, tenant_id, object_name):
+                return _descriptor()
+
+        class CommandGatewayStub:
+            async def insert(self, *, descriptor, payload):
+                raise AssertionError("insert should not be called")
+
+            async def update(self, *, descriptor, object_id, patch):
+                raise AssertionError("update should not be called")
+
+            async def delete(self, *, descriptor, object_id):
+                return True
+
+        class QueryGatewayStub:
+            async def get_by_id(self, *, descriptor, object_id, fetch_plan=None):
+                return {
+                    "id": contact_id.uuid,
+                    "created_at": now,
+                    "updated_at": now,
+                    "last_name": None,
+                    "first_name": "",
+                    "middle_name": None,
+                }
+
+            async def list(
+                self, *, descriptor, filters=(), sorting=(), page=None, fetch_plan=None
+            ):
+                return []
+
+        repository = ContactRuntimeRepository(
+            runtime_object_resolver=ResolverStub(),
+            runtime_command_gateway=CommandGatewayStub(),
+            runtime_query_gateway=QueryGatewayStub(),
+        )
+
+        dto = await repository.get_by_id(
+            tenant_id=tenant_id,
+            contact_id=contact_id,
+        )
+
+        self.assertIsNotNone(dto)
+        assert dto is not None
+        self.assertIsNone(dto.last_name)
+        self.assertEqual(dto.first_name, "")

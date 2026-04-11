@@ -8,6 +8,6 @@ from src.modules.shared import EntityIdVO
 class RenameContactCommand:
     tenant_id: EntityIdVO
     contact_id: ContactIdVO
-    last_name: str
-    first_name: str | None = None
+    first_name: str
+    last_name: str | None = None
     middle_name: str | None = None

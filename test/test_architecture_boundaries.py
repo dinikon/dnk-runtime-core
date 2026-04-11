@@ -23,6 +23,16 @@ def iter_imports(path: Path) -> list[str]:
 
 
 class ArchitectureBoundariesTests(unittest.TestCase):
+    def test_no_modules_namespace_imports_are_used(self) -> None:
+        forbidden_prefix = "modules."
+        for root in ("src", "test"):
+            for path in iter_python_files(root):
+                for module_name in iter_imports(path):
+                    self.assertFalse(
+                        module_name.startswith(forbidden_prefix),
+                        msg=f"{path} imports forbidden namespace {module_name}",
+                    )
+
     def test_tenancy_application_does_not_import_schema_registry_application(
         self,
     ) -> None:

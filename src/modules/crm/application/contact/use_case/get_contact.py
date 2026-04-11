@@ -1,11 +1,11 @@
 from typing import Protocol
 
-from modules.crm.application.contact.dto.contact_dto import ContactDTO
-from modules.crm.application.contact.query.get_contact_query import GetContactQuery
-from modules.crm.application.contact.query.repository import (
+from src.modules.crm.application.contact.dto.contact_dto import ContactDTO
+from src.modules.crm.application.contact.query.get_contact_query import GetContactQuery
+from src.modules.crm.application.contact.query.repository import (
     ContactQueryRepositoryProtocol,
 )
-from modules.crm.domain.contact.error import ContactNotFoundError
+from src.modules.crm.domain.contact.error import ContactNotFoundError
 
 
 class GetContactUseCaseProtocol(Protocol):

@@ -151,10 +151,8 @@ class ContactRuntimeRepository(
             created_at=ContactRuntimeRepository._as_datetime(row.get("created_at")),
             updated_at=ContactRuntimeRepository._as_datetime(row.get("updated_at")),
             contact_name=ContactNameVO(
-                last_name=ContactRuntimeRepository._as_str(row.get("last_name")),
-                first_name=ContactRuntimeRepository._as_optional_str(
-                    row.get("first_name")
-                ),
+                last_name=ContactRuntimeRepository._as_optional_str(row.get("last_name")),
+                first_name=ContactRuntimeRepository._as_str(row.get("first_name")),
                 middle_name=ContactRuntimeRepository._as_optional_str(
                     row.get("middle_name")
                 ),
@@ -167,8 +165,8 @@ class ContactRuntimeRepository(
             id=ContactRuntimeRepository._as_uuid(row.get("id")),
             created_at=ContactRuntimeRepository._as_datetime(row.get("created_at")),
             updated_at=ContactRuntimeRepository._as_datetime(row.get("updated_at")),
-            last_name=ContactRuntimeRepository._as_str(row.get("last_name")),
-            first_name=ContactRuntimeRepository._as_optional_str(row.get("first_name")),
+            last_name=ContactRuntimeRepository._as_optional_str(row.get("last_name")),
+            first_name=ContactRuntimeRepository._as_str(row.get("first_name")),
             middle_name=ContactRuntimeRepository._as_optional_str(
                 row.get("middle_name")
             ),
