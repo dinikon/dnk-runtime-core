@@ -11,3 +11,5 @@ class RenameContactCommand:
     first_name: str
     last_name: str | None = None
     middle_name: str | None = None
+    status: str | None = None
+    tags: tuple[str, ...] | None = None

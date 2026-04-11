@@ -5,10 +5,22 @@ from fastapi import APIRouter, HTTPException, Query, status
 from src.modules.crm.application.contact.query.list_contacts_query import (
     ListContactsQuery,
 )
+from src.modules.crm.domain.contact.error import ContactNotFoundError
 from src.modules.crm.presentation.depends.application import ListContactsUseCaseDep
 from src.modules.crm.presentation.http.contact.responses import (
     ContactResponseSchema,
     ListContactsResponseSchema,
+)
+from src.modules.runtime_data import (
+    RuntimeDataFilterError,
+    RuntimeDataPersistenceError,
+    RuntimeDataPolicyError,
+    RuntimeDataValidationError,
+)
+from src.modules.schema_registry.domain.error import (
+    RuntimeObjectDescriptorError,
+    RuntimeObjectNotFoundError,
+    SchemaRegistryMetadataInconsistentError,
 )
 from src.modules.shared import EntityIdVO
 from src.modules.shared.domain.errors import DomainError
@@ -42,9 +54,30 @@ async def list_contacts(
                 offset=offset,
             )
         )
+    except ContactNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except (
+        RuntimeDataPersistenceError,
+        RuntimeDataPolicyError,
+        RuntimeObjectDescriptorError,
+        RuntimeObjectNotFoundError,
+        SchemaRegistryMetadataInconsistentError,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except (RuntimeDataValidationError, RuntimeDataFilterError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
     except DomainError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
 
@@ -57,6 +90,8 @@ async def list_contacts(
                 last_name=contact.last_name,
                 first_name=contact.first_name,
                 middle_name=contact.middle_name,
+                status=contact.status,
+                tags=contact.tags,
             )
             for contact in result
         ],

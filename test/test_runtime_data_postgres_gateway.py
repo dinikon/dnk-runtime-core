@@ -4,10 +4,14 @@ import unittest
 from datetime import datetime
 from uuid import uuid4
 
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.exc import SQLAlchemyError
+
 from src.modules.runtime_data import (
     FilterSpec,
     PageSpec,
     PostgresRuntimeGateway,
+    RuntimeDataPersistenceError,
     SortSpec,
 )
 from src.modules.schema_registry.runtime import (
@@ -47,11 +51,13 @@ class _SessionSpy:
     def __init__(self, responses: list[_MappingsResult]) -> None:
         self._responses = list(responses)
         self.calls: list[tuple[str, dict]] = []
+        self.statements = []
         self.commit_calls = 0
         self.rollback_calls = 0
 
     async def execute(self, statement, params=None):
         text_value = str(statement)
+        self.statements.append(statement)
         self.calls.append((text_value, dict(params or {})))
         if not self._responses:
             raise AssertionError("Unexpected execute call")
@@ -113,6 +119,17 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
                     options={},
                     settings={},
                 ),
+                RuntimeFieldDescriptor(
+                    name="tags",
+                    type_code="multiselect",
+                    is_nullable=True,
+                    default_value=None,
+                    options={
+                        "vip": "VIP",
+                        "newsletter": "Newsletter",
+                    },
+                    settings={},
+                ),
             ),
             relations=(),
         )
@@ -125,6 +142,7 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
             "updated_at": datetime(2026, 1, 1, 10, 0, 0),
             "last_name": "Doe",
             "first_name": "Jane",
+            "tags": ["vip"],
         }
         session = _SessionSpy([_MappingsResult([response_row])])
         gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
@@ -135,6 +153,7 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
                 "id": str(contact_id),
                 "last_name": "Doe",
                 "first_name": "Jane",
+                "tags": ["vip"],
             },
         )
 
@@ -142,9 +161,12 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
         sql, params = session.calls[0]
         self.assertIn('INSERT INTO "dnk_test"."contacts"', sql)
         self.assertIn(
-            'RETURNING "id", "created_at", "updated_at", "last_name", "first_name"', sql
+            'RETURNING "id", "created_at", "updated_at", "last_name", "first_name", "tags"',
+            sql,
         )
         self.assertEqual(params["v_1"], "Doe")
+        self.assertEqual(params["v_3"], ["vip"])
+        self.assertIsInstance(session.statements[0]._bindparams["v_3"].type, JSONB)
         self.assertEqual(session.commit_calls, 0)
         self.assertEqual(session.rollback_calls, 0)
 
@@ -156,6 +178,7 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
             "updated_at": datetime(2026, 1, 1, 11, 0, 0),
             "last_name": "Roe",
             "first_name": "Jane",
+            "tags": [],
         }
         session = _SessionSpy([_MappingsResult([response_row])])
         gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
@@ -163,13 +186,17 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
         row = await gateway.update(
             descriptor=self._descriptor(),
             object_id=str(contact_id),
-            patch={"last_name": "Roe"},
+            patch={"last_name": "Roe", "tags": []},
         )
 
         self.assertIsNotNone(row)
         sql, _params = session.calls[0]
-        self.assertIn('SET "last_name" = :p_0, "updated_at" = CURRENT_TIMESTAMP', sql)
+        self.assertIn(
+            'SET "last_name" = :p_0, "tags" = :p_1, "updated_at" = CURRENT_TIMESTAMP',
+            sql,
+        )
         self.assertIn('WHERE "id" = :pk_value', sql)
+        self.assertIsInstance(session.statements[0]._bindparams["p_1"].type, JSONB)
         self.assertEqual(session.commit_calls, 0)
         self.assertEqual(session.rollback_calls, 0)
 
@@ -181,6 +208,7 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
             "updated_at": datetime(2026, 1, 1, 11, 0, 0),
             "last_name": "Doe",
             "first_name": "Jane",
+            "tags": ["vip"],
         }
         session = _SessionSpy([_MappingsResult([response_row])])
         gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
@@ -199,3 +227,20 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("LIMIT :page_limit OFFSET :page_offset", sql)
         self.assertEqual(params["page_limit"], 25)
         self.assertEqual(params["page_offset"], 10)
+
+    async def test_sqlalchemy_error_becomes_runtime_persistence_error(self) -> None:
+        class FailingSession:
+            async def execute(self, statement, params=None):
+                raise SQLAlchemyError("boom")
+
+        gateway = PostgresRuntimeGateway(FailingSession())  # type: ignore[arg-type]
+
+        with self.assertRaises(RuntimeDataPersistenceError):
+            await gateway.insert(
+                descriptor=self._descriptor(),
+                payload={
+                    "id": str(uuid4()),
+                    "first_name": "Jane",
+                    "tags": ["vip"],
+                },
+            )

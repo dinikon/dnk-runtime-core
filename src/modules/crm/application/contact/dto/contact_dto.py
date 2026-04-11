@@ -11,3 +11,5 @@ class ContactDTO:
     last_name: str | None
     first_name: str
     middle_name: str | None
+    status: str | None
+    tags: list[str]

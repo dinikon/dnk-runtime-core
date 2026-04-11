@@ -10,6 +10,17 @@ from src.modules.crm.application.contact.command.delete_contact_command import (
 from src.modules.crm.domain.contact.error import ContactNotFoundError
 from src.modules.crm.domain.contact.value_object import ContactIdVO
 from src.modules.crm.presentation.depends.application import DeleteContactUseCaseDep
+from src.modules.runtime_data import (
+    RuntimeDataFilterError,
+    RuntimeDataPersistenceError,
+    RuntimeDataPolicyError,
+    RuntimeDataValidationError,
+)
+from src.modules.schema_registry.domain.error import (
+    RuntimeObjectDescriptorError,
+    RuntimeObjectNotFoundError,
+    SchemaRegistryMetadataInconsistentError,
+)
 from src.modules.shared import EntityIdVO
 from src.modules.shared.domain.errors import DomainError
 from src.modules.shared.depends import AuthenticatedRequestContextDep
@@ -45,9 +56,25 @@ async def delete_contact(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
         ) from exc
+    except (
+        RuntimeDataPersistenceError,
+        RuntimeDataPolicyError,
+        RuntimeObjectDescriptorError,
+        RuntimeObjectNotFoundError,
+        SchemaRegistryMetadataInconsistentError,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except (RuntimeDataValidationError, RuntimeDataFilterError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
     except DomainError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
 

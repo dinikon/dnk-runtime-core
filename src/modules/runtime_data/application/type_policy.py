@@ -196,7 +196,14 @@ class RuntimeFieldTypePolicy:
                 raise RuntimeDataValidationError(
                     f"Field '{field.name}' requires a list[str]."
                 )
-            return list(raw_value)
+            values = list(raw_value)
+            if field.options:
+                for value in values:
+                    if value not in field.options:
+                        raise RuntimeDataValidationError(
+                            f"Field '{field.name}' has unsupported option '{value}'."
+                        )
+            return list(dict.fromkeys(values))
 
         raise RuntimeDataPolicyError(
             f"Unsupported runtime metadata type '{type_code}'."

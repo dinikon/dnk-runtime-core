@@ -67,14 +67,18 @@ class ContactRuntimeRepository(
         )
 
         if existing is None:
+            payload = {
+                "id": contact.id.uuid,
+                "last_name": contact.contact_name.last_name,
+                "first_name": contact.contact_name.first_name,
+                "middle_name": contact.contact_name.middle_name,
+                "tags": list(contact.tags),
+            }
+            if contact.status is not None:
+                payload["status"] = contact.status
             row = await self._runtime_command_gateway.insert(
                 descriptor=descriptor,
-                payload={
-                    "id": contact.id.uuid,
-                    "last_name": contact.contact_name.last_name,
-                    "first_name": contact.contact_name.first_name,
-                    "middle_name": contact.contact_name.middle_name,
-                },
+                payload=payload,
             )
         else:
             row = await self._runtime_command_gateway.update(
@@ -84,6 +88,8 @@ class ContactRuntimeRepository(
                     "last_name": contact.contact_name.last_name,
                     "first_name": contact.contact_name.first_name,
                     "middle_name": contact.contact_name.middle_name,
+                    "status": contact.status,
+                    "tags": list(contact.tags),
                 },
             )
             if row is None:
@@ -151,12 +157,16 @@ class ContactRuntimeRepository(
             created_at=ContactRuntimeRepository._as_datetime(row.get("created_at")),
             updated_at=ContactRuntimeRepository._as_datetime(row.get("updated_at")),
             contact_name=ContactNameVO(
-                last_name=ContactRuntimeRepository._as_optional_str(row.get("last_name")),
+                last_name=ContactRuntimeRepository._as_optional_str(
+                    row.get("last_name")
+                ),
                 first_name=ContactRuntimeRepository._as_str(row.get("first_name")),
                 middle_name=ContactRuntimeRepository._as_optional_str(
                     row.get("middle_name")
                 ),
             ),
+            status=ContactRuntimeRepository._as_optional_str(row.get("status")),
+            tags=ContactRuntimeRepository._as_str_list(row.get("tags")),
         )
 
     @staticmethod
@@ -170,6 +180,8 @@ class ContactRuntimeRepository(
             middle_name=ContactRuntimeRepository._as_optional_str(
                 row.get("middle_name")
             ),
+            status=ContactRuntimeRepository._as_optional_str(row.get("status")),
+            tags=ContactRuntimeRepository._as_str_list(row.get("tags")),
         )
 
     @staticmethod
@@ -199,3 +211,11 @@ class ContactRuntimeRepository(
         if isinstance(value, str):
             return value
         raise TypeError("Runtime row must contain optional string value.")
+
+    @staticmethod
+    def _as_str_list(value: Any) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, list) and all(isinstance(item, str) for item in value):
+            return list(value)
+        raise TypeError("Runtime row must contain list[str] value.")

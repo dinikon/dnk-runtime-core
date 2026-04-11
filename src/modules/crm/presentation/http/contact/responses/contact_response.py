@@ -11,6 +11,8 @@ class ContactResponseSchema(BaseModel):
     last_name: str | None
     first_name: str
     middle_name: str | None
+    status: str | None
+    tags: list[str]
 
 
 __all__ = ["ContactResponseSchema"]

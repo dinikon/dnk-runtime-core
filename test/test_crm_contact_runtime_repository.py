@@ -70,6 +70,30 @@ def _descriptor() -> RuntimeObjectDescriptor:
                 options={},
                 settings={},
             ),
+            RuntimeFieldDescriptor(
+                name="status",
+                type_code="select",
+                is_nullable=False,
+                default_value="'lead'",
+                options={
+                    "lead": "Lead",
+                    "customer": "Customer",
+                    "partner": "Partner",
+                },
+                settings={},
+            ),
+            RuntimeFieldDescriptor(
+                name="tags",
+                type_code="multiselect",
+                is_nullable=True,
+                default_value=None,
+                options={
+                    "vip": "VIP",
+                    "newsletter": "Newsletter",
+                    "inactive": "Inactive",
+                },
+                settings={},
+            ),
         ),
         relations=(),
     )
@@ -107,6 +131,8 @@ class ContactRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
                     "last_name": "Doe",
                     "first_name": "Jane",
                     "middle_name": None,
+                    "status": "customer",
+                    "tags": ["vip", "newsletter"],
                 }
 
             async def update(self, *, descriptor, object_id, patch):
@@ -137,13 +163,102 @@ class ContactRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
                             "middle_name": None,
                         },
                     )(),
+                    "status": "customer",
+                    "tags": ["vip", "newsletter"],
                 },
             )(),
         )
 
         self.assertEqual(inserted_payload["id"], contact_id.uuid)
+        self.assertEqual(inserted_payload["status"], "customer")
+        self.assertEqual(inserted_payload["tags"], ["vip", "newsletter"])
         self.assertEqual(contact.id.uuid, contact_id.uuid)
         self.assertEqual(contact.contact_name.last_name, "Doe")
+        self.assertEqual(contact.status, "customer")
+        self.assertEqual(contact.tags, ["vip", "newsletter"])
+
+    async def test_save_updates_status_and_tags_when_row_exists(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        contact_id = ContactIdVO.from_value(uuid4())
+        now = datetime.now(UTC)
+
+        class ResolverStub:
+            async def resolve(self, *, tenant_id, object_name):
+                return _descriptor()
+
+        class QueryGatewayStub:
+            async def get_by_id(self, *, descriptor, object_id, fetch_plan=None):
+                return {
+                    "id": contact_id.uuid,
+                    "created_at": now,
+                    "updated_at": now,
+                    "last_name": "Doe",
+                    "first_name": "Jane",
+                    "middle_name": None,
+                    "status": "lead",
+                    "tags": ["vip"],
+                }
+
+            async def list(
+                self, *, descriptor, filters=(), sorting=(), page=None, fetch_plan=None
+            ):
+                return []
+
+        updated_patch = None
+
+        class CommandGatewayStub:
+            async def insert(self, *, descriptor, payload):
+                raise AssertionError("insert should not be called")
+
+            async def update(self, *, descriptor, object_id, patch):
+                nonlocal updated_patch
+                updated_patch = patch
+                return {
+                    "id": contact_id.uuid,
+                    "created_at": now,
+                    "updated_at": now,
+                    "last_name": "Doe",
+                    "first_name": "Jane",
+                    "middle_name": None,
+                    "status": "customer",
+                    "tags": [],
+                }
+
+            async def delete(self, *, descriptor, object_id):
+                return True
+
+        repository = ContactRuntimeRepository(
+            runtime_object_resolver=ResolverStub(),
+            runtime_command_gateway=CommandGatewayStub(),
+            runtime_query_gateway=QueryGatewayStub(),
+        )
+
+        contact = await repository.save(
+            tenant_id=tenant_id,
+            contact=type(
+                "ContactStub",
+                (),
+                {
+                    "id": contact_id,
+                    "contact_name": type(
+                        "Name",
+                        (),
+                        {
+                            "last_name": "Doe",
+                            "first_name": "Jane",
+                            "middle_name": None,
+                        },
+                    )(),
+                    "status": "customer",
+                    "tags": [],
+                },
+            )(),
+        )
+
+        self.assertEqual(updated_patch["status"], "customer")
+        self.assertEqual(updated_patch["tags"], [])
+        self.assertEqual(contact.status, "customer")
+        self.assertEqual(contact.tags, [])
 
     async def test_get_by_id_maps_runtime_row_to_dto(self) -> None:
         tenant_id = EntityIdVO.from_value(uuid4())
@@ -173,6 +288,8 @@ class ContactRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
                     "last_name": "Doe",
                     "first_name": "Jane",
                     "middle_name": None,
+                    "status": "customer",
+                    "tags": ["vip"],
                 }
 
             async def list(
@@ -195,6 +312,8 @@ class ContactRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
         assert dto is not None
         self.assertEqual(dto.id, contact_id.uuid)
         self.assertEqual(dto.last_name, "Doe")
+        self.assertEqual(dto.status, "customer")
+        self.assertEqual(dto.tags, ["vip"])
 
     async def test_delete_raises_when_nothing_removed(self) -> None:
         tenant_id = EntityIdVO.from_value(uuid4())
@@ -263,6 +382,8 @@ class ContactRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
                     "last_name": None,
                     "first_name": "",
                     "middle_name": None,
+                    "status": "lead",
+                    "tags": None,
                 }
 
             async def list(
@@ -285,3 +406,5 @@ class ContactRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
         assert dto is not None
         self.assertIsNone(dto.last_name)
         self.assertEqual(dto.first_name, "")
+        self.assertEqual(dto.status, "lead")
+        self.assertEqual(dto.tags, [])

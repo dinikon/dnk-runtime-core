@@ -19,3 +19,7 @@ class RuntimeDataFilterError(RuntimeDataError):
 
 class RuntimeDataPolicyError(RuntimeDataError):
     pass
+
+
+class RuntimeDataPersistenceError(RuntimeDataError):
+    pass

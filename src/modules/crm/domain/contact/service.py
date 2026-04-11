@@ -24,6 +24,8 @@ class ContactService:
         first_name: str,
         last_name: str | None = None,
         middle_name: str | None = None,
+        status: str | None = None,
+        tags: tuple[str, ...] = (),
     ) -> ContactEntity:
         now = self._clock.now()
         contact = ContactEntity.create(
@@ -32,6 +34,8 @@ class ContactService:
             first_name=first_name,
             last_name=last_name,
             middle_name=middle_name,
+            status=status,
+            tags=tags,
         )
 
         return await self._command_repository.save(
@@ -62,6 +66,8 @@ class ContactService:
         first_name: str,
         last_name: str | None = None,
         middle_name: str | None = None,
+        status: str | None = None,
+        tags: tuple[str, ...] | None = None,
     ) -> ContactEntity:
         now = self._clock.now()
         contact = await self.get_contact(
@@ -74,6 +80,8 @@ class ContactService:
             first_name=first_name,
             last_name=last_name,
             middle_name=middle_name,
+            status=status,
+            tags=tags,
         )
 
         return await self._command_repository.save(

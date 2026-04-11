@@ -14,6 +14,17 @@ from src.modules.crm.presentation.http.contact.requests import (
     UpdateContactRequestSchema,
 )
 from src.modules.crm.presentation.http.contact.responses import ContactResponseSchema
+from src.modules.runtime_data import (
+    RuntimeDataFilterError,
+    RuntimeDataPersistenceError,
+    RuntimeDataPolicyError,
+    RuntimeDataValidationError,
+)
+from src.modules.schema_registry.domain.error import (
+    RuntimeObjectDescriptorError,
+    RuntimeObjectNotFoundError,
+    SchemaRegistryMetadataInconsistentError,
+)
 from src.modules.shared import EntityIdVO
 from src.modules.shared.domain.errors import DomainError
 from src.modules.shared.depends import AuthenticatedRequestContextDep
@@ -44,6 +55,8 @@ async def update_contact(
         last_name=payload.last_name,
         first_name=payload.first_name,
         middle_name=payload.middle_name,
+        status=payload.status,
+        tags=None if payload.tags is None else tuple(payload.tags),
     )
 
     try:
@@ -53,9 +66,25 @@ async def update_contact(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
         ) from exc
+    except (
+        RuntimeDataPersistenceError,
+        RuntimeDataPolicyError,
+        RuntimeObjectDescriptorError,
+        RuntimeObjectNotFoundError,
+        SchemaRegistryMetadataInconsistentError,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except (RuntimeDataValidationError, RuntimeDataFilterError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
     except DomainError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
 
@@ -66,6 +95,8 @@ async def update_contact(
         last_name=result.last_name,
         first_name=result.first_name,
         middle_name=result.middle_name,
+        status=result.status,
+        tags=result.tags,
     )
 
 

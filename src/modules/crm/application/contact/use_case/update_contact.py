@@ -4,6 +4,7 @@ from src.modules.crm.application.contact.command.rename_contact_command import (
     RenameContactCommand,
 )
 from src.modules.crm.application.contact.dto.contact_dto import ContactDTO
+from src.modules.crm.domain.contact.entity import ContactEntity
 from src.modules.crm.domain.contact.service import ContactService
 
 
@@ -12,7 +13,8 @@ class UpdateContactUseCaseProtocol(Protocol):
 
 
 class UpdateContactUseCase:
-    def __init__(self, service: ContactService):
+
+    def __init__(self, service: ContactService) -> None:
         self._service = service
 
     async def __call__(self, command: RenameContactCommand) -> ContactDTO:
@@ -22,7 +24,13 @@ class UpdateContactUseCase:
             last_name=command.last_name,
             first_name=command.first_name,
             middle_name=command.middle_name,
+            status=command.status,
+            tags=command.tags,
         )
+        return self._to_dto(contact)
+
+    @staticmethod
+    def _to_dto(contact: ContactEntity) -> ContactDTO:
         return ContactDTO(
             id=contact.id.uuid,
             created_at=contact.created_at,
@@ -30,4 +38,6 @@ class UpdateContactUseCase:
             last_name=contact.contact_name.last_name,
             first_name=contact.contact_name.first_name,
             middle_name=contact.contact_name.middle_name,
+            status=contact.status,
+            tags=list(contact.tags),
         )
