@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from src.modules.schema_registry.application.migration.schema_naming_strategy import (
     SchemaNamingStrategy,
 )
@@ -28,6 +30,14 @@ from src.modules.schema_registry.domain.seed.validated_schema_spec import (
 )
 
 
+@dataclass(frozen=True, slots=True)
+class _ObjectSeedPartial:
+    seed: ObjectSeed
+    name: ObjectNameVO
+    label: ObjectLabelVO
+    fields: tuple[ValidatedFieldSpec, ...]
+
+
 class SchemaSeedService:
 
     def __init__(
@@ -46,14 +56,7 @@ class SchemaSeedService:
         seen_singular_names: set[str] = set()
         seen_plural_names: set[str] = set()
         global_index_names: set[str] = set()
-        object_partials: list[
-            tuple[
-                ObjectSeed,
-                ObjectNameVO,
-                ObjectLabelVO,
-                tuple[ValidatedFieldSpec, ...],
-            ]
-        ] = []
+        object_partials: list[_ObjectSeedPartial] = []
         objects_by_name: dict[
             str,
             tuple[ObjectNameVO, tuple[ValidatedFieldSpec, ...]],
@@ -82,7 +85,7 @@ class SchemaSeedService:
             seen_plural_names.add(object_name.plural)
 
             field_names: set[str] = set()
-            fields: list[ValidatedFieldSpec] = []
+            field_specs: list[ValidatedFieldSpec] = []
             for field_seed in object_seed.fields:
                 field_name = FieldNameVO(field_seed.name)
                 field_label = FieldLabelVO(field_seed.label)
@@ -97,7 +100,7 @@ class SchemaSeedService:
                         f"in object '{object_name.plural}'."
                     )
                 field_names.add(field_name.value)
-                fields.append(
+                field_specs.append(
                     ValidatedFieldSpec(
                         name=field_name.value,
                         type=field_seed.type.strip().lower(),
@@ -112,26 +115,32 @@ class SchemaSeedService:
                     )
                 )
 
-            normalized_fields = tuple(fields)
+            normalized_fields = tuple(field_specs)
             object_partials.append(
-                (
-                    object_seed,
-                    object_name,
-                    object_label,
-                    normalized_fields,
+                _ObjectSeedPartial(
+                    seed=object_seed,
+                    name=object_name,
+                    label=object_label,
+                    fields=normalized_fields,
                 )
             )
             objects_by_name[object_name.singular] = (object_name, normalized_fields)
             objects_by_name[object_name.plural] = (object_name, normalized_fields)
 
         objects: list[ValidatedObjectSpec] = []
-        for object_seed, object_name, object_label, fields in object_partials:
-            field_names = {field.name for field in fields}
+        for partial in object_partials:
+            object_seed = partial.seed
+            object_name = partial.name
+            object_label = partial.label
+            normalized_fields = partial.fields
+            field_names = {field_spec.name for field_spec in normalized_fields}
             indexes: list[ValidatedIndexSpec] = []
 
             for index_seed in object_seed.indexes:
                 index_name = self._validate_identifier(index_seed.name, "Index name")
-                index_fields = tuple(field.strip() for field in index_seed.fields)
+                index_fields = tuple(
+                    field_name.strip() for field_name in index_seed.fields
+                )
                 if len(set(index_fields)) != len(index_fields):
                     raise SeedValidationError(
                         f"Index '{index_name}' contains duplicate fields."
@@ -227,7 +236,7 @@ class SchemaSeedService:
                     singular_label=object_label.singular,
                     plural_label=object_label.plural,
                     description=object_seed.description.strip(),
-                    fields=fields,
+                    fields=normalized_fields,
                     indexes=tuple(indexes),
                     relations=tuple(relations),
                 )
