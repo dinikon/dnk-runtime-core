@@ -105,14 +105,14 @@ SCHEMA_SEED = SchemaSeed(
                     type="text",
                     label="First Name",
                     description="First name.",
-                    is_nullable=False,
+                    is_nullable=True,
                 ),
                 FieldSeed(
                     name="last_name",
                     type="text",
                     label="Last Name",
                     description="Last name.",
-                    is_nullable=False,
+                    is_nullable=True,
                 ),
                 FieldSeed(
                     name="phone",
@@ -134,7 +134,7 @@ SCHEMA_SEED = SchemaSeed(
                     type="multiselect",
                     label="Tags",
                     description="Contact tags.",
-                    is_nullable=False,
+                    is_nullable=True,
                     default="'[]'",
                 ),
                 FieldSeed(
