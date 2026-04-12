@@ -17,30 +17,39 @@ from src.modules.shared import EntityIdVO
 
 
 class RuntimeObjectResolverProtocol(Protocol):
+    """Порт преобразования schema_registry metadata в runtime descriptor."""
+
     async def resolve(
         self,
-        *,
         tenant_id: EntityIdVO,
         object_name: str,
-    ) -> RuntimeObjectDescriptor: ...
+    ) -> RuntimeObjectDescriptor:
+        """Возвращает descriptor runtime-объекта tenant по имени."""
+        ...
 
 
-class SchemaRegistryRuntimeObjectResolver(RuntimeObjectResolverProtocol):
+class SchemaRegistryRuntimeObjectResolver:
+    """Resolver, который строит runtime descriptor из schema_registry metadata."""
+
     def __init__(
         self,
-        *,
         data_source_service: DataSourceService,
         object_service: ObjectService,
     ) -> None:
+        """Инициализирует resolver сервисами datasource и object metadata."""
         self._data_source_service = data_source_service
         self._object_service = object_service
 
     async def resolve(
         self,
-        *,
         tenant_id: EntityIdVO,
         object_name: str,
     ) -> RuntimeObjectDescriptor:
+        """Собирает descriptor объекта и проверяет consistency metadata.
+
+        Resolver связывает datasource tenant с object metadata, переносит поля в
+        immutable runtime descriptors и гарантирует наличие primary key поля `id`.
+        """
         normalized_object_name = object_name.strip()
         datasource = await self._data_source_service.get_required_by_tenant(
             tenant_id=tenant_id,

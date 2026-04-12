@@ -9,6 +9,8 @@ from src.modules.shared.db import Base, StringUUID
 
 
 class ObjectORM(Base):
+    """SQLAlchemy-модель metadata runtime-объекта tenant."""
+
     __tablename__ = "objects"
 
     id: Mapped[UUID] = mapped_column(

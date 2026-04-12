@@ -4,6 +4,8 @@ from urllib.parse import urlparse
 
 @dataclass(frozen=True, slots=True)
 class ConnectionDsnVO:
+    """Value object для проверенной строки подключения к PostgreSQL."""
+
     value: str
 
     _ALLOWED_SCHEMES = {
@@ -15,6 +17,7 @@ class ConnectionDsnVO:
     }
 
     def __post_init__(self) -> None:
+        """Валидирует DSN, поддержанный scheme, hostname и имя базы."""
         normalized = self.value.strip()
 
         if not normalized:
@@ -40,4 +43,5 @@ class ConnectionDsnVO:
         object.__setattr__(self, "value", normalized)
 
     def __str__(self) -> str:
+        """Возвращает нормализованную DSN-строку."""
         return self.value

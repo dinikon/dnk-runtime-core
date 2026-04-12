@@ -8,5 +8,7 @@ from src.modules.schema_registry.domain.object.entity import ObjectEntity
 
 @dataclass(frozen=True, slots=True)
 class SchemaRegistryMetadataSnapshot:
+    """Снимок metadata schema_registry: datasource tenant и его runtime-объекты."""
+
     datasource: DataSourceEntity
     objects: tuple[ObjectEntity, ...]

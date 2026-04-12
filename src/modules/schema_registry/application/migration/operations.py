@@ -8,23 +8,31 @@ from src.modules.schema_registry.application.migration.sql_type_preset import (
 
 @dataclass(frozen=True, slots=True)
 class CreateSchemaOperation:
+    """Операция создания PostgreSQL-схемы tenant."""
+
     schema_name: str
 
 
 @dataclass(frozen=True, slots=True)
 class CreateTableOperation:
+    """Операция создания таблицы в tenant-схеме."""
+
     schema_name: str
     table_name: str
 
 
 @dataclass(frozen=True, slots=True)
 class DropTableOperation:
+    """Destructive-операция удаления таблицы из tenant-схемы."""
+
     schema_name: str
     table_name: str
 
 
 @dataclass(frozen=True, slots=True)
 class AddColumnOperation:
+    """Операция добавления колонки с каноническим SQL-типом и default."""
+
     schema_name: str
     table_name: str
     column_name: str
@@ -35,6 +43,8 @@ class AddColumnOperation:
 
 @dataclass(frozen=True, slots=True)
 class DropColumnOperation:
+    """Destructive-операция удаления колонки из таблицы tenant."""
+
     schema_name: str
     table_name: str
     column_name: str
@@ -42,6 +52,8 @@ class DropColumnOperation:
 
 @dataclass(frozen=True, slots=True)
 class AlterColumnDefaultOperation:
+    """Операция изменения или удаления default-значения колонки."""
+
     schema_name: str
     table_name: str
     column_name: str
@@ -50,6 +62,8 @@ class AlterColumnDefaultOperation:
 
 @dataclass(frozen=True, slots=True)
 class AlterColumnNullableOperation:
+    """Операция изменения nullable-флага колонки."""
+
     schema_name: str
     table_name: str
     column_name: str
@@ -58,6 +72,8 @@ class AlterColumnNullableOperation:
 
 @dataclass(frozen=True, slots=True)
 class CreateIndexOperation:
+    """Операция создания обычного или unique-индекса."""
+
     schema_name: str
     table_name: str
     index_name: str
@@ -67,12 +83,16 @@ class CreateIndexOperation:
 
 @dataclass(frozen=True, slots=True)
 class DropIndexOperation:
+    """Destructive-операция удаления индекса из tenant-схемы."""
+
     schema_name: str
     index_name: str
 
 
 @dataclass(frozen=True, slots=True)
 class AddForeignKeyOperation:
+    """Операция создания foreign key между таблицами tenant-схемы."""
+
     schema_name: str
     table_name: str
     constraint_name: str
@@ -85,6 +105,8 @@ class AddForeignKeyOperation:
 
 @dataclass(frozen=True, slots=True)
 class DropForeignKeyOperation:
+    """Destructive-операция удаления foreign key constraint."""
+
     schema_name: str
     table_name: str
     constraint_name: str

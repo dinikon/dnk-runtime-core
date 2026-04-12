@@ -23,8 +23,10 @@ from src.modules.schema_registry.infrastructure.persistence.data_source import (
 
 
 class SqlAlchemyDataSourceRepository(DataSourceRepositoryProtocol):
+    """SQLAlchemy-репозиторий datasource metadata."""
 
     def __init__(self, session: AsyncSession) -> None:
+        """Инициализирует репозиторий текущей async-сессией."""
         self._session = session
 
     async def get_by_tenant_id(
@@ -32,6 +34,7 @@ class SqlAlchemyDataSourceRepository(DataSourceRepositoryProtocol):
         *,
         tenant_id: EntityIdVO,
     ) -> DataSourceEntity | None:
+        """Ищет datasource metadata по tenant_id."""
         model = await self._session.scalar(
             select(DataSourceORM)
             .where(DataSourceORM.tenant_id == tenant_id.value)
@@ -42,10 +45,12 @@ class SqlAlchemyDataSourceRepository(DataSourceRepositoryProtocol):
         return self._map_model(model)
 
     async def add(self, datasource: DataSourceEntity) -> None:
+        """Добавляет datasource model и flush-ит сессию."""
         self._session.add(self._to_model(datasource))
         await self._session.flush()
 
     async def update(self, datasource: DataSourceEntity) -> None:
+        """Обновляет существующий datasource или добавляет новый, если model нет."""
         model = await self._session.get(DataSourceORM, datasource.id.value)
         if model is None:
             self._session.add(self._to_model(datasource))
@@ -63,6 +68,7 @@ class SqlAlchemyDataSourceRepository(DataSourceRepositoryProtocol):
 
     @staticmethod
     def _to_model(datasource: DataSourceEntity) -> DataSourceORM:
+        """Мапит доменную datasource entity в SQLAlchemy-модель."""
         return DataSourceORM(
             id=datasource.id.value,
             created_at=datasource.created_at,
@@ -79,6 +85,7 @@ class SqlAlchemyDataSourceRepository(DataSourceRepositoryProtocol):
 
     @staticmethod
     def _map_model(model: DataSourceORM) -> DataSourceEntity:
+        """Мапит SQLAlchemy-модель datasource в доменную entity."""
         return DataSourceEntity(
             id=EntityIdVO.from_value(model.id),
             created_at=model.created_at,

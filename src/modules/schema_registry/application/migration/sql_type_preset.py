@@ -2,6 +2,8 @@ from enum import Enum
 
 
 class SqlTypePresetEnum(str, Enum):
+    """Канонические SQL-типы, которыми оперирует schema_registry diff."""
+
     TEXT = "text"
     VARCHAR_255 = "varchar_255"
     INTEGER = "integer"

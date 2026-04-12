@@ -7,6 +7,8 @@ from typing import Mapping
 
 @dataclass(frozen=True, slots=True)
 class RuntimeFieldDescriptor:
+    """Runtime-описание поля, нужное для gateway и type policy."""
+
     name: str
     type_code: str
     is_nullable: bool
@@ -17,6 +19,8 @@ class RuntimeFieldDescriptor:
 
 @dataclass(frozen=True, slots=True)
 class RuntimeRelationDescriptor:
+    """Runtime-описание relation между объектами для fetch plan."""
+
     name: str
     relation_type: str
     source_field: str
@@ -27,6 +31,8 @@ class RuntimeRelationDescriptor:
 
 @dataclass(frozen=True, slots=True)
 class RuntimeObjectDescriptor:
+    """Runtime-описание объекта: физическая таблица, поля и relation metadata."""
+
     schema_name: str
     object_name: str
     table_name: str
@@ -36,6 +42,7 @@ class RuntimeObjectDescriptor:
     relations: tuple[RuntimeRelationDescriptor, ...]
 
     def field_by_name(self, field_name: str) -> RuntimeFieldDescriptor | None:
+        """Ищет поле descriptor по имени после trim входного значения."""
         normalized = field_name.strip()
         for field in self.fields:
             if field.name == normalized:
@@ -44,5 +51,6 @@ class RuntimeObjectDescriptor:
 
     @property
     def fields_by_name(self) -> Mapping[str, RuntimeFieldDescriptor]:
+        """Возвращает read-only mapping полей descriptor по имени."""
         mapping = {field.name: field for field in self.fields}
         return MappingProxyType(mapping)

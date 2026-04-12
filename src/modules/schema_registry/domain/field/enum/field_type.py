@@ -2,6 +2,8 @@ from enum import Enum
 
 
 class FieldTypeEnum(str, Enum):
+    """Доменный список типов полей runtime-объектов."""
+
     TEXT = "text"
     INT = "int"
     DECIMAL = "decimal"

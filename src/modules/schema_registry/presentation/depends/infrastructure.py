@@ -46,6 +46,7 @@ from src.modules.schema_registry.infrastructure.seed.python_module_seed_reader i
 
 
 def get_schema_seed_reader() -> SeedReaderPort:
+    """Создает reader seed-спек из Python-модуля."""
     return PythonModuleSeedReader()
 
 
@@ -59,6 +60,7 @@ def get_tenant_schema_inspector(
     uow: UoWDep,
     postgres_field_canonicalizer: PostgresFieldCanonicalizerDep,
 ) -> TenantSchemaInspectorPort:
+    """Создает PostgreSQL inspector на базе текущей UoW-сессии."""
     return PostgresTenantSchemaInspector(uow.session, postgres_field_canonicalizer)
 
 
@@ -72,6 +74,7 @@ def get_tenant_schema_executor(
     uow: UoWDep,
     postgres_field_canonicalizer: PostgresFieldCanonicalizerDep,
 ) -> TenantSchemaExecutorPort:
+    """Создает PostgreSQL executor на базе текущей UoW-сессии."""
     return PostgresTenantSchemaExecutor(uow.session, postgres_field_canonicalizer)
 
 
@@ -82,6 +85,7 @@ TenantSchemaExecutorDep = Annotated[
 
 
 def get_data_source_repository(uow: UoWDep) -> DataSourceRepositoryProtocol:
+    """Создает SQLAlchemy datasource repository для текущей UoW."""
     return SqlAlchemyDataSourceRepository(uow.session)
 
 
@@ -92,6 +96,7 @@ DataSourceRepositoryDep = Annotated[
 
 
 def get_object_repository(uow: UoWDep) -> ObjectRepositoryProtocol:
+    """Создает SQLAlchemy object repository для текущей UoW."""
     return SqlAlchemyObjectRepository(uow.session)
 
 
@@ -102,10 +107,12 @@ ObjectRepositoryDep = Annotated[
 
 
 def get_entity_id_provider() -> Callable[[], EntityIdVO]:
+    """Возвращает provider UUIDv7 EntityIdVO для новых metadata-сущностей."""
     return lambda: EntityIdVO.from_value(uuid6.uuid7())
 
 
 def get_field_type_catalog() -> FieldTypeCatalog:
+    """Создает каталог поддержанных field-типов seed/spec."""
     return FieldTypeCatalog()
 
 
@@ -116,6 +123,7 @@ FieldTypeCatalogDep = Annotated[
 
 
 def get_postgres_field_canonicalizer() -> PostgresFieldCanonicalizer:
+    """Создает канонизатор PostgreSQL-типов и default-значений."""
     return PostgresFieldCanonicalizer()
 
 
@@ -129,6 +137,7 @@ def get_data_source_service(
     repository: DataSourceRepositoryDep,
     clock: ClockDep,
 ) -> DataSourceService:
+    """Создает доменный сервис datasource metadata."""
     return DataSourceService(
         repository=repository,
         clock=clock,
@@ -147,6 +156,7 @@ def get_object_service(
     clock: ClockDep,
     field_type_catalog: FieldTypeCatalogDep,
 ) -> ObjectService:
+    """Создает доменный сервис object metadata."""
     return ObjectService(
         object_repository=repository,
         clock=clock,

@@ -17,6 +17,7 @@ from src.modules.schema_registry.application.service.schema_seed_service import 
 
 
 class CreateSchemaUseCase:
+    """Создает физическую tenant-схему и начальную metadata из seed."""
 
     def __init__(
         self,
@@ -26,6 +27,7 @@ class CreateSchemaUseCase:
         postgres_schema_service: PostgresSchemaService,
         schema_registry_metadata_write_service: SchemaRegistryMetadataWriteService,
     ) -> None:
+        """Собирает зависимости для загрузки seed, планирования и записи metadata."""
         self._schema_seed_service = schema_seed_service
         self._schema_plan_service = schema_plan_service
         self._postgres_schema_service = postgres_schema_service
@@ -34,6 +36,7 @@ class CreateSchemaUseCase:
         )
 
     async def execute(self, command: CreateSchemaCommand) -> None:
+        """Выполняет полный сценарий первичного создания runtime-схемы tenant."""
         tenant_id = EntityIdVO.from_value(command.tenant_id)
         seed = await self._schema_seed_service.load(seed_path=command.seed_path)
         await self._postgres_schema_service.ensure_schema_absent(

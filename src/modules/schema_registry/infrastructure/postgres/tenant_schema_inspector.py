@@ -22,16 +22,19 @@ from src.modules.schema_registry.domain.error import UnsupportedSchemaBackendErr
 
 
 class PostgresTenantSchemaInspector(TenantSchemaInspectorPort):
+    """PostgreSQL-адаптер, читающий фактическую структуру tenant-схемы."""
 
     def __init__(
         self,
         session: AsyncSession,
         postgres_field_canonicalizer: PostgresFieldCanonicalizer,
     ) -> None:
+        """Инициализирует inspector SQLAlchemy-сессией и SQL-канонизатором типов."""
         self._session = session
         self._postgres_field_canonicalizer = postgres_field_canonicalizer
 
     async def schema_exists(self, *, schema_name: str) -> bool:
+        """Проверяет наличие schema_name через information_schema."""
         self._ensure_postgres()
         result = await self._session.scalar(
             text("""
@@ -46,6 +49,7 @@ class PostgresTenantSchemaInspector(TenantSchemaInspectorPort):
         return bool(result)
 
     async def inspect(self, *, schema_name: str) -> PhysicalSchemaSnapshot:
+        """Собирает snapshot схемы из таблиц, колонок, индексов и foreign keys."""
         self._ensure_postgres()
         tables = await self._load_tables(schema_name=schema_name)
         columns = await self._load_columns(schema_name=schema_name)
@@ -65,6 +69,7 @@ class PostgresTenantSchemaInspector(TenantSchemaInspectorPort):
         return PhysicalSchemaSnapshot(schema_name=schema_name, tables=tuple(snapshots))
 
     def _ensure_postgres(self) -> None:
+        """Проверяет, что текущий SQLAlchemy bind указывает на PostgreSQL dialect."""
         bind = self._session.get_bind()
         if bind.dialect.name != "postgresql":
             raise UnsupportedSchemaBackendError(
@@ -72,6 +77,7 @@ class PostgresTenantSchemaInspector(TenantSchemaInspectorPort):
             )
 
     async def _load_tables(self, *, schema_name: str) -> tuple[str, ...]:
+        """Загружает имена base tables tenant-схемы из information_schema."""
         rows = (
             await self._session.execute(
                 text("""
@@ -91,6 +97,7 @@ class PostgresTenantSchemaInspector(TenantSchemaInspectorPort):
         *,
         schema_name: str,
     ) -> dict[str, list[ColumnSnapshot]]:
+        """Загружает колонки из pg_catalog и канонизирует тип/default каждой."""
         rows = (
             await self._session.execute(
                 text("""
@@ -140,6 +147,7 @@ class PostgresTenantSchemaInspector(TenantSchemaInspectorPort):
         *,
         schema_name: str,
     ) -> dict[str, list[IndexSnapshot]]:
+        """Загружает non-primary индексы и их упорядоченные колонки."""
         rows = (
             await self._session.execute(
                 text("""
@@ -182,6 +190,7 @@ class PostgresTenantSchemaInspector(TenantSchemaInspectorPort):
         *,
         schema_name: str,
     ) -> dict[str, list[ForeignKeySnapshot]]:
+        """Загружает foreign key constraints и нормализует on_delete действие."""
         rows = (
             await self._session.execute(
                 text("""

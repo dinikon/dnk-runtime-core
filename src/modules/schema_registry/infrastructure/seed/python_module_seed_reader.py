@@ -8,7 +8,10 @@ from src.modules.schema_registry.domain.seed.schema_seed import SchemaSeed
 
 
 class PythonModuleSeedReader(SeedReaderPort):
+    """Seed reader, который импортирует Python-модуль и читает SCHEMA_SEED."""
+
     async def read(self, *, seed_path: str) -> SchemaSeed:
+        """Загружает seed из dotted module path и валидирует тип SCHEMA_SEED."""
         normalized = seed_path.strip()
         if not normalized:
             raise SeedValidationError("Seed module path must not be empty.")

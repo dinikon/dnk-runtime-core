@@ -8,6 +8,8 @@ _PG_IDENTIFIER_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 class SchemaNamingStrategy:
+    """Централизует правила именования PostgreSQL-идентификаторов schema_registry."""
+
     @classmethod
     def one_to_one_unique_index_name(
         cls,
@@ -15,6 +17,7 @@ class SchemaNamingStrategy:
         table_name: str,
         column_name: str,
     ) -> str:
+        """Генерирует имя unique-индекса для one_to_one связи и валидирует его."""
         return cls._validate_identifier(
             f"{table_name}_{column_name}_one_to_one_uq",
             title="Generated one_to_one unique index name",
@@ -22,10 +25,12 @@ class SchemaNamingStrategy:
 
     @staticmethod
     def validate_identifier(value: str, *, title: str) -> str:
+        """Валидирует внешний PostgreSQL-идентификатор и возвращает trim-значение."""
         return SchemaNamingStrategy._validate_identifier(value, title=title)
 
     @staticmethod
     def _validate_identifier(value: str, *, title: str) -> str:
+        """Проверяет обязательность, длину и формат PostgreSQL-идентификатора."""
         normalized = value.strip()
         if not normalized:
             raise SeedValidationError(f"{title} cannot be empty.")

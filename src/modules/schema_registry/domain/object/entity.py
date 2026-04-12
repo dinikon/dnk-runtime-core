@@ -25,6 +25,8 @@ from src.modules.shared import EntityIdVO
 
 @dataclass(slots=True)
 class ObjectEntity:
+    """Доменная сущность runtime-объекта и его полей в metadata."""
+
     id: EntityIdVO
     created_at: datetime
     updated_at: datetime
@@ -41,6 +43,7 @@ class ObjectEntity:
 
     @property
     def model_name(self) -> str:
+        """Возвращает singular-имя как имя доменной модели."""
         return self.object_name.singular
 
     @classmethod
@@ -55,6 +58,7 @@ class ObjectEntity:
         object_label: ObjectLabelVO,
         description: str,
     ) -> Self:
+        """Создает runtime-объект без полей и нормализует description."""
         return cls(
             id=id_,
             created_at=now,
@@ -75,6 +79,7 @@ class ObjectEntity:
         object_label: ObjectLabelVO,
         description: str,
     ) -> None:
+        """Обновляет имя, label и description runtime-объекта."""
         self.object_name = object_name
         self.object_label = object_label
         self.description = description.strip()
@@ -94,6 +99,7 @@ class ObjectEntity:
         options: dict[str, str] | None = None,
         settings: dict[str, str] | None = None,
     ) -> FieldEntity:
+        """Добавляет новое поле в объект, проверяя уникальность имени."""
         self._ensure_field_name_is_unique(field_name=field_name)
 
         field_entity = FieldEntity.create(
@@ -121,6 +127,7 @@ class ObjectEntity:
         field_id_provider: Callable[[], EntityIdVO],
         field_type_mapper: Callable[[str], FieldTypeVO],
     ) -> None:
+        """Массово добавляет поля из raw seed через переданный mapper типов."""
         for seed in seeds:
             self.add_field(
                 field_id=field_id_provider(),
@@ -144,6 +151,7 @@ class ObjectEntity:
         label: str,
         description: str,
     ) -> None:
+        """Переименовывает поле и обновляет его человекочитаемые metadata."""
         field_entity = self.get_field(field_id)
 
         self._ensure_field_name_is_unique(
@@ -165,6 +173,7 @@ class ObjectEntity:
         field_id: EntityIdVO,
         now: datetime,
     ) -> FieldEntity:
+        """Удаляет поле из объекта и возвращает удаленную сущность."""
         field_entity = self.get_field(field_id)
         self.fields = [_field for _field in self.fields if _field.id != field_id]
         self.updated_at = now
@@ -177,6 +186,7 @@ class ObjectEntity:
         now: datetime,
         settings: dict[str, str],
     ) -> None:
+        """Полностью заменяет settings выбранного поля."""
         field_entity = self.get_field(field_id)
         field_entity.replace_settings(now=now, settings=settings)
         self.updated_at = now
@@ -188,6 +198,7 @@ class ObjectEntity:
         now: datetime,
         patch: dict[str, str],
     ) -> None:
+        """Сливает patch в settings выбранного поля."""
         field_entity = self.get_field(field_id)
         field_entity.merge_settings(now=now, patch=patch)
         self.updated_at = now
@@ -199,17 +210,20 @@ class ObjectEntity:
         now: datetime,
         options: dict[str, str],
     ) -> None:
+        """Полностью заменяет options выбранного поля."""
         field_entity = self.get_field(field_id)
         field_entity.replace_options(now=now, options=options)
         self.updated_at = now
 
     def get_field(self, field_id: EntityIdVO) -> FieldEntity:
+        """Возвращает поле по id или поднимает FieldNotFoundError."""
         for field_entity in self.fields:
             if field_entity.id == field_id:
                 return field_entity
         raise FieldNotFoundError(f"Field {field_id} not found.")
 
     def get_field_by_name(self, field_name: str) -> FieldEntity | None:
+        """Ищет поле по имени после trim входного значения."""
         normalized = field_name.strip()
         for field_entity in self.fields:
             if field_entity.field_name.value == normalized:
@@ -222,6 +236,7 @@ class ObjectEntity:
         field_name: str,
         exclude_field_id: EntityIdVO | None = None,
     ) -> None:
+        """Проверяет уникальность имени поля внутри объекта."""
         normalized = field_name.strip()
 
         for field_entity in self.fields:

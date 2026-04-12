@@ -7,6 +7,8 @@ from src.modules.schema_registry.domain.seed.relation_seed import RelationSeed
 
 @dataclass(frozen=True, slots=True)
 class ObjectSeed:
+    """Raw seed-описание runtime-объекта, его полей, индексов и связей."""
+
     singular_name: str
     plural_name: str
     singular_label: str

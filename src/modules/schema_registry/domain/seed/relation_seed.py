@@ -5,6 +5,8 @@ from src.modules.schema_registry.domain.seed.relation_type import RelationTypeEn
 
 @dataclass(frozen=True, slots=True)
 class RelationSeed:
+    """Raw seed-описание relation между runtime-объектами."""
+
     name: str
     relation_type: str | RelationTypeEnum
     source_field: str

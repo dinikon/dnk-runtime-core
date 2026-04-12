@@ -6,6 +6,8 @@ from src.modules.schema_registry.domain.field.value_object.field_type import Fie
 
 
 class FieldTypeCatalog:
+    """Каталог field-типов, разрешенных в seed-спеках schema_registry."""
+
     _SUPPORTED_TYPES = {
         FieldTypeEnum.UUID.value: FieldTypeEnum.UUID,
         FieldTypeEnum.TEXT.value: FieldTypeEnum.TEXT,
@@ -20,6 +22,7 @@ class FieldTypeCatalog:
     }
 
     def from_seed_type(self, raw_type: str) -> FieldTypeVO:
+        """Преобразует строковый тип из seed в доменный FieldTypeVO."""
         normalized = raw_type.strip().lower()
         try:
             field_type = self._SUPPORTED_TYPES[normalized]
@@ -30,4 +33,5 @@ class FieldTypeCatalog:
         return FieldTypeVO.sql(field_type)
 
     def supported_seed_types(self) -> frozenset[str]:
+        """Возвращает множество строковых типов, поддержанных seed-форматом."""
         return frozenset(self._SUPPORTED_TYPES)

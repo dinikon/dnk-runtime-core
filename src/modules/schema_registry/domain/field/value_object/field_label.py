@@ -4,6 +4,7 @@ from src.modules.schema_registry.domain.error import InvalidValueObjectError
 
 
 def validate_label(value: str, *, field_name: str, max_length: int = 16) -> str:
+    """Валидирует человекочитаемый label и возвращает trim-значение."""
     normalized = value.strip()
 
     if not normalized:
@@ -17,9 +18,12 @@ def validate_label(value: str, *, field_name: str, max_length: int = 16) -> str:
 
 @dataclass(frozen=True, slots=True)
 class FieldLabelVO:
+    """Value object для короткого человекочитаемого label поля."""
+
     value: str
 
     def __post_init__(self) -> None:
+        """Нормализует и валидирует label поля."""
         normalized = validate_label(
             self.value,
             field_name="Field label",

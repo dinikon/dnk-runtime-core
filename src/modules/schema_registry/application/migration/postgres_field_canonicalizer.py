@@ -18,8 +18,11 @@ _POSTGRES_TYPE_CAST_RE = re.compile(r"^(?P<value>.+?)::[\w\s\[\]\.]+$")
 
 
 class PostgresFieldCanonicalizer:
+    """Преобразует field-типы и default-выражения в канонический PostgreSQL-вид."""
+
     @staticmethod
     def sql_preset_from_field_type(field_type: FieldTypeVO) -> SqlTypePresetEnum:
+        """Мапит доменный тип поля из schema_registry на поддержанный SQL preset."""
         mapping = {
             FieldTypeEnum.UUID: SqlTypePresetEnum.UUID,
             FieldTypeEnum.TEXT: SqlTypePresetEnum.TEXT,
@@ -41,6 +44,7 @@ class PostgresFieldCanonicalizer:
 
     @staticmethod
     def sql_preset_from_postgres_type(format_type: str) -> SqlTypePresetEnum:
+        """Мапит тип из pg_catalog.format_type в канонический SQL preset."""
         normalized = format_type.strip().lower()
         mapping = {
             "uuid": SqlTypePresetEnum.UUID,
@@ -64,6 +68,7 @@ class PostgresFieldCanonicalizer:
 
     @staticmethod
     def render_sql_preset(sql_preset: SqlTypePresetEnum) -> str:
+        """Рендерит SQL preset в DDL-фрагмент для PostgreSQL."""
         mapping = {
             SqlTypePresetEnum.UUID: "uuid",
             SqlTypePresetEnum.TEXT: "text",
@@ -84,6 +89,7 @@ class PostgresFieldCanonicalizer:
         raw_default: str | None,
         sql_preset: SqlTypePresetEnum,
     ) -> str | None:
+        """Нормализует default из seed и переводит ошибки в SeedValidationError."""
         try:
             return self._normalize_default(
                 raw_default=raw_default,
@@ -98,6 +104,7 @@ class PostgresFieldCanonicalizer:
         raw_default: str | None,
         sql_preset: SqlTypePresetEnum,
     ) -> str | None:
+        """Нормализует default, прочитанный из PostgreSQL catalog."""
         return self._normalize_default(
             raw_default=raw_default,
             sql_preset=sql_preset,
@@ -109,6 +116,7 @@ class PostgresFieldCanonicalizer:
         raw_default: str | None,
         sql_preset: SqlTypePresetEnum,
     ) -> str | None:
+        """Приводит default разных SQL-типов к стабильной строке для diff-сравнения."""
         if raw_default is None:
             return None
 
@@ -197,6 +205,7 @@ class PostgresFieldCanonicalizer:
 
     @classmethod
     def _strip_outer_parentheses(cls, value: str) -> str:
+        """Снимает внешние скобки, которые PostgreSQL часто добавляет к default."""
         normalized = value.strip()
         while normalized.startswith("(") and normalized.endswith(")"):
             candidate = normalized[1:-1].strip()
@@ -207,6 +216,7 @@ class PostgresFieldCanonicalizer:
 
     @classmethod
     def _strip_postgres_casts(cls, value: str) -> str:
+        """Снимает PostgreSQL type casts вида value::type перед сравнением."""
         normalized = value.strip()
         while True:
             match = _POSTGRES_TYPE_CAST_RE.fullmatch(normalized)
@@ -216,6 +226,7 @@ class PostgresFieldCanonicalizer:
 
     @staticmethod
     def _extract_literal(value: str) -> str:
+        """Достает строковый literal без внешних SQL-кавычек и с unescape кавычек."""
         normalized = value.strip()
         if normalized.startswith("'") and normalized.endswith("'"):
             return normalized[1:-1].replace("''", "'")
@@ -223,5 +234,6 @@ class PostgresFieldCanonicalizer:
 
     @staticmethod
     def _quote_sql_string(value: str) -> str:
+        """Экранирует строку как SQL literal для DDL default-выражений."""
         escaped = value.replace("'", "''")
         return f"'{escaped}'"

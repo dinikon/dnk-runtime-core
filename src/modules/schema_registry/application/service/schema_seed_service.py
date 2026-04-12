@@ -32,6 +32,8 @@ from src.modules.schema_registry.domain.seed.validated_schema_spec import (
 
 @dataclass(frozen=True, slots=True)
 class _ObjectSeedPartial:
+    """Промежуточное состояние object seed до валидации индексов и связей."""
+
     seed: ObjectSeed
     name: ObjectNameVO
     label: ObjectLabelVO
@@ -39,20 +41,29 @@ class _ObjectSeedPartial:
 
 
 class SchemaSeedService:
+    """Загружает seed и нормализует его в валидированную runtime-спецификацию."""
 
     def __init__(
         self,
         seed_reader: SeedReaderPort,
         field_type_catalog: FieldTypeCatalog,
     ) -> None:
+        """Инициализирует сервис reader-портом и каталогом поддержанных field-типов."""
         self._seed_reader = seed_reader
         self._field_type_catalog = field_type_catalog
 
     async def load(self, *, seed_path: str) -> ValidatedSchemaSpec:
+        """Читает seed по пути и возвращает нормализованную спецификацию."""
         seed = await self._seed_reader.read(seed_path=seed_path)
         return self._normalize(seed)
 
     def _normalize(self, seed: SchemaSeed) -> ValidatedSchemaSpec:
+        """Валидирует seed и приводит имена, типы, default, индексы и связи к spec.
+
+        Нормализация проходит в два этапа: сначала собираются объекты и поля,
+        чтобы построить lookup по singular/plural именам, затем валидируются
+        индексы и relations, которым нужны ссылки на уже известные объекты.
+        """
         seen_singular_names: set[str] = set()
         seen_plural_names: set[str] = set()
         global_index_names: set[str] = set()
@@ -250,10 +261,12 @@ class SchemaSeedService:
 
     @staticmethod
     def _validate_identifier(value: str, title: str) -> str:
+        """Делегирует валидацию PostgreSQL-идентификатора общей naming-стратегии."""
         return SchemaNamingStrategy.validate_identifier(value, title=title)
 
     @staticmethod
     def _normalize_relation_type(raw_type: str | RelationTypeEnum) -> RelationTypeEnum:
+        """Валидирует тип связи seed и ограничивает его supported MVP-вариантами."""
         normalized = str(
             raw_type.value if isinstance(raw_type, RelationTypeEnum) else raw_type
         )
@@ -272,6 +285,7 @@ class SchemaSeedService:
 
     @staticmethod
     def _normalize_on_delete(value: str) -> str:
+        """Приводит on_delete из seed к каноническому lowercase-значению."""
         mapping = {
             "restrict": "restrict",
             "cascade": "cascade",
@@ -290,6 +304,7 @@ class SchemaSeedService:
 
     @staticmethod
     def _normalize_default(value: str | None) -> str | None:
+        """Trim-ит default-значение seed и превращает пустую строку в None."""
         if value is None:
             return None
         normalized = value.strip()
@@ -301,6 +316,7 @@ class SchemaSeedService:
         index_name: str,
         global_index_names: set[str],
     ) -> None:
+        """Гарантирует уникальность имен индексов в пределах всей tenant-схемы."""
         if index_name in global_index_names:
             raise SeedValidationError(
                 f"Duplicate index name '{index_name}' in schema seed."
