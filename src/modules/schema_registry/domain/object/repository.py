@@ -33,9 +33,7 @@ class ObjectRepositoryProtocol(Protocol):
         """Сохраняет один runtime-объект и его поля."""
         ...
 
-    async def list_by_tenant_id(
-        self, *, tenant_id: EntityIdVO
-    ) -> list[ObjectEntity]:
+    async def list_by_tenant_id(self, *, tenant_id: EntityIdVO) -> list[ObjectEntity]:
         """Возвращает все runtime-объекты tenant."""
         ...
 
