@@ -1,0 +1,224 @@
+from __future__ import annotations
+
+import unittest
+from uuid import uuid4
+
+from src.modules.schema_registry.domain.datasource.entity import DataSourceEntity
+from src.modules.schema_registry.domain.datasource.value_object.schema_name import (
+    SchemaNameVO,
+)
+from src.modules.schema_registry.domain.error import (
+    RuntimeObjectDescriptorError,
+    RuntimeObjectNotFoundError,
+    SchemaRegistryMetadataInconsistentError,
+)
+from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
+from src.modules.schema_registry.domain.object.entity import ObjectEntity
+from src.modules.schema_registry.domain.object.value_object.object_label import (
+    ObjectLabelVO,
+)
+from src.modules.schema_registry.domain.object.value_object.object_name import (
+    ObjectNameVO,
+)
+from src.modules.schema_registry.runtime import SchemaRegistryRuntimeObjectResolver
+from src.modules.shared import EntityIdVO
+from src.modules.shared.infrastructure.time import UtcClock
+
+
+class SchemaRegistryRuntimeObjectResolverTests(unittest.IsolatedAsyncioTestCase):
+    async def test_resolve_returns_descriptor_from_metadata(self) -> None:
+        now = UtcClock().now()
+        tenant_id = EntityIdVO.from_value(uuid4())
+        data_source = DataSourceEntity.create(
+            id_=EntityIdVO.from_value(uuid4()),
+            now=now,
+            tenant_id=tenant_id,
+            schema_name=SchemaNameVO("dnk_test"),
+        )
+
+        object_entity = ObjectEntity.create(
+            id_=EntityIdVO.from_value(uuid4()),
+            tenant_id=tenant_id,
+            data_source_id=data_source.id,
+            now=now,
+            object_name=ObjectNameVO(singular="contact", plural="contacts"),
+            object_label=ObjectLabelVO(singular="Contact", plural="Contacts"),
+            description="Tenant contacts.",
+        )
+        field_types = FieldTypeCatalog()
+        object_entity.add_field(
+            field_id=EntityIdVO.from_value(uuid4()),
+            now=now,
+            field_name="id",
+            field_type=field_types.from_seed_type("uuid"),
+            label="ID",
+            description="Contact identifier.",
+            is_nullable=False,
+            default_value="gen_random_uuid()",
+        )
+        object_entity.add_field(
+            field_id=EntityIdVO.from_value(uuid4()),
+            now=now,
+            field_name="last_name",
+            field_type=field_types.from_seed_type("text"),
+            label="Last Name",
+            description="Contact last name.",
+            is_nullable=False,
+        )
+
+        class DataSourceServiceStub:
+            async def get_required_by_tenant(self, *, tenant_id):
+                return data_source
+
+        class ObjectServiceStub:
+            async def get_by_tenant_and_singular_name(
+                self, *, tenant_id, singular_name
+            ):
+                if singular_name == "contact":
+                    return object_entity
+                return None
+
+        resolver = SchemaRegistryRuntimeObjectResolver(
+            data_source_service=DataSourceServiceStub(),
+            object_service=ObjectServiceStub(),
+        )
+
+        descriptor = await resolver.resolve(
+            tenant_id=tenant_id,
+            object_name="contact",
+        )
+
+        self.assertEqual(descriptor.schema_name, "dnk_test")
+        self.assertEqual(descriptor.object_name, "contact")
+        self.assertEqual(descriptor.table_name, "contacts")
+        self.assertEqual(descriptor.pk, "id")
+        self.assertEqual(descriptor.title_field, "id")
+        self.assertEqual(
+            [field.name for field in descriptor.fields], ["id", "last_name"]
+        )
+
+    async def test_resolve_raises_not_found(self) -> None:
+        now = UtcClock().now()
+        tenant_id = EntityIdVO.from_value(uuid4())
+        data_source = DataSourceEntity.create(
+            id_=EntityIdVO.from_value(uuid4()),
+            now=now,
+            tenant_id=tenant_id,
+            schema_name=SchemaNameVO("dnk_test"),
+        )
+
+        class DataSourceServiceStub:
+            async def get_required_by_tenant(self, *, tenant_id):
+                return data_source
+
+        class ObjectServiceStub:
+            async def get_by_tenant_and_singular_name(
+                self, *, tenant_id, singular_name
+            ):
+                return None
+
+        resolver = SchemaRegistryRuntimeObjectResolver(
+            data_source_service=DataSourceServiceStub(),
+            object_service=ObjectServiceStub(),
+        )
+
+        with self.assertRaises(RuntimeObjectNotFoundError):
+            await resolver.resolve(
+                tenant_id=tenant_id,
+                object_name="contact",
+            )
+
+    async def test_resolve_rejects_missing_id_field(self) -> None:
+        now = UtcClock().now()
+        tenant_id = EntityIdVO.from_value(uuid4())
+        data_source = DataSourceEntity.create(
+            id_=EntityIdVO.from_value(uuid4()),
+            now=now,
+            tenant_id=tenant_id,
+            schema_name=SchemaNameVO("dnk_test"),
+        )
+
+        object_entity = ObjectEntity.create(
+            id_=EntityIdVO.from_value(uuid4()),
+            tenant_id=tenant_id,
+            data_source_id=data_source.id,
+            now=now,
+            object_name=ObjectNameVO(singular="contact", plural="contacts"),
+            object_label=ObjectLabelVO(singular="Contact", plural="Contacts"),
+            description="Tenant contacts.",
+        )
+        object_entity.add_field(
+            field_id=EntityIdVO.from_value(uuid4()),
+            now=now,
+            field_name="last_name",
+            field_type=FieldTypeCatalog().from_seed_type("text"),
+            label="Last Name",
+            description="Contact last name.",
+            is_nullable=False,
+        )
+
+        class DataSourceServiceStub:
+            async def get_required_by_tenant(self, *, tenant_id):
+                return data_source
+
+        class ObjectServiceStub:
+            async def get_by_tenant_and_singular_name(
+                self, *, tenant_id, singular_name
+            ):
+                return object_entity
+
+        resolver = SchemaRegistryRuntimeObjectResolver(
+            data_source_service=DataSourceServiceStub(),
+            object_service=ObjectServiceStub(),
+        )
+
+        with self.assertRaises(RuntimeObjectDescriptorError):
+            await resolver.resolve(tenant_id=tenant_id, object_name="contact")
+
+    async def test_resolve_rejects_metadata_mismatch(self) -> None:
+        now = UtcClock().now()
+        tenant_id = EntityIdVO.from_value(uuid4())
+        data_source = DataSourceEntity.create(
+            id_=EntityIdVO.from_value(uuid4()),
+            now=now,
+            tenant_id=tenant_id,
+            schema_name=SchemaNameVO("dnk_test"),
+        )
+
+        object_entity = ObjectEntity.create(
+            id_=EntityIdVO.from_value(uuid4()),
+            tenant_id=tenant_id,
+            data_source_id=EntityIdVO.from_value(uuid4()),
+            now=now,
+            object_name=ObjectNameVO(singular="contact", plural="contacts"),
+            object_label=ObjectLabelVO(singular="Contact", plural="Contacts"),
+            description="Tenant contacts.",
+        )
+        object_entity.add_field(
+            field_id=EntityIdVO.from_value(uuid4()),
+            now=now,
+            field_name="id",
+            field_type=FieldTypeCatalog().from_seed_type("uuid"),
+            label="ID",
+            description="Contact identifier.",
+            is_nullable=False,
+            default_value="gen_random_uuid()",
+        )
+
+        class DataSourceServiceStub:
+            async def get_required_by_tenant(self, *, tenant_id):
+                return data_source
+
+        class ObjectServiceStub:
+            async def get_by_tenant_and_singular_name(
+                self, *, tenant_id, singular_name
+            ):
+                return object_entity
+
+        resolver = SchemaRegistryRuntimeObjectResolver(
+            data_source_service=DataSourceServiceStub(),
+            object_service=ObjectServiceStub(),
+        )
+
+        with self.assertRaises(SchemaRegistryMetadataInconsistentError):
+            await resolver.resolve(tenant_id=tenant_id, object_name="contact")

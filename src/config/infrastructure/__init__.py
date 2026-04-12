@@ -47,25 +47,9 @@ class DatabaseConfig(BaseSettings):
         default="postgresql+asyncpg",
     )
 
-    def _uses_sqlite(self) -> bool:
-        return self.SQLALCHEMY_DATABASE_URI_SCHEME.startswith("sqlite")
-
-    def _build_sqlite_database_uri(self) -> str:
-        if self.DB_DATABASE == ":memory:":
-            return f"{self.SQLALCHEMY_DATABASE_URI_SCHEME}:///{self.DB_DATABASE}"
-        if os.path.isabs(self.DB_DATABASE):
-            return (
-                f"{self.SQLALCHEMY_DATABASE_URI_SCHEME}:////"
-                f"{self.DB_DATABASE.lstrip('/')}"
-            )
-        return f"{self.SQLALCHEMY_DATABASE_URI_SCHEME}:///{self.DB_DATABASE}"
-
     @computed_field
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
-        if self._uses_sqlite():
-            return self._build_sqlite_database_uri()
-
         db_extras = (
             f"{self.DB_EXTRAS}&client_encoding={self.DB_CHARSET}"
             if self.DB_CHARSET
@@ -116,9 +100,6 @@ class DatabaseConfig(BaseSettings):
     @computed_field
     @property
     def SQLALCHEMY_ENGINE_OPTIONS(self) -> dict[str, Any]:
-        if self._uses_sqlite():
-            return {}
-
         db_extras_dict = dict(parse_qsl(self.DB_EXTRAS))
 
         server_settings: dict[str, str] = {

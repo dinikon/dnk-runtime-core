@@ -1,5 +1,6 @@
 import logging
 from pathlib import Path
+
 # from typing import Any
 
 # from pydantic.fields import FieldInfo
@@ -11,7 +12,12 @@ from pydantic_settings import (
 )
 
 from src.libs.file_utils import search_file_upwards
-from .infrastructure import DatabaseConfig
+from src.config.feature.identity.auth_config import IdentityAuthConfig
+from src.config.deploy.control_plane import ControlPlaneConfig
+from src.config.deploy import DeploymentConfig
+from src.config.feature import FeatureConfig
+from src.config.infrastructure import DatabaseConfig
+from src.config.infrastructure.redis_config import RedisConfig
 
 # from .deploy import DeploymentConfig
 # from .enterprise import EnterpriseFeatureConfig
@@ -19,7 +25,8 @@ from .infrastructure import DatabaseConfig
 # from .feature import FeatureConfig
 # from .middleware import MiddlewareConfig
 # from .observability import ObservabilityConfig
-from .packaging import PackagingInfo
+from src.config.packaging import PackagingInfo
+
 # from .remote_settings_sources import (
 #     RemoteSettingsSource,
 #     RemoteSettingsSourceConfig,
@@ -84,12 +91,18 @@ PYPROJECT_TOML_PATH = search_file_upwards(
 class DnkConfig(
     # Infra config
     DatabaseConfig,
+    # Redis config
+    RedisConfig,
+    # Auth config
+    IdentityAuthConfig,
+    # Control Plane config
+    ControlPlaneConfig,
     # Packaging info
     PackagingInfo,
     # Deployment configs
-    # DeploymentConfig,
+    DeploymentConfig,
     # Feature configs
-    # FeatureConfig,
+    FeatureConfig,
     # Middleware configs
     # MiddlewareConfig,
     # Extra service configs
@@ -106,6 +119,7 @@ class DnkConfig(
         # read from dotenv format config file
         env_file=ENV_FILE_PATH,
         env_file_encoding="utf-8",
+        env_nested_delimiter="__",
         # ignore extra attributes
         extra="ignore",
     )
