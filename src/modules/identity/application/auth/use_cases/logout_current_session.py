@@ -14,11 +14,14 @@ from src.modules.shared.http.host import normalize_host
 
 
 class LogoutCurrentSessionUseCase:
+    """Use case logout текущей session."""
+
     def __init__(
         self,
         tenant_context_reader: TenantContextReaderPort,
         session_store: SessionStorePort,
     ):
+        """Инициализирует use case tenant context reader и session store."""
         self._tenant_context_reader = tenant_context_reader
         self._session_store = session_store
 
@@ -26,6 +29,7 @@ class LogoutCurrentSessionUseCase:
         self,
         dto: LogoutCurrentSessionCommandDTO,
     ) -> LogoutCurrentSessionResultDTO:
+        """Идемпотентно инвалидирует session token, если он валиден для tenant host."""
         host = normalize_host(dto.host)
         tenant_context = await self._tenant_context_reader.get_by_host(host)
 

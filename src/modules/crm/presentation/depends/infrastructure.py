@@ -19,6 +19,8 @@ from src.modules.shared.depends.uow import UoWDep
 
 
 def get_runtime_field_type_policy() -> RuntimeFieldTypePolicy:
+    """Создает policy приведения runtime field-типов для CRM gateway."""
+
     return RuntimeFieldTypePolicy()
 
 
@@ -32,6 +34,7 @@ def get_runtime_gateway(
     uow: UoWDep,
     type_policy: RuntimeFieldTypePolicyDep,
 ) -> PostgresRuntimeGateway:
+    """Создает PostgreSQL runtime gateway на базе текущей UoW-сессии."""
     return PostgresRuntimeGateway(
         uow.session,
         type_policy=type_policy,
@@ -48,6 +51,7 @@ def get_contact_query_repository(
     runtime_object_resolver: RuntimeObjectResolverDep,
     runtime_gateway: RuntimeGatewayDep,
 ) -> ContactQueryRepositoryProtocol:
+    """Создает query repository контактов поверх runtime gateway."""
     return ContactRuntimeRepository(
         runtime_object_resolver=runtime_object_resolver,
         runtime_command_gateway=runtime_gateway,
@@ -65,6 +69,7 @@ def get_contact_command_repository(
     runtime_object_resolver: RuntimeObjectResolverDep,
     runtime_gateway: RuntimeGatewayDep,
 ) -> ContactCommandRepositoryProtocol:
+    """Создает command repository контактов поверх runtime gateway."""
     return ContactRuntimeRepository(
         runtime_object_resolver=runtime_object_resolver,
         runtime_command_gateway=runtime_gateway,

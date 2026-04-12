@@ -22,12 +22,15 @@ from src.modules.shared.http.host import normalize_host
 
 
 class GetCurrentUserUseCase:
+    """Use case получения профиля текущего пользователя по session."""
+
     def __init__(
         self,
         tenant_context_reader: TenantContextReaderPort,
         users_repository: AuthUserRepositoryPort,
         session_store: SessionStorePort,
     ):
+        """Инициализирует use case tenant context reader, user repo и session store."""
         self._tenant_context_reader = tenant_context_reader
         self._users_repository = users_repository
         self._session_store = session_store
@@ -36,6 +39,7 @@ class GetCurrentUserUseCase:
         self,
         dto: GetCurrentUserCommandDTO,
     ) -> GetCurrentUserResultDTO:
+        """Проверяет session scope и возвращает профиль active пользователя."""
         host = normalize_host(dto.host)
         tenant_context = await self._tenant_context_reader.get_by_host(host)
 

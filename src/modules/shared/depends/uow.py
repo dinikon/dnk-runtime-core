@@ -11,6 +11,8 @@ from src.modules.shared.db.uow import UnitOfWork, UnitOfWorkProtocol
 
 
 async def get_uow(request: Request) -> AsyncGenerator[UnitOfWorkProtocol, None]:
+    """FastAPI dependency, открывающая UnitOfWork на время request."""
+
     session_factory = getattr(request.app.state, "db", db_helper.session_factory)
     typed_session_factory: async_sessionmaker[AsyncSession] = session_factory
     async with UnitOfWork(typed_session_factory) as uow:

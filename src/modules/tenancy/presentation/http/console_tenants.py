@@ -22,6 +22,8 @@ async def resolve_tenant(
     host: RequestHostDep,
     use_case: ResolveTenantByHostUseCaseDep,
 ) -> ResolveTenantResponseSchema:
+    """HTTP endpoint resolve tenant по host текущего request."""
+
     result = await use_case.execute(ResolveTenantByHostQuery(host=host))
     return ResolveTenantResponseSchema(
         exists=result.exists,

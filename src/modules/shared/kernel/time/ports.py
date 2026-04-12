@@ -5,4 +5,8 @@ from typing import Protocol
 
 
 class ClockPort(Protocol):
-    def now(self) -> datetime: ...
+    """Порт источника текущего времени."""
+
+    def now(self) -> datetime:
+        """Возвращает текущий datetime."""
+        ...

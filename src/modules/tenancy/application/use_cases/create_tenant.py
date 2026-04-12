@@ -13,6 +13,7 @@ from src.modules.tenancy.domain.services import TenantOnboardingService
 
 
 class CreateTenantUseCase:
+    """Use case создания tenant, администратора и runtime-схемы."""
 
     def __init__(
         self,
@@ -21,6 +22,7 @@ class CreateTenantUseCase:
         tenant_schema_bootstrap_context_factory: TenantSchemaBootstrapContextFactory,
         tenant_schema_bootstrap_port: TenantSchemaBootstrapPort,
     ):
+        """Инициализирует orchestration зависимости tenant onboarding."""
         self._tenant_onboarding_service = tenant_onboarding_service
         self._identity_provisioning_service = identity_provisioning_service
         self._tenant_schema_bootstrap_context_factory = (
@@ -29,6 +31,11 @@ class CreateTenantUseCase:
         self._tenant_schema_bootstrap_port = tenant_schema_bootstrap_port
 
     async def execute(self, command: CreateTenantCommand) -> CreateTenantResultDTO:
+        """Выполняет onboarding tenant, identity provisioning и bootstrap schema.
+
+        Сначала создается tenant и primary domain, затем tenant admin в identity,
+        после этого запускается bootstrap runtime-схемы через внешний порт.
+        """
         onboarding = (
             await self._tenant_onboarding_service.create_tenant_with_primary_domain(
                 tenant_name=command.tenant_name,

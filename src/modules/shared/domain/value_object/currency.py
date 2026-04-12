@@ -6,11 +6,16 @@ from ..errors import DomainError
 
 
 class CurrencyCodeNotSupportedError(DomainError):
+    """Ошибка неподдержанного кода валюты."""
+
     def __init__(self, value: str) -> None:
+        """Формирует сообщение с неподдержанным кодом валюты."""
         super().__init__(f"currency code '{value}' is not supported")
 
 
 class CurrencyCodeVO(StrEnum):
+    """Value object поддержанного ISO-like кода валюты."""
+
     USD = "USD"
     EUR = "EUR"
     GBP = "GBP"
@@ -19,6 +24,7 @@ class CurrencyCodeVO(StrEnum):
 
     @classmethod
     def from_value(cls, value: str | CurrencyCodeVO) -> CurrencyCodeVO:
+        """Создает CurrencyCodeVO из строки или возвращает готовый enum."""
         if isinstance(value, cls):
             return value
 

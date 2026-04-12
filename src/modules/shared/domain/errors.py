@@ -1,6 +1,8 @@
 class DomainError(Exception):
-    """Global base error for the whole project."""
+    """Базовая доменная ошибка всего проекта."""
 
 
 class EntityIdTypeError(DomainError):
+    """Ошибка некорректного типа значения EntityIdVO."""
+
     pass

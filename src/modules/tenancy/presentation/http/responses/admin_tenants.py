@@ -4,6 +4,8 @@ from pydantic import BaseModel
 
 
 class AdminCreateTenantResponseSchema(BaseModel):
+    """Pydantic-схема ответа admin endpoint создания tenant."""
+
     tenant_id: UUID
     user_id: UUID
     user_email_id: UUID

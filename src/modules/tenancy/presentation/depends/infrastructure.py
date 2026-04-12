@@ -28,6 +28,8 @@ from src.modules.tenancy.infrastructure.repositories import (
 
 
 def get_tenants_repository(uow: UoWDep) -> TenantRepositoryProtocol:
+    """Создает SQLAlchemy tenant repository для текущей UoW."""
+
     return SqlAlchemyTenantRepository(uow.session)
 
 
@@ -38,6 +40,7 @@ TenantsRepositoryDep = Annotated[
 
 
 def get_tenant_domains_repository(uow: UoWDep) -> TenantDomainRepositoryProtocol:
+    """Создает SQLAlchemy tenant domain repository для текущей UoW."""
     return SqlAlchemyTenantDomainRepository(uow.session)
 
 
@@ -50,6 +53,7 @@ TenantDomainsRepositoryDep = Annotated[
 def get_identity_provisioning_service(
     uow: UoWDep,
 ) -> IdentityProvisioningServiceProtocol:
+    """Создает tenancy adapter к identity provisioning сервису."""
     user_service = UserService(SqlAlchemyUserRepository(uow.session))
     return IdentityProvisioningServiceAdapter(user_service)
 
@@ -64,6 +68,7 @@ def get_tenant_onboarding_service(
     tenants_repository: TenantsRepositoryDep,
     tenant_domains_repository: TenantDomainsRepositoryDep,
 ) -> TenantOnboardingService:
+    """Создает доменный сервис onboarding tenant."""
     return TenantOnboardingService(
         tenants_repository=tenants_repository,
         tenant_domains_repository=tenant_domains_repository,

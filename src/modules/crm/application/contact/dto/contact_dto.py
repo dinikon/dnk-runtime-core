@@ -5,6 +5,8 @@ from uuid import UUID
 
 @dataclass(slots=True, frozen=True)
 class ContactDTO:
+    """DTO контакта, возвращаемый use case и query-репозиторием."""
+
     id: UUID
     created_at: datetime
     updated_at: datetime

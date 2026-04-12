@@ -13,23 +13,32 @@ from src.modules.identity.domain.errors import UserEmailAlreadyExistsError
 
 @dataclass(frozen=True, slots=True)
 class CreatedTenantAdmin:
+    """Результат создания tenant admin пользователя."""
+
     user_id: UUID
     user_email_id: UUID
     user_status: str
 
 
 class UserServiceProtocol(Protocol):
+    """Порт provisioning-сервиса пользователей identity."""
+
     async def create_tenant_admin(
         self,
         tenant_id: UUID,
         first_name: str,
         last_name: str,
         email: str,
-    ) -> CreatedTenantAdmin: ...
+    ) -> CreatedTenantAdmin:
+        """Создает tenant admin пользователя с primary email."""
+        ...
 
 
 class UserService:
+    """Application service provisioning пользователей identity."""
+
     def __init__(self, users_repository: UserRepositoryProtocol):
+        """Инициализирует сервис repository-портом пользователей."""
         self._users_repository = users_repository
 
     async def create_tenant_admin(
@@ -39,6 +48,7 @@ class UserService:
         last_name: str,
         email: str,
     ) -> CreatedTenantAdmin:
+        """Создает tenant admin и primary email после проверки уникальности email."""
         normalized_first_name = first_name.strip()
         normalized_last_name = last_name.strip()
         normalized_email = email.strip().lower()

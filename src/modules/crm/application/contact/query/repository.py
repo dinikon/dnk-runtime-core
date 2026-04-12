@@ -6,12 +6,16 @@ from src.modules.shared import EntityIdVO
 
 
 class ContactQueryRepositoryProtocol(Protocol):
+    """Порт чтения контактов для CRM query use cases."""
+
     async def get_by_id(
         self,
         *,
         tenant_id: EntityIdVO,
         contact_id: ContactIdVO,
-    ) -> ContactDTO | None: ...
+    ) -> ContactDTO | None:
+        """Возвращает контакт tenant по id или None."""
+        ...
 
     async def list(
         self,
@@ -19,7 +23,9 @@ class ContactQueryRepositoryProtocol(Protocol):
         tenant_id: EntityIdVO,
         limit: int,
         offset: int,
-    ) -> list[ContactDTO]: ...
+    ) -> list[ContactDTO]:
+        """Возвращает страницу контактов tenant."""
+        ...
 
 
 __all__ = ["ContactQueryRepositoryProtocol"]

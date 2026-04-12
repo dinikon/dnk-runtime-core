@@ -53,6 +53,8 @@ router = APIRouter(tags=["console-auth"])
 def _map_current_user_emails(
     emails: list[GetCurrentUserEmailDTO],
 ) -> list[CurrentUserEmailResponseSchema]:
+    """Мапит email DTO текущего пользователя в response schemas."""
+
     return [
         CurrentUserEmailResponseSchema(
             id=email.id,
@@ -67,6 +69,7 @@ def _map_current_user_emails(
 def _to_current_user_response(
     result: GetCurrentUserResultDTO | UpdateCurrentUserProfileResultDTO,
 ) -> CurrentUserResponseSchema:
+    """Мапит DTO профиля текущего пользователя в HTTP response schema."""
     return CurrentUserResponseSchema(
         id=result.id,
         status=result.status,
@@ -82,6 +85,7 @@ def _to_current_user_response(
 
 
 def _is_dev_mode() -> bool:
+    """Проверяет, что приложение запущено в development окружении."""
     return dnk_config.DEPLOY_ENV == "DEVELOPMENT"
 
 
@@ -95,6 +99,7 @@ async def request_email_otp(
     host: RequestHostDep,
     use_case: RequestEmailOtpUseCaseDep,
 ) -> RequestEmailOtpResponseSchema:
+    """HTTP endpoint запроса email OTP для console login."""
     try:
         result = await use_case.execute(
             RequestEmailOtpCommandDTO(
@@ -133,6 +138,7 @@ async def confirm_email_otp(
     settings: AuthSettingsDep,
     use_case: ConfirmEmailOtpUseCaseDep,
 ) -> ConfirmEmailOtpResponseSchema:
+    """HTTP endpoint подтверждения OTP и установки session cookie."""
     try:
         result = await use_case.execute(
             ConfirmEmailOtpCommandDTO(
@@ -185,6 +191,7 @@ async def get_current_user(
     settings: AuthSettingsDep,
     use_case: GetCurrentUserUseCaseDep,
 ) -> CurrentUserResponseSchema:
+    """HTTP endpoint получения профиля текущего пользователя."""
     try:
         result = await use_case.execute(
             GetCurrentUserCommandDTO(
@@ -222,6 +229,7 @@ async def update_current_user_profile(
     settings: AuthSettingsDep,
     use_case: UpdateCurrentUserProfileUseCaseDep,
 ) -> CurrentUserResponseSchema:
+    """HTTP endpoint обновления профиля текущего пользователя."""
     try:
         result = await use_case.execute(
             UpdateCurrentUserProfileCommandDTO(
@@ -270,6 +278,7 @@ async def logout_current_session(
     settings: AuthSettingsDep,
     use_case: LogoutCurrentSessionUseCaseDep,
 ) -> LogoutCurrentSessionResponseSchema:
+    """HTTP endpoint logout текущей session и удаления session cookie."""
     try:
         result = await use_case.execute(
             LogoutCurrentSessionCommandDTO(

@@ -34,6 +34,8 @@ def get_create_tenant_use_case(
     tenant_schema_bootstrap_context_factory: "TenantSchemaBootstrapContextFactoryDep",
     tenant_schema_bootstrap_port: "TenantSchemaBootstrapPortDep",
 ) -> CreateTenantUseCase:
+    """Создает use case полного tenant onboarding."""
+
     return CreateTenantUseCase(
         tenant_onboarding_service=tenant_onboarding_service,
         identity_provisioning_service=identity_provisioning_service,
@@ -51,6 +53,7 @@ CreateTenantUseCaseDep = Annotated[
 def get_tenant_schema_bootstrap_context_factory() -> (
     TenantSchemaBootstrapContextFactory
 ):
+    """Создает фабрику bootstrap context из runtime schema конфигурации."""
     return TenantSchemaBootstrapContextFactory(
         schema_prefix=dnk_config.SCHEMA_PREFIX,
         default_seed_path=dnk_config.DEFAULT_SEED_MODULE,
@@ -66,6 +69,7 @@ TenantSchemaBootstrapContextFactoryDep = Annotated[
 def get_tenant_schema_bootstrap_port(
     create_schema_use_case: CreateSchemaUseCaseDep,
 ) -> TenantSchemaBootstrapPort:
+    """Создает порт bootstrap tenant schema через schema_registry adapter."""
     return SchemaRegistryTenantSchemaBootstrapAdapter(create_schema_use_case)
 
 
@@ -79,6 +83,7 @@ def get_resolve_tenant_by_host_use_case(
     tenants_repository: TenantsRepositoryDep,
     tenant_domains_repository: TenantDomainsRepositoryDep,
 ) -> ResolveTenantByHostUseCase:
+    """Создает use case публичного resolve tenant по host."""
     return ResolveTenantByHostUseCase(
         tenants_repository=tenants_repository,
         tenant_domains_repository=tenant_domains_repository,
@@ -95,6 +100,7 @@ def get_tenant_request_context_by_host_use_case(
     tenants_repository: TenantsRepositoryDep,
     tenant_domains_repository: TenantDomainsRepositoryDep,
 ) -> ResolveTenantRequestContextByHostUseCase:
+    """Создает use case внутреннего tenant request context по host."""
     return ResolveTenantRequestContextByHostUseCase(
         tenants_repository=tenants_repository,
         tenant_domains_repository=tenant_domains_repository,

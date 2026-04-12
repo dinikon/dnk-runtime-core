@@ -5,6 +5,8 @@ from pydantic import BaseModel
 
 
 class ContactResponseSchema(BaseModel):
+    """Pydantic-схема HTTP-ответа с одним контактом."""
+
     id: UUID
     created_at: datetime
     updated_at: datetime

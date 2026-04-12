@@ -13,6 +13,8 @@ default_authorization_service: AuthorizationServiceProtocol = (
 
 
 def get_authorization_service(request: Request) -> AuthorizationServiceProtocol:
+    """Возвращает authorization service из app.state или default allow-all."""
+
     from_state = getattr(request.app.state, "authorization_service", None)
     if from_state is not None:
         return from_state

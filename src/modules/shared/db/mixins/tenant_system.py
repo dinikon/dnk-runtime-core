@@ -11,6 +11,8 @@ from src.modules.shared.db.mixins.audiense import AudienceMixin
 
 
 class TenantSystemMixin(AudienceMixin):
+    """SQLAlchemy mixin для tenant-scoped системных сущностей."""
+
     id: Mapped[UUID] = mapped_column(
         StringUUID,
         primary_key=True,

@@ -36,6 +36,8 @@ async def get_contact(
     context: AuthenticatedRequestContextDep,
     use_case: GetContactUseCaseDep,
 ) -> ContactResponseSchema:
+    """HTTP endpoint получения одного контакта текущего tenant."""
+
     tenant_id_raw = context.principal.tenant_id if context.principal else None
     if tenant_id_raw is None:
         raise HTTPException(

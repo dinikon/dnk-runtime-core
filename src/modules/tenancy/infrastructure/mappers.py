@@ -18,6 +18,8 @@ from src.modules.tenancy.infrastructure.persistence.tenant_domain import (
 
 
 def tenant_to_model(tenant: Tenant) -> TenantModel:
+    """Мапит доменную Tenant entity в SQLAlchemy TenantModel."""
+
     return TenantModel(
         id=tenant.id,
         name=tenant.name,
@@ -30,6 +32,7 @@ def tenant_to_model(tenant: Tenant) -> TenantModel:
 
 
 def tenant_model_to_entity(model: TenantModel) -> Tenant:
+    """Мапит SQLAlchemy TenantModel в доменную Tenant entity."""
     return Tenant(
         id=_to_uuid(model.id),
         name=model.name,
@@ -42,6 +45,7 @@ def tenant_model_to_entity(model: TenantModel) -> Tenant:
 
 
 def tenant_domain_to_model(domain: TenantDomain) -> TenantDomainModel:
+    """Мапит доменную TenantDomain entity в SQLAlchemy TenantDomainModel."""
     return TenantDomainModel(
         id=domain.id,
         tenant_id=domain.tenant_id,
@@ -63,6 +67,7 @@ def tenant_domain_to_model(domain: TenantDomain) -> TenantDomainModel:
 
 
 def tenant_domain_model_to_entity(model: TenantDomainModel) -> TenantDomain:
+    """Мапит SQLAlchemy TenantDomainModel в доменную TenantDomain entity."""
     return TenantDomain(
         id=_to_uuid(model.id),
         tenant_id=_to_uuid(model.tenant_id),
@@ -84,6 +89,7 @@ def tenant_domain_model_to_entity(model: TenantDomainModel) -> TenantDomain:
 
 
 def _to_uuid(value: UUID | str) -> UUID:
+    """Приводит UUID или строку из ORM к UUID."""
     if isinstance(value, UUID):
         return value
     return UUID(value)

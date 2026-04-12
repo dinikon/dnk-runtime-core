@@ -5,6 +5,8 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class Principal:
+    """Аутентифицированный principal текущего request."""
+
     user_id: str
     tenant_id: str | None
     session_id: str

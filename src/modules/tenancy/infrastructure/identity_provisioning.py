@@ -12,7 +12,10 @@ from src.modules.tenancy.application.ports.identity import (
 
 
 class IdentityProvisioningServiceAdapter(IdentityProvisioningServiceProtocol):
+    """Адаптер tenancy-порта provisioning к identity UserService."""
+
     def __init__(self, user_service: UserServiceProtocol):
+        """Инициализирует адаптер сервисом пользователей identity."""
         self._user_service = user_service
 
     async def create_tenant_admin(
@@ -22,6 +25,7 @@ class IdentityProvisioningServiceAdapter(IdentityProvisioningServiceProtocol):
         last_name: str,
         email: str,
     ) -> ProvisionedTenantAdmin:
+        """Создает tenant admin через identity и мапит результат в tenancy DTO."""
         result = await self._user_service.create_tenant_admin(
             tenant_id=tenant_id,
             first_name=first_name,

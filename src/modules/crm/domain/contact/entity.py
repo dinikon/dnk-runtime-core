@@ -7,6 +7,8 @@ from src.modules.crm.domain.contact.value_object import ContactIdVO, ContactName
 
 @dataclass(slots=True)
 class ContactEntity:
+    """Доменная сущность CRM-контакта."""
+
     id: ContactIdVO
     created_at: datetime
     updated_at: datetime
@@ -25,6 +27,7 @@ class ContactEntity:
         status: str | None = None,
         tags: tuple[str, ...] = (),
     ) -> Self:
+        """Создает контакт с едиными created_at/updated_at и валидированным именем."""
         return cls(
             id=id_,
             created_at=now,
@@ -48,6 +51,7 @@ class ContactEntity:
         status: str | None = None,
         tags: tuple[str, ...] | None = None,
     ) -> None:
+        """Обновляет имя, статус и теги контакта, если данные изменились."""
         new_contact_name = ContactNameVO(
             last_name=last_name,
             first_name=first_name,
@@ -69,4 +73,5 @@ class ContactEntity:
         self.updated_at = now
 
     def touch(self, *, now: datetime) -> None:
+        """Обновляет timestamp контакта без изменения бизнес-полей."""
         self.updated_at = now

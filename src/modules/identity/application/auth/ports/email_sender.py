@@ -4,4 +4,8 @@ from typing import Protocol
 
 
 class EmailSenderPort(Protocol):
-    async def send_login_code(self, email: str, code: str) -> None: ...
+    """Порт отправки OTP-кода пользователю."""
+
+    async def send_login_code(self, email: str, code: str) -> None:
+        """Отправляет login code на email."""
+        ...

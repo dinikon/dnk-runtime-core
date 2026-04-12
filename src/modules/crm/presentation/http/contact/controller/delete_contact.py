@@ -37,6 +37,8 @@ async def delete_contact(
     context: AuthenticatedRequestContextDep,
     use_case: DeleteContactUseCaseDep,
 ) -> Response:
+    """HTTP endpoint удаления контакта текущего tenant."""
+
     tenant_id_raw = context.principal.tenant_id if context.principal else None
     if tenant_id_raw is None:
         raise HTTPException(

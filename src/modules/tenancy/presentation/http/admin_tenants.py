@@ -39,6 +39,8 @@ async def create_tenant(
     _: AdminCreateTenantAuthorizationDep,
     use_case: CreateTenantUseCaseDep,
 ) -> AdminCreateTenantResponseSchema:
+    """HTTP endpoint создания tenant через защищенный control-plane вызов."""
+
     dto = CreateTenantCommand(
         tenant_name=payload.tenant.name,
         external_id=payload.tenant.external_id,

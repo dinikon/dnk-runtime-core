@@ -42,6 +42,8 @@ async def update_contact(
     context: AuthenticatedRequestContextDep,
     use_case: UpdateContactUseCaseDep,
 ) -> ContactResponseSchema:
+    """HTTP endpoint обновления контакта текущего tenant."""
+
     tenant_id_raw = context.principal.tenant_id if context.principal else None
     if tenant_id_raw is None:
         raise HTTPException(

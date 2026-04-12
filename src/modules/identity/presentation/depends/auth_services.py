@@ -25,15 +25,21 @@ from src.modules.shared.depends.token_manager import (
 
 @dataclass(frozen=True, slots=True)
 class SentLoginCode:
+    """Запись отправленного login code для in-memory email sender."""
+
     email: str
     code: str
 
 
 class InMemoryEmailSender(EmailSenderPort):
+    """Email sender-заглушка, сохраняющая отправленные login codes в памяти."""
+
     def __init__(self) -> None:
+        """Инициализирует список отправленных codes."""
         self.sent_codes: list[SentLoginCode] = []
 
     async def send_login_code(self, email: str, code: str) -> None:
+        """Сохраняет login code в памяти вместо реальной отправки email."""
         self.sent_codes.append(SentLoginCode(email=email, code=code))
 
 
@@ -41,6 +47,7 @@ default_email_sender = InMemoryEmailSender()
 
 
 def get_auth_settings() -> IdentityAuthSettings:
+    """Возвращает auth settings из конфигурации приложения."""
     return dnk_config.AUTH
 
 
@@ -48,6 +55,7 @@ AuthSettingsDep = Annotated[IdentityAuthSettings, Depends(get_auth_settings)]
 
 
 def get_email_sender(request: Request) -> EmailSenderPort:
+    """Возвращает email sender из app.state или in-memory default."""
     return getattr(request.app.state, "email_sender", default_email_sender)
 
 
@@ -55,6 +63,7 @@ EmailSenderDep = Annotated[EmailSenderPort, Depends(get_email_sender)]
 
 
 def get_otp_service(settings: AuthSettingsDep) -> OtpServiceProtocol:
+    """Создает OTP service с длиной кода из auth settings."""
     return OtpService(settings.otp_code_length)
 
 
@@ -62,6 +71,7 @@ OtpServiceDep = Annotated[OtpServiceProtocol, Depends(get_otp_service)]
 
 
 def get_session_service() -> SessionServiceProtocol:
+    """Создает session service для генерации session tokens."""
     return SessionService()
 
 

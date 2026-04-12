@@ -52,6 +52,8 @@ __all__ = [
 
 
 def __getattr__(name: str) -> Any:
+    """Лениво импортирует dependency-export по имени из __all__."""
+
     module_path = _LAZY_EXPORTS.get(name)
     if module_path is None:
         raise AttributeError(

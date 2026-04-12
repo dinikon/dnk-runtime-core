@@ -6,6 +6,8 @@ from src.modules.shared.http.host import extract_request_host
 
 
 def get_request_host(request: Request) -> str:
+    """Возвращает нормализованный host текущего request."""
+
     return extract_request_host(request)
 
 

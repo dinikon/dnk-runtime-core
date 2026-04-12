@@ -18,16 +18,21 @@ from src.modules.tenancy.domain.repositories import (
 
 @dataclass(frozen=True, slots=True)
 class TenantOnboardingDraft:
+    """Промежуточный результат создания tenant и primary domain."""
+
     tenant: Tenant
     tenant_domain: TenantDomain
 
 
 class TenantOnboardingService:
+    """Доменный сервис onboarding tenant и его primary domain."""
+
     def __init__(
         self,
         tenants_repository: TenantRepositoryProtocol,
         tenant_domains_repository: TenantDomainRepositoryProtocol,
     ) -> None:
+        """Инициализирует сервис репозиториями tenants и domains."""
         self._tenants_repository = tenants_repository
         self._tenant_domains_repository = tenant_domains_repository
 
@@ -38,6 +43,7 @@ class TenantOnboardingService:
         external_id: str,
         tenant_domain_host: str,
     ) -> TenantOnboardingDraft:
+        """Создает tenant с primary console domain после проверок уникальности."""
         normalized_name = tenant_name.strip()
         normalized_external_id = external_id.strip()
         normalized_host = normalize_host(tenant_domain_host)

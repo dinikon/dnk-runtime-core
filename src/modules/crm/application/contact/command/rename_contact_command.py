@@ -6,6 +6,8 @@ from src.modules.shared import EntityIdVO
 
 @dataclass(slots=True, frozen=True)
 class RenameContactCommand:
+    """Команда application-слоя на обновление данных контакта."""
+
     tenant_id: EntityIdVO
     contact_id: ContactIdVO
     first_name: str

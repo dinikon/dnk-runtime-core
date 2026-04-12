@@ -39,6 +39,8 @@ async def list_contacts(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> ListContactsResponseSchema:
+    """HTTP endpoint списка контактов текущего tenant с limit/offset пагинацией."""
+
     tenant_id_raw = context.principal.tenant_id if context.principal else None
     if tenant_id_raw is None:
         raise HTTPException(

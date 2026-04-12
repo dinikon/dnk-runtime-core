@@ -4,6 +4,8 @@ from uuid import UUID
 
 @dataclass(frozen=True, slots=True)
 class CreateTenantResultDTO:
+    """DTO результата создания tenant и администратора."""
+
     tenant_id: UUID
     user_id: UUID
     user_email_id: UUID
@@ -15,6 +17,8 @@ class CreateTenantResultDTO:
 
 @dataclass(frozen=True, slots=True)
 class ResolveTenantByHostResultDTO:
+    """DTO публичного resolve tenant по host для console-клиента."""
+
     exists: bool
     available: bool
     status: str
@@ -24,6 +28,8 @@ class ResolveTenantByHostResultDTO:
 
 @dataclass(frozen=True, slots=True)
 class TenantRequestContextDTO:
+    """DTO request context tenant для внутренних auth-сценариев."""
+
     tenant_id: UUID
     tenant_domain_id: UUID
     host: str

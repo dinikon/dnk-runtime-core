@@ -17,11 +17,14 @@ from src.modules.tenancy.domain.value_objects import TenantDomainStatus
 
 
 class ResolveTenantRequestContextByHostUseCase:
+    """Use case получения внутреннего tenant request context по host."""
+
     def __init__(
         self,
         tenants_repository: TenantRepositoryProtocol,
         tenant_domains_repository: TenantDomainRepositoryProtocol,
     ):
+        """Инициализирует use case репозиториями tenants и tenant domains."""
         self._tenants_repository = tenants_repository
         self._tenant_domains_repository = tenant_domains_repository
 
@@ -29,6 +32,7 @@ class ResolveTenantRequestContextByHostUseCase:
         self,
         query: ResolveTenantRequestContextByHostQuery,
     ) -> TenantRequestContextDTO:
+        """Возвращает request context или поднимает not-found/login unavailable ошибки."""
         normalized_host = normalize_host(query.host)
         if not normalized_host:
             raise TenantHostNotFoundError(normalized_host)

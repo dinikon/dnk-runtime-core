@@ -9,15 +9,22 @@ from src.modules.crm.domain.contact.entity import ContactEntity
 
 
 class CreateContactUseCaseProtocol(Protocol):
-    async def __call__(self, command: CreateContactCommand) -> ContactDTO: ...
+    """Порт use case создания контакта."""
+
+    async def __call__(self, command: CreateContactCommand) -> ContactDTO:
+        """Создает контакт и возвращает DTO."""
+        ...
 
 
 class CreateContactUseCase:
+    """Use case создания CRM-контакта через доменный сервис."""
 
     def __init__(self, service: ContactService) -> None:
+        """Инициализирует use case доменным сервисом контактов."""
         self._service = service
 
     async def __call__(self, command: CreateContactCommand) -> ContactDTO:
+        """Выполняет команду создания контакта и мапит entity в DTO."""
 
         contact = await self._service.create_contact(
             tenant_id=command.tenant_id,
@@ -32,6 +39,7 @@ class CreateContactUseCase:
 
     @staticmethod
     def _to_dto(contact: ContactEntity) -> ContactDTO:
+        """Мапит ContactEntity в ContactDTO."""
         return ContactDTO(
             id=contact.id.uuid,
             created_at=contact.created_at,

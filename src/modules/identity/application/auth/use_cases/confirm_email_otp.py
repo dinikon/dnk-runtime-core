@@ -32,6 +32,8 @@ from src.modules.shared.http.host import normalize_host
 
 
 class ConfirmEmailOtpUseCase:
+    """Use case подтверждения OTP и выдачи session cookie token."""
+
     def __init__(
         self,
         uow: UnitOfWorkProtocol,
@@ -43,6 +45,7 @@ class ConfirmEmailOtpUseCase:
         session_service: SessionServiceProtocol,
         session_ttl_seconds: int,
     ):
+        """Инициализирует зависимости OTP validation, session store и UoW."""
         self._uow = uow
         self._tenant_context_reader = tenant_context_reader
         self._users_repository = users_repository
@@ -56,6 +59,11 @@ class ConfirmEmailOtpUseCase:
         self,
         dto: ConfirmEmailOtpCommandDTO,
     ) -> ConfirmEmailOtpResultDTO:
+        """Проверяет OTP challenge, создает session и подтверждает primary email.
+
+        Операции записи session, invalidate challenge и verify email обернуты в
+        явный commit/rollback через UoW, чтобы auth side effects оставались связными.
+        """
         host = normalize_host(dto.host)
         email = dto.email.strip().lower()
 
