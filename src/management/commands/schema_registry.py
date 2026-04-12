@@ -16,6 +16,8 @@ from src.modules.shared.infrastructure.time import UtcClock
 
 
 async def handle_diff(args: argparse.Namespace) -> int:
+    """Обрабатывает CLI-команду schema-registry diff и печатает summary результата."""
+
     try:
         async with UnitOfWork(db_helper.session_factory) as uow:
             use_case = build_diff_schema_use_case(
@@ -45,10 +47,12 @@ async def handle_diff(args: argparse.Namespace) -> int:
 
 
 async def handle_schema_registry_root(_args: argparse.Namespace) -> int:
+    """Возвращает ошибочный exit code для запуска группы без подкоманды."""
     return 1
 
 
 def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Регистрирует argparse-команды schema-registry."""
     schema_registry_parser = subparsers.add_parser(
         "schema-registry",
         help="Schema registry management commands.",

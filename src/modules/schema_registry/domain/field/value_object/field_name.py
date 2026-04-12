@@ -7,6 +7,8 @@ _PG_IDENTIFIER_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 def validate_pg_identifier(value: str, *, field_name: str) -> str:
+    """Валидирует PostgreSQL-идентификатор поля или другого schema_registry объекта."""
+
     normalized = value.strip()
 
     if not normalized:
@@ -35,9 +37,12 @@ def validate_pg_identifier(value: str, *, field_name: str) -> str:
 
 @dataclass(frozen=True, slots=True)
 class FieldNameVO:
+    """Value object для имени поля, пригодного как PostgreSQL-идентификатор."""
+
     value: str
 
     def __post_init__(self) -> None:
+        """Нормализует и валидирует имя поля."""
         normalized = validate_pg_identifier(
             self.value,
             field_name="Field name",

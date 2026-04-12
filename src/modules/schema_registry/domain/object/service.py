@@ -29,6 +29,7 @@ from src.modules.schema_registry.domain.seed.validated_schema_spec import (
 
 
 class ObjectService:
+    """Доменный сервис для создания и синхронизации runtime object metadata."""
 
     def __init__(
         self,
@@ -37,6 +38,7 @@ class ObjectService:
         id_provider: Callable[[], EntityIdVO],
         field_type_catalog: FieldTypeCatalog,
     ) -> None:
+        """Инициализирует сервис репозиторием, временем, id и каталогом типов."""
         self._object_repository = object_repository
         self._clock = clock
         self._id_provider = id_provider
@@ -49,6 +51,7 @@ class ObjectService:
         data_source_id: EntityIdVO,
         seed: SchemaSeed | ValidatedSchemaSpec,
     ) -> list[ObjectEntity]:
+        """Полностью пересоздает metadata объектов tenant из seed или spec."""
         now = self._clock.now()
         objects: list[ObjectEntity] = []
 
@@ -102,6 +105,12 @@ class ObjectService:
         data_source_id: EntityIdVO,
         schema_spec: ValidatedSchemaSpec,
     ) -> list[ObjectEntity]:
+        """Синхронизирует существующие объекты tenant с валидированной spec.
+
+        Существующие объекты переиспользуются по plural-имени, поля обновляются
+        по имени, а отсутствующие в spec поля удаляются из metadata через
+        финальный список reconciled_fields.
+        """
         now = self._clock.now()
         existing_objects = await self._object_repository.list_by_tenant_id(
             tenant_id=tenant_id
@@ -169,6 +178,7 @@ class ObjectService:
         *,
         tenant_id: EntityIdVO,
     ) -> list[ObjectEntity]:
+        """Возвращает все runtime-объекты tenant из репозитория."""
         return await self._object_repository.list_by_tenant_id(tenant_id=tenant_id)
 
     async def get_by_tenant_and_singular_name(
@@ -177,6 +187,7 @@ class ObjectService:
         tenant_id: EntityIdVO,
         singular_name: str,
     ) -> ObjectEntity | None:
+        """Возвращает runtime-объект tenant по singular-имени или None."""
         return await self._object_repository.get_by_tenant_and_singular_name(
             tenant_id=tenant_id,
             singular_name=singular_name,
@@ -189,6 +200,7 @@ class ObjectService:
         field_specs: tuple[ValidatedFieldSpec, ...],
         now: datetime,
     ) -> bool:
+        """Сверяет поля объекта со spec и возвращает факт изменения metadata."""
         existing_by_name = {
             field.field_name.value: field for field in object_entity.fields
         }
@@ -246,6 +258,7 @@ class ObjectService:
         plural_label: str,
         description: str,
     ) -> ObjectEntity:
+        """Создает ObjectEntity с новыми id/timestamps и валидированными VO."""
         return ObjectEntity.create(
             id_=self._id_provider(),
             tenant_id=tenant_id,
@@ -269,6 +282,7 @@ class ObjectService:
         field_seeds: tuple[FieldSeed, ...],
         now: datetime,
     ) -> None:
+        """Добавляет поля в объект напрямую из raw field seed."""
         object_entity.add_fields_from_seed(
             now=now,
             seeds=field_seeds,
@@ -283,6 +297,7 @@ class ObjectService:
         field_specs: tuple[ValidatedFieldSpec, ...],
         now: datetime,
     ) -> None:
+        """Добавляет поля в объект из валидированной field spec."""
         for field_spec in field_specs:
             object_entity.add_field(
                 field_id=self._id_provider(),
@@ -306,6 +321,7 @@ class ObjectService:
         object_label: ObjectLabelVO,
         description: str,
     ) -> None:
+        """Обновляет metadata объекта, если имя, label или description изменились."""
         normalized_description = description.strip()
         if (
             object_entity.object_name == object_name

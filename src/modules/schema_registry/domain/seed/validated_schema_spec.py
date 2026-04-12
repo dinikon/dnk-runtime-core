@@ -10,6 +10,8 @@ from src.modules.schema_registry.domain.seed.relation_type import RelationTypeEn
 
 @dataclass(frozen=True, slots=True)
 class ValidatedFieldSpec:
+    """Нормализованное и валидированное описание поля runtime-объекта."""
+
     name: str
     type: str
     field_type: FieldTypeVO
@@ -23,6 +25,8 @@ class ValidatedFieldSpec:
 
 @dataclass(frozen=True, slots=True)
 class ValidatedIndexSpec:
+    """Нормализованное и валидированное описание индекса runtime-таблицы."""
+
     name: str
     fields: tuple[str, ...]
     is_unique: bool = False
@@ -31,6 +35,8 @@ class ValidatedIndexSpec:
 
 @dataclass(frozen=True, slots=True)
 class ValidatedRelationSpec:
+    """Нормализованное и валидированное описание relation/FK."""
+
     name: str
     relation_type: RelationTypeEnum
     source_field: str
@@ -42,6 +48,8 @@ class ValidatedRelationSpec:
 
 @dataclass(frozen=True, slots=True)
 class ValidatedObjectSpec:
+    """Нормализованное и валидированное описание runtime-объекта."""
+
     singular_name: str
     plural_name: str
     singular_label: str
@@ -54,12 +62,15 @@ class ValidatedObjectSpec:
 
 @dataclass(frozen=True, slots=True)
 class ValidatedSchemaSpec:
+    """Нормализованная и валидированная спецификация runtime-схемы."""
+
     version: str | None
     code: str
     label: str
     objects: tuple[ValidatedObjectSpec, ...]
 
     def get_object(self, object_name: str) -> ValidatedObjectSpec | None:
+        """Ищет object spec по singular или plural имени."""
         normalized = object_name.strip()
         for item in self.objects:
             if item.singular_name == normalized or item.plural_name == normalized:

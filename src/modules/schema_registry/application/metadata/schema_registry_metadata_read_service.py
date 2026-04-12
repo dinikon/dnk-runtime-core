@@ -12,11 +12,14 @@ from src.modules.schema_registry.domain.object.service import ObjectService
 
 
 class SchemaRegistryMetadataReadService:
+    """Собирает сохраненную metadata-картину schema_registry для tenant."""
+
     def __init__(
         self,
         data_source_service: DataSourceService,
         object_service: ObjectService,
     ) -> None:
+        """Инициализирует сервис зависимостями для чтения datasource и объектов."""
         self._data_source_service = data_source_service
         self._object_service = object_service
 
@@ -25,6 +28,7 @@ class SchemaRegistryMetadataReadService:
         *,
         tenant_id: EntityIdVO,
     ) -> SchemaRegistryMetadataSnapshot:
+        """Возвращает обязательный snapshot metadata и проверяет его связность."""
         datasource = await self._data_source_service.get_required_by_tenant(
             tenant_id=tenant_id
         )

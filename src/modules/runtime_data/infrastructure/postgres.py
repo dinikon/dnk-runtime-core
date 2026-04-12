@@ -37,11 +37,14 @@ _IDENTIFIER_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
+    """PostgreSQL gateway для CRUD-операций runtime-данных по descriptor."""
+
     def __init__(
         self,
         session: AsyncSession,
         type_policy: RuntimeFieldTypePolicy | None = None,
     ) -> None:
+        """Инициализирует gateway async-сессией и политикой runtime-типов."""
         self._session = session
         self._type_policy = type_policy or RuntimeFieldTypePolicy()
 
@@ -50,6 +53,7 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         descriptor: RuntimeObjectDescriptor,
         payload: Mapping[str, Any],
     ) -> Mapping[str, Any]:
+        """Вставляет runtime-запись, приводя payload к типам descriptor."""
         self._ensure_descriptor(descriptor)
         coerced_payload = self._type_policy.coerce_insert_payload(
             descriptor=descriptor,
@@ -94,6 +98,7 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         object_id: Any,
         patch: Mapping[str, Any],
     ) -> Mapping[str, Any] | None:
+        """Обновляет runtime-запись по primary key и возвращает свежую строку."""
         self._ensure_descriptor(descriptor)
         coerced_patch = self._type_policy.coerce_patch_payload(
             descriptor=descriptor,
@@ -149,6 +154,7 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         descriptor: RuntimeObjectDescriptor,
         object_id: Any,
     ) -> bool:
+        """Удаляет runtime-запись по primary key и сообщает, была ли она найдена."""
         self._ensure_descriptor(descriptor)
         pk_field = self._required_field(descriptor, descriptor.pk)
         pk_value = self._type_policy.coerce_value_for_field(
@@ -172,6 +178,7 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         object_id: Any,
         fetch_plan: FetchPlan | None = None,
     ) -> Mapping[str, Any] | None:
+        """Возвращает runtime-запись по primary key с учетом projection."""
         self._ensure_descriptor(descriptor)
         pk_field = self._required_field(descriptor, descriptor.pk)
         pk_value = self._type_policy.coerce_value_for_field(
@@ -203,6 +210,7 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         page: PageSpec | None = None,
         fetch_plan: FetchPlan | None = None,
     ) -> list[Mapping[str, Any]]:
+        """Возвращает список runtime-записей с filters, sorting, pagination и projection."""
         self._ensure_descriptor(descriptor)
         columns = self._selectable_columns(descriptor=descriptor, fetch_plan=fetch_plan)
 
@@ -256,6 +264,11 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         filter_spec: FilterSpec,
         position: int,
     ) -> tuple[str, dict[str, Any], dict[str, RuntimeFieldDescriptor]]:
+        """Строит SQL-фрагмент WHERE для одного runtime-фильтра.
+
+        Значения фильтров приводятся через RuntimeFieldTypePolicy, а поля json/jsonb
+        возвращаются в bind_fields, чтобы `_statement` мог назначить тип bindparam.
+        """
         field = descriptor.field_by_name(filter_spec.field)
         if field is None:
             raise RuntimeDataFilterError(f"Unknown filter field '{filter_spec.field}'.")
@@ -340,6 +353,7 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         descriptor: RuntimeObjectDescriptor,
         sorting: Sequence[SortSpec],
     ) -> str:
+        """Строит ORDER BY по валидированным полям descriptor."""
         if not sorting:
             return ""
 
@@ -363,6 +377,7 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         descriptor: RuntimeObjectDescriptor,
         fetch_plan: FetchPlan | None,
     ) -> list[str]:
+        """Возвращает список SELECT-колонок и всегда добавляет pk к projection."""
         projections = fetch_plan.projections if fetch_plan is not None else ()
         if not projections:
             fields = [field.name for field in descriptor.fields]
@@ -392,6 +407,7 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         *,
         bind_fields: Mapping[str, RuntimeFieldDescriptor] | None = None,
     ):
+        """Выполняет SQLAlchemy statement и переводит persistence-ошибки в доменные."""
         statement = self._statement(sql, bind_fields or {})
         try:
             if params is None:
@@ -408,6 +424,7 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         sql: str,
         bind_fields: Mapping[str, RuntimeFieldDescriptor],
     ) -> TextClause:
+        """Создает TextClause и назначает JSONB bindparam для json/multiselect полей."""
         statement = text(sql)
         typed_params = [
             bindparam(param_name, type_=postgresql.JSONB())
@@ -423,6 +440,7 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         descriptor: RuntimeObjectDescriptor,
         field_name: str,
     ) -> RuntimeFieldDescriptor:
+        """Возвращает обязательное поле descriptor или поднимает policy error."""
         field = descriptor.field_by_name(field_name)
         if field is None:
             raise RuntimeDataPolicyError(
@@ -431,6 +449,7 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         return field
 
     def _ensure_descriptor(self, descriptor: RuntimeObjectDescriptor) -> None:
+        """Проверяет SQL-идентификаторы descriptor перед динамическим SQL."""
         self._validate_identifier(descriptor.schema_name, "schema_name")
         self._validate_identifier(descriptor.table_name, "table_name")
         self._required_field(descriptor, descriptor.pk)
@@ -439,20 +458,25 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
 
     @classmethod
     def _validate_identifier(cls, value: str, title: str) -> None:
+        """Проверяет, что identifier безопасен для использования в SQL."""
         normalized = value.strip()
         if not _IDENTIFIER_RE.fullmatch(normalized):
             raise RuntimeDataPolicyError(f"Invalid {title} identifier '{value}'.")
 
     @classmethod
     def _qualified_table(cls, descriptor: RuntimeObjectDescriptor) -> str:
+        """Возвращает quoted schema.table для descriptor."""
         return f"{cls._qi(descriptor.schema_name)}.{cls._qi(descriptor.table_name)}"
 
     @staticmethod
     def _qi(identifier: str) -> str:
+        """Кавычит PostgreSQL-идентификатор."""
         return f'"{identifier}"'
 
 
 class NoopRuntimeRelationLoader(RuntimeRelationLoader):
+    """Relation loader-заглушка, возвращающая строки без дозагрузки relations."""
+
     async def load(
         self,
         *,
@@ -460,6 +484,7 @@ class NoopRuntimeRelationLoader(RuntimeRelationLoader):
         rows: Sequence[Mapping[str, Any]],
         fetch_plan: FetchPlan,
     ) -> list[Mapping[str, Any]]:
+        """Возвращает копии runtime-строк, игнорируя relation fetch plan."""
         _ = descriptor
         _ = fetch_plan
         return [dict(row) for row in rows]

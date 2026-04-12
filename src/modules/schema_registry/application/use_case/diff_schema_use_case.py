@@ -23,6 +23,7 @@ from src.modules.schema_registry.application.service.schema_seed_service import 
 
 
 class DiffSchemaUseCase:
+    """Применяет diff между seed-спекой, metadata и фактической PostgreSQL-схемой."""
 
     def __init__(
         self,
@@ -33,6 +34,7 @@ class DiffSchemaUseCase:
         postgres_schema_service: PostgresSchemaService,
         schema_registry_metadata_write_service: SchemaRegistryMetadataWriteService,
     ) -> None:
+        """Собирает зависимости для загрузки seed, diff-плана и обновления metadata."""
         self._schema_seed_service = schema_seed_service
         self._schema_registry_metadata_read_service = (
             schema_registry_metadata_read_service
@@ -44,6 +46,7 @@ class DiffSchemaUseCase:
         )
 
     async def execute(self, command: DiffSchemaCommand) -> DiffSchemaResultDTO:
+        """Строит и применяет migration plan, затем возвращает статистику изменений."""
         tenant_id = EntityIdVO.from_value(command.tenant_id)
         seed = await self._schema_seed_service.load(seed_path=command.seed_path)
         metadata_snapshot = (

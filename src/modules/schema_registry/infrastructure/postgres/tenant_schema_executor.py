@@ -28,22 +28,26 @@ from src.modules.schema_registry.domain.error import UnsupportedSchemaBackendErr
 
 
 class PostgresTenantSchemaExecutor(TenantSchemaExecutorPort):
+    """PostgreSQL-адаптер, исполняющий migration plan tenant-схемы."""
 
     def __init__(
         self,
         session: AsyncSession,
         postgres_field_canonicalizer: PostgresFieldCanonicalizer,
     ) -> None:
+        """Инициализирует executor SQLAlchemy-сессией и SQL-канонизатором типов."""
         self._session = session
         self._postgres_field_canonicalizer = postgres_field_canonicalizer
 
     async def execute(self, *, plan: MigrationPlan) -> None:
+        """Выполняет операции плана последовательно и flush-ит сессию."""
         self._ensure_postgres()
         for operation in plan.operations:
             await self._execute_operation(operation)
         await self._session.flush()
 
     async def _execute_operation(self, operation: MigrationOperation) -> None:
+        """Рендерит и выполняет DDL для одной поддержанной migration-операции."""
         if isinstance(operation, CreateSchemaOperation):
             await self._session.execute(
                 text(f"CREATE SCHEMA {self._qi(operation.schema_name)}")
@@ -170,6 +174,7 @@ class PostgresTenantSchemaExecutor(TenantSchemaExecutorPort):
         )
 
     def _ensure_postgres(self) -> None:
+        """Проверяет, что текущий SQLAlchemy bind указывает на PostgreSQL dialect."""
         bind = self._session.get_bind()
         if bind.dialect.name != "postgresql":
             raise UnsupportedSchemaBackendError(
@@ -178,18 +183,22 @@ class PostgresTenantSchemaExecutor(TenantSchemaExecutorPort):
 
     @staticmethod
     def _qi(identifier: str) -> str:
+        """Кавычит PostgreSQL-идентификатор для DDL."""
         return f'"{identifier}"'
 
     @classmethod
     def _qualified_table(cls, schema_name: str, table_name: str) -> str:
+        """Возвращает fully-qualified имя таблицы schema.table."""
         return f"{cls._qi(schema_name)}.{cls._qi(table_name)}"
 
     @classmethod
     def _qualified_index(cls, schema_name: str, index_name: str) -> str:
+        """Возвращает fully-qualified имя индекса schema.index."""
         return f"{cls._qi(schema_name)}.{cls._qi(index_name)}"
 
     @staticmethod
     def _normalize_on_delete(value: str) -> str:
+        """Приводит on_delete к PostgreSQL DDL token с безопасным fallback."""
         mapping = {
             "restrict": "RESTRICT",
             "cascade": "CASCADE",

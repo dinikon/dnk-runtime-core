@@ -7,6 +7,8 @@ _PG_IDENTIFIER_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 def _validate_pg_identifier(value: str, *, field_name: str) -> str:
+    """Валидирует имя объекта как PostgreSQL-идентификатор."""
+
     normalized = value.strip()
 
     if not normalized:
@@ -31,10 +33,13 @@ def _validate_pg_identifier(value: str, *, field_name: str) -> str:
 
 @dataclass(frozen=True, slots=True)
 class ObjectNameVO:
+    """Value object для singular/plural имен runtime-объекта."""
+
     singular: str
     plural: str
 
     def __post_init__(self) -> None:
+        """Нормализует имена и проверяет правила plural runtime-таблицы."""
         normalized_singular = _validate_pg_identifier(
             self.singular,
             field_name="Object singular_name",

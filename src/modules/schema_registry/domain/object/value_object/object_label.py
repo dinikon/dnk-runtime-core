@@ -4,6 +4,8 @@ from src.modules.schema_registry.domain.error import InvalidValueObjectError
 
 
 def _validate_label(value: str, *, field_name: str, max_length: int = 16) -> str:
+    """Валидирует singular/plural label runtime-объекта."""
+
     normalized = value.strip()
 
     if not normalized:
@@ -17,10 +19,13 @@ def _validate_label(value: str, *, field_name: str, max_length: int = 16) -> str
 
 @dataclass(frozen=True, slots=True)
 class ObjectLabelVO:
+    """Value object для singular/plural человекочитаемых labels объекта."""
+
     singular: str
     plural: str
 
     def __post_init__(self) -> None:
+        """Нормализует labels и запрещает совпадение singular/plural."""
         normalized_singular = _validate_label(
             self.singular,
             field_name="Object label_singular",

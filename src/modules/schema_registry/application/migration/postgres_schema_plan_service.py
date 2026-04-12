@@ -40,12 +40,15 @@ from src.modules.schema_registry.domain.seed.validated_schema_spec import (
 
 
 class PostgresSchemaPlanService:
+    """Строит PostgreSQL migration plan из seed/spec и снимка физической схемы."""
+
     def __init__(
         self,
         *,
         field_type_catalog: FieldTypeCatalog,
         postgres_field_canonicalizer: PostgresFieldCanonicalizer,
     ) -> None:
+        """Инициализирует сервис правилами field-типов и SQL-канонизации."""
         self._field_type_catalog = field_type_catalog
         self._postgres_field_canonicalizer = postgres_field_canonicalizer
 
@@ -55,6 +58,7 @@ class PostgresSchemaPlanService:
         schema_name: str,
         seed: SchemaSeed | ValidatedSchemaSpec,
     ) -> MigrationPlan:
+        """Строит полный план создания схемы, таблиц, колонок, индексов и FK."""
         plan = MigrationPlan()
         plan.add(CreateSchemaOperation(schema_name=schema_name))
         desired_schema = self._build_desired_schema(seed=seed, schema_name=schema_name)
@@ -116,6 +120,12 @@ class PostgresSchemaPlanService:
         seed: SchemaSeed | ValidatedSchemaSpec,
         actual_schema: PhysicalSchemaSnapshot,
     ) -> MigrationPlan:
+        """Строит diff-план между желаемой и фактической схемой PostgreSQL.
+
+        Порядок операций важен: сначала снимаются FK и индексы, которые могут
+        блокировать изменение таблиц, затем добавляются недостающие элементы.
+        Небезопасные изменения retained-колонок явно отклоняются.
+        """
         plan = MigrationPlan()
         desired_schema = self._build_desired_schema(seed=seed, schema_name=schema_name)
         actual_tables = {table.name: table for table in actual_schema.tables}
@@ -313,6 +323,7 @@ class PostgresSchemaPlanService:
         seed: SchemaSeed | ValidatedSchemaSpec,
         schema_name: str,
     ) -> PhysicalSchemaSnapshot:
+        """Преобразует raw seed или валидированную spec в желаемый snapshot схемы."""
         if isinstance(seed, ValidatedSchemaSpec):
             return self._build_desired_schema_from_spec(
                 schema_spec=seed,
@@ -326,6 +337,7 @@ class PostgresSchemaPlanService:
         seed: SchemaSeed,
         schema_name: str,
     ) -> PhysicalSchemaSnapshot:
+        """Строит желаемый snapshot напрямую из raw seed."""
         tables: list[TableSnapshot] = []
         for object_seed in seed.objects:
             tables.append(
@@ -339,6 +351,7 @@ class PostgresSchemaPlanService:
         schema_spec: ValidatedSchemaSpec,
         schema_name: str,
     ) -> PhysicalSchemaSnapshot:
+        """Строит желаемый snapshot из нормализованной и валидированной spec."""
         tables: list[TableSnapshot] = []
         for object_spec in schema_spec.objects:
             tables.append(
@@ -355,6 +368,7 @@ class PostgresSchemaPlanService:
         seed: SchemaSeed,
         object_seed: ObjectSeed,
     ) -> TableSnapshot:
+        """Преобразует один object seed в snapshot таблицы с колонками и связями."""
         columns = tuple(
             self._build_column_snapshot_from_seed(field_seed)
             for field_seed in object_seed.fields
@@ -398,6 +412,7 @@ class PostgresSchemaPlanService:
         schema_spec: ValidatedSchemaSpec,
         object_spec: ValidatedObjectSpec,
     ) -> TableSnapshot:
+        """Преобразует валидированный object spec в snapshot таблицы."""
         columns = tuple(
             self._build_column_snapshot_from_spec(field_spec)
             for field_spec in object_spec.fields
@@ -431,6 +446,7 @@ class PostgresSchemaPlanService:
         )
 
     def _build_column_snapshot_from_seed(self, field_seed: FieldSeed) -> ColumnSnapshot:
+        """Преобразует field seed в канонический snapshot PostgreSQL-колонки."""
         field_type = self._field_type_catalog.from_seed_type(field_seed.type)
         sql_preset = self._postgres_field_canonicalizer.sql_preset_from_field_type(
             field_type
@@ -449,6 +465,7 @@ class PostgresSchemaPlanService:
         self,
         field_spec: ValidatedFieldSpec,
     ) -> ColumnSnapshot:
+        """Преобразует валидированный field spec в snapshot PostgreSQL-колонки."""
         sql_preset = self._postgres_field_canonicalizer.sql_preset_from_field_type(
             field_spec.field_type
         )
@@ -468,6 +485,7 @@ class PostgresSchemaPlanService:
         relation_seed: RelationSeed | ValidatedRelationSpec,
         target_table_name: str,
     ) -> ForeignKeySnapshot:
+        """Строит snapshot foreign key из relation seed/spec и target-таблицы."""
         relation_type = self._normalize_relation_type(relation_seed.relation_type)
         if (
             relation_type == RelationTypeEnum.ONE_TO_ONE
@@ -487,6 +505,7 @@ class PostgresSchemaPlanService:
 
     @staticmethod
     def _normalize_on_delete(value: str) -> str:
+        """Приводит on_delete к каноническому lowercase-значению для snapshot."""
         mapping = {
             "restrict": "restrict",
             "cascade": "cascade",
@@ -504,6 +523,7 @@ class PostgresSchemaPlanService:
 
     @staticmethod
     def _normalize_relation_type(raw_type: str | RelationTypeEnum) -> RelationTypeEnum:
+        """Валидирует тип связи и оставляет только source-owned FK варианты MVP."""
         normalized = str(
             raw_type.value if isinstance(raw_type, RelationTypeEnum) else raw_type
         )

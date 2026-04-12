@@ -6,11 +6,14 @@ from src.modules.schema_registry.domain.error import InvalidValueObjectError
 
 @dataclass(frozen=True, slots=True)
 class SchemaNameVO:
+    """Value object для валидного имени PostgreSQL-схемы tenant."""
+
     value: str
 
     _PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
 
     def __post_init__(self) -> None:
+        """Проверяет trim, формат и ограничение длины имени схемы."""
         normalized = self.value.strip()
 
         if not normalized:
@@ -28,4 +31,5 @@ class SchemaNameVO:
             )
 
     def __str__(self) -> str:
+        """Возвращает строковое имя схемы."""
         return self.value

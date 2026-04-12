@@ -3,6 +3,8 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True, slots=True)
 class FieldSeed:
+    """Raw seed-описание поля runtime-объекта до нормализации."""
+
     name: str
     type: str
     label: str

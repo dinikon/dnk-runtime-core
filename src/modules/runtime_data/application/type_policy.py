@@ -19,12 +19,16 @@ from src.modules.schema_registry.runtime import (
 
 @dataclass(frozen=True, slots=True)
 class RuntimeFieldTypeDefinition:
+    """Описывает соответствие metadata-типа Python и PostgreSQL представлениям."""
+
     metadata_type: str
     python_canonical: str
     postgres_canonical: str
 
 
 class RuntimeFieldTypePolicy:
+    """Проверяет и нормализует runtime payload согласно descriptor metadata."""
+
     IMMUTABLE_PATCH_FIELDS = frozenset({"id", "created_at", "updated_at"})
 
     _TYPE_TABLE: dict[str, RuntimeFieldTypeDefinition] = {
@@ -45,6 +49,7 @@ class RuntimeFieldTypePolicy:
     }
 
     def type_definition(self, type_code: str) -> RuntimeFieldTypeDefinition:
+        """Возвращает определение поддержанного runtime-типа по его коду."""
         normalized = type_code.strip().lower()
         try:
             return self._TYPE_TABLE[normalized]
@@ -59,6 +64,11 @@ class RuntimeFieldTypePolicy:
         descriptor: RuntimeObjectDescriptor,
         payload: Mapping[str, Any],
     ) -> dict[str, Any]:
+        """Нормализует insert payload и проверяет обязательные поля descriptor.
+
+        Значения приводятся к canonical Python-типам до передачи gateway в БД.
+        Nullable и default-поля могут отсутствовать, остальные поля обязательны.
+        """
         fields_by_name = descriptor.fields_by_name
         self._validate_payload_keys(payload=payload, fields_by_name=fields_by_name)
 
@@ -89,6 +99,7 @@ class RuntimeFieldTypePolicy:
         descriptor: RuntimeObjectDescriptor,
         patch: Mapping[str, Any],
     ) -> dict[str, Any]:
+        """Нормализует patch payload и запрещает изменение immutable-полей."""
         fields_by_name = descriptor.fields_by_name
         self._validate_payload_keys(payload=patch, fields_by_name=fields_by_name)
 
@@ -112,6 +123,7 @@ class RuntimeFieldTypePolicy:
         descriptor: RuntimeObjectDescriptor,
         row: Mapping[str, Any],
     ) -> dict[str, Any]:
+        """Приводит строку из БД к runtime-формату, включая UTC-aware datetime."""
         normalized = dict(row)
         for field in descriptor.fields:
             if field.name not in normalized:
@@ -132,6 +144,7 @@ class RuntimeFieldTypePolicy:
         payload: Mapping[str, Any],
         fields_by_name: Mapping[str, RuntimeFieldDescriptor],
     ) -> None:
+        """Проверяет, что payload не содержит полей вне descriptor."""
         unknown_fields = sorted(set(payload) - set(fields_by_name))
         if unknown_fields:
             raise RuntimeDataValidationError(
@@ -144,6 +157,7 @@ class RuntimeFieldTypePolicy:
         field: RuntimeFieldDescriptor,
         raw_value: Any,
     ) -> Any:
+        """Приводит одно значение к типу поля и проверяет nullable/options правила."""
         if raw_value is None:
             if field.is_nullable:
                 return None
@@ -215,10 +229,12 @@ class RuntimeFieldTypePolicy:
         field: RuntimeFieldDescriptor,
         raw_value: Any,
     ) -> Any:
+        """Публичный helper для приведения значения под конкретное поле descriptor."""
         return self._coerce_field_value(field=field, raw_value=raw_value)
 
     @staticmethod
     def _coerce_uuid(*, field_name: str, raw_value: Any) -> UUID:
+        """Приводит UUID-значение из UUID или строки."""
         if isinstance(raw_value, UUID):
             return raw_value
         if isinstance(raw_value, str):
@@ -234,12 +250,14 @@ class RuntimeFieldTypePolicy:
 
     @staticmethod
     def _coerce_str(*, field_name: str, raw_value: Any) -> str:
+        """Проверяет, что значение является строкой."""
         if isinstance(raw_value, str):
             return raw_value
         raise RuntimeDataValidationError(f"Field '{field_name}' requires string value.")
 
     @staticmethod
     def _coerce_int(*, field_name: str, raw_value: Any) -> int:
+        """Приводит integer из int или строки, не принимая bool."""
         if isinstance(raw_value, bool):
             raise RuntimeDataValidationError(
                 f"Field '{field_name}' requires integer value."
@@ -259,6 +277,7 @@ class RuntimeFieldTypePolicy:
 
     @staticmethod
     def _coerce_decimal(*, field_name: str, raw_value: Any) -> Decimal:
+        """Приводит Decimal из Decimal, int или строки и отклоняет float."""
         if isinstance(raw_value, float):
             raise RuntimeDataValidationError(
                 f"Field '{field_name}' rejects float values; use Decimal or string."
@@ -280,6 +299,7 @@ class RuntimeFieldTypePolicy:
 
     @staticmethod
     def _coerce_bool(*, field_name: str, raw_value: Any) -> bool:
+        """Приводит boolean из bool или ограниченного набора строк."""
         if isinstance(raw_value, bool):
             return raw_value
         if isinstance(raw_value, str):
@@ -294,6 +314,7 @@ class RuntimeFieldTypePolicy:
 
     @staticmethod
     def _coerce_date(*, field_name: str, raw_value: Any) -> date:
+        """Приводит date из date или ISO date строки."""
         if isinstance(raw_value, date) and not isinstance(raw_value, datetime):
             return raw_value
         if isinstance(raw_value, str):
@@ -309,6 +330,7 @@ class RuntimeFieldTypePolicy:
 
     @staticmethod
     def _coerce_datetime(*, field_name: str, raw_value: Any) -> datetime:
+        """Приводит datetime к UTC и снимает tzinfo для PostgreSQL timestamp."""
         value = raw_value
         if isinstance(value, str):
             iso = value.replace("Z", "+00:00")
