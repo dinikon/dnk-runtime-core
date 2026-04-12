@@ -13,13 +13,17 @@ from src.modules.tenancy.application.ports.schema_bootstrap import (
 
 
 class SchemaRegistryTenantSchemaBootstrapAdapter(TenantSchemaBootstrapPort):
+    """Адаптер tenancy bootstrap, запускающий CreateSchemaUseCase schema_registry."""
+
     def __init__(self, create_schema_use_case: CreateSchemaUseCase) -> None:
+        """Инициализирует адаптер use case создания runtime-схемы."""
         self._create_schema_use_case = create_schema_use_case
 
     async def bootstrap(
         self,
         context: TenantSchemaBootstrapContext,
     ) -> None:
+        """Создает runtime-схему tenant по контексту onboarding."""
         await self._create_schema_use_case.execute(
             CreateSchemaCommand(
                 tenant_id=context.tenant_id,

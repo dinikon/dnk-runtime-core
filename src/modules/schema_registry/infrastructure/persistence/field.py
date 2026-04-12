@@ -9,6 +9,8 @@ from src.modules.shared.db import Base, PortableJSON, StringUUID
 
 
 class FieldORM(Base):
+    """SQLAlchemy-модель metadata поля runtime-объекта."""
+
     __tablename__ = "fields"
 
     id: Mapped[UUID] = mapped_column(

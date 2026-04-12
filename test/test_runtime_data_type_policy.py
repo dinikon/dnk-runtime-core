@@ -84,6 +84,30 @@ def _contact_descriptor() -> RuntimeObjectDescriptor:
                 options={},
                 settings={},
             ),
+            RuntimeFieldDescriptor(
+                name="status",
+                type_code="select",
+                is_nullable=False,
+                default_value="'lead'",
+                options={
+                    "lead": "Lead",
+                    "customer": "Customer",
+                    "partner": "Partner",
+                },
+                settings={},
+            ),
+            RuntimeFieldDescriptor(
+                name="tags",
+                type_code="multiselect",
+                is_nullable=True,
+                default_value=None,
+                options={
+                    "vip": "VIP",
+                    "newsletter": "Newsletter",
+                    "inactive": "Inactive",
+                },
+                settings={},
+            ),
         ),
         relations=(),
     )
@@ -165,3 +189,29 @@ class RuntimeFieldTypePolicyTests(unittest.TestCase):
         )
 
         self.assertEqual(coerced["first_name"], "")
+
+    def test_select_and_multiselect_validate_options(self) -> None:
+        policy = RuntimeFieldTypePolicy()
+        descriptor = _contact_descriptor()
+
+        coerced = policy.coerce_patch_payload(
+            descriptor=descriptor,
+            patch={
+                "status": "customer",
+                "tags": ["vip", "newsletter", "vip"],
+            },
+        )
+        self.assertEqual(coerced["status"], "customer")
+        self.assertEqual(coerced["tags"], ["vip", "newsletter"])
+
+        with self.assertRaises(RuntimeDataValidationError):
+            policy.coerce_patch_payload(
+                descriptor=descriptor,
+                patch={"status": "unknown"},
+            )
+
+        with self.assertRaises(RuntimeDataValidationError):
+            policy.coerce_patch_payload(
+                descriptor=descriptor,
+                patch={"tags": ["vip", "unknown"]},
+            )

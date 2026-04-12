@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, TypeAlias
 
 from fastapi import Depends
 
@@ -44,13 +44,14 @@ def get_schema_seed_service(
     seed_reader: SchemaSeedReaderDep,
     field_type_catalog: FieldTypeCatalogDep,
 ) -> SchemaSeedService:
+    """Создает application service для загрузки и нормализации seed."""
     return SchemaSeedService(
         seed_reader=seed_reader,
         field_type_catalog=field_type_catalog,
     )
 
 
-SchemaSeedServiceDep = Annotated[
+SchemaSeedServiceDep: TypeAlias = Annotated[
     SchemaSeedService,
     Depends(get_schema_seed_service),
 ]
@@ -60,13 +61,14 @@ def get_postgres_schema_service(
     inspector: TenantSchemaInspectorDep,
     executor: TenantSchemaExecutorDep,
 ) -> PostgresSchemaService:
+    """Создает сервис работы с физической PostgreSQL-схемой."""
     return PostgresSchemaService(
         inspector=inspector,
         executor=executor,
     )
 
 
-PostgresSchemaServiceDep = Annotated[
+PostgresSchemaServiceDep: TypeAlias = Annotated[
     PostgresSchemaService,
     Depends(get_postgres_schema_service),
 ]
@@ -76,13 +78,14 @@ def get_schema_registry_metadata_read_service(
     data_source_service: DataSourceServiceDep,
     object_service: ObjectServiceDep,
 ) -> SchemaRegistryMetadataReadService:
+    """Создает сервис чтения metadata schema_registry."""
     return SchemaRegistryMetadataReadService(
         data_source_service=data_source_service,
         object_service=object_service,
     )
 
 
-SchemaRegistryMetadataReadServiceDep = Annotated[
+SchemaRegistryMetadataReadServiceDep: TypeAlias = Annotated[
     SchemaRegistryMetadataReadService,
     Depends(get_schema_registry_metadata_read_service),
 ]
@@ -92,13 +95,14 @@ def get_schema_registry_metadata_write_service(
     data_source_service: DataSourceServiceDep,
     object_service: ObjectServiceDep,
 ) -> SchemaRegistryMetadataWriteService:
+    """Создает сервис записи metadata schema_registry."""
     return SchemaRegistryMetadataWriteService(
         data_source_service=data_source_service,
         object_service=object_service,
     )
 
 
-SchemaRegistryMetadataWriteServiceDep = Annotated[
+SchemaRegistryMetadataWriteServiceDep: TypeAlias = Annotated[
     SchemaRegistryMetadataWriteService,
     Depends(get_schema_registry_metadata_write_service),
 ]
@@ -108,13 +112,14 @@ def get_postgres_schema_plan_service(
     field_type_catalog: FieldTypeCatalogDep,
     postgres_field_canonicalizer: PostgresFieldCanonicalizerDep,
 ) -> PostgresSchemaPlanService:
+    """Создает сервис построения PostgreSQL migration plan."""
     return PostgresSchemaPlanService(
         field_type_catalog=field_type_catalog,
         postgres_field_canonicalizer=postgres_field_canonicalizer,
     )
 
 
-PostgresSchemaPlanServiceDep = Annotated[
+PostgresSchemaPlanServiceDep: TypeAlias = Annotated[
     PostgresSchemaPlanService,
     Depends(get_postgres_schema_plan_service),
 ]
@@ -126,6 +131,7 @@ def get_create_schema_use_case(
     postgres_schema_service: PostgresSchemaServiceDep,
     schema_registry_metadata_write_service: SchemaRegistryMetadataWriteServiceDep,
 ) -> CreateSchemaUseCase:
+    """Создает use case первичного создания runtime-схемы."""
     return CreateSchemaUseCase(
         schema_seed_service=schema_seed_service,
         schema_plan_service=schema_plan_service,
@@ -134,7 +140,7 @@ def get_create_schema_use_case(
     )
 
 
-CreateSchemaUseCaseDep = Annotated[
+CreateSchemaUseCaseDep: TypeAlias = Annotated[
     CreateSchemaUseCase,
     Depends(get_create_schema_use_case),
 ]
@@ -147,6 +153,7 @@ def get_diff_schema_use_case(
     postgres_schema_service: PostgresSchemaServiceDep,
     schema_registry_metadata_write_service: SchemaRegistryMetadataWriteServiceDep,
 ) -> DiffSchemaUseCase:
+    """Создает use case применения diff к runtime-схеме."""
     return DiffSchemaUseCase(
         schema_seed_service=schema_seed_service,
         schema_registry_metadata_read_service=schema_registry_metadata_read_service,
@@ -156,7 +163,7 @@ def get_diff_schema_use_case(
     )
 
 
-DiffSchemaUseCaseDep = Annotated[
+DiffSchemaUseCaseDep: TypeAlias = Annotated[
     DiffSchemaUseCase,
     Depends(get_diff_schema_use_case),
 ]
@@ -166,13 +173,14 @@ def get_runtime_object_resolver(
     data_source_service: DataSourceServiceDep,
     object_service: ObjectServiceDep,
 ) -> RuntimeObjectResolverProtocol:
+    """Создает resolver runtime descriptor из metadata schema_registry."""
     return SchemaRegistryRuntimeObjectResolver(
         data_source_service=data_source_service,
         object_service=object_service,
     )
 
 
-RuntimeObjectResolverDep = Annotated[
+RuntimeObjectResolverDep: TypeAlias = Annotated[
     RuntimeObjectResolverProtocol,
     Depends(get_runtime_object_resolver),
 ]

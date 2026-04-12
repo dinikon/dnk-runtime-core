@@ -4,6 +4,8 @@ from .contact_response import ContactResponseSchema
 
 
 class ListContactsResponseSchema(BaseModel):
+    """Pydantic-схема HTTP-ответа со страницей контактов."""
+
     items: list[ContactResponseSchema]
     limit: int
     offset: int

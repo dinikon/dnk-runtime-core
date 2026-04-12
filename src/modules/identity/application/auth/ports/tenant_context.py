@@ -7,6 +7,8 @@ from uuid import UUID
 
 @dataclass(frozen=True, slots=True)
 class TenantRequestContext:
+    """Контекст tenant/domain, разрешенный по request host."""
+
     tenant_id: UUID
     tenant_domain_id: UUID
     host: str
@@ -16,4 +18,8 @@ class TenantRequestContext:
 
 
 class TenantContextReaderPort(Protocol):
-    async def get_by_host(self, host: str) -> TenantRequestContext: ...
+    """Порт чтения tenant request context по host."""
+
+    async def get_by_host(self, host: str) -> TenantRequestContext:
+        """Возвращает tenant context или поднимает tenancy-доменную ошибку."""
+        ...

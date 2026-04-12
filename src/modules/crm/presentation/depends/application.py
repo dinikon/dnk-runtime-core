@@ -23,6 +23,8 @@ def get_contact_service(
     command_repository: ContactCommandRepositoryDep,
     clock: ClockDep,
 ) -> ContactService:
+    """Создает доменный сервис контактов для FastAPI DI."""
+
     return ContactService(
         command_repository=command_repository,
         clock=clock,
@@ -35,6 +37,7 @@ ContactServiceDep = Annotated[ContactService, Depends(get_contact_service)]
 def get_create_contact_use_case(
     service: ContactServiceDep,
 ) -> CreateContactUseCase:
+    """Создает use case создания контакта."""
     return CreateContactUseCase(service)
 
 
@@ -47,6 +50,7 @@ CreateContactUseCaseDep = Annotated[
 def get_get_contact_use_case(
     query_repository: ContactQueryRepositoryDep,
 ) -> GetContactUseCase:
+    """Создает use case получения контакта."""
     return GetContactUseCase(query_repository)
 
 
@@ -59,6 +63,7 @@ GetContactUseCaseDep = Annotated[
 def get_list_contacts_use_case(
     query_repository: ContactQueryRepositoryDep,
 ) -> ListContactsUseCase:
+    """Создает use case списка контактов."""
     return ListContactsUseCase(query_repository)
 
 
@@ -71,6 +76,7 @@ ListContactsUseCaseDep = Annotated[
 def get_update_contact_use_case(
     service: ContactServiceDep,
 ) -> UpdateContactUseCase:
+    """Создает use case обновления контакта."""
     return UpdateContactUseCase(service)
 
 
@@ -83,6 +89,7 @@ UpdateContactUseCaseDep = Annotated[
 def get_delete_contact_use_case(
     service: ContactServiceDep,
 ) -> DeleteContactUseCase:
+    """Создает use case удаления контакта."""
     return DeleteContactUseCase(service)
 
 

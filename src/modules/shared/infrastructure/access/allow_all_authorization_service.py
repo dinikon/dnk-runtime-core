@@ -6,6 +6,8 @@ from src.modules.shared.kernel.access.ports import AuthorizationServiceProtocol
 
 
 class AllowAllAuthorizationService(AuthorizationServiceProtocol):
+    """Authorization service-заглушка, разрешающая все действия."""
+
     async def can(
         self,
         *,
@@ -15,4 +17,5 @@ class AllowAllAuthorizationService(AuthorizationServiceProtocol):
         resource_type: str,
         resource_id: UUID | None = None,
     ) -> bool:
+        """Всегда возвращает True для development/default сценариев."""
         return True

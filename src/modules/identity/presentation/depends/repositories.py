@@ -12,6 +12,8 @@ from src.modules.shared.depends.uow import UoWDep
 
 
 def get_users_repository(uow: UoWDep) -> UserRepositoryProtocol:
+    """Создает SQLAlchemy user repository для текущей UoW."""
+
     return SqlAlchemyUserRepository(uow.session)
 
 

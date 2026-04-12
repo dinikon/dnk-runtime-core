@@ -20,6 +20,8 @@ from src.modules.shared.kernel.request_context import RequestContext
 
 @dataclass(frozen=True, slots=True)
 class AuthenticateBySessionCommand:
+    """Команда shared authentication process по session cookie."""
+
     host: str | None
     session_token: str | None
     ip: str | None
@@ -27,21 +29,28 @@ class AuthenticateBySessionCommand:
 
 
 class AuthenticationProcessProtocol(Protocol):
+    """Порт аутентификации request по session данным."""
 
     async def authenticate(
         self,
         command: AuthenticateBySessionCommand,
-    ) -> Principal | None: ...
+    ) -> Principal | None:
+        """Возвращает principal или None для неаутентифицированного request."""
+        ...
 
 
 class AuthenticateBySessionUseCaseAdapter(AuthenticationProcessProtocol):
+    """Адаптер shared auth-порта к identity AuthenticateBySessionUseCase."""
+
     def __init__(self, use_case: AuthenticateBySessionUseCaseDep) -> None:
+        """Сохраняет identity use case для последующей аутентификации."""
         self._use_case = use_case
 
     async def authenticate(
         self,
         command: AuthenticateBySessionCommand,
     ) -> Principal | None:
+        """Аутентифицирует session и мапит identity principal в shared Principal."""
         principal = await self._use_case.execute(
             AuthenticateBySessionUseCaseCommand(
                 host=command.host,
@@ -59,6 +68,7 @@ def get_authentication_process(
     request: Request,
     use_case: AuthenticateBySessionUseCaseDep,
 ) -> AuthenticationProcessProtocol:
+    """Возвращает authentication process из app.state или default adapter."""
     from_state = getattr(request.app.state, "authentication_process", None)
     if from_state is not None:
         return from_state
@@ -75,6 +85,7 @@ async def get_optional_request_context(
     request: Request,
     authentication_process: AuthenticationProcessDep,
 ) -> RequestContext:
+    """Строит RequestContext с optional principal из session cookie."""
     auth_settings = dnk_config.AUTH
     command = AuthenticateBySessionCommand(
         host=extract_request_host(request),
@@ -94,6 +105,7 @@ async def get_optional_request_context(
 async def require_authenticated_request_context(
     context: Annotated[RequestContext, Depends(get_optional_request_context)],
 ) -> RequestContext:
+    """Возвращает context только для аутентифицированного principal."""
     if context.principal is None or not context.principal.is_authenticated:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -113,6 +125,7 @@ AuthenticatedRequestContextDep = Annotated[
 
 
 def _extract_request_id(request: Request) -> str | None:
+    """Достает request/correlation id из HTTP headers."""
     request_id = request.headers.get("x-request-id")
     if request_id:
         return request_id
@@ -120,6 +133,7 @@ def _extract_request_id(request: Request) -> str | None:
 
 
 def _extract_request_ip(request: Request) -> str | None:
+    """Достает client ip из x-forwarded-for или request.client."""
     forwarded_for = request.headers.get("x-forwarded-for")
     if forwarded_for:
         first_ip = forwarded_for.split(",", 1)[0].strip()
@@ -132,6 +146,7 @@ def _extract_request_ip(request: Request) -> str | None:
 
 
 def _map_principal(principal: SessionPrincipal) -> Principal:
+    """Мапит identity SessionPrincipal в shared Principal."""
     return Principal(
         user_id=principal.user_id,
         tenant_id=principal.tenant_id,

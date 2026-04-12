@@ -5,12 +5,16 @@ from pydantic import BaseModel
 
 
 class ContactResponseSchema(BaseModel):
+    """Pydantic-схема HTTP-ответа с одним контактом."""
+
     id: UUID
     created_at: datetime
     updated_at: datetime
     last_name: str | None
     first_name: str
     middle_name: str | None
+    status: str | None
+    tags: list[str]
 
 
 __all__ = ["ContactResponseSchema"]

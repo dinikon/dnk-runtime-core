@@ -16,6 +16,8 @@ from src.modules.shared import EntityIdVO
 
 @dataclass(slots=True)
 class DataSourceEntity:
+    """Доменная сущность источника данных, привязанного к tenant runtime-схеме."""
+
     id: EntityIdVO
     created_at: datetime
     updated_at: datetime
@@ -36,6 +38,7 @@ class DataSourceEntity:
         connection_dsn: ConnectionDsnVO | None = None,
         data_source_type: DataSourceTypeVO = DataSourceTypeVO.POSTGRES,
     ) -> Self:
+        """Создает datasource с едиными created_at/updated_at и PostgreSQL default."""
         return cls(
             id=id_,
             created_at=now,

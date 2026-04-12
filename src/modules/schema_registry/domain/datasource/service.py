@@ -17,12 +17,15 @@ from src.modules.schema_registry.domain.error import (
 
 
 class DataSourceService:
+    """Управляет datasource metadata для tenant в доменном слое."""
+
     def __init__(
         self,
         repository: DataSourceRepositoryProtocol,
         clock: ClockPort,
         id_provider: Callable[[], EntityIdVO],
     ) -> None:
+        """Инициализирует сервис репозиторием, временем и генератором id."""
         self._repository = repository
         self._clock = clock
         self._id_provider = id_provider
@@ -33,6 +36,7 @@ class DataSourceService:
         tenant_id: EntityIdVO,
         schema_name: str,
     ) -> DataSourceEntity:
+        """Создает datasource tenant и запрещает дубликаты по tenant_id."""
         existing = await self._repository.get_by_tenant_id(tenant_id=tenant_id)
         if existing is not None:
             raise DataSourceAlreadyExistsError(str(tenant_id))
@@ -51,6 +55,7 @@ class DataSourceService:
         *,
         tenant_id: EntityIdVO,
     ) -> DataSourceEntity:
+        """Возвращает datasource tenant или поднимает доменную not-found ошибку."""
         datasource = await self._repository.get_by_tenant_id(tenant_id=tenant_id)
         if datasource is None:
             raise DataSourceNotFoundError(str(tenant_id))

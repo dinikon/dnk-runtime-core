@@ -21,6 +21,8 @@ from src.modules.tenancy.domain.errors import (
 
 @dataclass(frozen=True, slots=True)
 class AuthenticateBySessionCommand:
+    """Команда аутентификации по session token и request host."""
+
     host: str | None
     session_token: str | None
     ip: str | None
@@ -29,6 +31,8 @@ class AuthenticateBySessionCommand:
 
 @dataclass(frozen=True, slots=True)
 class SessionPrincipal:
+    """Principal, восстановленный из валидной session."""
+
     user_id: str
     tenant_id: str | None
     session_id: str
@@ -38,19 +42,30 @@ class SessionPrincipal:
 
 
 class AuthenticateBySessionUseCaseProtocol(Protocol):
+    """Порт use case аутентификации по session."""
+
     async def execute(
         self,
         dto: AuthenticateBySessionCommand,
-    ) -> SessionPrincipal | None: ...
+    ) -> SessionPrincipal | None:
+        """Возвращает principal или None, если session не валидна."""
+        ...
 
 
 class AuthenticateBySessionUseCase(AuthenticateBySessionUseCaseProtocol):
+    """Use case восстановления principal из session token.
+
+    Сценарий нормализует host, проверяет tenant context, session scope и status
+    пользователя, возвращая None для любого неуспешного authentication пути.
+    """
+
     def __init__(
         self,
         tenant_context_reader: TenantContextReaderPort,
         users_repository: AuthUserRepositoryPort,
         session_store: SessionStorePort,
     ):
+        """Инициализирует use case reader-ом tenant context, user repo и session store."""
         self._tenant_context_reader = tenant_context_reader
         self._users_repository = users_repository
         self._session_store = session_store
@@ -59,6 +74,7 @@ class AuthenticateBySessionUseCase(AuthenticateBySessionUseCaseProtocol):
         self,
         dto: AuthenticateBySessionCommand,
     ) -> SessionPrincipal | None:
+        """Проверяет session token и возвращает SessionPrincipal для active user."""
         host = normalize_host(dto.host or "")
         session_token = dto.session_token
 

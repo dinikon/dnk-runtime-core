@@ -5,6 +5,8 @@ from uuid import UUID
 
 
 class AuthorizationServiceProtocol(Protocol):
+    """Порт проверки прав principal на действие с ресурсом."""
+
     async def can(
         self,
         *,
@@ -13,4 +15,6 @@ class AuthorizationServiceProtocol(Protocol):
         action: str,
         resource_type: str,
         resource_id: UUID | None = None,
-    ) -> bool: ...
+    ) -> bool:
+        """Возвращает True, если действие разрешено."""
+        ...

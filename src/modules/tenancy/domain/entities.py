@@ -23,6 +23,8 @@ from src.modules.tenancy.domain.value_objects import (
 
 @dataclass(slots=True)
 class Tenant:
+    """Доменная сущность tenant и его бизнес-статуса."""
+
     id: UUID
     name: str
     external_id: str
@@ -32,16 +34,20 @@ class Tenant:
     updated_at: datetime
 
     def allows_login(self) -> bool:
+        """Показывает, разрешен ли login для tenant."""
         return self.status == TenantStatus.ACTIVE
 
     def allows_read_business_data(self) -> bool:
+        """Показывает, разрешено ли чтение бизнес-данных tenant."""
         return self.status in {TenantStatus.ACTIVE, TenantStatus.FREEZE}
 
     def allows_write_business_data(self) -> bool:
+        """Показывает, разрешена ли запись бизнес-данных tenant."""
         return self.status == TenantStatus.ACTIVE
 
     @classmethod
     def create(cls, name: str, external_id: str) -> "Tenant":
+        """Создает active tenant с нормализованными name и external_id."""
         normalized_name = name.strip()
         normalized_external_id = external_id.strip()
         if not normalized_name:
@@ -63,6 +69,8 @@ class Tenant:
 
 @dataclass(slots=True)
 class TenantDomain:
+    """Доменная сущность host/domain, связанного с tenant."""
+
     id: UUID
     tenant_id: UUID
     service_type: TenantServiceType
@@ -86,6 +94,7 @@ class TenantDomain:
         tenant_id: UUID,
         host: str,
     ) -> "TenantDomain":
+        """Создает primary console domain tenant с verified/active статусами."""
         normalized_host = host.strip().lower()
         if not normalized_host:
             raise InvalidTenantDomainHostError()

@@ -12,6 +12,8 @@ from src.modules.shared.db.types import StringUUID
 
 
 class TenantModel(Base):
+    """SQLAlchemy-модель tenant."""
+
     __tablename__ = "tenants"
 
     id: Mapped[UUID] = mapped_column(

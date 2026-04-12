@@ -7,6 +7,8 @@ from src.modules.shared.kernel.principal import Principal
 
 @dataclass(frozen=True, slots=True)
 class RequestContext:
+    """Контекст текущего request с principal и диагностическими metadata."""
+
     principal: Principal | None
     request_id: str | None
     ip: str | None

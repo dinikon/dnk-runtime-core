@@ -10,11 +10,14 @@ from src.modules.tenancy.domain.repositories import (
 
 
 class ResolveTenantByHostUseCase:
+    """Use case публичного resolve tenant по host."""
+
     def __init__(
         self,
         tenants_repository: TenantRepositoryProtocol,
         tenant_domains_repository: TenantDomainRepositoryProtocol,
     ):
+        """Инициализирует use case репозиториями tenants и tenant domains."""
         self._tenants_repository = tenants_repository
         self._tenant_domains_repository = tenant_domains_repository
 
@@ -22,6 +25,7 @@ class ResolveTenantByHostUseCase:
         self,
         query: ResolveTenantByHostQuery,
     ) -> ResolveTenantByHostResultDTO:
+        """Нормализует host и возвращает доступность tenant для console-клиента."""
         normalized_host = normalize_host(query.host)
         if not normalized_host:
             return ResolveTenantByHostResultDTO(

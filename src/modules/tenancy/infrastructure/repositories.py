@@ -27,14 +27,19 @@ from src.modules.tenancy.infrastructure.persistence.tenant_domain import (
 
 
 class SqlAlchemyTenantRepository(TenantRepositoryProtocol):
+    """SQLAlchemy-репозиторий tenant entities."""
+
     def __init__(self, session: AsyncSession):
+        """Инициализирует repository текущей async-сессией."""
         self._session = session
 
     async def add(self, tenant: Tenant) -> None:
+        """Добавляет tenant model и flush-ит сессию."""
         self._session.add(tenant_to_model(tenant))
         await self._session.flush()
 
     async def get_by_id(self, tenant_id: UUID) -> Tenant | None:
+        """Ищет tenant по id."""
         model = await self._session.scalar(
             select(TenantModel).where(TenantModel.id == str(tenant_id))
         )
@@ -43,6 +48,7 @@ class SqlAlchemyTenantRepository(TenantRepositoryProtocol):
         return tenant_model_to_entity(model)
 
     async def get_by_name(self, name: str) -> Tenant | None:
+        """Ищет tenant по имени."""
         model = await self._session.scalar(
             select(TenantModel).where(TenantModel.name == name)
         )
@@ -51,6 +57,7 @@ class SqlAlchemyTenantRepository(TenantRepositoryProtocol):
         return tenant_model_to_entity(model)
 
     async def exists_by_external_id(self, external_id: str) -> bool:
+        """Проверяет существование tenant по external_id."""
         tenant_id = await self._session.scalar(
             select(TenantModel.id)
             .where(TenantModel.external_id == external_id)
@@ -59,6 +66,7 @@ class SqlAlchemyTenantRepository(TenantRepositoryProtocol):
         return tenant_id is not None
 
     async def exists_by_name(self, name: str) -> bool:
+        """Проверяет существование tenant по имени."""
         tenant_id = await self._session.scalar(
             select(TenantModel.id).where(TenantModel.name == name).limit(1)
         )
@@ -66,14 +74,19 @@ class SqlAlchemyTenantRepository(TenantRepositoryProtocol):
 
 
 class SqlAlchemyTenantDomainRepository(TenantDomainRepositoryProtocol):
+    """SQLAlchemy-репозиторий tenant domain entities."""
+
     def __init__(self, session: AsyncSession):
+        """Инициализирует repository текущей async-сессией."""
         self._session = session
 
     async def add(self, domain: TenantDomain) -> None:
+        """Добавляет tenant domain model и flush-ит сессию."""
         self._session.add(tenant_domain_to_model(domain))
         await self._session.flush()
 
     async def get_by_id(self, domain_id: UUID) -> TenantDomain | None:
+        """Ищет tenant domain по id."""
         model = await self._session.scalar(
             select(TenantDomainModel).where(TenantDomainModel.id == str(domain_id))
         )
@@ -82,6 +95,7 @@ class SqlAlchemyTenantDomainRepository(TenantDomainRepositoryProtocol):
         return tenant_domain_model_to_entity(model)
 
     async def get_by_host(self, host: str) -> TenantDomain | None:
+        """Ищет не удаленный tenant domain по host."""
         model = await self._session.scalar(
             select(TenantDomainModel)
             .where(TenantDomainModel.host == host)
@@ -92,6 +106,7 @@ class SqlAlchemyTenantDomainRepository(TenantDomainRepositoryProtocol):
         return tenant_domain_model_to_entity(model)
 
     async def get_api_host_by_tenant_id(self, tenant_id: UUID) -> str | None:
+        """Возвращает preferred API host tenant, если он зарегистрирован."""
         return await self._session.scalar(
             select(TenantDomainModel.host)
             .where(TenantDomainModel.tenant_id == str(tenant_id))
@@ -102,6 +117,7 @@ class SqlAlchemyTenantDomainRepository(TenantDomainRepositoryProtocol):
         )
 
     async def exists_by_host(self, host: str) -> bool:
+        """Проверяет существование не удаленного tenant domain по host."""
         domain_id = await self._session.scalar(
             select(TenantDomainModel.id)
             .where(TenantDomainModel.host == host)

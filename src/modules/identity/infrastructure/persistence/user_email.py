@@ -11,6 +11,8 @@ from src.modules.shared.db.types import StringUUID
 
 
 class UserEmailModel(Base):
+    """SQLAlchemy-модель email-адреса пользователя identity."""
+
     __tablename__ = "user_emails"
 
     id: Mapped[UUID] = mapped_column(

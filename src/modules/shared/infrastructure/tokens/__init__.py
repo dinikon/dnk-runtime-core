@@ -17,6 +17,8 @@ __all__ = ["InMemoryTokenBackend", "RedisTokenBackend", "RedisTokenRepository"]
 
 
 def __getattr__(name: str) -> Any:
+    """Лениво импортирует token backend/repository по имени export."""
+
     module_path = _LAZY_EXPORTS.get(name)
     if module_path is None:
         raise AttributeError(

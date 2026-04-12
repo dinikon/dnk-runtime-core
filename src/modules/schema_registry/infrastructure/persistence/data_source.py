@@ -10,6 +10,8 @@ from src.modules.shared.db import Base, StringUUID
 
 
 class DataSourceORM(Base):
+    """SQLAlchemy-модель metadata datasource tenant runtime-схемы."""
+
     __tablename__ = "data_sources"
 
     id: Mapped[UUID] = mapped_column(

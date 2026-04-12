@@ -8,6 +8,8 @@ from src.modules.shared.db import StringUUID
 from src.modules.shared.db.mixins.audiense import AudienceMixin
 
 class TenantSystemMixin(AudienceMixin):
+    """Type stub для tenant-scoped системного SQLAlchemy mixin."""
+
     id: Mapped[UUID] = mapped_column(
         StringUUID,
         primary_key=True,

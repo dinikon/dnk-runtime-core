@@ -60,11 +60,12 @@ SCHEMA_SEED = SchemaSeed(
                     is_nullable=True,
                 ),
                 FieldSeed(
-                    name="category",
+                    name="status",
                     type="select",
-                    label="Category",
-                    description="Contact category.",
-                    is_nullable=True,
+                    label="Status",
+                    description="Contact status.",
+                    is_nullable=False,
+                    default="'lead'",
                     options={
                         "lead": "Lead",
                         "customer": "Customer",

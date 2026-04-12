@@ -10,11 +10,15 @@ if TYPE_CHECKING:
 
 
 class RedisTokenRepository:
+    """Низкоуровневый JSON repository для token payloads в Redis."""
+
     def __init__(self, client: "Redis"):
+        """Инициализирует repository готовым Redis client."""
         self._client = client
 
     @classmethod
     def from_config(cls) -> "RedisTokenRepository":
+        """Создает Redis client из конфигурации приложения."""
         try:
             from redis.asyncio import Redis
         except ModuleNotFoundError as exc:
@@ -34,13 +38,16 @@ class RedisTokenRepository:
         return cls(client)
 
     async def set_json(self, key: str, payload: dict[str, object], ttl: int) -> None:
+        """Сохраняет JSON payload по key с TTL."""
         await self._client.set(name=key, value=json.dumps(payload), ex=ttl)
 
     async def get_json(self, key: str) -> dict[str, Any] | None:
+        """Читает JSON payload по key или возвращает None."""
         raw_value = await self._client.get(key)
         if raw_value is None:
             return None
         return json.loads(raw_value)
 
     async def delete(self, key: str) -> None:
+        """Удаляет payload из Redis по key."""
         await self._client.delete(key)

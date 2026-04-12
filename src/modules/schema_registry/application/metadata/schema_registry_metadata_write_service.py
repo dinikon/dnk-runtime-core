@@ -11,11 +11,14 @@ from src.modules.schema_registry.domain.seed.validated_schema_spec import (
 
 
 class SchemaRegistryMetadataWriteService:
+    """Записывает metadata schema_registry после создания или diff схемы."""
+
     def __init__(
         self,
         data_source_service: DataSourceService,
         object_service: ObjectService,
     ) -> None:
+        """Инициализирует сервис доменными сервисами datasource и объектов."""
         self._data_source_service = data_source_service
         self._object_service = object_service
 
@@ -26,6 +29,7 @@ class SchemaRegistryMetadataWriteService:
         schema_name: str,
         seed: SchemaSeed | ValidatedSchemaSpec,
     ) -> DataSourceEntity:
+        """Создает datasource tenant и полностью записывает объекты из seed."""
         datasource = await self._data_source_service.create(
             tenant_id=tenant_id,
             schema_name=schema_name,
@@ -43,6 +47,7 @@ class SchemaRegistryMetadataWriteService:
         tenant_id: EntityIdVO,
         seed: SchemaSeed | ValidatedSchemaSpec,
     ) -> DataSourceEntity:
+        """Заменяет metadata объектов tenant по seed, сохраняя текущий datasource."""
         datasource = await self._data_source_service.get_required_by_tenant(
             tenant_id=tenant_id
         )
@@ -59,6 +64,7 @@ class SchemaRegistryMetadataWriteService:
         tenant_id: EntityIdVO,
         schema_spec: ValidatedSchemaSpec,
     ) -> DataSourceEntity:
+        """Синхронизирует metadata объектов tenant с валидированной спецификацией."""
         datasource = await self._data_source_service.get_required_by_tenant(
             tenant_id=tenant_id
         )

@@ -16,6 +16,8 @@ control_plane_bearer_scheme = HTTPBearer(
 
 
 def get_control_plane_api_key() -> str:
+    """Возвращает API key control plane из конфигурации."""
+
     return dnk_config.CONTROL_PLANE_API_KEY
 
 
@@ -29,6 +31,7 @@ async def authorize_control_plane_request(
         Security(control_plane_bearer_scheme),
     ] = None,
 ) -> None:
+    """Проверяет Bearer API key для admin/control-plane endpoints."""
     if not control_plane_api_key:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

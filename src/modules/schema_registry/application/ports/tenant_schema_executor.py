@@ -4,4 +4,8 @@ from src.modules.schema_registry.application.migration.plan import MigrationPlan
 
 
 class TenantSchemaExecutorPort(Protocol):
-    async def execute(self, *, plan: MigrationPlan) -> None: ...
+    """Порт применения migration plan к физической tenant-схеме."""
+
+    async def execute(self, *, plan: MigrationPlan) -> None:
+        """Выполняет операции плана в порядке, заданном application-слоем."""
+        ...

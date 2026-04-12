@@ -23,6 +23,8 @@ from src.modules.shared.db.uow import UnitOfWorkProtocol
 
 
 class UpdateCurrentUserProfileUseCase:
+    """Use case обновления профиля текущего пользователя по session."""
+
     def __init__(
         self,
         uow: UnitOfWorkProtocol,
@@ -30,6 +32,7 @@ class UpdateCurrentUserProfileUseCase:
         users_repository: AuthUserRepositoryPort,
         session_store: SessionStorePort,
     ):
+        """Инициализирует use case UoW, tenant context reader, user repo и session store."""
         self._uow = uow
         self._tenant_context_reader = tenant_context_reader
         self._users_repository = users_repository
@@ -39,6 +42,7 @@ class UpdateCurrentUserProfileUseCase:
         self,
         dto: UpdateCurrentUserProfileCommandDTO,
     ) -> UpdateCurrentUserProfileResultDTO:
+        """Проверяет session, обновляет профиль и коммитит изменения через UoW."""
         host = normalize_host(dto.host)
         tenant_context = await self._tenant_context_reader.get_by_host(host)
 

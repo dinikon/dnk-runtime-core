@@ -5,17 +5,26 @@ from src.modules.crm.application.contact.command.create_contact_command import (
 )
 from src.modules.crm.application.contact.dto.contact_dto import ContactDTO
 from src.modules.crm.domain.contact.service import ContactService
+from src.modules.crm.domain.contact.entity import ContactEntity
 
 
 class CreateContactUseCaseProtocol(Protocol):
-    async def __call__(self, command: CreateContactCommand) -> ContactDTO: ...
+    """Порт use case создания контакта."""
+
+    async def __call__(self, command: CreateContactCommand) -> ContactDTO:
+        """Создает контакт и возвращает DTO."""
+        ...
 
 
 class CreateContactUseCase:
-    def __init__(self, service: ContactService):
+    """Use case создания CRM-контакта через доменный сервис."""
+
+    def __init__(self, service: ContactService) -> None:
+        """Инициализирует use case доменным сервисом контактов."""
         self._service = service
 
     async def __call__(self, command: CreateContactCommand) -> ContactDTO:
+        """Выполняет команду создания контакта и мапит entity в DTO."""
 
         contact = await self._service.create_contact(
             tenant_id=command.tenant_id,
@@ -23,7 +32,14 @@ class CreateContactUseCase:
             last_name=command.last_name,
             first_name=command.first_name,
             middle_name=command.middle_name,
+            status=command.status,
+            tags=command.tags,
         )
+        return self._to_dto(contact)
+
+    @staticmethod
+    def _to_dto(contact: ContactEntity) -> ContactDTO:
+        """Мапит ContactEntity в ContactDTO."""
         return ContactDTO(
             id=contact.id.uuid,
             created_at=contact.created_at,
@@ -31,4 +47,6 @@ class CreateContactUseCase:
             last_name=contact.contact_name.last_name,
             first_name=contact.contact_name.first_name,
             middle_name=contact.contact_name.middle_name,
+            status=contact.status,
+            tags=list(contact.tags),
         )

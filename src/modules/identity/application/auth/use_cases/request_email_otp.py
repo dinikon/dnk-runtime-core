@@ -26,6 +26,8 @@ from src.modules.shared.http.host import normalize_host
 
 
 class RequestEmailOtpUseCase:
+    """Use case запроса email OTP для входа пользователя."""
+
     def __init__(
         self,
         tenant_context_reader: TenantContextReaderPort,
@@ -35,6 +37,7 @@ class RequestEmailOtpUseCase:
         email_sender: EmailSenderPort,
         otp_ttl_seconds: int,
     ):
+        """Инициализирует зависимости чтения tenant/user, OTP store и email sender."""
         self._tenant_context_reader = tenant_context_reader
         self._users_repository = users_repository
         self._otp_challenge_store = otp_challenge_store
@@ -46,6 +49,7 @@ class RequestEmailOtpUseCase:
         self,
         dto: RequestEmailOtpCommandDTO,
     ) -> RequestEmailOtpResultDTO:
+        """Создает OTP challenge для primary email active user и отправляет code."""
         host = normalize_host(dto.host)
         email = dto.email.strip().lower()
 

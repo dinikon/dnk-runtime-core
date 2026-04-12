@@ -4,6 +4,8 @@ from pydantic import BaseModel
 
 
 class ResolveTenantResponseSchema(BaseModel):
+    """Pydantic-схема ответа resolve tenant по host."""
+
     exists: bool
     available: bool
     status: str

@@ -4,16 +4,22 @@ from pydantic import BaseModel, ConfigDict, EmailStr
 
 
 class RequestEmailOtpRequestSchema(BaseModel):
+    """Pydantic-схема запроса email OTP."""
+
     email: EmailStr
 
 
 class ConfirmEmailOtpRequestSchema(BaseModel):
+    """Pydantic-схема подтверждения email OTP."""
+
     email: EmailStr
     token: str
     code: str
 
 
 class UpdateCurrentUserProfileRequestSchema(BaseModel):
+    """Pydantic-схема обновления профиля текущего пользователя."""
+
     model_config = ConfigDict(extra="forbid")
 
     last_name: str

@@ -13,6 +13,8 @@ from src.modules.shared import EntityIdVO
 
 @dataclass(slots=True)
 class FieldEntity:
+    """Доменная сущность поля runtime-объекта в metadata schema_registry."""
+
     id: EntityIdVO
     created_at: datetime
     updated_at: datetime
@@ -47,6 +49,7 @@ class FieldEntity:
         options: dict[str, str] | None = None,
         settings: dict[str, str] | None = None,
     ) -> Self:
+        """Создает поле и нормализует description/default/options/settings."""
         normalized_description = description.strip()
         normalized_options = dict(options or {})
         normalized_settings = dict(settings or {})
@@ -80,6 +83,7 @@ class FieldEntity:
         label: FieldLabelVO,
         description: str,
     ) -> None:
+        """Обновляет имя и человекочитаемые metadata поля."""
         self.field_name = field_name
         self.label = label
         self.description = description.strip()
@@ -91,6 +95,7 @@ class FieldEntity:
         now: datetime,
         settings: dict[str, str],
     ) -> None:
+        """Полностью заменяет settings поля."""
         self.settings = dict(settings)
         self.updated_at = now
 
@@ -100,6 +105,7 @@ class FieldEntity:
         now: datetime,
         patch: dict[str, str],
     ) -> None:
+        """Сливает patch в текущие settings поля."""
         new_settings = dict(self.settings)
         new_settings.update(patch)
         self.settings = new_settings
@@ -111,6 +117,7 @@ class FieldEntity:
         now: datetime,
         options: dict[str, str],
     ) -> None:
+        """Полностью заменяет options, разрешая их только select-like типам."""
         if options and not self.field_type.is_select_like():
             raise InvalidFieldOperationError(
                 "Options are allowed only for select/multiselect fields."
@@ -120,6 +127,7 @@ class FieldEntity:
         self.updated_at = now
 
     def clear_options(self, *, now: datetime) -> None:
+        """Очищает options поля и обновляет timestamp."""
         self.options = {}
         self.updated_at = now
 
@@ -136,6 +144,7 @@ class FieldEntity:
         options: dict[str, str],
         settings: dict[str, str],
     ) -> bool:
+        """Применяет валидированную spec к полю и возвращает факт изменения."""
         if options and not field_type.is_select_like():
             raise InvalidFieldOperationError(
                 "Options are allowed only for select/multiselect fields."
@@ -170,6 +179,7 @@ class FieldEntity:
         return True
 
     def change_type(self, *args: object, **kwargs: object) -> None:
+        """Явно запрещает изменение типа существующего поля в MVP."""
         raise InvalidFieldOperationError(
             "Changing field type is forbidden for existing field in MVP."
         )

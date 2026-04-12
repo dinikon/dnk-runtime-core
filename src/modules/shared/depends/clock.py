@@ -11,6 +11,8 @@ default_clock: ClockPort = UtcClock()
 
 
 def get_clock(request: Request) -> ClockPort:
+    """Возвращает clock из app.state или default UTC clock."""
+
     from_state = getattr(request.app.state, "clock", None)
     if from_state is not None:
         return from_state

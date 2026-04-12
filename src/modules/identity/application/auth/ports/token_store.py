@@ -8,6 +8,8 @@ from uuid import UUID
 
 @dataclass(frozen=True, slots=True)
 class OtpChallenge:
+    """Сериализуемая запись OTP challenge для email login."""
+
     token: str
     email: str
     tenant_id: UUID
@@ -19,6 +21,8 @@ class OtpChallenge:
 
 @dataclass(frozen=True, slots=True)
 class SessionRecord:
+    """Сериализуемая запись пользовательской session."""
+
     token: str
     session_id: str
     user_id: UUID
@@ -30,20 +34,32 @@ class SessionRecord:
 
 
 class OtpChallengeStorePort(Protocol):
-    async def create_challenge(
-        self, challenge: OtpChallenge, ttl_seconds: int
-    ) -> None: ...
-    async def get_challenge(
-        self, tenant_id: UUID, token: str
-    ) -> OtpChallenge | None: ...
-    async def invalidate_challenge(self, tenant_id: UUID, token: str) -> None: ...
+    """Порт хранения OTP challenges."""
+
+    async def create_challenge(self, challenge: OtpChallenge, ttl_seconds: int) -> None:
+        """Сохраняет OTP challenge с TTL."""
+        ...
+
+    async def get_challenge(self, tenant_id: UUID, token: str) -> OtpChallenge | None:
+        """Возвращает OTP challenge tenant по token или None."""
+        ...
+
+    async def invalidate_challenge(self, tenant_id: UUID, token: str) -> None:
+        """Удаляет OTP challenge tenant по token."""
+        ...
 
 
 class SessionStorePort(Protocol):
-    async def create_session(
-        self, session: SessionRecord, ttl_seconds: int
-    ) -> None: ...
-    async def get_session(
-        self, tenant_id: UUID, token: str
-    ) -> SessionRecord | None: ...
-    async def invalidate_session(self, tenant_id: UUID, token: str) -> None: ...
+    """Порт хранения пользовательских sessions."""
+
+    async def create_session(self, session: SessionRecord, ttl_seconds: int) -> None:
+        """Сохраняет session с TTL."""
+        ...
+
+    async def get_session(self, tenant_id: UUID, token: str) -> SessionRecord | None:
+        """Возвращает session tenant по token или None."""
+        ...
+
+    async def invalidate_session(self, tenant_id: UUID, token: str) -> None:
+        """Удаляет session tenant по token."""
+        ...

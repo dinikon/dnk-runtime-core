@@ -11,6 +11,8 @@ from src.modules.shared.domain.errors import DomainError
 
 @dataclass(slots=True)
 class UserEmail:
+    """Доменная сущность email-адреса пользователя."""
+
     id: UUID
     user_id: UUID
     email: str
@@ -21,6 +23,7 @@ class UserEmail:
     updated_at: datetime
 
     def mark_verified(self) -> None:
+        """Помечает email как verified, если он еще не подтвержден."""
         if self.is_verified:
             return
         now = datetime.now(UTC)
@@ -30,6 +33,8 @@ class UserEmail:
 
 @dataclass(slots=True)
 class User:
+    """Доменная сущность пользователя identity."""
+
     id: UUID
     tenant_id: UUID
     status: str
@@ -55,6 +60,7 @@ class User:
         first_name: str,
         last_name: str,
     ) -> "User":
+        """Создает active tenant admin с profile defaults."""
         normalized_first_name = first_name.strip()
         normalized_last_name = last_name.strip()
         if not normalized_first_name:
@@ -89,6 +95,7 @@ class User:
         is_primary: bool = False,
         is_verified: bool = False,
     ) -> UserEmail:
+        """Добавляет email пользователю и запрещает второй primary email."""
         normalized_email = email.strip().lower()
         if not normalized_email:
             raise DomainError("User email must not be empty.")
@@ -112,9 +119,11 @@ class User:
         return user_email
 
     def can_login(self) -> bool:
+        """Показывает, разрешен ли login для пользователя."""
         return self.status == "active"
 
     def get_primary_email(self, email: str) -> UserEmail | None:
+        """Возвращает primary email по адресу или None."""
         normalized_email = email.strip().lower()
         for existing in self.emails:
             if (
@@ -126,6 +135,7 @@ class User:
         return None
 
     def mark_email_verified(self, user_email_id: UUID) -> None:
+        """Помечает email пользователя как verified по id."""
         for email in self.emails:
             if email.id == user_email_id:
                 email.mark_verified()
@@ -143,6 +153,7 @@ class User:
         interface_theme: str | None,
         timezone: str,
     ) -> None:
+        """Обновляет профиль пользователя и валидирует language/theme/timezone."""
         normalized_last_name = last_name.strip()
         normalized_first_name = first_name.strip()
         normalized_middle_name = (

@@ -12,6 +12,8 @@ from src.modules.identity.presentation.depends.repositories import UsersReposito
 
 
 def get_user_service(users_repository: UsersRepositoryDep) -> UserServiceProtocol:
+    """Создает provisioning user service."""
+
     return UserService(users_repository)
 
 

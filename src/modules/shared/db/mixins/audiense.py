@@ -5,6 +5,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 
 class AudienceMixin:
+    """SQLAlchemy mixin с created_at/updated_at audit timestamps."""
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.current_timestamp(),

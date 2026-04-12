@@ -15,6 +15,8 @@ log = logging.getLogger(__name__)
 
 
 def _build_default_token_manager() -> TokenManager:
+    """Создает Redis-backed TokenManager или in-memory fallback."""
+
     try:
         return TokenManager(RedisTokenBackend.from_config())
     except RuntimeError as exc:
@@ -29,6 +31,7 @@ default_token_manager = _build_default_token_manager()
 
 
 def get_token_manager(request: Request) -> TokenManager:
+    """Возвращает token manager из app.state или default singleton."""
     from_state = getattr(request.app.state, "token_manager", None)
     if from_state is not None:
         return from_state

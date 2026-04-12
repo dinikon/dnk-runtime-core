@@ -8,6 +8,8 @@ from typing import Protocol
 
 @dataclass(frozen=True, slots=True)
 class GeneratedSession:
+    """Сгенерированные token/session_id и сроки session."""
+
     token: str
     session_id: str
     issued_at: datetime
@@ -15,11 +17,18 @@ class GeneratedSession:
 
 
 class SessionServiceProtocol(Protocol):
-    def generate(self, *, ttl_seconds: int) -> GeneratedSession: ...
+    """Порт генерации пользовательских sessions."""
+
+    def generate(self, *, ttl_seconds: int) -> GeneratedSession:
+        """Генерирует session с указанным TTL."""
+        ...
 
 
 class SessionService:
+    """Сервис генерации session token и session_id."""
+
     def generate(self, *, ttl_seconds: int) -> GeneratedSession:
+        """Генерирует session token, id, issued_at и expires_at."""
         issued_at = datetime.now(UTC)
         return GeneratedSession(
             token=f"sess_{secrets.token_urlsafe(32)}",
