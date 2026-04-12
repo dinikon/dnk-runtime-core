@@ -17,7 +17,6 @@ from src.modules.shared.infrastructure.time import UtcClock
 
 async def handle_diff(args: argparse.Namespace) -> int:
     """Обрабатывает CLI-команду schema-registry diff и печатает summary результата."""
-
     try:
         async with UnitOfWork(db_helper.session_factory) as uow:
             use_case = build_diff_schema_use_case(

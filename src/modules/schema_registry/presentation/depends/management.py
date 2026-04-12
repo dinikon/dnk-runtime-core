@@ -32,7 +32,6 @@ def build_diff_schema_use_case(
     clock: ClockPort,
 ) -> DiffSchemaUseCase:
     """Собирает DiffSchemaUseCase вне FastAPI DI для management-команд."""
-
     field_type_catalog = get_field_type_catalog()
     postgres_field_canonicalizer = get_postgres_field_canonicalizer()
     data_source_repository = get_data_source_repository(uow)

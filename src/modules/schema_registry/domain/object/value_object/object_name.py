@@ -8,7 +8,6 @@ _PG_IDENTIFIER_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 def _validate_pg_identifier(value: str, *, field_name: str) -> str:
     """Валидирует имя объекта как PostgreSQL-идентификатор."""
-
     normalized = value.strip()
 
     if not normalized:

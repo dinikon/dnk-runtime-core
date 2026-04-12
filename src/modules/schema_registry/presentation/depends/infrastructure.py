@@ -47,7 +47,6 @@ from src.modules.schema_registry.infrastructure.seed.python_module_seed_reader i
 
 def get_schema_seed_reader() -> SeedReaderPort:
     """Создает reader seed-спек из Python-модуля."""
-
     return PythonModuleSeedReader()
 
 
