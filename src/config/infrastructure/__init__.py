@@ -2,7 +2,13 @@ import os
 from typing import Any, Literal
 from urllib.parse import parse_qsl, quote_plus
 
-from pydantic import Field, NonNegativeInt, PositiveInt, computed_field
+from pydantic import (
+    Field,
+    NonNegativeFloat,
+    NonNegativeInt,
+    PositiveInt,
+    computed_field,
+)
 from pydantic_settings import BaseSettings
 
 
@@ -90,6 +96,16 @@ class DatabaseConfig(BaseSettings):
     SQLALCHEMY_ECHO: bool | Literal["debug"] = Field(
         description="If True, SQLAlchemy will log all SQL statements.",
         default=False,
+    )
+
+    DB_STARTUP_MAX_ATTEMPTS: PositiveInt = Field(
+        description="Maximum number of startup attempts to connect to database.",
+        default=5,
+    )
+
+    DB_STARTUP_RETRY_DELAY_SECONDS: NonNegativeFloat = Field(
+        description="Delay in seconds between retry attempts on startup.",
+        default=1,
     )
 
     RETRIEVAL_SERVICE_EXECUTORS: NonNegativeInt = Field(
