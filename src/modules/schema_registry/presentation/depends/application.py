@@ -19,6 +19,10 @@ from src.modules.schema_registry.application.service.postgres_schema_service imp
 from src.modules.schema_registry.application.service.schema_seed_service import (
     SchemaSeedService,
 )
+from src.modules.schema_registry.application.use_case.describe_runtime_object_use_case import (
+    DescribeRuntimeObjectUseCase,
+    DescribeRuntimeObjectUseCaseProtocol,
+)
 from src.modules.schema_registry.application.use_case.create_schema_use_case import (
     CreateSchemaUseCase,
 )
@@ -169,6 +173,23 @@ DiffSchemaUseCaseDep: TypeAlias = Annotated[
 ]
 
 
+def get_describe_runtime_object_use_case(
+    data_source_service: DataSourceServiceDep,
+    object_service: ObjectServiceDep,
+) -> DescribeRuntimeObjectUseCaseProtocol:
+    """Создает use case чтения описания runtime-объекта tenant."""
+    return DescribeRuntimeObjectUseCase(
+        data_source_service=data_source_service,
+        object_service=object_service,
+    )
+
+
+DescribeRuntimeObjectUseCaseDep: TypeAlias = Annotated[
+    DescribeRuntimeObjectUseCaseProtocol,
+    Depends(get_describe_runtime_object_use_case),
+]
+
+
 def get_runtime_object_resolver(
     data_source_service: DataSourceServiceDep,
     object_service: ObjectServiceDep,
@@ -188,6 +209,7 @@ RuntimeObjectResolverDep: TypeAlias = Annotated[
 
 __all__ = [
     "CreateSchemaUseCaseDep",
+    "DescribeRuntimeObjectUseCaseDep",
     "DiffSchemaUseCaseDep",
     "PostgresSchemaServiceDep",
     "PostgresSchemaPlanServiceDep",
@@ -196,6 +218,7 @@ __all__ = [
     "SchemaRegistryMetadataReadServiceDep",
     "SchemaRegistryMetadataWriteServiceDep",
     "get_create_schema_use_case",
+    "get_describe_runtime_object_use_case",
     "get_diff_schema_use_case",
     "get_postgres_schema_service",
     "get_postgres_schema_plan_service",

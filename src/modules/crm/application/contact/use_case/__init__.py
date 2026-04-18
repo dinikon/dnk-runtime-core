@@ -6,6 +6,10 @@ from src.modules.crm.application.contact.use_case.delete_contact import (
     DeleteContactUseCase,
     DeleteContactUseCaseProtocol,
 )
+from src.modules.crm.application.contact.use_case.describe_contact_fields import (
+    DescribeContactFieldsUseCase,
+    DescribeContactFieldsUseCaseProtocol,
+)
 from src.modules.crm.application.contact.use_case.get_contact import (
     GetContactUseCase,
     GetContactUseCaseProtocol,
@@ -24,6 +28,8 @@ __all__ = [
     "CreateContactUseCaseProtocol",
     "DeleteContactUseCase",
     "DeleteContactUseCaseProtocol",
+    "DescribeContactFieldsUseCase",
+    "DescribeContactFieldsUseCaseProtocol",
     "GetContactUseCase",
     "GetContactUseCaseProtocol",
     "ListContactsUseCase",
