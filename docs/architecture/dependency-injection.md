@@ -13,6 +13,9 @@ The project uses explicit composition functions instead of a large global contai
 - FastAPI controllers depend on typed aliases like `CreateTenantUseCaseDep` or `AuthenticatedRequestContextDep`.
 - These aliases are built from `Depends(...)` functions inside module-specific `presentation/depends/*`.
 - Repositories and adapters are assembled from the same request-scoped `uow.session`.
+- In `tenancy`, DI now wires use cases from `application/tenant/use_case/` and
+  `application/tenant_domain/use_case/` while keeping the public dependency
+  aliases stable for the rest of the codebase.
 
 ## Management Composition
 
@@ -43,5 +46,7 @@ The project uses explicit composition functions instead of a large global contai
 
 - `src/modules/shared/depends/uow.py`
 - `src/modules/tenancy/presentation/depends/application.py`
+- `src/modules/tenancy/application/tenant/use_case/`
+- `src/modules/tenancy/application/tenant_domain/use_case/`
 - `src/modules/schema_registry/presentation/depends/application.py`
 - `src/modules/schema_registry/presentation/depends/management.py`

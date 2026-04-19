@@ -48,6 +48,7 @@ Mounted under `/api/console/auth`.
 ## Source Of Truth
 
 - `src/modules/router.py`
-- `src/modules/tenancy/presentation/http/`
+- `src/modules/tenancy/presentation/http/admin_tenant/controller/`
+- `src/modules/tenancy/presentation/http/console_tenant/controller/`
 - `src/modules/identity/presentation/api/console_auth.py`
 - `src/modules/crm/presentation/http/contact/controller/`

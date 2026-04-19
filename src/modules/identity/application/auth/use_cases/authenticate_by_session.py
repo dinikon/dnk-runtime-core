@@ -13,7 +13,7 @@ from src.modules.identity.application.auth.ports.token_store import (
     SessionStorePort,
 )
 from src.modules.shared.http.host import normalize_host
-from src.modules.tenancy.domain.errors import (
+from src.modules.tenancy.domain.tenant_domain import (
     TenantHostNotFoundError,
     TenantLoginUnavailableError,
 )

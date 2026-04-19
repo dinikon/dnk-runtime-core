@@ -4,7 +4,7 @@
 
 `dnk-runtime-core` — backend-сервис на `FastAPI` + `SQLAlchemy AsyncIO`, построенный вокруг модульной структуры `src/modules`.
 
-Сейчас в проекте реализованы два рабочих направления:
+Сейчас в проекте реализованы несколько рабочих направлений:
 
 1. `tenancy`
    - server-to-server создание tenant через `POST /api/admin/create-tenant`
@@ -16,6 +16,13 @@
      - `GET /api/console/auth/me`
      - `PATCH /api/console/auth/me`
      - `POST /api/console/auth/logout`
+3. `schema_registry`
+    - bootstrap tenant runtime schema из seed
+    - diff tenant runtime schema через `dnk-manage schema-registry diff`
+4. `runtime_data`
+    - tenant-scoped доступ к runtime-таблицам и данным
+5. `crm`
+    - CRUD операций над `contact` поверх runtime data
 
 Ключевая бизнес-идея приложения:
 
@@ -39,16 +46,17 @@
 - PostgreSQL (asyncpg) как единственный SQL backend
 - unittest как текущий test runner
 
-Основные зависимости описаны в [pyproject.toml](/Users/inikon/PycharmProjects/dnk-runtime-core/pyproject.toml).
+Основные зависимости описаны в [pyproject.toml](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/pyproject.toml).
 
 ---
 
 ## Точка входа
 
-- приложение создается в [src/app_factory.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/app_factory.py)
-- экспорт `app` находится в [src/app.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/app.py)
-- класс приложения: [src/dnk_app.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/dnk_app.py)
-- общий router собирается в [src/modules/router.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/router.py)
+- приложение создается в [src/app_factory.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/app_factory.py)
+- экспорт `app` находится в [src/app.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/app.py)
+- класс приложения: [src/dnk_app.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/dnk_app.py)
+- общий router собирается
+  в [src/modules/router.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/modules/router.py)
 
 Текущий `lifespan`:
 
@@ -87,12 +95,36 @@ src/
       uow.py
     tenancy/
       application/
-        admin_onboarding/
-        request_context_by_host/
-        resolve_tenant_by_host/
+        ports/
+        tenant/
+          command/
+          dto/
+          use_case/
+        tenant_domain/
+          dto/
+          query/
+          use_case/
       domain/
+        service/
+        tenant/
+          value_object/
+        tenant_domain/
+          value_object/
       infrastructure/
+        adapter/
+        mapper/
+        persistence/
+        repository/
       presentation/
+        depends/
+        http/
+          admin_tenant/
+            controller/
+            requests/
+            responses/
+          console_tenant/
+            controller/
+            responses/
     identity/
       application/
         provisioning/
@@ -101,21 +133,26 @@ src/
       infrastructure/
       presentation/
     crm/
-    catalog/
-    org/
+    runtime_data/
+    schema_registry/
 test/
-  test_admin_create_tenant_endpoint.py
-  test_console_auth_endpoint.py
-  test_user_service.py
+  test_architecture_boundaries.py
+  test_tenancy_create_tenant_use_case.py
+  test_tenant_schema_bootstrap_boundary.py
+  test_tenancy_http_router.py
+  test_schema_registry_*.py
+  test_crm_*.py
 ```
 
-`crm`, `catalog` и `org` пока являются каркасами модулей без реализованной прикладной логики.
+`crm`, `runtime_data`, `schema_registry`, `identity` и `tenancy` содержат текущую рабочую прикладную логику проекта.
 
 ---
 
 ## Конфигурация
 
-Все конфиги агрегируются через [src/config/app_config.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/config/app_config.py) в `DnkConfig`.
+Все конфиги агрегируются
+через [src/config/app_config.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/config/app_config.py) в
+`DnkConfig`.
 
 Сейчас проект использует несколько config-групп:
 
@@ -159,20 +196,20 @@ test/
 
 `shared` содержит только технические кросс-модульные компоненты:
 
-- [src/modules/shared/db/helper.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/shared/db/helper.py)
+- [src/modules/shared/db/helper.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/modules/shared/db/helper.py)
   - создание engine
   - session factory
   - `create_all()`
-- [src/modules/shared/uow.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/shared/uow.py)
+- [src/modules/shared/uow.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/modules/shared/uow.py)
   - request-scoped `UnitOfWork`
-- [src/modules/shared/depends/uow.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/shared/depends/uow.py)
+- [src/modules/shared/depends/uow.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/modules/shared/depends/uow.py)
   - FastAPI dependency для `UoW`
-- [src/modules/shared/http/host.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/shared/http/host.py)
+- [src/modules/shared/http/host.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/modules/shared/http/host.py)
   - общая нормализация `host`
   - извлечение `host` из `Request`
-- [src/modules/shared/depends/request_host.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/shared/depends/request_host.py)
+- [src/modules/shared/depends/request_host.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/modules/shared/depends/request_host.py)
   - dependency `RequestHostDep`
-- [src/modules/shared/tokens/](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/shared/tokens)
+- [src/modules/shared/tokens/](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/modules/shared/tokens)
   - `TokenManager`
   - in-memory backend
   - Redis repository
@@ -198,9 +235,9 @@ test/
 
 Файлы:
 
-- [src/modules/tenancy/domain/entities.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/tenancy/domain/entities.py)
-- [src/modules/tenancy/domain/errors.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/tenancy/domain/errors.py)
-- [src/modules/tenancy/domain/value_objects/](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/tenancy/domain/value_objects)
+- [src/modules/tenancy/domain/tenant/entity.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/modules/tenancy/domain/tenant/entity.py)
+- [src/modules/tenancy/domain/tenant_domain/entity.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/modules/tenancy/domain/tenant_domain/entity.py)
+- [src/modules/tenancy/domain/service/tenant_onboarding.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/modules/tenancy/domain/service/tenant_onboarding.py)
 
 Бизнес-правила:
 
@@ -221,14 +258,21 @@ test/
 
 ### Application
 
-Реализованные slices:
+Текущая раскладка application-слоя:
 
-1. `admin_onboarding`
-   - создание tenant + первого admin user + primary domain
-2. `resolve_tenant_by_host`
-   - внешний read-model для UI
-3. `request_context_by_host`
-   - внутренний use case для получения валидного tenant request context
+1. `tenant`
+    - `command/create_tenant_command.py`
+    - `dto/create_tenant_result_dto.py`
+    - `use_case/create_tenant.py`
+2. `tenant_domain`
+    - `query/resolve_tenant_by_host_query.py`
+    - `query/resolve_tenant_request_context_by_host_query.py`
+    - `dto/resolve_tenant_by_host_result_dto.py`
+    - `dto/tenant_request_context_dto.py`
+    - `use_case/resolve_tenant_by_host.py`
+    - `use_case/resolve_tenant_request_context_by_host.py`
+3. `ports`
+    - tenancy-owned интеграционные порты к `identity` и `schema_registry`
 
 ### Presentation
 
@@ -239,16 +283,18 @@ test/
 
 Схемы request/response вынесены в отдельные файлы:
 
-- `presentation/api/requests/*`
-- `presentation/api/responses/*`
+- `presentation/http/admin_tenant/requests/*`
+- `presentation/http/admin_tenant/responses/*`
+- `presentation/http/console_tenant/responses/*`
 
 ### Infrastructure
 
 Содержит:
 
 - SQLAlchemy persistence models
-- SQLAlchemy repositories
-- mapping domain <-> DB
+- SQLAlchemy repositories в `infrastructure/repository/`
+- mapping domain <-> DB в `infrastructure/mapper/`
+- adapter к identity provisioning в `infrastructure/adapter/`
 
 ### Текущий create-tenant flow
 
@@ -256,13 +302,13 @@ test/
 
 1. route получает request schema
 2. route проходит Bearer API key guard
-3. payload маппится в `CreateTenantCommandDTO`
+3. payload маппится в `CreateTenantCommand`
 4. `CreateTenantUseCase` вызывает:
-   - `TenantService`
+    - `TenantOnboardingService`
    - `IdentityProvisioningServiceAdapter`
-   - `TenantDomainService`
-5. use case делает `commit()`
-6. при ошибке делает `rollback()`
+    - `TenantSchemaBootstrapPort`
+5. use case не открывает собственный `UoW` и не делает `commit()`/`rollback()`
+6. работа идет в request-scoped session через зависимости FastAPI
 
 Endpoint принимает:
 
@@ -307,8 +353,8 @@ Endpoint принимает:
 
 Файлы:
 
-- [src/modules/identity/domain/entities.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/identity/domain/entities.py)
-- [src/modules/identity/domain/errors.py](/Users/inikon/PycharmProjects/dnk-runtime-core/src/modules/identity/domain/errors.py)
+- [src/modules/identity/domain/entities.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/modules/identity/domain/entities.py)
+- [src/modules/identity/domain/errors.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/modules/identity/domain/errors.py)
 
 Бизнес-правила:
 
@@ -438,7 +484,7 @@ Endpoint принимает:
 - `host` всегда нормализуется в shared слое
 - auth-flow не доверяет frontend resolve-check и всегда повторно валидирует tenant context
 
-Для login-сценариев внутренний источник истины — `GetTenantRequestContextByHostUseCase`.
+Для login-сценариев внутренний источник истины — `ResolveTenantRequestContextByHostUseCase`.
 
 Этот use case:
 
@@ -467,20 +513,20 @@ Endpoint принимает:
 
 Сейчас есть:
 
-- [test/test_admin_create_tenant_endpoint.py](/Users/inikon/PycharmProjects/dnk-runtime-core/test/test_admin_create_tenant_endpoint.py)
-  - create-tenant
-  - external_id
-  - API key
-  - tenant resolve
-- [test/test_user_service.py](/Users/inikon/PycharmProjects/dnk-runtime-core/test/test_user_service.py)
-  - tenant-local email uniqueness
-- [test/test_console_auth_endpoint.py](/Users/inikon/PycharmProjects/dnk-runtime-core/test/test_console_auth_endpoint.py)
-  - request OTP
-  - confirm OTP
-  - get current user profile (`/api/console/auth/me`)
-  - update current user profile (`PATCH /api/console/auth/me`)
-  - logout
-  - tenant/host/session isolation
+- [test/test_architecture_boundaries.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/test/test_architecture_boundaries.py)
+    - архитектурные границы модулей
+    - запрет legacy import-путей
+- [test/test_tenancy_create_tenant_use_case.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/test/test_tenancy_create_tenant_use_case.py)
+    - orchestration `CreateTenantUseCase`
+    - bootstrap schema context
+- [test/test_tenant_schema_bootstrap_boundary.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/test/test_tenant_schema_bootstrap_boundary.py)
+    - boundary между `tenancy` и `schema_registry`
+- [test/test_tenancy_http_router.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/test/test_tenancy_http_router.py)
+    - сохранение публичных tenancy routes
+- `test/test_schema_registry_*.py`
+    - schema seed, metadata, diff, planner, executor, repositories, runtime resolver
+- `test/test_crm_*.py`
+    - CRM controller, entity, repository и use case сценарии
 
 ---
 

@@ -22,7 +22,7 @@ from src.modules.identity.application.auth.ports.token_store import (
 )
 from src.modules.identity.presentation.depends.repositories import UsersRepositoryDep
 from src.modules.shared.kernel.tokens import TokenManager
-from src.modules.tenancy.application.queries import (
+from src.modules.tenancy.application.tenant_domain.query import (
     ResolveTenantRequestContextByHostQuery,
 )
 from src.modules.tenancy.presentation.depends.application import (

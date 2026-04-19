@@ -13,15 +13,15 @@ from src.modules.shared.depends.uow import UoWDep
 from src.modules.tenancy.application.ports.identity import (
     IdentityProvisioningServiceProtocol,
 )
-from src.modules.tenancy.domain.repositories import (
+from src.modules.tenancy.domain.service import TenantOnboardingService
+from src.modules.tenancy.domain.tenant import TenantRepositoryProtocol
+from src.modules.tenancy.domain.tenant_domain import (
     TenantDomainRepositoryProtocol,
-    TenantRepositoryProtocol,
 )
-from src.modules.tenancy.domain.services import TenantOnboardingService
-from src.modules.tenancy.infrastructure.identity_provisioning import (
+from src.modules.tenancy.infrastructure.adapter.identity_provisioning import (
     IdentityProvisioningServiceAdapter,
 )
-from src.modules.tenancy.infrastructure.repositories import (
+from src.modules.tenancy.infrastructure.repository import (
     SqlAlchemyTenantDomainRepository,
     SqlAlchemyTenantRepository,
 )

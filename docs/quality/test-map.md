@@ -15,6 +15,8 @@ This page maps current tests to the behaviors they protect.
     - tenant creation orchestration
 - `test/test_tenant_schema_bootstrap_boundary.py`
     - tenancy-owned bootstrap context and adapter contract
+- `test/test_tenancy_http_router.py`
+    - guards public tenancy route registration
 
 ## Schema Registry
 
@@ -39,10 +41,9 @@ This page maps current tests to the behaviors they protect.
 
 ## Identity
 
-- `test_console_auth_*`, `test_identity_*`, `test_user_service*`
-    - OTP/session auth and user profile behavior
-- `test_shared_authentication_depends.py`
-    - request-context auth dependency path
+- identity currently has no dedicated standalone test cluster in `test/`
+- tenant-aware auth behavior is exercised indirectly through tenancy boundary,
+  shared auth wiring and end-to-end controller/use-case coverage in adjacent modules
 
 ## CRM
 

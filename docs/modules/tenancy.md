@@ -18,9 +18,9 @@ its primary console domain, and connecting onboarding to identity and runtime sc
     - creates primary `TenantDomain`
     - provisions tenant admin through identity
     - bootstraps runtime schema through `TenantSchemaBootstrapPort`
-- `ResolveTenantByHost`
+- `ResolveTenantByHostUseCase`
     - returns whether tenant exists and whether login is available
-- `ResolveTenantRequestContextByHost`
+- `ResolveTenantRequestContextByHostUseCase`
     - builds tenant request context from incoming host
 
 ## Domain Model
@@ -30,11 +30,21 @@ its primary console domain, and connecting onboarding to identity and runtime sc
 - `TenantDomain`
     - host binding for a tenant, service type, status, verification and TLS mode
 
+Current domain layout is split by subdomain:
+
+- `domain/tenant/`
+    - tenant entity, errors, repository contract, `TenantStatus`
+- `domain/tenant_domain/`
+    - tenant-domain entity, errors, repository contract and domain enums
+- `domain/service/`
+    - onboarding orchestration that creates `Tenant` + primary `TenantDomain`
+
 ## Infrastructure / Persistence
 
-- SQLAlchemy repositories and persistence models live under `tenancy/infrastructure/`
+- SQLAlchemy repositories and mappers live under `tenancy/infrastructure/repository/` and
+  `tenancy/infrastructure/mapper/`
 - persistence stores tenant records and tenant domains
-- module also contains identity provisioning adapter and host mapping logic
+- module also contains identity provisioning adapter under `tenancy/infrastructure/adapter/`
 
 ## Presentation / Entry Points
 
@@ -42,6 +52,15 @@ its primary console domain, and connecting onboarding to identity and runtime sc
     - protected by control-plane bearer API key
 - `GET /api/console/tenants/resolve`
     - resolves tenant availability by host
+
+Current HTTP layout is organized by endpoint area:
+
+- `presentation/http/admin_tenant/`
+    - controller, request and response schemas for admin create-tenant flow
+- `presentation/http/console_tenant/`
+    - controller and response schema for tenant resolve flow
+- `presentation/depends/`
+    - FastAPI DI builders for repositories, services and use cases
 
 ## Dependencies On Other Modules
 
@@ -52,7 +71,7 @@ its primary console domain, and connecting onboarding to identity and runtime sc
 ## Tests Covering This Module
 
 - tenant creation orchestration and schema bootstrap boundary tests
-- host resolution endpoint and use case tests
+- router smoke test for public tenancy endpoints
 - architecture boundary test that prevents direct import of `schema_registry.application`
 
 ## Related
@@ -64,7 +83,10 @@ its primary console domain, and connecting onboarding to identity and runtime sc
 
 ## Source Of Truth
 
-- `src/modules/tenancy/application/use_cases/create_tenant.py`
-- `src/modules/tenancy/domain/entities.py`
+- `src/modules/tenancy/application/tenant/use_case/create_tenant.py`
+- `src/modules/tenancy/application/tenant_domain/use_case/resolve_tenant_by_host.py`
+- `src/modules/tenancy/domain/tenant/entity.py`
+- `src/modules/tenancy/domain/tenant_domain/entity.py`
 - `src/modules/tenancy/application/ports/schema_bootstrap.py`
-- `src/modules/tenancy/presentation/http/admin_tenants.py`
+- `src/modules/tenancy/presentation/http/admin_tenant/controller/create_tenant.py`
+- `src/modules/tenancy/presentation/http/console_tenant/controller/resolve_tenant.py`

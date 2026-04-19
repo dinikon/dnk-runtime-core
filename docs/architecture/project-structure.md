@@ -33,6 +33,7 @@
 src/modules/
 ├── tenancy/
 ├── identity/
+├── runtime_data/
 ├── crm/
 ├── schema_registry/
 └── shared/
@@ -44,6 +45,10 @@ src/modules/
 - `application/`: use cases, DTOs, commands, queries, application services.
 - `infrastructure/`: persistence, adapters and integrations.
 - `presentation/`: HTTP routers and dependency assembly.
+
+Modules may further split these layers by subdomain when the module owns more
+than one closely related concept. For example, `tenancy` now separates
+`tenant` and `tenant_domain` inside both `domain/` and `application/`.
 
 `schema_registry` also has:
 

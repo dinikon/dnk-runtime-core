@@ -69,6 +69,23 @@ class ArchitectureBoundariesTests(unittest.TestCase):
             "src.modules.schema_registry.domain.service.schema_registry_metadata_snapshot",
             "src.modules.schema_registry.domain.field.service",
             "src.modules.schema_registry.domain.field.enum.sql_type_preset",
+            "src.modules.tenancy.application.commands",
+            "src.modules.tenancy.application.dto",
+            "src.modules.tenancy.application.queries",
+            "src.modules.tenancy.application.use_cases",
+            "src.modules.tenancy.domain.entities",
+            "src.modules.tenancy.domain.errors",
+            "src.modules.tenancy.domain.repositories",
+            "src.modules.tenancy.domain.services",
+            "src.modules.tenancy.domain.value_objects",
+            "src.modules.tenancy.infrastructure.identity_provisioning",
+            "src.modules.tenancy.infrastructure.mappers",
+            "src.modules.tenancy.infrastructure.repositories",
+            "src.modules.tenancy.presentation.http.admin_tenants",
+            "src.modules.tenancy.presentation.http.console_tenants",
+            "src.modules.tenancy.presentation.http.requests.admin_tenants",
+            "src.modules.tenancy.presentation.http.responses.admin_tenants",
+            "src.modules.tenancy.presentation.http.responses.console_tenants",
         )
         for root in ("src", "test"):
             for path in iter_python_files(root):

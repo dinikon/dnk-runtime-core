@@ -1,24 +1,18 @@
 from __future__ import annotations
 
 import unittest
-from dataclasses import dataclass
 from uuid import uuid4
 
-from src.modules.tenancy.application.commands import CreateTenantCommand
 from src.modules.tenancy.application.ports.schema_bootstrap import (
     TenantSchemaBootstrapContextFactory,
 )
-from src.modules.tenancy.application.use_cases.create_tenant import CreateTenantUseCase
-from src.modules.tenancy.domain.services import TenantOnboardingDraft
-from src.modules.tenancy.domain.entities import Tenant, TenantDomain
-from src.modules.tenancy.domain.value_objects import (
-    TenantDomainKind,
-    TenantDomainStatus,
-    TenantDomainTlsMode,
-    TenantDomainVerificationStatus,
-    TenantServiceType,
-    TenantStatus,
+from src.modules.tenancy.application.tenant import (
+    CreateTenantCommand,
+    CreateTenantUseCase,
 )
+from src.modules.tenancy.domain.service import TenantOnboardingDraft
+from src.modules.tenancy.domain.tenant import Tenant
+from src.modules.tenancy.domain.tenant_domain import TenantDomain
 
 
 class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):
@@ -33,7 +27,6 @@ class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):
         recorded_context = None
 
         class TenantOnboardingServiceStub:
-
             async def create_tenant_with_primary_domain(
                 self, **kwargs
             ) -> TenantOnboardingDraft:
