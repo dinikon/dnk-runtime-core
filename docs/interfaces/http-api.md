@@ -14,6 +14,7 @@ All public HTTP routes are mounted under `/api`.
 | Method   | Path                             | Module | Request                        | Response                     | Auth                          | Main errors         |
 |----------|----------------------------------|--------|--------------------------------|------------------------------|-------------------------------|---------------------|
 | `POST`   | `/api/crm/contacts`              | `crm`  | `CreateContactRequestSchema`   | `ContactResponseSchema`      | authenticated request context | `401`, `422`        |
+| `POST`   | `/api/crm/contacts/fields`       | `crm`  | none                           | `ContactFieldsResponseSchema`| authenticated request context | `401`, `409`, `422` |
 | `GET`    | `/api/crm/contacts`              | `crm`  | query params `limit`, `offset` | `ListContactsResponseSchema` | authenticated request context | `401`, `422`        |
 | `GET`    | `/api/crm/contacts/{contact_id}` | `crm`  | path `contact_id`              | `ContactResponseSchema`      | authenticated request context | `401`, `404`, `422` |
 | `PUT`    | `/api/crm/contacts/{contact_id}` | `crm`  | `UpdateContactRequestSchema`   | `ContactResponseSchema`      | authenticated request context | `401`, `404`, `422` |
@@ -35,6 +36,9 @@ Mounted under `/api/console/auth`.
 
 - Session cookie name comes from auth config and defaults to `dnk_session`.
 - Identity routes are tenant-host aware, so host extraction is part of the authentication flow.
+- Identity controllers map domain/tenancy errors directly inside controller files.
+- `PATCH /api/console/auth/me` requires `interface_theme` and does not accept `null`.
+- `GET /api/console/auth/me` and `PATCH /api/console/auth/me` always return `interface_theme` as a string.
 - `schema_registry` currently has no public HTTP API surface.
 
 ## Related
@@ -47,6 +51,7 @@ Mounted under `/api/console/auth`.
 ## Source Of Truth
 
 - `src/modules/router.py`
-- `src/modules/tenancy/presentation/http/`
-- `src/modules/identity/presentation/api/console_auth.py`
+- `src/modules/tenancy/presentation/http/admin_tenant/controller/`
+- `src/modules/tenancy/presentation/http/console_tenant/controller/`
+- `src/modules/identity/presentation/http/console_auth/controller/`
 - `src/modules/crm/presentation/http/contact/controller/`

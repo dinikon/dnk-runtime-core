@@ -31,6 +31,9 @@ This page maps the main business entities that currently appear in the service.
 
 ## Identity
 
+- Structure note: `identity` splits user state into `domain/user/` and auth-specific
+  OTP/session errors into `domain/auth/`.
+
 ### `User`
 
 - Module owner: `identity`
@@ -131,8 +134,10 @@ This page maps the main business entities that currently appear in the service.
 
 ## Source Of Truth
 
-- `src/modules/tenancy/domain/entities.py`
-- `src/modules/identity/domain/entities.py`
+- `src/modules/tenancy/domain/tenant/entity.py`
+- `src/modules/tenancy/domain/tenant_domain/entity.py`
+- `src/modules/identity/domain/user/entity.py`
+- `src/modules/identity/domain/auth/error.py`
 - `src/modules/crm/domain/contact/entity.py`
 - `src/modules/schema_registry/domain/datasource/entity.py`
 - `src/modules/schema_registry/domain/object/entity.py`

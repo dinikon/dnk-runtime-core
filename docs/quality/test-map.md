@@ -8,6 +8,7 @@ This page maps current tests to the behaviors they protect.
     - protects `tenancy.application -> schema_registry.application` boundary
     - protects `schema_registry.domain` from PostgreSQL/migration implementation leakage
     - checks that removed legacy paths are no longer used
+  - checks that removed `identity` `error_mapper` and `infrastructure.mapper` paths are no longer used
 
 ## Tenancy And Bootstrap Boundary
 
@@ -15,6 +16,8 @@ This page maps current tests to the behaviors they protect.
     - tenant creation orchestration
 - `test/test_tenant_schema_bootstrap_boundary.py`
     - tenancy-owned bootstrap context and adapter contract
+- `test/test_tenancy_http_router.py`
+    - guards public tenancy route registration
 
 ## Schema Registry
 
@@ -39,10 +42,26 @@ This page maps current tests to the behaviors they protect.
 
 ## Identity
 
-- `test_console_auth_*`, `test_identity_*`, `test_user_service*`
-    - OTP/session auth and user profile behavior
-- `test_shared_authentication_depends.py`
-    - request-context auth dependency path
+- `test/test_identity_use_cases.py`
+    - request/confirm OTP flow
+  - OTP email delivery failure fallback
+    - session authentication
+    - current user profile read/update
+    - logout
+    - tenant admin provisioning service
+- `test/test_identity_http_router.py`
+    - public identity route registration
+    - session cookie set/delete behavior
+  - tenant-aware per-controller HTTP error mapping
+
+## Shared
+
+- `test/test_shared_email_service.py`
+  - typed email service rendering for system email kinds
+  - provider factory selection
+  - SMTP transport message building
+  - SMTP vs SMTP SSL transport choice
+  - `resend` placeholder behavior
 
 ## CRM
 

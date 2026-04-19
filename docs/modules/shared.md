@@ -10,11 +10,11 @@ hosts infrastructure, kernel concepts and utility abstractions.
 - `db`
     - SQLAlchemy base, helper, unit of work, custom DB types and mixins
 - `depends`
-    - request-scoped FastAPI dependencies such as UoW, authentication and authorization
+  - request-scoped FastAPI dependencies such as UoW, authentication, authorization and email service resolution
 - `kernel`
-    - request context, principal, access and time ports
+  - request context, principal, access, time and public email service contracts
 - `infrastructure`
-    - concrete implementations for access, time and token backends
+  - concrete implementations for access, time, token backends, rendered email builders and transports
 - `http`
     - shared HTTP helpers such as host extraction
 - `domain`
@@ -36,16 +36,20 @@ hosts infrastructure, kernel concepts and utility abstractions.
     - authorization boundary, currently backed by allow-all implementation
 - `ClockPort` / `UtcClock`
     - time abstraction used by domain/application services
+- `EmailServicePort` / `SystemEmailKind`
+  - typed shared contract for system email delivery used by business modules
 
 ## Why It Matters
 
 - keeps module code small and focused on business logic
 - standardizes transaction, auth and request lifecycle behavior
+- centralizes email provider selection and SMTP transport wiring
 - provides common contracts for domain/application code
 
 ## Tests Covering This Area
 
 - shared authentication dependency tests
+- shared email service tests
 - DB and type tests
 - architecture boundary tests that protect module layering
 

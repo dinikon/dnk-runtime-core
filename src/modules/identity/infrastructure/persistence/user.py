@@ -45,17 +45,17 @@ class UserModel(Base):
         nullable=True,
         server_default=None,
     )
-    interface__language: Mapped[str] = mapped_column(
+    interface_language: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
         server_default="uk",
     )
     interface_theme: Mapped[str] = mapped_column(
         String(255),
-        nullable=True,
+        nullable=False,
         server_default="system",
     )
-    timezone: Mapped[str | None] = mapped_column(
+    timezone: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
         server_default="Europe/Kyiv",
@@ -65,7 +65,7 @@ class UserModel(Base):
         nullable=True,
         server_default=func.current_timestamp(),
     )
-    last_active_at: Mapped[datetime | None] = mapped_column(
+    last_active_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
     )

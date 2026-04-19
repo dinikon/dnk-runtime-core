@@ -1,17 +1,19 @@
-from src.modules.tenancy.presentation.http.admin_tenants import (
-    router as admin_tenants_router,
-)
-from src.modules.tenancy.presentation.http.requests.admin_tenants import (
+from src.modules.tenancy.presentation.http.admin_tenant import (
     AdminCreateTenantRequestSchema,
-)
-from src.modules.tenancy.presentation.http.responses.admin_tenants import (
     AdminCreateTenantResponseSchema,
+    create_tenant_router,
+)
+from src.modules.tenancy.presentation.http.console_tenant import (
+    ResolveTenantResponseSchema,
+    resolve_tenant_router,
 )
 from src.modules.tenancy.presentation.http.router import router
 
 __all__ = [
     "AdminCreateTenantRequestSchema",
     "AdminCreateTenantResponseSchema",
-    "admin_tenants_router",
+    "ResolveTenantResponseSchema",
+    "create_tenant_router",
+    "resolve_tenant_router",
     "router",
 ]

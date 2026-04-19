@@ -7,12 +7,19 @@ from fastapi import Depends
 from src.modules.crm.application.contact.query.repository import (
     ContactQueryRepositoryProtocol,
 )
+from src.modules.crm.application.contact.query.describe_contact_fields_repository import (
+    ContactFieldsDescriptionRepositoryProtocol,
+)
 from src.modules.crm.domain.contact.repository import (
     ContactCommandRepositoryProtocol,
 )
-from src.modules.crm.infrastructure import ContactRuntimeRepository
+from src.modules.crm.infrastructure import (
+    ContactModelDescriptionRepository,
+    ContactRuntimeRepository,
+)
 from src.modules.runtime_data import PostgresRuntimeGateway, RuntimeFieldTypePolicy
 from src.modules.schema_registry.presentation.depends.application import (
+    DescribeRuntimeObjectUseCaseDep,
     RuntimeObjectResolverDep,
 )
 from src.modules.shared.depends.uow import UoWDep
@@ -83,12 +90,29 @@ ContactCommandRepositoryDep = Annotated[
 ]
 
 
+def get_contact_fields_description_repository(
+    describe_runtime_object_use_case: DescribeRuntimeObjectUseCaseDep,
+) -> ContactFieldsDescriptionRepositoryProtocol:
+    """Создает repository описания модели contact через schema_registry."""
+    return ContactModelDescriptionRepository(
+        describe_runtime_object_use_case=describe_runtime_object_use_case,
+    )
+
+
+ContactFieldsDescriptionRepositoryDep = Annotated[
+    ContactFieldsDescriptionRepositoryProtocol,
+    Depends(get_contact_fields_description_repository),
+]
+
+
 __all__ = [
     "ContactCommandRepositoryDep",
+    "ContactFieldsDescriptionRepositoryDep",
     "ContactQueryRepositoryDep",
     "RuntimeGatewayDep",
     "RuntimeFieldTypePolicyDep",
     "get_contact_command_repository",
+    "get_contact_fields_description_repository",
     "get_contact_query_repository",
     "get_runtime_field_type_policy",
     "get_runtime_gateway",

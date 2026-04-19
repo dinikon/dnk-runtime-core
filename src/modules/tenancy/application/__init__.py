@@ -1,17 +1,15 @@
-from src.modules.tenancy.application.commands import CreateTenantCommand
-from src.modules.tenancy.application.dto import (
+from src.modules.tenancy.application.tenant import (
+    CreateTenantCommand,
     CreateTenantResultDTO,
-    ResolveTenantByHostResultDTO,
-    TenantRequestContextDTO,
-)
-from src.modules.tenancy.application.queries import (
-    ResolveTenantByHostQuery,
-    ResolveTenantRequestContextByHostQuery,
-)
-from src.modules.tenancy.application.use_cases import (
     CreateTenantUseCase,
+)
+from src.modules.tenancy.application.tenant_domain import (
+    ResolveTenantByHostQuery,
+    ResolveTenantByHostResultDTO,
     ResolveTenantByHostUseCase,
+    ResolveTenantRequestContextByHostQuery,
     ResolveTenantRequestContextByHostUseCase,
+    TenantRequestContextDTO,
 )
 
 __all__ = [

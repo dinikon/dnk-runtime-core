@@ -15,8 +15,8 @@ from src.modules.tenancy.application.ports.schema_bootstrap import (
     TenantSchemaBootstrapContextFactory,
     TenantSchemaBootstrapPort,
 )
-from src.modules.tenancy.application.use_cases import (
-    CreateTenantUseCase,
+from src.modules.tenancy.application.tenant import CreateTenantUseCase
+from src.modules.tenancy.application.tenant_domain.use_case import (
     ResolveTenantByHostUseCase,
     ResolveTenantRequestContextByHostUseCase,
 )

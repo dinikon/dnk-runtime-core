@@ -6,13 +6,11 @@ from typing import Annotated, Protocol
 from fastapi import Depends, HTTPException, Request, status
 
 from src.config import dnk_config
-from src.modules.identity.application.auth.use_cases.authenticate_by_session import (
+from src.modules.identity.application.auth import (
     AuthenticateBySessionCommand as AuthenticateBySessionUseCaseCommand,
     SessionPrincipal,
 )
-from src.modules.identity.presentation.depends.auth_use_cases import (
-    AuthenticateBySessionUseCaseDep,
-)
+from src.modules.identity.presentation.depends import AuthenticateBySessionUseCaseDep
 from src.modules.shared.http.host import extract_request_host
 from src.modules.shared.kernel.principal import Principal
 from src.modules.shared.kernel.request_context import RequestContext
@@ -51,7 +49,7 @@ class AuthenticateBySessionUseCaseAdapter(AuthenticationProcessProtocol):
         command: AuthenticateBySessionCommand,
     ) -> Principal | None:
         """Аутентифицирует session и мапит identity principal в shared Principal."""
-        principal = await self._use_case.execute(
+        principal = await self._use_case(
             AuthenticateBySessionUseCaseCommand(
                 host=command.host,
                 session_token=command.session_token,

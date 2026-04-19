@@ -4,6 +4,9 @@ from .create_contact import (
 from .delete_contact import (
     router as delete_contact_router,
 )
+from .describe_contact_fields import (
+    router as describe_contact_fields_router,
+)
 from .get_contact import (
     router as get_contact_router,
 )
@@ -17,6 +20,7 @@ from .update_contact import (
 __all__ = [
     "create_contact_router",
     "delete_contact_router",
+    "describe_contact_fields_router",
     "get_contact_router",
     "list_contacts_router",
     "update_contact_router",

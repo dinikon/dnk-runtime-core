@@ -8,6 +8,7 @@ only contacts.
 ## Public Functionality
 
 - create contact
+- get contact model description
 - get contact by id
 - list contacts with pagination
 - update contact name
@@ -16,6 +17,7 @@ only contacts.
 ## Main Flows / Use Cases
 
 - `CreateContact`
+- `DescribeContactFields`
 - `GetContact`
 - `ListContacts`
 - `UpdateContact`
@@ -38,6 +40,7 @@ only contacts.
 All current CRM routes live under `/api/crm/contacts`:
 
 - `POST /`
+- `POST /fields`
 - `GET /`
 - `GET /{contact_id}`
 - `PUT /{contact_id}`

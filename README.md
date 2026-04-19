@@ -8,6 +8,7 @@ schema management, and a small CRM surface for contacts.
 - `tenancy`: tenant onboarding and tenant resolution by host
 - `identity`: email OTP + session-based console authentication
 - `schema_registry`: runtime schema bootstrap and diff for tenant PostgreSQL schemas
+- `runtime_data`: tenant-scoped runtime object persistence and querying
 - `crm`: CRUD operations for contacts
 - `shared`: database, unit of work, request context, auth and infrastructure helpers
 
