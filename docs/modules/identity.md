@@ -64,6 +64,8 @@ Console auth routes live under `/api/console/auth`:
 
 Each controller keeps its own explicit `try/except -> HTTPException` mapping.
 `identity` does not use a shared `error_mapper.py`.
+Current-user profile stores `interface_theme` as a non-null string.
+The default theme is `system`, and `PATCH /me` requires an explicit non-null theme value.
 
 ## Auth Settings
 

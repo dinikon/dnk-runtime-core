@@ -9,7 +9,10 @@ from fastapi.testclient import TestClient
 from src.config.feature.identity.auth_config import IdentityAuthSettings
 from src.modules.identity.application.auth import (
     ConfirmEmailOtpResultDTO,
+    GetCurrentUserEmailDTO,
+    GetCurrentUserResultDTO,
     LogoutCurrentSessionResultDTO,
+    UpdateCurrentUserProfileResultDTO,
 )
 from src.modules.identity.domain.auth import InvalidOtpCodeError, InvalidSessionError
 from src.modules.identity.presentation.depends.application import (
@@ -53,6 +56,30 @@ class _UpdateCurrentUserProfileUseCaseStub:
         raise DomainError("Profile payload is invalid.")
 
 
+class _UpdateCurrentUserProfileSuccessUseCaseStub:
+
+    async def __call__(self, dto) -> UpdateCurrentUserProfileResultDTO:
+        return UpdateCurrentUserProfileResultDTO(
+            id=uuid4(),
+            status="active",
+            last_name="Doe",
+            first_name="John",
+            middle_name=None,
+            avatar=None,
+            interface_language="uk",
+            interface_theme="system",
+            timezone="Europe/Kyiv",
+            emails=[
+                GetCurrentUserEmailDTO(
+                    id=uuid4(),
+                    email="john@example.com",
+                    is_primary=True,
+                    is_verified=True,
+                )
+            ],
+        )
+
+
 class _RequestEmailOtpNotFoundUseCaseStub:
 
     async def __call__(self, dto):
@@ -73,6 +100,29 @@ class _ConfirmEmailOtpUnauthorizedUseCaseStub:
 class _GetCurrentUserUnauthorizedUseCaseStub:
     async def __call__(self, dto):
         raise InvalidSessionError()
+
+
+class _GetCurrentUserSuccessUseCaseStub:
+    async def __call__(self, dto) -> GetCurrentUserResultDTO:
+        return GetCurrentUserResultDTO(
+            id=uuid4(),
+            status="active",
+            last_name="Doe",
+            first_name="John",
+            middle_name=None,
+            avatar=None,
+            interface_language="uk",
+            interface_theme="dark",
+            timezone="Europe/Kyiv",
+            emails=[
+                GetCurrentUserEmailDTO(
+                    id=uuid4(),
+                    email="john@example.com",
+                    is_primary=True,
+                    is_verified=True,
+                )
+            ],
+        )
 
 
 class IdentityHttpRouterTests(unittest.TestCase):
@@ -159,6 +209,99 @@ class IdentityHttpRouterTests(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.json()["detail"], "Profile payload is invalid.")
 
+    def test_update_profile_rejects_null_interface_theme_with_422(self) -> None:
+        app = FastAPI()
+        app.include_router(router, prefix="/api/console/auth")
+        app.dependency_overrides[get_update_current_user_profile_use_case] = (
+            lambda: _UpdateCurrentUserProfileSuccessUseCaseStub()
+        )
+        app.dependency_overrides[get_auth_settings] = lambda: IdentityAuthSettings(
+            session_cookie_name="dnk_session"
+        )
+        app.dependency_overrides[get_request_host] = lambda: "tenant.example.com"
+
+        client = TestClient(app)
+        client.cookies.set("dnk_session", "sess_token")
+        response = client.patch(
+            "/api/console/auth/me",
+            json={
+                "last_name": "Doe",
+                "first_name": "John",
+                "middle_name": None,
+                "interface_language": "uk",
+                "interface_theme": None,
+                "timezone": "Europe/Kyiv",
+            },
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertTrue(
+            any(
+                item["loc"][-1] == "interface_theme"
+                for item in response.json()["detail"]
+            )
+        )
+
+    def test_update_profile_requires_interface_theme(self) -> None:
+        app = FastAPI()
+        app.include_router(router, prefix="/api/console/auth")
+        app.dependency_overrides[get_update_current_user_profile_use_case] = (
+            lambda: _UpdateCurrentUserProfileSuccessUseCaseStub()
+        )
+        app.dependency_overrides[get_auth_settings] = lambda: IdentityAuthSettings(
+            session_cookie_name="dnk_session"
+        )
+        app.dependency_overrides[get_request_host] = lambda: "tenant.example.com"
+
+        client = TestClient(app)
+        client.cookies.set("dnk_session", "sess_token")
+        response = client.patch(
+            "/api/console/auth/me",
+            json={
+                "last_name": "Doe",
+                "first_name": "John",
+                "middle_name": None,
+                "interface_language": "uk",
+                "timezone": "Europe/Kyiv",
+            },
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertTrue(
+            any(
+                item["loc"][-1] == "interface_theme"
+                for item in response.json()["detail"]
+            )
+        )
+
+    def test_update_profile_returns_non_nullable_interface_theme(self) -> None:
+        app = FastAPI()
+        app.include_router(router, prefix="/api/console/auth")
+        app.dependency_overrides[get_update_current_user_profile_use_case] = (
+            lambda: _UpdateCurrentUserProfileSuccessUseCaseStub()
+        )
+        app.dependency_overrides[get_auth_settings] = lambda: IdentityAuthSettings(
+            session_cookie_name="dnk_session"
+        )
+        app.dependency_overrides[get_request_host] = lambda: "tenant.example.com"
+
+        client = TestClient(app)
+        client.cookies.set("dnk_session", "sess_token")
+        response = client.patch(
+            "/api/console/auth/me",
+            json={
+                "last_name": "Doe",
+                "first_name": "John",
+                "middle_name": None,
+                "interface_language": "uk",
+                "interface_theme": "system",
+                "timezone": "Europe/Kyiv",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["interface_theme"], "system")
+
     def test_request_otp_maps_tenant_host_not_found_to_404(self) -> None:
         app = FastAPI()
         app.include_router(router, prefix="/api/console/auth")
@@ -234,6 +377,24 @@ class IdentityHttpRouterTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.json()["detail"], "Session is invalid or expired.")
+
+    def test_get_current_user_returns_non_nullable_interface_theme(self) -> None:
+        app = FastAPI()
+        app.include_router(router, prefix="/api/console/auth")
+        app.dependency_overrides[get_current_user_use_case] = (
+            lambda: _GetCurrentUserSuccessUseCaseStub()
+        )
+        app.dependency_overrides[get_auth_settings] = lambda: IdentityAuthSettings(
+            session_cookie_name="dnk_session"
+        )
+        app.dependency_overrides[get_request_host] = lambda: "tenant.example.com"
+
+        client = TestClient(app)
+        client.cookies.set("dnk_session", "sess_token")
+        response = client.get("/api/console/auth/me")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["interface_theme"], "dark")
 
 
 __all__ = ["IdentityHttpRouterTests"]

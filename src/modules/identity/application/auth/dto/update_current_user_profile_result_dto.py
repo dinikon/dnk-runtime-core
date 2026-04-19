@@ -17,7 +17,7 @@ class UpdateCurrentUserProfileResultDTO:
     middle_name: str | None
     avatar: str | None
     interface_language: str
-    interface_theme: str | None
+    interface_theme: str
     timezone: str
     emails: list[GetCurrentUserEmailDTO] = field(default_factory=list)
 

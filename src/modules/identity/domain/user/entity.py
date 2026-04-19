@@ -43,7 +43,7 @@ class User:
     middle_name: str | None
     avatar: str | None
     interface_language: str
-    interface_theme: str | None
+    interface_theme: str
     timezone: str
     last_login_at: datetime | None
     last_active_at: datetime
@@ -150,7 +150,7 @@ class User:
         first_name: str,
         middle_name: str | None,
         interface_language: str,
-        interface_theme: str | None,
+        interface_theme: str,
         timezone: str,
     ) -> None:
         """Обновляет профиль пользователя и валидирует language/theme/timezone."""
@@ -160,9 +160,11 @@ class User:
             middle_name.strip() if middle_name is not None else None
         )
         normalized_interface_language = interface_language.strip().lower()
-        normalized_interface_theme = (
-            interface_theme.strip().lower() if interface_theme is not None else None
-        )
+        if not isinstance(interface_theme, str):
+            raise DomainError(
+                "User interface theme must be one of: system, dark, light."
+            )
+        normalized_interface_theme = interface_theme.strip().lower()
         normalized_timezone = timezone.strip()
 
         if not normalized_last_name:
@@ -174,10 +176,7 @@ class User:
 
         if normalized_interface_language not in {"uk", "en"}:
             raise DomainError("User interface language must be one of: uk, en.")
-        if (
-            normalized_interface_theme is not None
-            and normalized_interface_theme not in {"system", "dark", "light"}
-        ):
+        if normalized_interface_theme not in {"system", "dark", "light"}:
             raise DomainError(
                 "User interface theme must be one of: system, dark, light."
             )

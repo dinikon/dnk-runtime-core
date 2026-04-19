@@ -482,7 +482,7 @@ Application-слой разделен на:
 7. обновляются поля:
    - `last_name`, `first_name`, `middle_name`
    - `interface_language` (`uk`/`en`)
-   - `interface_theme` (`system`/`dark`/`light`/`null`)
+   - `interface_theme` (`system`/`dark`/`light`, обязательно)
    - `timezone` (`Europe/Kyiv`/`Europe/Warsaw`)
    - дополнительные поля вне контракта PATCH payload отклоняются
 8. `UoW.commit()`

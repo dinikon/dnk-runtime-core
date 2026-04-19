@@ -37,6 +37,8 @@ Mounted under `/api/console/auth`.
 - Session cookie name comes from auth config and defaults to `dnk_session`.
 - Identity routes are tenant-host aware, so host extraction is part of the authentication flow.
 - Identity controllers map domain/tenancy errors directly inside controller files.
+- `PATCH /api/console/auth/me` requires `interface_theme` and does not accept `null`.
+- `GET /api/console/auth/me` and `PATCH /api/console/auth/me` always return `interface_theme` as a string.
 - `schema_registry` currently has no public HTTP API surface.
 
 ## Related

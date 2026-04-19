@@ -13,7 +13,7 @@ class UpdateCurrentUserProfileCommandDTO:
     first_name: str
     middle_name: str | None
     interface_language: str
-    interface_theme: str | None
+    interface_theme: str
     timezone: str
 
 

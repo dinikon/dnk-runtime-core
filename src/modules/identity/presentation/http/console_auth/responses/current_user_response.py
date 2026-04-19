@@ -17,7 +17,7 @@ class CurrentUserResponseSchema(BaseModel):
     middle_name: str | None
     avatar: str | None
     interface_language: str
-    interface_theme: str | None
+    interface_theme: str
     timezone: str
     emails: list[CurrentUserEmailResponseSchema] = Field(default_factory=list)
 

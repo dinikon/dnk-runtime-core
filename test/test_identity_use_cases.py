@@ -407,7 +407,56 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.last_name, "Smith")
         self.assertEqual(result.first_name, "Jane")
         self.assertEqual(result.interface_language, "en")
+        self.assertEqual(result.interface_theme, "dark")
         self.assertIs(users_repository.updated_profile, user)
+
+    async def test_update_current_user_profile_rejects_none_interface_theme(
+        self,
+    ) -> None:
+        user = User.create_tenant_admin(
+            tenant_id=self.tenant_id,
+            first_name="John",
+            last_name="Doe",
+        )
+        user.add_email("john@example.com", is_primary=True, is_verified=True)
+        users_repository = _UserRepositoryStub(user)
+        session_store = _SessionStoreStub()
+        now = datetime.now(UTC)
+        session_store.session = SessionRecord(
+            token="sess-token",
+            session_id="session-id",
+            user_id=user.id,
+            tenant_id=self.tenant_id,
+            tenant_domain_id=self.tenant_domain_id,
+            host=self.context.host,
+            issued_at=now,
+            expires_at=now + timedelta(hours=1),
+        )
+        uow = _UnitOfWorkStub()
+
+        use_case = UpdateCurrentUserProfileUseCase(
+            uow=uow,
+            tenant_context_reader=_TenantContextReaderStub(self.context),
+            users_repository=users_repository,
+            session_store=session_store,
+        )
+
+        with self.assertRaises(DomainError):
+            await use_case(
+                UpdateCurrentUserProfileCommandDTO(
+                    host=self.context.host,
+                    session_token="sess-token",
+                    last_name="Smith",
+                    first_name="Jane",
+                    middle_name="A",
+                    interface_language="en",
+                    interface_theme=None,
+                    timezone="Europe/Warsaw",
+                )
+            )
+
+        self.assertFalse(uow.committed)
+        self.assertFalse(uow.rolled_back)
 
     async def test_logout_current_session_invalidates_matching_session(self) -> None:
         session_store = _SessionStoreStub()
