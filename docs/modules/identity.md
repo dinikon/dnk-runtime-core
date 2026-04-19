@@ -16,12 +16,12 @@ read/update flows, and tenant admin provisioning during onboarding.
 
 ## Main Flows / Use Cases
 
-- `RequestEmailOtpUseCase`
-- `ConfirmEmailOtpUseCase`
-- `AuthenticateBySessionUseCase`
-- `GetCurrentUserUseCase`
-- `UpdateCurrentUserProfileUseCase`
-- `LogoutCurrentSessionUseCase`
+- `RequestEmailOtpUseCase.__call__`
+- `ConfirmEmailOtpUseCase.__call__`
+- `AuthenticateBySessionUseCase.__call__`
+- `GetCurrentUserUseCase.__call__`
+- `UpdateCurrentUserProfileUseCase.__call__`
+- `LogoutCurrentSessionUseCase.__call__`
 - `UserService.create_tenant_admin`
 
 ## Internal Structure
@@ -47,6 +47,7 @@ read/update flows, and tenant admin provisioning during onboarding.
 ## Infrastructure / Persistence
 
 - SQLAlchemy repositories store users and user emails
+- `SqlAlchemyUserRepository` explicitly maps ORM models to domain entities in its `return`
 - token/session implementations use shared `TokenManager`
 - tenant context is resolved through a tenancy-owned use case adapter
 - email delivery currently uses an in-memory stub adapter by default
@@ -60,6 +61,9 @@ Console auth routes live under `/api/console/auth`:
 - `GET /me`
 - `PATCH /me`
 - `POST /logout`
+
+Each controller keeps its own explicit `try/except -> HTTPException` mapping.
+`identity` does not use a shared `error_mapper.py`.
 
 ## Auth Settings
 
@@ -82,9 +86,12 @@ Console auth routes live under `/api/console/auth`:
 - `test/test_identity_http_router.py`
     - public route registration
     - cookie behavior
-    - HTTP error mapping
+  - per-controller HTTP error mapping
+- `test/test_identity_repository.py`
+    - explicit ORM -> domain mapping in repository return paths
 - `test/test_architecture_boundaries.py`
     - forbids legacy identity import paths
+  - forbids removed `error_mapper` and `infrastructure.mapper` imports
 
 ## Related
 

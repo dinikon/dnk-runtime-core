@@ -31,7 +31,7 @@ class SessionPrincipal:
 class AuthenticateBySessionUseCaseProtocol(Protocol):
     """Порт use case аутентификации по session."""
 
-    async def execute(
+    async def __call__(
         self,
         dto: AuthenticateBySessionCommand,
     ) -> SessionPrincipal | None:
@@ -53,7 +53,7 @@ class AuthenticateBySessionUseCase(AuthenticateBySessionUseCaseProtocol):
         self._users_repository = users_repository
         self._session_store = session_store
 
-    async def execute(
+    async def __call__(
         self,
         dto: AuthenticateBySessionCommand,
     ) -> SessionPrincipal | None:

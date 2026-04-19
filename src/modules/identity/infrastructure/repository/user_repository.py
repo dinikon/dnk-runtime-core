@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+from typing import cast
 from uuid import UUID
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.identity.domain.user import User, UserRepositoryProtocol
-from src.modules.identity.infrastructure.mapper import map_user_model
+from src.modules.identity.domain.user import User, UserEmail, UserRepositoryProtocol
 from src.modules.identity.infrastructure.persistence.user import UserModel
 from src.modules.identity.infrastructure.persistence.user_email import UserEmailModel
 
@@ -57,18 +57,54 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
 
     async def get_by_id(self, user_id: UUID) -> User | None:
         """Ищет пользователя по id и подгружает его email-адреса."""
-        user_model = await self._session.scalar(
-            select(UserModel).where(UserModel.id == str(user_id))
+        user_model = cast(
+            UserModel | None,
+            await self._session.scalar(
+                select(UserModel).where(UserModel.id == str(user_id))
+            ),
         )
         if user_model is None:
             return None
 
-        email_models = (
-            await self._session.scalars(
-                select(UserEmailModel).where(UserEmailModel.user_id == str(user_id))
-            )
-        ).all()
-        return map_user_model(user_model, email_models)
+        email_models = cast(
+            list[UserEmailModel],
+            (
+                await self._session.scalars(
+                    select(UserEmailModel).where(UserEmailModel.user_id == str(user_id))
+                )
+            ).all(),
+        )
+        return User(
+            id=user_model.id,
+            tenant_id=user_model.tenant_id,
+            status=user_model.status,
+            last_name=user_model.last_name,
+            first_name=user_model.first_name,
+            middle_name=user_model.middle_name,
+            avatar=user_model.avatar,
+            interface_language=user_model.interface_language,
+            interface_theme=user_model.interface_theme,
+            timezone=user_model.timezone,
+            last_login_at=user_model.last_login_at,
+            last_active_at=user_model.last_active_at,
+            last_login_ip=user_model.last_login_ip,
+            initialized_at=user_model.initialized_at,
+            created_at=user_model.created_at,
+            updated_at=user_model.updated_at,
+            emails=[
+                UserEmail(
+                    id=email_model.id,
+                    user_id=email_model.user_id,
+                    email=email_model.email,
+                    is_primary=email_model.is_primary,
+                    is_verified=email_model.is_verified,
+                    is_deleted=email_model.is_deleted,
+                    created_at=email_model.created_at,
+                    updated_at=email_model.updated_at,
+                )
+                for email_model in email_models
+            ],
+        )
 
     async def get_by_tenant_and_primary_email(
         self,
@@ -76,24 +112,63 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
         email: str,
     ) -> User | None:
         """Ищет пользователя tenant по primary email и подгружает emails."""
-        user_model = await self._session.scalar(
-            select(UserModel)
-            .join(UserEmailModel, UserEmailModel.user_id == UserModel.id)
-            .where(UserModel.tenant_id == str(tenant_id))
-            .where(UserEmailModel.email == email)
-            .where(UserEmailModel.is_primary.is_(True))
-            .where(UserEmailModel.is_deleted.is_(False))
-            .limit(1)
+        user_model = cast(
+            UserModel | None,
+            await self._session.scalar(
+                select(UserModel)
+                .join(UserEmailModel, UserEmailModel.user_id == UserModel.id)
+                .where(UserModel.tenant_id == str(tenant_id))
+                .where(UserEmailModel.email == email)
+                .where(UserEmailModel.is_primary.is_(True))
+                .where(UserEmailModel.is_deleted.is_(False))
+                .limit(1)
+            ),
         )
         if user_model is None:
             return None
 
-        email_models = (
-            await self._session.scalars(
-                select(UserEmailModel).where(UserEmailModel.user_id == user_model.id)
-            )
-        ).all()
-        return map_user_model(user_model, email_models)
+        user_model_id = user_model.id
+        email_models = cast(
+            list[UserEmailModel],
+            (
+                await self._session.scalars(
+                    select(UserEmailModel).where(
+                        UserEmailModel.user_id == user_model_id
+                    )
+                )
+            ).all(),
+        )
+        return User(
+            id=user_model.id,
+            tenant_id=user_model.tenant_id,
+            status=user_model.status,
+            last_name=user_model.last_name,
+            first_name=user_model.first_name,
+            middle_name=user_model.middle_name,
+            avatar=user_model.avatar,
+            interface_language=user_model.interface_language,
+            interface_theme=user_model.interface_theme,
+            timezone=user_model.timezone,
+            last_login_at=user_model.last_login_at,
+            last_active_at=user_model.last_active_at,
+            last_login_ip=user_model.last_login_ip,
+            initialized_at=user_model.initialized_at,
+            created_at=user_model.created_at,
+            updated_at=user_model.updated_at,
+            emails=[
+                UserEmail(
+                    id=email_model.id,
+                    user_id=email_model.user_id,
+                    email=email_model.email,
+                    is_primary=email_model.is_primary,
+                    is_verified=email_model.is_verified,
+                    is_deleted=email_model.is_deleted,
+                    created_at=email_model.created_at,
+                    updated_at=email_model.updated_at,
+                )
+                for email_model in email_models
+            ],
+        )
 
     async def update_profile(self, user: User) -> None:
         """Обновляет profile-поля пользователя в ORM-модели."""

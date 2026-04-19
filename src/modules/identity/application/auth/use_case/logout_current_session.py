@@ -25,7 +25,7 @@ class LogoutCurrentSessionUseCase:
         self._tenant_context_reader = tenant_context_reader
         self._session_store = session_store
 
-    async def execute(
+    async def __call__(
         self,
         dto: LogoutCurrentSessionCommandDTO,
     ) -> LogoutCurrentSessionResultDTO:

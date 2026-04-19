@@ -11,7 +11,9 @@ from src.modules.identity.application.auth import (
     ConfirmEmailOtpResultDTO,
     LogoutCurrentSessionResultDTO,
 )
+from src.modules.identity.domain.auth import InvalidOtpCodeError, InvalidSessionError
 from src.modules.identity.presentation.depends.application import (
+    get_current_user_use_case,
     get_confirm_email_otp_use_case,
     get_logout_current_session_use_case,
     get_request_email_otp_use_case,
@@ -28,7 +30,8 @@ from src.modules.tenancy.domain.tenant_domain import (
 
 
 class _ConfirmEmailOtpUseCaseStub:
-    async def execute(self, dto) -> ConfirmEmailOtpResultDTO:
+
+    async def __call__(self, dto) -> ConfirmEmailOtpResultDTO:
         return ConfirmEmailOtpResultDTO(
             ok=True,
             user_id=uuid4(),
@@ -39,23 +42,37 @@ class _ConfirmEmailOtpUseCaseStub:
 
 
 class _LogoutCurrentSessionUseCaseStub:
-    async def execute(self, dto) -> LogoutCurrentSessionResultDTO:
+
+    async def __call__(self, dto) -> LogoutCurrentSessionResultDTO:
         return LogoutCurrentSessionResultDTO(ok=True)
 
 
 class _UpdateCurrentUserProfileUseCaseStub:
-    async def execute(self, dto):
+
+    async def __call__(self, dto):
         raise DomainError("Profile payload is invalid.")
 
 
 class _RequestEmailOtpNotFoundUseCaseStub:
-    async def execute(self, dto):
+
+    async def __call__(self, dto):
         raise TenantHostNotFoundError("tenant.example.com")
 
 
 class _RequestEmailOtpForbiddenUseCaseStub:
-    async def execute(self, dto):
+
+    async def __call__(self, dto):
         raise TenantLoginUnavailableError("tenant.example.com")
+
+
+class _ConfirmEmailOtpUnauthorizedUseCaseStub:
+    async def __call__(self, dto):
+        raise InvalidOtpCodeError()
+
+
+class _GetCurrentUserUnauthorizedUseCaseStub:
+    async def __call__(self, dto):
+        raise InvalidSessionError()
 
 
 class IdentityHttpRouterTests(unittest.TestCase):
@@ -179,6 +196,44 @@ class IdentityHttpRouterTests(unittest.TestCase):
             response.json()["detail"],
             "Tenant for host 'tenant.example.com' is not available for login.",
         )
+
+    def test_confirm_otp_maps_invalid_code_to_401(self) -> None:
+        app = FastAPI()
+        app.include_router(router, prefix="/api/console/auth")
+        app.dependency_overrides[get_confirm_email_otp_use_case] = (
+            lambda: _ConfirmEmailOtpUnauthorizedUseCaseStub()
+        )
+        app.dependency_overrides[get_request_host] = lambda: "tenant.example.com"
+
+        response = TestClient(app).post(
+            "/api/console/auth/confirm-otp",
+            json={
+                "email": "john@example.com",
+                "token": "otp_token",
+                "code": "123456",
+            },
+        )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["detail"], "OTP code is invalid.")
+
+    def test_get_current_user_maps_invalid_session_to_401(self) -> None:
+        app = FastAPI()
+        app.include_router(router, prefix="/api/console/auth")
+        app.dependency_overrides[get_current_user_use_case] = (
+            lambda: _GetCurrentUserUnauthorizedUseCaseStub()
+        )
+        app.dependency_overrides[get_auth_settings] = lambda: IdentityAuthSettings(
+            session_cookie_name="dnk_session"
+        )
+        app.dependency_overrides[get_request_host] = lambda: "tenant.example.com"
+
+        client = TestClient(app)
+        client.cookies.set("dnk_session", "sess_token")
+        response = client.get("/api/console/auth/me")
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["detail"], "Session is invalid or expired.")
 
 
 __all__ = ["IdentityHttpRouterTests"]

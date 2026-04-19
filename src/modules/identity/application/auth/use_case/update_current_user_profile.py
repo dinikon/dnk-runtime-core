@@ -38,7 +38,7 @@ class UpdateCurrentUserProfileUseCase:
         self._users_repository = users_repository
         self._session_store = session_store
 
-    async def execute(
+    async def __call__(
         self,
         dto: UpdateCurrentUserProfileCommandDTO,
     ) -> UpdateCurrentUserProfileResultDTO:

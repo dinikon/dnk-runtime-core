@@ -399,6 +399,7 @@ Application-слой разделен на:
     - `dto/*`
     - `service/*`
     - `use_case/*`
+   - use case instances вызываются через `__call__`, а не `execute`
 3. `ports`
     - `email_sender.py`
     - `tenant_context_reader.py`
@@ -497,12 +498,15 @@ HTTP-слой разложен по CRM-подобной структуре:
 - `presentation/depends/application.py`
 - `presentation/depends/infrastructure.py`
 
+Контроллеры сами мапят domain/tenancy ошибки в `HTTPException`.
+Отдельный shared `error_mapper.py` для `identity` не используется.
+
 ### Infrastructure
 
 Содержит:
 
 - SQLAlchemy repository в `infrastructure/repository/user_repository.py`
-- mapping domain <-> DB в `infrastructure/mapper/user.py`
+- явный ORM -> domain mapping прямо в `repository/user_repository.py`
 - adapters:
     - `tenant_context.py`
     - `otp_challenge_store.py`
@@ -548,6 +552,7 @@ HTTP-слой разложен по CRM-подобной структуре:
 - [test/test_architecture_boundaries.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/test/test_architecture_boundaries.py)
     - архитектурные границы модулей
   - запрет legacy import-путей, включая старые `identity` import roots
+  - запрет импортов удалённых `controller/error_mapper.py` и `infrastructure/mapper`
 - [test/test_identity_use_cases.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/test/test_identity_use_cases.py)
     - request/confirm OTP
     - authenticate by session
@@ -555,10 +560,12 @@ HTTP-слой разложен по CRM-подобной структуре:
     - profile update
     - logout
     - tenant admin provisioning service
+- [test/test_identity_repository.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/test/test_identity_repository.py)
+    - явный ORM -> domain mapping в repository return
 - [test/test_identity_http_router.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/test/test_identity_http_router.py)
     - сохранение публичных identity routes
     - cookie set/delete semantics
-    - tenant-aware HTTP error mapping
+  - tenant-aware HTTP error mapping прямо в controller-файлах
 
 ---
 

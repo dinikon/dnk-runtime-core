@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, HTTPException, Response, status
 
 from src.modules.identity.application.auth import ConfirmEmailOtpCommandDTO
+from src.modules.identity.domain import (
+    InvalidOtpChallengeError,
+    InvalidOtpCodeError,
+    PrimaryUserEmailNotFoundError,
+    UserLoginUnavailableError,
+)
 from src.modules.identity.presentation.depends import (
     AuthSettingsDep,
     ConfirmEmailOtpUseCaseDep,
-)
-from src.modules.identity.presentation.http.console_auth.controller.error_mapper import (
-    raise_confirm_email_otp_http_error,
 )
 from src.modules.identity.presentation.http.console_auth.requests import (
     ConfirmEmailOtpRequestSchema,
@@ -17,6 +20,10 @@ from src.modules.identity.presentation.http.console_auth.responses import (
     ConfirmEmailOtpResponseSchema,
 )
 from src.modules.shared.depends.request_host import RequestHostDep
+from src.modules.tenancy.domain.tenant_domain import (
+    TenantHostNotFoundError,
+    TenantLoginUnavailableError,
+)
 
 router = APIRouter(tags=["console-auth"])
 
@@ -34,7 +41,7 @@ async def confirm_email_otp(
 ) -> ConfirmEmailOtpResponseSchema:
     """HTTP endpoint подтверждения OTP и установки session cookie."""
     try:
-        result = await use_case.execute(
+        result = await use_case(
             ConfirmEmailOtpCommandDTO(
                 host=host,
                 email=str(payload.email),
@@ -42,8 +49,21 @@ async def confirm_email_otp(
                 code=payload.code,
             )
         )
-    except Exception as exc:
-        raise_confirm_email_otp_http_error(exc)
+    except (TenantHostNotFoundError, PrimaryUserEmailNotFoundError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except (TenantLoginUnavailableError, UserLoginUnavailableError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    except (InvalidOtpChallengeError, InvalidOtpCodeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+        ) from exc
 
     response.set_cookie(
         key=settings.session_cookie_name,

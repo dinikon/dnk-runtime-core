@@ -7,9 +7,10 @@
 3. Module router selects the concrete controller function.
 4. `presentation/depends/*` resolves use case and infrastructure dependencies.
 5. Controller maps request schema to command/query DTO.
-6. Application use case orchestrates services.
-7. Domain services and repositories perform business work.
-8. Response schema is built and returned to the client.
+6. Controller calls the use case as `await use_case(...)` and maps domain errors to HTTP status codes.
+7. Application use case orchestrates services.
+8. Domain services and repositories perform business work.
+9. Response schema is built and returned to the client.
 
 ## Example Paths
 
@@ -25,6 +26,7 @@
 - `POST /api/console/auth/request-otp`
     - host extraction
   - identity controller in `presentation/http/console_auth/controller/`
+  - controller-local HTTP error mapping
     - identity OTP use case
   - tenancy host resolution and token/session infrastructure
 

@@ -51,7 +51,7 @@ class ConfirmEmailOtpUseCase:
         self._session_service = session_service
         self._session_ttl_seconds = session_ttl_seconds
 
-    async def execute(
+    async def __call__(
         self,
         dto: ConfirmEmailOtpCommandDTO,
     ) -> ConfirmEmailOtpResultDTO:

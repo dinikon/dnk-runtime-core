@@ -49,7 +49,7 @@ class AuthenticateBySessionUseCaseAdapter(AuthenticationProcessProtocol):
         command: AuthenticateBySessionCommand,
     ) -> Principal | None:
         """Аутентифицирует session и мапит identity principal в shared Principal."""
-        principal = await self._use_case.execute(
+        principal = await self._use_case(
             AuthenticateBySessionUseCaseCommand(
                 host=command.host,
                 session_token=command.session_token,

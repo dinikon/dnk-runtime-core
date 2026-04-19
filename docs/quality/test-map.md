@@ -8,6 +8,7 @@ This page maps current tests to the behaviors they protect.
     - protects `tenancy.application -> schema_registry.application` boundary
     - protects `schema_registry.domain` from PostgreSQL/migration implementation leakage
     - checks that removed legacy paths are no longer used
+  - checks that removed `identity` `error_mapper` and `infrastructure.mapper` paths are no longer used
 
 ## Tenancy And Bootstrap Boundary
 
@@ -47,10 +48,12 @@ This page maps current tests to the behaviors they protect.
     - current user profile read/update
     - logout
     - tenant admin provisioning service
+- `test/test_identity_repository.py`
+    - explicit ORM -> domain mapping in `SqlAlchemyUserRepository`
 - `test/test_identity_http_router.py`
     - public identity route registration
     - session cookie set/delete behavior
-    - tenant-aware HTTP error mapping
+  - tenant-aware per-controller HTTP error mapping
 
 ## CRM
 

@@ -19,7 +19,7 @@ The project uses explicit composition functions instead of a large global contai
 - In `identity`, `presentation/depends/infrastructure.py` builds repository,
   token-store, tenant-context and settings dependencies, while
   `presentation/depends/application.py` composes auth use cases and
-  `UserService`.
+  `UserService`. Controllers call identity use cases through `await use_case(...)`.
 
 ## Management Composition
 

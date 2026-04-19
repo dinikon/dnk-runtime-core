@@ -39,7 +39,7 @@ class RequestEmailOtpUseCase:
         self._email_sender = email_sender
         self._otp_ttl_seconds = otp_ttl_seconds
 
-    async def execute(
+    async def __call__(
         self,
         dto: RequestEmailOtpCommandDTO,
     ) -> RequestEmailOtpResultDTO:

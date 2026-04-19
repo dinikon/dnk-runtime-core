@@ -1,25 +1,29 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request, status
 
 from src.modules.identity.application.auth import (
     UpdateCurrentUserProfileCommandDTO,
+    UpdateCurrentUserProfileResultDTO,
 )
+from src.modules.identity.domain import InvalidSessionError, UserLoginUnavailableError
 from src.modules.identity.presentation.depends import (
     AuthSettingsDep,
     UpdateCurrentUserProfileUseCaseDep,
-)
-from src.modules.identity.presentation.http.console_auth.controller.error_mapper import (
-    raise_update_current_user_profile_http_error,
-    to_current_user_response,
 )
 from src.modules.identity.presentation.http.console_auth.requests import (
     UpdateCurrentUserProfileRequestSchema,
 )
 from src.modules.identity.presentation.http.console_auth.responses import (
+    CurrentUserEmailResponseSchema,
     CurrentUserResponseSchema,
 )
+from src.modules.shared.domain.errors import DomainError
 from src.modules.shared.depends.request_host import RequestHostDep
+from src.modules.tenancy.domain.tenant_domain import (
+    TenantHostNotFoundError,
+    TenantLoginUnavailableError,
+)
 
 router = APIRouter(tags=["console-auth"])
 
@@ -37,7 +41,7 @@ async def update_current_user_profile(
 ) -> CurrentUserResponseSchema:
     """HTTP endpoint обновления профиля текущего пользователя."""
     try:
-        result = await use_case.execute(
+        result = await use_case(
             UpdateCurrentUserProfileCommandDTO(
                 host=host,
                 session_token=request.cookies.get(settings.session_cookie_name),
@@ -49,10 +53,54 @@ async def update_current_user_profile(
                 timezone=payload.timezone,
             )
         )
-    except Exception as exc:
-        raise_update_current_user_profile_http_error(exc)
+    except TenantHostNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except (TenantLoginUnavailableError, UserLoginUnavailableError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    except InvalidSessionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+        ) from exc
+    except DomainError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
 
-    return to_current_user_response(result)
+    return _to_current_user_response(result)
+
+
+def _to_current_user_response(
+    result: UpdateCurrentUserProfileResultDTO,
+) -> CurrentUserResponseSchema:
+    """Мапит DTO обновленного профиля в HTTP response schema."""
+    return CurrentUserResponseSchema(
+        id=result.id,
+        status=result.status,
+        last_name=result.last_name,
+        first_name=result.first_name,
+        middle_name=result.middle_name,
+        avatar=result.avatar,
+        interface_language=result.interface_language,
+        interface_theme=result.interface_theme,
+        timezone=result.timezone,
+        emails=[
+            CurrentUserEmailResponseSchema(
+                id=email.id,
+                email=email.email,
+                is_primary=email.is_primary,
+                is_verified=email.is_verified,
+            )
+            for email in result.emails
+        ],
+    )
 
 
 __all__ = ["router"]

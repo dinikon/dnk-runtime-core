@@ -160,7 +160,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
             otp_ttl_seconds=300,
         )
 
-        result = await use_case.execute(
+        result = await use_case(
             RequestEmailOtpCommandDTO(
                 host=self.context.host,
                 email="john@example.com",
@@ -212,7 +212,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
             session_ttl_seconds=600,
         )
 
-        result = await use_case.execute(
+        result = await use_case(
             ConfirmEmailOtpCommandDTO(
                 host=self.context.host,
                 email="john@example.com",
@@ -268,7 +268,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with self.assertRaises(InvalidOtpCodeError):
-            await use_case.execute(
+            await use_case(
                 ConfirmEmailOtpCommandDTO(
                     host=self.context.host,
                     email="john@example.com",
@@ -297,7 +297,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with self.assertRaises(InvalidOtpChallengeError):
-            await use_case.execute(
+            await use_case(
                 ConfirmEmailOtpCommandDTO(
                     host=self.context.host,
                     email="john@example.com",
@@ -332,7 +332,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
             session_store=session_store,
         )
 
-        result = await use_case.execute(
+        result = await use_case(
             AuthenticateBySessionCommand(
                 host=self.context.host,
                 session_token="sess-token",
@@ -354,7 +354,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with self.assertRaises(InvalidSessionError):
-            await use_case.execute(
+            await use_case(
                 GetCurrentUserCommandDTO(
                     host=self.context.host,
                     session_token=None,
@@ -390,7 +390,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
             session_store=session_store,
         )
 
-        result = await use_case.execute(
+        result = await use_case(
             UpdateCurrentUserProfileCommandDTO(
                 host=self.context.host,
                 session_token="sess-token",
@@ -427,7 +427,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
             session_store=session_store,
         )
 
-        result = await use_case.execute(
+        result = await use_case(
             LogoutCurrentSessionCommandDTO(
                 host=self.context.host,
                 session_token="sess-token",

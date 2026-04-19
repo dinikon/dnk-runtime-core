@@ -96,6 +96,8 @@ class ArchitectureBoundariesTests(unittest.TestCase):
             "src.modules.identity.presentation.depends.auth_repositories",
             "src.modules.identity.presentation.depends.auth_services",
             "src.modules.identity.presentation.depends.auth_use_cases",
+            "src.modules.identity.presentation.http.console_auth.controller.error_mapper",
+            "src.modules.identity.infrastructure.mapper",
         )
         forbidden_modules = {
             "src.modules.identity.application.auth.dto",
@@ -114,3 +116,20 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                         ),
                         msg=f"{path} still uses legacy path {module_name}",
                     )
+
+    def test_identity_use_case_callers_do_not_use_execute_style(self) -> None:
+        forbidden_patterns = ("use_case.execute(", "_use_case.execute(")
+        paths = [
+            *iter_python_files(
+                "src/modules/identity/presentation/http/console_auth/controller"
+            ),
+            PROJECT_ROOT / "src/modules/shared/depends/authentication.py",
+            PROJECT_ROOT / "test/test_identity_use_cases.py",
+            PROJECT_ROOT / "test/test_identity_http_router.py",
+        ]
+        for path in paths:
+            content = path.read_text(encoding="utf-8")
+            self.assertFalse(
+                any(pattern in content for pattern in forbidden_patterns),
+                msg=f"{path} still uses execute-style identity use case calls",
+            )
