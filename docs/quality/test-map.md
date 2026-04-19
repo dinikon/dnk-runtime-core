@@ -41,9 +41,16 @@ This page maps current tests to the behaviors they protect.
 
 ## Identity
 
-- identity currently has no dedicated standalone test cluster in `test/`
-- tenant-aware auth behavior is exercised indirectly through tenancy boundary,
-  shared auth wiring and end-to-end controller/use-case coverage in adjacent modules
+- `test/test_identity_use_cases.py`
+    - request/confirm OTP flow
+    - session authentication
+    - current user profile read/update
+    - logout
+    - tenant admin provisioning service
+- `test/test_identity_http_router.py`
+    - public identity route registration
+    - session cookie set/delete behavior
+    - tenant-aware HTTP error mapping
 
 ## CRM
 

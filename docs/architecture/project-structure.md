@@ -50,6 +50,10 @@ Modules may further split these layers by subdomain when the module owns more
 than one closely related concept. For example, `tenancy` now separates
 `tenant` and `tenant_domain` inside both `domain/` and `application/`.
 
+`identity` similarly separates `user` and `auth`: `domain/user/` owns user and
+email state, while `domain/auth/` owns OTP/session errors and
+`application/auth/` contains console auth command/dto/service/use case files.
+
 `schema_registry` also has:
 
 - `application/migration/`: physical PostgreSQL planning model and canonicalization.

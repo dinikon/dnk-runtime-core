@@ -86,12 +86,29 @@ class ArchitectureBoundariesTests(unittest.TestCase):
             "src.modules.tenancy.presentation.http.requests.admin_tenants",
             "src.modules.tenancy.presentation.http.responses.admin_tenants",
             "src.modules.tenancy.presentation.http.responses.console_tenants",
+            "src.modules.identity.application.auth.services",
+            "src.modules.identity.application.auth.use_cases",
+            "src.modules.identity.application.auth.ports",
+            "src.modules.identity.application.provisioning",
+            "src.modules.identity.presentation.api",
+            "src.modules.identity.presentation.depends.repositories",
+            "src.modules.identity.presentation.depends.services",
+            "src.modules.identity.presentation.depends.auth_repositories",
+            "src.modules.identity.presentation.depends.auth_services",
+            "src.modules.identity.presentation.depends.auth_use_cases",
         )
+        forbidden_modules = {
+            "src.modules.identity.application.auth.dto",
+            "src.modules.identity.domain.entities",
+            "src.modules.identity.domain.errors",
+            "src.modules.identity.infrastructure.repositories",
+        }
         for root in ("src", "test"):
             for path in iter_python_files(root):
                 for module_name in iter_imports(path):
                     self.assertFalse(
-                        any(
+                        module_name in forbidden_modules
+                        or any(
                             module_name.startswith(prefix)
                             for prefix in forbidden_prefixes
                         ),

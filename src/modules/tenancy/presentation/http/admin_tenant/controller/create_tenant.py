@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, status
 
-from src.modules.identity.domain.errors import UserEmailAlreadyExistsError
+from src.modules.identity.domain import UserEmailAlreadyExistsError
 from src.modules.schema_registry.domain.error import (
     DataSourceAlreadyExistsError,
     PhysicalSchemaAlreadyExistsError,

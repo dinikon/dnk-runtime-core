@@ -50,5 +50,5 @@ Mounted under `/api/console/auth`.
 - `src/modules/router.py`
 - `src/modules/tenancy/presentation/http/admin_tenant/controller/`
 - `src/modules/tenancy/presentation/http/console_tenant/controller/`
-- `src/modules/identity/presentation/api/console_auth.py`
+- `src/modules/identity/presentation/http/console_auth/controller/`
 - `src/modules/crm/presentation/http/contact/controller/`

@@ -16,6 +16,10 @@ The project uses explicit composition functions instead of a large global contai
 - In `tenancy`, DI now wires use cases from `application/tenant/use_case/` and
   `application/tenant_domain/use_case/` while keeping the public dependency
   aliases stable for the rest of the codebase.
+- In `identity`, `presentation/depends/infrastructure.py` builds repository,
+  token-store, tenant-context and settings dependencies, while
+  `presentation/depends/application.py` composes auth use cases and
+  `UserService`.
 
 ## Management Composition
 
@@ -48,5 +52,7 @@ The project uses explicit composition functions instead of a large global contai
 - `src/modules/tenancy/presentation/depends/application.py`
 - `src/modules/tenancy/application/tenant/use_case/`
 - `src/modules/tenancy/application/tenant_domain/use_case/`
+- `src/modules/identity/presentation/depends/application.py`
+- `src/modules/identity/presentation/depends/infrastructure.py`
 - `src/modules/schema_registry/presentation/depends/application.py`
 - `src/modules/schema_registry/presentation/depends/management.py`

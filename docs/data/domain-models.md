@@ -133,7 +133,7 @@ This page maps the main business entities that currently appear in the service.
 
 - `src/modules/tenancy/domain/tenant/entity.py`
 - `src/modules/tenancy/domain/tenant_domain/entity.py`
-- `src/modules/identity/domain/entities.py`
+- `src/modules/identity/domain/user/entity.py`
 - `src/modules/crm/domain/contact/entity.py`
 - `src/modules/schema_registry/domain/datasource/entity.py`
 - `src/modules/schema_registry/domain/object/entity.py`

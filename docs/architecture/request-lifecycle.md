@@ -24,8 +24,9 @@
     - contact domain service
 - `POST /api/console/auth/request-otp`
     - host extraction
+  - identity controller in `presentation/http/console_auth/controller/`
     - identity OTP use case
-    - token/session infrastructure
+  - tenancy host resolution and token/session infrastructure
 
 ## Management Flow
 

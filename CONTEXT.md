@@ -127,16 +127,37 @@ src/
             responses/
     identity/
       application/
-        provisioning/
         auth/
+          command/
+          dto/
+          service/
+          use_case/
+        ports/
+        user/
+          dto/
+          service/
       domain/
+        auth/
+        user/
       infrastructure/
+        adapter/
+        mapper/
+        persistence/
+        repository/
       presentation/
+        depends/
+        http/
+          console_auth/
+            controller/
+            requests/
+            responses/
     crm/
     runtime_data/
     schema_registry/
 test/
   test_architecture_boundaries.py
+  test_identity_use_cases.py
+  test_identity_http_router.py
   test_tenancy_create_tenant_use_case.py
   test_tenant_schema_bootstrap_boundary.py
   test_tenancy_http_router.py
@@ -345,16 +366,19 @@ Endpoint принимает:
 
 - `User`
 - `UserEmail`
-- tenant-scoped поиском email
-- auth-flow по email OTP
-- tenant-scoped валидацией session и чтением current user profile
+- tenant-scoped поиском user по primary email
+- auth-flow по email OTP + session
+- tenant-scoped валидацией session и чтением/обновлением current user profile
+- provisioning tenant admin пользователя для onboarding в `tenancy`
 
 ### Domain
 
 Файлы:
 
-- [src/modules/identity/domain/entities.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/modules/identity/domain/entities.py)
-- [src/modules/identity/domain/errors.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/modules/identity/domain/errors.py)
+- [src/modules/identity/domain/user/entity.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/modules/identity/domain/user/entity.py)
+- [src/modules/identity/domain/user/error.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/modules/identity/domain/user/error.py)
+- [src/modules/identity/domain/user/repository.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/modules/identity/domain/user/repository.py)
+- [src/modules/identity/domain/auth/error.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/src/modules/identity/domain/auth/error.py)
 
 Бизнес-правила:
 
@@ -365,16 +389,20 @@ Endpoint принимает:
 
 ### Application
 
-Реализованы два slices:
+Application-слой разделен на:
 
-1. `provisioning`
-   - создание tenant admin пользователя
+1. `user`
+    - `dto/created_tenant_admin.py`
+    - `service/user_service.py`
 2. `auth`
-   - `request_otp`
-   - `confirm_otp`
-   - `current_user`
-   - `update_current_user_profile`
-   - `logout`
+    - `command/*`
+    - `dto/*`
+    - `service/*`
+    - `use_case/*`
+3. `ports`
+    - `email_sender.py`
+    - `tenant_context_reader.py`
+    - `token_store.py`
 
 ### Auth-flow
 
@@ -389,9 +417,10 @@ Endpoint принимает:
    - `code_hash`
 5. challenge пишется в token store
 6. code отправляется через email sender adapter
-7. response возвращает только:
+7. response возвращает:
    - `token`
    - `expires_in`
+   - `code` только в development mode
 
 #### `POST /api/console/auth/confirm-otp`
 
@@ -411,7 +440,7 @@ Endpoint принимает:
 8. OTP challenge инвалидируется
 9. при необходимости `UserEmail.is_verified = true`
 10. `UoW.commit()`
-11. route выставляет host-only cookie
+11. route выставляет session cookie
 
 #### `POST /api/console/auth/logout`
 
@@ -458,25 +487,44 @@ Endpoint принимает:
 8. `UoW.commit()`
 9. response возвращает обновленный user profile и `emails` c фильтром `is_deleted = false`
 
-### Token storage
+### Presentation
 
-Сейчас `identity` работает не напрямую с Redis, а через:
+HTTP-слой разложен по CRM-подобной структуре:
+
+- `presentation/http/console_auth/controller/*`
+- `presentation/http/console_auth/requests/*`
+- `presentation/http/console_auth/responses/*`
+- `presentation/depends/application.py`
+- `presentation/depends/infrastructure.py`
+
+### Infrastructure
+
+Содержит:
+
+- SQLAlchemy repository в `infrastructure/repository/user_repository.py`
+- mapping domain <-> DB в `infrastructure/mapper/user.py`
+- adapters:
+    - `tenant_context.py`
+    - `otp_challenge_store.py`
+    - `session_store.py`
+    - `email_sender.py`
+- persistence models в `infrastructure/persistence/`
+
+### Token storage и email sender
+
+`identity` работает не напрямую с Redis, а через:
 
 - `OtpChallengeStorePort`
 - `SessionStorePort`
 - shared `TokenManager`
 
-В production path используется Redis backend.
-В тестах backend обычно переопределяется через `app.state.token_manager`.
-
-### Email sender
+В production path default `TokenManager` пытается использовать Redis backend.
+Если Redis backend недоступен, shared dependency логирует warning и откатывается на in-memory fallback.
 
 Для MVP используется `InMemoryEmailSender` как stub adapter.
 Это техническая заглушка, а не финальный интеграционный email provider.
 
----
-
-## Правило tenant по host
+### Правило tenant по host
 
 В проекте уже централизовано правило:
 
@@ -493,40 +541,24 @@ Endpoint принимает:
   - tenant по host не найден
   - tenant недоступен для login
 
----
-
-## Текущее состояние Redis
-
-В коде реализованы:
-
-- Redis config
-- Redis repository
-- Redis token backend adapter
-
-Если пакет `redis` недоступен в runtime, `identity` dependencies логируют warning и откатываются на in-memory backend.
-
-Это сделано как безопасный fallback для локальной среды и тестов, но production path должен использовать реальный Redis backend.
-
----
-
 ## Текущее тестовое покрытие
 
 Сейчас есть:
 
 - [test/test_architecture_boundaries.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/test/test_architecture_boundaries.py)
     - архитектурные границы модулей
-    - запрет legacy import-путей
-- [test/test_tenancy_create_tenant_use_case.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/test/test_tenancy_create_tenant_use_case.py)
-    - orchestration `CreateTenantUseCase`
-    - bootstrap schema context
-- [test/test_tenant_schema_bootstrap_boundary.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/test/test_tenant_schema_bootstrap_boundary.py)
-    - boundary между `tenancy` и `schema_registry`
-- [test/test_tenancy_http_router.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/test/test_tenancy_http_router.py)
-    - сохранение публичных tenancy routes
-- `test/test_schema_registry_*.py`
-    - schema seed, metadata, diff, planner, executor, repositories, runtime resolver
-- `test/test_crm_*.py`
-    - CRM controller, entity, repository и use case сценарии
+  - запрет legacy import-путей, включая старые `identity` import roots
+- [test/test_identity_use_cases.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/test/test_identity_use_cases.py)
+    - request/confirm OTP
+    - authenticate by session
+    - current user
+    - profile update
+    - logout
+    - tenant admin provisioning service
+- [test/test_identity_http_router.py](/Users/denisnikoncuk/PycharmProjects/dnk-runtime-core/test/test_identity_http_router.py)
+    - сохранение публичных identity routes
+    - cookie set/delete semantics
+    - tenant-aware HTTP error mapping
 
 ---
 

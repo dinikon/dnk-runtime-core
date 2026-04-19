@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from src.modules.identity.application.provisioning.services.user_service import (
-    UserServiceProtocol,
-)
+from src.modules.identity.application.user import UserServiceProtocol
 from src.modules.tenancy.application.ports.identity import (
     IdentityProvisioningServiceProtocol,
     ProvisionedTenantAdmin,
