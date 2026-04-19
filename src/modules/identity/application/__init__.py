@@ -21,7 +21,6 @@ from src.modules.identity.application.auth import (
     UpdateCurrentUserProfileUseCase,
 )
 from src.modules.identity.application.ports import (
-    EmailSenderPort,
     OtpChallenge,
     OtpChallengeStorePort,
     SessionRecord,
@@ -43,7 +42,6 @@ __all__ = [
     "ConfirmEmailOtpResultDTO",
     "ConfirmEmailOtpUseCase",
     "CreatedTenantAdmin",
-    "EmailSenderPort",
     "GetCurrentUserCommandDTO",
     "GetCurrentUserEmailDTO",
     "GetCurrentUserResultDTO",

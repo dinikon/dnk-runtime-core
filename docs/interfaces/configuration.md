@@ -38,6 +38,21 @@ Project configuration is assembled by `DnkConfig`, which combines multiple setti
     - `AUTH.otp_token_ttl_seconds`
     - `AUTH.session_ttl_seconds`
 
+## Email Delivery Config
+
+- Group: `config/infrastructure/email_config.py`
+- Responsibilities:
+  - active email provider selection
+  - default sender identity
+  - SMTP transport host, port, credentials and TLS mode
+- Critical for behavior:
+  - `EMAIL.provider`
+  - `EMAIL.from_address`
+  - `EMAIL.smtp.host`
+  - `EMAIL.smtp.port`
+  - `EMAIL.smtp.use_tls`
+  - `EMAIL.smtp.use_starttls`
+
 ## Runtime Schema Config
 
 - Group: `config/feature/runtime_schema/__init__.py`
@@ -84,4 +99,5 @@ Project configuration is assembled by `DnkConfig`, which combines multiple setti
 - `src/config/feature/identity/auth_config.py`
 - `src/config/feature/runtime_schema/__init__.py`
 - `src/config/infrastructure/__init__.py`
+- `src/config/infrastructure/email_config.py`
 - `src/config/infrastructure/redis_config.py`

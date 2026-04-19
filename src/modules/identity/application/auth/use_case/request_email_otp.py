@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import logging
+
 from src.modules.identity.application.auth.command import RequestEmailOtpCommandDTO
 from src.modules.identity.application.auth.dto.request_email_otp_result_dto import (
     RequestEmailOtpResultDTO,
 )
 from src.modules.identity.application.auth.service import OtpServiceProtocol
 from src.modules.identity.application.ports import (
-    EmailSenderPort,
     OtpChallenge,
     OtpChallengeStorePort,
     TenantContextReaderPort,
@@ -16,7 +17,15 @@ from src.modules.identity.domain.user import (
     UserLoginUnavailableError,
     UserRepositoryProtocol,
 )
+from src.modules.shared.kernel.email import (
+    EmailDeliveryError,
+    EmailServicePort,
+    SendOtpCodeVariables,
+    SystemEmailKind,
+)
 from src.modules.shared.http.host import normalize_host
+
+log = logging.getLogger(__name__)
 
 
 class RequestEmailOtpUseCase:
@@ -28,7 +37,7 @@ class RequestEmailOtpUseCase:
         users_repository: UserRepositoryProtocol,
         otp_challenge_store: OtpChallengeStorePort,
         otp_service: OtpServiceProtocol,
-        email_sender: EmailSenderPort,
+        email_service: EmailServicePort,
         otp_ttl_seconds: int,
     ):
         """Инициализирует зависимости чтения tenant/user, OTP store и email sender."""
@@ -36,7 +45,7 @@ class RequestEmailOtpUseCase:
         self._users_repository = users_repository
         self._otp_challenge_store = otp_challenge_store
         self._otp_service = otp_service
-        self._email_sender = email_sender
+        self._email_service = email_service
         self._otp_ttl_seconds = otp_ttl_seconds
 
     async def __call__(
@@ -75,7 +84,19 @@ class RequestEmailOtpUseCase:
             ),
             ttl_seconds=self._otp_ttl_seconds,
         )
-        await self._email_sender.send_login_code(primary_email.email, generated.code)
+        variables: SendOtpCodeVariables = {"otp_code": generated.code}
+        try:
+            await self._email_service.send(
+                SystemEmailKind.SEND_OTP_CODE,
+                primary_email.email,
+                variables,
+            )
+        except EmailDeliveryError:
+            log.exception(
+                "Failed to deliver login OTP email to '%s' for tenant '%s'.",
+                primary_email.email,
+                tenant_context.tenant_id,
+            )
 
         return RequestEmailOtpResultDTO(
             token=generated.token,

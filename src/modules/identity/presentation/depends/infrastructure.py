@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import Depends, Request
+from fastapi import Depends
 
 from src.config import dnk_config
 from src.config.feature.identity.auth_config import IdentityAuthSettings
@@ -13,7 +13,6 @@ from src.modules.identity.application.auth.service import (
     SessionServiceProtocol,
 )
 from src.modules.identity.application.ports import (
-    EmailSenderPort,
     OtpChallengeStorePort,
     SessionStorePort,
     TenantContextReaderPort,
@@ -23,8 +22,8 @@ from src.modules.identity.infrastructure.adapter import (
     TenancyTenantContextReaderAdapter,
     TokenManagerBackedOtpChallengeStore,
     TokenManagerBackedSessionStore,
-    default_email_sender,
 )
+from src.modules.shared.depends.email_service import EmailServiceDep, get_email_service
 from src.modules.identity.infrastructure.repository import SqlAlchemyUserRepository
 from src.modules.shared.depends.token_manager import (
     TokenManagerDep,
@@ -54,14 +53,6 @@ def get_auth_settings() -> IdentityAuthSettings:
 
 
 AuthSettingsDep = Annotated[IdentityAuthSettings, Depends(get_auth_settings)]
-
-
-def get_email_sender(request: Request) -> EmailSenderPort:
-    """Возвращает email sender из app.state или in-memory default."""
-    return getattr(request.app.state, "email_sender", default_email_sender)
-
-
-EmailSenderDep = Annotated[EmailSenderPort, Depends(get_email_sender)]
 
 
 def get_otp_service(settings: AuthSettingsDep) -> OtpServiceProtocol:
@@ -116,7 +107,7 @@ SessionStoreDep = Annotated[SessionStorePort, Depends(get_session_store)]
 
 __all__ = [
     "AuthSettingsDep",
-    "EmailSenderDep",
+    "EmailServiceDep",
     "OtpChallengeStoreDep",
     "OtpServiceDep",
     "SessionServiceDep",
@@ -126,7 +117,7 @@ __all__ = [
     "UsersRepositoryDep",
     "default_token_manager",
     "get_auth_settings",
-    "get_email_sender",
+    "get_email_service",
     "get_otp_challenge_store",
     "get_otp_service",
     "get_session_service",

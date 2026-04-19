@@ -16,7 +16,7 @@ from src.modules.identity.application.auth import (
 from src.modules.identity.application.user import UserService, UserServiceProtocol
 from src.modules.identity.presentation.depends.infrastructure import (
     AuthSettingsDep,
-    EmailSenderDep,
+    EmailServiceDep,
     OtpChallengeStoreDep,
     OtpServiceDep,
     SessionServiceDep,
@@ -40,7 +40,7 @@ def get_request_email_otp_use_case(
     users_repository: UsersRepositoryDep,
     otp_challenge_store: OtpChallengeStoreDep,
     otp_service: OtpServiceDep,
-    email_sender: EmailSenderDep,
+    email_service: EmailServiceDep,
     settings: AuthSettingsDep,
 ) -> RequestEmailOtpUseCase:
     """Создает use case запроса email OTP."""
@@ -49,7 +49,7 @@ def get_request_email_otp_use_case(
         users_repository=users_repository,
         otp_challenge_store=otp_challenge_store,
         otp_service=otp_service,
-        email_sender=email_sender,
+        email_service=email_service,
         otp_ttl_seconds=settings.otp_token_ttl_seconds,
     )
 

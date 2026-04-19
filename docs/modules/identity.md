@@ -37,7 +37,7 @@ read/update flows, and tenant admin provisioning during onboarding.
 - `application/user/`
     - `dto/`, `service/`
 - `application/ports/`
-    - tenant context, token store and email sender ports
+  - tenant context and token store ports
 - `presentation/http/console_auth/`
     - controller/request/response files per endpoint
 - `presentation/depends/`
@@ -50,7 +50,8 @@ read/update flows, and tenant admin provisioning during onboarding.
 - `SqlAlchemyUserRepository` explicitly maps ORM models to domain entities in its `return`
 - token/session implementations use shared `TokenManager`
 - tenant context is resolved through a tenancy-owned use case adapter
-- email delivery currently uses an in-memory stub adapter by default
+- request OTP delegates typed email sending to shared `EmailService`
+- email delivery uses shared provider wiring with SMTP MVP transport and a placeholder `resend` provider
 
 ## Presentation / Entry Points
 
@@ -73,6 +74,7 @@ The default theme is `system`, and `PATCH /me` requires an explicit non-null the
 - OTP challenge TTL
 - session TTL
 - session cookie name
+- email OTP response still returns `code` only in `DEVELOPMENT`
 - in development mode, OTP code may be returned in response for easier local testing
 
 ## Dependencies On Other Modules
@@ -89,8 +91,6 @@ The default theme is `system`, and `PATCH /me` requires an explicit non-null the
     - public route registration
     - cookie behavior
   - per-controller HTTP error mapping
-- `test/test_identity_repository.py`
-    - explicit ORM -> domain mapping in repository return paths
 - `test/test_architecture_boundaries.py`
     - forbids legacy identity import paths
   - forbids removed `error_mapper` and `infrastructure.mapper` imports

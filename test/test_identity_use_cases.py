@@ -30,6 +30,10 @@ from src.modules.identity.domain import (
     User,
 )
 from src.modules.shared.domain.errors import DomainError
+from src.modules.shared.kernel.email import (
+    EmailDeliveryError,
+    SystemEmailKind,
+)
 
 
 class _TenantContextReaderStub:
@@ -52,12 +56,17 @@ class _UnitOfWorkStub:
         self.rolled_back = True
 
 
-class _EmailSenderStub:
+class _EmailServiceStub:
     def __init__(self) -> None:
-        self.sent: list[tuple[str, str]] = []
+        self.sent: list[tuple[SystemEmailKind, str, dict[str, str]]] = []
 
-    async def send_login_code(self, email: str, code: str) -> None:
-        self.sent.append((email, code))
+    async def send(self, kind, recipient_email: str, variables) -> None:
+        self.sent.append((kind, recipient_email, dict(variables)))
+
+
+class _FailingEmailServiceStub:
+    async def send(self, kind, recipient_email: str, variables) -> None:
+        raise EmailDeliveryError("SMTP is unavailable.")
 
 
 class _OtpChallengeStoreStub:
@@ -149,14 +158,14 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         user.add_email("john@example.com", is_primary=True)
         users_repository = _UserRepositoryStub(user)
         challenge_store = _OtpChallengeStoreStub()
-        email_sender = _EmailSenderStub()
+        email_service = _EmailServiceStub()
 
         use_case = RequestEmailOtpUseCase(
             tenant_context_reader=_TenantContextReaderStub(self.context),
             users_repository=users_repository,
             otp_challenge_store=challenge_store,
             otp_service=OtpService(6),
-            email_sender=email_sender,
+            email_service=email_service,
             otp_ttl_seconds=300,
         )
 
@@ -172,7 +181,41 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(result.code)
         self.assertEqual(challenge_store.created[0].email, "john@example.com")
         self.assertEqual(challenge_store.created[1], 300)
-        self.assertEqual(email_sender.sent, [("john@example.com", result.code)])
+        self.assertEqual(email_service.sent[0][0], SystemEmailKind.SEND_OTP_CODE)
+        self.assertEqual(email_service.sent[0][1], "john@example.com")
+        self.assertEqual(email_service.sent[0][2]["otp_code"], result.code)
+
+    async def test_request_email_otp_keeps_success_when_email_delivery_fails(
+        self,
+    ) -> None:
+        user = User.create_tenant_admin(
+            tenant_id=self.tenant_id,
+            first_name="John",
+            last_name="Doe",
+        )
+        user.add_email("john@example.com", is_primary=True)
+        challenge_store = _OtpChallengeStoreStub()
+
+        use_case = RequestEmailOtpUseCase(
+            tenant_context_reader=_TenantContextReaderStub(self.context),
+            users_repository=_UserRepositoryStub(user),
+            otp_challenge_store=challenge_store,
+            otp_service=OtpService(6),
+            email_service=_FailingEmailServiceStub(),
+            otp_ttl_seconds=300,
+        )
+
+        result = await use_case(
+            RequestEmailOtpCommandDTO(
+                host=self.context.host,
+                email="john@example.com",
+            )
+        )
+
+        self.assertTrue(result.token.startswith("otp_"))
+        self.assertEqual(result.expires_in, 300)
+        self.assertEqual(challenge_store.created[0].email, "john@example.com")
+        self.assertEqual(challenge_store.invalidated, [])
 
     async def test_confirm_email_otp_verifies_email_and_creates_session(self) -> None:
         user = User.create_tenant_admin(

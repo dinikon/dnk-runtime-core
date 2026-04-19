@@ -98,12 +98,16 @@ class ArchitectureBoundariesTests(unittest.TestCase):
             "src.modules.identity.presentation.depends.auth_use_cases",
             "src.modules.identity.presentation.http.console_auth.controller.error_mapper",
             "src.modules.identity.infrastructure.mapper",
+            "src.modules.identity.application.auth.service.login_otp_email_composer",
+            "src.modules.identity.infrastructure.adapter.login_otp_email_composer",
+            "src.modules.shared.depends.email_sender",
         )
         forbidden_modules = {
             "src.modules.identity.application.auth.dto",
             "src.modules.identity.domain.entities",
             "src.modules.identity.domain.errors",
             "src.modules.identity.infrastructure.repositories",
+            "src.modules.identity.application.ports.email_sender",
         }
         for root in ("src", "test"):
             for path in iter_python_files(root):
@@ -132,4 +136,27 @@ class ArchitectureBoundariesTests(unittest.TestCase):
             self.assertFalse(
                 any(pattern in content for pattern in forbidden_patterns),
                 msg=f"{path} still uses execute-style identity use case calls",
+            )
+
+    def test_email_delivery_does_not_use_app_state_or_identity_template_paths(
+        self,
+    ) -> None:
+        paths = [
+            PROJECT_ROOT / "src/modules/shared/depends/email_service.py",
+            PROJECT_ROOT
+            / "src/modules/identity/presentation/depends/infrastructure.py",
+            PROJECT_ROOT
+            / "src/modules/identity/application/auth/use_case/request_email_otp.py",
+        ]
+        forbidden_patterns = (
+            "request.app.state",
+            "login_otp_email_composer",
+            "email_templates",
+            "FileLoginOtpEmailComposer",
+        )
+        for path in paths:
+            content = path.read_text(encoding="utf-8")
+            self.assertFalse(
+                any(pattern in content for pattern in forbidden_patterns),
+                msg=f"{path} still uses removed email wiring pattern",
             )

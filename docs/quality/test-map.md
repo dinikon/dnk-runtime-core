@@ -44,16 +44,24 @@ This page maps current tests to the behaviors they protect.
 
 - `test/test_identity_use_cases.py`
     - request/confirm OTP flow
+  - OTP email delivery failure fallback
     - session authentication
     - current user profile read/update
     - logout
     - tenant admin provisioning service
-- `test/test_identity_repository.py`
-    - explicit ORM -> domain mapping in `SqlAlchemyUserRepository`
 - `test/test_identity_http_router.py`
     - public identity route registration
     - session cookie set/delete behavior
   - tenant-aware per-controller HTTP error mapping
+
+## Shared
+
+- `test/test_shared_email_service.py`
+  - typed email service rendering for system email kinds
+  - provider factory selection
+  - SMTP transport message building
+  - SMTP vs SMTP SSL transport choice
+  - `resend` placeholder behavior
 
 ## CRM
 

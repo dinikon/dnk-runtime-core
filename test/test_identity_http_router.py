@@ -7,14 +7,17 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from src.config.feature.identity.auth_config import IdentityAuthSettings
+from src.modules.identity.application import TenantRequestContext
 from src.modules.identity.application.auth import (
     ConfirmEmailOtpResultDTO,
     GetCurrentUserEmailDTO,
     GetCurrentUserResultDTO,
     LogoutCurrentSessionResultDTO,
+    OtpService,
     UpdateCurrentUserProfileResultDTO,
 )
 from src.modules.identity.domain.auth import InvalidOtpCodeError, InvalidSessionError
+from src.modules.identity.domain.user import User
 from src.modules.identity.presentation.depends.application import (
     get_current_user_use_case,
     get_confirm_email_otp_use_case,
@@ -22,10 +25,18 @@ from src.modules.identity.presentation.depends.application import (
     get_request_email_otp_use_case,
     get_update_current_user_profile_use_case,
 )
-from src.modules.identity.presentation.depends.infrastructure import get_auth_settings
+from src.modules.identity.presentation.depends.infrastructure import (
+    get_auth_settings,
+    get_otp_challenge_store,
+    get_otp_service,
+    get_tenant_context_reader,
+    get_users_repository,
+)
 from src.modules.identity.presentation.http.router import router
+from src.modules.shared.depends.email_service import get_email_service
 from src.modules.shared.depends.request_host import get_request_host
 from src.modules.shared.domain.errors import DomainError
+from src.modules.shared.kernel.email import EmailDeliveryError
 from src.modules.tenancy.domain.tenant_domain import (
     TenantHostNotFoundError,
     TenantLoginUnavailableError,
@@ -95,6 +106,37 @@ class _RequestEmailOtpForbiddenUseCaseStub:
 class _ConfirmEmailOtpUnauthorizedUseCaseStub:
     async def __call__(self, dto):
         raise InvalidOtpCodeError()
+
+
+class _TenantContextReaderStub:
+    def __init__(self, context: TenantRequestContext):
+        self.context = context
+
+    async def get_by_host(self, host: str) -> TenantRequestContext:
+        return self.context
+
+
+class _UserRepositoryStub:
+    def __init__(self, user: User | None) -> None:
+        self.user = user
+
+    async def get_by_tenant_and_primary_email(self, tenant_id, email: str):
+        if self.user is None or self.user.tenant_id != tenant_id:
+            return None
+        return self.user if self.user.get_primary_email(email) is not None else None
+
+
+class _OtpChallengeStoreStub:
+    def __init__(self) -> None:
+        self.created = None
+
+    async def create_challenge(self, challenge, ttl_seconds: int) -> None:
+        self.created = (challenge, ttl_seconds)
+
+
+class _FailingEmailServiceStub:
+    async def send(self, kind, recipient_email: str, variables) -> None:
+        raise EmailDeliveryError("SMTP is unavailable.")
 
 
 class _GetCurrentUserUnauthorizedUseCaseStub:
@@ -339,6 +381,47 @@ class IdentityHttpRouterTests(unittest.TestCase):
             response.json()["detail"],
             "Tenant for host 'tenant.example.com' is not available for login.",
         )
+
+    def test_request_otp_returns_200_when_email_delivery_fails(self) -> None:
+        app = FastAPI()
+        app.include_router(router, prefix="/api/console/auth")
+        tenant_id = uuid4()
+        user = User.create_tenant_admin(
+            tenant_id=tenant_id,
+            first_name="John",
+            last_name="Doe",
+        )
+        user.add_email("john@example.com", is_primary=True)
+        app.dependency_overrides[get_tenant_context_reader] = lambda: (
+            _TenantContextReaderStub(
+                TenantRequestContext(
+                    tenant_id=tenant_id,
+                    tenant_domain_id=uuid4(),
+                    host="tenant.example.com",
+                    tenant_status="active",
+                    domain_status="active",
+                    api_host="api.tenant.example.com",
+                )
+            )
+        )
+        app.dependency_overrides[get_users_repository] = lambda: _UserRepositoryStub(
+            user
+        )
+        app.dependency_overrides[get_otp_challenge_store] = (
+            lambda: _OtpChallengeStoreStub()
+        )
+        app.dependency_overrides[get_otp_service] = lambda: OtpService(6)
+        app.dependency_overrides[get_email_service] = lambda: _FailingEmailServiceStub()
+        app.dependency_overrides[get_request_host] = lambda: "tenant.example.com"
+
+        response = TestClient(app).post(
+            "/api/console/auth/request-otp",
+            json={"email": "john@example.com"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("token", response.json())
+        self.assertEqual(response.json()["expires_in"], 300)
 
     def test_confirm_otp_maps_invalid_code_to_401(self) -> None:
         app = FastAPI()
