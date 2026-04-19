@@ -43,7 +43,7 @@ class User:
     middle_name: str | None
     avatar: str | None
     interface_language: str
-    interface_theme: str
+    interface_theme: str | None
     timezone: str
     last_login_at: datetime | None
     last_active_at: datetime

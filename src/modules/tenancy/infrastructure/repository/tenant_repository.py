@@ -27,36 +27,48 @@ class SqlAlchemyTenantRepository(TenantRepositoryProtocol):
 
     async def get_by_id(self, tenant_id: UUID) -> Tenant | None:
         """Ищет tenant по id."""
-        model = await self._session.scalar(
-            select(TenantModel).where(TenantModel.id == str(tenant_id))
-        )
+        model: TenantModel | None = (
+            await self._session.scalars(
+                select(TenantModel).where(TenantModel.id == tenant_id)
+            )
+        ).one_or_none()
+
         if model is None:
             return None
         return tenant_model_to_entity(model)
 
     async def get_by_name(self, name: str) -> Tenant | None:
         """Ищет tenant по имени."""
-        model = await self._session.scalar(
-            select(TenantModel).where(TenantModel.name == name)
-        )
+        model: TenantModel | None = (
+            await self._session.scalars(
+                select(TenantModel).where(TenantModel.name == name)
+            )
+        ).one_or_none()
+
         if model is None:
             return None
         return tenant_model_to_entity(model)
 
     async def exists_by_external_id(self, external_id: str) -> bool:
         """Проверяет существование tenant по external_id."""
-        tenant_id = await self._session.scalar(
-            select(TenantModel.id)
-            .where(TenantModel.external_id == external_id)
-            .limit(1)
-        )
+        tenant_id: UUID | None = (
+            await self._session.scalars(
+                select(TenantModel.id)
+                .where(TenantModel.external_id == external_id)
+                .limit(1)
+            )
+        ).one_or_none()
+
         return tenant_id is not None
 
     async def exists_by_name(self, name: str) -> bool:
         """Проверяет существование tenant по имени."""
-        tenant_id = await self._session.scalar(
-            select(TenantModel.id).where(TenantModel.name == name).limit(1)
-        )
+        tenant_id: UUID | None = (
+            await self._session.scalars(
+                select(TenantModel.id).where(TenantModel.name == name).limit(1)
+            )
+        ).one_or_none()
+
         return tenant_id is not None
 
 

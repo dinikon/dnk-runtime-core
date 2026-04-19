@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import cast
 from uuid import UUID
 
 from sqlalchemy import select, update
@@ -57,23 +56,24 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
 
     async def get_by_id(self, user_id: UUID) -> User | None:
         """Ищет пользователя по id и подгружает его email-адреса."""
-        user_model = cast(
-            UserModel | None,
-            await self._session.scalar(
-                select(UserModel).where(UserModel.id == str(user_id))
-            ),
-        )
+
+        user_model: UserModel | None = (
+            await self._session.scalars(
+                select(UserModel).where(UserModel.id == user_id)
+            )
+        ).one_or_none()
+
         if user_model is None:
             return None
 
-        email_models = cast(
-            list[UserEmailModel],
+        email_models: list[UserEmailModel] = list(
             (
                 await self._session.scalars(
-                    select(UserEmailModel).where(UserEmailModel.user_id == str(user_id))
+                    select(UserEmailModel).where(UserEmailModel.user_id == user_id)
                 )
-            ).all(),
+            ).all()
         )
+
         return User(
             id=user_model.id,
             tenant_id=user_model.tenant_id,
@@ -112,32 +112,30 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
         email: str,
     ) -> User | None:
         """Ищет пользователя tenant по primary email и подгружает emails."""
-        user_model = cast(
-            UserModel | None,
-            await self._session.scalar(
+        user_model: UserModel | None = (
+            await self._session.scalars(
                 select(UserModel)
                 .join(UserEmailModel, UserEmailModel.user_id == UserModel.id)
-                .where(UserModel.tenant_id == str(tenant_id))
+                .where(UserModel.tenant_id == tenant_id)
                 .where(UserEmailModel.email == email)
                 .where(UserEmailModel.is_primary.is_(True))
                 .where(UserEmailModel.is_deleted.is_(False))
-                .limit(1)
-            ),
-        )
+            )
+        ).one_or_none()
+
         if user_model is None:
             return None
 
-        user_model_id = user_model.id
-        email_models = cast(
-            list[UserEmailModel],
+        email_models: list[UserEmailModel] = list(
             (
                 await self._session.scalars(
                     select(UserEmailModel).where(
-                        UserEmailModel.user_id == user_model_id
+                        UserEmailModel.user_id == user_model.id
                     )
                 )
-            ).all(),
+            ).all()
         )
+
         return User(
             id=user_model.id,
             tenant_id=user_model.tenant_id,
@@ -174,7 +172,7 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
         """Обновляет profile-поля пользователя в ORM-модели."""
         await self._session.execute(
             update(UserModel)
-            .where(UserModel.id == str(user.id))
+            .where(UserModel.id == user.id)
             .values(
                 last_name=user.last_name,
                 first_name=user.first_name,
@@ -191,7 +189,7 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
         """Помечает email как verified в ORM-модели."""
         await self._session.execute(
             update(UserEmailModel)
-            .where(UserEmailModel.id == str(user_email_id))
+            .where(UserEmailModel.id == user_email_id)
             .values(is_verified=True)
         )
         await self._session.flush()
@@ -202,14 +200,17 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
         email: str,
     ) -> bool:
         """Проверяет существование не удаленного email в tenant."""
-        email_id = await self._session.scalar(
-            select(UserEmailModel.id)
-            .join(UserModel, UserModel.id == UserEmailModel.user_id)
-            .where(UserModel.tenant_id == str(tenant_id))
-            .where(UserEmailModel.email == email)
-            .where(UserEmailModel.is_deleted.is_(False))
-            .limit(1)
-        )
+        email_id: UUID | None = (
+            await self._session.scalars(
+                select(UserEmailModel.id)
+                .join(UserModel, UserModel.id == UserEmailModel.user_id)
+                .where(UserModel.tenant_id == tenant_id)
+                .where(UserEmailModel.email == email)
+                .where(UserEmailModel.is_deleted.is_(False))
+                .limit(1)
+            )
+        ).one_or_none()
+
         return email_id is not None
 
 

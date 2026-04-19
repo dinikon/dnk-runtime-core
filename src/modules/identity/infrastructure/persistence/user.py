@@ -50,7 +50,7 @@ class UserModel(Base):
         nullable=False,
         server_default="uk",
     )
-    interface_theme: Mapped[str] = mapped_column(
+    interface_theme: Mapped[str | None] = mapped_column(
         String(255),
         nullable=True,
         server_default="system",

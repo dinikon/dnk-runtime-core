@@ -13,26 +13,34 @@ from src.modules.identity.infrastructure.repository.user_repository import (
 
 class _ScalarSequenceResult:
     def __init__(self, items):
-        self._items = items
+        self._items = list(items)
+
+    def one_or_none(self):
+        if not self._items:
+            return None
+        if len(self._items) == 1:
+            return self._items[0]
+        raise AssertionError("Expected zero or one result in test stub.")
 
     def all(self):
         return list(self._items)
 
 
 class _AsyncSessionStub:
-    def __init__(self, *, scalar_results=None, scalars_results=None) -> None:
-        self._scalar_results = list(scalar_results or [])
-        self._scalars_results = list(scalars_results or [])
 
-    async def scalar(self, statement):
-        if not self._scalar_results:
-            return None
-        return self._scalar_results.pop(0)
+    def __init__(self, *, scalars_results=None) -> None:
+        self._scalars_results = list(scalars_results or [])
 
     async def scalars(self, statement):
         if not self._scalars_results:
             return _ScalarSequenceResult([])
-        return _ScalarSequenceResult(self._scalars_results.pop(0))
+
+        items = self._scalars_results.pop(0)
+        if items is None:
+            return _ScalarSequenceResult([])
+        if isinstance(items, list):
+            return _ScalarSequenceResult(items)
+        return _ScalarSequenceResult([items])
 
 
 class SqlAlchemyUserRepositoryTests(unittest.IsolatedAsyncioTestCase):
@@ -72,8 +80,7 @@ class SqlAlchemyUserRepositoryTests(unittest.IsolatedAsyncioTestCase):
     async def test_get_by_id_returns_none_when_user_is_missing(self) -> None:
         repository = SqlAlchemyUserRepository(
             _AsyncSessionStub(
-                scalar_results=[None],
-                scalars_results=[],
+                scalars_results=[None],
             )
         )
 
@@ -84,8 +91,7 @@ class SqlAlchemyUserRepositoryTests(unittest.IsolatedAsyncioTestCase):
     async def test_get_by_id_maps_user_and_emails_without_mapper_module(self) -> None:
         repository = SqlAlchemyUserRepository(
             _AsyncSessionStub(
-                scalar_results=[self.user_model],
-                scalars_results=[[self.primary_email_model]],
+                scalars_results=[self.user_model, [self.primary_email_model]],
             )
         )
 
@@ -106,8 +112,7 @@ class SqlAlchemyUserRepositoryTests(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         repository = SqlAlchemyUserRepository(
             _AsyncSessionStub(
-                scalar_results=[None],
-                scalars_results=[],
+                scalars_results=[None],
             )
         )
 
@@ -121,8 +126,7 @@ class SqlAlchemyUserRepositoryTests(unittest.IsolatedAsyncioTestCase):
     async def test_get_by_tenant_and_primary_email_maps_user_and_emails(self) -> None:
         repository = SqlAlchemyUserRepository(
             _AsyncSessionStub(
-                scalar_results=[self.user_model],
-                scalars_results=[[self.primary_email_model]],
+                scalars_results=[self.user_model, [self.primary_email_model]],
             )
         )
 

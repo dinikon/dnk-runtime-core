@@ -34,43 +34,59 @@ class SqlAlchemyTenantDomainRepository(TenantDomainRepositoryProtocol):
 
     async def get_by_id(self, domain_id: UUID) -> TenantDomain | None:
         """Ищет tenant domain по id."""
-        model = await self._session.scalar(
-            select(TenantDomainModel).where(TenantDomainModel.id == str(domain_id))
-        )
+        model: TenantDomainModel | None = (
+            await self._session.scalars(
+                select(TenantDomainModel).where(TenantDomainModel.id == domain_id)
+            )
+        ).one_or_none()
+
         if model is None:
             return None
         return tenant_domain_model_to_entity(model)
 
     async def get_by_host(self, host: str) -> TenantDomain | None:
         """Ищет не удаленный tenant domain по host."""
-        model = await self._session.scalar(
-            select(TenantDomainModel)
-            .where(TenantDomainModel.host == host)
-            .where(TenantDomainModel.status != TenantDomainStatus.DELETED)
-        )
+        model: TenantDomainModel | None = (
+            await self._session.scalars(
+                select(TenantDomainModel)
+                .where(TenantDomainModel.host == host)
+                .where(TenantDomainModel.status != TenantDomainStatus.DELETED)
+            )
+        ).one_or_none()
+
         if model is None:
             return None
         return tenant_domain_model_to_entity(model)
 
     async def get_api_host_by_tenant_id(self, tenant_id: UUID) -> str | None:
         """Возвращает preferred API host tenant, если он зарегистрирован."""
-        return await self._session.scalar(
-            select(TenantDomainModel.host)
-            .where(TenantDomainModel.tenant_id == str(tenant_id))
-            .where(TenantDomainModel.service_type == TenantServiceType.API)
-            .where(TenantDomainModel.status != TenantDomainStatus.DELETED)
-            .order_by(TenantDomainModel.is_primary.desc(), TenantDomainModel.created_at)
-            .limit(1)
-        )
+        host: str | None = (
+            await self._session.scalars(
+                select(TenantDomainModel.host)
+                .where(TenantDomainModel.tenant_id == tenant_id)
+                .where(TenantDomainModel.service_type == TenantServiceType.API)
+                .where(TenantDomainModel.status != TenantDomainStatus.DELETED)
+                .order_by(
+                    TenantDomainModel.is_primary.desc(),
+                    TenantDomainModel.created_at,
+                )
+                .limit(1)
+            )
+        ).one_or_none()
+
+        return host
 
     async def exists_by_host(self, host: str) -> bool:
         """Проверяет существование не удаленного tenant domain по host."""
-        domain_id = await self._session.scalar(
-            select(TenantDomainModel.id)
-            .where(TenantDomainModel.host == host)
-            .where(TenantDomainModel.status != TenantDomainStatus.DELETED)
-            .limit(1)
-        )
+        domain_id: UUID | None = (
+            await self._session.scalars(
+                select(TenantDomainModel.id)
+                .where(TenantDomainModel.host == host)
+                .where(TenantDomainModel.status != TenantDomainStatus.DELETED)
+                .limit(1)
+            )
+        ).one_or_none()
+
         return domain_id is not None
 
 
