@@ -15,6 +15,7 @@ This documentation describes the current implementation of `dnk-runtime-core` as
 - [Tenancy](modules/tenancy.md)
 - [Identity](modules/identity.md)
 - [CRM](modules/crm.md)
+- [CRM Roadmap](modules/crm-roadmap.md)
 - [Schema Registry](modules/schema-registry.md)
 - [Shared](modules/shared.md)
 
