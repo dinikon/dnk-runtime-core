@@ -148,6 +148,37 @@ class RuntimeFieldTypePolicyTests(unittest.TestCase):
         self.assertEqual(coerced["score"], Decimal("10.25"))
         self.assertEqual(coerced["is_active"], True)
 
+    def test_patch_rejects_system_fields(self) -> None:
+        policy = RuntimeFieldTypePolicy()
+        base_descriptor = _contact_descriptor()
+        descriptor = RuntimeObjectDescriptor(
+            schema_name=base_descriptor.schema_name,
+            object_name=base_descriptor.object_name,
+            table_name=base_descriptor.table_name,
+            pk=base_descriptor.pk,
+            title_field=base_descriptor.title_field,
+            fields=base_descriptor.fields
+            + (
+                RuntimeFieldDescriptor(
+                    name="workflow_state",
+                    type_code="text",
+                    is_nullable=True,
+                    default_value=None,
+                    options={},
+                    settings={},
+                    kind="system",
+                ),
+            ),
+            relations=base_descriptor.relations,
+            kind=base_descriptor.kind,
+        )
+
+        with self.assertRaises(RuntimeDataValidationError):
+            policy.coerce_patch_payload(
+                descriptor=descriptor,
+                patch={"workflow_state": "locked"},
+            )
+
     def test_decimal_float_is_rejected(self) -> None:
         policy = RuntimeFieldTypePolicy()
         descriptor = _contact_descriptor()

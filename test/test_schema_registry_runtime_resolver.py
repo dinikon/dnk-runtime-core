@@ -13,7 +13,11 @@ from src.modules.schema_registry.domain.error import (
     SchemaRegistryMetadataInconsistentError,
 )
 from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
+from src.modules.schema_registry.domain.field.value_object.field_kind import FieldKind
 from src.modules.schema_registry.domain.object.entity import ObjectEntity
+from src.modules.schema_registry.domain.object.value_object.object_kind import (
+    ObjectKind,
+)
 from src.modules.schema_registry.domain.object.value_object.object_label import (
     ObjectLabelVO,
 )
@@ -44,6 +48,7 @@ class SchemaRegistryRuntimeObjectResolverTests(unittest.IsolatedAsyncioTestCase)
             object_name=ObjectNameVO(singular="contact", plural="contacts"),
             object_label=ObjectLabelVO(singular="Contact", plural="Contacts"),
             description="Tenant contacts.",
+            kind=ObjectKind.CUSTOM,
         )
         field_types = FieldTypeCatalog()
         object_entity.add_field(
@@ -55,6 +60,7 @@ class SchemaRegistryRuntimeObjectResolverTests(unittest.IsolatedAsyncioTestCase)
             description="Contact identifier.",
             is_nullable=False,
             default_value="gen_random_uuid()",
+            kind=FieldKind.SYSTEM,
         )
         object_entity.add_field(
             field_id=EntityIdVO.from_value(uuid4()),
@@ -91,10 +97,14 @@ class SchemaRegistryRuntimeObjectResolverTests(unittest.IsolatedAsyncioTestCase)
         self.assertEqual(descriptor.schema_name, "dnk_test")
         self.assertEqual(descriptor.object_name, "contact")
         self.assertEqual(descriptor.table_name, "contacts")
+        self.assertEqual(descriptor.kind, "custom")
         self.assertEqual(descriptor.pk, "id")
         self.assertEqual(descriptor.title_field, "id")
         self.assertEqual(
             [field.name for field in descriptor.fields], ["id", "last_name"]
+        )
+        self.assertEqual(
+            [field.kind for field in descriptor.fields], ["system", "standard"]
         )
 
     async def test_resolve_raises_not_found(self) -> None:

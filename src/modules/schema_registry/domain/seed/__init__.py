@@ -1,5 +1,7 @@
 from src.modules.schema_registry.domain.seed.field_seed import FieldSeed
 from src.modules.schema_registry.domain.seed.index_seed import IndexSeed
+from src.modules.schema_registry.domain.field.value_object.field_kind import FieldKind
+from src.modules.schema_registry.domain.object.value_object.object_kind import ObjectKind
 from src.modules.schema_registry.domain.seed.object_seed import ObjectSeed
 from src.modules.schema_registry.domain.seed.relation_seed import RelationSeed
 from src.modules.schema_registry.domain.seed.relation_type import RelationTypeEnum
@@ -14,7 +16,9 @@ from src.modules.schema_registry.domain.seed.validated_schema_spec import (
 
 __all__ = [
     "FieldSeed",
+    "FieldKind",
     "IndexSeed",
+    "ObjectKind",
     "ObjectSeed",
     "RelationSeed",
     "RelationTypeEnum",

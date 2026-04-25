@@ -63,6 +63,7 @@ async def describe_contact_fields(
             singular_label=result.object_description.singular_label,
             plural_label=result.object_description.plural_label,
             description=result.object_description.description,
+            kind=result.object_description.kind,
         ),
         fields=[
             ContactFieldDescriptionResponseSchema(
@@ -71,6 +72,7 @@ async def describe_contact_fields(
                 label=field.label,
                 description=field.description,
                 type=field.type,
+                kind=field.kind,
                 is_nullable=field.is_nullable,
                 default_value=field.default_value,
                 options=[

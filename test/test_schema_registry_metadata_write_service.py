@@ -11,8 +11,12 @@ from src.modules.schema_registry.domain.datasource.value_object.schema_name impo
     SchemaNameVO,
 )
 from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
+from src.modules.schema_registry.domain.field.value_object.field_kind import FieldKind
 from src.modules.schema_registry.domain.object.entity import ObjectEntity
 from src.modules.schema_registry.domain.object.service import ObjectService
+from src.modules.schema_registry.domain.object.value_object.object_kind import (
+    ObjectKind,
+)
 from src.modules.schema_registry.domain.object.value_object.object_label import (
     ObjectLabelVO,
 )
@@ -97,10 +101,12 @@ class SchemaRegistryMetadataWriteServiceTests(unittest.IsolatedAsyncioTestCase):
                     singular_label="Contact",
                     plural_label="Contacts",
                     description="Contacts.",
+                    kind=ObjectKind.CUSTOM,
                     fields=(
                         ValidatedFieldSpec(
                             name="last_name",
                             type="text",
+                            kind=FieldKind.SYSTEM,
                             field_type=FieldTypeCatalog().from_seed_type("text"),
                             label="Last Name",
                             description="Last name.",
@@ -122,3 +128,5 @@ class SchemaRegistryMetadataWriteServiceTests(unittest.IsolatedAsyncioTestCase):
         reconciled_object = object_repository.recorded_objects[0]
         self.assertEqual(reconciled_object.id, original_object_id)
         self.assertEqual(reconciled_object.fields[0].id, original_field_id)
+        self.assertEqual(reconciled_object.kind, ObjectKind.CUSTOM)
+        self.assertEqual(reconciled_object.fields[0].kind, FieldKind.SYSTEM)

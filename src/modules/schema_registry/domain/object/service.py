@@ -17,6 +17,9 @@ from src.modules.schema_registry.domain.object.repository import (
 from src.modules.schema_registry.domain.object.value_object.object_label import (
     ObjectLabelVO,
 )
+from src.modules.schema_registry.domain.object.value_object.object_kind import (
+    ObjectKind,
+)
 from src.modules.schema_registry.domain.object.value_object.object_name import (
     ObjectNameVO,
 )
@@ -66,6 +69,7 @@ class ObjectService:
                     singular_label=object_spec.singular_label,
                     plural_label=object_spec.plural_label,
                     description=object_spec.description,
+                    kind=object_spec.kind,
                 )
                 self._append_fields_from_spec(
                     object_entity=object_entity,
@@ -84,6 +88,7 @@ class ObjectService:
                     singular_label=object_seed.singular_label,
                     plural_label=object_seed.plural_label,
                     description=object_seed.description,
+                    kind=ObjectKind.from_value(object_seed.kind),
                 )
                 self._append_fields_from_seed(
                     object_entity=object_entity,
@@ -138,6 +143,7 @@ class ObjectService:
                         plural=object_spec.plural_label,
                     ),
                     description=object_spec.description,
+                    kind=object_spec.kind,
                 )
                 self._reconcile_fields(
                     object_entity=object_entity,
@@ -157,6 +163,7 @@ class ObjectService:
                         plural=object_spec.plural_label,
                     ),
                     description=object_spec.description,
+                    kind=object_spec.kind,
                 )
                 if self._reconcile_fields(
                     object_entity=object_entity,
@@ -216,6 +223,7 @@ class ObjectService:
                     now=now,
                     field_name=FieldNameVO(field_spec.name),
                     field_type=field_spec.field_type,
+                    kind=field_spec.kind,
                     label=FieldLabelVO(field_spec.label),
                     description=field_spec.description,
                     is_nullable=field_spec.is_nullable,
@@ -230,6 +238,7 @@ class ObjectService:
                         now=now,
                         field_name=FieldNameVO(field_spec.name),
                         field_type=field_spec.field_type,
+                        kind=field_spec.kind,
                         label=FieldLabelVO(field_spec.label),
                         description=field_spec.description,
                         is_nullable=field_spec.is_nullable,
@@ -257,6 +266,7 @@ class ObjectService:
         singular_label: str,
         plural_label: str,
         description: str,
+        kind: ObjectKind,
     ) -> ObjectEntity:
         """Создает ObjectEntity с новыми id/timestamps и валидированными VO."""
         return ObjectEntity.create(
@@ -273,6 +283,7 @@ class ObjectService:
                 plural=plural_label,
             ),
             description=description,
+            kind=kind,
         )
 
     def _append_fields_from_seed(
@@ -310,6 +321,7 @@ class ObjectService:
                 default_value=field_spec.default,
                 options=field_spec.options,
                 settings=field_spec.settings,
+                kind=field_spec.kind,
             )
 
     @staticmethod
@@ -320,6 +332,7 @@ class ObjectService:
         object_name: ObjectNameVO,
         object_label: ObjectLabelVO,
         description: str,
+        kind: ObjectKind,
     ) -> None:
         """Обновляет metadata объекта, если имя, label или description изменились."""
         normalized_description = description.strip()
@@ -327,6 +340,7 @@ class ObjectService:
             object_entity.object_name == object_name
             and object_entity.object_label == object_label
             and object_entity.description == normalized_description
+            and object_entity.kind == kind
         ):
             return
         object_entity.rename(
@@ -334,4 +348,5 @@ class ObjectService:
             object_name=object_name,
             object_label=object_label,
             description=normalized_description,
+            kind=kind,
         )

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.shared import EntityIdVO
 from src.modules.schema_registry.domain.field.entity import FieldEntity
 from src.modules.schema_registry.domain.field.enum.field_type import FieldTypeEnum
+from src.modules.schema_registry.domain.field.value_object.field_kind import FieldKind
 from src.modules.schema_registry.domain.field.value_object.field_label import (
     FieldLabelVO,
 )
@@ -20,6 +21,9 @@ from src.modules.schema_registry.domain.object.repository import (
 )
 from src.modules.schema_registry.domain.object.value_object.object_label import (
     ObjectLabelVO,
+)
+from src.modules.schema_registry.domain.object.value_object.object_kind import (
+    ObjectKind,
 )
 from src.modules.schema_registry.domain.object.value_object.object_name import (
     ObjectNameVO,
@@ -96,6 +100,7 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
         else:
             model.tenant_id = object_entity.tenant_id.value
             model.data_source_id = object_entity.data_source_id.value
+            model.kind = object_entity.kind.value
             model.singular_name = object_entity.object_name.singular
             model.plural_name = object_entity.object_name.plural
             model.singular_label = object_entity.object_label.singular
@@ -266,6 +271,7 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
             updated_at=object_entity.updated_at,
             tenant_id=object_entity.tenant_id.value,
             data_source_id=object_entity.data_source_id.value,
+            kind=object_entity.kind.value,
             singular_name=object_entity.object_name.singular,
             plural_name=object_entity.object_name.plural,
             singular_label=object_entity.object_label.singular,
@@ -281,6 +287,7 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
             created_at=field_entity.created_at,
             updated_at=field_entity.updated_at,
             object_id=field_entity.object_id.value,
+            kind=field_entity.kind.value,
             field_name=field_entity.field_name.value,
             field_type_code=field_entity.field_type.code.value,
             label=field_entity.label.value,
@@ -296,6 +303,7 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
         """Копирует изменяемые поля ObjectEntity в существующую ORM-модель."""
         model.tenant_id = object_entity.tenant_id.value
         model.data_source_id = object_entity.data_source_id.value
+        model.kind = object_entity.kind.value
         model.singular_name = object_entity.object_name.singular
         model.plural_name = object_entity.object_name.plural
         model.singular_label = object_entity.object_label.singular
@@ -307,6 +315,7 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
     def _update_field_model(model: FieldORM, field_entity: FieldEntity) -> None:
         """Копирует изменяемые поля FieldEntity в существующую ORM-модель."""
         model.object_id = field_entity.object_id.value
+        model.kind = field_entity.kind.value
         model.field_name = field_entity.field_name.value
         model.field_type_code = field_entity.field_type.code.value
         model.label = field_entity.label.value
@@ -326,6 +335,7 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
             updated_at=model.updated_at,
             tenant_id=EntityIdVO.from_value(model.tenant_id),
             data_source_id=EntityIdVO.from_value(model.data_source_id),
+            kind=ObjectKind(model.kind),
             object_name=ObjectNameVO(
                 singular=model.singular_name,
                 plural=model.plural_name,
@@ -349,6 +359,7 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
             created_at=model.created_at,
             updated_at=model.updated_at,
             object_id=EntityIdVO.from_value(model.object_id),
+            kind=FieldKind(model.kind),
             field_name=FieldNameVO(model.field_name),
             field_type=FieldTypeVO(code=FieldTypeEnum(model.field_type_code)),
             label=FieldLabelVO(model.label),

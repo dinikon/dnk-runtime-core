@@ -1,3 +1,5 @@
+from src.modules.schema_registry.domain.field.value_object.field_kind import FieldKind
+from src.modules.schema_registry.domain.object.value_object.object_kind import ObjectKind
 from src.modules.schema_registry.domain.seed.field_seed import FieldSeed
 from src.modules.schema_registry.domain.seed.index_seed import IndexSeed
 from src.modules.schema_registry.domain.seed.object_seed import ObjectSeed
@@ -15,6 +17,7 @@ SCHEMA_SEED = SchemaSeed(
             singular_label="Company",
             plural_label="Companies",
             description="Customer companies.",
+            kind=ObjectKind.STANDARD,
             fields=(
                 FieldSeed(
                     name="id",
@@ -22,6 +25,7 @@ SCHEMA_SEED = SchemaSeed(
                     label="ID",
                     description="Company identifier.",
                     is_nullable=False,
+                    kind=FieldKind.SYSTEM,
                 ),
                 FieldSeed(
                     name="name",
@@ -52,6 +56,7 @@ SCHEMA_SEED = SchemaSeed(
                     description="Creation timestamp.",
                     is_nullable=False,
                     default="CURRENT_TIMESTAMP",
+                    kind=FieldKind.SYSTEM,
                 ),
             ),
             indexes=(
@@ -78,6 +83,7 @@ SCHEMA_SEED = SchemaSeed(
             singular_label="Contact",
             plural_label="Contacts",
             description="Company contacts.",
+            kind=ObjectKind.STANDARD,
             fields=(
                 FieldSeed(
                     name="id",
@@ -85,6 +91,7 @@ SCHEMA_SEED = SchemaSeed(
                     label="ID",
                     description="Contact identifier.",
                     is_nullable=False,
+                    kind=FieldKind.SYSTEM,
                 ),
                 FieldSeed(
                     name="company_id",
@@ -144,6 +151,7 @@ SCHEMA_SEED = SchemaSeed(
                     description="Creation timestamp.",
                     is_nullable=False,
                     default="CURRENT_TIMESTAMP",
+                    kind=FieldKind.SYSTEM,
                 ),
             ),
             indexes=(
@@ -185,6 +193,7 @@ SCHEMA_SEED = SchemaSeed(
             singular_label="Deal",
             plural_label="Deals",
             description="Sales deals.",
+            kind=ObjectKind.STANDARD,
             fields=(
                 FieldSeed(
                     name="id",
@@ -192,6 +201,7 @@ SCHEMA_SEED = SchemaSeed(
                     label="ID",
                     description="Deal identifier.",
                     is_nullable=False,
+                    kind=FieldKind.SYSTEM,
                 ),
                 FieldSeed(
                     name="company_id",
@@ -268,6 +278,7 @@ SCHEMA_SEED = SchemaSeed(
                     description="Creation timestamp.",
                     is_nullable=False,
                     default="CURRENT_TIMESTAMP",
+                    kind=FieldKind.SYSTEM,
                 ),
             ),
             indexes=(

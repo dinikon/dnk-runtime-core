@@ -45,8 +45,8 @@ class ObjectORM(Base):
         index=True,
     )
 
-    object_type: Mapped[str] = mapped_column(
-        String(255), nullable=False, server_default="object"
+    kind: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="standard"
     )
     singular_name: Mapped[str] = mapped_column(String(255), nullable=False)
     plural_name: Mapped[str] = mapped_column(String(255), nullable=False)

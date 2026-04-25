@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Self
 
 from src.modules.schema_registry.domain.error import InvalidFieldOperationError
+from src.modules.schema_registry.domain.field.value_object.field_kind import FieldKind
 from src.modules.schema_registry.domain.field.value_object.field_label import (
     FieldLabelVO,
 )
@@ -21,6 +22,7 @@ class FieldEntity:
 
     object_id: EntityIdVO
 
+    kind: FieldKind
     field_name: FieldNameVO
     field_type: FieldTypeVO
 
@@ -48,6 +50,7 @@ class FieldEntity:
         default_value: str | None = None,
         options: dict[str, str] | None = None,
         settings: dict[str, str] | None = None,
+        kind: FieldKind = FieldKind.STANDARD,
     ) -> Self:
         """Создает поле и нормализует description/default/options/settings."""
         normalized_description = description.strip()
@@ -65,6 +68,7 @@ class FieldEntity:
             created_at=now,
             updated_at=now,
             object_id=object_id,
+            kind=kind,
             field_name=field_name,
             field_type=field_type,
             label=label,
@@ -137,6 +141,7 @@ class FieldEntity:
         now: datetime,
         field_name: FieldNameVO,
         field_type: FieldTypeVO,
+        kind: FieldKind,
         label: FieldLabelVO,
         description: str,
         is_nullable: bool,
@@ -158,6 +163,7 @@ class FieldEntity:
         if (
             self.field_name == field_name
             and self.field_type == field_type
+            and self.kind == kind
             and self.label == label
             and self.description == normalized_description
             and self.is_nullable == is_nullable
@@ -169,6 +175,7 @@ class FieldEntity:
 
         self.field_name = field_name
         self.field_type = field_type
+        self.kind = kind
         self.label = label
         self.description = normalized_description
         self.is_nullable = is_nullable
@@ -183,3 +190,11 @@ class FieldEntity:
         raise InvalidFieldOperationError(
             "Changing field type is forbidden for existing field in MVP."
         )
+
+    def can_delete(self) -> bool:
+        """Проверяет, можно ли удалить поле как пользовательское."""
+        return self.kind == FieldKind.CUSTOM
+
+    def can_patch(self) -> bool:
+        """Проверяет, можно ли менять runtime-значение поля напрямую."""
+        return self.kind != FieldKind.SYSTEM

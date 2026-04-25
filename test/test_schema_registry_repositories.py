@@ -9,10 +9,11 @@ from src.modules.schema_registry.domain.datasource.value_object.schema_name impo
     SchemaNameVO,
 )
 from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
-from src.modules.schema_registry.domain.field.value_object.field_label import (
-    FieldLabelVO,
-)
+from src.modules.schema_registry.domain.field.value_object.field_kind import FieldKind
 from src.modules.schema_registry.domain.object.entity import ObjectEntity
+from src.modules.schema_registry.domain.object.value_object.object_kind import (
+    ObjectKind,
+)
 from src.modules.schema_registry.domain.object.value_object.object_label import (
     ObjectLabelVO,
 )
@@ -55,7 +56,7 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
             updated_at=now,
             tenant_id=tenant_id,
             data_source_id=datasource_id,
-            object_type="object",
+            kind="standard",
             singular_name="contact",
             plural_name="contacts",
             singular_label="Contact",
@@ -67,6 +68,7 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
             created_at=now,
             updated_at=now,
             object_id=object_id,
+            kind="system",
             field_name="last_name",
             field_type_code="text",
             label="Last Name",
@@ -99,6 +101,8 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             objects[0].data_source_id, EntityIdVO.from_value(datasource_id)
         )
+        self.assertEqual(objects[0].kind, ObjectKind.STANDARD)
+        self.assertEqual(objects[0].fields[0].kind, FieldKind.SYSTEM)
         self.assertEqual(objects[0].fields[0].field_name.value, "last_name")
 
     async def test_data_source_repository_add_maps_entity_to_orm_model(self) -> None:
@@ -153,6 +157,7 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
             object_name=ObjectNameVO(singular="contact", plural="contacts"),
             object_label=ObjectLabelVO(singular="Contact", plural="Contacts"),
             description="Tenant contacts.",
+            kind=ObjectKind.CUSTOM,
         )
         object_entity.add_field(
             field_id=EntityIdVO.from_value(uuid4()),
@@ -162,12 +167,14 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
             label="Last Name",
             description="Contact last name.",
             is_nullable=False,
+            kind=FieldKind.SYSTEM,
         )
 
         class SessionSpy:
             def __init__(self) -> None:
                 self.flush_snapshots: list[list[str]] = []
                 self.added_types: list[str] = []
+                self.added_models: list[object] = []
 
             async def scalars(self, *_args, **_kwargs):
                 return ScalarsResult([])
@@ -176,6 +183,7 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
                 return None
 
             def add(self, model) -> None:
+                self.added_models.append(model)
                 self.added_types.append(type(model).__name__)
 
             async def flush(self) -> None:
@@ -193,6 +201,14 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
             session.flush_snapshots,
             [[], ["ObjectORM"], ["ObjectORM", "FieldORM"]],
         )
+        object_model = next(
+            model for model in session.added_models if isinstance(model, ObjectORM)
+        )
+        field_model = next(
+            model for model in session.added_models if isinstance(model, FieldORM)
+        )
+        self.assertEqual(object_model.kind, "custom")
+        self.assertEqual(field_model.kind, "system")
 
     async def test_reconcile_preserves_existing_field_identity(self) -> None:
         tenant_id = uuid4()
@@ -226,7 +242,7 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
             updated_at=now,
             tenant_id=tenant_id,
             data_source_id=data_source_id,
-            object_type="object",
+            kind="standard",
             singular_name="contact",
             plural_name="contacts",
             singular_label="Contact",
@@ -238,6 +254,7 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
             created_at=now,
             updated_at=now,
             object_id=object_id,
+            kind="standard",
             field_name="last_name",
             field_type_code="text",
             label="Last Name",
@@ -287,6 +304,7 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(field_model.id, field_id)
         self.assertEqual(field_model.label, "Surname")
+        self.assertEqual(field_model.kind, "standard")
         self.assertFalse(
             any(isinstance(model, FieldORM) for model in session.added_models)
         )

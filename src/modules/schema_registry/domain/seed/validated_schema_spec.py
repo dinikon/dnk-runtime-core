@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from src.modules.schema_registry.domain.field.value_object.field_kind import FieldKind
 from src.modules.schema_registry.domain.field.value_object.field_type import (
     FieldTypeVO,
+)
+from src.modules.schema_registry.domain.object.value_object.object_kind import (
+    ObjectKind,
 )
 from src.modules.schema_registry.domain.seed.relation_type import RelationTypeEnum
 
@@ -14,6 +18,7 @@ class ValidatedFieldSpec:
 
     name: str
     type: str
+    kind: FieldKind
     field_type: FieldTypeVO
     label: str
     description: str
@@ -55,6 +60,7 @@ class ValidatedObjectSpec:
     singular_label: str
     plural_label: str
     description: str
+    kind: ObjectKind
     fields: tuple[ValidatedFieldSpec, ...]
     indexes: tuple[ValidatedIndexSpec, ...] = ()
     relations: tuple[ValidatedRelationSpec, ...] = ()

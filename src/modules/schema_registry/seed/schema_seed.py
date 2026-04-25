@@ -1,3 +1,5 @@
+from src.modules.schema_registry.domain.field.value_object.field_kind import FieldKind
+from src.modules.schema_registry.domain.object.value_object.object_kind import ObjectKind
 from src.modules.schema_registry.domain.seed.field_seed import FieldSeed
 from src.modules.schema_registry.domain.seed.object_seed import ObjectSeed
 from src.modules.schema_registry.domain.seed.schema_seed import SchemaSeed
@@ -13,6 +15,7 @@ SCHEMA_SEED = SchemaSeed(
             singular_label="Contact",
             plural_label="Contacts",
             description="Tenant contact registry.",
+            kind=ObjectKind.STANDARD,
             fields=(
                 FieldSeed(
                     name="id",
@@ -21,6 +24,7 @@ SCHEMA_SEED = SchemaSeed(
                     description="Contact identifier.",
                     is_nullable=False,
                     default="gen_random_uuid()",
+                    kind=FieldKind.SYSTEM,
                 ),
                 FieldSeed(
                     name="created_at",
@@ -29,6 +33,7 @@ SCHEMA_SEED = SchemaSeed(
                     description="Record creation timestamp.",
                     is_nullable=False,
                     default="CURRENT_TIMESTAMP",
+                    kind=FieldKind.SYSTEM,
                 ),
                 FieldSeed(
                     name="updated_at",
@@ -37,6 +42,7 @@ SCHEMA_SEED = SchemaSeed(
                     description="Record update timestamp.",
                     is_nullable=False,
                     default="CURRENT_TIMESTAMP",
+                    kind=FieldKind.SYSTEM,
                 ),
                 FieldSeed(
                     name="last_name",

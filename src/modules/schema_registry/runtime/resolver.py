@@ -81,6 +81,7 @@ class SchemaRegistryRuntimeObjectResolver:
                 default_value=field.default_value,
                 options=dict(field.options),
                 settings=dict(field.settings),
+                kind=field.kind.value,
             )
             for field in object_entity.fields
         )
@@ -99,4 +100,5 @@ class SchemaRegistryRuntimeObjectResolver:
             title_field="id",
             fields=fields,
             relations=(),
+            kind=object_entity.kind.value,
         )

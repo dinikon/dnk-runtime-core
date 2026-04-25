@@ -32,6 +32,7 @@ class ContactModelDescriptionRepositoryTests(unittest.IsolatedAsyncioTestCase):
                     singular_label="Contact",
                     plural_label="Contacts",
                     description="Tenant contact registry.",
+                    kind="standard",
                     fields=(
                         RuntimeFieldDescriptionDTO(
                             id=status_field_id,
@@ -41,6 +42,7 @@ class ContactModelDescriptionRepositoryTests(unittest.IsolatedAsyncioTestCase):
                             type="select",
                             is_nullable=False,
                             default_value="'lead'",
+                            kind="system",
                             options={
                                 "lead": "Lead",
                                 "customer": "Customer",
@@ -54,6 +56,7 @@ class ContactModelDescriptionRepositoryTests(unittest.IsolatedAsyncioTestCase):
                             type="text",
                             is_nullable=False,
                             default_value=None,
+                            kind="standard",
                             options={},
                         ),
                     ),
@@ -69,11 +72,14 @@ class ContactModelDescriptionRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(description.object_description.id, object_id)
         self.assertEqual(description.object_description.singular_label, "Contact")
         self.assertEqual(description.object_description.plural_label, "Contacts")
+        self.assertEqual(description.object_description.kind, "standard")
         self.assertEqual(
             [field.field_name for field in description.fields],
             ["status", "first_name"],
         )
         self.assertEqual(description.fields[0].default_value, "'lead'")
+        self.assertEqual(description.fields[0].kind, "system")
+        self.assertEqual(description.fields[1].kind, "standard")
         self.assertEqual(
             description.fields[0].options,
             (

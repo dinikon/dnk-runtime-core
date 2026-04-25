@@ -75,6 +75,7 @@ class DescribeRuntimeObjectUseCase:
             singular_label=object_entity.object_label.singular,
             plural_label=object_entity.object_label.plural,
             description=object_entity.description,
+            kind=object_entity.kind.value,
             fields=tuple(
                 RuntimeFieldDescriptionDTO(
                     id=field.id.value,
@@ -85,6 +86,7 @@ class DescribeRuntimeObjectUseCase:
                     is_nullable=field.is_nullable,
                     default_value=field.default_value,
                     options=dict(field.options),
+                    kind=field.kind.value,
                 )
                 for field in object_entity.fields
             ),

@@ -61,6 +61,7 @@ class ContactFieldsControllerTests(unittest.IsolatedAsyncioTestCase):
                     singular_label="Contact",
                     plural_label="Contacts",
                     description="Tenant contact registry.",
+                    kind="standard",
                 ),
                 fields=(
                     ContactFieldDescriptionDTO(
@@ -69,6 +70,7 @@ class ContactFieldsControllerTests(unittest.IsolatedAsyncioTestCase):
                         label="Status",
                         description="Contact status.",
                         type="select",
+                        kind="system",
                         is_nullable=False,
                         default_value="'lead'",
                         options=(
@@ -96,9 +98,11 @@ class ContactFieldsControllerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.object.id, object_id)
         self.assertEqual(response.object.singular_label, "Contact")
         self.assertEqual(response.object.plural_label, "Contacts")
+        self.assertEqual(response.object.kind, "standard")
         self.assertEqual(response.fields[0].id, field_id)
         self.assertEqual(response.fields[0].field_name, "status")
         self.assertEqual(response.fields[0].type, "select")
+        self.assertEqual(response.fields[0].kind, "system")
         self.assertEqual(response.fields[0].default_value, "'lead'")
         self.assertEqual(
             [option.model_dump() for option in response.fields[0].options],
