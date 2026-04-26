@@ -6,9 +6,11 @@ from uuid import uuid4
 
 from src.modules.tenancy.domain.tenant import TenantStatus
 from src.modules.tenancy.domain.tenant_domain import (
+    TenantDomainIdVO,
     TenantDomainStatus,
     TenantServiceType,
 )
+from src.modules.shared import EntityIdVO
 from src.modules.tenancy.infrastructure.persistence.tenant import TenantModel
 from src.modules.tenancy.infrastructure.persistence.tenant_domain import (
     TenantDomainModel,
@@ -71,11 +73,11 @@ class SqlAlchemyTenantRepositoryTests(unittest.IsolatedAsyncioTestCase):
             _AsyncSessionStub(scalars_results=[self.tenant_model])
         )
 
-        result = await repository.get_by_id(self.tenant_id)
+        result = await repository.get_by_id(EntityIdVO.from_value(self.tenant_id))
 
         self.assertIsNotNone(result)
         assert result is not None
-        self.assertEqual(result.id, self.tenant_id)
+        self.assertEqual(result.id, EntityIdVO.from_value(self.tenant_id))
         self.assertEqual(result.name, "Acme")
         self.assertEqual(result.external_id, "acme")
 
@@ -122,8 +124,8 @@ class SqlAlchemyTenantDomainRepositoryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNotNone(result)
         assert result is not None
-        self.assertEqual(result.id, self.domain_id)
-        self.assertEqual(result.tenant_id, self.tenant_id)
+        self.assertEqual(result.id, TenantDomainIdVO.from_value(self.domain_id))
+        self.assertEqual(result.tenant_id, EntityIdVO.from_value(self.tenant_id))
         self.assertEqual(result.host, "api.example.com")
         self.assertEqual(result.service_type, TenantServiceType.API)
 
@@ -132,7 +134,9 @@ class SqlAlchemyTenantDomainRepositoryTests(unittest.IsolatedAsyncioTestCase):
             _AsyncSessionStub(scalars_results=["api.example.com"])
         )
 
-        result = await repository.get_api_host_by_tenant_id(self.tenant_id)
+        result = await repository.get_api_host_by_tenant_id(
+            EntityIdVO.from_value(self.tenant_id)
+        )
 
         self.assertEqual(result, "api.example.com")
 

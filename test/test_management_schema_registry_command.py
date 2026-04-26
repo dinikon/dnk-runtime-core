@@ -13,6 +13,7 @@ from src.management.cli import build_parser
 from src.management.commands import schema_registry as schema_registry_command
 from src.modules.schema_registry.application.dto import DiffSchemaResultDTO
 from src.modules.schema_registry.domain.error import SchemaRegistryError
+from src.modules.shared import EntityIdVO
 
 
 class SchemaRegistryManagementCommandTests(unittest.IsolatedAsyncioTestCase):
@@ -35,7 +36,7 @@ class SchemaRegistryManagementCommandTests(unittest.IsolatedAsyncioTestCase):
                 nonlocal recorded_command
                 recorded_command = command
                 return DiffSchemaResultDTO(
-                    tenant_id=command.tenant_id,
+                    tenant_id=command.tenant_id.uuid,
                     schema_name="dnk_example",
                     seed_path=command.seed_path,
                     total_operations=4,
@@ -72,7 +73,7 @@ class SchemaRegistryManagementCommandTests(unittest.IsolatedAsyncioTestCase):
             exit_code = await schema_registry_command.handle_diff(args)
 
         self.assertEqual(exit_code, 0)
-        self.assertEqual(recorded_command.tenant_id, tenant_id)
+        self.assertEqual(recorded_command.tenant_id, EntityIdVO.from_value(tenant_id))
         self.assertEqual(recorded_command.seed_path, dnk_config.DEFAULT_SEED_MODULE)
         self.assertIn("OK tenant_id=", stdout.getvalue())
         self.assertIn("operations=4", stdout.getvalue())

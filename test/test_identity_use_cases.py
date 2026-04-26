@@ -29,6 +29,7 @@ from src.modules.identity.domain import (
     UserEmailAlreadyExistsError,
     User,
 )
+from src.modules.shared import EntityIdVO
 from src.modules.shared.domain.errors import DomainError
 from src.modules.shared.kernel.email import (
     EmailDeliveryError,
@@ -139,6 +140,7 @@ class _UserRepositoryStub:
 class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.tenant_id = uuid4()
+        self.tenant_id_vo = EntityIdVO.from_value(self.tenant_id)
         self.tenant_domain_id = uuid4()
         self.context = TenantRequestContext(
             tenant_id=self.tenant_id,
@@ -151,7 +153,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_request_email_otp_creates_challenge_and_sends_code(self) -> None:
         user = User.create_tenant_admin(
-            tenant_id=self.tenant_id,
+            tenant_id=self.tenant_id_vo,
             first_name="John",
             last_name="Doe",
         )
@@ -189,7 +191,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         user = User.create_tenant_admin(
-            tenant_id=self.tenant_id,
+            tenant_id=self.tenant_id_vo,
             first_name="John",
             last_name="Doe",
         )
@@ -219,7 +221,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_confirm_email_otp_verifies_email_and_creates_session(self) -> None:
         user = User.create_tenant_admin(
-            tenant_id=self.tenant_id,
+            tenant_id=self.tenant_id_vo,
             first_name="John",
             last_name="Doe",
         )
@@ -277,7 +279,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_confirm_email_otp_rejects_invalid_code(self) -> None:
         user = User.create_tenant_admin(
-            tenant_id=self.tenant_id,
+            tenant_id=self.tenant_id_vo,
             first_name="John",
             last_name="Doe",
         )
@@ -322,7 +324,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_confirm_email_otp_rejects_missing_challenge(self) -> None:
         user = User.create_tenant_admin(
-            tenant_id=self.tenant_id,
+            tenant_id=self.tenant_id_vo,
             first_name="John",
             last_name="Doe",
         )
@@ -351,7 +353,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_authenticate_by_session_restores_principal(self) -> None:
         user = User.create_tenant_admin(
-            tenant_id=self.tenant_id,
+            tenant_id=self.tenant_id_vo,
             first_name="John",
             last_name="Doe",
         )
@@ -361,7 +363,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         session_store.session = SessionRecord(
             token="sess-token",
             session_id="session-id",
-            user_id=user.id,
+            user_id=user.id.uuid,
             tenant_id=self.tenant_id,
             tenant_domain_id=self.tenant_domain_id,
             host=self.context.host,
@@ -385,7 +387,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertIsNotNone(result)
-        self.assertEqual(result.user_id, str(user.id))
+        self.assertEqual(result.user_id, str(user.id.uuid))
         self.assertEqual(result.tenant_id, str(self.tenant_id))
         self.assertEqual(result.session_id, "session-id")
 
@@ -406,7 +408,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_update_current_user_profile_persists_changes(self) -> None:
         user = User.create_tenant_admin(
-            tenant_id=self.tenant_id,
+            tenant_id=self.tenant_id_vo,
             first_name="John",
             last_name="Doe",
         )
@@ -417,7 +419,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         session_store.session = SessionRecord(
             token="sess-token",
             session_id="session-id",
-            user_id=user.id,
+            user_id=user.id.uuid,
             tenant_id=self.tenant_id,
             tenant_domain_id=self.tenant_domain_id,
             host=self.context.host,
@@ -457,7 +459,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         user = User.create_tenant_admin(
-            tenant_id=self.tenant_id,
+            tenant_id=self.tenant_id_vo,
             first_name="John",
             last_name="Doe",
         )
@@ -468,7 +470,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         session_store.session = SessionRecord(
             token="sess-token",
             session_id="session-id",
-            user_id=user.id,
+            user_id=user.id.uuid,
             tenant_id=self.tenant_id,
             tenant_domain_id=self.tenant_domain_id,
             host=self.context.host,
@@ -534,7 +536,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         service = UserService(users_repository)
 
         result = await service.create_tenant_admin(
-            tenant_id=self.tenant_id,
+            tenant_id=self.tenant_id_vo,
             first_name="John",
             last_name="Doe",
             email="john@example.com",
@@ -545,7 +547,8 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(created_user.first_name, "John")
         self.assertEqual(created_user.last_name, "Doe")
         self.assertEqual(
-            created_user.get_primary_email("john@example.com").id, result.user_email_id
+            created_user.get_primary_email("john@example.com").id.uuid,
+            result.user_email_id,
         )
         self.assertEqual(result.user_status, "active")
 
@@ -556,7 +559,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(UserEmailAlreadyExistsError):
             await service.create_tenant_admin(
-                tenant_id=self.tenant_id,
+                tenant_id=self.tenant_id_vo,
                 first_name="John",
                 last_name="Doe",
                 email="john@example.com",

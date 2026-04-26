@@ -3,7 +3,11 @@ from __future__ import annotations
 import unittest
 from uuid import uuid4
 
+from src.modules.schema_registry.application.metadata.schema_registry_metadata_read_service import (
+    SchemaRegistryMetadataReadService,
+)
 from src.modules.schema_registry.domain.datasource.entity import DataSourceEntity
+from src.modules.schema_registry.domain.datasource.value_object import DataSourceIdVO
 from src.modules.schema_registry.domain.datasource.value_object.schema_name import (
     SchemaNameVO,
 )
@@ -11,14 +15,12 @@ from src.modules.schema_registry.domain.error import (
     SchemaRegistryMetadataInconsistentError,
 )
 from src.modules.schema_registry.domain.object.entity import ObjectEntity
+from src.modules.schema_registry.domain.object.value_object import RuntimeObjectIdVO
 from src.modules.schema_registry.domain.object.value_object.object_label import (
     ObjectLabelVO,
 )
 from src.modules.schema_registry.domain.object.value_object.object_name import (
     ObjectNameVO,
-)
-from src.modules.schema_registry.application.metadata.schema_registry_metadata_read_service import (
-    SchemaRegistryMetadataReadService,
 )
 from src.modules.shared import EntityIdVO
 from src.modules.shared.infrastructure.time import UtcClock
@@ -29,13 +31,13 @@ class SchemaRegistryMetadataReadServiceTests(unittest.IsolatedAsyncioTestCase):
         now = UtcClock().now()
         tenant_id = EntityIdVO.from_value(uuid4())
         datasource = DataSourceEntity.create(
-            id_=EntityIdVO.from_value(uuid4()),
+            id_=DataSourceIdVO.from_value(uuid4()),
             now=now,
             tenant_id=tenant_id,
             schema_name=SchemaNameVO("dnk_crm"),
         )
         object_entity = ObjectEntity.create(
-            id_=EntityIdVO.from_value(uuid4()),
+            id_=RuntimeObjectIdVO.from_value(uuid4()),
             tenant_id=tenant_id,
             data_source_id=datasource.id,
             now=now,
@@ -66,15 +68,15 @@ class SchemaRegistryMetadataReadServiceTests(unittest.IsolatedAsyncioTestCase):
         now = UtcClock().now()
         tenant_id = EntityIdVO.from_value(uuid4())
         datasource = DataSourceEntity.create(
-            id_=EntityIdVO.from_value(uuid4()),
+            id_=DataSourceIdVO.from_value(uuid4()),
             now=now,
             tenant_id=tenant_id,
             schema_name=SchemaNameVO("dnk_crm"),
         )
         object_entity = ObjectEntity.create(
-            id_=EntityIdVO.from_value(uuid4()),
+            id_=RuntimeObjectIdVO.from_value(uuid4()),
             tenant_id=tenant_id,
-            data_source_id=EntityIdVO.from_value(uuid4()),
+            data_source_id=DataSourceIdVO.from_value(uuid4()),
             now=now,
             object_name=ObjectNameVO(singular="contact", plural="contacts"),
             object_label=ObjectLabelVO(singular="Contact", plural="Contacts"),

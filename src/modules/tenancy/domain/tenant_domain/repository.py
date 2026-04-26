@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from typing import Protocol
-from uuid import UUID
 
+from src.modules.shared import EntityIdVO
 from src.modules.tenancy.domain.tenant_domain.entity import TenantDomain
+from src.modules.tenancy.domain.tenant_domain.value_object import TenantDomainIdVO
 
 
 class TenantDomainRepositoryProtocol(Protocol):
@@ -13,7 +14,7 @@ class TenantDomainRepositoryProtocol(Protocol):
         """Добавляет tenant domain в хранилище."""
         ...
 
-    async def get_by_id(self, domain_id: UUID) -> TenantDomain | None:
+    async def get_by_id(self, domain_id: TenantDomainIdVO) -> TenantDomain | None:
         """Возвращает tenant domain по id или None."""
         ...
 
@@ -21,7 +22,7 @@ class TenantDomainRepositoryProtocol(Protocol):
         """Возвращает активный tenant domain по host или None."""
         ...
 
-    async def get_api_host_by_tenant_id(self, tenant_id: UUID) -> str | None:
+    async def get_api_host_by_tenant_id(self, tenant_id: EntityIdVO) -> str | None:
         """Возвращает API host tenant или None."""
         ...
 

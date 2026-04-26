@@ -174,3 +174,66 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                 content,
                 msg=f"{path} still resolves tenant_id in wiring",
             )
+
+    def test_removed_id_wrapper_types_are_not_used(self) -> None:
+        removed_types = ("Typed" + "EntityIdVO", "Tenant" + "IdVO")
+        for root in ("src", "test"):
+            for path in iter_python_files(root):
+                if path == Path(__file__).resolve():
+                    continue
+                content = path.read_text(encoding="utf-8")
+                for removed_type in removed_types:
+                    self.assertNotIn(
+                        removed_type,
+                        content,
+                        msg=f"{path} still uses removed id type {removed_type}",
+                    )
+
+    def test_concrete_id_value_objects_inherit_entity_id_vo(self) -> None:
+        value_object_paths = [
+            path
+            for path in iter_python_files("src/modules")
+            if path.name.endswith("_id.py")
+            and "/value_object/" in path.as_posix()
+            and path.name != "entity_id.py"
+        ]
+        for path in value_object_paths:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            id_classes = [
+                node
+                for node in ast.walk(tree)
+                if isinstance(node, ast.ClassDef) and node.name.endswith("IdVO")
+            ]
+            self.assertTrue(id_classes, msg=f"{path} defines no concrete id VO")
+            for class_def in id_classes:
+                bases = {
+                    base.id for base in class_def.bases if isinstance(base, ast.Name)
+                }
+                self.assertIn(
+                    "EntityIdVO",
+                    bases,
+                    msg=f"{path}:{class_def.name} does not inherit EntityIdVO",
+                )
+
+    def test_domain_entity_ids_do_not_use_raw_uuid_annotations(self) -> None:
+        allowed_patterns = (
+            "FieldTypeEnum.UUID",
+            'UUID = "uuid"',
+            "from uuid import UUID",
+        )
+        for path in iter_python_files("src/modules"):
+            if "/domain/" not in path.as_posix():
+                continue
+            if path.as_posix().endswith(
+                "src/modules/shared/domain/value_object/entity_id.py"
+            ):
+                continue
+            content = path.read_text(encoding="utf-8")
+            filtered = content
+            for pattern in allowed_patterns:
+                filtered = filtered.replace(pattern, "")
+            self.assertNotIn(
+                ": UUID",
+                filtered,
+                msg=f"{path} uses raw UUID annotation in domain",
+            )

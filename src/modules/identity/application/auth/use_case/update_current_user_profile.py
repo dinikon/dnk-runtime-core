@@ -18,6 +18,8 @@ from src.modules.identity.domain.user import (
     UserLoginUnavailableError,
     UserRepositoryProtocol,
 )
+from src.modules.identity.domain.user.value_object import UserIdVO
+from src.modules.shared import EntityIdVO
 from src.modules.shared.db.uow import UnitOfWorkProtocol
 from src.modules.shared.http.host import normalize_host
 
@@ -45,6 +47,7 @@ class UpdateCurrentUserProfileUseCase:
         """Проверяет session, обновляет профиль и коммитит изменения через UoW."""
         host = normalize_host(dto.host)
         tenant_context = await self._tenant_context_reader.get_by_host(host)
+        tenant_id = EntityIdVO.from_value(tenant_context.tenant_id)
 
         if not dto.session_token:
             raise InvalidSessionError()
@@ -62,8 +65,10 @@ class UpdateCurrentUserProfileUseCase:
         ):
             raise InvalidSessionError()
 
-        user = await self._users_repository.get_by_id(session.user_id)
-        if user is None or user.tenant_id != tenant_context.tenant_id:
+        user = await self._users_repository.get_by_id(
+            UserIdVO.from_value(session.user_id)
+        )
+        if user is None or user.tenant_id != tenant_id:
             raise InvalidSessionError()
         if not user.can_login():
             raise UserLoginUnavailableError()
@@ -85,7 +90,7 @@ class UpdateCurrentUserProfileUseCase:
             raise
 
         return UpdateCurrentUserProfileResultDTO(
-            id=user.id,
+            id=user.id.uuid,
             status=user.status,
             last_name=user.last_name,
             first_name=user.first_name,
@@ -96,7 +101,7 @@ class UpdateCurrentUserProfileUseCase:
             timezone=user.timezone,
             emails=[
                 GetCurrentUserEmailDTO(
-                    id=email.id,
+                    id=email.id.uuid,
                     email=email.email,
                     is_primary=email.is_primary,
                     is_verified=email.is_verified,

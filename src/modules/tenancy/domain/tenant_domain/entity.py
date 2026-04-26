@@ -2,14 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from uuid import UUID
 
 import uuid6
 
+from src.modules.shared import EntityIdVO
 from src.modules.tenancy.domain.tenant_domain.error import (
     InvalidTenantDomainHostError,
 )
 from src.modules.tenancy.domain.tenant_domain.value_object import (
+    TenantDomainIdVO,
     TenantDomainKind,
     TenantDomainStatus,
     TenantDomainTlsMode,
@@ -22,8 +23,8 @@ from src.modules.tenancy.domain.tenant_domain.value_object import (
 class TenantDomain:
     """Доменная сущность host/domain, связанного с tenant."""
 
-    id: UUID
-    tenant_id: UUID
+    id: TenantDomainIdVO
+    tenant_id: EntityIdVO
     service_type: TenantServiceType
     kind: TenantDomainKind
     host: str
@@ -42,7 +43,7 @@ class TenantDomain:
     @classmethod
     def create_primary_console_domain(
         cls,
-        tenant_id: UUID,
+        tenant_id: EntityIdVO,
         host: str,
     ) -> "TenantDomain":
         """Создает primary console domain tenant с verified/active статусами."""
@@ -52,7 +53,7 @@ class TenantDomain:
 
         now = datetime.now(UTC)
         return cls(
-            id=uuid6.uuid7(),
+            id=TenantDomainIdVO.from_value(uuid6.uuid7()),
             tenant_id=tenant_id,
             service_type=TenantServiceType.CONSOLE,
             kind=TenantDomainKind.DEFAULT,

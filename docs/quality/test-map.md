@@ -9,6 +9,7 @@ This page maps current tests to the behaviors they protect.
     - protects `schema_registry.domain` from PostgreSQL/migration implementation leakage
     - checks that removed legacy paths are no longer used
   - checks that removed `identity` `error_mapper` and `infrastructure.mapper` paths are no longer used
+  - protects the single `EntityIdVO` identifier style and concrete id inheritance
 
 ## Tenancy And Bootstrap Boundary
 
@@ -56,6 +57,9 @@ This page maps current tests to the behaviors they protect.
 
 ## Shared
 
+- `test/test_shared_typed_entity_id.py`
+    - `EntityIdVO` conversion from UUID/string/base id
+    - concrete id classes inherit base behavior and are not equal for the same UUID
 - `test/test_shared_email_service.py`
   - typed email service rendering for system email kinds
   - provider factory selection

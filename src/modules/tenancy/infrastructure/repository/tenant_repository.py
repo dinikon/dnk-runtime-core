@@ -5,6 +5,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.modules.shared import EntityIdVO
 from src.modules.tenancy.domain.tenant import Tenant, TenantRepositoryProtocol
 from src.modules.tenancy.infrastructure.mapper import (
     tenant_model_to_entity,
@@ -25,11 +26,11 @@ class SqlAlchemyTenantRepository(TenantRepositoryProtocol):
         self._session.add(tenant_to_model(tenant))
         await self._session.flush()
 
-    async def get_by_id(self, tenant_id: UUID) -> Tenant | None:
+    async def get_by_id(self, tenant_id: EntityIdVO) -> Tenant | None:
         """Ищет tenant по id."""
         model: TenantModel | None = (
             await self._session.scalars(
-                select(TenantModel).where(TenantModel.id == tenant_id)
+                select(TenantModel).where(TenantModel.id == tenant_id.uuid)
             )
         ).one_or_none()
 

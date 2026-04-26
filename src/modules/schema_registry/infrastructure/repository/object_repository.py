@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.shared import EntityIdVO
+from src.modules.schema_registry.domain.datasource.value_object import DataSourceIdVO
 from src.modules.schema_registry.domain.field.entity import FieldEntity
 from src.modules.schema_registry.domain.field.enum.field_type import FieldTypeEnum
 from src.modules.schema_registry.domain.field.value_object.field_kind import FieldKind
@@ -15,6 +15,7 @@ from src.modules.schema_registry.domain.field.value_object.field_label import (
 )
 from src.modules.schema_registry.domain.field.value_object.field_name import FieldNameVO
 from src.modules.schema_registry.domain.field.value_object.field_type import FieldTypeVO
+from src.modules.schema_registry.domain.field.value_object import RuntimeFieldIdVO
 from src.modules.schema_registry.domain.object.entity import ObjectEntity
 from src.modules.schema_registry.domain.object.repository import (
     ObjectRepositoryProtocol,
@@ -28,8 +29,10 @@ from src.modules.schema_registry.domain.object.value_object.object_kind import (
 from src.modules.schema_registry.domain.object.value_object.object_name import (
     ObjectNameVO,
 )
+from src.modules.schema_registry.domain.object.value_object import RuntimeObjectIdVO
 from src.modules.schema_registry.infrastructure.persistence.field import FieldORM
 from src.modules.schema_registry.infrastructure.persistence.object import ObjectORM
+from src.modules.shared import EntityIdVO
 
 
 class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
@@ -48,7 +51,7 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
         """Ищет runtime-объект tenant по singular-имени и подгружает поля."""
         model = await self._session.scalar(
             select(ObjectORM)
-            .where(ObjectORM.tenant_id == tenant_id.value)
+            .where(ObjectORM.tenant_id == tenant_id.uuid)
             .where(ObjectORM.singular_name == singular_name.strip())
             .limit(1)
         )
@@ -67,7 +70,7 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
         """Ищет runtime-объект tenant по plural-имени и подгружает поля."""
         model = await self._session.scalar(
             select(ObjectORM)
-            .where(ObjectORM.tenant_id == tenant_id.value)
+            .where(ObjectORM.tenant_id == tenant_id.uuid)
             .where(ObjectORM.plural_name == plural_name.strip())
             .limit(1)
         )
@@ -77,9 +80,9 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
         field_models = await self._load_fields([model.id])
         return self._map_model(model, field_models.get(model.id, []))
 
-    async def get_by_id(self, *, object_id: EntityIdVO) -> ObjectEntity | None:
+    async def get_by_id(self, *, object_id: RuntimeObjectIdVO) -> ObjectEntity | None:
         """Ищет runtime-объект по id и подгружает поля."""
-        model = await self._session.get(ObjectORM, object_id.value)
+        model = await self._session.get(ObjectORM, object_id.uuid)
         if model is None:
             return None
 
@@ -89,17 +92,17 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
     async def save(self, object_entity: ObjectEntity) -> None:
         """Сохраняет один объект, заменяя набор его field-моделей."""
         await self._session.execute(
-            delete(FieldORM).where(FieldORM.object_id == object_entity.id.value)
+            delete(FieldORM).where(FieldORM.object_id == object_entity.id.uuid)
         )
         await self._session.flush()
 
-        model = await self._session.get(ObjectORM, object_entity.id.value)
+        model = await self._session.get(ObjectORM, object_entity.id.uuid)
         if model is None:
             model = self._to_model(object_entity)
             self._session.add(model)
         else:
-            model.tenant_id = object_entity.tenant_id.value
-            model.data_source_id = object_entity.data_source_id.value
+            model.tenant_id = object_entity.tenant_id.uuid
+            model.data_source_id = object_entity.data_source_id.uuid
             model.kind = object_entity.kind.value
             model.singular_name = object_entity.object_name.singular
             model.plural_name = object_entity.object_name.plural
@@ -124,7 +127,7 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
         models = (
             await self._session.scalars(
                 select(ObjectORM)
-                .where(ObjectORM.tenant_id == tenant_id.value)
+                .where(ObjectORM.tenant_id == tenant_id.uuid)
                 .order_by(ObjectORM.created_at, ObjectORM.id)
             )
         ).all()
@@ -145,7 +148,7 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
         """Полностью заменяет object/field metadata tenant."""
         object_ids = (
             await self._session.scalars(
-                select(ObjectORM.id).where(ObjectORM.tenant_id == tenant_id.value)
+                select(ObjectORM.id).where(ObjectORM.tenant_id == tenant_id.uuid)
             )
         ).all()
         if object_ids:
@@ -154,7 +157,7 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
             )
 
         await self._session.execute(
-            delete(ObjectORM).where(ObjectORM.tenant_id == tenant_id.value)
+            delete(ObjectORM).where(ObjectORM.tenant_id == tenant_id.uuid)
         )
         await self._session.flush()
 
@@ -182,10 +185,10 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
         """
         existing_object_ids = (
             await self._session.scalars(
-                select(ObjectORM.id).where(ObjectORM.tenant_id == tenant_id.value)
+                select(ObjectORM.id).where(ObjectORM.tenant_id == tenant_id.uuid)
             )
         ).all()
-        desired_object_ids = {object_entity.id.value for object_entity in objects}
+        desired_object_ids = {object_entity.id.uuid for object_entity in objects}
         removed_object_ids = [
             object_id
             for object_id in existing_object_ids
@@ -204,7 +207,7 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
         await self._session.flush()
 
         for object_entity in objects:
-            model = await self._session.get(ObjectORM, object_entity.id.value)
+            model = await self._session.get(ObjectORM, object_entity.id.uuid)
             if model is None:
                 self._session.add(self._to_model(object_entity))
             else:
@@ -213,7 +216,7 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
         await self._session.flush()
 
         desired_field_ids = {
-            field_entity.id.value
+            field_entity.id.uuid
             for object_entity in objects
             for field_entity in object_entity.fields
         }
@@ -237,7 +240,7 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
 
         for object_entity in objects:
             for field_entity in object_entity.fields:
-                model = await self._session.get(FieldORM, field_entity.id.value)
+                model = await self._session.get(FieldORM, field_entity.id.uuid)
                 if model is None:
                     self._session.add(self._to_field_model(field_entity))
                 else:
@@ -266,11 +269,11 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
     def _to_model(object_entity: ObjectEntity) -> ObjectORM:
         """Мапит доменную ObjectEntity в SQLAlchemy-модель."""
         return ObjectORM(
-            id=object_entity.id.value,
+            id=object_entity.id.uuid,
             created_at=object_entity.created_at,
             updated_at=object_entity.updated_at,
-            tenant_id=object_entity.tenant_id.value,
-            data_source_id=object_entity.data_source_id.value,
+            tenant_id=object_entity.tenant_id.uuid,
+            data_source_id=object_entity.data_source_id.uuid,
             kind=object_entity.kind.value,
             singular_name=object_entity.object_name.singular,
             plural_name=object_entity.object_name.plural,
@@ -283,10 +286,10 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
     def _to_field_model(field_entity: FieldEntity) -> FieldORM:
         """Мапит доменную FieldEntity в SQLAlchemy-модель."""
         return FieldORM(
-            id=field_entity.id.value,
+            id=field_entity.id.uuid,
             created_at=field_entity.created_at,
             updated_at=field_entity.updated_at,
-            object_id=field_entity.object_id.value,
+            object_id=field_entity.object_id.uuid,
             kind=field_entity.kind.value,
             field_name=field_entity.field_name.value,
             field_type_code=field_entity.field_type.code.value,
@@ -301,8 +304,8 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
     @staticmethod
     def _update_object_model(model: ObjectORM, object_entity: ObjectEntity) -> None:
         """Копирует изменяемые поля ObjectEntity в существующую ORM-модель."""
-        model.tenant_id = object_entity.tenant_id.value
-        model.data_source_id = object_entity.data_source_id.value
+        model.tenant_id = object_entity.tenant_id.uuid
+        model.data_source_id = object_entity.data_source_id.uuid
         model.kind = object_entity.kind.value
         model.singular_name = object_entity.object_name.singular
         model.plural_name = object_entity.object_name.plural
@@ -314,7 +317,7 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
     @staticmethod
     def _update_field_model(model: FieldORM, field_entity: FieldEntity) -> None:
         """Копирует изменяемые поля FieldEntity в существующую ORM-модель."""
-        model.object_id = field_entity.object_id.value
+        model.object_id = field_entity.object_id.uuid
         model.kind = field_entity.kind.value
         model.field_name = field_entity.field_name.value
         model.field_type_code = field_entity.field_type.code.value
@@ -330,11 +333,11 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
     def _map_model(model: ObjectORM, field_models: list[FieldORM]) -> ObjectEntity:
         """Мапит ORM object-модель и ее fields в доменную ObjectEntity."""
         return ObjectEntity(
-            id=EntityIdVO.from_value(model.id),
+            id=RuntimeObjectIdVO.from_value(model.id),
             created_at=model.created_at,
             updated_at=model.updated_at,
             tenant_id=EntityIdVO.from_value(model.tenant_id),
-            data_source_id=EntityIdVO.from_value(model.data_source_id),
+            data_source_id=DataSourceIdVO.from_value(model.data_source_id),
             kind=ObjectKind(model.kind),
             object_name=ObjectNameVO(
                 singular=model.singular_name,
@@ -355,10 +358,10 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
     def _map_field_model(model: FieldORM) -> FieldEntity:
         """Мапит ORM field-модель в доменную FieldEntity."""
         return FieldEntity(
-            id=EntityIdVO.from_value(model.id),
+            id=RuntimeFieldIdVO.from_value(model.id),
             created_at=model.created_at,
             updated_at=model.updated_at,
-            object_id=EntityIdVO.from_value(model.object_id),
+            object_id=RuntimeObjectIdVO.from_value(model.object_id),
             kind=FieldKind(model.kind),
             field_name=FieldNameVO(model.field_name),
             field_type=FieldTypeVO(code=FieldTypeEnum(model.field_type_code)),

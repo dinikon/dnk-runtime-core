@@ -13,12 +13,14 @@ from src.modules.schema_registry.application.use_case.diff_schema_use_case impor
 )
 from src.modules.schema_registry.domain.error import UnsupportedSchemaChangeError
 from src.modules.schema_registry.domain.seed.schema_seed import SchemaSeed
+from src.modules.shared import EntityIdVO
 
 
 class DiffSchemaUseCaseTests(unittest.IsolatedAsyncioTestCase):
     async def test_orchestrates_services_without_uow_access(self) -> None:
         calls: list[str] = []
-        tenant_id = uuid4()
+        tenant_id_raw = uuid4()
+        tenant_id = EntityIdVO.from_value(tenant_id_raw)
         seed = SchemaSeed(version=None, code="crm", label="CRM", objects=())
         plan = MigrationPlan()
 
@@ -87,11 +89,11 @@ class DiffSchemaUseCaseTests(unittest.IsolatedAsyncioTestCase):
             calls,
             [
                 "seed:seed.module",
-                f"metadata-read:{tenant_id}",
+                f"metadata-read:{tenant_id_raw}",
                 "inspect:dnk_crm",
                 "plan:dnk_crm:dnk_crm",
                 "apply:0",
-                f"metadata:{tenant_id}:crm",
+                f"metadata:{tenant_id_raw}:crm",
             ],
         )
         self.assertIsInstance(result, DiffSchemaResultDTO)
@@ -101,7 +103,8 @@ class DiffSchemaUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result.has_changes)
 
     async def test_does_not_write_metadata_if_physical_stage_fails(self) -> None:
-        tenant_id = uuid4()
+        tenant_id_raw = uuid4()
+        tenant_id = EntityIdVO.from_value(tenant_id_raw)
         seed = SchemaSeed(version=None, code="crm", label="CRM", objects=())
         calls: list[str] = []
 
@@ -160,7 +163,7 @@ class DiffSchemaUseCaseTests(unittest.IsolatedAsyncioTestCase):
             calls,
             [
                 "seed:seed.module",
-                f"metadata-read:{tenant_id}",
+                f"metadata-read:{tenant_id_raw}",
                 "inspect:dnk_crm",
             ],
         )

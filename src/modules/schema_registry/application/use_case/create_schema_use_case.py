@@ -1,4 +1,3 @@
-from src.modules.shared import EntityIdVO
 from src.modules.schema_registry.application.command.create_schema_command import (
     CreateSchemaCommand,
 )
@@ -37,7 +36,7 @@ class CreateSchemaUseCase:
 
     async def execute(self, command: CreateSchemaCommand) -> None:
         """Выполняет полный сценарий первичного создания runtime-схемы tenant."""
-        tenant_id = EntityIdVO.from_value(command.tenant_id)
+        tenant_id = command.tenant_id
         seed = await self._schema_seed_service.load(seed_path=command.seed_path)
         await self._postgres_schema_service.ensure_schema_absent(
             schema_name=command.schema_name

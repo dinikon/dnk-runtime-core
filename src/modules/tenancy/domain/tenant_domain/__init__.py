@@ -10,6 +10,7 @@ from src.modules.tenancy.domain.tenant_domain.repository import (
 )
 from src.modules.tenancy.domain.tenant_domain.value_object import (
     TenantApiAuthMode,
+    TenantDomainIdVO,
     TenantDomainKind,
     TenantDomainStatus,
     TenantDomainTlsMode,
@@ -22,6 +23,7 @@ __all__ = [
     "TenantApiAuthMode",
     "TenantDomain",
     "TenantDomainHostAlreadyExistsError",
+    "TenantDomainIdVO",
     "TenantDomainKind",
     "TenantDomainRepositoryProtocol",
     "TenantDomainStatus",

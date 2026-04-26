@@ -7,6 +7,9 @@ from src.modules.schema_registry.domain.datasource.entity import DataSourceEntit
 from src.modules.schema_registry.domain.datasource.repository import (
     DataSourceRepositoryProtocol,
 )
+from src.modules.schema_registry.domain.datasource.value_object.data_source_id import (
+    DataSourceIdVO,
+)
 from src.modules.schema_registry.domain.datasource.value_object.schema_name import (
     SchemaNameVO,
 )
@@ -23,7 +26,7 @@ class DataSourceService:
         self,
         repository: DataSourceRepositoryProtocol,
         clock: ClockPort,
-        id_provider: Callable[[], EntityIdVO],
+        id_provider: Callable[[], DataSourceIdVO],
     ) -> None:
         """Инициализирует сервис репозиторием, временем и генератором id."""
         self._repository = repository

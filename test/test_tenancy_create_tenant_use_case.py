@@ -76,8 +76,8 @@ class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(recorded_context)
         self.assertEqual(
             recorded_context.schema_name,
-            f"dnk_{tenant.id.hex}",
+            f"dnk_{tenant.id.uuid.hex}",
         )
         self.assertEqual(recorded_context.seed_path, "seed.module")
-        self.assertEqual(result.tenant_id, tenant.id)
+        self.assertEqual(result.tenant_id, tenant.id.uuid)
         self.assertEqual(result.user_id, created_user_id)

@@ -17,6 +17,7 @@ from src.modules.identity.domain.user import (
     UserLoginUnavailableError,
     UserRepositoryProtocol,
 )
+from src.modules.shared import EntityIdVO
 from src.modules.shared.kernel.email import (
     EmailDeliveryError,
     EmailServicePort,
@@ -57,9 +58,10 @@ class RequestEmailOtpUseCase:
         email = dto.email.strip().lower()
 
         tenant_context = await self._tenant_context_reader.get_by_host(host)
+        tenant_id = EntityIdVO.from_value(tenant_context.tenant_id)
 
         user = await self._users_repository.get_by_tenant_and_primary_email(
-            tenant_context.tenant_id,
+            tenant_id,
             email,
         )
         if user is None:

@@ -23,6 +23,7 @@ from src.modules.identity.domain.user import (
     UserLoginUnavailableError,
     UserRepositoryProtocol,
 )
+from src.modules.shared import EntityIdVO
 from src.modules.shared.db.uow import UnitOfWorkProtocol
 from src.modules.shared.http.host import normalize_host
 
@@ -60,6 +61,7 @@ class ConfirmEmailOtpUseCase:
         email = dto.email.strip().lower()
 
         tenant_context = await self._tenant_context_reader.get_by_host(host)
+        tenant_id = EntityIdVO.from_value(tenant_context.tenant_id)
 
         challenge = await self._otp_challenge_store.get_challenge(
             tenant_context.tenant_id,
@@ -81,7 +83,7 @@ class ConfirmEmailOtpUseCase:
             raise InvalidOtpCodeError()
 
         user = await self._users_repository.get_by_tenant_and_primary_email(
-            tenant_context.tenant_id,
+            tenant_id,
             email,
         )
         if user is None:
@@ -102,7 +104,7 @@ class ConfirmEmailOtpUseCase:
                 SessionRecord(
                     token=generated_session.token,
                     session_id=generated_session.session_id,
-                    user_id=user.id,
+                    user_id=user.id.uuid,
                     tenant_id=tenant_context.tenant_id,
                     tenant_domain_id=tenant_context.tenant_domain_id,
                     host=tenant_context.host,
@@ -125,7 +127,7 @@ class ConfirmEmailOtpUseCase:
 
         return ConfirmEmailOtpResultDTO(
             ok=True,
-            user_id=user.id,
+            user_id=user.id.uuid,
             tenant_id=tenant_context.tenant_id,
             session_token=generated_session.token,
             expires_in=self._session_ttl_seconds,
