@@ -5,8 +5,9 @@ from uuid import uuid4
 
 from src.modules.crm.domain.contact.value_object import ContactIdVO
 from src.modules.inventory.domain.product.value_object import ProductIdVO
+from src.modules.shared import EntityIdVO
 from src.modules.shared.domain.errors import EntityIdTypeError
-from src.modules.shared import EntityIdVO, TenantIdVO
+from src.modules.tenancy.domain.tenant.value_object import TenantIdVO
 
 
 class EntityIdVOTests(unittest.TestCase):

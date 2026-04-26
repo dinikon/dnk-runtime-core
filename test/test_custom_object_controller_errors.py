@@ -6,17 +6,21 @@ from uuid import uuid4
 
 from fastapi import HTTPException, status
 
-from src.modules.custom_object.application.dto import CustomRecordDTO
+from src.modules.custom_object.application.record.dto import CustomRecordDTO
 from src.modules.custom_object.domain import CustomObjectNotFoundError
-from src.modules.custom_object.presentation.http.controller import (
+from src.modules.custom_object.presentation.http.object.controller.describe_custom_object import (
     describe_custom_object,
-    list_custom_records,
 )
-from src.modules.custom_object.presentation.http.requests import (
-    ListCustomRecordsRequestSchema,
+from src.modules.custom_object.presentation.http.object.requests import (
     ObjectIdRequestSchema,
 )
-from src.modules.shared import Principal, RequestContext, TenantIdVO
+from src.modules.custom_object.presentation.http.record.controller.list_custom_records import (
+    list_custom_records,
+)
+from src.modules.custom_object.presentation.http.record.requests import (
+    ListCustomRecordsRequestSchema,
+)
+from src.modules.shared import EntityIdVO, Principal, RequestContext
 
 
 def _context() -> RequestContext:
@@ -95,7 +99,7 @@ class CustomObjectControllerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             recorded_query.tenant_id,
-            TenantIdVO.from_value(context.principal.tenant_id),
+            EntityIdVO.from_value(context.principal.tenant_id),
         )
         self.assertEqual(recorded_query.object_id.uuid, object_id)
         self.assertEqual(recorded_query.filters[0].logic, "or")

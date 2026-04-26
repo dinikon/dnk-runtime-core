@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from src.modules.tenancy.domain.tenant import TenantStatus
+from src.modules.tenancy.domain.tenant.value_object import TenantIdVO
 from src.modules.tenancy.domain.tenant_domain import (
     TenantDomainIdVO,
     TenantDomainStatus,
@@ -73,11 +74,11 @@ class SqlAlchemyTenantRepositoryTests(unittest.IsolatedAsyncioTestCase):
             _AsyncSessionStub(scalars_results=[self.tenant_model])
         )
 
-        result = await repository.get_by_id(EntityIdVO.from_value(self.tenant_id))
+        result = await repository.get_by_id(TenantIdVO.from_value(self.tenant_id))
 
         self.assertIsNotNone(result)
         assert result is not None
-        self.assertEqual(result.id, EntityIdVO.from_value(self.tenant_id))
+        self.assertEqual(result.id, TenantIdVO.from_value(self.tenant_id))
         self.assertEqual(result.name, "Acme")
         self.assertEqual(result.external_id, "acme")
 

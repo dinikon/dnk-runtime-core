@@ -4,13 +4,15 @@ import unittest
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from src.modules.custom_object.application import (
+from src.modules.custom_object.application.field.command import (
     AddCustomFieldCommand,
-    CreateCustomObjectCommand,
     CustomFieldInput,
 )
+from src.modules.custom_object.application.object.command import (
+    CreateCustomObjectCommand,
+)
 from src.modules.custom_object.domain import CustomObjectValidationError
-from src.modules.custom_object.infrastructure import SchemaRegistryCustomObjectStore
+from src.modules.custom_object.infrastructure import CustomObjectSchemaRepository
 from src.modules.schema_registry.application.migration.operations import (
     AddColumnOperation,
     CreateIndexOperation,
@@ -37,7 +39,7 @@ from src.modules.schema_registry.domain.object.value_object.object_label import 
 from src.modules.schema_registry.domain.object.value_object.object_name import (
     ObjectNameVO,
 )
-from src.modules.shared import TenantIdVO
+from src.modules.shared import EntityIdVO
 
 
 class _ClockStub:
@@ -108,7 +110,8 @@ class _TenantSchemaExecutorSpy:
 
 
 class CustomObjectSchemaStoreTests(unittest.IsolatedAsyncioTestCase):
-    def _datasource(self, tenant_id: TenantIdVO, now: datetime) -> DataSourceEntity:
+
+    def _datasource(self, tenant_id: EntityIdVO, now: datetime) -> DataSourceEntity:
         return DataSourceEntity.create(
             id_=DataSourceIdVO.from_value(uuid4()),
             now=now,
@@ -121,16 +124,16 @@ class CustomObjectSchemaStoreTests(unittest.IsolatedAsyncioTestCase):
         *,
         repository: _ObjectRepositoryStub,
         executor: _TenantSchemaExecutorSpy,
-        tenant_id: TenantIdVO,
+        tenant_id: EntityIdVO,
         now: datetime,
         object_ids: list[RuntimeObjectIdVO] | None = None,
         field_ids: list[RuntimeFieldIdVO] | None = None,
-    ) -> SchemaRegistryCustomObjectStore:
+    ) -> CustomObjectSchemaRepository:
         object_id_iter = iter(object_ids or [RuntimeObjectIdVO.from_value(uuid4())])
         field_id_iter = iter(
             field_ids or [RuntimeFieldIdVO.from_value(uuid4()) for _item in range(8)]
         )
-        return SchemaRegistryCustomObjectStore(
+        return CustomObjectSchemaRepository(
             object_repository=repository,
             data_source_service=_DataSourceServiceStub(
                 self._datasource(tenant_id, now)
@@ -144,7 +147,7 @@ class CustomObjectSchemaStoreTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_create_object_adds_system_fields_and_targeted_ddl(self) -> None:
-        tenant_id = TenantIdVO.from_value(uuid4())
+        tenant_id = EntityIdVO.from_value(uuid4())
         now = datetime.now(UTC)
         repository = _ObjectRepositoryStub()
         executor = _TenantSchemaExecutorSpy()
@@ -205,7 +208,7 @@ class CustomObjectSchemaStoreTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_add_field_rejects_required_column_without_default(self) -> None:
-        tenant_id = TenantIdVO.from_value(uuid4())
+        tenant_id = EntityIdVO.from_value(uuid4())
         datasource_id = DataSourceIdVO.from_value(uuid4())
         now = datetime.now(UTC)
         object_entity = ObjectEntity.create(

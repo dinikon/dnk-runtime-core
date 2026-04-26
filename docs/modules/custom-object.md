@@ -41,6 +41,8 @@
 ## Infrastructure / Persistence
 
 - metadata operations use the existing schema registry object repository and datasource service
+- object and field schema mutations are implemented by `CustomObjectSchemaRepository`
+- record operations are implemented by `CustomRecordRuntimeRepository`
 - physical schema mutations use targeted migration operations:
     - create/drop table
     - add/drop column
@@ -58,7 +60,7 @@ All routes require authenticated request context.
 
 ## Dependencies On Other Modules
 
-- uses `shared` authentication, tenant id, UoW and clock dependencies
+- uses `shared` authentication, generic tenant scope ids, UoW and clock dependencies
 - uses `schema_registry` metadata, field type catalog and DDL executor
 - uses `runtime_data` for dynamic record CRUD and filtering
 
@@ -79,7 +81,11 @@ All routes require authenticated request context.
 
 ## Source Of Truth
 
-- `src/modules/custom_object/application/`
-- `src/modules/custom_object/infrastructure/schema_registry_store.py`
-- `src/modules/custom_object/presentation/http/controller.py`
-
+- `src/modules/custom_object/application/object/`
+- `src/modules/custom_object/application/field/`
+- `src/modules/custom_object/application/record/`
+- `src/modules/custom_object/infrastructure/custom_object_schema_repository.py`
+- `src/modules/custom_object/infrastructure/custom_record_runtime_repository.py`
+- `src/modules/custom_object/presentation/http/object/controller/`
+- `src/modules/custom_object/presentation/http/field/controller/`
+- `src/modules/custom_object/presentation/http/record/controller/`

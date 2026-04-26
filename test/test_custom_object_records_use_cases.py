@@ -4,20 +4,25 @@ import unittest
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from src.modules.custom_object.application import (
+from src.modules.custom_object.application.record.command import (
     CreateCustomRecordCommand,
-    CreateCustomRecordUseCase,
+)
+from src.modules.custom_object.application.record.query import (
     ListCustomRecordsQuery,
+)
+from src.modules.custom_object.application.record.use_case import (
+    CreateCustomRecordUseCase,
     ListCustomRecordsUseCase,
 )
 from src.modules.custom_object.domain import CustomObjectValidationError
+from src.modules.custom_object.infrastructure import CustomRecordRuntimeRepository
 from src.modules.runtime_data import FilterGroupSpec, FilterSpec, SortSpec
 from src.modules.schema_registry.domain.object.value_object import RuntimeObjectIdVO
 from src.modules.schema_registry.runtime import (
     RuntimeFieldDescriptor,
     RuntimeObjectDescriptor,
 )
-from src.modules.shared import TenantIdVO
+from src.modules.shared import EntityIdVO
 
 
 def _field(
@@ -53,18 +58,24 @@ def _descriptor() -> RuntimeObjectDescriptor:
     )
 
 
-class _StoreStub:
-    def __init__(self) -> None:
+class _CustomRecordRepositoryStub(CustomRecordRuntimeRepository):
+    def __init__(self, *, command_gateway, query_gateway) -> None:
+        super().__init__(
+            object_repository=object(),
+            data_source_service=object(),
+            command_gateway=command_gateway,
+            query_gateway=query_gateway,
+        )
         self.calls = []
 
-    async def resolve_descriptor(self, *, tenant_id, object_id):
+    async def _resolve_descriptor(self, *, tenant_id, object_id):
         self.calls.append((tenant_id, object_id))
         return _descriptor()
 
 
 class CustomObjectRecordUseCaseTests(unittest.IsolatedAsyncioTestCase):
     async def test_create_record_rejects_direct_system_field_write(self) -> None:
-        tenant_id = TenantIdVO.from_value(uuid4())
+        tenant_id = EntityIdVO.from_value(uuid4())
         object_id = RuntimeObjectIdVO.from_value(uuid4())
 
         class CommandGatewaySpy:
@@ -76,7 +87,11 @@ class CustomObjectRecordUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 return {}
 
         gateway = CommandGatewaySpy()
-        use_case = CreateCustomRecordUseCase(_StoreStub(), gateway)
+        repository = _CustomRecordRepositoryStub(
+            command_gateway=gateway,
+            query_gateway=object(),
+        )
+        use_case = CreateCustomRecordUseCase(repository)
 
         with self.assertRaises(CustomObjectValidationError):
             await use_case(
@@ -90,7 +105,7 @@ class CustomObjectRecordUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(gateway.insert_called)
 
     async def test_list_records_passes_filter_group_sort_and_page(self) -> None:
-        tenant_id = TenantIdVO.from_value(uuid4())
+        tenant_id = EntityIdVO.from_value(uuid4())
         object_id = RuntimeObjectIdVO.from_value(uuid4())
         row_id = uuid4()
         now = datetime.now(UTC)
@@ -123,7 +138,11 @@ class CustomObjectRecordUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 FilterSpec(field="status", op="eq", value="new"),
             ),
         )
-        use_case = ListCustomRecordsUseCase(_StoreStub(), QueryGatewaySpy())
+        repository = _CustomRecordRepositoryStub(
+            command_gateway=object(),
+            query_gateway=QueryGatewaySpy(),
+        )
+        use_case = ListCustomRecordsUseCase(repository)
 
         result = await use_case(
             ListCustomRecordsQuery(

@@ -177,6 +177,64 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                 msg=f"{path} still resolves tenant_id in wiring",
             )
 
+    def test_shared_exports_only_generic_entity_id_vo(self) -> None:
+        paths = [
+            PROJECT_ROOT / "src/modules/shared/__init__.py",
+            PROJECT_ROOT / "src/modules/shared/domain/__init__.py",
+            PROJECT_ROOT / "src/modules/shared/domain/value_object/__init__.py",
+            PROJECT_ROOT / "src/modules/shared/domain/value_object/entity_id.py",
+        ]
+        for path in paths:
+            content = path.read_text(encoding="utf-8")
+            self.assertNotIn(
+                "TenantIdVO",
+                content,
+                msg=f"{path} exports or defines a tenant-specific id VO",
+            )
+
+        tree = ast.parse(
+            (
+                PROJECT_ROOT / "src/modules/shared/domain/value_object/entity_id.py"
+            ).read_text(encoding="utf-8")
+        )
+        id_classes = [
+            node.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ClassDef) and node.name.endswith("IdVO")
+        ]
+        self.assertEqual(id_classes, ["EntityIdVO"])
+
+    def test_concrete_id_value_objects_live_near_domain_objects(self) -> None:
+        for path in iter_python_files("src/modules"):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for class_def in ast.walk(tree):
+                if not isinstance(class_def, ast.ClassDef):
+                    continue
+                if (
+                    not class_def.name.endswith("IdVO")
+                    or class_def.name == "EntityIdVO"
+                ):
+                    continue
+                self.assertIn(
+                    "/domain/",
+                    path.as_posix(),
+                    msg=f"{path}:{class_def.name} is not under module/domain",
+                )
+                self.assertIn(
+                    "/value_object/",
+                    path.as_posix(),
+                    msg=f"{path}:{class_def.name} is not under value_object",
+                )
+
+    def test_custom_object_wiring_does_not_use_tenant_domain_id(self) -> None:
+        path = (
+            PROJECT_ROOT
+            / "src/modules/custom_object/presentation/depends/infrastructure.py"
+        )
+        content = path.read_text(encoding="utf-8")
+        self.assertNotIn("TenantIdVO", content)
+        self.assertNotIn("src.modules.tenancy.domain", content)
+
     def test_removed_id_wrapper_types_are_not_used(self) -> None:
         removed_types = ("Typed" + "EntityIdVO",)
         for root in ("src", "test"):

@@ -1,15 +1,29 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
-from src.modules.custom_object.application.command import (
+from src.modules.custom_object.application.field.command import (
     AddCustomFieldCommand,
-    CreateCustomObjectCommand,
     CustomFieldInput,
     DeleteCustomFieldCommand,
 )
-from src.modules.custom_object.application.dto import CustomFieldDTO, CustomObjectDTO
-from src.modules.custom_object.application.ports import CustomObjectStoreProtocol
+from src.modules.custom_object.application.field.dto import CustomFieldDTO
+from src.modules.custom_object.application.field.repository import (
+    CustomFieldSchemaRepositoryProtocol,
+)
+from src.modules.custom_object.application.object.command import (
+    CreateCustomObjectCommand,
+    DeleteCustomObjectCommand,
+)
+from src.modules.custom_object.application.object.dto import CustomObjectDTO
+from src.modules.custom_object.application.object.query import (
+    CustomObjectByIdQuery,
+    ListCustomObjectsQuery,
+)
+from src.modules.custom_object.application.object.repository import (
+    CustomObjectSchemaRepositoryProtocol,
+)
 from src.modules.custom_object.domain import (
     CustomObjectFieldNotFoundError,
     CustomObjectNotFoundError,
@@ -51,11 +65,7 @@ from src.modules.schema_registry.domain.object.value_object.object_label import 
 from src.modules.schema_registry.domain.object.value_object.object_name import (
     ObjectNameVO,
 )
-from src.modules.schema_registry.runtime import (
-    RuntimeFieldDescriptor,
-    RuntimeObjectDescriptor,
-)
-from src.modules.shared import ClockPort, TenantIdVO
+from src.modules.shared import ClockPort, EntityIdVO
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,7 +104,10 @@ _SYSTEM_FIELDS = (
 )
 
 
-class SchemaRegistryCustomObjectStore(CustomObjectStoreProtocol):
+class CustomObjectSchemaRepository(
+    CustomObjectSchemaRepositoryProtocol,
+    CustomFieldSchemaRepositoryProtocol,
+):
     """Custom-object adapter over schema_registry metadata and PostgreSQL DDL."""
 
     def __init__(
@@ -106,8 +119,8 @@ class SchemaRegistryCustomObjectStore(CustomObjectStoreProtocol):
         postgres_field_canonicalizer: PostgresFieldCanonicalizer,
         field_type_catalog: FieldTypeCatalog,
         clock: ClockPort,
-        object_id_provider,
-        field_id_provider,
+        object_id_provider: Callable[[], RuntimeObjectIdVO],
+        field_id_provider: Callable[[], RuntimeFieldIdVO],
     ) -> None:
         """Инициализирует adapter текущей UoW-сессией через переданные порты."""
         self._object_repository = object_repository
@@ -119,25 +132,24 @@ class SchemaRegistryCustomObjectStore(CustomObjectStoreProtocol):
         self._object_id_provider = object_id_provider
         self._field_id_provider = field_id_provider
 
-    async def list_objects(self, *, tenant_id: TenantIdVO) -> list[CustomObjectDTO]:
+    async def list_objects(
+        self, query: ListCustomObjectsQuery
+    ) -> list[CustomObjectDTO]:
         """Возвращает список custom objects tenant."""
-        objects = await self._object_repository.list_by_tenant_id(tenant_id=tenant_id)
+        objects = await self._object_repository.list_by_tenant_id(
+            tenant_id=query.tenant_id
+        )
         return [
             self._to_object_dto(object_entity)
             for object_entity in objects
             if object_entity.kind == ObjectKind.CUSTOM
         ]
 
-    async def describe_object(
-        self,
-        *,
-        tenant_id: TenantIdVO,
-        object_id: RuntimeObjectIdVO,
-    ) -> CustomObjectDTO:
+    async def describe_object(self, query: CustomObjectByIdQuery) -> CustomObjectDTO:
         """Возвращает схему custom object tenant."""
         object_entity = await self._get_required_custom_object(
-            tenant_id=tenant_id,
-            object_id=object_id,
+            tenant_id=query.tenant_id,
+            object_id=query.object_id,
         )
         return self._to_object_dto(object_entity)
 
@@ -221,19 +233,14 @@ class SchemaRegistryCustomObjectStore(CustomObjectStoreProtocol):
         await self._object_repository.save(object_entity)
         return self._to_object_dto(object_entity)
 
-    async def delete_object(
-        self,
-        *,
-        tenant_id: TenantIdVO,
-        object_id: RuntimeObjectIdVO,
-    ) -> None:
+    async def delete_object(self, command: DeleteCustomObjectCommand) -> None:
         """Hard-delete custom object table and metadata."""
         object_entity = await self._get_required_custom_object(
-            tenant_id=tenant_id,
-            object_id=object_id,
+            tenant_id=command.tenant_id,
+            object_id=command.object_id,
         )
         datasource = await self._data_source_service.get_required_by_tenant(
-            tenant_id=tenant_id,
+            tenant_id=command.tenant_id,
         )
         plan = MigrationPlan()
         plan.add_destructive(
@@ -244,10 +251,12 @@ class SchemaRegistryCustomObjectStore(CustomObjectStoreProtocol):
         )
         await self._tenant_schema_executor.execute(plan=plan)
 
-        objects = await self._object_repository.list_by_tenant_id(tenant_id=tenant_id)
+        objects = await self._object_repository.list_by_tenant_id(
+            tenant_id=command.tenant_id
+        )
         remaining = [item for item in objects if item.id.uuid != object_entity.id.uuid]
         await self._object_repository.reconcile_for_tenant(
-            tenant_id=tenant_id,
+            tenant_id=command.tenant_id,
             objects=remaining,
         )
 
@@ -310,51 +319,10 @@ class SchemaRegistryCustomObjectStore(CustomObjectStoreProtocol):
         await self._object_repository.save(object_entity)
         return self._to_object_dto(object_entity)
 
-    async def resolve_descriptor(
-        self,
-        *,
-        tenant_id: TenantIdVO,
-        object_id: RuntimeObjectIdVO,
-    ) -> RuntimeObjectDescriptor:
-        """Builds runtime descriptor for a custom object by metadata object_id."""
-        object_entity = await self._get_required_custom_object(
-            tenant_id=tenant_id,
-            object_id=object_id,
-        )
-        datasource = await self._data_source_service.get_required_by_tenant(
-            tenant_id=tenant_id,
-        )
-        if object_entity.data_source_id != datasource.id:
-            raise CustomObjectValidationError(
-                "Custom object metadata has mismatched data_source_id."
-            )
-        fields = tuple(
-            RuntimeFieldDescriptor(
-                name=field_entity.field_name.value,
-                type_code=field_entity.field_type.code.value,
-                is_nullable=field_entity.is_nullable,
-                default_value=field_entity.default_value,
-                options=dict(field_entity.options),
-                settings=dict(field_entity.settings),
-                kind=field_entity.kind.value,
-            )
-            for field_entity in object_entity.fields
-        )
-        return RuntimeObjectDescriptor(
-            schema_name=datasource.schema_name.value,
-            object_name=object_entity.object_name.singular,
-            table_name=object_entity.object_name.plural,
-            pk="id",
-            title_field="id",
-            fields=fields,
-            relations=(),
-            kind=object_entity.kind.value,
-        )
-
     async def _get_required_custom_object(
         self,
         *,
-        tenant_id: TenantIdVO,
+        tenant_id: EntityIdVO,
         object_id: RuntimeObjectIdVO,
     ) -> ObjectEntity:
         object_entity = await self._object_repository.get_by_id(object_id=object_id)
@@ -371,7 +339,7 @@ class SchemaRegistryCustomObjectStore(CustomObjectStoreProtocol):
     async def _ensure_object_names_available(
         self,
         *,
-        tenant_id: TenantIdVO,
+        tenant_id: EntityIdVO,
         object_name: ObjectNameVO,
     ) -> None:
         singular_existing = (
@@ -488,7 +456,7 @@ class SchemaRegistryCustomObjectStore(CustomObjectStoreProtocol):
             description=object_entity.description,
             kind=object_entity.kind.value,
             fields=tuple(
-                SchemaRegistryCustomObjectStore._to_field_dto(field_entity)
+                CustomObjectSchemaRepository._to_field_dto(field_entity)
                 for field_entity in object_entity.fields
             ),
         )
@@ -506,3 +474,6 @@ class SchemaRegistryCustomObjectStore(CustomObjectStoreProtocol):
             options=dict(field_entity.options),
             kind=field_entity.kind.value,
         )
+
+
+__all__ = ["CustomObjectSchemaRepository"]
