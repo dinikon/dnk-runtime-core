@@ -6,7 +6,6 @@ from src.modules.shared import EntityIdVO
 from src.modules.tenancy.domain.tenant_domain.entity import TenantDomain
 from src.modules.tenancy.domain.tenant_domain.value_object import TenantDomainIdVO
 
-
 class TenantDomainRepositoryProtocol(Protocol):
     """Порт хранения tenant domain entities."""
 

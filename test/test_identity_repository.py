@@ -12,7 +12,6 @@ from src.modules.identity.infrastructure.repository.user_repository import (
 from src.modules.identity.domain.user import UserEmailIdVO, UserIdVO
 from src.modules.shared import EntityIdVO
 
-
 class _ScalarSequenceResult:
     def __init__(self, items):
         self._items = list(items)

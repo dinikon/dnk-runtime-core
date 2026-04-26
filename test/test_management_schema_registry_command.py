@@ -15,7 +15,6 @@ from src.modules.schema_registry.application.dto import DiffSchemaResultDTO
 from src.modules.schema_registry.domain.error import SchemaRegistryError
 from src.modules.shared import EntityIdVO
 
-
 class SchemaRegistryManagementCommandTests(unittest.IsolatedAsyncioTestCase):
     def test_parser_registers_schema_registry_diff_command(self) -> None:
         tenant_id = uuid4()

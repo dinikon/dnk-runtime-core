@@ -16,7 +16,6 @@ from src.modules.identity.infrastructure.persistence.user import UserModel
 from src.modules.identity.infrastructure.persistence.user_email import UserEmailModel
 from src.modules.shared import EntityIdVO
 
-
 class SqlAlchemyUserRepository(UserRepositoryProtocol):
     """SQLAlchemy-репозиторий пользователей и email-адресов identity."""
 

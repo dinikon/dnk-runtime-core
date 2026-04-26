@@ -15,7 +15,6 @@ from src.modules.schema_registry.domain.error import UnsupportedSchemaChangeErro
 from src.modules.schema_registry.domain.seed.schema_seed import SchemaSeed
 from src.modules.shared import EntityIdVO
 
-
 class DiffSchemaUseCaseTests(unittest.IsolatedAsyncioTestCase):
     async def test_orchestrates_services_without_uow_access(self) -> None:
         calls: list[str] = []

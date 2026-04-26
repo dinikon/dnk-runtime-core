@@ -18,7 +18,6 @@ from src.modules.tenancy.domain.tenant_domain.value_object import (
     TenantServiceType,
 )
 
-
 @dataclass(slots=True)
 class TenantDomain:
     """Доменная сущность host/domain, связанного с tenant."""

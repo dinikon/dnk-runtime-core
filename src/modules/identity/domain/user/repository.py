@@ -6,7 +6,6 @@ from src.modules.identity.domain.user.entity import User
 from src.modules.identity.domain.user.value_object import UserEmailIdVO, UserIdVO
 from src.modules.shared import EntityIdVO
 
-
 class UserRepositoryProtocol(Protocol):
     """Порт хранения и чтения пользователей identity."""
 
