@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
+from src.modules.shared import EntityIdVO
 
 @dataclass(frozen=True, slots=True)
 class ProvisionedTenantAdmin:
@@ -19,7 +20,7 @@ class IdentityProvisioningServiceProtocol(Protocol):
 
     async def create_tenant_admin(
         self,
-        tenant_id: UUID,
+        tenant_id: EntityIdVO,
         first_name: str,
         last_name: str,
         email: str,

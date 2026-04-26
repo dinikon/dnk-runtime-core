@@ -6,7 +6,6 @@ from typing import Annotated
 import uuid6
 from fastapi import Depends
 
-from src.modules.shared import EntityIdVO
 from src.modules.shared.depends.clock import ClockDep
 from src.modules.shared.depends.uow import UoWDep
 from src.modules.schema_registry.application.migration.postgres_field_canonicalizer import (
@@ -23,11 +22,14 @@ from src.modules.schema_registry.domain.datasource.repository import (
     DataSourceRepositoryProtocol,
 )
 from src.modules.schema_registry.domain.datasource.service import DataSourceService
+from src.modules.schema_registry.domain.datasource.value_object import DataSourceIdVO
 from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
+from src.modules.schema_registry.domain.field.value_object import RuntimeFieldIdVO
 from src.modules.schema_registry.domain.object.repository import (
     ObjectRepositoryProtocol,
 )
 from src.modules.schema_registry.domain.object.service import ObjectService
+from src.modules.schema_registry.domain.object.value_object import RuntimeObjectIdVO
 from src.modules.schema_registry.infrastructure.postgres.tenant_schema_executor import (
     PostgresTenantSchemaExecutor,
 )
@@ -106,9 +108,19 @@ ObjectRepositoryDep = Annotated[
 ]
 
 
-def get_entity_id_provider() -> Callable[[], EntityIdVO]:
-    """Возвращает provider UUIDv7 EntityIdVO для новых metadata-сущностей."""
-    return lambda: EntityIdVO.from_value(uuid6.uuid7())
+def get_data_source_id_provider() -> Callable[[], DataSourceIdVO]:
+    """Возвращает provider UUIDv7 DataSourceIdVO для datasource metadata."""
+    return lambda: DataSourceIdVO.from_value(uuid6.uuid7())
+
+
+def get_runtime_object_id_provider() -> Callable[[], RuntimeObjectIdVO]:
+    """Возвращает provider UUIDv7 RuntimeObjectIdVO для object metadata."""
+    return lambda: RuntimeObjectIdVO.from_value(uuid6.uuid7())
+
+
+def get_runtime_field_id_provider() -> Callable[[], RuntimeFieldIdVO]:
+    """Возвращает provider UUIDv7 RuntimeFieldIdVO для field metadata."""
+    return lambda: RuntimeFieldIdVO.from_value(uuid6.uuid7())
 
 
 def get_field_type_catalog() -> FieldTypeCatalog:
@@ -141,7 +153,7 @@ def get_data_source_service(
     return DataSourceService(
         repository=repository,
         clock=clock,
-        id_provider=get_entity_id_provider(),
+        id_provider=get_data_source_id_provider(),
     )
 
 
@@ -160,7 +172,8 @@ def get_object_service(
     return ObjectService(
         object_repository=repository,
         clock=clock,
-        id_provider=get_entity_id_provider(),
+        object_id_provider=get_runtime_object_id_provider(),
+        field_id_provider=get_runtime_field_id_provider(),
         field_type_catalog=field_type_catalog,
     )
 
@@ -183,10 +196,13 @@ __all__ = [
     "TenantSchemaInspectorDep",
     "get_data_source_repository",
     "get_data_source_service",
+    "get_data_source_id_provider",
     "get_object_repository",
     "get_object_service",
     "get_field_type_catalog",
     "get_postgres_field_canonicalizer",
+    "get_runtime_field_id_provider",
+    "get_runtime_object_id_provider",
     "get_schema_seed_reader",
     "get_tenant_schema_executor",
     "get_tenant_schema_inspector",

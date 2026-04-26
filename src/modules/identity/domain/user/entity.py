@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from uuid import UUID
 
 import uuid6
 
+from src.modules.identity.domain.user.value_object import UserEmailIdVO, UserIdVO
+from src.modules.shared import EntityIdVO
 from src.modules.shared.domain.errors import DomainError
 
 
@@ -13,8 +14,8 @@ from src.modules.shared.domain.errors import DomainError
 class UserEmail:
     """Доменная сущность email-адреса пользователя."""
 
-    id: UUID
-    user_id: UUID
+    id: UserEmailIdVO
+    user_id: UserIdVO
     email: str
     is_primary: bool
     is_verified: bool
@@ -35,8 +36,8 @@ class UserEmail:
 class User:
     """Доменная сущность пользователя identity."""
 
-    id: UUID
-    tenant_id: UUID
+    id: UserIdVO
+    tenant_id: EntityIdVO
     status: str
     last_name: str
     first_name: str
@@ -56,7 +57,7 @@ class User:
     @classmethod
     def create_tenant_admin(
         cls,
-        tenant_id: UUID,
+        tenant_id: EntityIdVO,
         first_name: str,
         last_name: str,
     ) -> "User":
@@ -70,7 +71,7 @@ class User:
 
         now = datetime.now(UTC)
         return cls(
-            id=uuid6.uuid7(),
+            id=UserIdVO.from_value(uuid6.uuid7()),
             tenant_id=tenant_id,
             status="active",
             last_name=normalized_last_name,
@@ -105,7 +106,7 @@ class User:
 
         now = datetime.now(UTC)
         user_email = UserEmail(
-            id=uuid6.uuid7(),
+            id=UserEmailIdVO.from_value(uuid6.uuid7()),
             user_id=self.id,
             email=normalized_email,
             is_primary=is_primary,
@@ -134,7 +135,7 @@ class User:
                 return existing
         return None
 
-    def mark_email_verified(self, user_email_id: UUID) -> None:
+    def mark_email_verified(self, user_email_id: UserEmailIdVO) -> None:
         """Помечает email пользователя как verified по id."""
         for email in self.emails:
             if email.id == user_email_id:

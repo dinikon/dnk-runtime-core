@@ -12,7 +12,7 @@ from src.modules.schema_registry.application.use_case.create_schema_use_case imp
     CreateSchemaUseCase,
 )
 from src.modules.schema_registry.domain.seed.schema_seed import SchemaSeed
-
+from src.modules.shared import EntityIdVO
 
 @dataclass(frozen=True, slots=True)
 class CallRecord:
@@ -59,7 +59,8 @@ class CreateSchemaUseCaseTests(unittest.IsolatedAsyncioTestCase):
             schema_registry_metadata_write_service=MetadataService(),
         )
 
-        tenant_id = uuid4()
+        tenant_id_raw = uuid4()
+        tenant_id = EntityIdVO.from_value(tenant_id_raw)
         await use_case.execute(
             CreateSchemaCommand(
                 tenant_id=tenant_id,
@@ -75,6 +76,6 @@ class CreateSchemaUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 "ensure:dnk_schema",
                 "plan:dnk_schema:crm",
                 "apply:0",
-                f"metadata:{tenant_id}:dnk_schema:crm",
+                f"metadata:{tenant_id_raw}:dnk_schema:crm",
             ],
         )

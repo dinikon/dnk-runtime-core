@@ -9,18 +9,23 @@ from src.modules.schema_registry.domain.field.value_object.field_label import (
 )
 from src.modules.schema_registry.domain.field.value_object.field_name import FieldNameVO
 from src.modules.schema_registry.domain.field.value_object.field_type import FieldTypeVO
-from src.modules.shared import EntityIdVO
+from src.modules.schema_registry.domain.field.value_object.runtime_field_id import (
+    RuntimeFieldIdVO,
+)
+from src.modules.schema_registry.domain.object.value_object.runtime_object_id import (
+    RuntimeObjectIdVO,
+)
 
 
 @dataclass(slots=True)
 class FieldEntity:
     """Доменная сущность поля runtime-объекта в metadata schema_registry."""
 
-    id: EntityIdVO
+    id: RuntimeFieldIdVO
     created_at: datetime
     updated_at: datetime
 
-    object_id: EntityIdVO
+    object_id: RuntimeObjectIdVO
 
     kind: FieldKind
     field_name: FieldNameVO
@@ -39,9 +44,9 @@ class FieldEntity:
     def create(
         cls,
         *,
-        id_: EntityIdVO,
+        id_: RuntimeFieldIdVO,
         now: datetime,
-        object_id: EntityIdVO,
+        object_id: RuntimeObjectIdVO,
         field_name: FieldNameVO,
         field_type: FieldTypeVO,
         label: FieldLabelVO,

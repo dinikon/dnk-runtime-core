@@ -21,17 +21,17 @@ schema tables described by `schema_registry` seed metadata instead of static ORM
 ## Domain Model
 
 - `ProductEntity`
-    - `id`
+    - `id` as `ProductIdVO`
     - timestamps
     - required tenant-local `sku`
     - required `product_name`
     - optional `description`
-    - optional `category_id`
+    - optional `category_id` as `CategoryIdVO`
 - `CategoryEntity`
-    - `id`
+    - `id` as `CategoryIdVO`
     - timestamps
     - required `name`
-    - optional `parent_category_id` self-reference for category trees
+    - optional `parent_category_id` self-reference as `CategoryIdVO`
 
 ## Infrastructure / Persistence
 
@@ -40,6 +40,8 @@ schema tables described by `schema_registry` seed metadata instead of static ORM
 - writes and reads go through `runtime_data` gateways using the active request `UnitOfWork`
 - HTTP payloads do not accept `tenant_id`; controllers read it from request context and pass it through inventory
   commands, queries, use cases and repository calls
+- internally that tenant scope is `EntityIdVO`; product/category ids are concrete domain value objects and are converted
+  to UUIDs only at HTTP/runtime-data boundaries
 - wiring stays tenant-agnostic and does not bind repositories to a tenant
 - category deletion is protected by runtime foreign keys when products or child categories still reference it
 

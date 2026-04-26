@@ -35,6 +35,15 @@
   pass it through use cases, services and repository method calls where runtime metadata/data access needs it. Wiring
   files must stay tenant-agnostic and must not resolve or bind repositories to a tenant.
 
+## Identifier Rules
+
+- `EntityIdVO` is the single shared UUID primitive and the base class for concrete domain identifiers.
+- Tenant scope uses `EntityIdVO` directly. Concrete domain entities use concrete subclasses: for example `UserIdVO`,
+  `ContactIdVO`, `ProductIdVO`, `CategoryIdVO`, `DataSourceIdVO`, `RuntimeObjectIdVO` and `RuntimeFieldIdVO`.
+- Transport, token and persistence boundaries may use `UUID` or `str`, but values are converted to `EntityIdVO` or a
+  concrete id subclass before entering domain/application behavior and converted back with `.uuid` when leaving it.
+- Concrete id classes are intentionally not interchangeable, even when they wrap the same UUID.
+
 ## Schema Registry Rules
 
 - seed describes desired runtime structure

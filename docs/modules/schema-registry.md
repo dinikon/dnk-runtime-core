@@ -40,10 +40,13 @@ fields. It is responsible for bootstrap from seed and schema diff against existi
 
 - `DataSourceEntity`
     - tenant-scoped runtime data source and schema identity
+  - uses `DataSourceIdVO` and `EntityIdVO`
 - `ObjectEntity`
     - tenant/data_source scoped runtime object metadata
+  - uses `RuntimeObjectIdVO`, `EntityIdVO` and `DataSourceIdVO`
 - `FieldEntity`
     - field metadata including logical type, label, nullability, default, options and settings
+  - uses `RuntimeFieldIdVO` and `RuntimeObjectIdVO`
 
 ## Presentation / Entry Points
 
@@ -57,6 +60,8 @@ fields. It is responsible for bootstrap from seed and schema diff against existi
 
 - default seed module is `src.modules.schema_registry.seed.schema_seed`
 - default seed declares CRM contacts plus inventory products and product categories
+- management CLI and physical schema boundaries still accept UUID tenant ids, then convert them to `EntityIdVO` inside
+  application/domain code
 - test seed modules exist for diff experimentation
 - seed loading returns a validated and normalized schema spec before planning
 - `many_to_one` relations materialize as foreign keys

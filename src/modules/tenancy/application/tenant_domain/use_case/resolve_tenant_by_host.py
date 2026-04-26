@@ -72,7 +72,7 @@ class ResolveTenantByHostUseCase:
             exists=True,
             available=tenant.allows_login(),
             status=tenant.status.value,
-            tenant_id=tenant.id,
+            tenant_id=tenant.id.uuid,
             api_host=api_host,
         )
 

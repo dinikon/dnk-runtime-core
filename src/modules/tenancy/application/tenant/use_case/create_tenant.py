@@ -57,10 +57,10 @@ class CreateTenantUseCase:
         )
 
         return CreateTenantResultDTO(
-            tenant_id=onboarding.tenant.id,
+            tenant_id=onboarding.tenant.id.uuid,
             user_id=user.user_id,
             user_email_id=user.user_email_id,
-            tenant_domain_id=onboarding.tenant_domain.id,
+            tenant_domain_id=onboarding.tenant_domain.id.uuid,
             tenant_status=onboarding.tenant.status.value,
             user_status=user.user_status,
             tenant_domain_host=onboarding.tenant_domain.host,

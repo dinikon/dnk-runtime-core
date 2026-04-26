@@ -6,6 +6,7 @@ from uuid import uuid4
 from src.modules.schema_registry.infrastructure.tenancy_schema_bootstrap_adapter import (
     SchemaRegistryTenantSchemaBootstrapAdapter,
 )
+from src.modules.shared import EntityIdVO
 from src.modules.tenancy.application.ports.schema_bootstrap import (
     TenantSchemaBootstrapContext,
     TenantSchemaBootstrapContextFactory,
@@ -14,7 +15,7 @@ from src.modules.tenancy.application.ports.schema_bootstrap import (
 
 class TenantSchemaBootstrapBoundaryTests(unittest.IsolatedAsyncioTestCase):
     def test_context_factory_builds_tenancy_owned_bootstrap_context(self) -> None:
-        tenant_id = uuid4()
+        tenant_id = EntityIdVO.from_value(uuid4())
         factory = TenantSchemaBootstrapContextFactory(
             schema_prefix="dnk_",
             default_seed_path="seed.module",
@@ -22,8 +23,8 @@ class TenantSchemaBootstrapBoundaryTests(unittest.IsolatedAsyncioTestCase):
 
         context = factory.build(tenant_id=tenant_id)
 
-        self.assertEqual(context.tenant_id, tenant_id)
-        self.assertEqual(context.schema_name, f"dnk_{tenant_id.hex}")
+        self.assertEqual(context.tenant_id, tenant_id.uuid)
+        self.assertEqual(context.schema_name, f"dnk_{tenant_id.uuid.hex}")
         self.assertEqual(context.seed_path, "seed.module")
 
     async def test_adapter_translates_context_to_create_schema_command(self) -> None:
@@ -43,6 +44,8 @@ class TenantSchemaBootstrapBoundaryTests(unittest.IsolatedAsyncioTestCase):
 
         await adapter.bootstrap(context=context)
 
-        self.assertEqual(recorded_command.tenant_id, context.tenant_id)
+        self.assertEqual(
+            recorded_command.tenant_id, EntityIdVO.from_value(context.tenant_id)
+        )
         self.assertEqual(recorded_command.schema_name, context.schema_name)
         self.assertEqual(recorded_command.seed_path, context.seed_path)

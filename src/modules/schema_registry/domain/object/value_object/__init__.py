@@ -7,5 +7,8 @@ from src.modules.schema_registry.domain.object.value_object.object_label import 
 from src.modules.schema_registry.domain.object.value_object.object_name import (
     ObjectNameVO,
 )
+from src.modules.schema_registry.domain.object.value_object.runtime_object_id import (
+    RuntimeObjectIdVO,
+)
 
-__all__ = ["ObjectKind", "ObjectLabelVO", "ObjectNameVO"]
+__all__ = ["ObjectKind", "ObjectLabelVO", "ObjectNameVO", "RuntimeObjectIdVO"]

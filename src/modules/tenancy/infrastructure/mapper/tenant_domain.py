@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from uuid import UUID
-
+from src.modules.shared import EntityIdVO
 from src.modules.tenancy.domain.tenant_domain import (
     TenantDomain,
+    TenantDomainIdVO,
     TenantDomainKind,
     TenantDomainStatus,
     TenantDomainTlsMode,
@@ -18,8 +18,8 @@ from src.modules.tenancy.infrastructure.persistence.tenant_domain import (
 def tenant_domain_to_model(domain: TenantDomain) -> TenantDomainModel:
     """Мапит доменную TenantDomain entity в SQLAlchemy TenantDomainModel."""
     return TenantDomainModel(
-        id=domain.id,
-        tenant_id=domain.tenant_id,
+        id=domain.id.uuid,
+        tenant_id=domain.tenant_id.uuid,
         service_type=domain.service_type,
         kind=domain.kind,
         host=domain.host,
@@ -40,8 +40,8 @@ def tenant_domain_to_model(domain: TenantDomain) -> TenantDomainModel:
 def tenant_domain_model_to_entity(model: TenantDomainModel) -> TenantDomain:
     """Мапит SQLAlchemy TenantDomainModel в доменную TenantDomain entity."""
     return TenantDomain(
-        id=_to_uuid(model.id),
-        tenant_id=_to_uuid(model.tenant_id),
+        id=TenantDomainIdVO.from_value(model.id),
+        tenant_id=EntityIdVO.from_value(model.tenant_id),
         service_type=TenantServiceType(model.service_type),
         kind=TenantDomainKind(model.kind),
         host=model.host,
@@ -57,13 +57,6 @@ def tenant_domain_model_to_entity(model: TenantDomainModel) -> TenantDomain:
         created_at=model.created_at,
         updated_at=model.updated_at,
     )
-
-
-def _to_uuid(value: UUID | str) -> UUID:
-    """Приводит UUID или строку из ORM к UUID."""
-    if isinstance(value, UUID):
-        return value
-    return UUID(value)
 
 
 __all__ = [

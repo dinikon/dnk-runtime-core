@@ -1,6 +1,9 @@
 from src.modules.tenancy.domain.tenant_domain.value_object.tenant_api_auth_mode import (
     TenantApiAuthMode,
 )
+from src.modules.tenancy.domain.tenant_domain.value_object.tenant_domain_id import (
+    TenantDomainIdVO,
+)
 from src.modules.tenancy.domain.tenant_domain.value_object.tenant_domain_kind import (
     TenantDomainKind,
 )
@@ -19,6 +22,7 @@ from src.modules.tenancy.domain.tenant_domain.value_object.tenant_service_type i
 
 __all__ = [
     "TenantApiAuthMode",
+    "TenantDomainIdVO",
     "TenantDomainKind",
     "TenantDomainStatus",
     "TenantDomainTlsMode",

@@ -5,6 +5,9 @@ from typing import Self
 from src.modules.schema_registry.domain.datasource.value_object.connection_dsn import (
     ConnectionDsnVO,
 )
+from src.modules.schema_registry.domain.datasource.value_object.data_source_id import (
+    DataSourceIdVO,
+)
 from src.modules.schema_registry.domain.datasource.value_object.schema_name import (
     SchemaNameVO,
 )
@@ -18,7 +21,7 @@ from src.modules.shared import EntityIdVO
 class DataSourceEntity:
     """Доменная сущность источника данных, привязанного к tenant runtime-схеме."""
 
-    id: EntityIdVO
+    id: DataSourceIdVO
     created_at: datetime
     updated_at: datetime
     tenant_id: EntityIdVO
@@ -31,7 +34,7 @@ class DataSourceEntity:
     def create(
         cls,
         *,
-        id_: EntityIdVO,
+        id_: DataSourceIdVO,
         now: datetime,
         tenant_id: EntityIdVO,
         schema_name: SchemaNameVO,

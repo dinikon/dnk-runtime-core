@@ -9,6 +9,8 @@ from src.modules.identity.application.ports import (
     TenantContextReaderPort,
 )
 from src.modules.identity.domain.user import UserRepositoryProtocol
+from src.modules.identity.domain.user.value_object import UserIdVO
+from src.modules.shared import EntityIdVO
 from src.modules.shared.http.host import normalize_host
 from src.modules.tenancy.domain.tenant_domain import (
     TenantHostNotFoundError,
@@ -39,7 +41,7 @@ class AuthenticateBySessionUseCaseProtocol(Protocol):
         ...
 
 
-class AuthenticateBySessionUseCase(AuthenticateBySessionUseCaseProtocol):
+class AuthenticateBySessionUseCase:
     """Use case восстановления principal из session token."""
 
     def __init__(
@@ -68,6 +70,7 @@ class AuthenticateBySessionUseCase(AuthenticateBySessionUseCaseProtocol):
             tenant_context = await self._tenant_context_reader.get_by_host(host)
         except (TenantHostNotFoundError, TenantLoginUnavailableError):
             return None
+        tenant_id = EntityIdVO.from_value(tenant_context.tenant_id)
 
         session = await self._session_store.get_session(
             tenant_context.tenant_id,
@@ -82,14 +85,16 @@ class AuthenticateBySessionUseCase(AuthenticateBySessionUseCaseProtocol):
         ):
             return None
 
-        user = await self._users_repository.get_by_id(session.user_id)
-        if user is None or user.tenant_id != tenant_context.tenant_id:
+        user = await self._users_repository.get_by_id(
+            UserIdVO.from_value(session.user_id)
+        )
+        if user is None or user.tenant_id != tenant_id:
             return None
         if not user.can_login():
             return None
 
         return SessionPrincipal(
-            user_id=str(user.id),
+            user_id=str(user.id.uuid),
             tenant_id=str(tenant_context.tenant_id),
             session_id=session.session_id,
             roles=(),

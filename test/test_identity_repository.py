@@ -9,7 +9,8 @@ from src.modules.identity.infrastructure.persistence.user_email import UserEmail
 from src.modules.identity.infrastructure.repository.user_repository import (
     SqlAlchemyUserRepository,
 )
-
+from src.modules.identity.domain.user import UserEmailIdVO, UserIdVO
+from src.modules.shared import EntityIdVO
 
 class _ScalarSequenceResult:
     def __init__(self, items):
@@ -84,7 +85,7 @@ class SqlAlchemyUserRepositoryTests(unittest.IsolatedAsyncioTestCase):
             )
         )
 
-        result = await repository.get_by_id(self.user_id)
+        result = await repository.get_by_id(UserIdVO.from_value(self.user_id))
 
         self.assertIsNone(result)
 
@@ -95,12 +96,14 @@ class SqlAlchemyUserRepositoryTests(unittest.IsolatedAsyncioTestCase):
             )
         )
 
-        result = await repository.get_by_id(self.user_id)
+        result = await repository.get_by_id(UserIdVO.from_value(self.user_id))
 
         self.assertIsNotNone(result)
         assert result is not None
-        self.assertEqual(result.id, self.user_model.id)
-        self.assertEqual(result.tenant_id, self.user_model.tenant_id)
+        self.assertEqual(result.id, UserIdVO.from_value(self.user_model.id))
+        self.assertEqual(
+            result.tenant_id, EntityIdVO.from_value(self.user_model.tenant_id)
+        )
         self.assertEqual(result.first_name, "John")
         self.assertEqual(len(result.emails), 1)
         self.assertEqual(result.emails[0].email, "john@example.com")
@@ -117,7 +120,7 @@ class SqlAlchemyUserRepositoryTests(unittest.IsolatedAsyncioTestCase):
         )
 
         result = await repository.get_by_tenant_and_primary_email(
-            self.tenant_id,
+            EntityIdVO.from_value(self.tenant_id),
             "john@example.com",
         )
 
@@ -131,17 +134,21 @@ class SqlAlchemyUserRepositoryTests(unittest.IsolatedAsyncioTestCase):
         )
 
         result = await repository.get_by_tenant_and_primary_email(
-            self.tenant_id,
+            EntityIdVO.from_value(self.tenant_id),
             "john@example.com",
         )
 
         self.assertIsNotNone(result)
         assert result is not None
-        self.assertEqual(result.id, self.user_model.id)
+        self.assertEqual(result.id, UserIdVO.from_value(self.user_model.id))
         self.assertEqual(result.last_name, "Doe")
         self.assertEqual(result.timezone, "Europe/Kyiv")
         self.assertEqual(len(result.emails), 1)
-        self.assertEqual(result.emails[0].user_id, self.user_id)
+        self.assertEqual(result.emails[0].user_id, UserIdVO.from_value(self.user_id))
+        self.assertEqual(
+            result.emails[0].id,
+            UserEmailIdVO.from_value(self.primary_email_model.id),
+        )
         self.assertEqual(result.emails[0].email, "john@example.com")
 
 

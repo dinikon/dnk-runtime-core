@@ -26,7 +26,7 @@ only contacts.
 ## Domain Model
 
 - `ContactEntity`
-    - `id`
+    - `id` as `ContactIdVO`
     - timestamps
     - `ContactNameVO` with last, first and middle name
 
@@ -36,6 +36,8 @@ only contacts.
 - current persistence integrates with shared database layer and authenticated request context
 - HTTP payloads do not accept `tenant_id`; controllers read it from request context and pass it through CRM commands,
   queries, use cases and repository calls
+- internally that tenant scope is `EntityIdVO`; contact ids are `ContactIdVO` and are converted to UUIDs only at
+  HTTP/runtime-data boundaries
 - wiring stays tenant-agnostic and does not bind repositories to a tenant
 
 ## Presentation / Entry Points

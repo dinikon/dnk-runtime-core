@@ -5,12 +5,15 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from src.modules.schema_registry.domain.datasource.entity import DataSourceEntity
+from src.modules.schema_registry.domain.datasource.value_object import DataSourceIdVO
 from src.modules.schema_registry.domain.datasource.value_object.schema_name import (
     SchemaNameVO,
 )
 from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
+from src.modules.schema_registry.domain.field.value_object import RuntimeFieldIdVO
 from src.modules.schema_registry.domain.field.value_object.field_kind import FieldKind
 from src.modules.schema_registry.domain.object.entity import ObjectEntity
+from src.modules.schema_registry.domain.object.value_object import RuntimeObjectIdVO
 from src.modules.schema_registry.domain.object.value_object.object_kind import (
     ObjectKind,
 )
@@ -99,7 +102,7 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(objects), 1)
         self.assertEqual(objects[0].tenant_id, EntityIdVO.from_value(tenant_id))
         self.assertEqual(
-            objects[0].data_source_id, EntityIdVO.from_value(datasource_id)
+            objects[0].data_source_id, DataSourceIdVO.from_value(datasource_id)
         )
         self.assertEqual(objects[0].kind, ObjectKind.STANDARD)
         self.assertEqual(objects[0].fields[0].kind, FieldKind.SYSTEM)
@@ -111,7 +114,7 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
         now = datetime.now(UTC)
 
         datasource = DataSourceEntity.create(
-            id_=EntityIdVO.from_value(datasource_id),
+            id_=DataSourceIdVO.from_value(datasource_id),
             now=now,
             tenant_id=EntityIdVO.from_value(tenant_id),
             schema_name=SchemaNameVO("dnk_test"),
@@ -138,19 +141,19 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
         model = session.added_models[0]
         self.assertIsInstance(model, DataSourceORM)
         assert isinstance(model, DataSourceORM)
-        self.assertEqual(model.id, datasource.id.value)
-        self.assertEqual(model.tenant_id, datasource.tenant_id.value)
+        self.assertEqual(model.id, datasource.id.uuid)
+        self.assertEqual(model.tenant_id, datasource.tenant_id.uuid)
         self.assertEqual(model.data_source_type, datasource.data_source_type.value)
         self.assertEqual(model.schema_name, datasource.schema_name.value)
         self.assertEqual(model.connection_dsn, None)
 
     async def test_replace_all_flushes_objects_before_fields(self) -> None:
         tenant_id = uuid4()
-        datasource_id = EntityIdVO.from_value(uuid4())
+        datasource_id = DataSourceIdVO.from_value(uuid4())
         now = datetime.now(UTC)
 
         object_entity = ObjectEntity.create(
-            id_=EntityIdVO.from_value(uuid4()),
+            id_=RuntimeObjectIdVO.from_value(uuid4()),
             tenant_id=EntityIdVO.from_value(tenant_id),
             data_source_id=datasource_id,
             now=now,
@@ -160,7 +163,7 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
             kind=ObjectKind.CUSTOM,
         )
         object_entity.add_field(
-            field_id=EntityIdVO.from_value(uuid4()),
+            field_id=RuntimeFieldIdVO.from_value(uuid4()),
             now=now,
             field_name="last_name",
             field_type=FieldTypeCatalog().from_seed_type("text"),
@@ -218,16 +221,16 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
         data_source_id = uuid4()
 
         object_entity = ObjectEntity.create(
-            id_=EntityIdVO.from_value(object_id),
+            id_=RuntimeObjectIdVO.from_value(object_id),
             tenant_id=EntityIdVO.from_value(tenant_id),
-            data_source_id=EntityIdVO.from_value(data_source_id),
+            data_source_id=DataSourceIdVO.from_value(data_source_id),
             now=now,
             object_name=ObjectNameVO(singular="contact", plural="contacts"),
             object_label=ObjectLabelVO(singular="Contact", plural="Contacts"),
             description="Tenant contacts.",
         )
         object_entity.add_field(
-            field_id=EntityIdVO.from_value(field_id),
+            field_id=RuntimeFieldIdVO.from_value(field_id),
             now=now,
             field_name="last_name",
             field_type=FieldTypeCatalog().from_seed_type("text"),

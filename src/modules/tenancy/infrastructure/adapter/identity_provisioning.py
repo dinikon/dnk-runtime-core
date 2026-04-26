@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from uuid import UUID
-
 from src.modules.identity.application.user import UserServiceProtocol
+from src.modules.shared import EntityIdVO
 from src.modules.tenancy.application.ports.identity import (
     IdentityProvisioningServiceProtocol,
     ProvisionedTenantAdmin,
@@ -18,7 +17,7 @@ class IdentityProvisioningServiceAdapter(IdentityProvisioningServiceProtocol):
 
     async def create_tenant_admin(
         self,
-        tenant_id: UUID,
+        tenant_id: EntityIdVO,
         first_name: str,
         last_name: str,
         email: str,

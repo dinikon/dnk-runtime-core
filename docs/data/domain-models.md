@@ -2,6 +2,10 @@
 
 This page maps the main business entities that currently appear in the service.
 
+Identifier convention: `EntityIdVO` is the single shared UUID primitive and the base class for concrete ids. Tenant
+scope uses `EntityIdVO` directly; concrete entities expose concrete subclasses such as `UserIdVO`, `ContactIdVO`,
+`ProductIdVO`, `CategoryIdVO`, `DataSourceIdVO`, `RuntimeObjectIdVO` and `RuntimeFieldIdVO`.
+
 ## Tenancy
 
 ### `Tenant`
@@ -9,7 +13,7 @@ This page maps the main business entities that currently appear in the service.
 - Module owner: `tenancy`
 - Business meaning: tenant account / workspace identity
 - Key fields:
-    - `id`
+    - `id` as `EntityIdVO`
     - `name`
     - `external_id`
     - `status`
@@ -21,7 +25,8 @@ This page maps the main business entities that currently appear in the service.
 - Module owner: `tenancy`
 - Business meaning: tenant host binding for a specific service surface
 - Key fields:
-    - `tenant_id`
+    - `id` as `TenantDomainIdVO`
+    - `tenant_id` as `EntityIdVO`
     - `service_type`
     - `kind`
     - `host`
@@ -39,8 +44,8 @@ This page maps the main business entities that currently appear in the service.
 - Module owner: `identity`
 - Business meaning: tenant-scoped console user
 - Key fields:
-    - `id`
-    - `tenant_id`
+    - `id` as `UserIdVO`
+    - `tenant_id` as `EntityIdVO`
     - `status`
     - name fields
     - locale/theme/timezone
@@ -52,7 +57,8 @@ This page maps the main business entities that currently appear in the service.
 - Module owner: `identity`
 - Business meaning: user email identity and verification record
 - Key fields:
-    - `user_id`
+    - `id` as `UserEmailIdVO`
+    - `user_id` as `UserIdVO`
     - `email`
     - `is_primary`
     - `is_verified`
@@ -65,7 +71,7 @@ This page maps the main business entities that currently appear in the service.
 - Module owner: `crm`
 - Business meaning: CRM contact record
 - Key fields:
-    - `id`
+    - `id` as `ContactIdVO`
     - timestamps
     - `contact_name` with last/first/middle name
 
@@ -76,22 +82,22 @@ This page maps the main business entities that currently appear in the service.
 - Module owner: `inventory`
 - Business meaning: tenant-scoped physical good that can be sold
 - Key fields:
-    - `id`
+    - `id` as `ProductIdVO`
     - timestamps
     - `sku`
     - `product_name`
     - `description`
-    - `category_id`
+    - `category_id` as `CategoryIdVO`
 
 ### `CategoryEntity`
 
 - Module owner: `inventory`
 - Business meaning: product category node in a tenant category tree
 - Key fields:
-    - `id`
+    - `id` as `CategoryIdVO`
     - timestamps
     - `name`
-    - `parent_category_id`
+    - `parent_category_id` as `CategoryIdVO`
 
 ## Schema Registry
 
@@ -100,8 +106,8 @@ This page maps the main business entities that currently appear in the service.
 - Module owner: `schema_registry`
 - Business meaning: tenant runtime data source metadata
 - Key fields:
-    - `id`
-    - `tenant_id`
+    - `id` as `DataSourceIdVO`
+    - `tenant_id` as `EntityIdVO`
     - `data_source_type`
     - `schema_name`
     - `connection_dsn`
@@ -112,9 +118,9 @@ This page maps the main business entities that currently appear in the service.
 - Module owner: `schema_registry`
 - Business meaning: runtime object metadata inside a tenant schema
 - Key fields:
-    - `id`
-    - `tenant_id`
-    - `data_source_id`
+    - `id` as `RuntimeObjectIdVO`
+    - `tenant_id` as `EntityIdVO`
+    - `data_source_id` as `DataSourceIdVO`
     - `object_name`
     - `object_label`
     - `description`
@@ -125,8 +131,8 @@ This page maps the main business entities that currently appear in the service.
 - Module owner: `schema_registry`
 - Business meaning: metadata for one runtime field inside one object
 - Key fields:
-    - `id`
-    - `object_id`
+    - `id` as `RuntimeFieldIdVO`
+    - `object_id` as `RuntimeObjectIdVO`
     - `field_name`
     - `field_type`
     - `label`

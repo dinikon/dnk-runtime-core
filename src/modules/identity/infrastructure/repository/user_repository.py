@@ -5,10 +5,16 @@ from uuid import UUID
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.identity.domain.user import User, UserEmail, UserRepositoryProtocol
+from src.modules.identity.domain.user import (
+    User,
+    UserEmail,
+    UserEmailIdVO,
+    UserIdVO,
+    UserRepositoryProtocol,
+)
 from src.modules.identity.infrastructure.persistence.user import UserModel
 from src.modules.identity.infrastructure.persistence.user_email import UserEmailModel
-
+from src.modules.shared import EntityIdVO
 
 class SqlAlchemyUserRepository(UserRepositoryProtocol):
     """SQLAlchemy-репозиторий пользователей и email-адресов identity."""
@@ -21,8 +27,8 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
         """Добавляет user model и все связанные email models."""
         self._session.add(
             UserModel(
-                id=user.id,
-                tenant_id=user.tenant_id,
+                id=user.id.uuid,
+                tenant_id=user.tenant_id.uuid,
                 status=user.status,
                 last_name=user.last_name,
                 first_name=user.first_name,
@@ -42,8 +48,8 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
         for email in user.emails:
             self._session.add(
                 UserEmailModel(
-                    id=email.id,
-                    user_id=email.user_id,
+                    id=email.id.uuid,
+                    user_id=email.user_id.uuid,
                     email=email.email,
                     is_primary=email.is_primary,
                     is_verified=email.is_verified,
@@ -54,12 +60,12 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
             )
         await self._session.flush()
 
-    async def get_by_id(self, user_id: UUID) -> User | None:
+    async def get_by_id(self, user_id: UserIdVO) -> User | None:
         """Ищет пользователя по id и подгружает его email-адреса."""
 
         user_model: UserModel | None = (
             await self._session.scalars(
-                select(UserModel).where(UserModel.id == user_id)
+                select(UserModel).where(UserModel.id == user_id.uuid)
             )
         ).one_or_none()
 
@@ -69,14 +75,14 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
         email_models: list[UserEmailModel] = list(
             (
                 await self._session.scalars(
-                    select(UserEmailModel).where(UserEmailModel.user_id == user_id)
+                    select(UserEmailModel).where(UserEmailModel.user_id == user_id.uuid)
                 )
             ).all()
         )
 
         return User(
-            id=user_model.id,
-            tenant_id=user_model.tenant_id,
+            id=UserIdVO.from_value(user_model.id),
+            tenant_id=EntityIdVO.from_value(user_model.tenant_id),
             status=user_model.status,
             last_name=user_model.last_name,
             first_name=user_model.first_name,
@@ -93,8 +99,8 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
             updated_at=user_model.updated_at,
             emails=[
                 UserEmail(
-                    id=email_model.id,
-                    user_id=email_model.user_id,
+                    id=UserEmailIdVO.from_value(email_model.id),
+                    user_id=UserIdVO.from_value(email_model.user_id),
                     email=email_model.email,
                     is_primary=email_model.is_primary,
                     is_verified=email_model.is_verified,
@@ -108,7 +114,7 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
 
     async def get_by_tenant_and_primary_email(
         self,
-        tenant_id: UUID,
+        tenant_id: EntityIdVO,
         email: str,
     ) -> User | None:
         """Ищет пользователя tenant по primary email и подгружает emails."""
@@ -116,7 +122,7 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
             await self._session.scalars(
                 select(UserModel)
                 .join(UserEmailModel, UserEmailModel.user_id == UserModel.id)
-                .where(UserModel.tenant_id == tenant_id)
+                .where(UserModel.tenant_id == tenant_id.uuid)
                 .where(UserEmailModel.email == email)
                 .where(UserEmailModel.is_primary.is_(True))
                 .where(UserEmailModel.is_deleted.is_(False))
@@ -137,8 +143,8 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
         )
 
         return User(
-            id=user_model.id,
-            tenant_id=user_model.tenant_id,
+            id=UserIdVO.from_value(user_model.id),
+            tenant_id=EntityIdVO.from_value(user_model.tenant_id),
             status=user_model.status,
             last_name=user_model.last_name,
             first_name=user_model.first_name,
@@ -155,8 +161,8 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
             updated_at=user_model.updated_at,
             emails=[
                 UserEmail(
-                    id=email_model.id,
-                    user_id=email_model.user_id,
+                    id=UserEmailIdVO.from_value(email_model.id),
+                    user_id=UserIdVO.from_value(email_model.user_id),
                     email=email_model.email,
                     is_primary=email_model.is_primary,
                     is_verified=email_model.is_verified,
@@ -172,7 +178,7 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
         """Обновляет profile-поля пользователя в ORM-модели."""
         await self._session.execute(
             update(UserModel)
-            .where(UserModel.id == user.id)
+            .where(UserModel.id == user.id.uuid)
             .values(
                 last_name=user.last_name,
                 first_name=user.first_name,
@@ -185,18 +191,18 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
         )
         await self._session.flush()
 
-    async def mark_email_verified(self, user_email_id: UUID) -> None:
+    async def mark_email_verified(self, user_email_id: UserEmailIdVO) -> None:
         """Помечает email как verified в ORM-модели."""
         await self._session.execute(
             update(UserEmailModel)
-            .where(UserEmailModel.id == user_email_id)
+            .where(UserEmailModel.id == user_email_id.uuid)
             .values(is_verified=True)
         )
         await self._session.flush()
 
     async def exists_by_tenant_and_email(
         self,
-        tenant_id: UUID,
+        tenant_id: EntityIdVO,
         email: str,
     ) -> bool:
         """Проверяет существование не удаленного email в tenant."""
@@ -204,7 +210,7 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
             await self._session.scalars(
                 select(UserEmailModel.id)
                 .join(UserModel, UserModel.id == UserEmailModel.user_id)
-                .where(UserModel.tenant_id == tenant_id)
+                .where(UserModel.tenant_id == tenant_id.uuid)
                 .where(UserEmailModel.email == email)
                 .where(UserEmailModel.is_deleted.is_(False))
                 .limit(1)
