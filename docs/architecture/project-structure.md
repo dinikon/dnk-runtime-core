@@ -35,6 +35,7 @@ src/modules/
 ├── identity/
 ├── runtime_data/
 ├── crm/
+├── inventory/
 ├── schema_registry/
 └── shared/
 ```

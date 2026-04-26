@@ -23,10 +23,15 @@
     - tenant-scoped доступ к runtime-таблицам и данным
 5. `crm`
     - CRUD операций над `contact` поверх runtime data
+6. `inventory`
+    - CRUD операций над товарами и категориями поверх runtime data
 
 Ключевая бизнес-идея приложения:
 
 - tenant всегда определяется по `host`;
+- клиентские runtime-data модули (`crm`, `inventory`) не принимают `tenant_id` от клиента в payload/query/path;
+- контроллер берет `tenant_id` из request context и прокидывает его через command/query DTO, use case, service и
+  repository method API; wiring-файлы tenant не резолвят и не биндуют;
 - `tenancy` владеет `Tenant` и `TenantDomain`;
 - `identity` владеет `User` и `UserEmail`;
 - `shared` хранит только технические cross-module механизмы;

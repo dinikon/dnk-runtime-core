@@ -69,6 +69,30 @@ This page maps the main business entities that currently appear in the service.
     - timestamps
     - `contact_name` with last/first/middle name
 
+## Inventory
+
+### `ProductEntity`
+
+- Module owner: `inventory`
+- Business meaning: tenant-scoped physical good that can be sold
+- Key fields:
+    - `id`
+    - timestamps
+    - `sku`
+    - `product_name`
+    - `description`
+    - `category_id`
+
+### `CategoryEntity`
+
+- Module owner: `inventory`
+- Business meaning: product category node in a tenant category tree
+- Key fields:
+    - `id`
+    - timestamps
+    - `name`
+    - `parent_category_id`
+
 ## Schema Registry
 
 ### `DataSourceEntity`
@@ -130,6 +154,7 @@ This page maps the main business entities that currently appear in the service.
 - [Tenancy module](../modules/tenancy.md)
 - [Identity module](../modules/identity.md)
 - [CRM module](../modules/crm.md)
+- [Inventory module](../modules/inventory.md)
 - [Schema Registry module](../modules/schema-registry.md)
 
 ## Source Of Truth
@@ -139,5 +164,7 @@ This page maps the main business entities that currently appear in the service.
 - `src/modules/identity/domain/user/entity.py`
 - `src/modules/identity/domain/auth/error.py`
 - `src/modules/crm/domain/contact/entity.py`
+- `src/modules/inventory/domain/product/entity.py`
+- `src/modules/inventory/domain/category/entity.py`
 - `src/modules/schema_registry/domain/datasource/entity.py`
 - `src/modules/schema_registry/domain/object/entity.py`

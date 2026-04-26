@@ -1,0 +1,1 @@
+"""Category application package."""

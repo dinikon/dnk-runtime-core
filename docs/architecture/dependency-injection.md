@@ -13,6 +13,8 @@ The project uses explicit composition functions instead of a large global contai
 - FastAPI controllers depend on typed aliases like `CreateTenantUseCaseDep` or `AuthenticatedRequestContextDep`.
 - These aliases are built from `Depends(...)` functions inside module-specific `presentation/depends/*`.
 - Repositories and adapters are assembled from the same request-scoped `uow.session`.
+- Client-data module wiring stays tenant-agnostic: it assembles repositories/gateways only. Controllers read tenant from
+  the authenticated request context and pass `tenant_id` through command/query DTOs and use cases.
 - In `tenancy`, DI now wires use cases from `application/tenant/use_case/` and
   `application/tenant_domain/use_case/` while keeping the public dependency
   aliases stable for the rest of the codebase.

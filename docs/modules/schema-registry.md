@@ -56,6 +56,7 @@ fields. It is responsible for bootstrap from seed and schema diff against existi
 ## Seed And Metadata Notes
 
 - default seed module is `src.modules.schema_registry.seed.schema_seed`
+- default seed declares CRM contacts plus inventory products and product categories
 - test seed modules exist for diff experimentation
 - seed loading returns a validated and normalized schema spec before planning
 - `many_to_one` relations materialize as foreign keys

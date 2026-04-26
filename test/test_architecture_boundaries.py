@@ -160,3 +160,17 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                 any(pattern in content for pattern in forbidden_patterns),
                 msg=f"{path} still uses removed email wiring pattern",
             )
+
+    def test_client_data_wiring_does_not_resolve_tenant_id(self) -> None:
+        paths = [
+            PROJECT_ROOT / "src/modules/crm/presentation/depends/infrastructure.py",
+            PROJECT_ROOT
+            / "src/modules/inventory/presentation/depends/infrastructure.py",
+        ]
+        for path in paths:
+            content = path.read_text(encoding="utf-8")
+            self.assertNotIn(
+                "tenant_id",
+                content,
+                msg=f"{path} still resolves tenant_id in wiring",
+            )

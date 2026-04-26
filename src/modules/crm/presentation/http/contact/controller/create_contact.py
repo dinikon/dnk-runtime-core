@@ -46,7 +46,7 @@ async def create_contact(
     """HTTP endpoint создания контакта текущего tenant.
 
     Endpoint берет tenant_id из principal, формирует application command и
-    переводит доменные/runtime ошибки в соответствующие HTTP status codes.
+    переводит доменные/runtime ошибки в HTTP status codes.
     """
 
     tenant_id_raw = context.principal.tenant_id if context.principal else None

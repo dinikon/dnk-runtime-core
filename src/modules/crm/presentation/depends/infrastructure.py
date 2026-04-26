@@ -4,11 +4,11 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from src.modules.crm.application.contact.query.repository import (
-    ContactQueryRepositoryProtocol,
-)
 from src.modules.crm.application.contact.query.describe_contact_fields_repository import (
     ContactFieldsDescriptionRepositoryProtocol,
+)
+from src.modules.crm.application.contact.query.repository import (
+    ContactQueryRepositoryProtocol,
 )
 from src.modules.crm.domain.contact.repository import (
     ContactCommandRepositoryProtocol,
@@ -103,7 +103,6 @@ ContactFieldsDescriptionRepositoryDep = Annotated[
     ContactFieldsDescriptionRepositoryProtocol,
     Depends(get_contact_fields_description_repository),
 ]
-
 
 __all__ = [
     "ContactCommandRepositoryDep",

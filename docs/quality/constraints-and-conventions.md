@@ -29,6 +29,11 @@
 - HTTP business routes use request context from shared authentication dependency.
 - Console auth is host-aware and session-cookie based.
 - Control-plane protected routes use bearer API key validation.
+- Client data routes such as `crm` and `inventory` must not accept `tenant_id` from public payloads, query params or
+  path
+  params. Controllers read tenant from the authenticated request context, put it into application command/query DTOs and
+  pass it through use cases, services and repository method calls where runtime metadata/data access needs it. Wiring
+  files must stay tenant-agnostic and must not resolve or bind repositories to a tenant.
 
 ## Schema Registry Rules
 

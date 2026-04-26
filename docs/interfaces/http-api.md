@@ -20,6 +20,23 @@ All public HTTP routes are mounted under `/api`.
 | `PUT`    | `/api/crm/contacts/{contact_id}` | `crm`  | `UpdateContactRequestSchema`   | `ContactResponseSchema`      | authenticated request context | `401`, `404`, `422` |
 | `DELETE` | `/api/crm/contacts/{contact_id}` | `crm`  | path `contact_id`              | empty `204`                  | authenticated request context | `401`, `404`, `422` |
 
+## Inventory
+
+| Method   | Path                                      | Module      | Request / Params                                 | Response                       | Auth                          | Main errors                |
+|----------|-------------------------------------------|-------------|--------------------------------------------------|--------------------------------|-------------------------------|----------------------------|
+| `POST`   | `/api/inventory/products`                 | `inventory` | `CreateProductRequestSchema`                     | `ProductResponseSchema`        | authenticated request context | `401`, `404`, `409`, `422` |
+| `POST`   | `/api/inventory/products/fields`          | `inventory` | none                                             | `ProductFieldsResponseSchema`  | authenticated request context | `401`, `409`, `422`        |
+| `GET`    | `/api/inventory/products`                 | `inventory` | `limit`, `offset`, optional `category_id`        | `ListProductsResponseSchema`   | authenticated request context | `401`, `409`, `422`        |
+| `GET`    | `/api/inventory/products/{product_id}`    | `inventory` | path `product_id`                                | `ProductResponseSchema`        | authenticated request context | `401`, `404`, `409`, `422` |
+| `PUT`    | `/api/inventory/products/{product_id}`    | `inventory` | `UpdateProductRequestSchema`                     | `ProductResponseSchema`        | authenticated request context | `401`, `404`, `409`, `422` |
+| `DELETE` | `/api/inventory/products/{product_id}`    | `inventory` | path `product_id`                                | empty `204`                    | authenticated request context | `401`, `404`, `409`, `422` |
+| `POST`   | `/api/inventory/categories`               | `inventory` | `CreateCategoryRequestSchema`                    | `CategoryResponseSchema`       | authenticated request context | `401`, `404`, `409`, `422` |
+| `POST`   | `/api/inventory/categories/fields`        | `inventory` | none                                             | `CategoryFieldsResponseSchema` | authenticated request context | `401`, `409`, `422`        |
+| `GET`    | `/api/inventory/categories`               | `inventory` | `limit`, `offset`, optional `parent_category_id` | `ListCategoriesResponseSchema` | authenticated request context | `401`, `409`, `422`        |
+| `GET`    | `/api/inventory/categories/{category_id}` | `inventory` | path `category_id`                               | `CategoryResponseSchema`       | authenticated request context | `401`, `404`, `409`, `422` |
+| `PUT`    | `/api/inventory/categories/{category_id}` | `inventory` | `UpdateCategoryRequestSchema`                    | `CategoryResponseSchema`       | authenticated request context | `401`, `404`, `409`, `422` |
+| `DELETE` | `/api/inventory/categories/{category_id}` | `inventory` | path `category_id`                               | empty `204`                    | authenticated request context | `401`, `404`, `409`, `422` |
+
 ## Identity / Console Auth
 
 Mounted under `/api/console/auth`.
@@ -37,6 +54,8 @@ Mounted under `/api/console/auth`.
 - Session cookie name comes from auth config and defaults to `dnk_session`.
 - Identity routes are tenant-host aware, so host extraction is part of the authentication flow.
 - Identity controllers map domain/tenancy errors directly inside controller files.
+- CRM and inventory client-data routes do not accept `tenant_id` from the client. Controllers derive it from the request
+  domain/auth context and pass it internally through commands/queries and use cases.
 - `PATCH /api/console/auth/me` requires `interface_theme` and does not accept `null`.
 - `GET /api/console/auth/me` and `PATCH /api/console/auth/me` always return `interface_theme` as a string.
 - `schema_registry` currently has no public HTTP API surface.
@@ -55,3 +74,5 @@ Mounted under `/api/console/auth`.
 - `src/modules/tenancy/presentation/http/console_tenant/controller/`
 - `src/modules/identity/presentation/http/console_auth/controller/`
 - `src/modules/crm/presentation/http/contact/controller/`
+- `src/modules/inventory/presentation/http/product/controller/`
+- `src/modules/inventory/presentation/http/category/controller/`

@@ -68,6 +68,19 @@ This page maps current tests to the behaviors they protect.
 - `test_crm_*`
     - CRM endpoints and domain/use case behavior around contacts
 
+## Inventory
+
+- `test/test_inventory_schema_seed.py`
+    - default seed inventory objects, indexes and foreign keys
+- `test/test_inventory_domain_use_cases.py`
+    - product/category value objects and category tree validation
+- `test/test_inventory_runtime_repositories.py`
+    - runtime repository mapping and filter payloads
+- `test/test_inventory_controller_errors.py`
+    - controller error mapping and product category filtering
+- `test/test_inventory_http_router.py`
+    - public inventory route registration
+
 ## Legacy / Historical Naming
 
 - some old test names still use `runtime_schema_*`
@@ -85,6 +98,7 @@ This page maps current tests to the behaviors they protect.
 - [Constraints and conventions](constraints-and-conventions.md)
 - [Schema Registry module](../modules/schema-registry.md)
 - [Tenancy module](../modules/tenancy.md)
+- [Inventory module](../modules/inventory.md)
 
 ## Source Of Truth
 
