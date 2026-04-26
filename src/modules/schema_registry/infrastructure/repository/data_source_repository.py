@@ -24,6 +24,7 @@ from src.modules.schema_registry.infrastructure.persistence.data_source import (
 )
 from src.modules.shared import EntityIdVO
 
+
 class SqlAlchemyDataSourceRepository(DataSourceRepositoryProtocol):
     """SQLAlchemy-репозиторий datasource metadata."""
 

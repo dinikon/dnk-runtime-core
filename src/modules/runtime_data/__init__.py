@@ -1,5 +1,7 @@
 from src.modules.runtime_data.application import (
     FetchPlan,
+    FilterExpression,
+    FilterGroupSpec,
     FilterSpec,
     PageSpec,
     RuntimeCommandGateway,
@@ -24,6 +26,8 @@ from src.modules.runtime_data.infrastructure import (
 
 __all__ = [
     "FetchPlan",
+    "FilterExpression",
+    "FilterGroupSpec",
     "FilterSpec",
     "NoopRuntimeRelationLoader",
     "PageSpec",

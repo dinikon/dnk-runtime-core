@@ -42,3 +42,7 @@ class EntityIdVO:
     def uuid(self) -> UUID:
         """Возвращает UUID-значение идентификатора."""
         return self.value
+
+
+class TenantIdVO(EntityIdVO):
+    """Value object идентификатора tenant/workspace scope."""

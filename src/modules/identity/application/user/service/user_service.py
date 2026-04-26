@@ -10,6 +10,7 @@ from src.modules.identity.domain.user import (
 )
 from src.modules.shared import EntityIdVO
 
+
 class UserServiceProtocol(Protocol):
     """Порт provisioning-сервиса пользователей identity."""
 

@@ -142,6 +142,16 @@ scope uses `EntityIdVO` directly; concrete entities expose concrete subclasses s
     - `options`
     - `settings`
 
+## Custom Object
+
+`custom_object` does not define a separate persistence entity for object metadata. It manages:
+
+- `ObjectEntity` rows with `kind=custom`
+- `FieldEntity` rows with `kind=custom`
+- runtime record rows in tenant physical tables
+
+Each custom object has system fields `id`, `created_at` and `updated_at`.
+
 ## Shared Kernel Concepts
 
 ### `Principal`

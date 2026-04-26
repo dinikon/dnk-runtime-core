@@ -34,6 +34,7 @@ src/modules/
 ├── tenancy/
 ├── identity/
 ├── runtime_data/
+├── custom_object/
 ├── crm/
 ├── inventory/
 ├── schema_registry/

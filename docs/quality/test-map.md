@@ -85,6 +85,21 @@ This page maps current tests to the behaviors they protect.
 - `test/test_inventory_http_router.py`
     - public inventory route registration
 
+## Custom Object
+
+- `test/test_custom_object_schema_store.py`
+    - custom object metadata creation and targeted DDL planning
+    - unsafe required field addition rejection
+- `test/test_custom_object_records_use_cases.py`
+    - custom object record CRUD/list orchestration
+    - system field write protection
+- `test/test_custom_object_controller_errors.py`
+    - controller error mapping and Filter/Sort parsing
+- `test/test_custom_object_http_router.py`
+    - public custom object route registration
+- `test/test_runtime_data_postgres_gateway.py`
+    - nested AND/OR runtime filter SQL generation
+
 ## Legacy / Historical Naming
 
 - some old test names still use `runtime_schema_*`

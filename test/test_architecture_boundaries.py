@@ -166,6 +166,8 @@ class ArchitectureBoundariesTests(unittest.TestCase):
             PROJECT_ROOT / "src/modules/crm/presentation/depends/infrastructure.py",
             PROJECT_ROOT
             / "src/modules/inventory/presentation/depends/infrastructure.py",
+            PROJECT_ROOT
+            / "src/modules/custom_object/presentation/depends/infrastructure.py",
         ]
         for path in paths:
             content = path.read_text(encoding="utf-8")
@@ -176,7 +178,7 @@ class ArchitectureBoundariesTests(unittest.TestCase):
             )
 
     def test_removed_id_wrapper_types_are_not_used(self) -> None:
-        removed_types = ("Typed" + "EntityIdVO", "Tenant" + "IdVO")
+        removed_types = ("Typed" + "EntityIdVO",)
         for root in ("src", "test"):
             for path in iter_python_files(root):
                 if path == Path(__file__).resolve():

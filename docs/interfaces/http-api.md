@@ -37,6 +37,25 @@ All public HTTP routes are mounted under `/api`.
 | `PUT`    | `/api/inventory/categories/{category_id}` | `inventory` | `UpdateCategoryRequestSchema`                    | `CategoryResponseSchema`       | authenticated request context | `401`, `404`, `409`, `422` |
 | `DELETE` | `/api/inventory/categories/{category_id}` | `inventory` | path `category_id`                               | empty `204`                    | authenticated request context | `401`, `404`, `409`, `422` |
 
+## Custom Object
+
+All custom object read routes use `POST` bodies instead of `GET`.
+
+| Method   | Path                                 | Module          | Request / Params                     | Response                          | Auth                          | Main errors                |
+|----------|--------------------------------------|-----------------|--------------------------------------|-----------------------------------|-------------------------------|----------------------------|
+| `POST`   | `/api/custom-objects/list`           | `custom_object` | none                                 | `ListCustomObjectsResponseSchema` | authenticated request context | `401`, `409`, `422`        |
+| `POST`   | `/api/custom-objects/create`         | `custom_object` | `CreateCustomObjectRequestSchema`    | `CustomObjectResponseSchema`      | authenticated request context | `401`, `409`, `422`        |
+| `DELETE` | `/api/custom-objects/delete`         | `custom_object` | body `object_id`                     | empty `204`                       | authenticated request context | `401`, `404`, `409`, `422` |
+| `POST`   | `/api/custom-objects/schema`         | `custom_object` | body `object_id`                     | `CustomObjectResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
+| `POST`   | `/api/custom-objects/fields/create`  | `custom_object` | `CreateCustomFieldRequestSchema`     | `CustomObjectResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
+| `DELETE` | `/api/custom-objects/fields/delete`  | `custom_object` | body `object_id`, `field_id`         | `CustomObjectResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
+| `POST`   | `/api/custom-objects/records/create` | `custom_object` | body `object_id`, `values`           | `CustomRecordResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
+| `POST`   | `/api/custom-objects/records/detail` | `custom_object` | body `object_id`, `row_id`           | `CustomRecordResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
+| `POST`   | `/api/custom-objects/records/list`   | `custom_object` | body `object_id`, `filter`, `sort`   | `ListCustomRecordsResponseSchema` | authenticated request context | `401`, `404`, `409`, `422` |
+| `PATCH`  | `/api/custom-objects/records/update` | `custom_object` | body `object_id`, `row_id`, `values` | `CustomRecordResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
+| `PUT`    | `/api/custom-objects/records/update` | `custom_object` | body `object_id`, `row_id`, `values` | `CustomRecordResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
+| `DELETE` | `/api/custom-objects/records/delete` | `custom_object` | body `object_id`, `row_id`           | empty `204`                       | authenticated request context | `401`, `404`, `409`, `422` |
+
 ## Identity / Console Auth
 
 Mounted under `/api/console/auth`.
@@ -56,6 +75,7 @@ Mounted under `/api/console/auth`.
 - Identity controllers map domain/tenancy errors directly inside controller files.
 - CRM and inventory client-data routes do not accept `tenant_id` from the client. Controllers derive it from the request
   domain/auth context and pass it internally through commands/queries and use cases.
+- `custom_object` routes follow the same tenant rule and accept runtime `object_id` / `row_id` in request bodies.
 - `PATCH /api/console/auth/me` requires `interface_theme` and does not accept `null`.
 - `GET /api/console/auth/me` and `PATCH /api/console/auth/me` always return `interface_theme` as a string.
 - `schema_registry` currently has no public HTTP API surface.

@@ -14,6 +14,7 @@ from src.modules.schema_registry.application.use_case.create_schema_use_case imp
 from src.modules.schema_registry.domain.seed.schema_seed import SchemaSeed
 from src.modules.shared import EntityIdVO
 
+
 @dataclass(frozen=True, slots=True)
 class CallRecord:
     name: str
