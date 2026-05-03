@@ -5,10 +5,7 @@ from fastapi import APIRouter, HTTPException, status
 from src.modules.schema_registry.application.config.object.query import (
     CustomObjectByIdQuery,
 )
-from src.modules.schema_registry.domain.error import (
-    ObjectNotFoundError,
-    SchemaRegistryError,
-)
+from src.modules.schema_registry.domain.error import ObjectNotFoundError
 from src.modules.schema_registry.presentation.depends.config import (
     DescribeCustomObjectUseCaseDep,
 )
@@ -30,7 +27,7 @@ from src.modules.schema_registry.domain.error import (
 )
 from src.modules.schema_registry.domain.object.value_object import RuntimeObjectIdVO
 from src.modules.shared import EntityIdVO
-from src.modules.shared.depends import AuthenticatedRequestContextDep
+from src.modules.shared.depends.authentication import AuthenticatedRequestContextDep
 from src.modules.shared.domain.errors import DomainError
 
 router = APIRouter(prefix="/config/objects", tags=["config"])
@@ -44,8 +41,8 @@ async def describe_custom_object(
 ) -> CustomObjectResponseSchema:
     """HTTP endpoint схемы custom object."""
 
-    tenant_id_raw = context.principal.tenant_id if context.principal else None
-    if tenant_id_raw is None:
+    principal = context.principal
+    if principal is None or principal.tenant_id is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Unauthorized.",
@@ -54,7 +51,7 @@ async def describe_custom_object(
     try:
         result = await use_case(
             CustomObjectByIdQuery(
-                tenant_id=EntityIdVO.from_value(tenant_id_raw),
+                tenant_id=EntityIdVO.from_value(principal.tenant_id),
                 object_id=RuntimeObjectIdVO.from_value(payload.object_id),
             )
         )

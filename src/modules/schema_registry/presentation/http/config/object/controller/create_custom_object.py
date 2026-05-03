@@ -8,7 +8,6 @@ from src.modules.schema_registry.application.config.field.command import (
 from src.modules.schema_registry.application.config.object.command import (
     CreateCustomObjectCommand,
 )
-from src.modules.schema_registry.domain.error import SchemaRegistryError
 from src.modules.schema_registry.presentation.depends.config import (
     CreateCustomObjectUseCaseDep,
 )
@@ -29,7 +28,7 @@ from src.modules.schema_registry.domain.error import (
     UnsupportedSchemaBackendError,
 )
 from src.modules.shared import EntityIdVO
-from src.modules.shared.depends import AuthenticatedRequestContextDep
+from src.modules.shared.depends.authentication import AuthenticatedRequestContextDep
 from src.modules.shared.domain.errors import DomainError
 
 router = APIRouter(prefix="/config/objects", tags=["config"])
@@ -47,15 +46,15 @@ async def create_custom_object(
 ) -> CustomObjectResponseSchema:
     """HTTP endpoint создания custom object."""
 
-    tenant_id_raw = context.principal.tenant_id if context.principal else None
-    if tenant_id_raw is None:
+    principal = context.principal
+    if principal is None or principal.tenant_id is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Unauthorized.",
         )
 
     command = CreateCustomObjectCommand(
-        tenant_id=EntityIdVO.from_value(tenant_id_raw),
+        tenant_id=EntityIdVO.from_value(principal.tenant_id),
         singular_name=payload.singular_name,
         plural_name=payload.plural_name,
         singular_label=payload.singular_label,
@@ -69,8 +68,8 @@ async def create_custom_object(
                 description=field.description,
                 is_nullable=field.is_nullable,
                 default_value=field.default_value,
-                options=dict(field.options),
-                settings=dict(field.settings),
+                options=field.options,
+                settings=field.settings,
             )
             for field in payload.fields
         ),

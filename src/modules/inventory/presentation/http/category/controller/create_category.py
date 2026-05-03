@@ -45,15 +45,15 @@ async def create_category(
 ) -> CategoryResponseSchema:
     """HTTP endpoint создания категории текущего tenant."""
 
-    tenant_id_raw = context.principal.tenant_id if context.principal else None
-    if tenant_id_raw is None:
+    principal = context.principal
+    if principal is None or principal.tenant_id is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Unauthorized.",
         )
 
     command = CreateCategoryCommand(
-        tenant_id=EntityIdVO.from_value(tenant_id_raw),
+        tenant_id=EntityIdVO.from_value(principal.tenant_id),
         category_id=CategoryIdVO.from_value(uuid6.uuid7()),
         name=payload.name,
         parent_category_id=(
