@@ -87,9 +87,6 @@ This page maps current tests to the behaviors they protect.
 
 ## Custom Object
 
-- `test/test_custom_object_schema_store.py`
-    - custom object metadata creation and targeted DDL planning
-    - unsafe required field addition rejection
 - `test/test_custom_object_records_use_cases.py`
     - custom object record CRUD/list orchestration
     - system field write protection
@@ -99,6 +96,15 @@ This page maps current tests to the behaviors they protect.
     - public custom object route registration
 - `test/test_runtime_data_postgres_gateway.py`
     - nested AND/OR runtime filter SQL generation
+
+## Schema Config
+
+- `test/test_schema_config_repository.py`
+    - object metadata creation and targeted DDL planning
+    - object kind policy for system/view/standard/custom
+    - field kind policy and unsafe required field addition rejection
+- `test/test_schema_config_http_router.py`
+    - public `/api/config/objects/...` route registration
 
 ## Legacy / Historical Naming
 

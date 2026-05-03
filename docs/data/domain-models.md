@@ -144,11 +144,10 @@ scope uses `EntityIdVO` directly; concrete entities expose concrete subclasses s
 
 ## Custom Object
 
-`custom_object` does not define a separate persistence entity for object metadata. It manages:
+`custom_object` does not define a separate persistence entity for object metadata. It manages only runtime record rows
+for descriptors whose `ObjectEntity.kind` is `custom`.
 
-- `ObjectEntity` rows with `kind=custom`
-- `FieldEntity` rows with `kind=custom`
-- runtime record rows in tenant physical tables
+Schema metadata and DDL for custom objects and custom fields are managed by `schema_registry` config APIs.
 
 Each custom object has system fields `id`, `created_at` and `updated_at`.
 

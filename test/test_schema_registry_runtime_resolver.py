@@ -110,6 +110,60 @@ class SchemaRegistryRuntimeObjectResolverTests(unittest.IsolatedAsyncioTestCase)
             [field.kind for field in descriptor.fields], ["system", "standard"]
         )
 
+    async def test_resolve_by_id_returns_descriptor_from_metadata(self) -> None:
+        now = UtcClock().now()
+        tenant_id = EntityIdVO.from_value(uuid4())
+        data_source = DataSourceEntity.create(
+            id_=DataSourceIdVO.from_value(uuid4()),
+            now=now,
+            tenant_id=tenant_id,
+            schema_name=SchemaNameVO("dnk_test"),
+        )
+        object_entity = ObjectEntity.create(
+            id_=RuntimeObjectIdVO.from_value(uuid4()),
+            tenant_id=tenant_id,
+            data_source_id=data_source.id,
+            now=now,
+            object_name=ObjectNameVO(singular="deal", plural="deals"),
+            object_label=ObjectLabelVO(singular="Deal", plural="Deals"),
+            description="Tenant deals.",
+            kind=ObjectKind.CUSTOM,
+        )
+        object_entity.add_field(
+            field_id=RuntimeFieldIdVO.from_value(uuid4()),
+            now=now,
+            field_name="id",
+            field_type=FieldTypeCatalog().from_seed_type("uuid"),
+            label="ID",
+            description="Deal identifier.",
+            is_nullable=False,
+            default_value="gen_random_uuid()",
+            kind=FieldKind.SYSTEM,
+        )
+
+        class DataSourceServiceStub:
+            async def get_required_by_tenant(self, *, tenant_id):
+                return data_source
+
+        class ObjectServiceStub:
+            async def get_by_id(self, *, object_id):
+                if object_id == object_entity.id:
+                    return object_entity
+                return None
+
+        resolver = SchemaRegistryRuntimeObjectResolver(
+            data_source_service=DataSourceServiceStub(),
+            object_service=ObjectServiceStub(),
+        )
+
+        descriptor = await resolver.resolve_by_id(
+            tenant_id=tenant_id,
+            object_id=object_entity.id,
+        )
+
+        self.assertEqual(descriptor.object_name, "deal")
+        self.assertEqual(descriptor.table_name, "deals")
+
     async def test_resolve_raises_not_found(self) -> None:
         now = UtcClock().now()
         tenant_id = EntityIdVO.from_value(uuid4())

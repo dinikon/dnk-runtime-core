@@ -211,6 +211,14 @@ class ObjectService:
             singular_name=singular_name,
         )
 
+    async def get_by_id(
+        self,
+        *,
+        object_id: RuntimeObjectIdVO,
+    ) -> ObjectEntity | None:
+        """Возвращает runtime-объект по id или None."""
+        return await self._object_repository.get_by_id(object_id=object_id)
+
     def _reconcile_fields(
         self,
         *,

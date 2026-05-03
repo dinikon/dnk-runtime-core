@@ -3,7 +3,8 @@
 ## Purpose
 
 `schema_registry` manages tenant runtime schemas in PostgreSQL and stores a metadata snapshot of runtime objects and
-fields. It is responsible for bootstrap from seed and schema diff against existing tenant schemas.
+fields. It is responsible for bootstrap from seed, schema diff against existing tenant schemas and config-time
+object/field metadata plus targeted DDL changes.
 
 ## Public Functionality
 
@@ -12,6 +13,7 @@ fields. It is responsible for bootstrap from seed and schema diff against existi
 - diff existing tenant runtime schema against seed
 - inspect physical PostgreSQL schema
 - persist metadata snapshot for datasource, objects and fields
+- expose config APIs for object list/schema/create/delete and custom field create/delete
 
 ## Main Flows / Use Cases
 
@@ -35,6 +37,17 @@ fields. It is responsible for bootstrap from seed and schema diff against existi
 - metadata orchestration through read/write services
 - physical migration planning through `PostgresSchemaPlanService`
 - physical execution through PostgreSQL inspector and executor
+- config-time schema mutations through `SchemaConfigRepository`
+
+## Config API Rules
+
+- `ObjectKind.SYSTEM` and `ObjectKind.VIEW` are read-only and still appear in list/schema responses.
+- `ObjectKind.STANDARD` appears in list/schema, cannot be deleted, and can be extended with `custom` fields.
+- `ObjectKind.CUSTOM` can be created, deleted and extended with `custom` fields.
+- `FieldKind.SYSTEM` stays in metadata/descriptors but is hidden from config API responses.
+- `FieldKind.STANDARD` is visible in config responses but cannot be deleted.
+- `FieldKind.CUSTOM` can be created and hard-deleted.
+- field update/type update, custom relations and custom indexes are not part of the config API.
 
 ## Domain Model
 
@@ -50,7 +63,13 @@ fields. It is responsible for bootstrap from seed and schema diff against existi
 
 ## Presentation / Entry Points
 
-- no public HTTP router at the moment
+- HTTP router under `/api/config`:
+    - `POST /api/config/objects/list`
+    - `POST /api/config/objects/create`
+    - `DELETE /api/config/objects/delete`
+    - `POST /api/config/objects/schema`
+    - `POST /api/config/objects/fields/create`
+    - `DELETE /api/config/objects/fields/delete`
 - management CLI:
     - `dnk-manage schema-registry diff <tenant_id> [--seed-path ...]`
 - bootstrap adapter for `tenancy`:
@@ -81,11 +100,13 @@ fields. It is responsible for bootstrap from seed and schema diff against existi
 
 - uses `shared` for UoW, identifiers and time
 - exposes adapter to `tenancy` through tenancy-owned bootstrap port
-- does not expose public HTTP API directly
+- exposes schema config HTTP endpoints for authenticated tenant context
 
 ## Tests Covering This Module
 
 - seed service tests
+- schema config repository tests
+- schema config HTTP router/controller tests
 - metadata read tests
 - diff use case tests
 - planning tests
@@ -104,5 +125,8 @@ fields. It is responsible for bootstrap from seed and schema diff against existi
 
 - `src/modules/schema_registry/application/use_case/create_schema_use_case.py`
 - `src/modules/schema_registry/application/use_case/diff_schema_use_case.py`
+- `src/modules/schema_registry/application/config/`
+- `src/modules/schema_registry/infrastructure/config/schema_config_repository.py`
+- `src/modules/schema_registry/presentation/http/config/`
 - `src/modules/schema_registry/application/migration/postgres_schema_plan_service.py`
 - `src/modules/schema_registry/seed/schema_seed.py`

@@ -2,26 +2,19 @@
 
 ## Purpose
 
-`custom_object` exposes tenant-scoped custom runtime objects, their fields and their records. It uses
-`schema_registry` metadata plus targeted PostgreSQL DDL and reads/writes rows through `runtime_data`.
+`custom_object` owns tenant-scoped record CRUD for objects whose schema descriptor has `kind=custom`.
+Schema metadata, object/field configuration and physical DDL belong to `schema_registry` config APIs.
 
 ## Public Functionality
 
-- list custom objects
-- create custom object with automatic system fields
-- hard-delete custom object and its physical table
-- get object schema and fields
-- add and delete custom fields
-- create, read, list, update and delete records for custom objects
+- create custom-object records
+- get a custom-object record by `object_id` and `row_id`
+- list custom-object records with recursive filter DSL and ordered sort map
+- patch/put custom-object records
+- delete custom-object records
 
 ## Main Flows / Use Cases
 
-- `CreateCustomObjectUseCase`
-- `DescribeCustomObjectUseCase`
-- `ListCustomObjectsUseCase`
-- `DeleteCustomObjectUseCase`
-- `AddCustomFieldUseCase`
-- `DeleteCustomFieldUseCase`
 - `CreateCustomRecordUseCase`
 - `GetCustomRecordUseCase`
 - `ListCustomRecordsUseCase`
@@ -30,47 +23,38 @@
 
 ## Domain Model
 
-- custom objects are stored as `schema_registry.ObjectEntity` with `kind=custom`
-- custom fields are stored as `schema_registry.FieldEntity` with `kind=custom`
-- every custom object gets system fields:
-    - `id`
-    - `created_at`
-    - `updated_at`
-- records are tenant runtime rows in the physical tenant schema
+- `object_id` is a `schema_registry.RuntimeObjectIdVO`
+- records are generic runtime rows returned as `{ object_id, row_id, values }`
+- system fields such as `id`, `created_at` and `updated_at` are immutable in write payloads
+- non-custom descriptors are rejected; standard CRM/inventory records are handled by their own modules
 
 ## Infrastructure / Persistence
 
-- metadata operations use the existing schema registry object repository and datasource service
-- object and field schema mutations are implemented by `CustomObjectSchemaRepository`
-- record operations are implemented by `CustomRecordRuntimeRepository`
-- physical schema mutations use targeted migration operations:
-    - create/drop table
-    - add/drop column
-    - automatic unique index on `id`
+- `CustomRecordRuntimeRepository` resolves descriptors through `schema_registry` by `object_id`
 - record CRUD uses `PostgresRuntimeGateway`
-- adding a required field to an existing object without a default is rejected as unsafe
-- object and field delete operations are hard deletes and physically remove data
+- filters and sorting are delegated to `runtime_data`
+- the module does not use schema DDL ports, object metadata repositories or schema config use cases
 
 ## Presentation / Entry Points
 
-All current custom object routes live under `/api/custom-objects`.
+All current custom object routes live under `/api/custom-objects/records`.
 
-All read endpoints use `POST` request bodies instead of `GET`, including list/detail/schema endpoints.
+All read endpoints use `POST` request bodies instead of `GET`.
 All routes require authenticated request context.
 
 ## Dependencies On Other Modules
 
-- uses `shared` authentication, generic tenant scope ids, UoW and clock dependencies
-- uses `schema_registry` metadata, field type catalog and DDL executor
-- uses `runtime_data` for dynamic record CRUD and filtering
+- uses `shared` authentication, generic tenant scope ids and UoW dependencies
+- uses `schema_registry` runtime descriptor resolver
+- uses `runtime_data` for dynamic record CRUD, filtering and sorting
 
 ## Tests Covering This Module
 
-- custom object schema store tests
 - custom object record use case tests
 - custom object controller error tests
 - custom object router tests
 - runtime data nested filter tests
+- architecture guard that `custom_object` does not own schema config or DDL
 
 ## Related
 
@@ -81,11 +65,6 @@ All routes require authenticated request context.
 
 ## Source Of Truth
 
-- `src/modules/custom_object/application/object/`
-- `src/modules/custom_object/application/field/`
 - `src/modules/custom_object/application/record/`
-- `src/modules/custom_object/infrastructure/custom_object_schema_repository.py`
 - `src/modules/custom_object/infrastructure/custom_record_runtime_repository.py`
-- `src/modules/custom_object/presentation/http/object/controller/`
-- `src/modules/custom_object/presentation/http/field/controller/`
 - `src/modules/custom_object/presentation/http/record/controller/`

@@ -15,7 +15,6 @@ from src.modules.custom_object.application.record.repository import (
     CustomRecordRepositoryProtocol,
 )
 from src.modules.custom_object.domain import (
-    CustomObjectNotFoundError,
     CustomObjectRecordNotFoundError,
     CustomObjectValidationError,
 )
@@ -24,18 +23,10 @@ from src.modules.runtime_data.application.ports import (
     RuntimeCommandGateway,
     RuntimeQueryGateway,
 )
-from src.modules.schema_registry.domain.datasource.service import DataSourceService
-from src.modules.schema_registry.domain.object.entity import ObjectEntity
-from src.modules.schema_registry.domain.object.repository import (
-    ObjectRepositoryProtocol,
-)
 from src.modules.schema_registry.domain.object.value_object import RuntimeObjectIdVO
-from src.modules.schema_registry.domain.object.value_object.object_kind import (
-    ObjectKind,
-)
 from src.modules.schema_registry.runtime import (
-    RuntimeFieldDescriptor,
     RuntimeObjectDescriptor,
+    RuntimeObjectResolverProtocol,
 )
 from src.modules.shared import EntityIdVO
 
@@ -46,14 +37,12 @@ class CustomRecordRuntimeRepository(CustomRecordRepositoryProtocol):
     def __init__(
         self,
         *,
-        object_repository: ObjectRepositoryProtocol,
-        data_source_service: DataSourceService,
+        runtime_object_resolver: RuntimeObjectResolverProtocol,
         command_gateway: RuntimeCommandGateway,
         query_gateway: RuntimeQueryGateway,
     ) -> None:
-        """Инициализирует repository metadata-портами и runtime gateways."""
-        self._object_repository = object_repository
-        self._data_source_service = data_source_service
+        """Инициализирует repository runtime resolver и gateway-портами."""
+        self._runtime_object_resolver = runtime_object_resolver
         self._command_gateway = command_gateway
         self._query_gateway = query_gateway
 
@@ -152,56 +141,15 @@ class CustomRecordRuntimeRepository(CustomRecordRepositoryProtocol):
         tenant_id: EntityIdVO,
         object_id: RuntimeObjectIdVO,
     ) -> RuntimeObjectDescriptor:
-        object_entity = await self._get_required_custom_object(
+        descriptor = await self._runtime_object_resolver.resolve_by_id(
             tenant_id=tenant_id,
             object_id=object_id,
         )
-        datasource = await self._data_source_service.get_required_by_tenant(
-            tenant_id=tenant_id,
-        )
-        if object_entity.data_source_id != datasource.id:
+        if descriptor.kind.strip().lower() != "custom":
             raise CustomObjectValidationError(
-                "Custom object metadata has mismatched data_source_id."
+                "Custom object record operations support only custom objects."
             )
-        fields = tuple(
-            RuntimeFieldDescriptor(
-                name=field_entity.field_name.value,
-                type_code=field_entity.field_type.code.value,
-                is_nullable=field_entity.is_nullable,
-                default_value=field_entity.default_value,
-                options=dict(field_entity.options),
-                settings=dict(field_entity.settings),
-                kind=field_entity.kind.value,
-            )
-            for field_entity in object_entity.fields
-        )
-        return RuntimeObjectDescriptor(
-            schema_name=datasource.schema_name.value,
-            object_name=object_entity.object_name.singular,
-            table_name=object_entity.object_name.plural,
-            pk="id",
-            title_field="id",
-            fields=fields,
-            relations=(),
-            kind=object_entity.kind.value,
-        )
-
-    async def _get_required_custom_object(
-        self,
-        *,
-        tenant_id: EntityIdVO,
-        object_id: RuntimeObjectIdVO,
-    ) -> ObjectEntity:
-        object_entity = await self._object_repository.get_by_id(object_id=object_id)
-        if (
-            object_entity is None
-            or object_entity.tenant_id != tenant_id
-            or object_entity.kind != ObjectKind.CUSTOM
-        ):
-            raise CustomObjectNotFoundError(
-                f"Custom object '{object_id}' was not found."
-            )
-        return object_entity
+        return descriptor
 
     @staticmethod
     def _record_to_dto(

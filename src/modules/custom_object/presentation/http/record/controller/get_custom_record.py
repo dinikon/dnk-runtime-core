@@ -26,6 +26,7 @@ from src.modules.runtime_data import (
 from src.modules.schema_registry.domain.error import (
     PhysicalSchemaNotFoundError,
     RuntimeObjectDescriptorError,
+    RuntimeObjectNotFoundError,
     SchemaRegistryError,
     SchemaRegistryMetadataInconsistentError,
     UnsupportedSchemaBackendError,
@@ -64,6 +65,7 @@ async def get_custom_record(
     except (
         CustomObjectNotFoundError,
         CustomObjectRecordNotFoundError,
+        RuntimeObjectNotFoundError,
     ) as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

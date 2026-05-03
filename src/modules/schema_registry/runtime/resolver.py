@@ -8,7 +8,9 @@ from src.modules.schema_registry.domain.error import (
     RuntimeObjectNotFoundError,
     SchemaRegistryMetadataInconsistentError,
 )
+from src.modules.schema_registry.domain.object.entity import ObjectEntity
 from src.modules.schema_registry.domain.object.service import ObjectService
+from src.modules.schema_registry.domain.object.value_object import RuntimeObjectIdVO
 from src.modules.schema_registry.runtime.descriptor import (
     RuntimeFieldDescriptor,
     RuntimeObjectDescriptor,
@@ -25,6 +27,14 @@ class RuntimeObjectResolverProtocol(Protocol):
         object_name: str,
     ) -> RuntimeObjectDescriptor:
         """Возвращает descriptor runtime-объекта tenant по имени."""
+        ...
+
+    async def resolve_by_id(
+        self,
+        tenant_id: EntityIdVO,
+        object_id: RuntimeObjectIdVO,
+    ) -> RuntimeObjectDescriptor:
+        """Возвращает descriptor runtime-объекта tenant по object_id."""
         ...
 
 
@@ -51,9 +61,6 @@ class SchemaRegistryRuntimeObjectResolver:
         immutable runtime descriptors и гарантирует наличие primary key поля `id`.
         """
         normalized_object_name = object_name.strip()
-        datasource = await self._data_source_service.get_required_by_tenant(
-            tenant_id=tenant_id,
-        )
         object_entity = await self._object_service.get_by_tenant_and_singular_name(
             tenant_id=tenant_id,
             singular_name=normalized_object_name,
@@ -63,10 +70,45 @@ class SchemaRegistryRuntimeObjectResolver:
                 tenant_id=str(tenant_id),
                 object_name=normalized_object_name,
             )
+        return await self._build_descriptor(
+            tenant_id=tenant_id,
+            object_entity=object_entity,
+            not_found_label=normalized_object_name,
+        )
+
+    async def resolve_by_id(
+        self,
+        tenant_id: EntityIdVO,
+        object_id: RuntimeObjectIdVO,
+    ) -> RuntimeObjectDescriptor:
+        """Собирает descriptor объекта по object_id и проверяет consistency metadata."""
+        object_entity = await self._object_service.get_by_id(object_id=object_id)
+        if object_entity is None:
+            raise RuntimeObjectNotFoundError(
+                tenant_id=str(tenant_id),
+                object_name=str(object_id),
+            )
+        return await self._build_descriptor(
+            tenant_id=tenant_id,
+            object_entity=object_entity,
+            not_found_label=str(object_id),
+        )
+
+    async def _build_descriptor(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        object_entity: ObjectEntity,
+        not_found_label: str,
+    ) -> RuntimeObjectDescriptor:
+        datasource = await self._data_source_service.get_required_by_tenant(
+            tenant_id=tenant_id,
+        )
 
         if object_entity.tenant_id != tenant_id:
-            raise SchemaRegistryMetadataInconsistentError(
-                "schema_registry object metadata has mismatched tenant_id."
+            raise RuntimeObjectNotFoundError(
+                tenant_id=str(tenant_id),
+                object_name=not_found_label,
             )
         if object_entity.data_source_id != datasource.id:
             raise SchemaRegistryMetadataInconsistentError(

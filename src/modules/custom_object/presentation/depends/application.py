@@ -4,16 +4,6 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from src.modules.custom_object.application.field.use_case import (
-    AddCustomFieldUseCase,
-    DeleteCustomFieldUseCase,
-)
-from src.modules.custom_object.application.object.use_case import (
-    CreateCustomObjectUseCase,
-    DeleteCustomObjectUseCase,
-    DescribeCustomObjectUseCase,
-    ListCustomObjectsUseCase,
-)
 from src.modules.custom_object.application.record.use_case import (
     CreateCustomRecordUseCase,
     DeleteCustomRecordUseCase,
@@ -22,88 +12,8 @@ from src.modules.custom_object.application.record.use_case import (
     UpdateCustomRecordUseCase,
 )
 from src.modules.custom_object.presentation.depends.infrastructure import (
-    CustomFieldSchemaRepositoryDep,
-    CustomObjectSchemaRepositoryDep,
     CustomRecordRepositoryDep,
 )
-
-
-def get_list_custom_objects_use_case(
-    repository: CustomObjectSchemaRepositoryDep,
-) -> ListCustomObjectsUseCase:
-    """Создает use case списка custom objects."""
-    return ListCustomObjectsUseCase(repository)
-
-
-ListCustomObjectsUseCaseDep = Annotated[
-    ListCustomObjectsUseCase,
-    Depends(get_list_custom_objects_use_case),
-]
-
-
-def get_create_custom_object_use_case(
-    repository: CustomObjectSchemaRepositoryDep,
-) -> CreateCustomObjectUseCase:
-    """Создает use case создания custom object."""
-    return CreateCustomObjectUseCase(repository)
-
-
-CreateCustomObjectUseCaseDep = Annotated[
-    CreateCustomObjectUseCase,
-    Depends(get_create_custom_object_use_case),
-]
-
-
-def get_describe_custom_object_use_case(
-    repository: CustomObjectSchemaRepositoryDep,
-) -> DescribeCustomObjectUseCase:
-    """Создает use case чтения схемы custom object."""
-    return DescribeCustomObjectUseCase(repository)
-
-
-DescribeCustomObjectUseCaseDep = Annotated[
-    DescribeCustomObjectUseCase,
-    Depends(get_describe_custom_object_use_case),
-]
-
-
-def get_delete_custom_object_use_case(
-    repository: CustomObjectSchemaRepositoryDep,
-) -> DeleteCustomObjectUseCase:
-    """Создает use case удаления custom object."""
-    return DeleteCustomObjectUseCase(repository)
-
-
-DeleteCustomObjectUseCaseDep = Annotated[
-    DeleteCustomObjectUseCase,
-    Depends(get_delete_custom_object_use_case),
-]
-
-
-def get_add_custom_field_use_case(
-    repository: CustomFieldSchemaRepositoryDep,
-) -> AddCustomFieldUseCase:
-    """Создает use case добавления custom field."""
-    return AddCustomFieldUseCase(repository)
-
-
-AddCustomFieldUseCaseDep = Annotated[
-    AddCustomFieldUseCase,
-    Depends(get_add_custom_field_use_case),
-]
-
-
-def get_delete_custom_field_use_case(
-    repository: CustomFieldSchemaRepositoryDep,
-) -> DeleteCustomFieldUseCase:
-    """Создает use case удаления custom field."""
-    return DeleteCustomFieldUseCase(repository)
-
-
-DeleteCustomFieldUseCaseDep = Annotated[
-    DeleteCustomFieldUseCase,
-    Depends(get_delete_custom_field_use_case),
-]
 
 
 def get_create_custom_record_use_case(
@@ -172,15 +82,9 @@ DeleteCustomRecordUseCaseDep = Annotated[
 
 
 __all__ = [
-    "AddCustomFieldUseCaseDep",
-    "CreateCustomObjectUseCaseDep",
     "CreateCustomRecordUseCaseDep",
-    "DeleteCustomFieldUseCaseDep",
-    "DeleteCustomObjectUseCaseDep",
     "DeleteCustomRecordUseCaseDep",
-    "DescribeCustomObjectUseCaseDep",
     "GetCustomRecordUseCaseDep",
-    "ListCustomObjectsUseCaseDep",
     "ListCustomRecordsUseCaseDep",
     "UpdateCustomRecordUseCaseDep",
 ]

@@ -235,6 +235,32 @@ class ArchitectureBoundariesTests(unittest.TestCase):
         self.assertNotIn("TenantIdVO", content)
         self.assertNotIn("src.modules.tenancy.domain", content)
 
+    def test_custom_object_does_not_own_schema_config_or_ddl(self) -> None:
+        forbidden_patterns = (
+            "src.modules.schema_registry.application.config.object",
+            "src.modules.schema_registry.application.config.field",
+            "src.modules.schema_registry.application.migration",
+            "src.modules.schema_registry.application.ports.tenant_schema_executor",
+            "src.modules.schema_registry.domain.datasource.service",
+            "src.modules.schema_registry.domain.object.repository",
+            "SchemaConfigRepository",
+            "TenantSchemaExecutor",
+            "ObjectRepositoryProtocol",
+            "DataSourceService",
+            "CreateTableOperation",
+            "AddColumnOperation",
+            "DropTableOperation",
+            "DropColumnOperation",
+        )
+        for path in iter_python_files("src/modules/custom_object"):
+            content = path.read_text(encoding="utf-8")
+            for pattern in forbidden_patterns:
+                self.assertNotIn(
+                    pattern,
+                    content,
+                    msg=f"{path} still owns schema config or DDL via {pattern}",
+                )
+
     def test_removed_id_wrapper_types_are_not_used(self) -> None:
         removed_types = ("Typed" + "EntityIdVO",)
         for root in ("src", "test"):

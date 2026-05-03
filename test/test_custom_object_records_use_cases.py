@@ -39,7 +39,7 @@ def _field(
     )
 
 
-def _descriptor() -> RuntimeObjectDescriptor:
+def _descriptor(*, kind: str = "custom") -> RuntimeObjectDescriptor:
     return RuntimeObjectDescriptor(
         schema_name="dnk_test",
         object_name="deal",
@@ -54,23 +54,40 @@ def _descriptor() -> RuntimeObjectDescriptor:
             _field("status", "select", is_nullable=False),
         ),
         relations=(),
-        kind="custom",
+        kind=kind,
     )
 
 
-class _CustomRecordRepositoryStub(CustomRecordRuntimeRepository):
-    def __init__(self, *, command_gateway, query_gateway) -> None:
-        super().__init__(
-            object_repository=object(),
-            data_source_service=object(),
-            command_gateway=command_gateway,
-            query_gateway=query_gateway,
-        )
+class _RuntimeObjectResolverStub:
+    def __init__(self, descriptor: RuntimeObjectDescriptor | None = None) -> None:
+        self.descriptor = descriptor or _descriptor()
         self.calls = []
 
-    async def _resolve_descriptor(self, *, tenant_id, object_id):
+    async def resolve(self, tenant_id, object_name):
+        raise AssertionError(
+            "custom_object record repository must resolve by object_id"
+        )
+
+    async def resolve_by_id(self, tenant_id, object_id):
         self.calls.append((tenant_id, object_id))
-        return _descriptor()
+        return self.descriptor
+
+
+def _repository(
+    *,
+    command_gateway=object(),
+    query_gateway=object(),
+    descriptor: RuntimeObjectDescriptor | None = None,
+) -> tuple[CustomRecordRuntimeRepository, _RuntimeObjectResolverStub]:
+    resolver = _RuntimeObjectResolverStub(descriptor)
+    return (
+        CustomRecordRuntimeRepository(
+            runtime_object_resolver=resolver,
+            command_gateway=command_gateway,
+            query_gateway=query_gateway,
+        ),
+        resolver,
+    )
 
 
 class CustomObjectRecordUseCaseTests(unittest.IsolatedAsyncioTestCase):
@@ -87,7 +104,7 @@ class CustomObjectRecordUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 return {}
 
         gateway = CommandGatewaySpy()
-        repository = _CustomRecordRepositoryStub(
+        repository, resolver = _repository(
             command_gateway=gateway,
             query_gateway=object(),
         )
@@ -103,6 +120,7 @@ class CustomObjectRecordUseCaseTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertFalse(gateway.insert_called)
+        self.assertEqual(resolver.calls, [(tenant_id, object_id)])
 
     async def test_list_records_passes_filter_group_sort_and_page(self) -> None:
         tenant_id = EntityIdVO.from_value(uuid4())
@@ -138,7 +156,7 @@ class CustomObjectRecordUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 FilterSpec(field="status", op="eq", value="new"),
             ),
         )
-        repository = _CustomRecordRepositoryStub(
+        repository, _resolver = _repository(
             command_gateway=object(),
             query_gateway=QueryGatewaySpy(),
         )
@@ -160,6 +178,37 @@ class CustomObjectRecordUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(recorded["sorting"][0].field, "created_at")
         self.assertEqual(recorded["page"].limit, 25)
         self.assertEqual(recorded["page"].offset, 10)
+
+    async def test_record_operations_reject_non_custom_descriptor(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        object_id = RuntimeObjectIdVO.from_value(uuid4())
+
+        class CommandGatewaySpy:
+            def __init__(self) -> None:
+                self.insert_called = False
+
+            async def insert(self, *, descriptor, payload):
+                self.insert_called = True
+                return {}
+
+        gateway = CommandGatewaySpy()
+        repository, _resolver = _repository(
+            command_gateway=gateway,
+            query_gateway=object(),
+            descriptor=_descriptor(kind="standard"),
+        )
+        use_case = CreateCustomRecordUseCase(repository)
+
+        with self.assertRaises(CustomObjectValidationError):
+            await use_case(
+                CreateCustomRecordCommand(
+                    tenant_id=tenant_id,
+                    object_id=object_id,
+                    values={"name": "Acme"},
+                )
+            )
+
+        self.assertFalse(gateway.insert_called)
 
 
 __all__ = ["CustomObjectRecordUseCaseTests"]
