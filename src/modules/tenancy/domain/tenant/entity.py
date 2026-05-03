@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from uuid import UUID
 
 import uuid6
 
@@ -10,14 +9,14 @@ from src.modules.tenancy.domain.tenant.error import (
     InvalidTenantExternalIdError,
     InvalidTenantNameError,
 )
-from src.modules.tenancy.domain.tenant.value_object import TenantStatus
+from src.modules.tenancy.domain.tenant.value_object import TenantIdVO, TenantStatus
 
 
 @dataclass(slots=True)
 class Tenant:
     """Доменная сущность tenant и его бизнес-статуса."""
 
-    id: UUID
+    id: TenantIdVO
     name: str
     external_id: str
     status: TenantStatus
@@ -49,7 +48,7 @@ class Tenant:
 
         now = datetime.now(UTC)
         return cls(
-            id=uuid6.uuid7(),
+            id=TenantIdVO.from_value(uuid6.uuid7()),
             name=normalized_name,
             external_id=normalized_external_id,
             status=TenantStatus.ACTIVE,

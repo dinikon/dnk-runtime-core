@@ -1,6 +1,9 @@
 from typing import Protocol
 
 from src.modules.schema_registry.domain.object.entity import ObjectEntity
+from src.modules.schema_registry.domain.object.value_object.runtime_object_id import (
+    RuntimeObjectIdVO,
+)
 from src.modules.shared import EntityIdVO
 
 
@@ -25,7 +28,7 @@ class ObjectRepositoryProtocol(Protocol):
         """Возвращает объект tenant по plural-имени или None."""
         ...
 
-    async def get_by_id(self, *, object_id: EntityIdVO) -> ObjectEntity | None:
+    async def get_by_id(self, *, object_id: RuntimeObjectIdVO) -> ObjectEntity | None:
         """Возвращает объект по id или None."""
         ...
 

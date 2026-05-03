@@ -7,12 +7,19 @@ from src.modules.schema_registry.application.metadata.schema_registry_metadata_w
     SchemaRegistryMetadataWriteService,
 )
 from src.modules.schema_registry.domain.datasource.entity import DataSourceEntity
+from src.modules.schema_registry.domain.datasource.value_object import DataSourceIdVO
 from src.modules.schema_registry.domain.datasource.value_object.schema_name import (
     SchemaNameVO,
 )
 from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
+from src.modules.schema_registry.domain.field.value_object import RuntimeFieldIdVO
+from src.modules.schema_registry.domain.field.value_object.field_kind import FieldKind
 from src.modules.schema_registry.domain.object.entity import ObjectEntity
 from src.modules.schema_registry.domain.object.service import ObjectService
+from src.modules.schema_registry.domain.object.value_object import RuntimeObjectIdVO
+from src.modules.schema_registry.domain.object.value_object.object_kind import (
+    ObjectKind,
+)
 from src.modules.schema_registry.domain.object.value_object.object_label import (
     ObjectLabelVO,
 )
@@ -33,13 +40,13 @@ class SchemaRegistryMetadataWriteServiceTests(unittest.IsolatedAsyncioTestCase):
         now = UtcClock().now()
         tenant_id = EntityIdVO.from_value(uuid4())
         datasource = DataSourceEntity.create(
-            id_=EntityIdVO.from_value(uuid4()),
+            id_=DataSourceIdVO.from_value(uuid4()),
             now=now,
             tenant_id=tenant_id,
             schema_name=SchemaNameVO("dnk_crm"),
         )
         object_entity = ObjectEntity.create(
-            id_=EntityIdVO.from_value(uuid4()),
+            id_=RuntimeObjectIdVO.from_value(uuid4()),
             tenant_id=tenant_id,
             data_source_id=datasource.id,
             now=now,
@@ -48,7 +55,7 @@ class SchemaRegistryMetadataWriteServiceTests(unittest.IsolatedAsyncioTestCase):
             description="Contacts.",
         )
         object_entity.add_field(
-            field_id=EntityIdVO.from_value(uuid4()),
+            field_id=RuntimeFieldIdVO.from_value(uuid4()),
             now=now,
             field_name="last_name",
             field_type=FieldTypeCatalog().from_seed_type("text"),
@@ -79,7 +86,8 @@ class SchemaRegistryMetadataWriteServiceTests(unittest.IsolatedAsyncioTestCase):
         object_service = ObjectService(
             object_repository=object_repository,
             clock=UtcClock(),
-            id_provider=lambda: EntityIdVO.from_value(uuid4()),
+            object_id_provider=lambda: RuntimeObjectIdVO.from_value(uuid4()),
+            field_id_provider=lambda: RuntimeFieldIdVO.from_value(uuid4()),
             field_type_catalog=FieldTypeCatalog(),
         )
         service = SchemaRegistryMetadataWriteService(
@@ -97,10 +105,12 @@ class SchemaRegistryMetadataWriteServiceTests(unittest.IsolatedAsyncioTestCase):
                     singular_label="Contact",
                     plural_label="Contacts",
                     description="Contacts.",
+                    kind=ObjectKind.CUSTOM,
                     fields=(
                         ValidatedFieldSpec(
                             name="last_name",
                             type="text",
+                            kind=FieldKind.SYSTEM,
                             field_type=FieldTypeCatalog().from_seed_type("text"),
                             label="Last Name",
                             description="Last name.",
@@ -122,3 +132,5 @@ class SchemaRegistryMetadataWriteServiceTests(unittest.IsolatedAsyncioTestCase):
         reconciled_object = object_repository.recorded_objects[0]
         self.assertEqual(reconciled_object.id, original_object_id)
         self.assertEqual(reconciled_object.fields[0].id, original_field_id)
+        self.assertEqual(reconciled_object.kind, ObjectKind.CUSTOM)
+        self.assertEqual(reconciled_object.fields[0].kind, FieldKind.SYSTEM)

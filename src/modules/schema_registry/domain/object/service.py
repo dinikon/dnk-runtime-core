@@ -4,12 +4,18 @@ from collections.abc import Callable
 from datetime import datetime
 
 from src.modules.shared import ClockPort, EntityIdVO
+from src.modules.schema_registry.domain.datasource.value_object.data_source_id import (
+    DataSourceIdVO,
+)
 from src.modules.schema_registry.domain.field.entity import FieldEntity
 from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
 from src.modules.schema_registry.domain.field.value_object.field_label import (
     FieldLabelVO,
 )
 from src.modules.schema_registry.domain.field.value_object.field_name import FieldNameVO
+from src.modules.schema_registry.domain.field.value_object.runtime_field_id import (
+    RuntimeFieldIdVO,
+)
 from src.modules.schema_registry.domain.object.entity import ObjectEntity
 from src.modules.schema_registry.domain.object.repository import (
     ObjectRepositoryProtocol,
@@ -17,8 +23,14 @@ from src.modules.schema_registry.domain.object.repository import (
 from src.modules.schema_registry.domain.object.value_object.object_label import (
     ObjectLabelVO,
 )
+from src.modules.schema_registry.domain.object.value_object.object_kind import (
+    ObjectKind,
+)
 from src.modules.schema_registry.domain.object.value_object.object_name import (
     ObjectNameVO,
+)
+from src.modules.schema_registry.domain.object.value_object.runtime_object_id import (
+    RuntimeObjectIdVO,
 )
 from src.modules.schema_registry.domain.seed.field_seed import FieldSeed
 from src.modules.schema_registry.domain.seed.schema_seed import SchemaSeed
@@ -35,20 +47,22 @@ class ObjectService:
         self,
         object_repository: ObjectRepositoryProtocol,
         clock: ClockPort,
-        id_provider: Callable[[], EntityIdVO],
+        object_id_provider: Callable[[], RuntimeObjectIdVO],
+        field_id_provider: Callable[[], RuntimeFieldIdVO],
         field_type_catalog: FieldTypeCatalog,
     ) -> None:
         """Инициализирует сервис репозиторием, временем, id и каталогом типов."""
         self._object_repository = object_repository
         self._clock = clock
-        self._id_provider = id_provider
+        self._object_id_provider = object_id_provider
+        self._field_id_provider = field_id_provider
         self._field_type_catalog = field_type_catalog
 
     async def replace_all_for_tenant_from_seed(
         self,
         *,
         tenant_id: EntityIdVO,
-        data_source_id: EntityIdVO,
+        data_source_id: DataSourceIdVO,
         seed: SchemaSeed | ValidatedSchemaSpec,
     ) -> list[ObjectEntity]:
         """Полностью пересоздает metadata объектов tenant из seed или spec."""
@@ -66,6 +80,7 @@ class ObjectService:
                     singular_label=object_spec.singular_label,
                     plural_label=object_spec.plural_label,
                     description=object_spec.description,
+                    kind=object_spec.kind,
                 )
                 self._append_fields_from_spec(
                     object_entity=object_entity,
@@ -84,6 +99,7 @@ class ObjectService:
                     singular_label=object_seed.singular_label,
                     plural_label=object_seed.plural_label,
                     description=object_seed.description,
+                    kind=ObjectKind.from_value(object_seed.kind),
                 )
                 self._append_fields_from_seed(
                     object_entity=object_entity,
@@ -102,7 +118,7 @@ class ObjectService:
         self,
         *,
         tenant_id: EntityIdVO,
-        data_source_id: EntityIdVO,
+        data_source_id: DataSourceIdVO,
         schema_spec: ValidatedSchemaSpec,
     ) -> list[ObjectEntity]:
         """Синхронизирует существующие объекты tenant с валидированной spec.
@@ -125,7 +141,7 @@ class ObjectService:
             object_entity = existing_by_plural_name.get(object_spec.plural_name)
             if object_entity is None:
                 object_entity = ObjectEntity.create(
-                    id_=self._id_provider(),
+                    id_=self._object_id_provider(),
                     tenant_id=tenant_id,
                     data_source_id=data_source_id,
                     now=now,
@@ -138,6 +154,7 @@ class ObjectService:
                         plural=object_spec.plural_label,
                     ),
                     description=object_spec.description,
+                    kind=object_spec.kind,
                 )
                 self._reconcile_fields(
                     object_entity=object_entity,
@@ -157,6 +174,7 @@ class ObjectService:
                         plural=object_spec.plural_label,
                     ),
                     description=object_spec.description,
+                    kind=object_spec.kind,
                 )
                 if self._reconcile_fields(
                     object_entity=object_entity,
@@ -193,6 +211,14 @@ class ObjectService:
             singular_name=singular_name,
         )
 
+    async def get_by_id(
+        self,
+        *,
+        object_id: RuntimeObjectIdVO,
+    ) -> ObjectEntity | None:
+        """Возвращает runtime-объект по id или None."""
+        return await self._object_repository.get_by_id(object_id=object_id)
+
     def _reconcile_fields(
         self,
         *,
@@ -211,11 +237,12 @@ class ObjectService:
             field_entity = existing_by_name.get(field_spec.name)
             if field_entity is None:
                 field_entity = FieldEntity.create(
-                    id_=self._id_provider(),
+                    id_=self._field_id_provider(),
                     object_id=object_entity.id,
                     now=now,
                     field_name=FieldNameVO(field_spec.name),
                     field_type=field_spec.field_type,
+                    kind=field_spec.kind,
                     label=FieldLabelVO(field_spec.label),
                     description=field_spec.description,
                     is_nullable=field_spec.is_nullable,
@@ -230,6 +257,7 @@ class ObjectService:
                         now=now,
                         field_name=FieldNameVO(field_spec.name),
                         field_type=field_spec.field_type,
+                        kind=field_spec.kind,
                         label=FieldLabelVO(field_spec.label),
                         description=field_spec.description,
                         is_nullable=field_spec.is_nullable,
@@ -250,17 +278,18 @@ class ObjectService:
         self,
         *,
         tenant_id: EntityIdVO,
-        data_source_id: EntityIdVO,
+        data_source_id: DataSourceIdVO,
         now: datetime,
         singular_name: str,
         plural_name: str,
         singular_label: str,
         plural_label: str,
         description: str,
+        kind: ObjectKind,
     ) -> ObjectEntity:
         """Создает ObjectEntity с новыми id/timestamps и валидированными VO."""
         return ObjectEntity.create(
-            id_=self._id_provider(),
+            id_=self._object_id_provider(),
             tenant_id=tenant_id,
             data_source_id=data_source_id,
             now=now,
@@ -273,6 +302,7 @@ class ObjectService:
                 plural=plural_label,
             ),
             description=description,
+            kind=kind,
         )
 
     def _append_fields_from_seed(
@@ -286,7 +316,7 @@ class ObjectService:
         object_entity.add_fields_from_seed(
             now=now,
             seeds=field_seeds,
-            field_id_provider=self._id_provider,
+            field_id_provider=self._field_id_provider,
             field_type_mapper=self._field_type_catalog.from_seed_type,
         )
 
@@ -300,7 +330,7 @@ class ObjectService:
         """Добавляет поля в объект из валидированной field spec."""
         for field_spec in field_specs:
             object_entity.add_field(
-                field_id=self._id_provider(),
+                field_id=self._field_id_provider(),
                 now=now,
                 field_name=field_spec.name,
                 field_type=field_spec.field_type,
@@ -310,6 +340,7 @@ class ObjectService:
                 default_value=field_spec.default,
                 options=field_spec.options,
                 settings=field_spec.settings,
+                kind=field_spec.kind,
             )
 
     @staticmethod
@@ -320,6 +351,7 @@ class ObjectService:
         object_name: ObjectNameVO,
         object_label: ObjectLabelVO,
         description: str,
+        kind: ObjectKind,
     ) -> None:
         """Обновляет metadata объекта, если имя, label или description изменились."""
         normalized_description = description.strip()
@@ -327,6 +359,7 @@ class ObjectService:
             object_entity.object_name == object_name
             and object_entity.object_label == object_label
             and object_entity.description == normalized_description
+            and object_entity.kind == kind
         ):
             return
         object_entity.rename(
@@ -334,4 +367,5 @@ class ObjectService:
             object_name=object_name,
             object_label=object_label,
             description=normalized_description,
+            kind=kind,
         )

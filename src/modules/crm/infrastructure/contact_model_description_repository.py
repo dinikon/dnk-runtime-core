@@ -43,6 +43,7 @@ class ContactModelDescriptionRepository(ContactFieldsDescriptionRepositoryProtoc
                 singular_label=description.singular_label,
                 plural_label=description.plural_label,
                 description=description.description,
+                kind=description.kind,
             ),
             fields=tuple(
                 ContactFieldDescriptionDTO(
@@ -51,6 +52,7 @@ class ContactModelDescriptionRepository(ContactFieldsDescriptionRepositoryProtoc
                     label=field.label,
                     description=field.description,
                     type=field.type,
+                    kind=field.kind,
                     is_nullable=field.is_nullable,
                     default_value=field.default_value,
                     options=tuple(

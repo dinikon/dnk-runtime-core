@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from src.modules.shared import EntityIdVO
 from src.modules.schema_registry.application.command.diff_schema_command import (
     DiffSchemaCommand,
 )
@@ -47,7 +46,7 @@ class DiffSchemaUseCase:
 
     async def execute(self, command: DiffSchemaCommand) -> DiffSchemaResultDTO:
         """Строит и применяет migration plan, затем возвращает статистику изменений."""
-        tenant_id = EntityIdVO.from_value(command.tenant_id)
+        tenant_id = command.tenant_id
         seed = await self._schema_seed_service.load(seed_path=command.seed_path)
         metadata_snapshot = (
             await self._schema_registry_metadata_read_service.get_required_by_tenant(
@@ -70,7 +69,7 @@ class DiffSchemaUseCase:
         destructive_operations = len(plan.destructive_operations)
         total_operations = len(plan.operations)
         return DiffSchemaResultDTO(
-            tenant_id=command.tenant_id,
+            tenant_id=command.tenant_id.uuid,
             schema_name=metadata_snapshot.datasource.schema_name.value,
             seed_path=command.seed_path,
             total_operations=total_operations,

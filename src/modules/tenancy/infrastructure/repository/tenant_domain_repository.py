@@ -5,8 +5,10 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.modules.shared import EntityIdVO
 from src.modules.tenancy.domain.tenant_domain import (
     TenantDomain,
+    TenantDomainIdVO,
     TenantDomainRepositoryProtocol,
     TenantDomainStatus,
     TenantServiceType,
@@ -32,11 +34,11 @@ class SqlAlchemyTenantDomainRepository(TenantDomainRepositoryProtocol):
         self._session.add(tenant_domain_to_model(domain))
         await self._session.flush()
 
-    async def get_by_id(self, domain_id: UUID) -> TenantDomain | None:
+    async def get_by_id(self, domain_id: TenantDomainIdVO) -> TenantDomain | None:
         """Ищет tenant domain по id."""
         model: TenantDomainModel | None = (
             await self._session.scalars(
-                select(TenantDomainModel).where(TenantDomainModel.id == domain_id)
+                select(TenantDomainModel).where(TenantDomainModel.id == domain_id.uuid)
             )
         ).one_or_none()
 
@@ -58,12 +60,12 @@ class SqlAlchemyTenantDomainRepository(TenantDomainRepositoryProtocol):
             return None
         return tenant_domain_model_to_entity(model)
 
-    async def get_api_host_by_tenant_id(self, tenant_id: UUID) -> str | None:
+    async def get_api_host_by_tenant_id(self, tenant_id: EntityIdVO) -> str | None:
         """Возвращает preferred API host tenant, если он зарегистрирован."""
         host: str | None = (
             await self._session.scalars(
                 select(TenantDomainModel.host)
-                .where(TenantDomainModel.tenant_id == tenant_id)
+                .where(TenantDomainModel.tenant_id == tenant_id.uuid)
                 .where(TenantDomainModel.service_type == TenantServiceType.API)
                 .where(TenantDomainModel.status != TenantDomainStatus.DELETED)
                 .order_by(

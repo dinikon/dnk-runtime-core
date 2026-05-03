@@ -110,6 +110,10 @@ class RuntimeFieldTypePolicy:
                     f"Field '{field_name}' is immutable and cannot be updated."
                 )
             field = fields_by_name[field_name]
+            if field.kind.strip().lower() == "system":
+                raise RuntimeDataValidationError(
+                    f"Field '{field_name}' is system and cannot be updated."
+                )
             coerced_patch[field_name] = self._coerce_field_value(
                 field=field,
                 raw_value=raw_value,

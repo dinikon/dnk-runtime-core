@@ -15,6 +15,7 @@ class RuntimeFieldDescriptor:
     default_value: str | None
     options: Mapping[str, str]
     settings: Mapping[str, str]
+    kind: str = "standard"
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +41,7 @@ class RuntimeObjectDescriptor:
     title_field: str
     fields: tuple[RuntimeFieldDescriptor, ...]
     relations: tuple[RuntimeRelationDescriptor, ...]
+    kind: str = "standard"
 
     def field_by_name(self, field_name: str) -> RuntimeFieldDescriptor | None:
         """Ищет поле descriptor по имени после trim входного значения."""

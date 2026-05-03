@@ -4,6 +4,7 @@ import unittest
 from uuid import uuid4
 
 from src.modules.schema_registry.domain.datasource.entity import DataSourceEntity
+from src.modules.schema_registry.domain.datasource.value_object import DataSourceIdVO
 from src.modules.schema_registry.domain.datasource.value_object.schema_name import (
     SchemaNameVO,
 )
@@ -13,7 +14,13 @@ from src.modules.schema_registry.domain.error import (
     SchemaRegistryMetadataInconsistentError,
 )
 from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
+from src.modules.schema_registry.domain.field.value_object import RuntimeFieldIdVO
+from src.modules.schema_registry.domain.field.value_object.field_kind import FieldKind
 from src.modules.schema_registry.domain.object.entity import ObjectEntity
+from src.modules.schema_registry.domain.object.value_object import RuntimeObjectIdVO
+from src.modules.schema_registry.domain.object.value_object.object_kind import (
+    ObjectKind,
+)
 from src.modules.schema_registry.domain.object.value_object.object_label import (
     ObjectLabelVO,
 )
@@ -30,24 +37,25 @@ class SchemaRegistryRuntimeObjectResolverTests(unittest.IsolatedAsyncioTestCase)
         now = UtcClock().now()
         tenant_id = EntityIdVO.from_value(uuid4())
         data_source = DataSourceEntity.create(
-            id_=EntityIdVO.from_value(uuid4()),
+            id_=DataSourceIdVO.from_value(uuid4()),
             now=now,
             tenant_id=tenant_id,
             schema_name=SchemaNameVO("dnk_test"),
         )
 
         object_entity = ObjectEntity.create(
-            id_=EntityIdVO.from_value(uuid4()),
+            id_=RuntimeObjectIdVO.from_value(uuid4()),
             tenant_id=tenant_id,
             data_source_id=data_source.id,
             now=now,
             object_name=ObjectNameVO(singular="contact", plural="contacts"),
             object_label=ObjectLabelVO(singular="Contact", plural="Contacts"),
             description="Tenant contacts.",
+            kind=ObjectKind.CUSTOM,
         )
         field_types = FieldTypeCatalog()
         object_entity.add_field(
-            field_id=EntityIdVO.from_value(uuid4()),
+            field_id=RuntimeFieldIdVO.from_value(uuid4()),
             now=now,
             field_name="id",
             field_type=field_types.from_seed_type("uuid"),
@@ -55,9 +63,10 @@ class SchemaRegistryRuntimeObjectResolverTests(unittest.IsolatedAsyncioTestCase)
             description="Contact identifier.",
             is_nullable=False,
             default_value="gen_random_uuid()",
+            kind=FieldKind.SYSTEM,
         )
         object_entity.add_field(
-            field_id=EntityIdVO.from_value(uuid4()),
+            field_id=RuntimeFieldIdVO.from_value(uuid4()),
             now=now,
             field_name="last_name",
             field_type=field_types.from_seed_type("text"),
@@ -91,17 +100,75 @@ class SchemaRegistryRuntimeObjectResolverTests(unittest.IsolatedAsyncioTestCase)
         self.assertEqual(descriptor.schema_name, "dnk_test")
         self.assertEqual(descriptor.object_name, "contact")
         self.assertEqual(descriptor.table_name, "contacts")
+        self.assertEqual(descriptor.kind, "custom")
         self.assertEqual(descriptor.pk, "id")
         self.assertEqual(descriptor.title_field, "id")
         self.assertEqual(
             [field.name for field in descriptor.fields], ["id", "last_name"]
         )
+        self.assertEqual(
+            [field.kind for field in descriptor.fields], ["system", "standard"]
+        )
+
+    async def test_resolve_by_id_returns_descriptor_from_metadata(self) -> None:
+        now = UtcClock().now()
+        tenant_id = EntityIdVO.from_value(uuid4())
+        data_source = DataSourceEntity.create(
+            id_=DataSourceIdVO.from_value(uuid4()),
+            now=now,
+            tenant_id=tenant_id,
+            schema_name=SchemaNameVO("dnk_test"),
+        )
+        object_entity = ObjectEntity.create(
+            id_=RuntimeObjectIdVO.from_value(uuid4()),
+            tenant_id=tenant_id,
+            data_source_id=data_source.id,
+            now=now,
+            object_name=ObjectNameVO(singular="deal", plural="deals"),
+            object_label=ObjectLabelVO(singular="Deal", plural="Deals"),
+            description="Tenant deals.",
+            kind=ObjectKind.CUSTOM,
+        )
+        object_entity.add_field(
+            field_id=RuntimeFieldIdVO.from_value(uuid4()),
+            now=now,
+            field_name="id",
+            field_type=FieldTypeCatalog().from_seed_type("uuid"),
+            label="ID",
+            description="Deal identifier.",
+            is_nullable=False,
+            default_value="gen_random_uuid()",
+            kind=FieldKind.SYSTEM,
+        )
+
+        class DataSourceServiceStub:
+            async def get_required_by_tenant(self, *, tenant_id):
+                return data_source
+
+        class ObjectServiceStub:
+            async def get_by_id(self, *, object_id):
+                if object_id == object_entity.id:
+                    return object_entity
+                return None
+
+        resolver = SchemaRegistryRuntimeObjectResolver(
+            data_source_service=DataSourceServiceStub(),
+            object_service=ObjectServiceStub(),
+        )
+
+        descriptor = await resolver.resolve_by_id(
+            tenant_id=tenant_id,
+            object_id=object_entity.id,
+        )
+
+        self.assertEqual(descriptor.object_name, "deal")
+        self.assertEqual(descriptor.table_name, "deals")
 
     async def test_resolve_raises_not_found(self) -> None:
         now = UtcClock().now()
         tenant_id = EntityIdVO.from_value(uuid4())
         data_source = DataSourceEntity.create(
-            id_=EntityIdVO.from_value(uuid4()),
+            id_=DataSourceIdVO.from_value(uuid4()),
             now=now,
             tenant_id=tenant_id,
             schema_name=SchemaNameVO("dnk_test"),
@@ -132,14 +199,14 @@ class SchemaRegistryRuntimeObjectResolverTests(unittest.IsolatedAsyncioTestCase)
         now = UtcClock().now()
         tenant_id = EntityIdVO.from_value(uuid4())
         data_source = DataSourceEntity.create(
-            id_=EntityIdVO.from_value(uuid4()),
+            id_=DataSourceIdVO.from_value(uuid4()),
             now=now,
             tenant_id=tenant_id,
             schema_name=SchemaNameVO("dnk_test"),
         )
 
         object_entity = ObjectEntity.create(
-            id_=EntityIdVO.from_value(uuid4()),
+            id_=RuntimeObjectIdVO.from_value(uuid4()),
             tenant_id=tenant_id,
             data_source_id=data_source.id,
             now=now,
@@ -148,7 +215,7 @@ class SchemaRegistryRuntimeObjectResolverTests(unittest.IsolatedAsyncioTestCase)
             description="Tenant contacts.",
         )
         object_entity.add_field(
-            field_id=EntityIdVO.from_value(uuid4()),
+            field_id=RuntimeFieldIdVO.from_value(uuid4()),
             now=now,
             field_name="last_name",
             field_type=FieldTypeCatalog().from_seed_type("text"),
@@ -179,23 +246,23 @@ class SchemaRegistryRuntimeObjectResolverTests(unittest.IsolatedAsyncioTestCase)
         now = UtcClock().now()
         tenant_id = EntityIdVO.from_value(uuid4())
         data_source = DataSourceEntity.create(
-            id_=EntityIdVO.from_value(uuid4()),
+            id_=DataSourceIdVO.from_value(uuid4()),
             now=now,
             tenant_id=tenant_id,
             schema_name=SchemaNameVO("dnk_test"),
         )
 
         object_entity = ObjectEntity.create(
-            id_=EntityIdVO.from_value(uuid4()),
+            id_=RuntimeObjectIdVO.from_value(uuid4()),
             tenant_id=tenant_id,
-            data_source_id=EntityIdVO.from_value(uuid4()),
+            data_source_id=DataSourceIdVO.from_value(uuid4()),
             now=now,
             object_name=ObjectNameVO(singular="contact", plural="contacts"),
             object_label=ObjectLabelVO(singular="Contact", plural="Contacts"),
             description="Tenant contacts.",
         )
         object_entity.add_field(
-            field_id=EntityIdVO.from_value(uuid4()),
+            field_id=RuntimeFieldIdVO.from_value(uuid4()),
             now=now,
             field_name="id",
             field_type=FieldTypeCatalog().from_seed_type("uuid"),

@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from src.modules.schema_registry.domain.error import InvalidValueObjectError
 
 
-def _validate_label(value: str, *, field_name: str, max_length: int = 16) -> str:
+def _validate_label(value: str, *, field_name: str, max_length: int = 32) -> str:
     """Валидирует singular/plural label runtime-объекта."""
     normalized = value.strip()
 
@@ -28,12 +28,12 @@ class ObjectLabelVO:
         normalized_singular = _validate_label(
             self.singular,
             field_name="Object label_singular",
-            max_length=16,
+            max_length=32,
         )
         normalized_plural = _validate_label(
             self.plural,
             field_name="Object label_plural",
-            max_length=16,
+            max_length=32,
         )
 
         if normalized_singular == normalized_plural:

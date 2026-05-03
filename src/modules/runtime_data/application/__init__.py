@@ -1,5 +1,7 @@
 from src.modules.runtime_data.application.models import (
     FetchPlan,
+    FilterExpression,
+    FilterGroupSpec,
     FilterSpec,
     PageSpec,
     SortSpec,
@@ -16,6 +18,8 @@ from src.modules.runtime_data.application.type_policy import (
 
 __all__ = [
     "FetchPlan",
+    "FilterExpression",
+    "FilterGroupSpec",
     "FilterSpec",
     "PageSpec",
     "RuntimeCommandGateway",

@@ -1,0 +1,1 @@
+"""Inventory HTTP presentation package."""

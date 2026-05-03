@@ -1,5 +1,11 @@
+from src.modules.schema_registry.domain.field.value_object.field_kind import FieldKind
+from src.modules.schema_registry.domain.object.value_object.object_kind import (
+    ObjectKind,
+)
 from src.modules.schema_registry.domain.seed.field_seed import FieldSeed
+from src.modules.schema_registry.domain.seed.index_seed import IndexSeed
 from src.modules.schema_registry.domain.seed.object_seed import ObjectSeed
+from src.modules.schema_registry.domain.seed.relation_seed import RelationSeed
 from src.modules.schema_registry.domain.seed.schema_seed import SchemaSeed
 
 SCHEMA_SEED = SchemaSeed(
@@ -13,6 +19,7 @@ SCHEMA_SEED = SchemaSeed(
             singular_label="Contact",
             plural_label="Contacts",
             description="Tenant contact registry.",
+            kind=ObjectKind.STANDARD,
             fields=(
                 FieldSeed(
                     name="id",
@@ -21,6 +28,7 @@ SCHEMA_SEED = SchemaSeed(
                     description="Contact identifier.",
                     is_nullable=False,
                     default="gen_random_uuid()",
+                    kind=FieldKind.SYSTEM,
                 ),
                 FieldSeed(
                     name="created_at",
@@ -29,6 +37,7 @@ SCHEMA_SEED = SchemaSeed(
                     description="Record creation timestamp.",
                     is_nullable=False,
                     default="CURRENT_TIMESTAMP",
+                    kind=FieldKind.SYSTEM,
                 ),
                 FieldSeed(
                     name="updated_at",
@@ -37,6 +46,7 @@ SCHEMA_SEED = SchemaSeed(
                     description="Record update timestamp.",
                     is_nullable=False,
                     default="CURRENT_TIMESTAMP",
+                    kind=FieldKind.SYSTEM,
                 ),
                 FieldSeed(
                     name="last_name",
@@ -83,6 +93,176 @@ SCHEMA_SEED = SchemaSeed(
                         "newsletter": "Newsletter",
                         "inactive": "Inactive",
                     },
+                ),
+            ),
+        ),
+        ObjectSeed(
+            singular_name="product_category",
+            plural_name="product_categories",
+            singular_label="Product Category",
+            plural_label="Product Categories",
+            description="Tenant product category tree.",
+            kind=ObjectKind.STANDARD,
+            fields=(
+                FieldSeed(
+                    name="id",
+                    type="uuid",
+                    label="ID",
+                    description="Product category identifier.",
+                    is_nullable=False,
+                    default="gen_random_uuid()",
+                    kind=FieldKind.SYSTEM,
+                ),
+                FieldSeed(
+                    name="created_at",
+                    type="datetime",
+                    label="Created At",
+                    description="Record creation timestamp.",
+                    is_nullable=False,
+                    default="CURRENT_TIMESTAMP",
+                    kind=FieldKind.SYSTEM,
+                ),
+                FieldSeed(
+                    name="updated_at",
+                    type="datetime",
+                    label="Updated At",
+                    description="Record update timestamp.",
+                    is_nullable=False,
+                    default="CURRENT_TIMESTAMP",
+                    kind=FieldKind.SYSTEM,
+                ),
+                FieldSeed(
+                    name="name",
+                    type="text",
+                    label="Name",
+                    description="Product category name.",
+                    is_nullable=False,
+                ),
+                FieldSeed(
+                    name="parent_category_id",
+                    type="uuid",
+                    label="Parent Category",
+                    description="Parent category identifier for category tree.",
+                    is_nullable=True,
+                ),
+            ),
+            indexes=(
+                IndexSeed(
+                    name="product_categories_id_uq",
+                    fields=("id",),
+                    is_unique=True,
+                ),
+                IndexSeed(
+                    name="product_categories_name_idx",
+                    fields=("name",),
+                    is_unique=False,
+                ),
+                IndexSeed(
+                    name="product_categories_parent_category_id_idx",
+                    fields=("parent_category_id",),
+                    is_unique=False,
+                ),
+            ),
+            relations=(
+                RelationSeed(
+                    name="product_categories_parent_category_id_fk",
+                    relation_type="many_to_one",
+                    source_field="parent_category_id",
+                    target_object="product_category",
+                    target_field="id",
+                    on_delete="restrict",
+                ),
+            ),
+        ),
+        ObjectSeed(
+            singular_name="product",
+            plural_name="products",
+            singular_label="Product",
+            plural_label="Products",
+            description="Tenant physical goods that can be sold.",
+            kind=ObjectKind.STANDARD,
+            fields=(
+                FieldSeed(
+                    name="id",
+                    type="uuid",
+                    label="ID",
+                    description="Product identifier.",
+                    is_nullable=False,
+                    default="gen_random_uuid()",
+                    kind=FieldKind.SYSTEM,
+                ),
+                FieldSeed(
+                    name="created_at",
+                    type="datetime",
+                    label="Created At",
+                    description="Record creation timestamp.",
+                    is_nullable=False,
+                    default="CURRENT_TIMESTAMP",
+                    kind=FieldKind.SYSTEM,
+                ),
+                FieldSeed(
+                    name="updated_at",
+                    type="datetime",
+                    label="Updated At",
+                    description="Record update timestamp.",
+                    is_nullable=False,
+                    default="CURRENT_TIMESTAMP",
+                    kind=FieldKind.SYSTEM,
+                ),
+                FieldSeed(
+                    name="sku",
+                    type="text",
+                    label="SKU",
+                    description="Tenant-local stock keeping unit.",
+                    is_nullable=False,
+                ),
+                FieldSeed(
+                    name="product_name",
+                    type="text",
+                    label="Product Name",
+                    description="Product display name.",
+                    is_nullable=False,
+                ),
+                FieldSeed(
+                    name="description",
+                    type="text",
+                    label="Description",
+                    description="Product description.",
+                    is_nullable=True,
+                ),
+                FieldSeed(
+                    name="category_id",
+                    type="uuid",
+                    label="Category",
+                    description="Optional product category identifier.",
+                    is_nullable=True,
+                ),
+            ),
+            indexes=(
+                IndexSeed(
+                    name="products_id_uq",
+                    fields=("id",),
+                    is_unique=True,
+                ),
+                IndexSeed(
+                    name="products_sku_uq",
+                    fields=("sku",),
+                    is_unique=True,
+                ),
+                IndexSeed(
+                    name="products_category_id_idx",
+                    fields=("category_id",),
+                    is_unique=False,
+                ),
+            ),
+            relations=(
+                RelationSeed(
+                    name="products_category_id_fk",
+                    relation_type="many_to_one",
+                    source_field="category_id",
+                    target_object="product_category",
+                    target_field="id",
+                    on_delete="restrict",
                 ),
             ),
         ),

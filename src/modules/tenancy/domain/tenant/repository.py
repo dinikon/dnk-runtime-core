@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from typing import Protocol
-from uuid import UUID
 
 from src.modules.tenancy.domain.tenant.entity import Tenant
+from src.modules.tenancy.domain.tenant.value_object import TenantIdVO
 
 
 class TenantRepositoryProtocol(Protocol):
@@ -13,7 +13,7 @@ class TenantRepositoryProtocol(Protocol):
         """Добавляет tenant в хранилище."""
         ...
 
-    async def get_by_id(self, tenant_id: UUID) -> Tenant | None:
+    async def get_by_id(self, tenant_id: TenantIdVO) -> Tenant | None:
         """Возвращает tenant по id или None."""
         ...
 

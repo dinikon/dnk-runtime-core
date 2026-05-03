@@ -41,8 +41,8 @@ async def list_contacts(
 ) -> ListContactsResponseSchema:
     """HTTP endpoint списка контактов текущего tenant с limit/offset пагинацией."""
 
-    tenant_id_raw = context.principal.tenant_id if context.principal else None
-    if tenant_id_raw is None:
+    principal = context.principal
+    if principal is None or principal.tenant_id is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Unauthorized.",
@@ -51,7 +51,7 @@ async def list_contacts(
     try:
         result = await use_case(
             ListContactsQuery(
-                tenant_id=EntityIdVO.from_value(tenant_id_raw),
+                tenant_id=EntityIdVO.from_value(principal.tenant_id),
                 limit=limit,
                 offset=offset,
             )

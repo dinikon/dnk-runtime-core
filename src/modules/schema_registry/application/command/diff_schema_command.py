@@ -1,10 +1,11 @@
 from dataclasses import dataclass
-from uuid import UUID
+
+from src.modules.shared import EntityIdVO
 
 
 @dataclass(slots=True, frozen=True)
 class DiffSchemaCommand:
     """Команда на применение diff между seed-спекой и runtime-схемой tenant."""
 
-    tenant_id: UUID
+    tenant_id: EntityIdVO
     seed_path: str

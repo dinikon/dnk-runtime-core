@@ -5,14 +5,18 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from src.modules.schema_registry.domain.datasource.entity import DataSourceEntity
+from src.modules.schema_registry.domain.datasource.value_object import DataSourceIdVO
 from src.modules.schema_registry.domain.datasource.value_object.schema_name import (
     SchemaNameVO,
 )
 from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
-from src.modules.schema_registry.domain.field.value_object.field_label import (
-    FieldLabelVO,
-)
+from src.modules.schema_registry.domain.field.value_object import RuntimeFieldIdVO
+from src.modules.schema_registry.domain.field.value_object.field_kind import FieldKind
 from src.modules.schema_registry.domain.object.entity import ObjectEntity
+from src.modules.schema_registry.domain.object.value_object import RuntimeObjectIdVO
+from src.modules.schema_registry.domain.object.value_object.object_kind import (
+    ObjectKind,
+)
 from src.modules.schema_registry.domain.object.value_object.object_label import (
     ObjectLabelVO,
 )
@@ -55,7 +59,7 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
             updated_at=now,
             tenant_id=tenant_id,
             data_source_id=datasource_id,
-            object_type="object",
+            kind="standard",
             singular_name="contact",
             plural_name="contacts",
             singular_label="Contact",
@@ -67,6 +71,7 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
             created_at=now,
             updated_at=now,
             object_id=object_id,
+            kind="system",
             field_name="last_name",
             field_type_code="text",
             label="Last Name",
@@ -97,8 +102,10 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(objects), 1)
         self.assertEqual(objects[0].tenant_id, EntityIdVO.from_value(tenant_id))
         self.assertEqual(
-            objects[0].data_source_id, EntityIdVO.from_value(datasource_id)
+            objects[0].data_source_id, DataSourceIdVO.from_value(datasource_id)
         )
+        self.assertEqual(objects[0].kind, ObjectKind.STANDARD)
+        self.assertEqual(objects[0].fields[0].kind, FieldKind.SYSTEM)
         self.assertEqual(objects[0].fields[0].field_name.value, "last_name")
 
     async def test_data_source_repository_add_maps_entity_to_orm_model(self) -> None:
@@ -107,7 +114,7 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
         now = datetime.now(UTC)
 
         datasource = DataSourceEntity.create(
-            id_=EntityIdVO.from_value(datasource_id),
+            id_=DataSourceIdVO.from_value(datasource_id),
             now=now,
             tenant_id=EntityIdVO.from_value(tenant_id),
             schema_name=SchemaNameVO("dnk_test"),
@@ -134,40 +141,43 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
         model = session.added_models[0]
         self.assertIsInstance(model, DataSourceORM)
         assert isinstance(model, DataSourceORM)
-        self.assertEqual(model.id, datasource.id.value)
-        self.assertEqual(model.tenant_id, datasource.tenant_id.value)
+        self.assertEqual(model.id, datasource.id.uuid)
+        self.assertEqual(model.tenant_id, datasource.tenant_id.uuid)
         self.assertEqual(model.data_source_type, datasource.data_source_type.value)
         self.assertEqual(model.schema_name, datasource.schema_name.value)
         self.assertEqual(model.connection_dsn, None)
 
     async def test_replace_all_flushes_objects_before_fields(self) -> None:
         tenant_id = uuid4()
-        datasource_id = EntityIdVO.from_value(uuid4())
+        datasource_id = DataSourceIdVO.from_value(uuid4())
         now = datetime.now(UTC)
 
         object_entity = ObjectEntity.create(
-            id_=EntityIdVO.from_value(uuid4()),
+            id_=RuntimeObjectIdVO.from_value(uuid4()),
             tenant_id=EntityIdVO.from_value(tenant_id),
             data_source_id=datasource_id,
             now=now,
             object_name=ObjectNameVO(singular="contact", plural="contacts"),
             object_label=ObjectLabelVO(singular="Contact", plural="Contacts"),
             description="Tenant contacts.",
+            kind=ObjectKind.CUSTOM,
         )
         object_entity.add_field(
-            field_id=EntityIdVO.from_value(uuid4()),
+            field_id=RuntimeFieldIdVO.from_value(uuid4()),
             now=now,
             field_name="last_name",
             field_type=FieldTypeCatalog().from_seed_type("text"),
             label="Last Name",
             description="Contact last name.",
             is_nullable=False,
+            kind=FieldKind.SYSTEM,
         )
 
         class SessionSpy:
             def __init__(self) -> None:
                 self.flush_snapshots: list[list[str]] = []
                 self.added_types: list[str] = []
+                self.added_models: list[object] = []
 
             async def scalars(self, *_args, **_kwargs):
                 return ScalarsResult([])
@@ -176,6 +186,7 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
                 return None
 
             def add(self, model) -> None:
+                self.added_models.append(model)
                 self.added_types.append(type(model).__name__)
 
             async def flush(self) -> None:
@@ -193,6 +204,14 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
             session.flush_snapshots,
             [[], ["ObjectORM"], ["ObjectORM", "FieldORM"]],
         )
+        object_model = next(
+            model for model in session.added_models if isinstance(model, ObjectORM)
+        )
+        field_model = next(
+            model for model in session.added_models if isinstance(model, FieldORM)
+        )
+        self.assertEqual(object_model.kind, "custom")
+        self.assertEqual(field_model.kind, "system")
 
     async def test_reconcile_preserves_existing_field_identity(self) -> None:
         tenant_id = uuid4()
@@ -202,16 +221,16 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
         data_source_id = uuid4()
 
         object_entity = ObjectEntity.create(
-            id_=EntityIdVO.from_value(object_id),
+            id_=RuntimeObjectIdVO.from_value(object_id),
             tenant_id=EntityIdVO.from_value(tenant_id),
-            data_source_id=EntityIdVO.from_value(data_source_id),
+            data_source_id=DataSourceIdVO.from_value(data_source_id),
             now=now,
             object_name=ObjectNameVO(singular="contact", plural="contacts"),
             object_label=ObjectLabelVO(singular="Contact", plural="Contacts"),
             description="Tenant contacts.",
         )
         object_entity.add_field(
-            field_id=EntityIdVO.from_value(field_id),
+            field_id=RuntimeFieldIdVO.from_value(field_id),
             now=now,
             field_name="last_name",
             field_type=FieldTypeCatalog().from_seed_type("text"),
@@ -226,7 +245,7 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
             updated_at=now,
             tenant_id=tenant_id,
             data_source_id=data_source_id,
-            object_type="object",
+            kind="standard",
             singular_name="contact",
             plural_name="contacts",
             singular_label="Contact",
@@ -238,6 +257,7 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
             created_at=now,
             updated_at=now,
             object_id=object_id,
+            kind="standard",
             field_name="last_name",
             field_type_code="text",
             label="Last Name",
@@ -287,6 +307,7 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(field_model.id, field_id)
         self.assertEqual(field_model.label, "Surname")
+        self.assertEqual(field_model.kind, "standard")
         self.assertFalse(
             any(isinstance(model, FieldORM) for model in session.added_models)
         )

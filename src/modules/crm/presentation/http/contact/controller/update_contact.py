@@ -44,15 +44,15 @@ async def update_contact(
 ) -> ContactResponseSchema:
     """HTTP endpoint обновления контакта текущего tenant."""
 
-    tenant_id_raw = context.principal.tenant_id if context.principal else None
-    if tenant_id_raw is None:
+    principal = context.principal
+    if principal is None or principal.tenant_id is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Unauthorized.",
         )
 
     command = RenameContactCommand(
-        tenant_id=EntityIdVO.from_value(tenant_id_raw),
+        tenant_id=EntityIdVO.from_value(principal.tenant_id),
         contact_id=ContactIdVO.from_value(contact_id),
         last_name=payload.last_name,
         first_name=payload.first_name,

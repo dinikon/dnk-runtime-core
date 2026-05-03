@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, TypeAlias
 
 FilterOperator = Literal["eq", "in", "contains", "gte", "lte"]
+FilterLogic = Literal["and", "or"]
 SortDirection = Literal["asc", "desc"]
 
 
@@ -14,6 +15,17 @@ class FilterSpec:
     field: str
     op: FilterOperator
     value: Any
+
+
+@dataclass(frozen=True, slots=True)
+class FilterGroupSpec:
+    """Группа runtime-фильтров с явным AND/OR оператором."""
+
+    logic: FilterLogic
+    items: tuple["FilterExpression", ...]
+
+
+FilterExpression: TypeAlias = FilterSpec | FilterGroupSpec
 
 
 @dataclass(frozen=True, slots=True)

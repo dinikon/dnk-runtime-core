@@ -57,8 +57,8 @@ class ResolveTenantRequestContextByHostUseCase:
             api_host = tenant_domain.host
 
         return TenantRequestContextDTO(
-            tenant_id=tenant.id,
-            tenant_domain_id=tenant_domain.id,
+            tenant_id=tenant.id.uuid,
+            tenant_domain_id=tenant_domain.id.uuid,
             host=tenant_domain.host,
             tenant_status=tenant.status.value,
             domain_status=tenant_domain.status.value,

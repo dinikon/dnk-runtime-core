@@ -18,6 +18,8 @@ Default seed module:
 
 - `src.modules.schema_registry.seed.schema_seed`
 
+The default seed currently declares CRM contacts plus inventory products and product categories.
+
 ## 2. Metadata Snapshot
 
 Metadata snapshot is stored in system tables and represents the registry view of tenant runtime schema.
@@ -43,6 +45,14 @@ This is the actual PostgreSQL schema for a tenant:
 - columns
 - indexes
 - foreign keys
+
+Client runtime rows do not carry a `tenant_id` column/key. Tenant isolation comes from host/domain resolution plus the
+physical tenant schema selected for the request. Application code still passes the resolved `tenant_id` internally so
+metadata resolution and runtime gateways can target the correct tenant schema.
+
+Inside domain/application code that tenant scope is represented as `EntityIdVO`. Runtime metadata entities use concrete
+`EntityIdVO` subclasses (`DataSourceIdVO`, `RuntimeObjectIdVO`, `RuntimeFieldIdVO`), while physical schema columns and
+HTTP/CLI interfaces continue to use UUID values.
 
 `schema_registry` inspects this physical schema and compares it with the seed.
 

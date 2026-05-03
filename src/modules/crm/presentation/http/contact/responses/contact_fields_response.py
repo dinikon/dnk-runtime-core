@@ -18,6 +18,7 @@ class ContactFieldDescriptionResponseSchema(BaseModel):
     label: str
     description: str
     type: str
+    kind: str
     is_nullable: bool
     default_value: str | None
     options: list[ContactFieldOptionResponseSchema]
@@ -30,6 +31,7 @@ class ContactObjectDescriptionResponseSchema(BaseModel):
     singular_label: str
     plural_label: str
     description: str
+    kind: str
 
 
 class ContactFieldsResponseSchema(BaseModel):

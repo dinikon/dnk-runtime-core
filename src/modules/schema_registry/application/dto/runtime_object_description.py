@@ -14,6 +14,7 @@ class RuntimeFieldDescriptionDTO:
     is_nullable: bool
     default_value: str | None
     options: dict[str, str]
+    kind: str = "standard"
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,3 +26,4 @@ class RuntimeObjectDescriptionDTO:
     plural_label: str
     description: str
     fields: tuple[RuntimeFieldDescriptionDTO, ...]
+    kind: str = "standard"

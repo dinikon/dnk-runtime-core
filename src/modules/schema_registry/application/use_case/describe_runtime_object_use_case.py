@@ -71,13 +71,14 @@ class DescribeRuntimeObjectUseCase:
             )
 
         return RuntimeObjectDescriptionDTO(
-            id=object_entity.id.value,
+            id=object_entity.id.uuid,
             singular_label=object_entity.object_label.singular,
             plural_label=object_entity.object_label.plural,
             description=object_entity.description,
+            kind=object_entity.kind.value,
             fields=tuple(
                 RuntimeFieldDescriptionDTO(
-                    id=field.id.value,
+                    id=field.id.uuid,
                     field_name=field.field_name.value,
                     label=field.label.value,
                     description=field.description,
@@ -85,6 +86,7 @@ class DescribeRuntimeObjectUseCase:
                     is_nullable=field.is_nullable,
                     default_value=field.default_value,
                     options=dict(field.options),
+                    kind=field.kind.value,
                 )
                 for field in object_entity.fields
             ),

@@ -33,15 +33,15 @@ async def describe_contact_fields(
 ) -> ContactFieldsResponseSchema:
     """HTTP endpoint получения описания CRM-модели contact для tenant."""
 
-    tenant_id_raw = context.principal.tenant_id if context.principal else None
-    if tenant_id_raw is None:
+    principal = context.principal
+    if principal is None or principal.tenant_id is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Unauthorized.",
         )
 
     try:
-        result = await use_case(EntityIdVO.from_value(tenant_id_raw))
+        result = await use_case(EntityIdVO.from_value(principal.tenant_id))
     except (
         DataSourceNotFoundError,
         RuntimeObjectNotFoundError,
@@ -63,6 +63,7 @@ async def describe_contact_fields(
             singular_label=result.object_description.singular_label,
             plural_label=result.object_description.plural_label,
             description=result.object_description.description,
+            kind=result.object_description.kind,
         ),
         fields=[
             ContactFieldDescriptionResponseSchema(
@@ -71,6 +72,7 @@ async def describe_contact_fields(
                 label=field.label,
                 description=field.description,
                 type=field.type,
+                kind=field.kind,
                 is_nullable=field.is_nullable,
                 default_value=field.default_value,
                 options=[

@@ -22,6 +22,7 @@ class ContactFieldDescriptionDTO:
     is_nullable: bool
     default_value: str | None
     options: tuple[ContactFieldOptionDTO, ...]
+    kind: str = "standard"
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +33,7 @@ class ContactObjectDescriptionDTO:
     singular_label: str
     plural_label: str
     description: str
+    kind: str = "standard"
 
 
 @dataclass(frozen=True, slots=True)

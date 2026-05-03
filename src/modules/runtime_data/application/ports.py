@@ -5,6 +5,7 @@ from typing import Any, Protocol
 
 from src.modules.runtime_data.application.models import (
     FetchPlan,
+    FilterExpression,
     FilterSpec,
     PageSpec,
     SortSpec,
@@ -61,7 +62,7 @@ class RuntimeQueryGateway(Protocol):
         self,
         *,
         descriptor: RuntimeObjectDescriptor,
-        filters: Sequence[FilterSpec] = (),
+        filters: Sequence[FilterExpression] = (),
         sorting: Sequence[SortSpec] = (),
         page: PageSpec | None = None,
         fetch_plan: FetchPlan | None = None,

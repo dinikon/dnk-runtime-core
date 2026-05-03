@@ -23,7 +23,8 @@ hosts infrastructure, kernel concepts and utility abstractions.
 ## Most Used Shared Primitives
 
 - `EntityIdVO`
-    - strongly typed entity identifier wrapper used across modules
+    - UUID value object used directly for tenant scope and as the base class for concrete identifiers such as
+      `UserIdVO`, `ContactIdVO`, `ProductIdVO`, `RuntimeObjectIdVO` and `RuntimeFieldIdVO`
 - `RequestContext`
     - current request principal + request metadata
 - `Principal`
@@ -45,6 +46,8 @@ hosts infrastructure, kernel concepts and utility abstractions.
 - standardizes transaction, auth and request lifecycle behavior
 - centralizes email provider selection and SMTP transport wiring
 - provides common contracts for domain/application code
+- keeps id handling consistent: public APIs and persistence can expose UUIDs, while domain/application code uses
+  `EntityIdVO` for tenant scope and concrete `EntityIdVO` subclasses for entity ids
 
 ## Tests Covering This Area
 

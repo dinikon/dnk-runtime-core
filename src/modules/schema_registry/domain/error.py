@@ -43,6 +43,12 @@ class InvalidFieldOperationError(SchemaRegistryError):
     pass
 
 
+class InvalidObjectOperationError(SchemaRegistryError):
+    """Ошибка неподдержанной или запрещенной операции над runtime-объектом."""
+
+    pass
+
+
 class InvalidValueObjectError(SchemaRegistryError):
     """Ошибка валидации value object в домене schema_registry."""
 

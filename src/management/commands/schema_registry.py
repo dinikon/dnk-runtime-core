@@ -10,6 +10,7 @@ from src.modules.schema_registry.domain.error import SchemaRegistryError
 from src.modules.schema_registry.presentation.depends.management import (
     build_diff_schema_use_case,
 )
+from src.modules.shared import EntityIdVO
 from src.modules.shared.db.helper import db_helper
 from src.modules.shared.db.uow import UnitOfWork
 from src.modules.shared.infrastructure.time import UtcClock
@@ -25,7 +26,7 @@ async def handle_diff(args: argparse.Namespace) -> int:
             )
             result = await use_case.execute(
                 DiffSchemaCommand(
-                    tenant_id=args.tenant_id,
+                    tenant_id=EntityIdVO.from_value(args.tenant_id),
                     seed_path=args.seed_path,
                 )
             )

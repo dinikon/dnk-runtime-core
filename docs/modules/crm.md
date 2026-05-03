@@ -26,14 +26,19 @@ only contacts.
 ## Domain Model
 
 - `ContactEntity`
-    - `id`
+    - `id` as `ContactIdVO`
     - timestamps
     - `ContactNameVO` with last, first and middle name
 
 ## Infrastructure / Persistence
 
 - CRM repositories live under `crm/infrastructure`
-- current persistence integrates with shared database layer and tenant-aware request context
+- current persistence integrates with shared database layer and authenticated request context
+- HTTP payloads do not accept `tenant_id`; controllers read it from request context and pass it through CRM commands,
+  queries, use cases and repository calls
+- internally that tenant scope is `EntityIdVO`; contact ids are `ContactIdVO` and are converted to UUIDs only at
+  HTTP/runtime-data boundaries
+- wiring stays tenant-agnostic and does not bind repositories to a tenant
 
 ## Presentation / Entry Points
 
@@ -51,7 +56,7 @@ All routes currently require authenticated request context.
 ## Dependencies On Other Modules
 
 - uses `shared` authentication dependency and request context
-- is tenant-aware through shared request context rather than through its own tenant bootstrap logic
+- relies on request-domain tenant resolution rather than its own tenant bootstrap logic
 
 ## Tests Covering This Module
 

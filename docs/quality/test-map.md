@@ -9,6 +9,7 @@ This page maps current tests to the behaviors they protect.
     - protects `schema_registry.domain` from PostgreSQL/migration implementation leakage
     - checks that removed legacy paths are no longer used
   - checks that removed `identity` `error_mapper` and `infrastructure.mapper` paths are no longer used
+  - protects the single `EntityIdVO` identifier style and concrete id inheritance
 
 ## Tenancy And Bootstrap Boundary
 
@@ -56,6 +57,9 @@ This page maps current tests to the behaviors they protect.
 
 ## Shared
 
+- `test/test_shared_typed_entity_id.py`
+    - `EntityIdVO` conversion from UUID/string/base id
+    - concrete id classes inherit base behavior and are not equal for the same UUID
 - `test/test_shared_email_service.py`
   - typed email service rendering for system email kinds
   - provider factory selection
@@ -67,6 +71,40 @@ This page maps current tests to the behaviors they protect.
 
 - `test_crm_*`
     - CRM endpoints and domain/use case behavior around contacts
+
+## Inventory
+
+- `test/test_inventory_schema_seed.py`
+    - default seed inventory objects, indexes and foreign keys
+- `test/test_inventory_domain_use_cases.py`
+    - product/category value objects and category tree validation
+- `test/test_inventory_runtime_repositories.py`
+    - runtime repository mapping and filter payloads
+- `test/test_inventory_controller_errors.py`
+    - controller error mapping and product category filtering
+- `test/test_inventory_http_router.py`
+    - public inventory route registration
+
+## Custom Object
+
+- `test/test_custom_object_records_use_cases.py`
+    - custom object record CRUD/list orchestration
+    - system field write protection
+- `test/test_custom_object_controller_errors.py`
+    - controller error mapping and Filter/Sort parsing
+- `test/test_custom_object_http_router.py`
+    - public custom object route registration
+- `test/test_runtime_data_postgres_gateway.py`
+    - nested AND/OR runtime filter SQL generation
+
+## Schema Config
+
+- `test/test_schema_config_repository.py`
+    - object metadata creation and targeted DDL planning
+    - object kind policy for system/view/standard/custom
+    - field kind policy and unsafe required field addition rejection
+- `test/test_schema_config_http_router.py`
+    - public `/api/config/objects/...` route registration
 
 ## Legacy / Historical Naming
 
@@ -85,6 +123,7 @@ This page maps current tests to the behaviors they protect.
 - [Constraints and conventions](constraints-and-conventions.md)
 - [Schema Registry module](../modules/schema-registry.md)
 - [Tenancy module](../modules/tenancy.md)
+- [Inventory module](../modules/inventory.md)
 
 ## Source Of Truth
 

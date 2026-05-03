@@ -12,6 +12,8 @@ from sqlalchemy.sql.elements import TextClause
 
 from src.modules.runtime_data.application.models import (
     FetchPlan,
+    FilterExpression,
+    FilterGroupSpec,
     FilterSpec,
     PageSpec,
     SortSpec,
@@ -205,7 +207,7 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         self,
         *,
         descriptor: RuntimeObjectDescriptor,
-        filters: Sequence[FilterSpec] = (),
+        filters: Sequence[FilterExpression] = (),
         sorting: Sequence[SortSpec] = (),
         page: PageSpec | None = None,
         fetch_plan: FetchPlan | None = None,
@@ -217,11 +219,17 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         params: dict[str, Any] = {}
         bind_fields: dict[str, RuntimeFieldDescriptor] = {}
         where_parts: list[str] = []
-        for index, filter_spec in enumerate(filters):
-            where_sql, where_params, where_bind_fields = self._build_filter_clause(
+        position = 0
+        for filter_spec in filters:
+            (
+                where_sql,
+                where_params,
+                where_bind_fields,
+                position,
+            ) = self._build_filter_expression(
                 descriptor=descriptor,
                 filter_spec=filter_spec,
-                position=index,
+                position=position,
             )
             where_parts.append(where_sql)
             params.update(where_params)
@@ -256,6 +264,64 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
             self._type_policy.normalize_row(descriptor=descriptor, row=row)
             for row in rows
         ]
+
+    def _build_filter_expression(
+        self,
+        *,
+        descriptor: RuntimeObjectDescriptor,
+        filter_spec: FilterExpression,
+        position: int,
+    ) -> tuple[str, dict[str, Any], dict[str, RuntimeFieldDescriptor], int]:
+        """Строит SQL-фрагмент WHERE для одиночного фильтра или AND/OR группы."""
+        if isinstance(filter_spec, FilterSpec):
+            where_sql, where_params, where_bind_fields = self._build_filter_clause(
+                descriptor=descriptor,
+                filter_spec=filter_spec,
+                position=position,
+            )
+            return where_sql, where_params, where_bind_fields, position + 1
+
+        if isinstance(filter_spec, FilterGroupSpec):
+            logic = str(filter_spec.logic).strip().lower()
+            if logic not in {"and", "or"}:
+                raise RuntimeDataFilterError(
+                    f"Unsupported filter group logic '{filter_spec.logic}'."
+                )
+            if not filter_spec.items:
+                raise RuntimeDataFilterError(
+                    f"Filter group '{logic}' requires at least one item."
+                )
+
+            parts: list[str] = []
+            params: dict[str, Any] = {}
+            bind_fields: dict[str, RuntimeFieldDescriptor] = {}
+            next_position = position
+            for item in filter_spec.items:
+                (
+                    item_sql,
+                    item_params,
+                    item_bind_fields,
+                    next_position,
+                ) = self._build_filter_expression(
+                    descriptor=descriptor,
+                    filter_spec=item,
+                    position=next_position,
+                )
+                parts.append(item_sql)
+                params.update(item_params)
+                bind_fields.update(item_bind_fields)
+
+            joiner = f" {logic.upper()} "
+            return (
+                f"({joiner.join(parts)})",
+                params,
+                bind_fields,
+                next_position,
+            )
+
+        raise RuntimeDataFilterError(
+            f"Unsupported filter expression '{type(filter_spec).__name__}'."
+        )
 
     def _build_filter_clause(
         self,

@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
+from src.modules.shared import EntityIdVO
+
 
 @dataclass(frozen=True, slots=True)
 class TenantSchemaBootstrapContext:
@@ -34,11 +36,11 @@ class TenantSchemaBootstrapContextFactory:
         self._schema_prefix = schema_prefix
         self._default_seed_path = default_seed_path
 
-    def build(self, *, tenant_id: UUID) -> TenantSchemaBootstrapContext:
+    def build(self, *, tenant_id: EntityIdVO) -> TenantSchemaBootstrapContext:
         """Создает bootstrap context с именем схемы на базе tenant UUID hex."""
         return TenantSchemaBootstrapContext(
-            tenant_id=tenant_id,
-            schema_name=f"{self._schema_prefix}{tenant_id.hex}",
+            tenant_id=tenant_id.uuid,
+            schema_name=f"{self._schema_prefix}{tenant_id.uuid.hex}",
             seed_path=self._default_seed_path,
         )
 

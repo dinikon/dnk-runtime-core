@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from src.modules.schema_registry.domain.error import InvalidValueObjectError
 
 
-def validate_label(value: str, *, field_name: str, max_length: int = 16) -> str:
+def validate_label(value: str, *, field_name: str, max_length: int = 32) -> str:
     """Валидирует человекочитаемый label и возвращает trim-значение."""
 
     normalized = value.strip()
@@ -28,6 +28,6 @@ class FieldLabelVO:
         normalized = validate_label(
             self.value,
             field_name="Field label",
-            max_length=16,
+            max_length=32,
         )
         object.__setattr__(self, "value", normalized)

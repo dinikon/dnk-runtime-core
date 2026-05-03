@@ -6,11 +6,12 @@
 2. Root router from `src/modules/router.py` is mounted under `/api`.
 3. Module router selects the concrete controller function.
 4. `presentation/depends/*` resolves use case and infrastructure dependencies.
-5. Controller maps request schema to command/query DTO.
-6. Controller calls the use case as `await use_case(...)` and maps domain errors to HTTP status codes.
-7. Application use case orchestrates services.
-8. Domain services and repositories perform business work.
-9. Response schema is built and returned to the client.
+5. Controller reads tenant from authenticated request context when the route works with client runtime data.
+6. Controller maps request schema to command/query DTO and adds internal `tenant_id` from the request context.
+7. Controller calls the use case as `await use_case(...)` and maps domain errors to HTTP status codes.
+8. Application use case orchestrates services.
+9. Domain services and repositories perform business work.
+10. Response schema is built and returned to the client.
 
 ## Example Paths
 

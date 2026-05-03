@@ -5,12 +5,15 @@ from src.modules.identity.domain.user.error import (
     UserLoginUnavailableError,
 )
 from src.modules.identity.domain.user.repository import UserRepositoryProtocol
+from src.modules.identity.domain.user.value_object import UserEmailIdVO, UserIdVO
 
 __all__ = [
     "PrimaryUserEmailNotFoundError",
     "User",
     "UserEmail",
     "UserEmailAlreadyExistsError",
+    "UserEmailIdVO",
+    "UserIdVO",
     "UserLoginUnavailableError",
     "UserRepositoryProtocol",
 ]

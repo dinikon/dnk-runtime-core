@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.modules.runtime_data import (
+    FilterGroupSpec,
     FilterSpec,
     PageSpec,
     PostgresRuntimeGateway,
@@ -227,6 +228,58 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("LIMIT :page_limit OFFSET :page_offset", sql)
         self.assertEqual(params["page_limit"], 25)
         self.assertEqual(params["page_offset"], 10)
+
+    async def test_list_supports_nested_filter_groups(self) -> None:
+        contact_id = uuid4()
+        response_row = {
+            "id": contact_id,
+            "created_at": datetime(2026, 1, 1, 10, 0, 0),
+            "updated_at": datetime(2026, 1, 1, 11, 0, 0),
+            "last_name": "Doe",
+            "first_name": "Jane",
+            "tags": [],
+        }
+        session = _SessionSpy([_MappingsResult([response_row])])
+        gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
+
+        rows = await gateway.list(
+            descriptor=self._descriptor(),
+            filters=(
+                FilterGroupSpec(
+                    logic="and",
+                    items=(
+                        FilterSpec(field="last_name", op="eq", value="Doe"),
+                        FilterGroupSpec(
+                            logic="or",
+                            items=(
+                                FilterSpec(
+                                    field="first_name",
+                                    op="contains",
+                                    value="Ja",
+                                ),
+                                FilterSpec(
+                                    field="last_name",
+                                    op="contains",
+                                    value="Do",
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        self.assertEqual(len(rows), 1)
+        sql, params = session.calls[0]
+        self.assertIn(
+            'WHERE ("last_name" = :f_0 AND '
+            '(CAST("first_name" AS text) ILIKE :f_1 OR '
+            'CAST("last_name" AS text) ILIKE :f_2))',
+            sql,
+        )
+        self.assertEqual(params["f_0"], "Doe")
+        self.assertEqual(params["f_1"], "%Ja%")
+        self.assertEqual(params["f_2"], "%Do%")
 
     async def test_sqlalchemy_error_becomes_runtime_persistence_error(self) -> None:
         class FailingSession:

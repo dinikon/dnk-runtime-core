@@ -160,3 +160,166 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                 any(pattern in content for pattern in forbidden_patterns),
                 msg=f"{path} still uses removed email wiring pattern",
             )
+
+    def test_client_data_wiring_does_not_resolve_tenant_id(self) -> None:
+        paths = [
+            PROJECT_ROOT / "src/modules/crm/presentation/depends/infrastructure.py",
+            PROJECT_ROOT
+            / "src/modules/inventory/presentation/depends/infrastructure.py",
+            PROJECT_ROOT
+            / "src/modules/custom_object/presentation/depends/infrastructure.py",
+        ]
+        for path in paths:
+            content = path.read_text(encoding="utf-8")
+            self.assertNotIn(
+                "tenant_id",
+                content,
+                msg=f"{path} still resolves tenant_id in wiring",
+            )
+
+    def test_shared_exports_only_generic_entity_id_vo(self) -> None:
+        paths = [
+            PROJECT_ROOT / "src/modules/shared/__init__.py",
+            PROJECT_ROOT / "src/modules/shared/domain/__init__.py",
+            PROJECT_ROOT / "src/modules/shared/domain/value_object/__init__.py",
+            PROJECT_ROOT / "src/modules/shared/domain/value_object/entity_id.py",
+        ]
+        for path in paths:
+            content = path.read_text(encoding="utf-8")
+            self.assertNotIn(
+                "TenantIdVO",
+                content,
+                msg=f"{path} exports or defines a tenant-specific id VO",
+            )
+
+        tree = ast.parse(
+            (
+                PROJECT_ROOT / "src/modules/shared/domain/value_object/entity_id.py"
+            ).read_text(encoding="utf-8")
+        )
+        id_classes = [
+            node.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ClassDef) and node.name.endswith("IdVO")
+        ]
+        self.assertEqual(id_classes, ["EntityIdVO"])
+
+    def test_concrete_id_value_objects_live_near_domain_objects(self) -> None:
+        for path in iter_python_files("src/modules"):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for class_def in ast.walk(tree):
+                if not isinstance(class_def, ast.ClassDef):
+                    continue
+                if (
+                    not class_def.name.endswith("IdVO")
+                    or class_def.name == "EntityIdVO"
+                ):
+                    continue
+                self.assertIn(
+                    "/domain/",
+                    path.as_posix(),
+                    msg=f"{path}:{class_def.name} is not under module/domain",
+                )
+                self.assertIn(
+                    "/value_object/",
+                    path.as_posix(),
+                    msg=f"{path}:{class_def.name} is not under value_object",
+                )
+
+    def test_custom_object_wiring_does_not_use_tenant_domain_id(self) -> None:
+        path = (
+            PROJECT_ROOT
+            / "src/modules/custom_object/presentation/depends/infrastructure.py"
+        )
+        content = path.read_text(encoding="utf-8")
+        self.assertNotIn("TenantIdVO", content)
+        self.assertNotIn("src.modules.tenancy.domain", content)
+
+    def test_custom_object_does_not_own_schema_config_or_ddl(self) -> None:
+        forbidden_patterns = (
+            "src.modules.schema_registry.application.config.object",
+            "src.modules.schema_registry.application.config.field",
+            "src.modules.schema_registry.application.migration",
+            "src.modules.schema_registry.application.ports.tenant_schema_executor",
+            "src.modules.schema_registry.domain.datasource.service",
+            "src.modules.schema_registry.domain.object.repository",
+            "SchemaConfigRepository",
+            "TenantSchemaExecutor",
+            "ObjectRepositoryProtocol",
+            "DataSourceService",
+            "CreateTableOperation",
+            "AddColumnOperation",
+            "DropTableOperation",
+            "DropColumnOperation",
+        )
+        for path in iter_python_files("src/modules/custom_object"):
+            content = path.read_text(encoding="utf-8")
+            for pattern in forbidden_patterns:
+                self.assertNotIn(
+                    pattern,
+                    content,
+                    msg=f"{path} still owns schema config or DDL via {pattern}",
+                )
+
+    def test_removed_id_wrapper_types_are_not_used(self) -> None:
+        removed_types = ("Typed" + "EntityIdVO",)
+        for root in ("src", "test"):
+            for path in iter_python_files(root):
+                if path == Path(__file__).resolve():
+                    continue
+                content = path.read_text(encoding="utf-8")
+                for removed_type in removed_types:
+                    self.assertNotIn(
+                        removed_type,
+                        content,
+                        msg=f"{path} still uses removed id type {removed_type}",
+                    )
+
+    def test_concrete_id_value_objects_inherit_entity_id_vo(self) -> None:
+        value_object_paths = [
+            path
+            for path in iter_python_files("src/modules")
+            if path.name.endswith("_id.py")
+            and "/value_object/" in path.as_posix()
+            and path.name != "entity_id.py"
+        ]
+        for path in value_object_paths:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            id_classes = [
+                node
+                for node in ast.walk(tree)
+                if isinstance(node, ast.ClassDef) and node.name.endswith("IdVO")
+            ]
+            self.assertTrue(id_classes, msg=f"{path} defines no concrete id VO")
+            for class_def in id_classes:
+                bases = {
+                    base.id for base in class_def.bases if isinstance(base, ast.Name)
+                }
+                self.assertIn(
+                    "EntityIdVO",
+                    bases,
+                    msg=f"{path}:{class_def.name} does not inherit EntityIdVO",
+                )
+
+    def test_domain_entity_ids_do_not_use_raw_uuid_annotations(self) -> None:
+        allowed_patterns = (
+            "FieldTypeEnum.UUID",
+            'UUID = "uuid"',
+            "from uuid import UUID",
+        )
+        for path in iter_python_files("src/modules"):
+            if "/domain/" not in path.as_posix():
+                continue
+            if path.as_posix().endswith(
+                "src/modules/shared/domain/value_object/entity_id.py"
+            ):
+                continue
+            content = path.read_text(encoding="utf-8")
+            filtered = content
+            for pattern in allowed_patterns:
+                filtered = filtered.replace(pattern, "")
+            self.assertNotIn(
+                ": UUID",
+                filtered,
+                msg=f"{path} uses raw UUID annotation in domain",
+            )

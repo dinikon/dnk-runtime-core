@@ -8,16 +8,29 @@ from src.modules.schema_registry.domain.error import (
     FieldAlreadyExistsError,
 )
 from src.modules.schema_registry.domain.field.entity import FieldEntity
+from src.modules.schema_registry.domain.field.value_object.field_kind import FieldKind
 from src.modules.schema_registry.domain.field.value_object.field_label import (
     FieldLabelVO,
 )
 from src.modules.schema_registry.domain.field.value_object.field_name import FieldNameVO
+from src.modules.schema_registry.domain.field.value_object.runtime_field_id import (
+    RuntimeFieldIdVO,
+)
 from src.modules.schema_registry.domain.field.value_object.field_type import FieldTypeVO
+from src.modules.schema_registry.domain.datasource.value_object.data_source_id import (
+    DataSourceIdVO,
+)
 from src.modules.schema_registry.domain.object.value_object.object_label import (
     ObjectLabelVO,
 )
+from src.modules.schema_registry.domain.object.value_object.object_kind import (
+    ObjectKind,
+)
 from src.modules.schema_registry.domain.object.value_object.object_name import (
     ObjectNameVO,
+)
+from src.modules.schema_registry.domain.object.value_object.runtime_object_id import (
+    RuntimeObjectIdVO,
 )
 from src.modules.schema_registry.domain.seed.field_seed import FieldSeed
 from src.modules.shared import EntityIdVO
@@ -27,13 +40,14 @@ from src.modules.shared import EntityIdVO
 class ObjectEntity:
     """Доменная сущность runtime-объекта и его полей в metadata."""
 
-    id: EntityIdVO
+    id: RuntimeObjectIdVO
     created_at: datetime
     updated_at: datetime
 
     tenant_id: EntityIdVO
-    data_source_id: EntityIdVO
+    data_source_id: DataSourceIdVO
 
+    kind: ObjectKind
     object_name: ObjectNameVO
     object_label: ObjectLabelVO
 
@@ -50,13 +64,14 @@ class ObjectEntity:
     def create(
         cls,
         *,
-        id_: EntityIdVO,
+        id_: RuntimeObjectIdVO,
         tenant_id: EntityIdVO,
-        data_source_id: EntityIdVO,
+        data_source_id: DataSourceIdVO,
         now: datetime,
         object_name: ObjectNameVO,
         object_label: ObjectLabelVO,
         description: str,
+        kind: ObjectKind = ObjectKind.STANDARD,
     ) -> Self:
         """Создает runtime-объект без полей и нормализует description."""
         return cls(
@@ -65,6 +80,7 @@ class ObjectEntity:
             updated_at=now,
             tenant_id=tenant_id,
             data_source_id=data_source_id,
+            kind=kind,
             object_name=object_name,
             object_label=object_label,
             description=description.strip(),
@@ -78,8 +94,11 @@ class ObjectEntity:
         object_name: ObjectNameVO,
         object_label: ObjectLabelVO,
         description: str,
+        kind: ObjectKind | None = None,
     ) -> None:
         """Обновляет имя, label и description runtime-объекта."""
+        if kind is not None:
+            self.kind = kind
         self.object_name = object_name
         self.object_label = object_label
         self.description = description.strip()
@@ -88,7 +107,7 @@ class ObjectEntity:
     def add_field(
         self,
         *,
-        field_id: EntityIdVO,
+        field_id: RuntimeFieldIdVO,
         now: datetime,
         field_name: str,
         field_type: FieldTypeVO,
@@ -98,6 +117,7 @@ class ObjectEntity:
         default_value: str | None = None,
         options: dict[str, str] | None = None,
         settings: dict[str, str] | None = None,
+        kind: FieldKind = FieldKind.STANDARD,
     ) -> FieldEntity:
         """Добавляет новое поле в объект, проверяя уникальность имени."""
         self._ensure_field_name_is_unique(field_name=field_name)
@@ -108,6 +128,7 @@ class ObjectEntity:
             now=now,
             field_name=FieldNameVO(field_name),
             field_type=field_type,
+            kind=kind,
             label=FieldLabelVO(label),
             description=description,
             is_nullable=is_nullable,
@@ -124,7 +145,7 @@ class ObjectEntity:
         *,
         now: datetime,
         seeds: Sequence[FieldSeed],
-        field_id_provider: Callable[[], EntityIdVO],
+        field_id_provider: Callable[[], RuntimeFieldIdVO],
         field_type_mapper: Callable[[str], FieldTypeVO],
     ) -> None:
         """Массово добавляет поля из raw seed через переданный mapper типов."""
@@ -140,12 +161,13 @@ class ObjectEntity:
                 default_value=seed.default,
                 options=seed.options,
                 settings=seed.settings,
+                kind=FieldKind.from_value(seed.kind),
             )
 
     def rename_field(
         self,
         *,
-        field_id: EntityIdVO,
+        field_id: RuntimeFieldIdVO,
         now: datetime,
         field_name: str,
         label: str,
@@ -170,7 +192,7 @@ class ObjectEntity:
     def remove_field(
         self,
         *,
-        field_id: EntityIdVO,
+        field_id: RuntimeFieldIdVO,
         now: datetime,
     ) -> FieldEntity:
         """Удаляет поле из объекта и возвращает удаленную сущность."""
@@ -182,7 +204,7 @@ class ObjectEntity:
     def replace_field_settings(
         self,
         *,
-        field_id: EntityIdVO,
+        field_id: RuntimeFieldIdVO,
         now: datetime,
         settings: dict[str, str],
     ) -> None:
@@ -194,7 +216,7 @@ class ObjectEntity:
     def merge_field_settings(
         self,
         *,
-        field_id: EntityIdVO,
+        field_id: RuntimeFieldIdVO,
         now: datetime,
         patch: dict[str, str],
     ) -> None:
@@ -206,7 +228,7 @@ class ObjectEntity:
     def replace_field_options(
         self,
         *,
-        field_id: EntityIdVO,
+        field_id: RuntimeFieldIdVO,
         now: datetime,
         options: dict[str, str],
     ) -> None:
@@ -215,7 +237,7 @@ class ObjectEntity:
         field_entity.replace_options(now=now, options=options)
         self.updated_at = now
 
-    def get_field(self, field_id: EntityIdVO) -> FieldEntity:
+    def get_field(self, field_id: RuntimeFieldIdVO) -> FieldEntity:
         """Возвращает поле по id или поднимает FieldNotFoundError."""
         for field_entity in self.fields:
             if field_entity.id == field_id:
@@ -234,7 +256,7 @@ class ObjectEntity:
         self,
         *,
         field_name: str,
-        exclude_field_id: EntityIdVO | None = None,
+        exclude_field_id: RuntimeFieldIdVO | None = None,
     ) -> None:
         """Проверяет уникальность имени поля внутри объекта."""
         normalized = field_name.strip()
@@ -247,3 +269,19 @@ class ObjectEntity:
                 raise FieldAlreadyExistsError(
                     f"Field with name '{normalized}' already exists in object '{self.id}'."
                 )
+
+    def is_visible_in_catalog(self) -> bool:
+        """Проверяет, нужно ли показывать объект в UI-каталоге объектов."""
+        return self.kind != ObjectKind.SYSTEM
+
+    def can_add_custom_fields(self) -> bool:
+        """Проверяет, можно ли расширять объект пользовательскими полями."""
+        return self.kind in {ObjectKind.CUSTOM, ObjectKind.STANDARD}
+
+    def can_delete(self) -> bool:
+        """Проверяет, можно ли удалить объект как пользовательский."""
+        return self.kind == ObjectKind.CUSTOM
+
+    def is_read_only(self) -> bool:
+        """Проверяет metadata-only read-only режим для будущих view-объектов."""
+        return self.kind == ObjectKind.VIEW

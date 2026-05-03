@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from typing import Protocol
-from uuid import UUID
 
 from src.modules.identity.application.user.dto import CreatedTenantAdmin
 from src.modules.identity.domain.user import (
@@ -9,6 +8,7 @@ from src.modules.identity.domain.user import (
     UserEmailAlreadyExistsError,
     UserRepositoryProtocol,
 )
+from src.modules.shared import EntityIdVO
 
 
 class UserServiceProtocol(Protocol):
@@ -16,7 +16,7 @@ class UserServiceProtocol(Protocol):
 
     async def create_tenant_admin(
         self,
-        tenant_id: UUID,
+        tenant_id: EntityIdVO,
         first_name: str,
         last_name: str,
         email: str,
@@ -34,7 +34,7 @@ class UserService:
 
     async def create_tenant_admin(
         self,
-        tenant_id: UUID,
+        tenant_id: EntityIdVO,
         first_name: str,
         last_name: str,
         email: str,
@@ -57,8 +57,8 @@ class UserService:
         primary_email = user.add_email(normalized_email, is_primary=True)
         await self._users_repository.add(user)
         return CreatedTenantAdmin(
-            user_id=user.id,
-            user_email_id=primary_email.id,
+            user_id=user.id.uuid,
+            user_email_id=primary_email.id.uuid,
             user_status=user.status,
         )
 

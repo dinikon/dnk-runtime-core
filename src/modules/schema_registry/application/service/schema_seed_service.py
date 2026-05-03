@@ -8,12 +8,16 @@ from src.modules.schema_registry.application.migration.schema_naming_strategy im
 from src.modules.schema_registry.application.ports.seed_reader import SeedReaderPort
 from src.modules.schema_registry.domain.error import SeedValidationError
 from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
+from src.modules.schema_registry.domain.field.value_object.field_kind import FieldKind
 from src.modules.schema_registry.domain.field.value_object.field_label import (
     FieldLabelVO,
 )
 from src.modules.schema_registry.domain.field.value_object.field_name import FieldNameVO
 from src.modules.schema_registry.domain.object.value_object.object_label import (
     ObjectLabelVO,
+)
+from src.modules.schema_registry.domain.object.value_object.object_kind import (
+    ObjectKind,
 )
 from src.modules.schema_registry.domain.object.value_object.object_name import (
     ObjectNameVO,
@@ -37,6 +41,7 @@ class _ObjectSeedPartial:
     seed: ObjectSeed
     name: ObjectNameVO
     label: ObjectLabelVO
+    kind: ObjectKind
     fields: tuple[ValidatedFieldSpec, ...]
 
 
@@ -82,6 +87,7 @@ class SchemaSeedService:
                 singular=object_seed.singular_label,
                 plural=object_seed.plural_label,
             )
+            object_kind = self._normalize_object_kind(object_seed.kind)
 
             if object_name.singular in seen_singular_names:
                 raise SeedValidationError(
@@ -101,6 +107,7 @@ class SchemaSeedService:
                 field_name = FieldNameVO(field_seed.name)
                 field_label = FieldLabelVO(field_seed.label)
                 field_type = self._field_type_catalog.from_seed_type(field_seed.type)
+                field_kind = self._normalize_field_kind(field_seed.kind)
                 if field_seed.options and not field_type.is_select_like():
                     raise SeedValidationError(
                         "Options are allowed only for select/multiselect fields."
@@ -115,6 +122,7 @@ class SchemaSeedService:
                     ValidatedFieldSpec(
                         name=field_name.value,
                         type=field_seed.type.strip().lower(),
+                        kind=field_kind,
                         field_type=field_type,
                         label=field_label.value,
                         description=field_seed.description.strip(),
@@ -131,6 +139,7 @@ class SchemaSeedService:
                     seed=object_seed,
                     name=object_name,
                     label=object_label,
+                    kind=object_kind,
                     fields=normalized_fields,
                 )
             )
@@ -142,6 +151,7 @@ class SchemaSeedService:
             object_seed = partial.seed
             object_name = partial.name
             object_label = partial.label
+            object_kind = partial.kind
             normalized_fields = partial.fields
             field_names = {field_spec.name for field_spec in normalized_fields}
             indexes: list[ValidatedIndexSpec] = []
@@ -246,6 +256,7 @@ class SchemaSeedService:
                     singular_label=object_label.singular,
                     plural_label=object_label.plural,
                     description=object_seed.description.strip(),
+                    kind=object_kind,
                     fields=normalized_fields,
                     indexes=tuple(indexes),
                     relations=tuple(relations),
@@ -309,6 +320,22 @@ class SchemaSeedService:
             return None
         normalized = value.strip()
         return normalized or None
+
+    @staticmethod
+    def _normalize_object_kind(value: str | ObjectKind) -> ObjectKind:
+        """Валидирует и нормализует kind runtime-объекта из seed."""
+        try:
+            return ObjectKind.from_value(value)
+        except ValueError as exc:
+            raise SeedValidationError(f"Unsupported object kind '{value}'.") from exc
+
+    @staticmethod
+    def _normalize_field_kind(value: str | FieldKind) -> FieldKind:
+        """Валидирует и нормализует kind runtime-поля из seed."""
+        try:
+            return FieldKind.from_value(value)
+        except ValueError as exc:
+            raise SeedValidationError(f"Unsupported field kind '{value}'.") from exc
 
     @staticmethod
     def _ensure_global_index_name_is_unique(

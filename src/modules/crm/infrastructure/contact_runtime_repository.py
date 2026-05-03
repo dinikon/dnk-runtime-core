@@ -48,6 +48,7 @@ class ContactRuntimeRepository(
 
     async def load(
         self,
+        *,
         tenant_id: EntityIdVO,
         contact_id: ContactIdVO,
     ) -> ContactEntity | None:
@@ -63,6 +64,7 @@ class ContactRuntimeRepository(
 
     async def save(
         self,
+        *,
         tenant_id: EntityIdVO,
         contact: ContactEntity,
     ) -> ContactEntity:
@@ -106,6 +108,7 @@ class ContactRuntimeRepository(
 
     async def delete(
         self,
+        *,
         tenant_id: EntityIdVO,
         contact_id: ContactIdVO,
     ) -> None:
@@ -120,6 +123,7 @@ class ContactRuntimeRepository(
 
     async def get_by_id(
         self,
+        *,
         tenant_id: EntityIdVO,
         contact_id: ContactIdVO,
     ) -> ContactDTO | None:
@@ -135,6 +139,7 @@ class ContactRuntimeRepository(
 
     async def list(
         self,
+        *,
         tenant_id: EntityIdVO,
         limit: int,
         offset: int,
