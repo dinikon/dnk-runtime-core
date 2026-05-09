@@ -55,6 +55,9 @@ from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatal
 from src.modules.schema_registry.domain.field.value_object import RuntimeFieldIdVO
 from src.modules.schema_registry.domain.field.value_object.field_kind import FieldKind
 from src.modules.schema_registry.domain.object.entity import ObjectEntity
+from src.modules.schema_registry.domain.object.naming import (
+    normalize_custom_object_names,
+)
 from src.modules.schema_registry.domain.object.repository import (
     ObjectRepositoryProtocol,
 )
@@ -160,9 +163,13 @@ class SchemaConfigRepository(
         datasource = await self._data_source_service.get_required_by_tenant(
             tenant_id=command.tenant_id,
         )
+        singular_name, plural_name = normalize_custom_object_names(
+            singular_name=command.singular_name,
+            plural_name=command.plural_name,
+        )
         object_name = ObjectNameVO(
-            singular=command.singular_name,
-            plural=command.plural_name,
+            singular=singular_name,
+            plural=plural_name,
         )
         await self._ensure_object_names_available(
             tenant_id=command.tenant_id,

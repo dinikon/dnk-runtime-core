@@ -37,6 +37,7 @@ from src.modules.schema_registry.domain.field.value_object.field_kind import Fie
 from src.modules.schema_registry.domain.error import (
     InvalidFieldOperationError,
     InvalidObjectOperationError,
+    ObjectNameAlreadyExistsError,
     UnsupportedSchemaChangeError,
 )
 from src.modules.schema_registry.domain.object.entity import ObjectEntity
@@ -237,14 +238,19 @@ class SchemaConfigRepositoryTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(result.kind, "custom")
+        self.assertEqual(result.singular_name, "c_deal")
+        self.assertEqual(result.plural_name, "c_deals")
         self.assertEqual([field.field_name for field in result.fields], ["status"])
         self.assertEqual(result.fields[0].kind, "custom")
+        self.assertEqual(repository.saved.object_name.singular, "c_deal")
+        self.assertEqual(repository.saved.object_name.plural, "c_deals")
         self.assertEqual(
             [field.field_name.value for field in repository.saved.fields[:3]],
             ["id", "created_at", "updated_at"],
         )
         self.assertIs(repository.saved, repository.objects[0])
         self.assertIsInstance(executor.operations[0], CreateTableOperation)
+        self.assertEqual(executor.operations[0].table_name, "c_deals")
         self.assertEqual(
             [
                 operation.column_name
@@ -258,6 +264,109 @@ class SchemaConfigRepositoryTests(unittest.IsolatedAsyncioTestCase):
                 isinstance(operation, CreateIndexOperation)
                 for operation in executor.operations
             )
+        )
+
+    async def test_create_object_keeps_existing_custom_prefix(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        now = datetime.now(UTC)
+        repository = _ObjectRepositoryStub()
+        executor = _TenantSchemaExecutorSpy()
+        store = self._store(
+            repository=repository,
+            executor=executor,
+            tenant_id=tenant_id,
+            now=now,
+        )
+
+        result = await store.create_object(
+            CreateCustomObjectCommand(
+                tenant_id=tenant_id,
+                singular_name="c_deal",
+                plural_name="c_deals",
+                singular_label="Deal",
+                plural_label="Deals",
+                description="Sales deals.",
+            )
+        )
+
+        self.assertEqual(result.singular_name, "c_deal")
+        self.assertEqual(result.plural_name, "c_deals")
+        self.assertEqual(executor.operations[0].table_name, "c_deals")
+
+    async def test_create_object_checks_duplicates_after_custom_prefix(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        now = datetime.now(UTC)
+        repository = _ObjectRepositoryStub()
+        store = self._store(
+            repository=repository,
+            executor=_TenantSchemaExecutorSpy(),
+            tenant_id=tenant_id,
+            now=now,
+        )
+
+        await store.create_object(
+            CreateCustomObjectCommand(
+                tenant_id=tenant_id,
+                singular_name="deal",
+                plural_name="deals",
+                singular_label="Deal",
+                plural_label="Deals",
+                description="Sales deals.",
+            )
+        )
+
+        with self.assertRaises(ObjectNameAlreadyExistsError):
+            await store.create_object(
+                CreateCustomObjectCommand(
+                    tenant_id=tenant_id,
+                    singular_name="c_deal",
+                    plural_name="c_deals",
+                    singular_label="Deal",
+                    plural_label="Deals",
+                    description="Sales deals.",
+                )
+            )
+
+    async def test_create_custom_object_does_not_conflict_with_standard_name(
+        self,
+    ) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        datasource_id = DataSourceIdVO.from_value(uuid4())
+        now = datetime.now(UTC)
+        standard = self._object(
+            tenant_id=tenant_id,
+            datasource_id=datasource_id,
+            now=now,
+            singular="contact",
+            plural="contacts",
+            kind=ObjectKind.STANDARD,
+        )
+        repository = _ObjectRepositoryStub([standard])
+        executor = _TenantSchemaExecutorSpy()
+        store = self._store(
+            repository=repository,
+            executor=executor,
+            tenant_id=tenant_id,
+            now=now,
+        )
+
+        result = await store.create_object(
+            CreateCustomObjectCommand(
+                tenant_id=tenant_id,
+                singular_name="contact",
+                plural_name="contacts",
+                singular_label="Contact",
+                plural_label="Contacts",
+                description="Custom contacts.",
+            )
+        )
+
+        self.assertEqual(result.singular_name, "c_contact")
+        self.assertEqual(result.plural_name, "c_contacts")
+        self.assertEqual(executor.operations[0].table_name, "c_contacts")
+        self.assertEqual(
+            [item.object_name.plural for item in repository.objects],
+            ["contacts", "c_contacts"],
         )
 
     async def test_add_field_rejects_required_column_without_default(self) -> None:

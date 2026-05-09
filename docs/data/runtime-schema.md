@@ -69,6 +69,7 @@ HTTP/CLI interfaces continue to use UUID values.
 - logical object definition
 - contains singular/plural names, labels, description, fields, indexes and relations
 - `plural_name` is used as physical table name
+- `c_` is reserved for custom objects; system/standard/view seed objects must not use that prefix
 
 ### `FieldSeed`
 
@@ -118,6 +119,7 @@ HTTP/CLI interfaces continue to use UUID values.
 - default changes for retained columns are supported through explicit migration operation
 - metadata rename is not inferred heuristically; renamed natural keys behave as remove/add until explicit rename support
   exists
+- custom object tables use `c_`-prefixed physical names and are preserved by seed diff when they are absent from seed
 - nested bootstrap and diff must work in one active `UoW / AsyncSession`
 
 ## Related

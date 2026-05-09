@@ -21,6 +21,17 @@ class TenantDomainModel(Base):
         default=uuid6.uuid7,
         nullable=False,
     )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.current_timestamp(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.current_timestamp(),
+        nullable=False,
+        onupdate=func.current_timestamp(),
+    )
     tenant_id: Mapped[UUID] = mapped_column(
         StringUUID,
         ForeignKey("tenants.id"),
@@ -64,17 +75,6 @@ class TenantDomainModel(Base):
     )
     metadata_json: Mapped[dict[str, object] | None] = mapped_column(
         PortableJSON, nullable=True, default=None
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.current_timestamp(),
-        nullable=False,
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.current_timestamp(),
-        nullable=False,
-        onupdate=func.current_timestamp(),
     )
 
     __table_args__ = (

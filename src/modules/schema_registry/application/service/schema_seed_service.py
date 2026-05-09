@@ -19,6 +19,10 @@ from src.modules.schema_registry.domain.object.value_object.object_label import 
 from src.modules.schema_registry.domain.object.value_object.object_kind import (
     ObjectKind,
 )
+from src.modules.schema_registry.domain.object.naming import (
+    has_custom_object_prefix,
+    normalize_custom_object_names,
+)
 from src.modules.schema_registry.domain.object.value_object.object_name import (
     ObjectNameVO,
 )
@@ -79,15 +83,26 @@ class SchemaSeedService:
         ] = {}
 
         for object_seed in seed.objects:
+            object_kind = self._normalize_object_kind(object_seed.kind)
+            singular_name = object_seed.singular_name
+            plural_name = object_seed.plural_name
+            if object_kind == ObjectKind.CUSTOM:
+                singular_name, plural_name = normalize_custom_object_names(
+                    singular_name=singular_name,
+                    plural_name=plural_name,
+                )
             object_name = ObjectNameVO(
-                singular=object_seed.singular_name,
-                plural=object_seed.plural_name,
+                singular=singular_name,
+                plural=plural_name,
             )
             object_label = ObjectLabelVO(
                 singular=object_seed.singular_label,
                 plural=object_seed.plural_label,
             )
-            object_kind = self._normalize_object_kind(object_seed.kind)
+            self._ensure_non_custom_object_does_not_use_custom_prefix(
+                object_name=object_name,
+                object_kind=object_kind,
+            )
 
             if object_name.singular in seen_singular_names:
                 raise SeedValidationError(
@@ -328,6 +343,22 @@ class SchemaSeedService:
             return ObjectKind.from_value(value)
         except ValueError as exc:
             raise SeedValidationError(f"Unsupported object kind '{value}'.") from exc
+
+    @staticmethod
+    def _ensure_non_custom_object_does_not_use_custom_prefix(
+        *,
+        object_name: ObjectNameVO,
+        object_kind: ObjectKind,
+    ) -> None:
+        """Резервирует c_ namespace для custom objects."""
+        if object_kind == ObjectKind.CUSTOM:
+            return
+        if has_custom_object_prefix(object_name.singular) or has_custom_object_prefix(
+            object_name.plural
+        ):
+            raise SeedValidationError(
+                "Only custom objects can use the 'c_' name prefix."
+            )
 
     @staticmethod
     def _normalize_field_kind(value: str | FieldKind) -> FieldKind:

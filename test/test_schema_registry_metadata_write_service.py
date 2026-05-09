@@ -134,3 +134,91 @@ class SchemaRegistryMetadataWriteServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reconciled_object.fields[0].id, original_field_id)
         self.assertEqual(reconciled_object.kind, ObjectKind.CUSTOM)
         self.assertEqual(reconciled_object.fields[0].kind, FieldKind.SYSTEM)
+
+    async def test_reconcile_preserves_custom_objects_outside_seed(self) -> None:
+        now = UtcClock().now()
+        tenant_id = EntityIdVO.from_value(uuid4())
+        datasource = DataSourceEntity.create(
+            id_=DataSourceIdVO.from_value(uuid4()),
+            now=now,
+            tenant_id=tenant_id,
+            schema_name=SchemaNameVO("dnk_crm"),
+        )
+        standard_object = ObjectEntity.create(
+            id_=RuntimeObjectIdVO.from_value(uuid4()),
+            tenant_id=tenant_id,
+            data_source_id=datasource.id,
+            now=now,
+            object_name=ObjectNameVO(singular="contact", plural="contacts"),
+            object_label=ObjectLabelVO(singular="Contact", plural="Contacts"),
+            description="Contacts.",
+            kind=ObjectKind.STANDARD,
+        )
+        custom_object = ObjectEntity.create(
+            id_=RuntimeObjectIdVO.from_value(uuid4()),
+            tenant_id=tenant_id,
+            data_source_id=datasource.id,
+            now=now,
+            object_name=ObjectNameVO(singular="c_deal", plural="c_deals"),
+            object_label=ObjectLabelVO(singular="Deal", plural="Deals"),
+            description="Deals.",
+            kind=ObjectKind.CUSTOM,
+        )
+        original_custom_id = custom_object.id
+
+        class DataSourceServiceStub:
+            async def get_required_by_tenant(self, *, tenant_id):
+                return datasource
+
+        class ObjectRepositoryStub:
+            def __init__(self):
+                self.objects = [standard_object, custom_object]
+                self.recorded_objects = []
+
+            async def list_by_tenant_id(self, *, tenant_id):
+                return self.objects
+
+            async def reconcile_for_tenant(self, *, tenant_id, objects):
+                self.recorded_objects = objects
+                self.objects = objects
+
+        object_repository = ObjectRepositoryStub()
+        object_service = ObjectService(
+            object_repository=object_repository,
+            clock=UtcClock(),
+            object_id_provider=lambda: RuntimeObjectIdVO.from_value(uuid4()),
+            field_id_provider=lambda: RuntimeFieldIdVO.from_value(uuid4()),
+            field_type_catalog=FieldTypeCatalog(),
+        )
+        service = SchemaRegistryMetadataWriteService(
+            data_source_service=DataSourceServiceStub(),
+            object_service=object_service,
+        )
+        schema_spec = ValidatedSchemaSpec(
+            version=None,
+            code="crm",
+            label="CRM",
+            objects=(
+                ValidatedObjectSpec(
+                    singular_name="contact",
+                    plural_name="contacts",
+                    singular_label="Contact",
+                    plural_label="Contacts",
+                    description="Contacts.",
+                    kind=ObjectKind.STANDARD,
+                    fields=(),
+                ),
+            ),
+        )
+
+        await service.reconcile_from_spec(
+            tenant_id=tenant_id,
+            schema_spec=schema_spec,
+        )
+
+        self.assertEqual(
+            [item.object_name.plural for item in object_repository.recorded_objects],
+            ["contacts", "c_deals"],
+        )
+        self.assertEqual(object_repository.recorded_objects[1].id, original_custom_id)
+        self.assertIs(object_repository.recorded_objects[1], custom_object)

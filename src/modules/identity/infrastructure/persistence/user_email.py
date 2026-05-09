@@ -18,6 +18,17 @@ class UserEmailModel(Base):
     id: Mapped[UUID] = mapped_column(
         StringUUID, primary_key=True, default=uuid6.uuid7, nullable=False
     )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.current_timestamp(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.current_timestamp(),
+        onupdate=func.current_timestamp(),
+        nullable=False,
+    )
     user_id: Mapped[UUID] = mapped_column(
         StringUUID, ForeignKey("users.id"), nullable=False, index=True
     )
@@ -30,15 +41,4 @@ class UserEmailModel(Base):
     )
     is_deleted: Mapped[bool] = mapped_column(
         sa.Boolean(), nullable=False, server_default=sa.text("'false'")
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.current_timestamp(),
-        nullable=False,
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.current_timestamp(),
-        onupdate=func.current_timestamp(),
-        nullable=False,
     )

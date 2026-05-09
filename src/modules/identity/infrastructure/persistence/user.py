@@ -21,6 +21,17 @@ class UserModel(Base):
         default=uuid6.uuid7,
         nullable=False,
     )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.current_timestamp(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.current_timestamp(),
+        onupdate=func.current_timestamp(),
+        nullable=False,
+    )
     tenant_id: Mapped[UUID] = mapped_column(
         StringUUID,
         ForeignKey("tenants.id"),
@@ -33,6 +44,7 @@ class UserModel(Base):
         nullable=False,
         index=True,
     )
+    user_type: Mapped[str] = mapped_column(String(255))
     last_name: Mapped[str] = mapped_column(String(255), nullable=False)
     first_name: Mapped[str] = mapped_column(String(255), nullable=False)
     middle_name: Mapped[str | None] = mapped_column(
@@ -76,15 +88,4 @@ class UserModel(Base):
     )
     initialized_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, server_default=None
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.current_timestamp(),
-        nullable=False,
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.current_timestamp(),
-        onupdate=func.current_timestamp(),
-        nullable=False,
     )

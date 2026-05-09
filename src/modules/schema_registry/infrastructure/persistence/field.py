@@ -39,8 +39,8 @@ class FieldORM(Base):
     kind: Mapped[str] = mapped_column(
         String(32), nullable=False, server_default="standard"
     )
-    field_name: Mapped[str] = mapped_column(String(255), nullable=False)
     field_type_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    field_name: Mapped[str] = mapped_column(String(255), nullable=False)
     label: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(String(255), nullable=False)
     is_nullable: Mapped[bool] = mapped_column(Boolean, nullable=False)

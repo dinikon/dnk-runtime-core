@@ -181,6 +181,44 @@ class SchemaSeedServiceTests(unittest.IsolatedAsyncioTestCase):
         finally:
             sys.modules.pop(module_name, None)
 
+    async def test_rejects_non_custom_object_with_custom_prefix(self) -> None:
+        module_name = "test_schema_seed_reserved_custom_prefix"
+        module = types.ModuleType(module_name)
+        module.SCHEMA_SEED = SchemaSeed(
+            version=None,
+            code="crm",
+            label="CRM",
+            objects=(
+                ObjectSeed(
+                    singular_name="c_contact",
+                    plural_name="c_contacts",
+                    singular_label="Contact",
+                    plural_label="Contacts",
+                    description="Tenant contacts.",
+                    kind="standard",
+                    fields=(
+                        FieldSeed(
+                            name="id",
+                            type="uuid",
+                            label="ID",
+                            is_nullable=False,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        sys.modules[module_name] = module
+
+        try:
+            service = SchemaSeedService(
+                PythonModuleSeedReader(),
+                FieldTypeCatalog(),
+            )
+            with self.assertRaises(SeedValidationError):
+                await service.load(seed_path=module_name)
+        finally:
+            sys.modules.pop(module_name, None)
+
     async def test_rejects_options_for_non_select_field(self) -> None:
         module_name = "test_schema_seed_text_options"
         module = types.ModuleType(module_name)
