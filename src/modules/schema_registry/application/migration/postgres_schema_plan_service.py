@@ -26,6 +26,7 @@ from src.modules.schema_registry.application.migration.postgres_field_canonicali
 )
 from src.modules.schema_registry.domain.error import UnsupportedSchemaChangeError
 from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
+from src.modules.schema_registry.domain.object.naming import has_custom_object_prefix
 from src.modules.schema_registry.domain.seed.field_seed import FieldSeed
 from src.modules.schema_registry.domain.seed.object_seed import ObjectSeed
 from src.modules.schema_registry.domain.seed.relation_seed import RelationSeed
@@ -135,6 +136,8 @@ class PostgresSchemaPlanService:
 
         for actual_table in sorted(actual_schema.tables, key=lambda item: item.name):
             desired_table = desired_tables.get(actual_table.name)
+            if desired_table is None and self._is_custom_table(actual_table.name):
+                continue
             for foreign_key in sorted(
                 actual_table.foreign_keys, key=lambda item: item.name
             ):
@@ -158,6 +161,8 @@ class PostgresSchemaPlanService:
 
         for actual_table in sorted(actual_schema.tables, key=lambda item: item.name):
             desired_table = desired_tables.get(actual_table.name)
+            if desired_table is None and self._is_custom_table(actual_table.name):
+                continue
             for index in sorted(actual_table.indexes, key=lambda item: item.name):
                 desired_index = (
                     None
@@ -224,6 +229,8 @@ class PostgresSchemaPlanService:
 
         for actual_table in sorted(actual_schema.tables, key=lambda item: item.name):
             if actual_table.name not in desired_tables:
+                if self._is_custom_table(actual_table.name):
+                    continue
                 plan.add_destructive(
                     DropTableOperation(
                         schema_name=schema_name,
@@ -502,6 +509,11 @@ class PostgresSchemaPlanService:
             target_columns=(relation_seed.target_field,),
             on_delete=self._normalize_on_delete(relation_seed.on_delete),
         )
+
+    @staticmethod
+    def _is_custom_table(table_name: str) -> bool:
+        """Проверяет, принадлежит ли физическая таблица custom object namespace."""
+        return has_custom_object_prefix(table_name)
 
     @staticmethod
     def _normalize_on_delete(value: str) -> str:

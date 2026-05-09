@@ -16,6 +16,7 @@ from src.modules.schema_registry.application.migration.operations import (
 from src.modules.schema_registry.application.migration.physical_schema_snapshot import (
     ColumnSnapshot,
     ForeignKeySnapshot,
+    IndexSnapshot,
     PhysicalSchemaSnapshot,
     TableSnapshot,
 )
@@ -391,6 +392,60 @@ class PostgresSchemaPlanServiceTests(unittest.TestCase):
                 for item in plan.destructive_operations
             )
         )
+
+    def test_build_diff_plan_preserves_custom_tables_outside_seed(self) -> None:
+        seed = SchemaSeed(
+            version=None,
+            code="crm",
+            label="CRM",
+            objects=(),
+        )
+        actual_schema = PhysicalSchemaSnapshot(
+            schema_name="dnk_test",
+            tables=(
+                TableSnapshot(
+                    name="c_deals",
+                    columns=(
+                        ColumnSnapshot(
+                            name="id",
+                            sql_preset=SqlTypePresetEnum.UUID,
+                            is_nullable=False,
+                            default_value=None,
+                        ),
+                        ColumnSnapshot(
+                            name="company_id",
+                            sql_preset=SqlTypePresetEnum.UUID,
+                            is_nullable=True,
+                            default_value=None,
+                        ),
+                    ),
+                    indexes=(
+                        IndexSnapshot(
+                            name="c_deals_id_uq",
+                            columns=("id",),
+                            is_unique=True,
+                        ),
+                    ),
+                    foreign_keys=(
+                        ForeignKeySnapshot(
+                            name="c_deals_company_id_fk",
+                            source_columns=("company_id",),
+                            target_table_name="companies",
+                            target_columns=("id",),
+                            on_delete="restrict",
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        plan = self.service.build_diff_plan(
+            schema_name="dnk_test",
+            seed=seed,
+            actual_schema=actual_schema,
+        )
+
+        self.assertEqual(plan.operations, [])
 
     def test_build_diff_plan_allows_retained_column_default_change(self) -> None:
         seed = SchemaSeed(

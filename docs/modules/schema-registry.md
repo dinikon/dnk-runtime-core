@@ -44,6 +44,7 @@ object/field metadata plus targeted DDL changes.
 - `ObjectKind.SYSTEM` and `ObjectKind.VIEW` are read-only and still appear in list/schema responses.
 - `ObjectKind.STANDARD` appears in list/schema, cannot be deleted, and can be extended with `custom` fields.
 - `ObjectKind.CUSTOM` can be created, deleted and extended with `custom` fields.
+- custom object `singular_name` and `plural_name` are stored with the `c_` prefix; create APIs add it automatically.
 - `FieldKind.SYSTEM` stays in metadata/descriptors but is hidden from config API responses.
 - `FieldKind.STANDARD` is visible in config responses but cannot be deleted.
 - `FieldKind.CUSTOM` can be created and hard-deleted.
@@ -93,6 +94,7 @@ object/field metadata plus targeted DDL changes.
 - diff metadata sync reconciles by stable natural keys:
     - objects by plural name
     - fields by field name inside the object
+- seed diff preserves existing `custom` object metadata and `c_` physical tables that are not declared by seed
 - no-op diff preserves matching metadata ids; rename is not inferred heuristically
 - indexes, relations and constraints are inferred from seed and physical schema, not stored as full metadata graph
 

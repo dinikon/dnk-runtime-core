@@ -135,7 +135,13 @@ class ObjectService:
             object_entity.object_name.plural: object_entity
             for object_entity in existing_objects
         }
+        preserved_custom_objects = [
+            object_entity
+            for object_entity in existing_objects
+            if object_entity.kind == ObjectKind.CUSTOM
+        ]
         objects: list[ObjectEntity] = []
+        reconciled_object_ids: set[RuntimeObjectIdVO] = set()
 
         for object_spec in schema_spec.objects:
             object_entity = existing_by_plural_name.get(object_spec.plural_name)
@@ -184,6 +190,11 @@ class ObjectService:
                     object_entity.updated_at = now
 
             objects.append(object_entity)
+            reconciled_object_ids.add(object_entity.id)
+
+        for object_entity in preserved_custom_objects:
+            if object_entity.id not in reconciled_object_ids:
+                objects.append(object_entity)
 
         await self._object_repository.reconcile_for_tenant(
             tenant_id=tenant_id,

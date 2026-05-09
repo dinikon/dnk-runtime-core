@@ -55,6 +55,7 @@ Config rules:
 - `system` and `view` objects are read-only.
 - `standard` objects can receive/delete `custom` fields but cannot be deleted.
 - `custom` objects can be created, deleted and extended with `custom` fields.
+- `custom` object names are saved and returned with the `c_` prefix; create requests may omit it.
 - `system` fields are hidden in config responses; `standard` fields are visible but not deletable.
 
 ## Custom Object
