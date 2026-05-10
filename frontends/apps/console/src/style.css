@@ -217,6 +217,14 @@ h1 {
     background: #242424;
 }
 
+.auth-provider-button:disabled {
+    opacity: 1;
+}
+
+.auth-primary-button:disabled {
+    background: #8d8d8d;
+}
+
 .auth-mail-button {
     border: 1px solid #dfdfdf;
     color: #292929;
