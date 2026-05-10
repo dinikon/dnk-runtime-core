@@ -4,20 +4,41 @@ type RequestOptions = Omit<RequestInit, "body"> & {
     body?: unknown;
 };
 
+export class HttpError extends Error {
+    constructor(
+        public readonly status: number,
+        public readonly path: string,
+        public readonly detail?: unknown
+    ) {
+        super(`HTTP ${status} for ${path}`);
+    }
+}
+
 async function request<TResponse>(path: string, options: RequestOptions = {}): Promise<TResponse> {
     const {body, headers, ...requestInit} = options;
+    const requestHeaders = new Headers(headers);
+
+    if (body !== undefined && !requestHeaders.has("Content-Type")) {
+        requestHeaders.set("Content-Type", "application/json");
+    }
+
     const response = await fetch(`${apiBaseUrl}${path}`, {
         credentials: "include",
         ...requestInit,
-        headers: {
-            "Content-Type": "application/json",
-            ...headers
-        },
+        headers: requestHeaders,
         body: body === undefined ? undefined : JSON.stringify(body)
     });
 
     if (!response.ok) {
-        throw new Error(`HTTP ${response.status} for ${path}`);
+        let detail: unknown;
+
+        try {
+            detail = await response.json();
+        } catch {
+            detail = await response.text();
+        }
+
+        throw new HttpError(response.status, path, detail);
     }
 
     if (response.status === 204) {

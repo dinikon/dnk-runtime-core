@@ -36,6 +36,11 @@ button {
     cursor: pointer;
 }
 
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.58;
+}
+
 input {
     min-height: 40px;
     border: 1px solid #c8cfdd;
@@ -46,6 +51,10 @@ input {
 
 .console-shell {
     min-height: 100vh;
+}
+
+.console-shell--auth {
+    background: #484848;
 }
 
 .console-header {
@@ -78,6 +87,10 @@ input {
     max-width: 1120px;
     margin: 0 auto;
     padding: 48px 32px;
+}
+
+.console-main-auth {
+    min-height: 100vh;
 }
 
 .page-stack {
@@ -128,6 +141,190 @@ h1 {
     gap: 10px;
 }
 
+.auth-page {
+    display: grid;
+    min-height: 100vh;
+    place-items: center;
+    padding: 32px 16px;
+    background: #484848;
+}
+
+.auth-card {
+    display: grid;
+    width: min(100%, 304px);
+    gap: 10px;
+    border-radius: 4px;
+    padding: 28px 32px 24px;
+    color: #1f1f1f;
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 10%);
+    text-align: center;
+}
+
+.auth-card--compact {
+    width: min(100%, 320px);
+    min-height: 168px;
+    align-content: center;
+    gap: 14px;
+}
+
+.auth-card--otp {
+    width: min(100%, 308px);
+    padding-top: 30px;
+}
+
+.auth-card h1 {
+    margin: 0 0 8px;
+    font-size: 0.92rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.auth-card p {
+    margin: 0;
+    color: #6d6d6d;
+    font-size: 0.7rem;
+    line-height: 1.45;
+}
+
+.auth-spinner {
+    width: 22px;
+    height: 22px;
+    justify-self: center;
+    border: 2px solid #dedede;
+    border-top-color: #282828;
+    border-radius: 999px;
+    animation: auth-spin 0.8s linear infinite;
+}
+
+.auth-provider-button,
+.auth-mail-button,
+.auth-primary-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    width: 100%;
+    min-height: 28px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
+.auth-provider-button,
+.auth-primary-button {
+    color: #ffffff;
+    background: #242424;
+}
+
+.auth-mail-button {
+    border: 1px solid #dfdfdf;
+    color: #292929;
+    background: #ffffff;
+}
+
+.auth-input {
+    width: 100%;
+    min-height: 32px;
+    border-color: #dedede;
+    border-radius: 4px;
+    color: #1f1f1f;
+    font-size: 0.76rem;
+    text-align: center;
+}
+
+.auth-input::placeholder {
+    color: #8a8a8a;
+}
+
+.provider-mark {
+    display: inline-grid;
+    width: 14px;
+    height: 14px;
+    place-items: center;
+    border-radius: 3px;
+    color: #ffffff;
+    font-size: 0.56rem;
+    font-weight: 800;
+}
+
+.provider-mark--google {
+    background: #4285f4;
+}
+
+.provider-mark--microsoft {
+    background: #f25022;
+}
+
+.auth-icon {
+    display: grid;
+    width: 30px;
+    height: 30px;
+    place-items: center;
+    justify-self: center;
+    border: 1px solid #222222;
+    border-radius: 999px;
+    color: #222222;
+    font-size: 0.88rem;
+}
+
+.otp-inputs {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 6px;
+    margin: 8px 0 2px;
+}
+
+.otp-input {
+    width: 100%;
+    min-width: 0;
+    min-height: 28px;
+    border: 1px solid #dedede;
+    border-radius: 4px;
+    padding: 0;
+    color: #202020;
+    font-size: 0.8rem;
+    text-align: center;
+}
+
+.auth-error {
+    color: #a83232 !important;
+    font-weight: 600;
+}
+
+.auth-dev-code {
+    color: #454545 !important;
+    font-weight: 600;
+}
+
+.auth-legal {
+    margin-top: 10px !important;
+    padding: 0 4px;
+}
+
+.auth-footer-actions {
+    display: flex;
+    justify-content: center;
+    gap: 14px;
+    margin-top: 8px;
+}
+
+.auth-footer-actions button {
+    min-height: auto;
+    border: 0;
+    padding: 0;
+    color: #8a8a8a;
+    background: transparent;
+    font-size: 0.66rem;
+    font-weight: 500;
+}
+
+@keyframes auth-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 @media (max-width: 640px) {
     .console-header {
         align-items: flex-start;
@@ -137,5 +334,9 @@ h1 {
 
     .console-main {
         padding: 32px 20px;
+    }
+
+    .auth-card {
+        width: min(100%, 330px);
     }
 }
