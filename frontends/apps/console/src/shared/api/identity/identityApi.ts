@@ -8,10 +8,11 @@ import type {
 } from "@/shared/api/identity/types";
 
 export const identityApi = {
-    resolveTenant: () => httpClient.get<ResolveTenantResponse>("/console/tenants/resolve"),
-    requestEmailOtp: (email: string) =>
-        httpClient.post<RequestEmailOtpResponse>("/console/auth/request-otp", {email}),
-    confirmEmailOtp: (payload: ConfirmEmailOtpRequest) =>
-        httpClient.post<ConfirmEmailOtpResponse>("/console/auth/confirm-otp", payload),
-    getCurrentUser: () => httpClient.get<ConsoleUser>("/console/auth/me")
+    resolveTenant: async () =>
+        (await httpClient.get<ResolveTenantResponse>("/console/tenants/resolve")).data,
+    requestEmailOtp: async (email: string) =>
+        (await httpClient.post<RequestEmailOtpResponse>("/console/auth/request-otp", {email})).data,
+    confirmEmailOtp: async (payload: ConfirmEmailOtpRequest) =>
+        (await httpClient.post<ConfirmEmailOtpResponse>("/console/auth/confirm-otp", payload)).data,
+    getCurrentUser: async () => (await httpClient.get<ConsoleUser>("/console/auth/me")).data
 };

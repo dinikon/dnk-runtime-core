@@ -6,7 +6,7 @@ import {
     type RequestEmailOtpResponse,
     type ResolveTenantResponse
 } from "@/shared/api/identity";
-import {getApiErrorMessage, HttpError} from "@/shared/api/http/errors";
+import {getApiErrorMessage, getApiErrorStatus} from "@/shared/api/http/errors";
 
 interface EmailChallenge {
     email: string;
@@ -50,10 +50,11 @@ export const useSessionStore = defineStore("session", {
             try {
                 this.tenant = await identityApi.resolveTenant();
             } catch (error) {
+                const status = getApiErrorStatus(error);
                 this.tenant = {
                     exists: false,
                     available: false,
-                    status: error instanceof HttpError ? `http_${error.status}` : "unknown_error",
+                    status: status ? `http_${status}` : "unknown_error",
                     tenant_id: null,
                     api_host: null
                 };
