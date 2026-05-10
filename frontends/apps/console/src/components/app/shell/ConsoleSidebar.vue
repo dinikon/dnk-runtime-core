@@ -3,6 +3,7 @@ import {
   BookOpen,
   CheckSquare,
   ContactRound,
+  Database,
   FileText,
   Settings,
   Store,
@@ -11,7 +12,8 @@ import {
 } from "lucide-vue-next";
 
 const workspaceItems = [
-  {label: "Contacts", icon: ContactRound, active: true},
+  {label: "Objects", icon: Database, active: true},
+  {label: "Contacts", icon: ContactRound},
   {label: "Tasks", icon: CheckSquare},
   {label: "Notes", icon: FileText},
   {label: "Opportunities", icon: Target},

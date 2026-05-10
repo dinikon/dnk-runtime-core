@@ -5,6 +5,7 @@ export {
   OtpCodeInput
 } from "./auth";
 export {ConsoleSidebar} from "./shell";
+export {ObjectRecordsTable, ObjectTabs} from "./object-browser";
 export {ContactsTable} from "./table";
 export type {ContactTableLabels, ContactTableRow} from "./table";
 export {ContactDetailsPanel} from "./details";

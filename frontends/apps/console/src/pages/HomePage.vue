@@ -1,274 +1,204 @@
 <script setup lang="ts">
-import {computed, onBeforeUnmount, onMounted, ref} from "vue";
-import {useRouter} from "vue-router";
+import {computed, onMounted, ref, watch} from "vue";
+import {useRoute, useRouter} from "vue-router";
+import {RefreshCcw} from "lucide-vue-next";
 
-import {
-  ConsoleSidebar,
-  ContactDetailsPanel,
-  ContactsTable,
-  type ContactFormValue,
-  type ContactTableLabels,
-  type ContactTableRow
-} from "@/components/app";
+import {ConsoleSidebar, ObjectRecordsTable, ObjectTabs} from "@/components/app";
 import {useSessionStore} from "@/app/stores/session";
-import {
-  crmContactsApi,
-  type Contact,
-  type ContactFieldOption,
-  type ContactFieldsResponse
-} from "@/shared/api/crm";
 import {getApiErrorMessage, getApiErrorStatus} from "@/shared/api/http/errors";
+import {
+  isObjectRecordsAdapterNotFoundError,
+  objectRecordsApi,
+  type ObjectRecord
+} from "@/shared/api/object-records";
+import {schemaRegistryApi, type RuntimeField, type RuntimeObject} from "@/shared/api/schema-registry";
 
-const DETAILS_WIDTH_STORAGE_KEY = "console.contacts.details.width";
-const DRAFT_ROW_KEY = "draft-contact";
-const DETAILS_MIN_WIDTH = 360;
-const DETAILS_MAX_WIDTH = 720;
+const DEFAULT_LIMIT = 50;
+const DEFAULT_OFFSET = 0;
 
+const route = useRoute();
 const router = useRouter();
 const sessionStore = useSessionStore();
 
-const contacts = ref<Contact[]>([]);
-const contactsCount = ref(0);
-const fields = ref<ContactFieldsResponse | null>(null);
-const selectedKey = ref<string | null>(null);
-const draftRow = ref<ContactTableRow | null>(null);
-const isLoading = ref(false);
-const isSaving = ref(false);
-const isDeleting = ref(false);
+const objects = ref<RuntimeObject[]>([]);
+const selectedObjectId = ref<string | null>(null);
+const selectedSchema = ref<RuntimeObject | null>(null);
+const records = ref<ObjectRecord[]>([]);
+const recordsCount = ref(0);
+const isLoadingObjects = ref(false);
+const isLoadingSchema = ref(false);
+const isLoadingRecords = ref(false);
 const pageError = ref<string | null>(null);
-const detailsError = ref<string | null>(null);
-const detailsWidth = ref(readStoredDetailsWidth());
-const isResizing = ref(false);
+const recordsError = ref<string | null>(null);
 
-const rows = computed<ContactTableRow[]>(() => {
-  const contactRows = contacts.value.map(contactToRow);
-  return draftRow.value ? [draftRow.value, ...contactRows] : contactRows;
-});
+let objectLoadRequest = 0;
 
-const selectedRow = computed(() => rows.value.find((row) => row.key === selectedKey.value) ?? null);
-const tableCount = computed(() => contactsCount.value + (draftRow.value ? 1 : 0));
-const statusOptions = computed(() => fieldOptions("status", [
-  {value: "lead", label: "Lead"},
-  {value: "customer", label: "Customer"},
-  {value: "partner", label: "Partner"}
-]));
-const tagOptions = computed(() => fieldOptions("tags", [
-  {value: "vip", label: "VIP"},
-  {value: "newsletter", label: "Newsletter"},
-  {value: "inactive", label: "Inactive"}
-]));
-const tableLabels = computed<ContactTableLabels>(() => ({
-  name: contactNameLabel(),
-  status: fieldLabel("status", "Status"),
-  tags: fieldLabel("tags", "Tags"),
-  createdAt: fieldLabel("created_at", "Created At"),
-  updatedAt: fieldLabel("updated_at", "Updated At")
-}));
+const visibleObjects = computed(() => objects.value.filter((object) => isVisibleObjectKind(object.kind)));
+const selectedObject = computed(() => (
+    visibleObjects.value.find((object) => object.id === selectedObjectId.value) ?? null
+));
+const tableFields = computed<RuntimeField[]>(() => (
+    selectedSchema.value?.fields.filter((field) => field.kind.trim().toLowerCase() !== "system") ?? []
+));
+const hasRecoverableError = computed(() => pageError.value !== null);
 
 onMounted(() => {
-  void loadWorkspace();
+  void loadObjects();
 });
 
-onBeforeUnmount(() => {
-  stopResize();
-});
+watch(
+    () => route.query.object,
+    () => {
+      if (!isLoadingObjects.value && objects.value.length > 0) {
+        selectObjectFromRoute();
+      }
+    }
+);
 
-async function loadWorkspace() {
-  isLoading.value = true;
+async function loadObjects() {
+  isLoadingObjects.value = true;
   pageError.value = null;
+  recordsError.value = null;
 
   try {
-    const [fieldsResult, contactsResult] = await Promise.all([
-      crmContactsApi.describeFields(),
-      crmContactsApi.list({limit: 50, offset: 0})
-    ]);
-    fields.value = fieldsResult;
-    contacts.value = contactsResult.items;
-    contactsCount.value = contactsResult.count;
+    const result = await schemaRegistryApi.listObjects();
+    objects.value = result.items;
+    selectObjectFromRoute();
   } catch (error) {
-    await handleApiFailure(error, "Could not load contacts.");
+    await handleApiFailure(error, "Could not load objects.");
   } finally {
-    isLoading.value = false;
+    isLoadingObjects.value = false;
   }
 }
 
-function createDraftRow() {
-  detailsError.value = null;
-
-  if (!draftRow.value) {
-    draftRow.value = {
-      key: DRAFT_ROW_KEY,
-      contact: null,
-      isDraft: true,
-      firstName: "",
-      lastName: null,
-      middleName: null,
-      status: null,
-      tags: [],
-      createdAt: null,
-      updatedAt: null
-    };
-  }
-
-  selectedKey.value = DRAFT_ROW_KEY;
+function selectObject(object: RuntimeObject) {
+  void router.push({
+    query: {
+      ...route.query,
+      object: object.id
+    }
+  });
 }
 
-function selectRow(row: ContactTableRow) {
-  detailsError.value = null;
-  selectedKey.value = row.key;
-}
-
-function closeDetails() {
-  if (selectedKey.value === DRAFT_ROW_KEY) {
-    draftRow.value = null;
-  }
-
-  selectedKey.value = null;
-  detailsError.value = null;
-}
-
-async function saveContact(value: ContactFormValue) {
-  if (!selectedRow.value) {
+function selectObjectFromRoute() {
+  const fallbackObject = visibleObjects.value[0] ?? null;
+  if (!fallbackObject) {
+    selectedObjectId.value = null;
+    selectedSchema.value = null;
+    records.value = [];
+    recordsCount.value = 0;
     return;
   }
 
-  isSaving.value = true;
-  detailsError.value = null;
+  const queryObjectId = readObjectIdFromRoute();
+  const nextObject = visibleObjects.value.find((object) => object.id === queryObjectId) ?? fallbackObject;
+
+  if (queryObjectId !== nextObject.id) {
+    void router.replace({
+      query: {
+        ...route.query,
+        object: nextObject.id
+      }
+    });
+  }
+
+  if (selectedObjectId.value === nextObject.id) {
+    return;
+  }
+
+  selectedObjectId.value = nextObject.id;
+  void loadObjectWorkspace(nextObject);
+}
+
+async function loadObjectWorkspace(object: RuntimeObject) {
+  const requestId = ++objectLoadRequest;
+  selectedSchema.value = null;
+  records.value = [];
+  recordsCount.value = 0;
+  pageError.value = null;
+  recordsError.value = null;
+  isLoadingSchema.value = true;
 
   try {
-    if (selectedRow.value.isDraft) {
-      const created = await crmContactsApi.create({
-        first_name: value.first_name,
-        last_name: value.last_name,
-        middle_name: value.middle_name,
-        status: value.status,
-        tags: value.tags
-      });
-      contacts.value = [created, ...contacts.value];
-      contactsCount.value += 1;
-      draftRow.value = null;
-      selectedKey.value = created.id;
+    const schema = await schemaRegistryApi.describeObject(object.id);
+    if (requestId !== objectLoadRequest) {
       return;
     }
 
-    const updated = await crmContactsApi.update(selectedRow.value.key, {
-      first_name: value.first_name,
-      last_name: value.last_name,
-      middle_name: value.middle_name,
-      status: value.status,
-      tags: value.tags
-    });
-    contacts.value = contacts.value.map((contact) => contact.id === updated.id ? updated : contact);
-    selectedKey.value = updated.id;
+    selectedSchema.value = schema;
+    isLoadingSchema.value = false;
+    await loadRecords(schema, requestId);
   } catch (error) {
-    await handleApiFailure(error, "Could not save contact.", "details");
+    if (requestId === objectLoadRequest) {
+      await handleApiFailure(error, "Could not load object schema.");
+    }
   } finally {
-    isSaving.value = false;
+    if (requestId === objectLoadRequest) {
+      isLoadingSchema.value = false;
+    }
   }
 }
 
-async function deleteSelectedContact() {
-  const row = selectedRow.value;
-
-  if (!row || row.isDraft) {
-    closeDetails();
-    return;
-  }
-
-  isDeleting.value = true;
-  detailsError.value = null;
+async function loadRecords(object: RuntimeObject, requestId = objectLoadRequest) {
+  isLoadingRecords.value = true;
+  recordsError.value = null;
 
   try {
-    await crmContactsApi.delete(row.key);
-    contacts.value = contacts.value.filter((contact) => contact.id !== row.key);
-    contactsCount.value = Math.max(contactsCount.value - 1, 0);
-    selectedKey.value = null;
+    const result = await objectRecordsApi.list(object, {
+      limit: DEFAULT_LIMIT,
+      offset: DEFAULT_OFFSET
+    });
+
+    if (requestId !== objectLoadRequest) {
+      return;
+    }
+
+    records.value = result.items;
+    recordsCount.value = result.count;
   } catch (error) {
-    await handleApiFailure(error, "Could not delete contact.", "details");
+    if (requestId !== objectLoadRequest) {
+      return;
+    }
+
+    if (isObjectRecordsAdapterNotFoundError(error)) {
+      recordsError.value = "Data endpoint is not configured.";
+      return;
+    }
+
+    await handleApiFailure(error, "Could not load records.");
   } finally {
-    isDeleting.value = false;
+    if (requestId === objectLoadRequest) {
+      isLoadingRecords.value = false;
+    }
   }
 }
 
-function startResize(event: MouseEvent) {
-  event.preventDefault();
-  isResizing.value = true;
-  window.addEventListener("mousemove", resizeDetails);
-  window.addEventListener("mouseup", stopResize);
-}
-
-function resizeDetails(event: MouseEvent) {
-  if (!isResizing.value) {
+async function retryCurrentLoad() {
+  if (selectedObject.value) {
+    await loadObjectWorkspace(selectedObject.value);
     return;
   }
 
-  const nextWidth = clamp(window.innerWidth - event.clientX - 24, DETAILS_MIN_WIDTH, DETAILS_MAX_WIDTH);
-  detailsWidth.value = nextWidth;
-  window.localStorage.setItem(DETAILS_WIDTH_STORAGE_KEY, String(nextWidth));
+  await loadObjects();
 }
 
-function stopResize() {
-  isResizing.value = false;
-  window.removeEventListener("mousemove", resizeDetails);
-  window.removeEventListener("mouseup", stopResize);
+function readObjectIdFromRoute(): string | null {
+  return typeof route.query.object === "string" ? route.query.object : null;
 }
 
-function contactToRow(contact: Contact): ContactTableRow {
-  return {
-    key: contact.id,
-    contact,
-    isDraft: false,
-    firstName: contact.first_name,
-    lastName: contact.last_name,
-    middleName: contact.middle_name,
-    status: contact.status,
-    tags: contact.tags,
-    createdAt: contact.created_at,
-    updatedAt: contact.updated_at
-  };
+function isVisibleObjectKind(kind: string): boolean {
+  const normalizedKind = kind.trim().toLowerCase();
+  return normalizedKind === "standard" || normalizedKind === "custom";
 }
 
-function fieldOptions(fieldName: string, fallback: ContactFieldOption[]): ContactFieldOption[] {
-  return fields.value?.fields.find((field) => field.field_name === fieldName)?.options ?? fallback;
-}
-
-function fieldLabel(fieldName: string, fallback: string): string {
-  return fields.value?.fields.find((field) => field.field_name === fieldName)?.label ?? fallback;
-}
-
-function contactNameLabel(): string {
-  const firstName = fieldLabel("first_name", "First Name");
-  const lastName = fieldLabel("last_name", "Last Name");
-  return firstName === "First Name" && lastName === "Last Name" ? "Name" : `${firstName} / ${lastName}`;
-}
-
-async function handleApiFailure(
-    error: unknown,
-    fallback: string,
-    target: "page" | "details" = "page"
-) {
+async function handleApiFailure(error: unknown, fallback: string) {
   if (getApiErrorStatus(error) === 401) {
     sessionStore.clearSession();
     await router.push("/login");
     return;
   }
 
-  const message = getApiErrorMessage(error, fallback);
-
-  if (target === "details") {
-    detailsError.value = message;
-  } else {
-    pageError.value = message;
-  }
-}
-
-function readStoredDetailsWidth(): number {
-  const value = Number(window.localStorage.getItem(DETAILS_WIDTH_STORAGE_KEY));
-  return Number.isFinite(value) ? clamp(value, DETAILS_MIN_WIDTH, DETAILS_MAX_WIDTH) : 520;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
+  pageError.value = getApiErrorMessage(error, fallback);
 }
 </script>
 
@@ -278,43 +208,41 @@ function clamp(value: number, min: number, max: number): number {
 
     <main class="flex min-w-0 flex-1 flex-col gap-3 p-4">
       <header class="flex min-h-10 items-center gap-3 px-1">
-        <h1 class="text-base font-semibold text-neutral-800">Contacts</h1>
-        <p v-if="pageError" class="ml-4 rounded-md bg-red-50 px-3 py-1 text-sm text-red-700">{{ pageError }}</p>
+        <div class="min-w-0">
+          <h1 class="truncate text-base font-semibold text-neutral-800">Objects</h1>
+        </div>
+
+        <button
+            v-if="hasRecoverableError"
+            type="button"
+            class="ml-auto inline-flex h-8 items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-3 text-sm font-medium text-neutral-700 shadow-sm transition-colors hover:bg-neutral-50"
+            @click="retryCurrentLoad"
+        >
+          <RefreshCcw class="size-4"/>
+          Retry
+        </button>
       </header>
 
-      <div class="flex min-h-0 flex-1 gap-3">
-        <ContactsTable
-            :rows="rows"
-            :selected-key="selectedKey"
-            :is-loading="isLoading"
-            :count="tableCount"
-            :labels="tableLabels"
-            @select="selectRow"
-            @create="createDraftRow"
-        />
+      <ObjectTabs
+          :objects="visibleObjects"
+          :selected-object-id="selectedObjectId"
+          :is-loading="isLoadingObjects"
+          @select="selectObject"
+      />
 
-        <template v-if="selectedRow">
-          <div
-              class="w-1 cursor-col-resize rounded-full bg-transparent transition-colors hover:bg-neutral-300"
-              :class="isResizing ? 'bg-neutral-300' : ''"
-              title="Resize details"
-              @mousedown="startResize"
-          />
-          <div class="min-h-0 shrink-0" :style="{width: `${detailsWidth}px`}">
-            <ContactDetailsPanel
-                :row="selectedRow"
-                :status-options="statusOptions"
-                :tag-options="tagOptions"
-                :is-saving="isSaving"
-                :is-deleting="isDeleting"
-                :error="detailsError"
-                @close="closeDetails"
-                @save="saveContact"
-                @delete="deleteSelectedContact"
-            />
-          </div>
-        </template>
-      </div>
+      <p v-if="pageError" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+        {{ pageError }}
+      </p>
+
+      <ObjectRecordsTable
+          :object="selectedSchema ?? selectedObject"
+          :fields="tableFields"
+          :records="records"
+          :count="recordsCount"
+          :is-loading-schema="isLoadingSchema"
+          :is-loading-records="isLoadingRecords"
+          :records-error="recordsError"
+      />
     </main>
   </div>
 </template>
