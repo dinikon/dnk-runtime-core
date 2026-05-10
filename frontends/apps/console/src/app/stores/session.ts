@@ -1,27 +1,12 @@
 import {defineStore} from "pinia";
 
-import {authApi, type RequestEmailOtpResponse, type ResolveTenantResponse} from "@/shared/api/authApi";
-import {HttpError, httpClient} from "@/shared/api/httpClient";
-
-export interface ConsoleUserEmail {
-    id: string;
-    email: string;
-    is_primary: boolean;
-    is_verified: boolean;
-}
-
-export interface ConsoleUser {
-    id: string;
-    status: string;
-    last_name: string;
-    first_name: string;
-    middle_name: string | null;
-    avatar: string | null;
-    interface_language: string;
-    interface_theme: string;
-    timezone: string;
-    emails: ConsoleUserEmail[];
-}
+import {
+    identityApi,
+    type ConsoleUser,
+    type RequestEmailOtpResponse,
+    type ResolveTenantResponse
+} from "@/shared/api/identity";
+import {getApiErrorMessage, HttpError} from "@/shared/api/http/errors";
 
 interface EmailChallenge {
     email: string;
@@ -63,7 +48,7 @@ export const useSessionStore = defineStore("session", {
             this.authError = null;
 
             try {
-                this.tenant = await authApi.resolveTenant();
+                this.tenant = await identityApi.resolveTenant();
             } catch (error) {
                 this.tenant = {
                     exists: false,
@@ -81,7 +66,7 @@ export const useSessionStore = defineStore("session", {
             this.authError = null;
 
             try {
-                const result = await authApi.requestEmailOtp(email);
+                const result = await identityApi.requestEmailOtp(email);
                 this.emailChallenge = {
                     email,
                     token: result.token,
@@ -90,7 +75,7 @@ export const useSessionStore = defineStore("session", {
                 };
                 return result;
             } catch (error) {
-                this.authError = authErrorMessage(error, "We could not send a verification email.");
+                this.authError = getApiErrorMessage(error, "We could not send a verification email.");
                 throw error;
             } finally {
                 this.isRequestingOtp = false;
@@ -105,7 +90,7 @@ export const useSessionStore = defineStore("session", {
             this.authError = null;
 
             try {
-                await authApi.confirmEmailOtp({
+                await identityApi.confirmEmailOtp({
                     email: this.emailChallenge.email,
                     token: this.emailChallenge.token,
                     code
@@ -113,7 +98,7 @@ export const useSessionStore = defineStore("session", {
                 this.emailChallenge = null;
                 await this.loadCurrentUser();
             } catch (error) {
-                this.authError = authErrorMessage(error, "The verification code is invalid or expired.");
+                this.authError = getApiErrorMessage(error, "The verification code is invalid or expired.");
                 throw error;
             } finally {
                 this.isConfirmingOtp = false;
@@ -123,7 +108,7 @@ export const useSessionStore = defineStore("session", {
             this.isLoading = true;
 
             try {
-                this.user = await httpClient.get<ConsoleUser>("/console/auth/me");
+                this.user = await identityApi.getCurrentUser();
             } catch {
                 this.user = null;
             } finally {
@@ -138,24 +123,3 @@ export const useSessionStore = defineStore("session", {
         }
     }
 });
-
-function authErrorMessage(error: unknown, fallback: string): string {
-    if (!(error instanceof HttpError)) {
-        return fallback;
-    }
-
-    if (typeof error.detail === "string" && error.detail.trim().length > 0) {
-        return error.detail;
-    }
-
-    if (
-        error.detail &&
-        typeof error.detail === "object" &&
-        "detail" in error.detail &&
-        typeof error.detail.detail === "string"
-    ) {
-        return error.detail.detail;
-    }
-
-    return fallback;
-}

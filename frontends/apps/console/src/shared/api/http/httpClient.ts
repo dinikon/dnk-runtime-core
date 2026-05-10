@@ -1,18 +1,9 @@
 import {apiBaseUrl} from "@/shared/config/env";
+import {HttpError} from "@/shared/api/http/errors";
 
 type RequestOptions = Omit<RequestInit, "body"> & {
     body?: unknown;
 };
-
-export class HttpError extends Error {
-    constructor(
-        public readonly status: number,
-        public readonly path: string,
-        public readonly detail?: unknown
-    ) {
-        super(`HTTP ${status} for ${path}`);
-    }
-}
 
 async function request<TResponse>(path: string, options: RequestOptions = {}): Promise<TResponse> {
     const {body, headers, ...requestInit} = options;
