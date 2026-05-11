@@ -24,18 +24,48 @@ import {
 } from "lucide-vue-next";
 import {RouterLink} from "vue-router";
 
-interface BreadcrumbItem {
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import {Card, CardContent} from "@/components/ui/card";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+} from "@/components/ui/sidebar";
+
+interface BreadcrumbItemProps {
   label: string;
   to?: string;
 }
 
+interface SettingsNavigationItem {
+  id: string;
+  label: string;
+  to: string;
+  icon: typeof UserCircle;
+  nested?: boolean;
+}
+
 defineProps<{
   title: string;
-  breadcrumbs: BreadcrumbItem[];
+  breadcrumbs: BreadcrumbItemProps[];
   activeItem: string;
 }>();
 
-const userItems = [
+const userItems: SettingsNavigationItem[] = [
   {id: "profile", label: "Profile", to: "/settings/profile", icon: UserCircle},
   {id: "experience", label: "Experience", to: "/settings/experience", icon: MonitorCog},
   {id: "accounts", label: "Accounts", to: "/settings/accounts", icon: AtSign},
@@ -43,7 +73,7 @@ const userItems = [
   {id: "calendar", label: "Calendar", to: "/settings/accounts/calendar", icon: CalendarDays, nested: true}
 ];
 
-const workspaceItems = [
+const workspaceItems: SettingsNavigationItem[] = [
   {id: "workspace-general", label: "General", to: "/settings/workspace/general", icon: Settings},
   {id: "data-model", label: "Data Model", to: "/settings/workspace/data-model", icon: Database},
   {id: "members", label: "Members", to: "/settings/workspace/members", icon: Users},
@@ -56,106 +86,96 @@ const workspaceItems = [
   {id: "security", label: "Security", to: "/settings/workspace/security", icon: KeyRound}
 ];
 
-const otherItems = [
+const otherItems: SettingsNavigationItem[] = [
   {id: "admin-panel", label: "Admin Panel", to: "/settings/admin-panel", icon: Server},
   {id: "updates", label: "Updates", to: "/settings/updates", icon: Rocket},
   {id: "support", label: "Support", to: "/settings/support", icon: Bell},
   {id: "documentation", label: "Documentation", to: "/settings/documentation", icon: HelpCircle},
   {id: "logout", label: "Log out", to: "/login", icon: LogOut}
 ];
+
+const navigationGroups = [
+  {label: "User", items: userItems},
+  {label: "Workspace", items: workspaceItems},
+  {label: "Other", items: otherItems}
+];
 </script>
 
 <template>
-  <div class="flex h-screen overflow-hidden bg-neutral-100 text-neutral-900">
-    <aside class="flex h-screen w-[320px] shrink-0 flex-col px-7 py-7">
-      <RouterLink
-          class="mb-9 inline-flex min-h-8 items-center gap-2 text-sm font-semibold text-neutral-600 hover:text-neutral-900"
-          to="/"
-      >
-        <X class="size-4"/>
-        Exit Settings
-      </RouterLink>
+  <SidebarProvider class="h-svh max-h-svh overflow-hidden">
+    <Sidebar variant="inset">
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" as-child>
+              <RouterLink to="/">
+                <div
+                    class="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground"
+                >
+                  <X class="size-4"/>
+                </div>
+                <div class="grid flex-1 text-left text-sm leading-tight">
+                  <span class="truncate font-medium">Exit Settings</span>
+                  <span class="truncate text-xs">Back to console</span>
+                </div>
+              </RouterLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarHeader>
 
-      <nav class="min-h-0 flex-1 overflow-y-auto pr-2">
-        <section class="grid gap-1">
-          <h2 class="mb-1 px-1 text-xs font-semibold text-neutral-400">User</h2>
-          <RouterLink
-              v-for="item in userItems"
-              :key="item.id"
-              class="flex min-h-9 items-center gap-2 rounded-md px-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-200/60 hover:text-neutral-900"
-              :class="[
-              activeItem === item.id ? 'bg-neutral-200/80 text-neutral-900' : '',
-              item.nested ? 'ml-4 border-l border-neutral-200 pl-4' : ''
-            ]"
-              :to="item.to"
-          >
-            <component :is="item.icon" class="size-4"/>
-            <span class="truncate">{{ item.label }}</span>
-          </RouterLink>
-        </section>
+      <SidebarContent>
+        <SidebarGroup v-for="group in navigationGroups" :key="group.label">
+          <SidebarGroupLabel>{{ group.label }}</SidebarGroupLabel>
+          <SidebarMenu>
+            <SidebarMenuItem v-for="item in group.items" :key="item.id">
+              <SidebarMenuButton
+                  as-child
+                  :is-active="activeItem === item.id"
+                  :tooltip="item.label"
+                  :class="item.nested ? 'pl-6' : undefined"
+              >
+                <RouterLink :to="item.to">
+                  <component :is="item.icon"/>
+                  <span>{{ item.label }}</span>
+                </RouterLink>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarGroup>
+      </SidebarContent>
+    </Sidebar>
 
-        <section class="mt-6 grid gap-1">
-          <h2 class="mb-1 px-1 text-xs font-semibold text-neutral-400">Workspace</h2>
-          <RouterLink
-              v-for="item in workspaceItems"
-              :key="item.id"
-              class="flex min-h-9 items-center gap-2 rounded-md px-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-200/60 hover:text-neutral-900"
-              :class="activeItem === item.id ? 'bg-neutral-200/80 text-neutral-900' : ''"
-              :to="item.to"
-          >
-            <component :is="item.icon" class="size-4"/>
-            <span class="truncate">{{ item.label }}</span>
-          </RouterLink>
-        </section>
+    <SidebarInset class="min-h-0 overflow-hidden">
+      <div class="flex min-h-0 flex-1 flex-col gap-4 p-4">
+        <header class="flex h-8 shrink-0 items-center">
+          <Breadcrumb>
+            <BreadcrumbList>
+              <template v-for="(breadcrumb, index) in breadcrumbs" :key="`${breadcrumb.label}-${index}`">
+                <BreadcrumbItem>
+                  <BreadcrumbLink v-if="breadcrumb.to" as-child>
+                    <RouterLink :to="breadcrumb.to">
+                      {{ breadcrumb.label }}
+                    </RouterLink>
+                  </BreadcrumbLink>
+                  <BreadcrumbPage v-else>
+                    {{ breadcrumb.label }}
+                  </BreadcrumbPage>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator v-if="index < breadcrumbs.length - 1"/>
+              </template>
+            </BreadcrumbList>
+          </Breadcrumb>
+        </header>
 
-        <section class="mt-6 grid gap-1">
-          <h2 class="mb-1 px-1 text-xs font-semibold text-neutral-400">Other</h2>
-          <RouterLink
-              v-for="item in otherItems"
-              :key="item.id"
-              class="flex min-h-9 items-center gap-2 rounded-md px-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-200/60 hover:text-neutral-900"
-              :class="activeItem === item.id ? 'bg-neutral-200/80 text-neutral-900' : ''"
-              :to="item.to"
-          >
-            <component :is="item.icon" class="size-4"/>
-            <span class="truncate">{{ item.label }}</span>
-          </RouterLink>
-        </section>
-      </nav>
-
-      <div class="mt-5 flex items-center justify-between gap-3 px-1">
-        <span class="inline-flex items-center gap-3 text-sm font-medium text-neutral-600">
-          <span class="size-1.5 rounded-full bg-yellow-400"/>
-          Advanced:
-        </span>
-        <span class="relative inline-flex h-6 w-11 items-center rounded-full bg-yellow-400">
-          <span class="absolute right-0.5 size-5 rounded-full bg-white shadow-sm"/>
-        </span>
+        <Card class="min-h-0 flex-1 overflow-hidden py-0">
+          <CardContent class="min-h-0 flex-1 overflow-auto p-8">
+            <slot>
+              <div class="text-sm text-muted-foreground">{{ title }}</div>
+            </slot>
+          </CardContent>
+        </Card>
       </div>
-    </aside>
-
-    <main class="flex min-w-0 flex-1 flex-col gap-6 px-6 py-7">
-      <header class="flex min-h-8 items-center gap-2 text-sm font-medium text-neutral-400">
-        <template v-for="(breadcrumb, index) in breadcrumbs" :key="`${breadcrumb.label}-${index}`">
-          <RouterLink
-              v-if="breadcrumb.to"
-              class="hover:text-neutral-800"
-              :to="breadcrumb.to"
-          >
-            {{ breadcrumb.label }}
-          </RouterLink>
-          <span v-else :class="index === breadcrumbs.length - 1 ? 'text-neutral-800' : ''">
-            {{ breadcrumb.label }}
-          </span>
-          <span v-if="index < breadcrumbs.length - 1" class="text-neutral-500">/</span>
-        </template>
-      </header>
-
-      <section class="min-h-0 flex-1 overflow-auto rounded-lg border border-neutral-200 bg-white px-8 py-8 shadow-sm">
-        <slot>
-          <div class="text-sm text-neutral-400">{{ title }}</div>
-        </slot>
-      </section>
-    </main>
-  </div>
+    </SidebarInset>
+  </SidebarProvider>
 </template>

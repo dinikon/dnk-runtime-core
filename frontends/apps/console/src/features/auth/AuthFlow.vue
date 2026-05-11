@@ -1,9 +1,15 @@
 <script setup lang="ts">
 import {computed, onMounted, ref} from "vue";
 import {useRouter} from "vue-router";
+import {Loader2, Mail} from "lucide-vue-next";
 
 import {useSessionStore} from "@/app/stores/session";
-import {AuthCard, AuthProviderButton, AuthShell, OtpCodeInput} from "@/features/auth/components";
+import {Alert, AlertDescription} from "@/components/ui/alert";
+import {Button} from "@/components/ui/button";
+import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
+import {Input} from "@/components/ui/input";
+import {Label} from "@/components/ui/label";
+import {AuthProviderButton, OtpCodeInput} from "@/features/auth/components";
 
 const router = useRouter();
 const sessionStore = useSessionStore();
@@ -69,119 +75,128 @@ function openMail(provider: "gmail" | "outlook") {
 </script>
 
 <template>
-  <AuthShell>
-    <AuthCard v-if="loginStep === 'checking'" class="min-h-42 max-w-80 content-center gap-3.5">
-      <div
-          class="mx-auto size-5.5 animate-spin rounded-full border-2 border-neutral-200 border-t-neutral-900"
-          aria-hidden="true"
-      />
-      <h1 class="text-sm font-semibold leading-tight">Loading workspace</h1>
-      <p class="text-[0.7rem] leading-relaxed text-neutral-500">Checking the current workspace address.</p>
-    </AuthCard>
+  <Card v-if="loginStep === 'checking'" class="w-full max-w-sm text-center">
+    <CardHeader class="items-center">
+      <Loader2 class="size-5 animate-spin text-muted-foreground" aria-hidden="true"/>
+      <CardTitle class="text-base">Loading workspace</CardTitle>
+      <CardDescription>Checking the current workspace address.</CardDescription>
+    </CardHeader>
+  </Card>
 
-    <AuthCard v-else-if="loginStep === 'workspace-not-found'" class="min-h-42 max-w-80 content-center gap-3.5">
-      <h1 class="text-sm font-semibold leading-tight">Вітаємо в dNiko</h1>
-      <p class="text-[0.7rem] leading-relaxed text-neutral-500">
-        Робочий простір за цією адресою не знайдено або він недоступний.
-      </p>
-      <p class="mt-2 px-1 text-[0.66rem] leading-relaxed text-neutral-400">
-        By using dNiko, you agree to the Terms of Service and Data Processing Agreement.
-      </p>
-    </AuthCard>
+  <Card v-else-if="loginStep === 'workspace-not-found'" class="w-full max-w-sm">
+    <CardHeader class="text-center">
+      <CardTitle class="text-base">Вітаємо в dNiko</CardTitle>
+      <CardDescription>Робочий простір за цією адресою не знайдено або він недоступний.</CardDescription>
+    </CardHeader>
+    <CardContent class="grid gap-4">
+      <Alert>
+        <AlertDescription>
+          By using dNiko, you agree to the Terms of Service and Data Processing Agreement.
+        </AlertDescription>
+      </Alert>
+    </CardContent>
+  </Card>
 
-    <AuthCard v-else-if="loginStep === 'email'">
-      <form class="grid gap-2.5" @submit.prevent="requestOtp">
-        <h1 class="mb-2 text-sm font-semibold leading-tight">Welcome to dNiko</h1>
+  <Card v-else-if="loginStep === 'email'" class="w-full max-w-sm">
+    <CardHeader class="text-center">
+      <CardTitle class="text-base">Welcome to dNiko</CardTitle>
+      <CardDescription>Enter your email to continue.</CardDescription>
+    </CardHeader>
+    <CardContent>
+      <form class="grid gap-4" @submit.prevent="requestOtp">
+        <div class="grid gap-2">
+          <AuthProviderButton provider="google" disabled>
+            Continue with Google
+          </AuthProviderButton>
+          <AuthProviderButton provider="microsoft" disabled>
+            Continue with Microsoft
+          </AuthProviderButton>
+        </div>
 
-        <AuthProviderButton provider="google" disabled>
-          Continue with Google
-        </AuthProviderButton>
-        <AuthProviderButton provider="microsoft" disabled>
-          Continue with Microsoft
-        </AuthProviderButton>
+        <div class="grid gap-2">
+          <Label for="auth-email">Email</Label>
+          <Input
+              id="auth-email"
+              v-model="email"
+              class="text-center"
+              type="email"
+              autocomplete="email"
+              placeholder="tim@apple.dev"
+              required
+          />
+        </div>
 
-        <input
-            v-model="email"
-            class="min-h-8 w-full rounded border border-neutral-200 bg-white px-3 text-center text-xs text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
-            type="email"
-            autocomplete="email"
-            placeholder="tim@apple.dev"
-            required
-        />
-
-        <button
-            class="inline-flex min-h-7 w-full items-center justify-center rounded bg-neutral-900 text-[0.72rem] font-semibold text-white transition-colors hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-400"
-            type="submit"
-            :disabled="!canRequestOtp"
-        >
+        <Button class="w-full" type="submit" :disabled="!canRequestOtp">
           {{ sessionStore.isRequestingOtp ? "Sending..." : "Continue" }}
-        </button>
+        </Button>
 
-        <p v-if="sessionStore.authError" class="text-[0.7rem] font-semibold leading-relaxed text-red-700">
-          {{ sessionStore.authError }}
-        </p>
-        <p class="mt-2 px-1 text-[0.66rem] leading-relaxed text-neutral-500">
+        <Alert v-if="sessionStore.authError" variant="destructive">
+          <AlertDescription>{{ sessionStore.authError }}</AlertDescription>
+        </Alert>
+
+        <p class="px-1 text-center text-xs leading-relaxed text-muted-foreground">
           By using dNiko, you agree to the Terms of Service and Data Processing Agreement.
         </p>
       </form>
-    </AuthCard>
+    </CardContent>
+  </Card>
 
-    <AuthCard v-else class="max-w-[308px] pt-7">
-      <form class="grid gap-2.5" @submit.prevent="confirmOtp">
-        <div
-            class="mx-auto grid size-7.5 place-items-center rounded-full border border-neutral-900 text-sm text-neutral-900"
-            aria-hidden="true"
-        >
-          ✉
+  <Card v-else class="w-full max-w-sm">
+    <CardHeader class="items-center text-center">
+      <div class="grid size-9 place-items-center rounded-full border">
+        <Mail class="size-4" aria-hidden="true"/>
+      </div>
+      <CardTitle class="text-base">Check your Emails</CardTitle>
+      <CardDescription>
+        A verification email has been sent to:
+        <strong class="block text-foreground">{{ sessionStore.emailChallenge?.email }}</strong>
+      </CardDescription>
+    </CardHeader>
+    <CardContent>
+      <form class="grid gap-4" @submit.prevent="confirmOtp">
+        <div class="grid gap-2">
+          <AuthProviderButton provider="google" variant="outline" @click="openMail('gmail')">
+            Open Gmail
+          </AuthProviderButton>
+          <AuthProviderButton provider="microsoft" variant="outline" @click="openMail('outlook')">
+            Open Outlook
+          </AuthProviderButton>
         </div>
-        <h1 class="text-sm font-semibold leading-tight">Check your Emails</h1>
-        <p class="text-[0.7rem] leading-relaxed text-neutral-500">
-          A verification email has been sent to:<br/>
-          <strong>{{ sessionStore.emailChallenge?.email }}</strong>
-        </p>
 
-        <AuthProviderButton provider="google" variant="outline" @click="openMail('gmail')">
-          Open Gmail
-        </AuthProviderButton>
-        <AuthProviderButton provider="microsoft" variant="outline" @click="openMail('outlook')">
-          Open Outlook
-        </AuthProviderButton>
+        <div class="grid gap-2">
+          <Label>Verification code</Label>
+          <OtpCodeInput v-model="code"/>
+        </div>
 
-        <OtpCodeInput v-model="code" class="my-1"/>
+        <Alert v-if="sessionStore.emailChallenge?.devCode">
+          <AlertDescription>
+            Development code: {{ sessionStore.emailChallenge.devCode }}
+          </AlertDescription>
+        </Alert>
 
-        <p
-            v-if="sessionStore.emailChallenge?.devCode"
-            class="text-[0.7rem] font-semibold leading-relaxed text-neutral-700"
-        >
-          Development code: {{ sessionStore.emailChallenge.devCode }}
-        </p>
-
-        <button
-            class="inline-flex min-h-7 w-full items-center justify-center rounded bg-neutral-900 text-[0.72rem] font-semibold text-white transition-colors hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-400"
-            type="submit"
-            :disabled="!canConfirmOtp"
-        >
+        <Button class="w-full" type="submit" :disabled="!canConfirmOtp">
           {{ sessionStore.isConfirmingOtp ? "Checking..." : "Continue" }}
-        </button>
+        </Button>
 
-        <p v-if="sessionStore.authError" class="text-[0.7rem] font-semibold leading-relaxed text-red-700">
-          {{ sessionStore.authError }}
-        </p>
+        <Alert v-if="sessionStore.authError" variant="destructive">
+          <AlertDescription>{{ sessionStore.authError }}</AlertDescription>
+        </Alert>
 
-        <div class="mt-1 flex justify-center gap-3.5">
-          <button class="text-[0.66rem] font-medium text-neutral-400 hover:text-neutral-700" type="button"
-                  @click="requestOtp">
+        <div class="flex justify-center gap-3">
+          <Button variant="link" size="sm" type="button" class="h-auto px-0 text-muted-foreground" @click="requestOtp">
             Resend email
-          </button>
-          <button
-              class="text-[0.66rem] font-medium text-neutral-400 hover:text-neutral-700"
+          </Button>
+          <Button
+              variant="link"
+              size="sm"
               type="button"
+              class="h-auto px-0 text-muted-foreground"
               @click="sessionStore.emailChallenge = null"
           >
             Change email
-          </button>
+          </Button>
         </div>
       </form>
-    </AuthCard>
-  </AuthShell>
+    </CardContent>
+  </Card>
 </template>

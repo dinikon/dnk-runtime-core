@@ -59,13 +59,13 @@ async function focusInput(index: number) {
 </script>
 
 <template>
-  <div class="grid grid-cols-6 gap-1.5" aria-label="Verification code">
+  <div class="grid grid-cols-6 gap-2" aria-label="Verification code">
     <input
         v-for="(_, index) in digits"
         :key="index"
         ref="inputs"
         :value="digits[index]"
-        class="min-h-7 min-w-0 rounded border border-neutral-200 bg-white p-0 text-center text-xs text-neutral-900 outline-none transition-colors focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
+        class="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-9 min-w-0 rounded-md border p-0 text-center text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:ring-[3px]"
         inputmode="numeric"
         maxlength="6"
         autocomplete="one-time-code"

@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import {AuthFlow} from "@/features/auth";
+import {AuthLayout} from "@/layouts";
 </script>
 
 <template>
-  <AuthFlow/>
+  <AuthLayout>
+    <AuthFlow/>
+  </AuthLayout>
 </template>
