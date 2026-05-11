@@ -18,4 +18,15 @@ Console commands are run from this directory:
 - `npm install`
 - `npm run dev:console`
 - `npm run build:console`
+- `npm run preview:console`
 - `npm run typecheck:console`
+
+## Documentation
+
+- [Console frontend](../docs/frontends/console.md)
+
+## Source Of Truth
+
+- `apps/console/src/`
+- `apps/shortlink/`
+- `packages/`

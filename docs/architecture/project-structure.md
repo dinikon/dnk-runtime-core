@@ -6,6 +6,7 @@
 .
 ├── README.md
 ├── docs/
+├── frontends/
 ├── manage.py
 ├── pyproject.toml
 ├── src/
@@ -26,6 +27,26 @@
 - `src/management/`: management CLI parser and command handlers.
 - `test/`: unit and integration-style tests around module behavior and architecture boundaries.
 - `docs/`: project documentation.
+- `frontends/`: frontend workspace with browser applications and shared frontend packages.
+
+## Frontends Layout
+
+```text
+frontends/
+├── apps/
+│   ├── console/
+│   └── shortlink/
+└── packages/
+    ├── api-client/
+    ├── config/
+    └── ui/
+```
+
+- `frontends/apps/console/`: Vue 3 administrative and operator console application.
+- `frontends/apps/shortlink/`: short link frontend experience.
+- `frontends/packages/api-client/`: shared backend HTTP API client package.
+- `frontends/packages/config/`: shared frontend configuration package.
+- `frontends/packages/ui/`: shared frontend UI package.
 
 ## Modules Layout
 
@@ -74,9 +95,11 @@ repository return paths.
 - [Architecture overview](overview.md)
 - [Modules](../modules/tenancy.md)
 - [Management CLI](../interfaces/management-cli.md)
+- [Console frontend](../frontends/console.md)
 
 ## Source Of Truth
 
 - `src/modules/`
 - `src/management/`
 - `test/`
+- `frontends/`
