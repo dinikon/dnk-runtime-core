@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 from uuid import uuid4
 
 from src.modules.communication.application.ports import ProviderHttpResponse
@@ -15,6 +16,8 @@ from src.modules.communication.application.services import (
 from src.modules.communication.application.use_cases import (
     HandleProviderWebhookCommand,
     HandleProviderWebhookUseCase,
+    ProcessOutboundMessageByIdCommand,
+    ProcessOutboundMessageByIdUseCase,
     ProcessOutboundMessageUseCase,
     ProcessQueuedMessagesCommand,
     SendCommunicationCommand,
@@ -125,6 +128,8 @@ class _ProcessRepositoryStub:
             }
         )
         self.attempt = SimpleNamespace(
+            delivery_attempt_id=uuid4(),
+            attempt_no=1,
             status="STARTED",
             request_payload=None,
             response_payload=None,
@@ -152,6 +157,49 @@ class _ProcessRepositoryStub:
     async def create_delivery_attempt(self, **_kwargs):
         self.attempt.request_payload = _kwargs["request_payload"]
         return self.attempt
+
+
+class _ByIdRepositoryStub(_ProcessRepositoryStub):
+    def __init__(self, *, claimable: bool = True) -> None:
+        super().__init__()
+        self.claimable = claimable
+        self.completed = False
+        self.failed_processing = False
+        self.claim_tokens = []
+
+    async def claim_outbound_for_processing(self, **kwargs):
+        self.claim_tokens.append(kwargs["processing_token"])
+        if not self.claimable:
+            self.outbound.internal_status = "SENT"
+            return None
+        self.outbound.internal_status = "SENDING"
+        self.outbound.processing_token = kwargs["processing_token"]
+        return self.outbound
+
+    async def get_outbound_by_id(self, _outbound_message_id):
+        return self.outbound
+
+    async def complete_outbound_processing(self, **kwargs):
+        self.completed = True
+        self.outbound.internal_status = kwargs["internal_status"]
+        self.outbound.external_message_id = kwargs["external_message_id"]
+        return True
+
+    async def fail_outbound_processing(self, **_kwargs):
+        self.failed_processing = True
+        self.outbound.internal_status = "FAILED"
+        return True
+
+
+class _UnitOfWorkStub:
+    def __init__(self, _session_factory):
+        self.session = object()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
 
 
 class _SmtpTransportStub:
@@ -380,6 +428,93 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(http_client.requests, [])
         self.assertEqual(repository.outbound.internal_status, "FAILED")
         self.assertIn("Send spec is missing", repository.outbound.error_message)
+
+    async def test_process_outbound_by_id_claims_sends_and_persists_success(
+        self,
+    ) -> None:
+        repository = _ByIdRepositoryStub()
+        http_client = _HttpClientStub()
+        use_case = ProcessOutboundMessageByIdUseCase(
+            session_factory=object(),
+            sender_registry=ProviderSenderRegistry(
+                [
+                    YamlHttpProviderSender(
+                        http_client=http_client,
+                        payload_builder=ProviderPayloadBuildService(),
+                        status_mapper=ProviderStatusMappingService(),
+                        json_path=JsonPathService(),
+                        secret_codec=SecretCodec(),
+                    )
+                ]
+            ),
+            template_renderer=TemplateRenderService(),
+            processing_lease_seconds=300,
+        )
+
+        with (
+            patch(
+                "src.modules.communication.application.use_cases.UnitOfWork",
+                _UnitOfWorkStub,
+            ),
+            patch(
+                "src.modules.communication.application.use_cases.CommunicationRepository",
+                return_value=repository,
+            ),
+        ):
+            result = await use_case(
+                ProcessOutboundMessageByIdCommand(
+                    outbound_message_id=repository.outbound.outbound_message_id,
+                )
+            )
+
+        self.assertTrue(result.processed)
+        self.assertTrue(result.succeeded)
+        self.assertTrue(repository.completed)
+        self.assertEqual(repository.outbound.external_message_id, "ext-123")
+        self.assertEqual(http_client.requests[0]["json_body"]["text"], "Approved 15000")
+
+    async def test_process_outbound_by_id_skips_duplicate_non_queued_message(
+        self,
+    ) -> None:
+        repository = _ByIdRepositoryStub(claimable=False)
+        http_client = _HttpClientStub()
+        use_case = ProcessOutboundMessageByIdUseCase(
+            session_factory=object(),
+            sender_registry=ProviderSenderRegistry(
+                [
+                    YamlHttpProviderSender(
+                        http_client=http_client,
+                        payload_builder=ProviderPayloadBuildService(),
+                        status_mapper=ProviderStatusMappingService(),
+                        json_path=JsonPathService(),
+                        secret_codec=SecretCodec(),
+                    )
+                ]
+            ),
+            template_renderer=TemplateRenderService(),
+            processing_lease_seconds=300,
+        )
+
+        with (
+            patch(
+                "src.modules.communication.application.use_cases.UnitOfWork",
+                _UnitOfWorkStub,
+            ),
+            patch(
+                "src.modules.communication.application.use_cases.CommunicationRepository",
+                return_value=repository,
+            ),
+        ):
+            result = await use_case(
+                ProcessOutboundMessageByIdCommand(
+                    outbound_message_id=repository.outbound.outbound_message_id,
+                )
+            )
+
+        self.assertFalse(result.processed)
+        self.assertTrue(result.skipped)
+        self.assertEqual(result.status, "SENT")
+        self.assertEqual(http_client.requests, [])
 
     async def test_process_queued_smtp_message_sends_email_and_redacts_secrets(
         self,

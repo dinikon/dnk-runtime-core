@@ -120,6 +120,42 @@ class ProcessQueuedResultDTO:
 
 
 @dataclass(frozen=True, slots=True)
+class ProcessOutboundMessageResultDTO:
+    outbound_message_id: UUID
+    processed: bool
+    succeeded: bool
+    skipped: bool
+    status: str
+    error_message: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PublishQueuedResultDTO:
+    scanned: int
+    published: int
+    failed: int
+
+
+@dataclass(frozen=True, slots=True)
+class RecoverStuckResultDTO:
+    recovered: int
+
+
+@dataclass(frozen=True, slots=True)
+class OutboundMessageJob:
+    outbound_message_id: UUID
+    published_at: datetime
+    source: str
+
+    def to_payload(self) -> dict[str, str]:
+        return {
+            "outbound_message_id": str(self.outbound_message_id),
+            "published_at": self.published_at.isoformat(),
+            "source": self.source,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class WebhookResultDTO:
     accepted: bool
     matched: bool
@@ -129,11 +165,15 @@ class WebhookResultDTO:
 
 __all__ = [
     "MessageTemplateDTO",
+    "OutboundMessageJob",
     "OutboundMessageDTO",
     "ProcessQueuedResultDTO",
+    "ProcessOutboundMessageResultDTO",
     "ProviderConnectionDTO",
     "ProviderConnectorDTO",
     "ProviderMessageTypeDTO",
+    "PublishQueuedResultDTO",
+    "RecoverStuckResultDTO",
     "SendCommunicationResultDTO",
     "TemplateVersionDTO",
     "WebhookResultDTO",

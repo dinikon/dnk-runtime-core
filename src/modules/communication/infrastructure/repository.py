@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import desc, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.communication.application.dto import (
@@ -515,6 +515,95 @@ class CommunicationRepository:
         )
         return list((await self._session.scalars(statement)).all())
 
+    async def list_publishable_outbounds(
+        self,
+        *,
+        limit: int,
+        now: datetime,
+        republish_before: datetime,
+    ) -> list[OutboundMessageModel]:
+        statement = (
+            select(OutboundMessageModel)
+            .join(
+                CommunicationRequestModel,
+                CommunicationRequestModel.communication_request_id
+                == OutboundMessageModel.communication_request_id,
+            )
+            .where(
+                OutboundMessageModel.internal_status
+                == OutboundMessageStatus.QUEUED.value,
+                or_(
+                    OutboundMessageModel.next_attempt_at.is_(None),
+                    OutboundMessageModel.next_attempt_at <= now,
+                ),
+                or_(
+                    OutboundMessageModel.queue_published_at.is_(None),
+                    OutboundMessageModel.queue_published_at <= republish_before,
+                ),
+            )
+            .order_by(
+                CommunicationRequestModel.priority,
+                OutboundMessageModel.created_at,
+            )
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        )
+        return list((await self._session.scalars(statement)).all())
+
+    async def mark_outbound_published(
+        self,
+        *,
+        outbound_message_id: UUID,
+        published_at: datetime,
+    ) -> None:
+        outbound = await self.get_outbound_by_id(outbound_message_id)
+        if outbound is None:
+            return
+        outbound.queue_published_at = published_at
+        outbound.queue_publish_count = int(outbound.queue_publish_count or 0) + 1
+        await self._session.flush()
+
+    async def get_outbound_by_id(
+        self,
+        outbound_message_id: UUID,
+    ) -> OutboundMessageModel | None:
+        return (
+            await self._session.scalars(
+                select(OutboundMessageModel).where(
+                    OutboundMessageModel.outbound_message_id == outbound_message_id
+                )
+            )
+        ).one_or_none()
+
+    async def claim_outbound_for_processing(
+        self,
+        *,
+        outbound_message_id: UUID,
+        processing_token: UUID,
+        now: datetime,
+        lease_until: datetime,
+    ) -> OutboundMessageModel | None:
+        statement = (
+            update(OutboundMessageModel)
+            .where(
+                OutboundMessageModel.outbound_message_id == outbound_message_id,
+                OutboundMessageModel.internal_status
+                == OutboundMessageStatus.QUEUED.value,
+                or_(
+                    OutboundMessageModel.next_attempt_at.is_(None),
+                    OutboundMessageModel.next_attempt_at <= now,
+                ),
+            )
+            .values(
+                internal_status=OutboundMessageStatus.SENDING.value,
+                processing_token=processing_token,
+                processing_started_at=now,
+                processing_deadline_at=lease_until,
+            )
+            .returning(OutboundMessageModel)
+        )
+        return (await self._session.scalars(statement)).one_or_none()
+
     async def load_processing_context(
         self,
         outbound_message_id: UUID,
@@ -602,6 +691,155 @@ class CommunicationRepository:
         await self._session.flush()
         return attempt
 
+    async def complete_outbound_processing(
+        self,
+        *,
+        outbound_message_id: UUID,
+        processing_token: UUID,
+        delivery_attempt_id: UUID,
+        rendered_payload: dict[str, Any],
+        provider_request_payload: dict[str, Any],
+        response_payload: dict[str, Any],
+        http_status_code: int | None,
+        external_message_id: str | None,
+        external_status: str | None,
+        internal_status: str,
+        finished_at: datetime,
+    ) -> bool:
+        outbound = await self.get_outbound_by_id(outbound_message_id)
+        if outbound is None or outbound.processing_token != processing_token:
+            return False
+        request = await self._get_request_for_outbound(outbound)
+        attempt = await self._get_delivery_attempt(delivery_attempt_id)
+        if attempt is None:
+            return False
+
+        outbound.rendered_payload = rendered_payload
+        outbound.provider_request_payload = provider_request_payload
+        outbound.external_message_id = external_message_id
+        outbound.external_status = external_status
+        outbound.internal_status = internal_status
+        outbound.error_code = None
+        outbound.error_message = None
+        outbound.processing_token = None
+        outbound.processing_started_at = None
+        outbound.processing_deadline_at = None
+        outbound.next_attempt_at = None
+        _apply_status_timestamps(outbound, internal_status, finished_at)
+
+        request.status = (
+            RequestStatus.COMPLETED.value
+            if internal_status
+            in {
+                OutboundMessageStatus.SENT.value,
+                OutboundMessageStatus.DELIVERED.value,
+                OutboundMessageStatus.OPENED.value,
+                OutboundMessageStatus.CLICKED.value,
+            }
+            else RequestStatus.FAILED.value
+        )
+
+        attempt.status = AttemptStatus.SUCCESS.value
+        attempt.response_payload = response_payload
+        attempt.http_status_code = http_status_code
+        attempt.external_message_id = external_message_id
+        attempt.finished_at = finished_at
+        await self._session.flush()
+        return True
+
+    async def fail_outbound_processing(
+        self,
+        *,
+        outbound_message_id: UUID,
+        processing_token: UUID,
+        delivery_attempt_id: UUID | None,
+        error_code: str,
+        error_message: str,
+        finished_at: datetime,
+        response_payload: dict[str, Any] | None = None,
+        http_status_code: int | None = None,
+        external_message_id: str | None = None,
+        external_status: str | None = None,
+        retry_at: datetime | None = None,
+    ) -> bool:
+        outbound = await self.get_outbound_by_id(outbound_message_id)
+        if outbound is None or outbound.processing_token != processing_token:
+            return False
+        request = await self._get_request_for_outbound(outbound)
+        attempt = (
+            await self._get_delivery_attempt(delivery_attempt_id)
+            if delivery_attempt_id is not None
+            else None
+        )
+        retryable = retry_at is not None
+
+        outbound.processing_token = None
+        outbound.processing_started_at = None
+        outbound.processing_deadline_at = None
+        outbound.error_code = error_code
+        outbound.error_message = error_message
+        outbound.external_message_id = external_message_id
+        outbound.external_status = external_status
+        if retryable:
+            outbound.internal_status = OutboundMessageStatus.QUEUED.value
+            outbound.next_attempt_at = retry_at
+            outbound.queue_published_at = None
+            request.status = RequestStatus.QUEUED.value
+        else:
+            outbound.internal_status = OutboundMessageStatus.FAILED.value
+            outbound.failed_at = outbound.failed_at or finished_at
+            request.status = RequestStatus.FAILED.value
+
+        if attempt is not None:
+            attempt.status = (
+                AttemptStatus.RETRYABLE_FAILED.value
+                if retryable
+                else AttemptStatus.NON_RETRYABLE_FAILED.value
+            )
+            attempt.response_payload = response_payload or {"error": error_message}
+            attempt.http_status_code = http_status_code
+            attempt.external_message_id = external_message_id
+            attempt.error_code = error_code
+            attempt.error_message = error_message
+            attempt.finished_at = finished_at
+
+        await self._session.flush()
+        return True
+
+    async def recover_stuck_outbounds(
+        self,
+        *,
+        older_than: datetime,
+        now: datetime,
+        limit: int,
+    ) -> int:
+        statement = (
+            select(OutboundMessageModel)
+            .where(
+                OutboundMessageModel.internal_status
+                == OutboundMessageStatus.SENDING.value,
+                or_(
+                    OutboundMessageModel.processing_deadline_at <= now,
+                    OutboundMessageModel.processing_started_at <= older_than,
+                ),
+            )
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        )
+        outbounds = list((await self._session.scalars(statement)).all())
+        for outbound in outbounds:
+            request = await self._get_request_for_outbound(outbound)
+            outbound.internal_status = OutboundMessageStatus.UNKNOWN.value
+            outbound.processing_token = None
+            outbound.processing_started_at = None
+            outbound.processing_deadline_at = None
+            outbound.error_code = "PROCESSING_LEASE_EXPIRED"
+            outbound.error_message = "Processing lease expired before completion."
+            outbound.failed_at = outbound.failed_at or now
+            request.status = RequestStatus.FAILED.value
+        await self._session.flush()
+        return len(outbounds)
+
     async def get_outbound(
         self,
         *,
@@ -676,6 +914,31 @@ class CommunicationRepository:
         self._session.add(event)
         await self._session.flush()
         return event
+
+    async def _get_request_for_outbound(
+        self,
+        outbound: OutboundMessageModel,
+    ) -> CommunicationRequestModel:
+        return (
+            await self._session.scalars(
+                select(CommunicationRequestModel).where(
+                    CommunicationRequestModel.communication_request_id
+                    == outbound.communication_request_id
+                )
+            )
+        ).one()
+
+    async def _get_delivery_attempt(
+        self,
+        delivery_attempt_id: UUID,
+    ) -> DeliveryAttemptModel | None:
+        return (
+            await self._session.scalars(
+                select(DeliveryAttemptModel).where(
+                    DeliveryAttemptModel.delivery_attempt_id == delivery_attempt_id
+                )
+            )
+        ).one_or_none()
 
     async def _next_template_version_no(self, template_id: UUID) -> int:
         current = await self._session.scalar(
@@ -803,6 +1066,24 @@ def outbound_to_dto(model: OutboundMessageModel) -> OutboundMessageDTO:
         created_at=model.created_at,
         updated_at=model.updated_at,
     )
+
+
+def _apply_status_timestamps(
+    outbound: OutboundMessageModel,
+    internal_status: str,
+    now: datetime,
+) -> None:
+    if internal_status == OutboundMessageStatus.SENT.value:
+        outbound.sent_at = outbound.sent_at or now
+    elif internal_status == OutboundMessageStatus.DELIVERED.value:
+        outbound.sent_at = outbound.sent_at or now
+        outbound.delivered_at = outbound.delivered_at or now
+    elif internal_status in (
+        OutboundMessageStatus.FAILED.value,
+        OutboundMessageStatus.EXPIRED.value,
+        OutboundMessageStatus.UNDELIVERED.value,
+    ):
+        outbound.failed_at = outbound.failed_at or now
 
 
 def utc_now() -> datetime:

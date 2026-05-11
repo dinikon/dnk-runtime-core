@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
 
+from src.config import dnk_config
+from src.modules.communication.application.ports import OutboundMessagePublisherProtocol
 from src.modules.communication.application.services import (
     JsonPathService,
     JsonSchemaValidationService,
@@ -33,6 +36,9 @@ from src.modules.communication.infrastructure.provider_senders import (
     ProviderSenderRegistry,
     YamlHttpProviderSender,
     YamlSmtpProviderSender,
+)
+from src.modules.communication.infrastructure.rabbitmq import (
+    RabbitMQOutboundMessagePublisher,
 )
 from src.modules.communication.infrastructure.repository import CommunicationRepository
 from src.modules.shared.depends.uow import UoWDep
@@ -129,6 +135,31 @@ def get_provider_sender_registry(
 ProviderSenderRegistryDep = Annotated[
     ProviderSenderRegistry,
     Depends(get_provider_sender_registry),
+]
+
+
+async def get_outbound_message_publisher(
+    request: Request,
+) -> AsyncGenerator[OutboundMessagePublisherProtocol | None, None]:
+    if not dnk_config.COMMUNICATION_QUEUE.enabled:
+        yield None
+        return
+
+    publisher = getattr(request.app.state, "communication_outbound_publisher", None)
+    if publisher is not None:
+        yield publisher
+        return
+
+    async with RabbitMQOutboundMessagePublisher.from_settings(
+        dnk_config.COMMUNICATION_QUEUE,
+        manage_broker_lifecycle=True,
+    ) as fallback_publisher:
+        yield fallback_publisher
+
+
+OutboundMessagePublisherDep = Annotated[
+    OutboundMessagePublisherProtocol | None,
+    Depends(get_outbound_message_publisher),
 ]
 
 
@@ -313,10 +344,12 @@ __all__ = [
     "ListOutboundMessagesUseCaseDep",
     "ListProviderConnectionsUseCaseDep",
     "ListProviderConnectorsUseCaseDep",
+    "OutboundMessagePublisherDep",
     "ProcessOutboundMessageUseCaseDep",
     "ProviderSenderRegistryDep",
     "RegisterProviderConnectorUseCaseDep",
     "SendCommunicationUseCaseDep",
     "get_communication_repository",
+    "get_outbound_message_publisher",
     "get_provider_sender_registry",
 ]
