@@ -64,7 +64,7 @@ class YamlHttpProviderSender:
 
     def build(self, context: ProviderSendContext) -> ProviderPreparedSend:
         """Build HTTP request details and persistable request snapshot."""
-        send_spec = context.connector_spec["send"]
+        send_spec = context.send_spec
         method, url, headers, body = self._payload_builder.build(
             send_spec=send_spec,
             context=_render_context(context, secrets={}),
@@ -105,7 +105,7 @@ class YamlHttpProviderSender:
             json_body=payload["body"],
             basic_auth=payload["basic_auth"],
         )
-        send_spec = context.connector_spec["send"]
+        send_spec = context.send_spec
         response_mapping = send_spec.get("response_mapping") or {}
         external_message_id = self._json_path.extract_one(
             response.payload,
@@ -182,11 +182,8 @@ class YamlSmtpProviderSender:
         """Build SMTP transport settings and a redacted request snapshot."""
         secrets = self._secret_codec.decode(context.secrets_b64)
         rendered_send = self._payload_builder.render_value(
-            context.connector_spec["send"],
-            _render_context(
-                _smtp_context_with_default_bodies(context),
-                secrets=secrets,
-            ),
+            context.send_spec,
+            _render_context(context, secrets=secrets),
         )
         if not isinstance(rendered_send, dict):
             raise CommunicationValidationError("SMTP send spec must render to object.")
@@ -281,31 +278,10 @@ def _render_context(
             "connection_code": context.connection_code,
             "channel_code": context.channel_code,
         },
+        "provider_message_type": {
+            "code": context.provider_message_type_code,
+        },
     }
-
-
-def _smtp_context_with_default_bodies(
-    context: ProviderSendContext,
-) -> ProviderSendContext:
-    rendered_payload = {
-        "text_body": "",
-        "html_body": "",
-        **context.rendered_payload,
-    }
-    return ProviderSendContext(
-        outbound_message_id=context.outbound_message_id,
-        communication_request_id=context.communication_request_id,
-        initiator_ref_id=context.initiator_ref_id,
-        recipient_address=context.recipient_address,
-        recipient_snapshot=context.recipient_snapshot,
-        variables=context.variables,
-        connection_code=context.connection_code,
-        channel_code=context.channel_code,
-        config=context.config,
-        secrets_b64=context.secrets_b64,
-        connector_spec=context.connector_spec,
-        rendered_payload=rendered_payload,
-    )
 
 
 def _as_bool(value: Any) -> bool:

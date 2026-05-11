@@ -94,6 +94,83 @@ class CommunicationServicesTests(unittest.TestCase):
                 VALID_PROVIDER_YAML.replace("response_mapping:", "response_map:")
             )
 
+    def test_provider_yaml_loader_accepts_message_type_send_without_root_send(
+        self,
+    ) -> None:
+        yaml_content = VALID_PROVIDER_YAML.replace(
+            """send:
+  transport: http
+  method: POST
+  url: "https://example.test/{{ config.client_id }}"
+  headers:
+    Content-Type: application/json
+  body:
+    phone_number: "{{ recipient.address }}"
+    text: "{{ template.text }}"
+    ttl: "{{ template.ttl }}"
+  response_mapping:
+    external_message_id: "$.message_id"
+    external_status: "$.status"
+""",
+            """    send:
+      transport: http
+      method: POST
+      url: "https://example.test/{{ config.client_id }}"
+      headers:
+        Content-Type: application/json
+      body:
+        phone_number: "{{ recipient.address }}"
+        text: "{{ template.text }}"
+        ttl: "{{ template.ttl }}"
+      response_mapping:
+        external_message_id: "$.message_id"
+        external_status: "$.status"
+""",
+        )
+
+        parsed = ProviderYamlLoader().load(yaml_content)
+
+        self.assertNotIn("send", parsed.spec)
+        self.assertEqual(
+            parsed.spec["message_types"][0]["send"]["transport"],
+            "http",
+        )
+
+    def test_provider_yaml_loader_rejects_message_type_without_any_send(
+        self,
+    ) -> None:
+        yaml_content = VALID_PROVIDER_YAML.replace(
+            """send:
+  transport: http
+  method: POST
+  url: "https://example.test/{{ config.client_id }}"
+  headers:
+    Content-Type: application/json
+  body:
+    phone_number: "{{ recipient.address }}"
+    text: "{{ template.text }}"
+    ttl: "{{ template.ttl }}"
+  response_mapping:
+    external_message_id: "$.message_id"
+    external_status: "$.status"
+""",
+            "",
+        )
+
+        with self.assertRaises(CommunicationValidationError):
+            ProviderYamlLoader().load(yaml_content)
+
+    def test_provider_yaml_loader_rejects_invalid_message_type_transport(
+        self,
+    ) -> None:
+        yaml_content = VALID_PROVIDER_YAML.replace(
+            "  transport: http",
+            "  transport: smtp",
+        )
+
+        with self.assertRaises(CommunicationValidationError):
+            ProviderYamlLoader().load(yaml_content)
+
     def test_provider_yaml_loader_accepts_yaml_smtp_contract(self) -> None:
         yaml_content = (
             PROJECT_ROOT / "docs/communication/providers/smtp_email.yaml"
@@ -102,7 +179,8 @@ class CommunicationServicesTests(unittest.TestCase):
         parsed = ProviderYamlLoader().load(yaml_content)
 
         self.assertEqual(parsed.spec["connector_type"], "YAML_SMTP")
-        self.assertEqual(parsed.spec["send"]["transport"], "smtp")
+        self.assertNotIn("send", parsed.spec)
+        self.assertEqual(parsed.spec["message_types"][0]["send"]["transport"], "smtp")
         self.assertEqual(parsed.spec["message_types"][0]["channel"], "EMAIL")
 
     def test_provider_yaml_loader_rejects_invalid_yaml_smtp_contract(self) -> None:
@@ -111,7 +189,9 @@ class CommunicationServicesTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         with self.assertRaises(CommunicationValidationError):
-            ProviderYamlLoader().load(yaml_content.replace("  host:", "  smtp_host:"))
+            ProviderYamlLoader().load(
+                yaml_content.replace("      host:", "      smtp_host:")
+            )
 
     def test_template_and_provider_payload_rendering_keep_native_types(self) -> None:
         rendered = TemplateRenderService().render(

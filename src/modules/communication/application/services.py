@@ -39,7 +39,6 @@ class ProviderYamlLoader:
         "connector_type",
         "channels",
         "message_types",
-        "send",
     )
 
     def load(self, yaml_content: str) -> ParsedConnector:
@@ -87,40 +86,46 @@ class ProviderYamlLoader:
                 "message_types must be a non-empty list."
             )
 
-        for index, message_type in enumerate(message_types):
-            self._validate_message_type(message_type, index)
+        connector_type = str(spec["connector_type"])
+        if "send" in spec:
+            raise CommunicationValidationError(
+                "Root-level send is not supported. Define send inside each message type."
+            )
 
-        send = spec.get("send")
-        if not isinstance(send, dict):
-            raise CommunicationValidationError("send must be an object.")
-        self._validate_send_spec(str(spec["connector_type"]), send)
+        for index, message_type in enumerate(message_types):
+            self._validate_message_type(
+                message_type,
+                index,
+                connector_type=connector_type,
+            )
 
     def _validate_send_spec(
         self,
         connector_type: str,
         send: Mapping[str, Any],
+        label: str,
     ) -> None:
         if "transport" not in send:
             raise CommunicationValidationError(
-                "send.transport is required in provider YAML."
+                f"{label}.transport is required in provider YAML."
             )
 
         if connector_type == "YAML_HTTP":
             if send.get("transport") != "http":
                 raise CommunicationValidationError(
-                    "YAML_HTTP provider YAML must use send.transport=http."
+                    f"YAML_HTTP provider YAML must use {label}.transport=http."
                 )
             for field in ("method", "url", "body", "response_mapping"):
                 if field not in send:
                     raise CommunicationValidationError(
-                        f"send.{field} is required in YAML_HTTP provider YAML."
+                        f"{label}.{field} is required in YAML_HTTP provider YAML."
                     )
             return
 
         if connector_type == "YAML_SMTP":
             if send.get("transport") != "smtp":
                 raise CommunicationValidationError(
-                    "YAML_SMTP provider YAML must use send.transport=smtp."
+                    f"YAML_SMTP provider YAML must use {label}.transport=smtp."
                 )
             for field in (
                 "host",
@@ -137,7 +142,7 @@ class ProviderYamlLoader:
             ):
                 if field not in send:
                     raise CommunicationValidationError(
-                        f"send.{field} is required in YAML_SMTP provider YAML."
+                        f"{label}.{field} is required in YAML_SMTP provider YAML."
                     )
             return
 
@@ -149,7 +154,13 @@ class ProviderYamlLoader:
             f"Unsupported connector_type '{connector_type}'."
         )
 
-    def _validate_message_type(self, message_type: Any, index: int) -> None:
+    def _validate_message_type(
+        self,
+        message_type: Any,
+        index: int,
+        *,
+        connector_type: str,
+    ) -> None:
         if not isinstance(message_type, dict):
             raise CommunicationValidationError(
                 f"message_types[{index}] must be an object."
@@ -168,6 +179,20 @@ class ProviderYamlLoader:
             raise CommunicationValidationError(
                 f"message_types[{index}].ui_schema must be an object."
             )
+        send = message_type.get("send")
+        if send is None:
+            raise CommunicationValidationError(
+                f"message_types[{index}].send is required."
+            )
+        if not isinstance(send, dict):
+            raise CommunicationValidationError(
+                f"message_types[{index}].send must be an object."
+            )
+        self._validate_send_spec(
+            connector_type,
+            send,
+            f"message_types[{index}].send",
+        )
 
     @staticmethod
     def _validate_json_schema(schema: Any, label: str) -> None:

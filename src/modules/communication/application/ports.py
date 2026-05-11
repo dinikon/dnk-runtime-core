@@ -25,9 +25,11 @@ class ProviderSendContext:
     variables: dict[str, Any]
     connection_code: str
     channel_code: str
+    provider_message_type_code: str
     config: dict[str, Any]
     secrets_b64: str | None
     connector_spec: dict[str, Any]
+    send_spec: dict[str, Any]
     rendered_payload: dict[str, Any]
 
 

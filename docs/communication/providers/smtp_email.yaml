@@ -87,6 +87,22 @@ message_types:
     ui_schema:
       text_body:
         ui:widget: textarea
+    send:
+      transport: smtp
+      host: "{{ config.smtp_host }}"
+      port: "{{ config.smtp_port }}"
+      username: "{{ secrets.username }}"
+      password: "{{ secrets.password }}"
+      use_tls: "{{ config.use_tls }}"
+      use_starttls: "{{ config.use_starttls }}"
+      timeout_seconds: "{{ config.timeout_seconds }}"
+
+      from_address: "{{ config.from_address }}"
+      from_name: "{{ config.from_name }}"
+      to_address: "{{ recipient.address }}"
+
+      subject: "{{ template.subject }}"
+      text_body: "{{ template.text_body }}"
 
   - code: email_html
     channel: EMAIL
@@ -112,28 +128,23 @@ message_types:
         ui:widget: textarea
       html_body:
         ui:widget: textarea
+    send:
+      transport: smtp
+      host: "{{ config.smtp_host }}"
+      port: "{{ config.smtp_port }}"
+      username: "{{ secrets.username }}"
+      password: "{{ secrets.password }}"
+      use_tls: "{{ config.use_tls }}"
+      use_starttls: "{{ config.use_starttls }}"
+      timeout_seconds: "{{ config.timeout_seconds }}"
 
-send:
-  transport: smtp
-  host: "{{ config.smtp_host }}"
-  port: "{{ config.smtp_port }}"
-  username: "{{ secrets.username }}"
-  password: "{{ secrets.password }}"
-  use_tls: "{{ config.use_tls }}"
-  use_starttls: "{{ config.use_starttls }}"
-  timeout_seconds: "{{ config.timeout_seconds }}"
+      from_address: "{{ config.from_address }}"
+      from_name: "{{ config.from_name }}"
+      to_address: "{{ recipient.address }}"
 
-  from_address: "{{ config.from_address }}"
-  from_name: "{{ config.from_name }}"
-  to_address: "{{ recipient.address }}"
-
-  subject: "{{ template.subject }}"
-  text_body: "{{ template.text_body | default('') }}"
-  html_body: "{{ template.html_body | default('') }}"
-
-  response_mapping:
-    external_message_id: "$.message_id"
-    external_status: "$.status"
+      subject: "{{ template.subject }}"
+      text_body: "{{ template.text_body | default('') }}"
+      html_body: "{{ template.html_body }}"
 
 status_mapping:
   accepted: SENT

@@ -74,7 +74,11 @@ class _ProcessRepositoryStub:
             initiator_ref_id="deal:123",
             status="QUEUED",
         )
-        self.template = SimpleNamespace()
+        self.template = SimpleNamespace(provider_message_type_id=uuid4())
+        self.message_type = SimpleNamespace(
+            provider_message_type_id=self.template.provider_message_type_id,
+            message_type_code="viber_text",
+        )
         self.version = SimpleNamespace(
             template_payload={
                 "text": "Approved {{ amount }}",
@@ -137,6 +141,7 @@ class _ProcessRepositoryStub:
             self.version,
             self.connection,
             self.connector,
+            self.message_type,
         )
 
     async def create_delivery_attempt(self, **_kwargs):
@@ -157,7 +162,8 @@ class _SmtpTransportStub:
 
 
 class _SmtpProcessRepositoryStub(_ProcessRepositoryStub):
-    def __init__(self, *, legacy_send_templates: bool = False) -> None:
+
+    def __init__(self) -> None:
         super().__init__()
         self.outbound.recipient_address = "john@example.com"
         self.request.variables = {"name": "John"}
@@ -166,6 +172,7 @@ class _SmtpProcessRepositoryStub(_ProcessRepositoryStub):
             "text_body": "Plain {{ name }}",
             "html_body": "<p>Hello {{ name }}</p>",
         }
+        self.message_type.message_type_code = "email_html"
         self.connection.connection_code = "dnk_smtp"
         self.connection.channel_code = "EMAIL"
         self.connection.config = {
@@ -186,27 +193,47 @@ class _SmtpProcessRepositoryStub(_ProcessRepositoryStub):
                 "username_secret_key": "username",
                 "password_secret_key": "password",
             },
-            "send": {
-                "transport": "smtp",
-                "host": "{{ config.smtp_host }}",
-                "port": "{{ config.smtp_port }}",
-                "username": "{{ secrets.username }}",
-                "password": "{{ secrets.password }}",
-                "use_tls": "{{ config.use_tls }}",
-                "use_starttls": "{{ config.use_starttls }}",
-                "timeout_seconds": "{{ config.timeout_seconds }}",
-                "from_address": "{{ config.from_address }}",
-                "from_name": "{{ config.from_name }}",
-                "to_address": "{{ recipient.address }}",
-                "subject": "{{ template.subject }}",
-                "text_body": "{{ template.text_body | default('') }}",
-                "html_body": "{{ template.html_body | default('') }}",
-            },
+            "message_types": [
+                {
+                    "code": "email_text",
+                    "send": {
+                        "transport": "smtp",
+                        "host": "{{ config.smtp_host }}",
+                        "port": "{{ config.smtp_port }}",
+                        "username": "{{ secrets.username }}",
+                        "password": "{{ secrets.password }}",
+                        "use_tls": "{{ config.use_tls }}",
+                        "use_starttls": "{{ config.use_starttls }}",
+                        "timeout_seconds": "{{ config.timeout_seconds }}",
+                        "from_address": "{{ config.from_address }}",
+                        "from_name": "{{ config.from_name }}",
+                        "to_address": "{{ recipient.address }}",
+                        "subject": "{{ template.subject }}",
+                        "text_body": "{{ template.text_body }}",
+                    },
+                },
+                {
+                    "code": "email_html",
+                    "send": {
+                        "transport": "smtp",
+                        "host": "{{ config.smtp_host }}",
+                        "port": "{{ config.smtp_port }}",
+                        "username": "{{ secrets.username }}",
+                        "password": "{{ secrets.password }}",
+                        "use_tls": "{{ config.use_tls }}",
+                        "use_starttls": "{{ config.use_starttls }}",
+                        "timeout_seconds": "{{ config.timeout_seconds }}",
+                        "from_address": "{{ config.from_address }}",
+                        "from_name": "{{ config.from_name }}",
+                        "to_address": "{{ recipient.address }}",
+                        "subject": "{{ template.subject }}",
+                        "text_body": "{{ template.text_body | default('') }}",
+                        "html_body": "{{ template.html_body }}",
+                    },
+                },
+            ],
             "status_mapping": {"sent": "SENT"},
         }
-        if legacy_send_templates:
-            self.connector.yaml_spec["send"]["text_body"] = "{{ template.text_body }}"
-            self.connector.yaml_spec["send"]["html_body"] = "{{ template.html_body }}"
 
 
 class _IdempotencyRepositoryStub:
@@ -300,6 +327,54 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(http_client.requests[0]["basic_auth"], ("user", "secret"))
         self.assertEqual(http_client.requests[0]["json_body"]["ttl"], 60)
 
+    async def test_process_queued_message_prefers_message_type_send_over_root_send(
+        self,
+    ) -> None:
+        repository = _ProcessRepositoryStub()
+        root_send = repository.connector.yaml_spec["send"]
+        root_send["body"] = {
+            "phone_number": "{{ recipient.address }}",
+            "text": "ROOT {{ template.text }}",
+            "ttl": "{{ template.ttl }}",
+        }
+        repository.connector.yaml_spec["message_types"] = [
+            {
+                "code": "viber_text",
+                "send": {
+                    **root_send,
+                    "body": {
+                        "phone_number": "{{ recipient.address }}",
+                        "text": "{{ template.text }}",
+                        "ttl": "{{ template.ttl }}",
+                    },
+                },
+            }
+        ]
+        http_client = _HttpClientStub()
+        use_case = ProcessOutboundMessageUseCase(
+            repository=repository,
+            sender_registry=ProviderSenderRegistry(
+                [
+                    YamlHttpProviderSender(
+                        http_client=http_client,
+                        payload_builder=ProviderPayloadBuildService(),
+                        status_mapper=ProviderStatusMappingService(),
+                        json_path=JsonPathService(),
+                        secret_codec=SecretCodec(),
+                    )
+                ]
+            ),
+            template_renderer=TemplateRenderService(),
+        )
+
+        result = await use_case(ProcessQueuedMessagesCommand(limit=10))
+
+        self.assertEqual(result.succeeded, 1)
+        self.assertEqual(
+            http_client.requests[0]["json_body"]["text"],
+            "Approved 15000",
+        )
+
     async def test_process_queued_smtp_message_sends_email_and_redacts_secrets(
         self,
     ) -> None:
@@ -333,20 +408,22 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(transport.kwargs["password"], "secret")
         self.assertEqual(transport.sent_messages[0].recipient_email, "john@example.com")
         self.assertEqual(transport.sent_messages[0].subject, "Hello John")
+        self.assertEqual(transport.sent_messages[0].html_body, "<p>Hello John</p>")
         snapshot = repository.outbound.provider_request_payload
         attempt_snapshot = repository.attempt.request_payload
         self.assertTrue(snapshot["has_password"])
         self.assertNotIn("secret", str(snapshot))
         self.assertNotIn("secret", str(attempt_snapshot))
 
-    async def test_process_queued_smtp_message_tolerates_legacy_yaml_without_html_body_default(
+    async def test_process_queued_smtp_text_message_does_not_render_html_body(
         self,
     ) -> None:
         _SmtpTransportStub.instances.clear()
-        repository = _SmtpProcessRepositoryStub(legacy_send_templates=True)
+        repository = _SmtpProcessRepositoryStub()
+        repository.message_type.message_type_code = "email_text"
         repository.version.template_payload = {
-            "subject": "Text only",
-            "text_body": "Text only body",
+            "subject": "Text {{ name }}",
+            "text_body": "Plain {{ name }}",
         }
         use_case = ProcessOutboundMessageUseCase(
             repository=repository,
@@ -365,10 +442,9 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         result = await use_case(ProcessQueuedMessagesCommand(limit=10))
 
         self.assertEqual(result.succeeded, 1)
-        self.assertEqual(repository.outbound.internal_status, "SENT")
-        self.assertEqual(
-            _SmtpTransportStub.instances[0].sent_messages[0].html_body, None
-        )
+        message = _SmtpTransportStub.instances[0].sent_messages[0]
+        self.assertEqual(message.text_body, "Plain John")
+        self.assertIsNone(message.html_body)
 
     async def test_send_communication_returns_existing_idempotent_message(self) -> None:
         repository = _IdempotencyRepositoryStub()

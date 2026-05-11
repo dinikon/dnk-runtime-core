@@ -525,6 +525,7 @@ class CommunicationRepository:
         TemplateVersionModel,
         ProviderConnectionModel,
         ProviderConnectorDefinitionModel,
+        ProviderMessageTypeModel,
     ]:
         outbound = (
             await self._session.scalars(
@@ -572,7 +573,15 @@ class CommunicationRepository:
                 )
             )
         ).one()
-        return outbound, request, template, version, connection, connector
+        message_type = (
+            await self._session.scalars(
+                select(ProviderMessageTypeModel).where(
+                    ProviderMessageTypeModel.provider_message_type_id
+                    == template.provider_message_type_id
+                )
+            )
+        ).one()
+        return outbound, request, template, version, connection, connector, message_type
 
     async def create_delivery_attempt(
         self,

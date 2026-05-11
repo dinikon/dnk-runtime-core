@@ -503,6 +503,7 @@ class ProcessOutboundMessageUseCase:
             version,
             connection,
             connector,
+            message_type,
         ) = await self._repository.load_processing_context(outbound_message_id)
         now = utc_now()
         outbound.internal_status = OutboundMessageStatus.SENDING.value
@@ -523,9 +524,14 @@ class ProcessOutboundMessageUseCase:
                 request=request,
                 connection=connection,
                 connector_spec=connector.yaml_spec,
+                send_spec=self._resolve_send_spec(
+                    connector.yaml_spec,
+                    str(message_type.message_type_code),
+                ),
+                provider_message_type_code=str(message_type.message_type_code),
                 rendered_payload=rendered_payload,
             )
-            send_spec = connector.yaml_spec["send"]
+            send_spec = context.send_spec
             sender = self._sender_registry.get(str(send_spec["transport"]))
             prepared = sender.build(context)
             attempt = await self._repository.create_delivery_attempt(
@@ -579,6 +585,8 @@ class ProcessOutboundMessageUseCase:
         request,
         connection,
         connector_spec: dict[str, Any],
+        send_spec: dict[str, Any],
+        provider_message_type_code: str,
         rendered_payload: dict[str, Any],
     ) -> ProviderSendContext:
         return ProviderSendContext(
@@ -590,10 +598,37 @@ class ProcessOutboundMessageUseCase:
             variables=request.variables,
             connection_code=connection.connection_code,
             channel_code=connection.channel_code,
+            provider_message_type_code=provider_message_type_code,
             config=connection.config,
             secrets_b64=connection.secrets_b64,
             connector_spec=connector_spec,
+            send_spec=send_spec,
             rendered_payload=rendered_payload,
+        )
+
+    @staticmethod
+    def _resolve_send_spec(
+        connector_spec: dict[str, Any],
+        message_type_code: str,
+    ) -> dict[str, Any]:
+        for message_type in connector_spec.get("message_types") or []:
+            if not isinstance(message_type, dict):
+                continue
+            if str(message_type.get("code")) != message_type_code:
+                continue
+            send_spec = message_type.get("send")
+            if send_spec is None:
+                raise CommunicationValidationError(
+                    f"Send spec is missing for provider message type '{message_type_code}'."
+                )
+            if not isinstance(send_spec, dict):
+                raise CommunicationValidationError(
+                    f"message type '{message_type_code}' send spec must be an object."
+                )
+            return send_spec
+
+        raise CommunicationValidationError(
+            f"No send spec found for provider message type '{message_type_code}'."
         )
 
     @staticmethod
