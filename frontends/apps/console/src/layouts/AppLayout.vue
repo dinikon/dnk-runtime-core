@@ -1,17 +1,25 @@
 <script setup lang="ts">
-import {ConsoleSidebar} from "@/features/app-shell";
+import AppSidebar from "@/layouts/default/components/AppSidebar.vue";
+import {Separator} from "@/components/ui/separator";
+import {SidebarInset, SidebarProvider, SidebarTrigger} from "@/components/ui/sidebar";
 </script>
 
 <template>
-  <div class="flex h-screen overflow-hidden bg-neutral-100 text-neutral-900">
-    <ConsoleSidebar/>
+  <SidebarProvider class="h-svh max-h-svh overflow-hidden">
+    <AppSidebar/>
 
-    <main class="flex min-w-0 flex-1 flex-col gap-3 p-4">
-      <header class="flex min-h-10 items-center gap-3 px-1">
-        <slot name="header"/>
+    <SidebarInset class="min-h-0 overflow-hidden">
+      <header class="flex h-16 shrink-0 items-center gap-2 border-b border-border px-4">
+        <SidebarTrigger class="-ml-1"/>
+        <Separator orientation="vertical" class="mr-2 data-[orientation=vertical]:h-4"/>
+        <div class="min-w-0 flex-1">
+          <slot name="header"/>
+        </div>
       </header>
 
-      <slot/>
-    </main>
-  </div>
+      <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-4">
+        <slot/>
+      </div>
+    </SidebarInset>
+  </SidebarProvider>
 </template>
