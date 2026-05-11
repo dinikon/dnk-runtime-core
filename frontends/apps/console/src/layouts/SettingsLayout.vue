@@ -1,25 +1,8 @@
 <script setup lang="ts">
 import {
-  AtSign,
-  BadgeDollarSign,
-  Bell,
-  Boxes,
-  CalendarDays,
-  Code2,
   Database,
-  Globe2,
-  HelpCircle,
-  KeyRound,
-  LockKeyhole,
   LogOut,
-  Mail,
-  MonitorCog,
-  Rocket,
-  Server,
-  Settings,
-  Sparkles,
   UserCircle,
-  Users,
   X
 } from "lucide-vue-next";
 import {RouterLink} from "vue-router";
@@ -56,7 +39,6 @@ interface SettingsNavigationItem {
   label: string;
   to: string;
   icon: typeof UserCircle;
-  nested?: boolean;
 }
 
 defineProps<{
@@ -66,31 +48,14 @@ defineProps<{
 }>();
 
 const userItems: SettingsNavigationItem[] = [
-  {id: "profile", label: "Profile", to: "/settings/profile", icon: UserCircle},
-  {id: "experience", label: "Experience", to: "/settings/experience", icon: MonitorCog},
-  {id: "accounts", label: "Accounts", to: "/settings/accounts", icon: AtSign},
-  {id: "emails", label: "Emails", to: "/settings/accounts/emails", icon: Mail, nested: true},
-  {id: "calendar", label: "Calendar", to: "/settings/accounts/calendar", icon: CalendarDays, nested: true}
+  {id: "profile", label: "Profile", to: "/settings/profile", icon: UserCircle}
 ];
 
 const workspaceItems: SettingsNavigationItem[] = [
-  {id: "workspace-general", label: "General", to: "/settings/workspace/general", icon: Settings},
-  {id: "data-model", label: "Data Model", to: "/settings/workspace/data-model", icon: Database},
-  {id: "members", label: "Members", to: "/settings/workspace/members", icon: Users},
-  {id: "roles", label: "Roles", to: "/settings/workspace/roles", icon: LockKeyhole},
-  {id: "domains", label: "Domains", to: "/settings/workspace/domains", icon: Globe2},
-  {id: "billing", label: "Billing", to: "/settings/workspace/billing", icon: BadgeDollarSign},
-  {id: "apis-webhooks", label: "APIs & Webhooks", to: "/settings/workspace/apis-webhooks", icon: Code2},
-  {id: "apps", label: "Apps", to: "/settings/workspace/apps", icon: Boxes},
-  {id: "ai", label: "AI", to: "/settings/workspace/ai", icon: Sparkles},
-  {id: "security", label: "Security", to: "/settings/workspace/security", icon: KeyRound}
+  {id: "data-model", label: "Data Model", to: "/settings/workspace/data-model", icon: Database}
 ];
 
 const otherItems: SettingsNavigationItem[] = [
-  {id: "admin-panel", label: "Admin Panel", to: "/settings/admin-panel", icon: Server},
-  {id: "updates", label: "Updates", to: "/settings/updates", icon: Rocket},
-  {id: "support", label: "Support", to: "/settings/support", icon: Bell},
-  {id: "documentation", label: "Documentation", to: "/settings/documentation", icon: HelpCircle},
   {id: "logout", label: "Log out", to: "/login", icon: LogOut}
 ];
 
@@ -133,7 +98,6 @@ const navigationGroups = [
                   as-child
                   :is-active="activeItem === item.id"
                   :tooltip="item.label"
-                  :class="item.nested ? 'pl-6' : undefined"
               >
                 <RouterLink :to="item.to">
                   <component :is="item.icon"/>

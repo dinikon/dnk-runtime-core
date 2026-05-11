@@ -1,11 +1,24 @@
 <script setup lang="ts">
 import {computed, onMounted, reactive, ref} from "vue";
 import {useRoute, useRouter} from "vue-router";
-import {ChevronRight, Database, Filter, Loader2, Plus, Search, Trash2, X} from "lucide-vue-next";
+import {ChevronRight, Database, Filter, Loader2, Plus, Search, Trash2} from "lucide-vue-next";
 
 import {useSessionStore} from "@/app/stores/session";
 import {getApiErrorMessage, getApiErrorStatus} from "@/api/http/errors";
 import {schemaRegistryApi, type CreateCustomObjectPayload, type RuntimeObject} from "@/api/schema-registry";
+import {Alert, AlertDescription} from "@/components/ui/alert";
+import {Button} from "@/components/ui/button";
+import {Input} from "@/components/ui/input";
+import {Label} from "@/components/ui/label";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle
+} from "@/components/ui/sheet";
+import {Textarea} from "@/components/ui/textarea";
 import {SettingsLayout} from "@/layouts";
 
 const IDENTIFIER_PATTERN = /^[a-z][a-z0-9_]*$/;
@@ -78,6 +91,15 @@ function closeCreateDialog() {
   }
 
   isCreateDialogOpen.value = false;
+}
+
+function handleCreateSheetOpen(open: boolean) {
+  if (open) {
+    openCreateDialog();
+    return;
+  }
+
+  closeCreateDialog();
 }
 
 async function submitCreateObject() {
@@ -222,8 +244,8 @@ function kindLabel(kind: string): string {
 
 function kindClass(kind: string): string {
   return kind.trim().toLowerCase() === "custom"
-      ? "bg-orange-50 text-orange-700 ring-orange-100"
-      : "bg-blue-50 text-blue-700 ring-blue-100";
+      ? "bg-secondary text-secondary-foreground ring-border"
+      : "bg-muted text-muted-foreground ring-border";
 }
 
 async function handleApiFailure(error: unknown, fallback: string) {
@@ -246,52 +268,40 @@ async function handleApiFailure(error: unknown, fallback: string) {
     <div class="flex min-h-[560px] flex-col">
       <header class="flex items-start justify-between gap-4">
         <div class="grid gap-7">
-          <h1 class="text-base font-semibold text-neutral-900">Objects</h1>
+          <h1 class="text-base font-semibold">Objects</h1>
           <div class="grid gap-1">
-            <h2 class="text-sm font-semibold text-neutral-900">Existing objects</h2>
-            <p class="text-sm text-neutral-400">Manage objects, fields and relationships</p>
+            <h2 class="text-sm font-semibold">Existing objects</h2>
+            <p class="text-sm text-muted-foreground">Manage objects, fields and relationships</p>
           </div>
         </div>
 
-        <button
-            class="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500"
-            type="button"
-            @click="openCreateDialog"
-        >
+        <Button type="button" size="sm" @click="openCreateDialog">
           <Plus class="size-4"/>
           New Object
-        </button>
+        </Button>
       </header>
 
-      <div v-if="routeNotice" class="mt-5 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
-        {{ routeNotice }}
-      </div>
-      <div v-if="pageError" class="mt-5 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-        {{ pageError }}
-      </div>
+      <Alert v-if="routeNotice" class="mt-5">
+        <AlertDescription>{{ routeNotice }}</AlertDescription>
+      </Alert>
+      <Alert v-if="pageError" class="mt-5" variant="destructive">
+        <AlertDescription>{{ pageError }}</AlertDescription>
+      </Alert>
 
       <div class="mt-6 flex items-center gap-2">
-        <label class="relative min-w-0 flex-1">
-          <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-neutral-300"/>
-          <input
-              v-model="searchQuery"
-              class="h-9 w-full rounded-md border border-neutral-200 bg-white pl-9 pr-3 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-300 focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
-              placeholder="Search an object..."
-          />
-        </label>
-        <button
-            class="grid size-9 place-items-center rounded-md border border-neutral-200 bg-white text-neutral-500 transition-colors hover:bg-neutral-50"
-            type="button"
-            disabled
-        >
+        <div class="relative min-w-0 flex-1">
+          <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/>
+          <Input v-model="searchQuery" class="pl-9" placeholder="Search an object..."/>
+        </div>
+        <Button type="button" variant="outline" size="icon" disabled>
           <Filter class="size-4"/>
-        </button>
+        </Button>
       </div>
 
-      <div class="mt-3 overflow-hidden rounded-md border border-neutral-100">
+      <div class="mt-3 overflow-hidden rounded-md border">
         <table class="w-full border-collapse text-left text-sm">
-          <thead class="bg-white text-xs font-semibold text-neutral-400">
-          <tr class="border-b border-neutral-100">
+          <thead class="bg-background text-xs font-semibold text-muted-foreground">
+          <tr class="border-b">
             <th class="px-3 py-2">Name</th>
             <th class="px-3 py-2">App</th>
             <th class="w-24 px-3 py-2 text-right">Fields</th>
@@ -300,57 +310,58 @@ async function handleApiFailure(error: unknown, fallback: string) {
           </thead>
           <tbody>
           <tr v-if="isLoading">
-            <td class="px-3 py-10 text-center text-neutral-400" colspan="4">
-                <span class="inline-flex items-center gap-2">
-                  <Loader2 class="size-4 animate-spin"/>
-                  Loading objects...
-                </span>
+            <td class="px-3 py-10 text-center text-muted-foreground" colspan="4">
+              <span class="inline-flex items-center gap-2">
+                <Loader2 class="size-4 animate-spin"/>
+                Loading objects...
+              </span>
             </td>
           </tr>
 
           <tr v-else-if="filteredObjects.length === 0">
-            <td class="px-3 py-10 text-center text-neutral-400" colspan="4">No objects found.</td>
+            <td class="px-3 py-10 text-center text-muted-foreground" colspan="4">No objects found.</td>
           </tr>
 
           <tr
               v-for="object in filteredObjects"
               v-else
               :key="object.id"
-              class="h-11 cursor-pointer border-b border-neutral-100 text-neutral-700 transition-colors last:border-b-0 hover:bg-neutral-50"
+              class="h-11 cursor-pointer border-b text-foreground transition-colors last:border-b-0 hover:bg-muted/50"
               tabindex="0"
               @click="openObject(object)"
               @keydown.enter="openObject(object)"
           >
             <td class="px-3 py-2">
               <div class="flex min-w-0 items-center gap-2">
-                  <span class="grid size-5 shrink-0 place-items-center rounded bg-blue-50 text-blue-600">
-                    <Database class="size-3.5"/>
-                  </span>
+                <span class="grid size-5 shrink-0 place-items-center rounded bg-muted text-muted-foreground">
+                  <Database class="size-3.5"/>
+                </span>
                 <span class="truncate font-medium">{{ object.plural_label }}</span>
               </div>
             </td>
             <td class="px-3 py-2">
-                <span
-                    class="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-semibold ring-1"
-                    :class="kindClass(object.kind)"
-                >
-                  {{ kindLabel(object.kind) }}
-                </span>
+              <span
+                  class="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-semibold ring-1"
+                  :class="kindClass(object.kind)"
+              >
+                {{ kindLabel(object.kind) }}
+              </span>
             </td>
-            <td class="px-3 py-2 text-right text-neutral-500">{{ object.fields.length }}</td>
+            <td class="px-3 py-2 text-right text-muted-foreground">{{ object.fields.length }}</td>
             <td class="px-3 py-2">
               <div class="flex items-center justify-end gap-1">
-                <button
+                <Button
                     v-if="canDeleteObject(object)"
-                    class="grid size-7 place-items-center rounded-md text-neutral-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
                     type="button"
+                    variant="ghost"
+                    size="icon-sm"
                     :disabled="deletingObjectId === object.id"
                     @click.stop="deleteObject(object)"
                 >
                   <Loader2 v-if="deletingObjectId === object.id" class="size-4 animate-spin"/>
                   <Trash2 v-else class="size-4"/>
-                </button>
-                <ChevronRight class="size-4 text-neutral-300"/>
+                </Button>
+                <ChevronRight class="size-4 text-muted-foreground"/>
               </div>
             </td>
           </tr>
@@ -359,96 +370,57 @@ async function handleApiFailure(error: unknown, fallback: string) {
       </div>
     </div>
 
-    <div
-        v-if="isCreateDialogOpen"
-        class="fixed inset-0 z-50 grid place-items-center bg-neutral-950/30 px-4"
-        role="dialog"
-        aria-modal="true"
-    >
-      <form
-          class="w-full max-w-xl rounded-lg border border-neutral-200 bg-white p-5 shadow-xl"
-          @submit.prevent="submitCreateObject"
-      >
-        <div class="flex items-start justify-between gap-4">
-          <div class="grid gap-1">
-            <h2 class="text-base font-semibold text-neutral-900">New Object</h2>
-            <p class="text-sm text-neutral-400">Create a custom runtime object</p>
+    <Sheet :open="isCreateDialogOpen" @update:open="handleCreateSheetOpen">
+      <SheetContent class="w-full overflow-y-auto sm:max-w-xl">
+        <form class="flex min-h-full flex-col" @submit.prevent="submitCreateObject">
+          <SheetHeader>
+            <SheetTitle>New Object</SheetTitle>
+            <SheetDescription>Create a custom runtime object</SheetDescription>
+          </SheetHeader>
+
+          <div class="grid gap-5 px-4">
+            <Alert v-if="createErrors.length > 0" variant="destructive">
+              <AlertDescription class="grid gap-1">
+                <span v-for="error in createErrors" :key="error">{{ error }}</span>
+              </AlertDescription>
+            </Alert>
+
+            <div class="grid gap-4 md:grid-cols-2">
+              <div class="grid gap-2">
+                <Label for="object-singular-label">Singular label</Label>
+                <Input id="object-singular-label" v-model="createForm.singular_label" placeholder="Company"/>
+              </div>
+              <div class="grid gap-2">
+                <Label for="object-plural-label">Plural label</Label>
+                <Input id="object-plural-label" v-model="createForm.plural_label" placeholder="Companies"/>
+              </div>
+              <div class="grid gap-2">
+                <Label for="object-singular-name">Singular identifier</Label>
+                <Input id="object-singular-name" v-model="createForm.singular_name" placeholder="company"/>
+              </div>
+              <div class="grid gap-2">
+                <Label for="object-plural-name">Plural identifier</Label>
+                <Input id="object-plural-name" v-model="createForm.plural_name" placeholder="companies"/>
+              </div>
+            </div>
+
+            <div class="grid gap-2">
+              <Label for="object-description">Description</Label>
+              <Textarea id="object-description" v-model="createForm.description" placeholder="Optional"/>
+            </div>
           </div>
-          <button
-              class="grid size-8 place-items-center rounded-md text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700"
-              type="button"
-              @click="closeCreateDialog"
-          >
-            <X class="size-4"/>
-          </button>
-        </div>
 
-        <div v-if="createErrors.length > 0" class="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-          <p v-for="error in createErrors" :key="error">{{ error }}</p>
-        </div>
-
-        <div class="mt-5 grid gap-4 md:grid-cols-2">
-          <label class="grid gap-1">
-            <span class="text-xs font-semibold text-neutral-400">Singular label</span>
-            <input
-                v-model="createForm.singular_label"
-                class="h-9 rounded-md border border-neutral-200 px-3 text-sm outline-none focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
-                placeholder="Company"
-            />
-          </label>
-          <label class="grid gap-1">
-            <span class="text-xs font-semibold text-neutral-400">Plural label</span>
-            <input
-                v-model="createForm.plural_label"
-                class="h-9 rounded-md border border-neutral-200 px-3 text-sm outline-none focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
-                placeholder="Companies"
-            />
-          </label>
-          <label class="grid gap-1">
-            <span class="text-xs font-semibold text-neutral-400">Singular identifier</span>
-            <input
-                v-model="createForm.singular_name"
-                class="h-9 rounded-md border border-neutral-200 px-3 text-sm outline-none focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
-                placeholder="company"
-            />
-          </label>
-          <label class="grid gap-1">
-            <span class="text-xs font-semibold text-neutral-400">Plural identifier</span>
-            <input
-                v-model="createForm.plural_name"
-                class="h-9 rounded-md border border-neutral-200 px-3 text-sm outline-none focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
-                placeholder="companies"
-            />
-          </label>
-        </div>
-
-        <label class="mt-4 grid gap-1">
-          <span class="text-xs font-semibold text-neutral-400">Description</span>
-          <textarea
-              v-model="createForm.description"
-              class="min-h-20 rounded-md border border-neutral-200 px-3 py-2 text-sm outline-none focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
-              placeholder="Optional"
-          />
-        </label>
-
-        <div class="mt-5 flex justify-end gap-2">
-          <button
-              class="inline-flex h-8 items-center rounded-md border border-neutral-200 bg-white px-3 text-sm font-semibold text-neutral-600 transition-colors hover:bg-neutral-50"
-              type="button"
-              @click="closeCreateDialog"
-          >
-            Cancel
-          </button>
-          <button
-              class="inline-flex h-8 items-center gap-1.5 rounded-md bg-neutral-900 px-3 text-sm font-semibold text-white transition-colors hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300"
-              type="submit"
-              :disabled="isCreating"
-          >
-            <Loader2 v-if="isCreating" class="size-4 animate-spin"/>
-            Create
-          </button>
-        </div>
-      </form>
-    </div>
+          <SheetFooter class="sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" @click="closeCreateDialog">
+              Cancel
+            </Button>
+            <Button type="submit" :disabled="isCreating">
+              <Loader2 v-if="isCreating" class="size-4 animate-spin"/>
+              Create
+            </Button>
+          </SheetFooter>
+        </form>
+      </SheetContent>
+    </Sheet>
   </SettingsLayout>
 </template>

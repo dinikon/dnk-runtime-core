@@ -10,7 +10,6 @@ import {
   Settings,
   Shield,
   Trash2,
-  X
 } from "lucide-vue-next";
 
 import {useSessionStore} from "@/app/stores/session";
@@ -22,6 +21,27 @@ import {
   type RuntimeField,
   type RuntimeObject
 } from "@/api/schema-registry";
+import {Alert, AlertDescription} from "@/components/ui/alert";
+import {Button} from "@/components/ui/button";
+import {Checkbox} from "@/components/ui/checkbox";
+import {Input} from "@/components/ui/input";
+import {Label} from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle
+} from "@/components/ui/sheet";
+import {Textarea} from "@/components/ui/textarea";
 import {SettingsLayout} from "@/layouts";
 
 interface OptionRow {
@@ -139,6 +159,23 @@ function closeCreateFieldDialog() {
   }
 
   isCreateFieldDialogOpen.value = false;
+}
+
+function handleCreateFieldSheetOpen(open: boolean) {
+  if (open) {
+    openCreateFieldDialog();
+    return;
+  }
+
+  closeCreateFieldDialog();
+}
+
+function handleFieldTypeChange(value: unknown) {
+  if (typeof value !== "string" || !FIELD_TYPES.includes(value as FieldType)) {
+    return;
+  }
+
+  fieldForm.type = value as FieldType;
 }
 
 async function submitCreateField() {
@@ -370,8 +407,8 @@ function fieldKindLabel(kind: string): string {
 
 function kindClass(kind: string): string {
   return kind.trim().toLowerCase() === "custom"
-      ? "bg-orange-50 text-orange-700 ring-orange-100"
-      : "bg-blue-50 text-blue-700 ring-blue-100";
+      ? "bg-secondary text-secondary-foreground ring-border"
+      : "bg-muted text-muted-foreground ring-border";
 }
 
 function fieldTypeLabel(type: string): string {
@@ -411,7 +448,7 @@ async function handleApiFailure(error: unknown, fallback: string) {
     ]"
   >
     <div class="flex min-h-[560px] flex-col">
-      <div v-if="isLoading" class="grid flex-1 place-items-center text-sm text-neutral-400">
+      <div v-if="isLoading" class="grid flex-1 place-items-center text-sm text-muted-foreground">
         <span class="inline-flex items-center gap-2">
           <Loader2 class="size-4 animate-spin"/>
           Loading object...
@@ -421,12 +458,12 @@ async function handleApiFailure(error: unknown, fallback: string) {
       <div v-else-if="object" class="flex flex-1 flex-col">
         <header class="flex items-start justify-between gap-4">
           <div class="flex min-w-0 items-center gap-3">
-            <span class="grid size-7 shrink-0 place-items-center rounded-md bg-purple-50 text-purple-600">
+            <span class="grid size-7 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
               <Database class="size-4"/>
             </span>
             <div class="min-w-0">
               <div class="flex min-w-0 items-center gap-2">
-                <h1 class="truncate text-base font-semibold text-neutral-900">{{ object.plural_label }}</h1>
+                <h1 class="truncate text-base font-semibold">{{ object.plural_label }}</h1>
                 <span
                     class="inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[11px] font-semibold ring-1"
                     :class="kindClass(object.kind)"
@@ -434,80 +471,75 @@ async function handleApiFailure(error: unknown, fallback: string) {
                   {{ kindLabel(object.kind) }}
                 </span>
               </div>
-              <p class="mt-1 truncate text-sm text-neutral-400">{{ object.description || object.plural_name }}</p>
+              <p class="mt-1 truncate text-sm text-muted-foreground">{{ object.description || object.plural_name }}</p>
             </div>
           </div>
 
           <div class="flex shrink-0 items-center gap-2">
-            <RouterLink
-                class="inline-flex h-8 items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-3 text-sm font-semibold text-neutral-600 transition-colors hover:bg-neutral-50"
-                :to="{path: '/', query: {object: object.id}}"
-            >
-              <ExternalLink class="size-4"/>
-              See records
-            </RouterLink>
-            <button
+            <Button as-child variant="outline" size="sm">
+              <RouterLink :to="{path: '/', query: {object: object.id}}">
+                <ExternalLink class="size-4"/>
+                See records
+              </RouterLink>
+            </Button>
+            <Button
                 v-if="canDeleteCurrentObject"
-                class="inline-flex h-8 items-center gap-1.5 rounded-md border border-red-200 bg-white px-3 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
+                variant="destructive"
+                size="sm"
                 :disabled="isDeletingObject"
                 @click="deleteCurrentObject"
             >
               <Loader2 v-if="isDeletingObject" class="size-4 animate-spin"/>
               <Trash2 v-else class="size-4"/>
               Delete
-            </button>
-            <button
-                class="inline-flex h-8 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-neutral-300"
+            </Button>
+            <Button
                 type="button"
+                size="sm"
                 :disabled="!canManageFields"
                 @click="openCreateFieldDialog"
             >
               <Plus class="size-4"/>
               New Field
-            </button>
+            </Button>
           </div>
         </header>
 
-        <div v-if="pageError" class="mt-5 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-          {{ pageError }}
-        </div>
+        <Alert v-if="pageError" class="mt-5" variant="destructive">
+          <AlertDescription>{{ pageError }}</AlertDescription>
+        </Alert>
 
-        <nav class="mt-8 flex items-center gap-5 border-b border-neutral-200 text-sm font-semibold">
-          <button class="-mb-px inline-flex h-9 items-center gap-1.5 border-b border-neutral-900 text-neutral-900"
-                  type="button">
+        <nav class="mt-8 flex items-center gap-2 border-b">
+          <Button class="-mb-px rounded-none border-b-2 border-foreground px-0" variant="ghost" type="button">
             <Database class="size-4"/>
             Fields
-          </button>
-          <button class="inline-flex h-9 items-center gap-1.5 text-neutral-500" type="button" disabled>
+          </Button>
+          <Button variant="ghost" type="button" disabled>
             <Shield class="size-4"/>
             Permissions
-          </button>
-          <button class="inline-flex h-9 items-center gap-1.5 text-neutral-500" type="button" disabled>
+          </Button>
+          <Button variant="ghost" type="button" disabled>
             <Settings class="size-4"/>
             Settings
-          </button>
+          </Button>
         </nav>
 
         <section class="mt-7 grid gap-5">
           <div class="grid gap-1">
-            <h2 class="text-sm font-semibold text-neutral-900">Fields</h2>
-            <p class="text-sm text-neutral-400">Customize fields available in object views and records</p>
+            <h2 class="text-sm font-semibold">Fields</h2>
+            <p class="text-sm text-muted-foreground">Customize fields available in object views and records</p>
           </div>
 
-          <label class="relative max-w-3xl">
-            <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-neutral-300"/>
-            <input
-                v-model="searchQuery"
-                class="h-9 w-full rounded-md border border-neutral-200 bg-white pl-9 pr-3 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-300 focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
-                placeholder="Search a field..."
-            />
-          </label>
+          <div class="relative max-w-3xl">
+            <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/>
+            <Input v-model="searchQuery" class="pl-9" placeholder="Search a field..."/>
+          </div>
 
-          <div class="max-w-5xl overflow-hidden rounded-md border border-neutral-100">
+          <div class="max-w-5xl overflow-hidden rounded-md border">
             <table class="w-full border-collapse text-left text-sm">
-              <thead class="bg-white text-xs font-semibold text-neutral-400">
-              <tr class="border-b border-neutral-100">
+              <thead class="bg-background text-xs font-semibold text-muted-foreground">
+              <tr class="border-b">
                 <th class="px-3 py-2">Name</th>
                 <th class="px-3 py-2">Identifier</th>
                 <th class="px-3 py-2">Data type</th>
@@ -517,44 +549,45 @@ async function handleApiFailure(error: unknown, fallback: string) {
               </thead>
               <tbody>
               <tr v-if="filteredFields.length === 0">
-                <td class="px-3 py-10 text-center text-neutral-400" colspan="5">No fields found.</td>
+                <td class="px-3 py-10 text-center text-muted-foreground" colspan="5">No fields found.</td>
               </tr>
               <tr
                   v-for="field in filteredFields"
                   v-else
                   :key="field.id"
-                  class="h-11 border-b border-neutral-100 text-neutral-700 last:border-b-0"
+                  class="h-11 border-b text-foreground last:border-b-0"
               >
                 <td class="px-3 py-2">
                   <div class="flex min-w-0 items-center gap-2">
                     <span class="truncate font-medium">{{ field.label }}</span>
                     <span
-                        class="inline-flex shrink-0 items-center rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-500"
+                        class="inline-flex shrink-0 items-center rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground"
                     >
-                        {{ fieldKindLabel(field.kind) }}
-                      </span>
+                      {{ fieldKindLabel(field.kind) }}
+                    </span>
                   </div>
                 </td>
                 <td class="px-3 py-2">
-                  <code class="text-xs text-neutral-500">{{ field.field_name }}</code>
+                  <code class="text-xs text-muted-foreground">{{ field.field_name }}</code>
                 </td>
                 <td class="px-3 py-2">
-                    <span class="rounded bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-700">
-                      {{ fieldTypeLabel(field.type) }}
-                    </span>
+                  <span class="rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-secondary-foreground">
+                    {{ fieldTypeLabel(field.type) }}
+                  </span>
                 </td>
-                <td class="px-3 py-2 text-neutral-500">{{ field.is_nullable ? "Optional" : "Required" }}</td>
+                <td class="px-3 py-2 text-muted-foreground">{{ field.is_nullable ? "Optional" : "Required" }}</td>
                 <td class="px-3 py-2">
-                  <button
+                  <Button
                       v-if="canDeleteField(field)"
-                      class="grid size-7 place-items-center rounded-md text-neutral-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
                       type="button"
+                      variant="ghost"
+                      size="icon-sm"
                       :disabled="deletingFieldId === field.id"
                       @click="deleteField(field)"
                   >
                     <Loader2 v-if="deletingFieldId === field.id" class="size-4 animate-spin"/>
                     <Trash2 v-else class="size-4"/>
-                  </button>
+                  </Button>
                 </td>
               </tr>
               </tbody>
@@ -563,150 +596,97 @@ async function handleApiFailure(error: unknown, fallback: string) {
         </section>
       </div>
 
-      <div v-else class="grid flex-1 place-items-center text-sm text-neutral-400">
+      <div v-else class="grid flex-1 place-items-center text-sm text-muted-foreground">
         Object is not available.
       </div>
     </div>
 
-    <div
-        v-if="isCreateFieldDialogOpen"
-        class="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-neutral-950/30 px-4 py-8"
-        role="dialog"
-        aria-modal="true"
-    >
-      <form
-          class="w-full max-w-2xl rounded-lg border border-neutral-200 bg-white p-5 shadow-xl"
-          @submit.prevent="submitCreateField"
-      >
-        <div class="flex items-start justify-between gap-4">
-          <div class="grid gap-1">
-            <h2 class="text-base font-semibold text-neutral-900">New Field</h2>
-            <p class="text-sm text-neutral-400">{{ object?.plural_label }}</p>
+    <Sheet :open="isCreateFieldDialogOpen" @update:open="handleCreateFieldSheetOpen">
+      <SheetContent class="w-full overflow-y-auto sm:max-w-2xl">
+        <form class="flex min-h-full flex-col" @submit.prevent="submitCreateField">
+          <SheetHeader>
+            <SheetTitle>New Field</SheetTitle>
+            <SheetDescription>{{ object?.plural_label }}</SheetDescription>
+          </SheetHeader>
+
+          <div class="grid gap-5 px-4">
+            <Alert v-if="createFieldErrors.length > 0" variant="destructive">
+              <AlertDescription class="grid gap-1">
+                <span v-for="error in createFieldErrors" :key="error">{{ error }}</span>
+              </AlertDescription>
+            </Alert>
+
+            <div class="grid gap-4 md:grid-cols-2">
+              <div class="grid gap-2">
+                <Label for="field-label">Label</Label>
+                <Input id="field-label" v-model="fieldForm.label" placeholder="Status"/>
+              </div>
+              <div class="grid gap-2">
+                <Label for="field-name">Identifier</Label>
+                <Input id="field-name" v-model="fieldForm.field_name" placeholder="status"/>
+              </div>
+              <div class="grid gap-2">
+                <Label>Data type</Label>
+                <Select :model-value="fieldForm.type" @update:model-value="handleFieldTypeChange">
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="Select data type"/>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem v-for="type in FIELD_TYPES" :key="type" :value="type">
+                      {{ fieldTypeLabel(type) }}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div class="grid gap-2">
+                <Label for="field-default-value">Default value</Label>
+                <Input id="field-default-value" v-model="fieldForm.default_value" placeholder="Optional"/>
+              </div>
+            </div>
+
+            <Label class="flex items-center gap-2">
+              <Checkbox v-model="fieldForm.is_required"/>
+              Required
+            </Label>
+
+            <div class="grid gap-2">
+              <Label for="field-description">Description</Label>
+              <Textarea id="field-description" v-model="fieldForm.description" placeholder="Optional"/>
+            </div>
+
+            <section v-if="isSelectLikeField" class="grid gap-3 rounded-md border p-3">
+              <div class="flex items-center justify-between gap-3">
+                <h3 class="text-sm font-semibold">Options</h3>
+                <Button type="button" variant="outline" size="sm" @click="addOptionRow">
+                  <Plus class="size-4"/>
+                  Add option
+                </Button>
+              </div>
+              <div
+                  v-for="(row, index) in optionRows"
+                  :key="index"
+                  class="grid gap-2 md:grid-cols-[1fr_1fr_auto]"
+              >
+                <Input v-model="row.value" placeholder="value"/>
+                <Input v-model="row.label" placeholder="Label"/>
+                <Button type="button" variant="ghost" size="icon" @click="removeOptionRow(index)">
+                  <Trash2 class="size-4"/>
+                </Button>
+              </div>
+            </section>
           </div>
-          <button
-              class="grid size-8 place-items-center rounded-md text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700"
-              type="button"
-              @click="closeCreateFieldDialog"
-          >
-            <X class="size-4"/>
-          </button>
-        </div>
 
-        <div v-if="createFieldErrors.length > 0" class="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-          <p v-for="error in createFieldErrors" :key="error">{{ error }}</p>
-        </div>
-
-        <div class="mt-5 grid gap-4 md:grid-cols-2">
-          <label class="grid gap-1">
-            <span class="text-xs font-semibold text-neutral-400">Label</span>
-            <input
-                v-model="fieldForm.label"
-                class="h-9 rounded-md border border-neutral-200 px-3 text-sm outline-none focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
-                placeholder="Status"
-            />
-          </label>
-          <label class="grid gap-1">
-            <span class="text-xs font-semibold text-neutral-400">Identifier</span>
-            <input
-                v-model="fieldForm.field_name"
-                class="h-9 rounded-md border border-neutral-200 px-3 text-sm outline-none focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
-                placeholder="status"
-            />
-          </label>
-          <label class="grid gap-1">
-            <span class="text-xs font-semibold text-neutral-400">Data type</span>
-            <select
-                v-model="fieldForm.type"
-                class="h-9 rounded-md border border-neutral-200 bg-white px-3 text-sm outline-none focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
-            >
-              <option v-for="type in FIELD_TYPES" :key="type" :value="type">
-                {{ fieldTypeLabel(type) }}
-              </option>
-            </select>
-          </label>
-          <label class="grid gap-1">
-            <span class="text-xs font-semibold text-neutral-400">Default value</span>
-            <input
-                v-model="fieldForm.default_value"
-                class="h-9 rounded-md border border-neutral-200 px-3 text-sm outline-none focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
-                placeholder="Optional"
-            />
-          </label>
-        </div>
-
-        <label class="mt-4 flex items-center gap-2 text-sm font-medium text-neutral-700">
-          <input
-              v-model="fieldForm.is_required"
-              class="size-4 rounded border-neutral-300"
-              type="checkbox"
-          />
-          Required
-        </label>
-
-        <label class="mt-4 grid gap-1">
-          <span class="text-xs font-semibold text-neutral-400">Description</span>
-          <textarea
-              v-model="fieldForm.description"
-              class="min-h-20 rounded-md border border-neutral-200 px-3 py-2 text-sm outline-none focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
-              placeholder="Optional"
-          />
-        </label>
-
-        <section v-if="isSelectLikeField" class="mt-5 grid gap-3 rounded-md border border-neutral-100 p-3">
-          <div class="flex items-center justify-between gap-3">
-            <h3 class="text-sm font-semibold text-neutral-900">Options</h3>
-            <button
-                class="inline-flex h-8 items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-3 text-sm font-semibold text-neutral-600 transition-colors hover:bg-neutral-50"
-                type="button"
-                @click="addOptionRow"
-            >
-              <Plus class="size-4"/>
-              Add option
-            </button>
-          </div>
-          <div
-              v-for="(row, index) in optionRows"
-              :key="index"
-              class="grid gap-2 md:grid-cols-[1fr_1fr_auto]"
-          >
-            <input
-                v-model="row.value"
-                class="h-9 rounded-md border border-neutral-200 px-3 text-sm outline-none focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
-                placeholder="value"
-            />
-            <input
-                v-model="row.label"
-                class="h-9 rounded-md border border-neutral-200 px-3 text-sm outline-none focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
-                placeholder="Label"
-            />
-            <button
-                class="grid size-9 place-items-center rounded-md text-neutral-400 transition-colors hover:bg-red-50 hover:text-red-600"
-                type="button"
-                @click="removeOptionRow(index)"
-            >
-              <Trash2 class="size-4"/>
-            </button>
-          </div>
-        </section>
-
-        <div class="mt-5 flex justify-end gap-2">
-          <button
-              class="inline-flex h-8 items-center rounded-md border border-neutral-200 bg-white px-3 text-sm font-semibold text-neutral-600 transition-colors hover:bg-neutral-50"
-              type="button"
-              @click="closeCreateFieldDialog"
-          >
-            Cancel
-          </button>
-          <button
-              class="inline-flex h-8 items-center gap-1.5 rounded-md bg-neutral-900 px-3 text-sm font-semibold text-white transition-colors hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300"
-              type="submit"
-              :disabled="isCreatingField"
-          >
-            <Loader2 v-if="isCreatingField" class="size-4 animate-spin"/>
-            Create
-          </button>
-        </div>
-      </form>
-    </div>
+          <SheetFooter class="sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" @click="closeCreateFieldDialog">
+              Cancel
+            </Button>
+            <Button type="submit" :disabled="isCreatingField">
+              <Loader2 v-if="isCreatingField" class="size-4 animate-spin"/>
+              Create
+            </Button>
+          </SheetFooter>
+        </form>
+      </SheetContent>
+    </Sheet>
   </SettingsLayout>
 </template>
