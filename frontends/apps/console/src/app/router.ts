@@ -1,6 +1,9 @@
 import {createRouter, createWebHistory} from "vue-router";
 
 import {
+    CommunicationMessagesPage,
+    CommunicationProvidersPage,
+    CommunicationTemplatesPage,
     DataModelObjectFieldsPage,
     DataModelObjectsPage,
     ProfileSettingsPage,
@@ -116,6 +119,21 @@ export const router = createRouter({
             path: "/settings/workspace/data-model/:objectId",
             name: "settings-data-model-object",
             component: DataModelObjectFieldsPage
+        },
+        {
+            path: "/settings/workspace/communication/providers",
+            name: "settings-communication-providers",
+            component: CommunicationProvidersPage
+        },
+        {
+            path: "/settings/workspace/communication/templates",
+            name: "settings-communication-templates",
+            component: CommunicationTemplatesPage
+        },
+        {
+            path: "/settings/workspace/communication/messages",
+            name: "settings-communication-messages",
+            component: CommunicationMessagesPage
         },
         ...placeholderSettingsRoutes
     ]

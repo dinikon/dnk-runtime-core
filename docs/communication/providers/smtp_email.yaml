@@ -1,0 +1,152 @@
+provider_code: dnk_smtp
+provider_name: DNK SMTP
+version: "1.0.0"
+connector_type: YAML_SMTP
+
+channels:
+  - EMAIL
+
+auth:
+  type: smtp_login
+  username_secret_key: username
+  password_secret_key: password
+
+config_schema:
+  type: object
+  required:
+    - from_address
+    - from_name
+    - smtp_host
+    - smtp_port
+    - use_tls
+    - use_starttls
+    - timeout_seconds
+  properties:
+    from_address:
+      type: string
+      title: From address
+      format: email
+      default: no-reply@dniko.net
+    from_name:
+      type: string
+      title: From name
+      default: DNK Runtime
+    smtp_host:
+      type: string
+      title: SMTP host
+      default: mail.dniko.net
+    smtp_port:
+      type: integer
+      title: SMTP port
+      default: 465
+    use_tls:
+      type: boolean
+      title: Use SMTP over TLS
+      default: true
+    use_starttls:
+      type: boolean
+      title: Use STARTTLS
+      default: false
+    timeout_seconds:
+      type: number
+      title: Timeout seconds
+      default: 10
+
+secrets_schema:
+  type: object
+  required:
+    - username
+    - password
+  properties:
+    username:
+      type: string
+      title: SMTP username
+      default: noreply@dniko.net
+    password:
+      type: string
+      title: SMTP password
+      format: password
+
+message_types:
+  - code: email_text
+    channel: EMAIL
+    name: Plain text email
+    field_schema:
+      type: object
+      required:
+        - subject
+        - text_body
+      properties:
+        subject:
+          type: string
+          title: Subject
+          maxLength: 255
+        text_body:
+          type: string
+          title: Text body
+    ui_schema:
+      text_body:
+        ui:widget: textarea
+
+  - code: email_html
+    channel: EMAIL
+    name: HTML email
+    field_schema:
+      type: object
+      required:
+        - subject
+        - html_body
+      properties:
+        subject:
+          type: string
+          title: Subject
+          maxLength: 255
+        text_body:
+          type: string
+          title: Fallback text body
+        html_body:
+          type: string
+          title: HTML body
+    ui_schema:
+      text_body:
+        ui:widget: textarea
+      html_body:
+        ui:widget: textarea
+
+send:
+  transport: smtp
+  host: "{{ config.smtp_host }}"
+  port: "{{ config.smtp_port }}"
+  username: "{{ secrets.username }}"
+  password: "{{ secrets.password }}"
+  use_tls: "{{ config.use_tls }}"
+  use_starttls: "{{ config.use_starttls }}"
+  timeout_seconds: "{{ config.timeout_seconds }}"
+
+  from_address: "{{ config.from_address }}"
+  from_name: "{{ config.from_name }}"
+  to_address: "{{ recipient.address }}"
+
+  subject: "{{ template.subject }}"
+  text_body: "{{ template.text_body | default('') }}"
+  html_body: "{{ template.html_body | default('') }}"
+
+  response_mapping:
+    external_message_id: "$.message_id"
+    external_status: "$.status"
+
+status_mapping:
+  accepted: SENT
+  sent: SENT
+  failed: FAILED
+
+retry_policy:
+  max_attempts: 3
+  backoff:
+    type: exponential
+    initial_seconds: 30
+    max_seconds: 600
+
+rate_limit:
+  per_second: 10
+  per_minute: 300

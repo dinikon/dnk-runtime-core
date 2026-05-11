@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import {
   Database,
+  FileText,
   LogOut,
+  MessagesSquare,
+  PlugZap,
   UserCircle,
   X
 } from "lucide-vue-next";
@@ -52,7 +55,20 @@ const userItems: SettingsNavigationItem[] = [
 ];
 
 const workspaceItems: SettingsNavigationItem[] = [
-  {id: "data-model", label: "Data Model", to: "/settings/workspace/data-model", icon: Database}
+  {id: "data-model", label: "Data Model", to: "/settings/workspace/data-model", icon: Database},
+  {id: "communication-providers", label: "Providers", to: "/settings/workspace/communication/providers", icon: PlugZap},
+  {
+    id: "communication-templates",
+    label: "Templates",
+    to: "/settings/workspace/communication/templates",
+    icon: FileText
+  },
+  {
+    id: "communication-messages",
+    label: "Messages",
+    to: "/settings/workspace/communication/messages",
+    icon: MessagesSquare
+  }
 ];
 
 const otherItems: SettingsNavigationItem[] = [
