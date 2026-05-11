@@ -101,21 +101,26 @@ class _ProcessRepositoryStub:
                     "username_secret_key": "username",
                     "password_secret_key": "password",
                 },
-                "send": {
-                    "transport": "http",
-                    "method": "POST",
-                    "url": "https://example.test/{{ config.client_id }}",
-                    "headers": {"Content-Type": "application/json"},
-                    "body": {
-                        "phone_number": "{{ recipient.address }}",
-                        "text": "{{ template.text }}",
-                        "ttl": "{{ template.ttl }}",
+                "message_types": [
+                    {
+                        "code": "viber_text",
+                        "send": {
+                            "transport": "http",
+                            "method": "POST",
+                            "url": "https://example.test/{{ config.client_id }}",
+                            "headers": {"Content-Type": "application/json"},
+                            "body": {
+                                "phone_number": "{{ recipient.address }}",
+                                "text": "{{ template.text }}",
+                                "ttl": "{{ template.ttl }}",
+                            },
+                            "response_mapping": {
+                                "external_message_id": "$.message_id",
+                                "external_status": "$.status",
+                            },
+                        },
                     },
-                    "response_mapping": {
-                        "external_message_id": "$.message_id",
-                        "external_status": "$.status",
-                    },
-                },
+                ],
                 "status_mapping": {"23033": "DELIVERED"},
             }
         )
@@ -327,27 +332,28 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(http_client.requests[0]["basic_auth"], ("user", "secret"))
         self.assertEqual(http_client.requests[0]["json_body"]["ttl"], 60)
 
-    async def test_process_queued_message_prefers_message_type_send_over_root_send(
+    async def test_process_queued_message_rejects_old_root_send_without_message_type_send(
         self,
     ) -> None:
         repository = _ProcessRepositoryStub()
-        root_send = repository.connector.yaml_spec["send"]
-        root_send["body"] = {
-            "phone_number": "{{ recipient.address }}",
-            "text": "ROOT {{ template.text }}",
-            "ttl": "{{ template.ttl }}",
+        repository.connector.yaml_spec["send"] = {
+            "transport": "http",
+            "method": "POST",
+            "url": "https://example.test/{{ config.client_id }}",
+            "headers": {"Content-Type": "application/json"},
+            "body": {
+                "phone_number": "{{ recipient.address }}",
+                "text": "ROOT {{ template.text }}",
+                "ttl": "{{ template.ttl }}",
+            },
+            "response_mapping": {
+                "external_message_id": "$.message_id",
+                "external_status": "$.status",
+            },
         }
         repository.connector.yaml_spec["message_types"] = [
             {
                 "code": "viber_text",
-                "send": {
-                    **root_send,
-                    "body": {
-                        "phone_number": "{{ recipient.address }}",
-                        "text": "{{ template.text }}",
-                        "ttl": "{{ template.ttl }}",
-                    },
-                },
             }
         ]
         http_client = _HttpClientStub()
@@ -369,11 +375,11 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
         result = await use_case(ProcessQueuedMessagesCommand(limit=10))
 
-        self.assertEqual(result.succeeded, 1)
-        self.assertEqual(
-            http_client.requests[0]["json_body"]["text"],
-            "Approved 15000",
-        )
+        self.assertEqual(result.succeeded, 0)
+        self.assertEqual(result.failed, 1)
+        self.assertEqual(http_client.requests, [])
+        self.assertEqual(repository.outbound.internal_status, "FAILED")
+        self.assertIn("Send spec is missing", repository.outbound.error_message)
 
     async def test_process_queued_smtp_message_sends_email_and_redacts_secrets(
         self,

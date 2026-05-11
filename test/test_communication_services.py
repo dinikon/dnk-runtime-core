@@ -57,19 +57,19 @@ message_types:
         ttl:
           type: integer
           default: 60
-send:
-  transport: http
-  method: POST
-  url: "https://example.test/{{ config.client_id }}"
-  headers:
-    Content-Type: application/json
-  body:
-    phone_number: "{{ recipient.address }}"
-    text: "{{ template.text }}"
-    ttl: "{{ template.ttl }}"
-  response_mapping:
-    external_message_id: "$.message_id"
-    external_status: "$.status"
+    send:
+      transport: http
+      method: POST
+      url: "https://example.test/{{ config.client_id }}"
+      headers:
+        Content-Type: application/json
+      body:
+        phone_number: "{{ recipient.address }}"
+        text: "{{ template.text }}"
+        ttl: "{{ template.ttl }}"
+      response_mapping:
+        external_message_id: "$.message_id"
+        external_status: "$.status"
 webhook:
   external_message_id_path: "$.message_id"
   external_status_path: "$.status"
@@ -94,24 +94,8 @@ class CommunicationServicesTests(unittest.TestCase):
                 VALID_PROVIDER_YAML.replace("response_mapping:", "response_map:")
             )
 
-    def test_provider_yaml_loader_accepts_message_type_send_without_root_send(
-        self,
-    ) -> None:
+    def test_provider_yaml_loader_rejects_root_send_contract(self) -> None:
         yaml_content = VALID_PROVIDER_YAML.replace(
-            """send:
-  transport: http
-  method: POST
-  url: "https://example.test/{{ config.client_id }}"
-  headers:
-    Content-Type: application/json
-  body:
-    phone_number: "{{ recipient.address }}"
-    text: "{{ template.text }}"
-    ttl: "{{ template.ttl }}"
-  response_mapping:
-    external_message_id: "$.message_id"
-    external_status: "$.status"
-""",
             """    send:
       transport: http
       method: POST
@@ -126,20 +110,6 @@ class CommunicationServicesTests(unittest.TestCase):
         external_message_id: "$.message_id"
         external_status: "$.status"
 """,
-        )
-
-        parsed = ProviderYamlLoader().load(yaml_content)
-
-        self.assertNotIn("send", parsed.spec)
-        self.assertEqual(
-            parsed.spec["message_types"][0]["send"]["transport"],
-            "http",
-        )
-
-    def test_provider_yaml_loader_rejects_message_type_without_any_send(
-        self,
-    ) -> None:
-        yaml_content = VALID_PROVIDER_YAML.replace(
             """send:
   transport: http
   method: POST
@@ -154,6 +124,29 @@ class CommunicationServicesTests(unittest.TestCase):
     external_message_id: "$.message_id"
     external_status: "$.status"
 """,
+        )
+
+        with self.assertRaises(CommunicationValidationError):
+            ProviderYamlLoader().load(yaml_content)
+
+    def test_provider_yaml_loader_rejects_message_type_without_any_send(
+        self,
+    ) -> None:
+        yaml_content = VALID_PROVIDER_YAML.replace(
+            """    send:
+      transport: http
+      method: POST
+      url: "https://example.test/{{ config.client_id }}"
+      headers:
+        Content-Type: application/json
+      body:
+        phone_number: "{{ recipient.address }}"
+        text: "{{ template.text }}"
+        ttl: "{{ template.ttl }}"
+      response_mapping:
+        external_message_id: "$.message_id"
+        external_status: "$.status"
+""",
             "",
         )
 
@@ -164,8 +157,8 @@ class CommunicationServicesTests(unittest.TestCase):
         self,
     ) -> None:
         yaml_content = VALID_PROVIDER_YAML.replace(
-            "  transport: http",
-            "  transport: smtp",
+            "      transport: http",
+            "      transport: smtp",
         )
 
         with self.assertRaises(CommunicationValidationError):
