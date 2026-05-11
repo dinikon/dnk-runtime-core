@@ -4,9 +4,10 @@ import {
     identityApi,
     type ConsoleUser,
     type RequestEmailOtpResponse,
-    type ResolveTenantResponse
-} from "@/shared/api/identity";
-import {getApiErrorMessage, getApiErrorStatus} from "@/shared/api/http/errors";
+    type ResolveTenantResponse,
+    type UpdateCurrentUserProfilePayload
+} from "@/api/identity";
+import {getApiErrorMessage, getApiErrorStatus} from "@/api/http/errors";
 
 interface EmailChallenge {
     email: string;
@@ -24,6 +25,13 @@ interface SessionState {
     isResolvingTenant: boolean;
     isRequestingOtp: boolean;
     isConfirmingOtp: boolean;
+    isUpdatingProfile: boolean;
+}
+
+interface UpdateProfileNameInput {
+    first_name: string;
+    last_name: string;
+    middle_name: string | null;
 }
 
 export const useSessionStore = defineStore("session", {
@@ -35,6 +43,7 @@ export const useSessionStore = defineStore("session", {
         isResolvingTenant: false,
         isRequestingOtp: false,
         isConfirmingOtp: false,
+        isUpdatingProfile: false,
         isLoading: false
     }),
     getters: {
@@ -116,11 +125,34 @@ export const useSessionStore = defineStore("session", {
                 this.isLoading = false;
             }
         },
+        async updateProfileName(input: UpdateProfileNameInput) {
+            if (!this.user) {
+                throw new Error("Current user is not loaded.");
+            }
+
+            this.isUpdatingProfile = true;
+
+            try {
+                const payload: UpdateCurrentUserProfilePayload = {
+                    first_name: input.first_name,
+                    last_name: input.last_name,
+                    middle_name: input.middle_name,
+                    interface_language: this.user.interface_language,
+                    interface_theme: this.user.interface_theme,
+                    timezone: this.user.timezone
+                };
+                this.user = await identityApi.updateCurrentUserProfile(payload);
+                return this.user;
+            } finally {
+                this.isUpdatingProfile = false;
+            }
+        },
         clearSession() {
             this.user = null;
             this.emailChallenge = null;
             this.authError = null;
             this.isLoading = false;
+            this.isUpdatingProfile = false;
         }
     }
 });
