@@ -1,6 +1,7 @@
 # Documentation Index
 
-This documentation describes the current implementation of `dnk-runtime-core` as it exists in `src/` and `test/`.
+This documentation describes the current implementation of `dnk-runtime-core` as it exists in `src/`, `test/` and
+`frontends/`.
 
 ## Architecture
 
@@ -26,6 +27,10 @@ This documentation describes the current implementation of `dnk-runtime-core` as
 - [Management CLI](interfaces/management-cli.md)
 - [Configuration](interfaces/configuration.md)
 
+## Frontends
+
+- [Console frontend](frontends/console.md)
+
 ## Data And Runtime Model
 
 - [Domain models](data/domain-models.md)
@@ -46,3 +51,4 @@ This documentation describes the current implementation of `dnk-runtime-core` as
 - `src/app_factory.py`
 - `src/modules/router.py`
 - `src/management/cli.py`
+- `frontends/apps/console/src/`

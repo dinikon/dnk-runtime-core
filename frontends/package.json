@@ -1,0 +1,15 @@
+{
+  "name": "@dnk/frontends",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:console": "npm --workspace @dnk/console run dev",
+    "build:console": "npm --workspace @dnk/console run build",
+    "preview:console": "npm --workspace @dnk/console run preview",
+    "typecheck:console": "npm --workspace @dnk/console run typecheck"
+  }
+}

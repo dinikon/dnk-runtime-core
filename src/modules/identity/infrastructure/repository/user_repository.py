@@ -31,6 +31,7 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
                 id=user.id.uuid,
                 tenant_id=user.tenant_id.uuid,
                 status=user.status,
+                user_type="user",
                 last_name=user.last_name,
                 first_name=user.first_name,
                 middle_name=user.middle_name,
