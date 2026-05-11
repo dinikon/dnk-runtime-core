@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import datetime
+import logging
 from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
+from src.modules.communication.application.dto import SendCommunicationResultDTO
 from src.modules.communication.application.use_cases import (
     ActivateTemplateVersionCommand,
     CreateMessageTemplateCommand,
@@ -16,14 +18,17 @@ from src.modules.communication.application.use_cases import (
     HandleProviderWebhookCommand,
     RegisterProviderConnectorCommand,
     SendCommunicationCommand,
+    utc_now,
 )
 from src.modules.communication.domain import (
     CommunicationError,
     CommunicationNotFoundError,
     CommunicationValidationError,
+    OutboundMessageStatus,
 )
 from src.modules.communication.presentation.depends.application import (
     ActivateTemplateVersionUseCaseDep,
+    CommunicationRepositoryDep,
     CreateMessageTemplateUseCaseDep,
     CreateProviderConnectionUseCaseDep,
     CreateTemplateVersionUseCaseDep,
@@ -33,14 +38,18 @@ from src.modules.communication.presentation.depends.application import (
     ListOutboundMessagesUseCaseDep,
     ListProviderConnectionsUseCaseDep,
     ListProviderConnectorsUseCaseDep,
+    OutboundMessagePublisherDep,
     RegisterProviderConnectorUseCaseDep,
     SendCommunicationUseCaseDep,
 )
 from src.modules.shared.depends import (
     AuthenticatedRequestContextDep,
     OptionalRequestContextDep,
+    UoWDep,
 )
 from src.modules.shared.kernel.request_context import RequestContext
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/communication", tags=["communication"])
 
@@ -394,6 +403,9 @@ async def send_communication(
     payload: SendCommunicationRequestSchema,
     context: AuthenticatedRequestContextDep,
     use_case: SendCommunicationUseCaseDep,
+    uow: UoWDep,
+    repository: CommunicationRepositoryDep,
+    publisher: OutboundMessagePublisherDep,
 ) -> SendCommunicationResponseSchema:
     tenant_id = _require_tenant_id(context)
     try:
@@ -415,6 +427,13 @@ async def send_communication(
                 scheduled_at=payload.scheduled_at,
                 priority=payload.priority,
             )
+        )
+        await uow.commit()
+        await _publish_send_job_after_commit(
+            result=result,
+            repository=repository,
+            publisher=publisher,
+            uow=uow,
         )
     except CommunicationError as exc:
         _raise_http_error(exc)
@@ -503,6 +522,39 @@ def _raise_http_error(exc: CommunicationError) -> None:
         status_code=status.HTTP_409_CONFLICT,
         detail=str(exc),
     ) from exc
+
+
+async def _publish_send_job_after_commit(
+    *,
+    result: SendCommunicationResultDTO,
+    repository: CommunicationRepositoryDep,
+    publisher: OutboundMessagePublisherDep,
+    uow: UoWDep,
+) -> None:
+    if publisher is None:
+        return
+    if result.internal_status != OutboundMessageStatus.QUEUED.value:
+        return
+
+    published_at = utc_now()
+    try:
+        await publisher.publish(
+            outbound_message_id=result.outbound_message_id,
+            published_at=published_at,
+            source="send_communication",
+        )
+        await repository.mark_outbound_published(
+            outbound_message_id=result.outbound_message_id,
+            published_at=published_at,
+        )
+        await uow.commit()
+    except Exception:
+        await uow.rollback()
+        log.warning(
+            "Failed to publish outbound communication message after send commit.",
+            extra={"outbound_message_id": str(result.outbound_message_id)},
+            exc_info=True,
+        )
 
 
 __all__ = ["router"]

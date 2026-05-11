@@ -1,7 +1,14 @@
 from __future__ import annotations
 
+from datetime import datetime
 import unittest
+from uuid import uuid4
 
+from src.modules.communication.application.dto import SendCommunicationResultDTO
+from src.modules.communication.domain import OutboundMessageStatus
+from src.modules.communication.presentation.http.router import (
+    _publish_send_job_after_commit,
+)
 from src.modules.communication.presentation.http.router import router
 
 
@@ -37,4 +44,93 @@ class CommunicationHttpRouterTests(unittest.TestCase):
         self.assertIn(("POST", "/communication/webhooks/{provider_code}"), routes)
 
 
-__all__ = ["CommunicationHttpRouterTests"]
+class _PublisherStub:
+    def __init__(self) -> None:
+        self.published: list[tuple[str, str]] = []
+
+    async def publish(self, *, outbound_message_id, source, published_at) -> None:
+        self.published.append((str(outbound_message_id), source))
+
+
+class _RepositoryStub:
+    def __init__(self) -> None:
+        self.marked: list[tuple[str, datetime]] = []
+
+    async def mark_outbound_published(
+        self,
+        *,
+        outbound_message_id,
+        published_at,
+    ) -> None:
+        self.marked.append((str(outbound_message_id), published_at))
+
+
+class _UnitOfWorkStub:
+    def __init__(self) -> None:
+        self.commits = 0
+        self.rollbacks = 0
+
+    async def commit(self) -> None:
+        self.commits += 1
+
+    async def rollback(self) -> None:
+        self.rollbacks += 1
+
+
+class CommunicationSendPublishTests(unittest.IsolatedAsyncioTestCase):
+    async def test_publish_send_job_after_commit_publishes_queued_message(self) -> None:
+        outbound_message_id = uuid4()
+        publisher = _PublisherStub()
+        repository = _RepositoryStub()
+        uow = _UnitOfWorkStub()
+
+        await _publish_send_job_after_commit(
+            result=SendCommunicationResultDTO(
+                communication_request_id=uuid4(),
+                outbound_message_id=outbound_message_id,
+                status="ACCEPTED",
+                internal_status=OutboundMessageStatus.QUEUED.value,
+                idempotent=False,
+            ),
+            repository=repository,
+            publisher=publisher,
+            uow=uow,
+        )
+
+        self.assertEqual(
+            publisher.published,
+            [(str(outbound_message_id), "send_communication")],
+        )
+        self.assertEqual(len(repository.marked), 1)
+        self.assertEqual(repository.marked[0][0], str(outbound_message_id))
+        self.assertEqual(uow.commits, 1)
+        self.assertEqual(uow.rollbacks, 0)
+
+    async def test_publish_send_job_after_commit_skips_terminal_message(self) -> None:
+        publisher = _PublisherStub()
+        repository = _RepositoryStub()
+        uow = _UnitOfWorkStub()
+
+        await _publish_send_job_after_commit(
+            result=SendCommunicationResultDTO(
+                communication_request_id=uuid4(),
+                outbound_message_id=uuid4(),
+                status="COMPLETED",
+                internal_status=OutboundMessageStatus.SENT.value,
+                idempotent=True,
+            ),
+            repository=repository,
+            publisher=publisher,
+            uow=uow,
+        )
+
+        self.assertEqual(publisher.published, [])
+        self.assertEqual(repository.marked, [])
+        self.assertEqual(uow.commits, 0)
+        self.assertEqual(uow.rollbacks, 0)
+
+
+__all__ = [
+    "CommunicationHttpRouterTests",
+    "CommunicationSendPublishTests",
+]

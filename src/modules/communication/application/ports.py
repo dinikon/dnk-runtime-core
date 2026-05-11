@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Protocol
 from uuid import UUID
 
@@ -97,8 +98,23 @@ class ProviderSenderRegistryProtocol(Protocol):
         ...
 
 
+class OutboundMessagePublisherProtocol(Protocol):
+    """Port for publishing outbound-message work to a broker."""
+
+    async def publish(
+        self,
+        *,
+        outbound_message_id: UUID,
+        source: str,
+        published_at: datetime,
+    ) -> None:
+        """Publish a communication outbound message job."""
+        ...
+
+
 __all__ = [
     "HttpClientProtocol",
+    "OutboundMessagePublisherProtocol",
     "ProviderHttpResponse",
     "ProviderPreparedSend",
     "ProviderSendContext",
