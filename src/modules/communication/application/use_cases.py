@@ -55,7 +55,6 @@ from src.modules.communication.infrastructure.repository import (
 )
 from src.modules.shared.db.uow import UnitOfWork
 
-
 @dataclass(frozen=True, slots=True)
 class RegisterProviderConnectorCommand:
     yaml_content: str
