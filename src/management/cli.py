@@ -21,6 +21,9 @@ def _bootstrap_pythonpath() -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     _bootstrap_pythonpath()
+    from src.management.commands.communication import (
+        register as register_communication,
+    )
     from src.management.commands.schema_registry import (
         register as register_schema_registry,
     )
@@ -30,6 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Management commands for dnk-runtime-core.",
     )
     subparsers = parser.add_subparsers(dest="commands")
+    register_communication(subparsers)
     register_schema_registry(subparsers)
     return parser
 
