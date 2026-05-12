@@ -19,6 +19,8 @@ from src.modules.communication.application.services import (
 from src.modules.communication.domain import (
     CommunicationValidationError,
     OutboundMessageStatus,
+    ProviderPayloadValidationError,
+    ProviderSecretsValidationError,
 )
 from src.modules.shared.infrastructure.email.models import RenderedEmailMessage
 from src.modules.shared.infrastructure.email.smtp_email_transport import (
@@ -161,7 +163,7 @@ class YamlHttpProviderSender:
         username_key = auth.get("username_secret_key")
         password_key = auth.get("password_secret_key")
         if username_key not in secrets or password_key not in secrets:
-            raise CommunicationValidationError(
+            raise ProviderSecretsValidationError(
                 "Provider connection secrets are missing basic auth credentials."
             )
         return str(secrets[username_key]), str(secrets[password_key])
@@ -176,7 +178,7 @@ class YamlHttpProviderSender:
             return {}
         token_key = auth.get("token_secret_key")
         if token_key not in secrets:
-            raise CommunicationValidationError(
+            raise ProviderSecretsValidationError(
                 "Provider connection secrets are missing bearer auth token."
             )
         return {"Authorization": f"Bearer {secrets[token_key]}"}
@@ -206,7 +208,9 @@ class YamlSmtpProviderSender:
             _render_context(context, secrets=secrets),
         )
         if not isinstance(rendered_send, dict):
-            raise CommunicationValidationError("SMTP send spec must render to object.")
+            raise ProviderPayloadValidationError(
+                "SMTP send spec must render to object."
+            )
 
         text_body = str(rendered_send.get("text_body") or "")
         html_body = rendered_send.get("html_body")

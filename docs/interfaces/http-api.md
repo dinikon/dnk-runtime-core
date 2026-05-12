@@ -37,6 +37,23 @@ All public HTTP routes are mounted under `/api`.
 | `PUT`    | `/api/inventory/categories/{category_id}` | `inventory` | `UpdateCategoryRequestSchema`                    | `CategoryResponseSchema`       | authenticated request context | `401`, `404`, `409`, `422` |
 | `DELETE` | `/api/inventory/categories/{category_id}` | `inventory` | path `category_id`                               | empty `204`                    | authenticated request context | `401`, `404`, `409`, `422` |
 
+## Communication
+
+| Method | Path                                                                        | Module          | Request / Params                        | Response                                | Auth                          | Main errors                |
+|--------|-----------------------------------------------------------------------------|-----------------|-----------------------------------------|-----------------------------------------|-------------------------------|----------------------------|
+| `POST` | `/api/communication/providers/connectors/import-yaml`                       | `communication` | `ImportYamlRequestSchema`               | `ProviderConnectorResponseSchema`       | authenticated request context | `401`, `404`, `409`, `422` |
+| `GET`  | `/api/communication/providers/connectors`                                   | `communication` | none                                    | `ListProviderConnectorsResponseSchema`  | authenticated request context | `401`, `409`, `422`        |
+| `POST` | `/api/communication/providers/connections`                                  | `communication` | `CreateProviderConnectionRequestSchema` | `ProviderConnectionResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
+| `GET`  | `/api/communication/providers/connections`                                  | `communication` | none                                    | `ListProviderConnectionsResponseSchema` | authenticated request context | `401`, `409`, `422`        |
+| `POST` | `/api/communication/templates`                                              | `communication` | `CreateMessageTemplateRequestSchema`    | `MessageTemplateResponseSchema`         | authenticated request context | `401`, `404`, `409`, `422` |
+| `POST` | `/api/communication/templates/{template_id}/versions`                       | `communication` | `CreateTemplateVersionRequestSchema`    | `TemplateVersionResponseSchema`         | authenticated request context | `401`, `404`, `409`, `422` |
+| `POST` | `/api/communication/templates/{template_id}/versions/{version_id}/activate` | `communication` | path ids                                | `TemplateVersionResponseSchema`         | authenticated request context | `401`, `404`, `409`, `422` |
+| `GET`  | `/api/communication/templates`                                              | `communication` | none                                    | `ListMessageTemplatesResponseSchema`    | authenticated request context | `401`, `409`, `422`        |
+| `POST` | `/api/communication/send`                                                   | `communication` | `SendCommunicationRequestSchema`        | `SendCommunicationResponseSchema`       | authenticated request context | `401`, `404`, `409`, `422` |
+| `GET`  | `/api/communication/messages`                                               | `communication` | `limit`, `offset`                       | `ListOutboundMessagesResponseSchema`    | authenticated request context | `401`, `409`, `422`        |
+| `GET`  | `/api/communication/messages/{outbound_message_id}`                         | `communication` | path `outbound_message_id`              | `OutboundMessageResponseSchema`         | authenticated request context | `401`, `404`, `409`, `422` |
+| `POST` | `/api/communication/webhooks/{tenant_id}/{provider_code}`                   | `communication` | raw provider JSON payload               | `WebhookResponseSchema`                 | optional request context      | `404`, `409`, `422`        |
+
 ## Schema Config
 
 Schema config read routes use `POST` bodies instead of `GET`.
@@ -95,12 +112,15 @@ Mounted under `/api/console/auth`.
 - `PATCH /api/console/auth/me` requires `interface_theme` and does not accept `null`.
 - `GET /api/console/auth/me` and `PATCH /api/console/auth/me` always return `interface_theme` as a string.
 - schema metadata/DDL changes are exposed only through `/api/config/...`; `custom_object` does not proxy those routes.
+- communication routes return standard FastAPI error bodies with readable string `detail`; provider secrets are never
+  returned by connection responses.
 
 ## Related
 
 - [Management CLI](management-cli.md)
 - [Tenancy module](../modules/tenancy.md)
 - [Identity module](../modules/identity.md)
+- [Communication module](../modules/communication.md)
 - [CRM module](../modules/crm.md)
 
 ## Source Of Truth

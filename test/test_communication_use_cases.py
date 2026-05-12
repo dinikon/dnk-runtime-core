@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import unittest
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
 
-from src.modules.communication.application.ports import ProviderHttpResponse
+from src.modules.communication.application.message.ports import ProviderHttpResponse
 from src.modules.communication.application.services import (
     JsonPathService,
     ProviderPayloadBuildService,
@@ -13,15 +14,17 @@ from src.modules.communication.application.services import (
     SecretCodec,
     TemplateRenderService,
 )
-from src.modules.communication.application.use_cases import (
-    HandleProviderWebhookCommand,
-    HandleProviderWebhookUseCase,
+from src.modules.communication.application.message import (
     ProcessOutboundMessageByIdCommand,
     ProcessOutboundMessageByIdUseCase,
     ProcessOutboundMessageUseCase,
     ProcessQueuedMessagesCommand,
     SendCommunicationCommand,
     SendCommunicationUseCase,
+)
+from src.modules.communication.application.webhook import (
+    HandleProviderWebhookCommand,
+    HandleProviderWebhookUseCase,
 )
 from src.modules.communication.domain import OutboundMessageStatus
 from src.modules.communication.infrastructure.provider_senders import (
@@ -75,6 +78,23 @@ class _TurboSmsHttpClientStub(_HttpClientStub):
                     }
                 ],
             },
+        )
+
+
+class _FailingHttpClientStub(_HttpClientStub):
+    async def request(self, *, method, url, headers, json_body, basic_auth=None):
+        self.requests.append(
+            {
+                "method": method,
+                "url": url,
+                "headers": headers,
+                "json_body": json_body,
+                "basic_auth": basic_auth,
+            }
+        )
+        return ProviderHttpResponse(
+            status_code=500,
+            payload={"error": "temporary"},
         )
 
 
@@ -153,6 +173,10 @@ class _ProcessRepositoryStub:
                     },
                 ],
                 "status_mapping": {"23033": "DELIVERED"},
+                "retry_policy": {
+                    "max_attempts": 3,
+                    "backoff": {"initial_seconds": 30, "max_seconds": 600},
+                },
             }
         )
         self.attempt = SimpleNamespace(
@@ -207,6 +231,7 @@ class _ByIdRepositoryStub(_ProcessRepositoryStub):
         self.claimable = claimable
         self.completed = False
         self.failed_processing = False
+        self.last_failure_kwargs = None
         self.claim_tokens = []
 
     async def claim_outbound_for_processing(self, **kwargs):
@@ -227,9 +252,12 @@ class _ByIdRepositoryStub(_ProcessRepositoryStub):
         self.outbound.external_message_id = kwargs["external_message_id"]
         return True
 
-    async def fail_outbound_processing(self, **_kwargs):
+    async def fail_outbound_processing(self, **kwargs):
+        self.last_failure_kwargs = kwargs
         self.failed_processing = True
-        self.outbound.internal_status = "FAILED"
+        self.outbound.internal_status = (
+            "QUEUED" if kwargs.get("retry_at") is not None else "FAILED"
+        )
         return True
 
 
@@ -242,6 +270,11 @@ class _UnitOfWorkStub:
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
         return None
+
+
+class _ClockStub:
+    def now(self):
+        return datetime.now(UTC)
 
 
 class _SmtpTransportStub:
@@ -442,6 +475,18 @@ class _WebhookRepositoryStub:
 
 
 class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
+    def test_legacy_use_case_module_reexports_new_paths(self) -> None:
+        from src.modules.communication.application import use_cases
+
+        self.assertIs(
+            use_cases.ProcessOutboundMessageUseCase,
+            ProcessOutboundMessageUseCase,
+        )
+        self.assertIs(
+            use_cases.HandleProviderWebhookUseCase,
+            HandleProviderWebhookUseCase,
+        )
+
     async def test_process_queued_message_renders_payload_and_maps_status(self) -> None:
         repository = _ProcessRepositoryStub()
         http_client = _HttpClientStub()
@@ -459,6 +504,7 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 ]
             ),
             template_renderer=TemplateRenderService(),
+            clock=_ClockStub(),
         )
 
         result = await use_case(
@@ -494,6 +540,7 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 ]
             ),
             template_renderer=TemplateRenderService(),
+            clock=_ClockStub(),
         )
 
         result = await use_case(
@@ -557,6 +604,7 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 ]
             ),
             template_renderer=TemplateRenderService(),
+            clock=_ClockStub(),
         )
 
         result = await use_case(
@@ -590,11 +638,12 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
             template_renderer=TemplateRenderService(),
             repository_factory=lambda _session: repository,
             processing_lease_seconds=300,
+            clock=_ClockStub(),
         )
 
         with (
             patch(
-                "src.modules.communication.application.use_cases.UnitOfWork",
+                "src.modules.communication.application.message.use_case.UnitOfWork",
                 _UnitOfWorkStub,
             ),
         ):
@@ -610,6 +659,49 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(repository.completed)
         self.assertEqual(repository.outbound.external_message_id, "ext-123")
         self.assertEqual(http_client.requests[0]["json_body"]["text"], "Approved 15000")
+
+    async def test_process_outbound_by_id_requeues_retryable_provider_failure(
+        self,
+    ) -> None:
+        repository = _ByIdRepositoryStub()
+        http_client = _FailingHttpClientStub()
+        use_case = ProcessOutboundMessageByIdUseCase(
+            session_factory=object(),
+            sender_registry=ProviderSenderRegistry(
+                [
+                    YamlHttpProviderSender(
+                        http_client=http_client,
+                        payload_builder=ProviderPayloadBuildService(),
+                        status_mapper=ProviderStatusMappingService(),
+                        json_path=JsonPathService(),
+                        secret_codec=SecretCodec(),
+                    )
+                ]
+            ),
+            template_renderer=TemplateRenderService(),
+            repository_factory=lambda _session: repository,
+            processing_lease_seconds=300,
+            clock=_ClockStub(),
+        )
+
+        with (
+            patch(
+                "src.modules.communication.application.message.use_case.UnitOfWork",
+                _UnitOfWorkStub,
+            ),
+        ):
+            result = await use_case(
+                ProcessOutboundMessageByIdCommand(
+                    tenant_id=uuid4(),
+                    outbound_message_id=repository.outbound.outbound_message_id,
+                )
+            )
+
+        self.assertTrue(result.processed)
+        self.assertFalse(result.succeeded)
+        self.assertEqual(result.status, OutboundMessageStatus.QUEUED.value)
+        self.assertIsNotNone(repository.last_failure_kwargs["retry_at"])
+        self.assertEqual(repository.outbound.internal_status, "QUEUED")
 
     async def test_process_outbound_by_id_skips_duplicate_non_queued_message(
         self,
@@ -632,11 +724,12 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
             template_renderer=TemplateRenderService(),
             repository_factory=lambda _session: repository,
             processing_lease_seconds=300,
+            clock=_ClockStub(),
         )
 
         with (
             patch(
-                "src.modules.communication.application.use_cases.UnitOfWork",
+                "src.modules.communication.application.message.use_case.UnitOfWork",
                 _UnitOfWorkStub,
             ),
         ):
@@ -669,6 +762,7 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 ]
             ),
             template_renderer=TemplateRenderService(),
+            clock=_ClockStub(),
         )
 
         result = await use_case(
@@ -716,6 +810,7 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 ]
             ),
             template_renderer=TemplateRenderService(),
+            clock=_ClockStub(),
         )
 
         result = await use_case(
@@ -730,7 +825,7 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
     async def test_send_communication_returns_existing_idempotent_message(self) -> None:
         repository = _IdempotencyRepositoryStub()
         use_case = SendCommunicationUseCase(
-            repository, schema_validator=SimpleNamespace()
+            repository, schema_validator=SimpleNamespace(), clock=_ClockStub()
         )
 
         result = await use_case(
@@ -757,6 +852,7 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
             repository,
             JsonPathService(),
             ProviderStatusMappingService(),
+            _ClockStub(),
         )
 
         result = await use_case(
@@ -782,6 +878,7 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
             repository,
             JsonPathService(),
             ProviderStatusMappingService(),
+            _ClockStub(),
         )
 
         result = await use_case(

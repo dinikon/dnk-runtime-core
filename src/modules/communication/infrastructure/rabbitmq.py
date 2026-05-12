@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -23,7 +23,6 @@ from src.modules.communication.application.dto import OutboundMessageJob
 from src.modules.communication.application.use_cases import (
     ProcessOutboundMessageByIdCommand,
     ProcessOutboundMessageByIdUseCase,
-    utc_now,
 )
 
 
@@ -234,7 +233,7 @@ def _parse_outbound_message_job(payload: Mapping[str, Any]) -> OutboundMessageJo
     published_at = (
         datetime.fromisoformat(str(published_at_raw))
         if published_at_raw is not None
-        else utc_now()
+        else datetime.now(UTC)
     )
     source = str(payload.get("source") or "unknown")
     return OutboundMessageJob(

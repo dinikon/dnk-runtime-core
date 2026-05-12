@@ -85,6 +85,28 @@ This page maps current tests to the behaviors they protect.
 - `test/test_inventory_http_router.py`
     - public inventory route registration
 
+## Communication
+
+- `test/test_communication_services.py`
+  - provider YAML validation
+  - template/provider payload rendering
+  - JSONPath and status mapping
+  - secret encoding and DTO secret omission
+- `test/test_communication_use_cases.py`
+  - outbound processing for HTTP/SMTP providers
+  - idempotent send behavior
+  - retryable provider failure backoff
+  - webhook matched/unmatched behavior
+  - compatibility re-exports for legacy application import paths
+- `test/test_communication_http_router.py`
+  - public communication route registration
+  - controller-local HTTP error mapping
+  - publish-after-commit behavior for send requests
+- `test/test_communication_management_command.py`
+  - communication management command parsing and handler behavior
+- `test/test_communication_queue.py`
+  - queue settings-derived RabbitMQ topology names
+
 ## Custom Object
 
 - `test/test_custom_object_records_use_cases.py`

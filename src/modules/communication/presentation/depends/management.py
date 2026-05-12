@@ -70,10 +70,12 @@ def build_process_outbound_message_use_case(
 ) -> ProcessOutboundMessageUseCase:
     """Builds ProcessOutboundMessageUseCase outside FastAPI DI."""
     sender_registry = build_provider_sender_registry()
+    clock = UtcClock()
     return ProcessOutboundMessageUseCase(
         repository=build_communication_repository(uow.session),
         sender_registry=sender_registry,
         template_renderer=TemplateRenderService(),
+        clock=clock,
     )
 
 
@@ -82,12 +84,14 @@ def build_process_outbound_message_by_id_use_case(
     session_factory: async_sessionmaker[AsyncSession],
     processing_lease_seconds: int,
 ) -> ProcessOutboundMessageByIdUseCase:
+    clock = UtcClock()
     return ProcessOutboundMessageByIdUseCase(
         session_factory=session_factory,
         repository_factory=build_communication_repository,
         sender_registry=build_provider_sender_registry(),
         template_renderer=TemplateRenderService(),
         processing_lease_seconds=processing_lease_seconds,
+        clock=clock,
     )
 
 
@@ -97,10 +101,12 @@ def build_publish_queued_outbound_messages_use_case(
     publisher: RabbitMQOutboundMessagePublisher,
     republish_after_seconds: int,
 ) -> PublishQueuedOutboundMessagesUseCase:
+    clock = UtcClock()
     return PublishQueuedOutboundMessagesUseCase(
         repository=build_communication_repository(uow.session),
         publisher=publisher,
         republish_after_seconds=republish_after_seconds,
+        clock=clock,
     )
 
 
@@ -108,8 +114,10 @@ def build_recover_stuck_outbound_messages_use_case(
     *,
     uow: UnitOfWorkProtocol,
 ) -> RecoverStuckOutboundMessagesUseCase:
+    clock = UtcClock()
     return RecoverStuckOutboundMessagesUseCase(
         repository=build_communication_repository(uow.session),
+        clock=clock,
     )
 
 

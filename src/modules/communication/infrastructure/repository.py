@@ -2,26 +2,37 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
 from typing import Any
 from uuid import UUID, uuid4
 
-from src.modules.communication.application.dto import (
-    MessageTemplateDTO,
-    OutboundMessageDTO,
-    ProviderConnectionDTO,
-    ProviderConnectorDTO,
-    ProviderMessageTypeDTO,
-    TemplateVersionDTO,
-)
 from src.modules.communication.domain import (
     AttemptStatus,
+    CommunicationRequest,
     ConnectorStatus,
+    DeliveryAttempt,
+    DeliveryEvent,
+    MessageTemplate,
     OutboundMessageStatus,
+    OutboundMessage,
+    ProviderConnection,
     ProviderConnectionStatus,
+    ProviderConnector,
+    ProviderMessageType,
     RequestStatus,
+    TemplateVersion,
     TemplateStatus,
     TemplateVersionStatus,
+)
+from src.modules.communication.domain.value_object import (
+    CommunicationRequestIdVO,
+    DeliveryAttemptIdVO,
+    DeliveryEventIdVO,
+    MessageTemplateIdVO,
+    OutboundMessageIdVO,
+    ProviderConnectionIdVO,
+    ProviderConnectorIdVO,
+    ProviderMessageTypeIdVO,
+    TemplateVersionIdVO,
 )
 from src.modules.runtime_data import (
     FilterGroupSpec,
@@ -376,13 +387,13 @@ class CommunicationRepository:
         versions = await self._list(
             tenant_id=tenant_id,
             object_name=_TEMPLATE_VERSION,
-            filters=[FilterSpec("template_id", "eq", template.template_id)],
+            filters=[FilterSpec("template_id", "eq", template.template_id.uuid)],
         )
         descriptor = await self._descriptor(tenant_id, _TEMPLATE_VERSION)
         for item in versions:
             status = (
                 TemplateVersionStatus.ACTIVE.value
-                if item["id"] == version.template_version_id
+                if item["id"] == version.template_version_id.uuid
                 else (
                     TemplateVersionStatus.DEPRECATED.value
                     if item["status"] == TemplateVersionStatus.ACTIVE.value
@@ -390,7 +401,7 @@ class CommunicationRepository:
                 )
             )
             patch: dict[str, Any] = {"status": status}
-            if item["id"] == version.template_version_id:
+            if item["id"] == version.template_version_id.uuid:
                 patch["activated_at"] = now
             await self._command_gateway.update(
                 descriptor=descriptor,
@@ -399,11 +410,11 @@ class CommunicationRepository:
             )
         await self._command_gateway.update(
             descriptor=await self._descriptor(tenant_id, _TEMPLATE),
-            object_id=template.template_id,
+            object_id=template.template_id.uuid,
             patch={"status": TemplateStatus.ACTIVE.value},
         )
         fresh = await self._get(
-            tenant_id, _TEMPLATE_VERSION, version.template_version_id
+            tenant_id, _TEMPLATE_VERSION, version.template_version_id.uuid
         )
         return _template_version_model(fresh)
 
@@ -628,20 +639,27 @@ class CommunicationRepository:
             tenant_id,
             await self._required(
                 _REQUEST,
-                await self._get(tenant_id, _REQUEST, outbound.communication_request_id),
+                await self._get(
+                    tenant_id,
+                    _REQUEST,
+                    outbound.communication_request_id.uuid,
+                ),
             ),
         )
         template = _template_model(
             tenant_id,
             await self._required(
-                _TEMPLATE, await self._get(tenant_id, _TEMPLATE, request.template_id)
+                _TEMPLATE,
+                await self._get(tenant_id, _TEMPLATE, request.template_id.uuid),
             ),
         )
         version = _template_version_model(
             await self._required(
                 _TEMPLATE_VERSION,
                 await self._get(
-                    tenant_id, _TEMPLATE_VERSION, request.template_version_id
+                    tenant_id,
+                    _TEMPLATE_VERSION,
+                    request.template_version_id.uuid,
                 ),
             )
         )
@@ -650,7 +668,9 @@ class CommunicationRepository:
             await self._required(
                 _CONNECTION,
                 await self._get(
-                    tenant_id, _CONNECTION, outbound.provider_connection_id
+                    tenant_id,
+                    _CONNECTION,
+                    outbound.provider_connection_id.uuid,
                 ),
             ),
         )
@@ -658,7 +678,9 @@ class CommunicationRepository:
             await self._required(
                 _CONNECTOR,
                 await self._get(
-                    tenant_id, _CONNECTOR, connection.provider_connector_id
+                    tenant_id,
+                    _CONNECTOR,
+                    connection.provider_connector_id.uuid,
                 ),
             )
         )
@@ -666,7 +688,9 @@ class CommunicationRepository:
             await self._required(
                 _MESSAGE_TYPE,
                 await self._get(
-                    tenant_id, _MESSAGE_TYPE, template.provider_message_type_id
+                    tenant_id,
+                    _MESSAGE_TYPE,
+                    template.provider_message_type_id.uuid,
                 ),
             )
         )
@@ -711,7 +735,11 @@ class CommunicationRepository:
         finished_at: datetime,
     ) -> bool:
         outbound = await self.get_outbound_by_id(tenant_id, outbound_message_id)
-        if outbound is None or outbound.processing_token != processing_token:
+        if (
+            outbound is None
+            or outbound.processing_token is None
+            or outbound.processing_token.uuid != processing_token
+        ):
             return False
         patch = {
             "rendered_payload": rendered_payload,
@@ -739,7 +767,7 @@ class CommunicationRepository:
             return False
         await self._command_gateway.update(
             descriptor=await self._descriptor(tenant_id, _REQUEST),
-            object_id=outbound.communication_request_id,
+            object_id=outbound.communication_request_id.uuid,
             patch={"status": _request_status_for_internal_status(internal_status)},
         )
         await self._command_gateway.update(
@@ -772,7 +800,11 @@ class CommunicationRepository:
         retry_at: datetime | None = None,
     ) -> bool:
         outbound = await self.get_outbound_by_id(tenant_id, outbound_message_id)
-        if outbound is None or outbound.processing_token != processing_token:
+        if (
+            outbound is None
+            or outbound.processing_token is None
+            or outbound.processing_token.uuid != processing_token
+        ):
             return False
         retryable = retry_at is not None
         outbound_patch = {
@@ -804,7 +836,7 @@ class CommunicationRepository:
             return False
         await self._command_gateway.update(
             descriptor=await self._descriptor(tenant_id, _REQUEST),
-            object_id=outbound.communication_request_id,
+            object_id=outbound.communication_request_id.uuid,
             patch={
                 "status": (
                     RequestStatus.QUEUED.value
@@ -1061,154 +1093,262 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
-def connector_to_dto(model) -> ProviderConnectorDTO:
-    spec = model.yaml_spec or {}
-    return ProviderConnectorDTO(
-        provider_connector_id=model.provider_connector_id,
-        provider_code=model.provider_code,
-        provider_name=model.provider_name,
-        version=model.version,
-        connector_type=model.connector_type,
-        channels=list(spec.get("channels") or []),
-        config_schema=dict(spec.get("config_schema") or {}),
-        secrets_schema=dict(spec.get("secrets_schema") or {}),
-        status=model.status,
-        created_at=model.created_at,
-        updated_at=model.updated_at,
+def _connector_model(row: Mapping[str, Any]) -> ProviderConnector:
+    return ProviderConnector(
+        provider_connector_id=ProviderConnectorIdVO.from_value(_as_uuid(row["id"])),
+        provider_code=_as_str(row.get("provider_code")),
+        provider_name=_as_str(row.get("provider_name")),
+        version=_as_str(row.get("version")),
+        connector_type=_as_str(row.get("connector_type")),
+        yaml_spec=_as_dict(row.get("yaml_spec")),
+        yaml_checksum=_as_str(row.get("yaml_checksum")),
+        status=_as_str(row.get("status")),
+        created_at=_as_datetime(row.get("created_at")),
+        updated_at=_as_datetime(row.get("updated_at")),
     )
 
 
-def message_type_to_dto(model) -> ProviderMessageTypeDTO:
-    return ProviderMessageTypeDTO(
-        provider_message_type_id=model.provider_message_type_id,
-        provider_connector_id=model.provider_connector_id,
-        message_type_code=model.message_type_code,
-        channel_code=model.channel_code,
-        name=model.name,
-        field_schema=dict(model.field_schema or {}),
-        ui_schema=dict(model.ui_schema or {}),
-        is_active=bool(model.is_active),
-    )
-
-
-def connection_to_dto(model) -> ProviderConnectionDTO:
-    return ProviderConnectionDTO(
-        provider_connection_id=model.provider_connection_id,
-        tenant_id=model.tenant_id,
-        provider_connector_id=model.provider_connector_id,
-        connection_code=model.connection_code,
-        connection_name=model.connection_name,
-        channel_code=model.channel_code,
-        config=dict(model.config or {}),
-        secret_ref=model.secret_ref,
-        has_secrets=bool(model.secrets_b64),
-        status=model.status,
-        created_at=model.created_at,
-        updated_at=model.updated_at,
-    )
-
-
-def template_to_dto(model, active_version=None) -> MessageTemplateDTO:
-    return MessageTemplateDTO(
-        template_id=model.template_id,
-        tenant_id=model.tenant_id,
-        template_code=model.template_code,
-        name=model.name,
-        description=model.description,
-        provider_connector_id=model.provider_connector_id,
-        provider_message_type_id=model.provider_message_type_id,
-        channel_code=model.channel_code,
-        message_class=model.message_class,
-        status=model.status,
-        created_at=model.created_at,
-        updated_at=model.updated_at,
-        active_version_id=(
-            active_version.template_version_id if active_version is not None else None
+def _message_type_model(row: Mapping[str, Any]) -> ProviderMessageType:
+    return ProviderMessageType(
+        provider_message_type_id=ProviderMessageTypeIdVO.from_value(
+            _as_uuid(row["id"])
         ),
-        active_version_no=(
-            active_version.version_no if active_version is not None else None
+        provider_connector_id=ProviderConnectorIdVO.from_value(
+            _as_uuid(row.get("provider_connector_id"))
         ),
+        message_type_code=_as_str(row.get("message_type_code")),
+        channel_code=_as_str(row.get("channel_code")),
+        name=_as_str(row.get("name")),
+        field_schema=_as_dict(row.get("field_schema")),
+        ui_schema=_as_dict(row.get("ui_schema")),
+        is_active=bool(row.get("is_active")),
     )
 
 
-def template_version_to_dto(model) -> TemplateVersionDTO:
-    return TemplateVersionDTO(
-        template_version_id=model.template_version_id,
-        template_id=model.template_id,
-        version_no=model.version_no,
-        template_payload=dict(model.template_payload or {}),
-        variables_schema=dict(model.variables_schema or {}),
-        status=model.status,
-        created_at=model.created_at,
-        activated_at=model.activated_at,
+def _connection_model(tenant_id: UUID, row: Mapping[str, Any]) -> ProviderConnection:
+    return ProviderConnection(
+        provider_connection_id=ProviderConnectionIdVO.from_value(_as_uuid(row["id"])),
+        tenant_id=EntityIdVO.from_value(tenant_id),
+        provider_connector_id=ProviderConnectorIdVO.from_value(
+            _as_uuid(row.get("provider_connector_id"))
+        ),
+        connection_code=_as_str(row.get("connection_code")),
+        connection_name=_as_str(row.get("connection_name")),
+        channel_code=_as_str(row.get("channel_code")),
+        config=_as_dict(row.get("config")),
+        secret_ref=_as_optional_str(row.get("secret_ref")),
+        secrets_b64=_as_optional_str(row.get("secrets_b64")),
+        status=_as_str(row.get("status")),
+        created_at=_as_datetime(row.get("created_at")),
+        updated_at=_as_datetime(row.get("updated_at")),
     )
 
 
-def outbound_to_dto(model) -> OutboundMessageDTO:
-    return OutboundMessageDTO(
-        outbound_message_id=model.outbound_message_id,
-        tenant_id=model.tenant_id,
-        communication_request_id=model.communication_request_id,
-        provider_connection_id=model.provider_connection_id,
-        channel_code=model.channel_code,
-        contact_id=model.contact_id,
-        recipient_address=model.recipient_address,
-        rendered_payload=dict(model.rendered_payload or {}),
-        provider_request_payload=dict(model.provider_request_payload or {}),
-        external_message_id=model.external_message_id,
-        external_status=model.external_status,
-        internal_status=model.internal_status,
-        error_code=model.error_code,
-        error_message=model.error_message,
-        queued_at=model.queued_at,
-        sent_at=model.sent_at,
-        delivered_at=model.delivered_at,
-        failed_at=model.failed_at,
-        created_at=model.created_at,
-        updated_at=model.updated_at,
+def _template_model(tenant_id: UUID, row: Mapping[str, Any]) -> MessageTemplate:
+    return MessageTemplate(
+        template_id=MessageTemplateIdVO.from_value(_as_uuid(row["id"])),
+        tenant_id=EntityIdVO.from_value(tenant_id),
+        template_code=_as_str(row.get("template_code")),
+        name=_as_str(row.get("name")),
+        description=_as_optional_str(row.get("description")),
+        provider_connector_id=ProviderConnectorIdVO.from_value(
+            _as_uuid(row.get("provider_connector_id"))
+        ),
+        provider_message_type_id=ProviderMessageTypeIdVO.from_value(
+            _as_uuid(row.get("provider_message_type_id"))
+        ),
+        channel_code=_as_str(row.get("channel_code")),
+        message_class=_as_str(row.get("message_class")),
+        status=_as_str(row.get("status")),
+        created_at=_as_datetime(row.get("created_at")),
+        updated_at=_as_datetime(row.get("updated_at")),
     )
 
 
-def _connector_model(row: Mapping[str, Any]):
-    return _model(row, provider_connector_id=row["id"])
+def _template_version_model(row: Mapping[str, Any]) -> TemplateVersion:
+    return TemplateVersion(
+        template_version_id=TemplateVersionIdVO.from_value(_as_uuid(row["id"])),
+        template_id=MessageTemplateIdVO.from_value(_as_uuid(row.get("template_id"))),
+        version_no=int(row.get("version_no")),
+        template_payload=_as_dict(row.get("template_payload")),
+        variables_schema=_as_dict(row.get("variables_schema")),
+        status=_as_str(row.get("status")),
+        created_at=_as_datetime(row.get("created_at")),
+        activated_at=_as_optional_datetime(row.get("activated_at")),
+    )
 
 
-def _message_type_model(row: Mapping[str, Any]):
-    return _model(row, provider_message_type_id=row["id"])
+def _request_model(tenant_id: UUID, row: Mapping[str, Any]) -> CommunicationRequest:
+    return CommunicationRequest(
+        communication_request_id=CommunicationRequestIdVO.from_value(
+            _as_uuid(row["id"])
+        ),
+        tenant_id=EntityIdVO.from_value(tenant_id),
+        initiator_type=_as_str(row.get("initiator_type")),
+        initiator_ref_id=_as_optional_str(row.get("initiator_ref_id")),
+        correlation_id=_optional_entity_id(row.get("correlation_id")),
+        idempotency_key=_as_optional_str(row.get("idempotency_key")),
+        message_class=_as_str(row.get("message_class")),
+        channel_code=_as_str(row.get("channel_code")),
+        template_id=MessageTemplateIdVO.from_value(_as_uuid(row.get("template_id"))),
+        template_version_id=TemplateVersionIdVO.from_value(
+            _as_uuid(row.get("template_version_id"))
+        ),
+        contact_id=_optional_entity_id(row.get("contact_id")),
+        recipient_address=_as_str(row.get("recipient_address")),
+        recipient_snapshot=_as_dict(row.get("recipient_snapshot")),
+        variables=_as_dict(row.get("variables")),
+        scheduled_at=_as_optional_datetime(row.get("scheduled_at")),
+        priority=int(row.get("priority")),
+        status=_as_str(row.get("status")),
+        created_at=_as_datetime(row.get("created_at")),
+        updated_at=_as_datetime(row.get("updated_at")),
+    )
 
 
-def _connection_model(tenant_id: UUID, row: Mapping[str, Any]):
-    return _model(row, tenant_id=tenant_id, provider_connection_id=row["id"])
+def _outbound_model(tenant_id: UUID, row: Mapping[str, Any]) -> OutboundMessage:
+    return OutboundMessage(
+        outbound_message_id=OutboundMessageIdVO.from_value(_as_uuid(row["id"])),
+        tenant_id=EntityIdVO.from_value(tenant_id),
+        communication_request_id=CommunicationRequestIdVO.from_value(
+            _as_uuid(row.get("communication_request_id"))
+        ),
+        provider_connection_id=ProviderConnectionIdVO.from_value(
+            _as_uuid(row.get("provider_connection_id"))
+        ),
+        channel_code=_as_str(row.get("channel_code")),
+        message_class=_as_str(row.get("message_class")),
+        priority=int(row.get("priority")),
+        contact_id=_optional_entity_id(row.get("contact_id")),
+        recipient_address=_as_str(row.get("recipient_address")),
+        rendered_payload=_as_dict(row.get("rendered_payload")),
+        provider_request_payload=_as_dict(row.get("provider_request_payload")),
+        external_message_id=_as_optional_str(row.get("external_message_id")),
+        external_status=_as_optional_str(row.get("external_status")),
+        internal_status=_as_str(row.get("internal_status")),
+        error_code=_as_optional_str(row.get("error_code")),
+        error_message=_as_optional_str(row.get("error_message")),
+        queued_at=_as_optional_datetime(row.get("queued_at")),
+        sent_at=_as_optional_datetime(row.get("sent_at")),
+        delivered_at=_as_optional_datetime(row.get("delivered_at")),
+        failed_at=_as_optional_datetime(row.get("failed_at")),
+        processing_token=_optional_entity_id(row.get("processing_token")),
+        processing_started_at=_as_optional_datetime(row.get("processing_started_at")),
+        processing_deadline_at=_as_optional_datetime(row.get("processing_deadline_at")),
+        next_attempt_at=_as_optional_datetime(row.get("next_attempt_at")),
+        queue_published_at=_as_optional_datetime(row.get("queue_published_at")),
+        queue_publish_count=int(row.get("queue_publish_count") or 0),
+        created_at=_as_datetime(row.get("created_at")),
+        updated_at=_as_datetime(row.get("updated_at")),
+    )
 
 
-def _template_model(tenant_id: UUID, row: Mapping[str, Any]):
-    return _model(row, tenant_id=tenant_id, template_id=row["id"])
+def _attempt_model(row: Mapping[str, Any]) -> DeliveryAttempt:
+    return DeliveryAttempt(
+        delivery_attempt_id=DeliveryAttemptIdVO.from_value(_as_uuid(row["id"])),
+        outbound_message_id=OutboundMessageIdVO.from_value(
+            _as_uuid(row.get("outbound_message_id"))
+        ),
+        provider_connection_id=ProviderConnectionIdVO.from_value(
+            _as_uuid(row.get("provider_connection_id"))
+        ),
+        attempt_no=int(row.get("attempt_no")),
+        status=_as_str(row.get("status")),
+        request_payload=_as_optional_dict(row.get("request_payload")),
+        response_payload=_as_optional_dict(row.get("response_payload")),
+        http_status_code=(
+            None
+            if row.get("http_status_code") is None
+            else int(row["http_status_code"])
+        ),
+        external_message_id=_as_optional_str(row.get("external_message_id")),
+        error_code=_as_optional_str(row.get("error_code")),
+        error_message=_as_optional_str(row.get("error_message")),
+        started_at=_as_optional_datetime(row.get("started_at")),
+        finished_at=_as_optional_datetime(row.get("finished_at")),
+    )
 
 
-def _template_version_model(row: Mapping[str, Any]):
-    return _model(row, template_version_id=row["id"])
+def _event_model(tenant_id: UUID, row: Mapping[str, Any]) -> DeliveryEvent:
+    return DeliveryEvent(
+        delivery_event_id=DeliveryEventIdVO.from_value(_as_uuid(row["id"])),
+        tenant_id=EntityIdVO.from_value(tenant_id),
+        outbound_message_id=(
+            None
+            if row.get("outbound_message_id") is None
+            else OutboundMessageIdVO.from_value(
+                _as_uuid(row.get("outbound_message_id"))
+            )
+        ),
+        provider_connection_id=(
+            None
+            if row.get("provider_connection_id") is None
+            else ProviderConnectionIdVO.from_value(
+                _as_uuid(row.get("provider_connection_id"))
+            )
+        ),
+        external_message_id=_as_optional_str(row.get("external_message_id")),
+        external_status=_as_optional_str(row.get("external_status")),
+        internal_status=_as_str(row.get("internal_status")),
+        event_type=_as_str(row.get("event_type")),
+        event_at=_as_optional_datetime(row.get("event_at")),
+        raw_payload=_as_dict(row.get("raw_payload")),
+        created_at=_as_datetime(row.get("created_at")),
+    )
 
 
-def _request_model(tenant_id: UUID, row: Mapping[str, Any]):
-    return _model(row, tenant_id=tenant_id, communication_request_id=row["id"])
+def _as_uuid(value: Any) -> UUID:
+    if isinstance(value, UUID):
+        return value
+    if isinstance(value, str):
+        return UUID(value)
+    if isinstance(value, EntityIdVO):
+        return value.uuid
+    raise TypeError("Communication runtime row must contain UUID value.")
 
 
-def _outbound_model(tenant_id: UUID, row: Mapping[str, Any]):
-    return _model(row, tenant_id=tenant_id, outbound_message_id=row["id"])
+def _as_datetime(value: Any) -> datetime:
+    if isinstance(value, datetime):
+        return value
+    raise TypeError("Communication runtime row must contain datetime value.")
 
 
-def _attempt_model(row: Mapping[str, Any]):
-    return _model(row, delivery_attempt_id=row["id"])
+def _as_optional_datetime(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    return _as_datetime(value)
 
 
-def _event_model(tenant_id: UUID, row: Mapping[str, Any]):
-    return _model(row, tenant_id=tenant_id, delivery_event_id=row["id"])
+def _as_str(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    raise TypeError("Communication runtime row must contain string value.")
 
 
-def _model(row: Mapping[str, Any], **aliases: Any):
-    values = dict(row)
-    values.update(aliases)
-    return SimpleNamespace(**values)
+def _as_optional_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    return _as_str(value)
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return dict(value)
+    raise TypeError("Communication runtime row must contain object value.")
+
+
+def _as_optional_dict(value: Any) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    return _as_dict(value)
+
+
+def _optional_entity_id(value: Any) -> EntityIdVO | None:
+    if value is None:
+        return None
+    return EntityIdVO.from_value(_as_uuid(value))
 
 
 def _optional_model(row: Mapping[str, Any] | None, factory):
@@ -1247,11 +1387,5 @@ def _status_timestamp_patch(
 
 __all__ = [
     "CommunicationRepository",
-    "connection_to_dto",
-    "connector_to_dto",
-    "message_type_to_dto",
-    "outbound_to_dto",
-    "template_to_dto",
-    "template_version_to_dto",
     "utc_now",
 ]

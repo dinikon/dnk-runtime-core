@@ -195,6 +195,36 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                         msg=f"{path} imports removed communication persistence",
                     )
 
+    def test_communication_application_does_not_import_infrastructure(self) -> None:
+        forbidden_prefix = "src.modules.communication.infrastructure"
+        for path in iter_python_files("src/modules/communication/application"):
+            for module_name in iter_imports(path):
+                self.assertFalse(
+                    module_name.startswith(forbidden_prefix),
+                    msg=f"{path} imports forbidden infrastructure module {module_name}",
+                )
+
+    def test_communication_http_root_router_is_composition_only(self) -> None:
+        path = PROJECT_ROOT / "src/modules/communication/presentation/http/router.py"
+        content = path.read_text(encoding="utf-8")
+        self.assertNotIn("_raise_http_error", content)
+        self.assertNotIn("asdict(", content)
+        self.assertIn("include_router", content)
+
+    def test_communication_repository_does_not_export_dto_mappers(self) -> None:
+        path = PROJECT_ROOT / "src/modules/communication/infrastructure/repository.py"
+        content = path.read_text(encoding="utf-8")
+        forbidden_patterns = (
+            "connection_to_dto",
+            "connector_to_dto",
+            "message_type_to_dto",
+            "template_to_dto",
+            "template_version_to_dto",
+            "outbound_to_dto",
+        )
+        for pattern in forbidden_patterns:
+            self.assertNotIn(pattern, content)
+
     def test_shared_exports_only_generic_entity_id_vo(self) -> None:
         paths = [
             PROJECT_ROOT / "src/modules/shared/__init__.py",

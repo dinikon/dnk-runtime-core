@@ -16,6 +16,8 @@ from jsonschema.exceptions import SchemaError
 from src.modules.communication.domain import (
     CommunicationValidationError,
     OutboundMessageStatus,
+    ProviderPayloadValidationError,
+    ProviderSecretsValidationError,
 )
 
 _JSON_SCHEMA_META_SCHEMA = "https://json-schema.org/draft/2020-12/schema"
@@ -276,7 +278,7 @@ class ProviderPayloadBuildService:
             try:
                 return self._environment.from_string(value).render(**context)
             except Exception as exc:
-                raise CommunicationValidationError(
+                raise ProviderPayloadValidationError(
                     f"Provider payload rendering failed: {exc}"
                 ) from exc
         if isinstance(value, list):
@@ -299,7 +301,9 @@ class ProviderPayloadBuildService:
         headers = self.render_value(send_spec.get("headers", {}), context)
         body = self.render_value(send_spec.get("body", {}), context)
         if not isinstance(headers, dict):
-            raise CommunicationValidationError("send.headers must render to an object.")
+            raise ProviderPayloadValidationError(
+                "send.headers must render to an object."
+            )
         return method, str(url), {str(k): str(v) for k, v in headers.items()}, body
 
 
@@ -365,11 +369,11 @@ class SecretCodec:
             raw = base64.b64decode(secrets_b64.encode("ascii"))
             decoded = json.loads(raw.decode("utf-8"))
         except Exception as exc:
-            raise CommunicationValidationError(
+            raise ProviderSecretsValidationError(
                 "Provider connection secrets are not valid base64 JSON."
             ) from exc
         if not isinstance(decoded, dict):
-            raise CommunicationValidationError(
+            raise ProviderSecretsValidationError(
                 "Provider connection secrets must decode to an object."
             )
         return decoded

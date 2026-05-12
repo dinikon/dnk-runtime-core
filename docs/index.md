@@ -17,6 +17,7 @@ This documentation describes the current implementation of `dnk-runtime-core` as
 - [Identity](modules/identity.md)
 - [CRM](modules/crm.md)
 - [Inventory](modules/inventory.md)
+- [Communication](modules/communication.md)
 - [Custom Object](modules/custom-object.md)
 - [Schema Registry](modules/schema-registry.md)
 - [Shared](modules/shared.md)

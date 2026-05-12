@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
-from types import SimpleNamespace
+from uuid import UUID
 
 from src.modules.communication.application.services import (
     JsonPathService,
@@ -17,7 +17,7 @@ from src.modules.communication.domain import (
     CommunicationValidationError,
     OutboundMessageStatus,
 )
-from src.modules.communication.infrastructure.repository import connection_to_dto
+from src.modules.communication.application.provider.dto import ProviderConnectionDTO
 
 VALID_PROVIDER_YAML = """
 provider_code: gms
@@ -254,21 +254,20 @@ class CommunicationServicesTests(unittest.TestCase):
         self.assertNotIn("secret", encoded or "")
         self.assertEqual(codec.decode(encoded)["password"], "secret")
 
-        model = SimpleNamespace(
-            tenant_id="00000000-0000-0000-0000-000000000001",
-            provider_connector_id="00000000-0000-0000-0000-000000000002",
-            provider_connection_id="00000000-0000-0000-0000-000000000003",
+        dto = ProviderConnectionDTO(
+            tenant_id=UUID("00000000-0000-0000-0000-000000000001"),
+            provider_connector_id=UUID("00000000-0000-0000-0000-000000000002"),
+            provider_connection_id=UUID("00000000-0000-0000-0000-000000000003"),
             connection_code="gms_viber",
             connection_name="GMS Viber",
             channel_code="VIBER",
             config={"client_id": "abc"},
-            secrets_b64=encoded,
             secret_ref=None,
+            has_secrets=bool(encoded),
             status="ACTIVE",
             created_at=datetime(2026, 1, 1, tzinfo=UTC),
             updated_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
-        dto = connection_to_dto(model)
 
         self.assertTrue(dto.has_secrets)
         self.assertFalse(hasattr(dto, "secrets_b64"))
