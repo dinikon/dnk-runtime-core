@@ -176,6 +176,22 @@ class CommunicationServicesTests(unittest.TestCase):
         self.assertEqual(parsed.spec["message_types"][0]["send"]["transport"], "smtp")
         self.assertEqual(parsed.spec["message_types"][0]["channel"], "EMAIL")
 
+    def test_provider_yaml_loader_accepts_turbosms_sms_contract(self) -> None:
+        yaml_content = (
+            PROJECT_ROOT / "docs/communication/providers/turbosms_sms.yaml"
+        ).read_text(encoding="utf-8")
+
+        parsed = ProviderYamlLoader().load(yaml_content)
+
+        self.assertEqual(parsed.spec["provider_code"], "turbosms")
+        self.assertEqual(parsed.spec["connector_type"], "YAML_HTTP")
+        self.assertEqual(parsed.spec["auth"]["type"], "bearer")
+        self.assertEqual(parsed.spec["message_types"][0]["channel"], "SMS")
+        self.assertEqual(
+            parsed.spec["message_types"][0]["send"]["url"],
+            "https://api.turbosms.ua/message/send.json",
+        )
+
     def test_provider_yaml_loader_rejects_invalid_yaml_smtp_contract(self) -> None:
         yaml_content = (
             PROJECT_ROOT / "docs/communication/providers/smtp_email.yaml"

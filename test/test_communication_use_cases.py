@@ -51,6 +51,33 @@ class _HttpClientStub:
         )
 
 
+class _TurboSmsHttpClientStub(_HttpClientStub):
+    async def request(self, *, method, url, headers, json_body, basic_auth=None):
+        self.requests.append(
+            {
+                "method": method,
+                "url": url,
+                "headers": headers,
+                "json_body": json_body,
+                "basic_auth": basic_auth,
+            }
+        )
+        return ProviderHttpResponse(
+            status_code=200,
+            payload={
+                "response_code": 0,
+                "response_status": "OK",
+                "response_result": [
+                    {
+                        "phone": "380671112233",
+                        "message_id": "turbo-123",
+                        "response_status": "OK",
+                    }
+                ],
+            },
+        )
+
+
 class _ProcessRepositoryStub:
     def __init__(self) -> None:
         self.secret_codec = SecretCodec()
@@ -289,6 +316,48 @@ class _SmtpProcessRepositoryStub(_ProcessRepositoryStub):
         }
 
 
+class _TurboSmsProcessRepositoryStub(_ProcessRepositoryStub):
+    def __init__(self) -> None:
+        super().__init__()
+        self.message_type.message_type_code = "sms_text"
+        self.connection.connection_code = "turbosms_sms"
+        self.connection.channel_code = "SMS"
+        self.connection.config = {"sender": "TurboSMS"}
+        self.connection.secrets_b64 = self.secret_codec.encode(
+            {"api_key": "turbo-secret-token"}
+        )
+        self.connector.yaml_spec = {
+            "auth": {
+                "type": "bearer",
+                "token_secret_key": "api_key",
+            },
+            "message_types": [
+                {
+                    "code": "sms_text",
+                    "send": {
+                        "transport": "http",
+                        "method": "POST",
+                        "url": "https://api.turbosms.ua/message/send.json",
+                        "headers": {"Content-Type": "application/json"},
+                        "body": {
+                            "sequence_id": "{{ message.outbound_message_id }}",
+                            "recipients": ["{{ recipient.address }}"],
+                            "sms": {
+                                "sender": "{{ config.sender }}",
+                                "text": "{{ template.text }}",
+                            },
+                        },
+                        "response_mapping": {
+                            "external_message_id": "$.response_result[0].message_id",
+                            "external_status": "$.response_result[0].response_status",
+                        },
+                    },
+                },
+            ],
+            "status_mapping": {"OK": "SENT"},
+        }
+
+
 class _IdempotencyRepositoryStub:
     def __init__(self) -> None:
         self.request = SimpleNamespace(
@@ -379,6 +448,47 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(http_client.requests[0]["basic_auth"], ("user", "secret"))
         self.assertEqual(http_client.requests[0]["json_body"]["ttl"], 60)
+
+    async def test_process_queued_http_bearer_auth_uses_secret_without_persisting_it(
+        self,
+    ) -> None:
+        repository = _TurboSmsProcessRepositoryStub()
+        http_client = _TurboSmsHttpClientStub()
+        use_case = ProcessOutboundMessageUseCase(
+            repository=repository,
+            sender_registry=ProviderSenderRegistry(
+                [
+                    YamlHttpProviderSender(
+                        http_client=http_client,
+                        payload_builder=ProviderPayloadBuildService(),
+                        status_mapper=ProviderStatusMappingService(),
+                        json_path=JsonPathService(),
+                        secret_codec=SecretCodec(),
+                    )
+                ]
+            ),
+            template_renderer=TemplateRenderService(),
+        )
+
+        result = await use_case(ProcessQueuedMessagesCommand(limit=10))
+
+        self.assertEqual(result.succeeded, 1)
+        self.assertEqual(repository.outbound.external_message_id, "turbo-123")
+        self.assertEqual(repository.outbound.internal_status, "SENT")
+        self.assertEqual(
+            http_client.requests[0]["headers"]["Authorization"],
+            "Bearer turbo-secret-token",
+        )
+        self.assertIsNone(http_client.requests[0]["basic_auth"])
+        self.assertEqual(
+            http_client.requests[0]["json_body"]["sequence_id"],
+            str(repository.outbound.outbound_message_id),
+        )
+        snapshot = repository.outbound.provider_request_payload
+        attempt_snapshot = repository.attempt.request_payload
+        self.assertEqual(snapshot["headers"]["Authorization"], "[REDACTED]")
+        self.assertNotIn("turbo-secret-token", str(snapshot))
+        self.assertNotIn("turbo-secret-token", str(attempt_snapshot))
 
     async def test_process_queued_message_rejects_old_root_send_without_message_type_send(
         self,
