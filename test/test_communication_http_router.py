@@ -8,9 +8,13 @@ from uuid import uuid4
 from fastapi import HTTPException
 
 from src.modules.communication.application.dto import SendCommunicationResultDTO
-from src.modules.communication.domain import (
+from src.modules.communication.domain.error import (
     CommunicationValidationError,
+)
+from src.modules.communication.domain.outbound_message import (
     OutboundMessageStatus,
+)
+from src.modules.communication.domain.provider_connector import (
     ProviderConnectorNotFoundError,
 )
 from src.modules.communication.presentation.http.message.router import list_messages

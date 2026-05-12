@@ -13,12 +13,16 @@ from src.modules.communication.application.template.dto import (
 from src.modules.communication.application.template.ports import (
     MessageTemplateRepositoryProtocol,
 )
-from src.modules.communication.domain import (
+from src.modules.communication.domain.error import (
     CommunicationValidationError,
+)
+from src.modules.communication.domain.message_template import (
     MessageTemplateNotFoundError,
+    TemplateVersionNotFoundError,
+)
+from src.modules.communication.domain.provider_connector import (
     ProviderConnectorNotFoundError,
     ProviderMessageTypeNotFoundError,
-    TemplateVersionNotFoundError,
 )
 from src.modules.shared.kernel.time.ports import ClockPort
 

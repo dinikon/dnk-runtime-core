@@ -1,4 +1,10 @@
-"""Message template repository protocols."""
+from __future__ import annotations
 
-__all__: list[str] = []
+from typing import Protocol
 
+
+class MessageTemplateRepositoryProtocol(Protocol):
+    """Repository protocol marker for message template aggregate."""
+
+
+__all__ = ["MessageTemplateRepositoryProtocol"]

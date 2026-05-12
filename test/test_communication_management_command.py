@@ -14,7 +14,7 @@ from src.modules.communication.application.dto import (
     PublishQueuedResultDTO,
     RecoverStuckResultDTO,
 )
-from src.modules.communication.domain import CommunicationValidationError
+from src.modules.communication.domain.error import CommunicationValidationError
 
 
 class CommunicationManagementCommandTests(unittest.IsolatedAsyncioTestCase):

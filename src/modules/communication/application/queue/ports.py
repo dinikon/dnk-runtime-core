@@ -7,7 +7,7 @@ from uuid import UUID
 from src.modules.communication.application.message.ports import (
     OutboundMessagePublisherProtocol,
 )
-from src.modules.communication.domain import OutboundMessage
+from src.modules.communication.domain.outbound_message import OutboundMessage
 
 
 class OutboundQueueRepositoryProtocol(Protocol):

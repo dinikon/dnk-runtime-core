@@ -1,4 +1,10 @@
-"""Delivery repository protocols."""
+from __future__ import annotations
 
-__all__: list[str] = []
+from typing import Protocol
 
+
+class DeliveryRepositoryProtocol(Protocol):
+    """Repository protocol marker for delivery aggregate."""
+
+
+__all__ = ["DeliveryRepositoryProtocol"]

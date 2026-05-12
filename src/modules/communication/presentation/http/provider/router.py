@@ -11,7 +11,7 @@ from src.modules.communication.application.provider import (
     CreateProviderConnectionCommand,
     RegisterProviderConnectorCommand,
 )
-from src.modules.communication.domain import (
+from src.modules.communication.domain.error import (
     CommunicationNotFoundError,
     CommunicationRuntimeStateError,
     CommunicationValidationError,

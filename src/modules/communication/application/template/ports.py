@@ -4,11 +4,13 @@ from datetime import datetime
 from typing import Any, Protocol
 from uuid import UUID
 
-from src.modules.communication.domain import (
+from src.modules.communication.domain.message_template import (
     MessageTemplate,
+    TemplateVersion,
+)
+from src.modules.communication.domain.provider_connector import (
     ProviderConnector,
     ProviderMessageType,
-    TemplateVersion,
 )
 
 

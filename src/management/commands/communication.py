@@ -10,7 +10,7 @@ from src.modules.communication.application.use_cases import (
     PublishQueuedOutboundMessagesCommand,
     RecoverStuckOutboundMessagesCommand,
 )
-from src.modules.communication.domain import CommunicationError
+from src.modules.communication.domain.error import CommunicationError
 from src.modules.communication.infrastructure.rabbitmq import (
     RabbitMQOutboundMessagePublisher,
     build_communication_faststream_app,

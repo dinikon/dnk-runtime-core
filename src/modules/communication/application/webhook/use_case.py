@@ -15,9 +15,13 @@ from src.modules.communication.application.webhook.dto import WebhookResultDTO
 from src.modules.communication.application.webhook.ports import (
     ProviderWebhookRepositoryProtocol,
 )
-from src.modules.communication.domain import (
-    CommunicationValidationError,
+from src.modules.communication.domain.delivery import (
     DeliveryEventType,
+)
+from src.modules.communication.domain.error import (
+    CommunicationValidationError,
+)
+from src.modules.communication.domain.provider_connector import (
     ProviderConnectorNotFoundError,
 )
 from src.modules.shared.kernel.time.ports import ClockPort

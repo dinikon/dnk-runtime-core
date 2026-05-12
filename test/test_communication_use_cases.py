@@ -26,7 +26,7 @@ from src.modules.communication.application.webhook import (
     HandleProviderWebhookCommand,
     HandleProviderWebhookUseCase,
 )
-from src.modules.communication.domain import OutboundMessageStatus
+from src.modules.communication.domain.outbound_message import OutboundMessageStatus
 from src.modules.communication.infrastructure.provider_senders import (
     ProviderSenderRegistry,
     YamlHttpProviderSender,

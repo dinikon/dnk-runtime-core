@@ -4,9 +4,13 @@ from datetime import datetime
 from typing import Any, Protocol
 from uuid import UUID
 
-from src.modules.communication.domain import (
+from src.modules.communication.domain.delivery import (
     DeliveryEvent,
+)
+from src.modules.communication.domain.outbound_message import (
     OutboundMessage,
+)
+from src.modules.communication.domain.provider_connector import (
     ProviderConnector,
 )
 

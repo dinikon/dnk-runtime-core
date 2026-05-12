@@ -3,8 +3,10 @@ from __future__ import annotations
 from typing import Any, Protocol
 from uuid import UUID
 
-from src.modules.communication.domain import (
+from src.modules.communication.domain.provider_connection import (
     ProviderConnection,
+)
+from src.modules.communication.domain.provider_connector import (
     ProviderConnector,
     ProviderMessageType,
 )

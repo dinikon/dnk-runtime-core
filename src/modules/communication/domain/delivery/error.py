@@ -1,4 +1,10 @@
-"""Delivery domain errors."""
+from __future__ import annotations
 
-__all__: list[str] = []
+from src.modules.communication.domain.error import CommunicationValidationError
 
+
+class WebhookPayloadValidationError(CommunicationValidationError):
+    """Raised when webhook payload cannot be accepted."""
+
+
+__all__ = ["WebhookPayloadValidationError"]

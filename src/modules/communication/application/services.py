@@ -13,10 +13,14 @@ from jsonpath_ng import parse as parse_jsonpath
 from jsonschema import Draft202012Validator, ValidationError
 from jsonschema.exceptions import SchemaError
 
-from src.modules.communication.domain import (
+from src.modules.communication.domain.error import (
     CommunicationValidationError,
+)
+from src.modules.communication.domain.outbound_message import (
     OutboundMessageStatus,
     ProviderPayloadValidationError,
+)
+from src.modules.communication.domain.provider_connection import (
     ProviderSecretsValidationError,
 )
 

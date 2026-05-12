@@ -1,4 +1,10 @@
-"""Outbound message repository protocols."""
+from __future__ import annotations
 
-__all__: list[str] = []
+from typing import Protocol
 
+
+class OutboundMessageRepositoryProtocol(Protocol):
+    """Repository protocol marker for outbound message aggregate."""
+
+
+__all__ = ["OutboundMessageRepositoryProtocol"]

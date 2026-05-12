@@ -8,15 +8,23 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.communication.domain import (
-    CommunicationRequest,
+from src.modules.communication.domain.delivery import (
     DeliveryAttempt,
+)
+from src.modules.communication.domain.message_template import (
     MessageTemplate,
+    TemplateVersion,
+)
+from src.modules.communication.domain.outbound_message import (
+    CommunicationRequest,
     OutboundMessage,
+)
+from src.modules.communication.domain.provider_connection import (
     ProviderConnection,
+)
+from src.modules.communication.domain.provider_connector import (
     ProviderConnector,
     ProviderMessageType,
-    TemplateVersion,
 )
 
 

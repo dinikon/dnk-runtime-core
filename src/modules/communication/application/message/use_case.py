@@ -32,9 +32,13 @@ from src.modules.communication.application.services import (
     JsonSchemaValidationService,
     TemplateRenderService,
 )
-from src.modules.communication.domain import (
+from src.modules.communication.domain.error import (
     CommunicationValidationError,
+)
+from src.modules.communication.domain.message_template import (
     MessageTemplateNotFoundError,
+)
+from src.modules.communication.domain.outbound_message import (
     OutboundMessageNotFoundError,
     OutboundMessageStatus,
 )

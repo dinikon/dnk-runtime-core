@@ -12,10 +12,12 @@ from src.modules.communication.application.message import (
     SendCommunicationCommand,
     SendCommunicationResultDTO,
 )
-from src.modules.communication.domain import (
+from src.modules.communication.domain.error import (
     CommunicationNotFoundError,
     CommunicationRuntimeStateError,
     CommunicationValidationError,
+)
+from src.modules.communication.domain.outbound_message import (
     OutboundMessageStatus,
 )
 from src.modules.communication.presentation.depends.application import (

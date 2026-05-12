@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
 from src.modules.communication.application.webhook import HandleProviderWebhookCommand
-from src.modules.communication.domain import (
+from src.modules.communication.domain.error import (
     CommunicationNotFoundError,
     CommunicationRuntimeStateError,
     CommunicationValidationError,

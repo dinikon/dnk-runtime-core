@@ -12,7 +12,7 @@ from src.modules.communication.application.template import (
     CreateMessageTemplateCommand,
     CreateTemplateVersionCommand,
 )
-from src.modules.communication.domain import (
+from src.modules.communication.domain.error import (
     CommunicationNotFoundError,
     CommunicationRuntimeStateError,
     CommunicationValidationError,

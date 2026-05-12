@@ -1,4 +1,13 @@
-"""Provider connection value objects."""
+from __future__ import annotations
 
-__all__: list[str] = []
+from dataclasses import dataclass
 
+from src.modules.shared import EntityIdVO
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderConnectionIdVO(EntityIdVO):
+    """Communication provider connection id."""
+
+
+__all__ = ["ProviderConnectionIdVO"]

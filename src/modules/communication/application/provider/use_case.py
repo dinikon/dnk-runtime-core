@@ -18,8 +18,10 @@ from src.modules.communication.application.services import (
     ProviderYamlLoader,
     SecretCodec,
 )
-from src.modules.communication.domain import (
+from src.modules.communication.domain.error import (
     CommunicationValidationError,
+)
+from src.modules.communication.domain.provider_connector import (
     ProviderConnectorNotFoundError,
 )
 

@@ -13,8 +13,10 @@ from src.modules.communication.application.services import (
     SecretCodec,
     TemplateRenderService,
 )
-from src.modules.communication.domain import (
+from src.modules.communication.domain.error import (
     CommunicationValidationError,
+)
+from src.modules.communication.domain.outbound_message import (
     OutboundMessageStatus,
 )
 from src.modules.communication.application.provider.dto import ProviderConnectionDTO

@@ -5,34 +5,40 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
-from src.modules.communication.domain import (
+from src.modules.communication.domain.delivery import (
     AttemptStatus,
-    CommunicationRequest,
-    ConnectorStatus,
     DeliveryAttempt,
+    DeliveryAttemptIdVO,
     DeliveryEvent,
+    DeliveryEventIdVO,
+)
+from src.modules.communication.domain.message_template import (
     MessageTemplate,
-    OutboundMessageStatus,
-    OutboundMessage,
-    ProviderConnection,
-    ProviderConnectionStatus,
-    ProviderConnector,
-    ProviderMessageType,
-    RequestStatus,
-    TemplateVersion,
+    MessageTemplateIdVO,
     TemplateStatus,
+    TemplateVersion,
+    TemplateVersionIdVO,
     TemplateVersionStatus,
 )
-from src.modules.communication.domain.value_object import (
+from src.modules.communication.domain.outbound_message import (
+    CommunicationRequest,
     CommunicationRequestIdVO,
-    DeliveryAttemptIdVO,
-    DeliveryEventIdVO,
-    MessageTemplateIdVO,
+    OutboundMessage,
     OutboundMessageIdVO,
+    OutboundMessageStatus,
+    RequestStatus,
+)
+from src.modules.communication.domain.provider_connection import (
+    ProviderConnection,
     ProviderConnectionIdVO,
+    ProviderConnectionStatus,
+)
+from src.modules.communication.domain.provider_connector import (
+    ConnectorStatus,
+    ProviderConnector,
     ProviderConnectorIdVO,
+    ProviderMessageType,
     ProviderMessageTypeIdVO,
-    TemplateVersionIdVO,
 )
 from src.modules.runtime_data import (
     FilterGroupSpec,

@@ -16,10 +16,14 @@ from src.modules.communication.application.services import (
     ProviderStatusMappingService,
     SecretCodec,
 )
-from src.modules.communication.domain import (
+from src.modules.communication.domain.error import (
     CommunicationValidationError,
+)
+from src.modules.communication.domain.outbound_message import (
     OutboundMessageStatus,
     ProviderPayloadValidationError,
+)
+from src.modules.communication.domain.provider_connection import (
     ProviderSecretsValidationError,
 )
 from src.modules.shared.infrastructure.email.models import RenderedEmailMessage
