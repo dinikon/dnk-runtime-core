@@ -496,6 +496,7 @@ class CommunicationRepository:
 
     async def claim_queued_messages(self, tenant_id: UUID, limit: int):
         claimed = []
+        now = utc_now()
         for _ in range(limit):
             token = uuid4()
             rows = await self._claim_outbounds(
@@ -503,13 +504,20 @@ class CommunicationRepository:
                 filters=[
                     FilterSpec(
                         "internal_status", "eq", OutboundMessageStatus.QUEUED.value
-                    )
+                    ),
+                    FilterGroupSpec(
+                        "or",
+                        (
+                            FilterSpec("next_attempt_at", "eq", None),
+                            FilterSpec("next_attempt_at", "lte", now),
+                        ),
+                    ),
                 ],
                 patch={
                     "internal_status": OutboundMessageStatus.SENDING.value,
                     "processing_token": token,
-                    "processing_started_at": utc_now(),
-                    "processing_deadline_at": utc_now() + timedelta(seconds=300),
+                    "processing_started_at": now,
+                    "processing_deadline_at": now + timedelta(seconds=300),
                 },
                 limit=1,
             )
@@ -612,6 +620,10 @@ class CommunicationRepository:
 
     async def load_processing_context(self, tenant_id: UUID, outbound_message_id: UUID):
         outbound = await self.get_outbound_by_id(tenant_id, outbound_message_id)
+        if outbound is None:
+            raise LookupError(
+                f"Required communication runtime row '{_OUTBOUND}' was not found."
+            )
         request = _request_model(
             tenant_id,
             await self._required(

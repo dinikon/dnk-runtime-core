@@ -223,15 +223,15 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(rows, [response_row])
         sql, _params = session.calls[0]
         self.assertIn('UPDATE "dnk_test"."contacts"', sql)
-        self.assertIn('SET "last_name" = :p_0, "updated_at" = CURRENT_TIMESTAMP', sql)
+        self.assertIn('SET "last_name" = :u_0, "updated_at" = CURRENT_TIMESTAMP', sql)
         self.assertIn('WHERE "last_name" IS NULL', sql)
 
     async def test_claim_uses_skip_locked_cte_and_limit(self) -> None:
         contact_id = uuid4()
         response_row = {
             "id": contact_id,
-            "created_at": datetime(2026, 1, 1, 10, 0, 0),
-            "updated_at": datetime(2026, 1, 1, 11, 0, 0),
+            "created_at": datetime(2026, 1, 1, 10, 0, 0, tzinfo=UTC),
+            "updated_at": datetime(2026, 1, 1, 11, 0, 0, tzinfo=UTC),
             "last_name": "Doe",
             "first_name": "Jane",
             "tags": [],
@@ -253,7 +253,7 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("FOR UPDATE SKIP LOCKED", sql)
         self.assertIn('ORDER BY "created_at" ASC', sql)
         self.assertIn("LIMIT :claim_limit", sql)
-        self.assertIn('WHERE "id" IN (SELECT id FROM claimed)', sql)
+        self.assertIn('WHERE "id" IN (SELECT "id" FROM claimed)', sql)
         self.assertEqual(params["claim_limit"], 5)
 
     async def test_list_supports_filters_sorting_and_pagination(self) -> None:
