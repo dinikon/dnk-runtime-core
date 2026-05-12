@@ -10,6 +10,7 @@
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
+    "@tanstack/vue-query": "^5.99.0",
     "@vueuse/core": "^14.3.0",
     "axios": "^1.16.0",
     "class-variance-authority": "^0.7.1",
@@ -23,7 +24,6 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.0",
-    "@tanstack/vue-query": "^5.99.0",
     "@tsconfig/node24": "^24.0.4",
     "@types/node": "^24.0.0",
     "@vitejs/plugin-vue": "^6.0.0",
