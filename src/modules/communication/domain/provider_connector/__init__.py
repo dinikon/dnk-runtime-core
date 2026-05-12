@@ -1,0 +1,2 @@
+"""Provider connector aggregate."""
+

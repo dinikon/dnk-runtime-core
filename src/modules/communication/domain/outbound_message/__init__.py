@@ -1,0 +1,2 @@
+"""Outbound message aggregate."""
+
