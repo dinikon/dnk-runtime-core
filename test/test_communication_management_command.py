@@ -5,6 +5,7 @@ import io
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from unittest.mock import patch
+from uuid import UUID
 
 from src.management.cli import build_parser
 from src.management.commands import communication as communication_command
@@ -17,22 +18,41 @@ from src.modules.communication.domain import CommunicationValidationError
 
 
 class CommunicationManagementCommandTests(unittest.IsolatedAsyncioTestCase):
+    TENANT_ID = "00000000-0000-0000-0000-000000000001"
+
     def test_parser_registers_process_queued_command(self) -> None:
         args = build_parser().parse_args(
-            ["communication", "process-queued", "--limit", "25"]
+            [
+                "communication",
+                "process-queued",
+                "--tenant-id",
+                self.TENANT_ID,
+                "--limit",
+                "25",
+            ]
         )
 
+        self.assertEqual(args.tenant_id, self.TENANT_ID)
         self.assertEqual(args.limit, 25)
         self.assertIs(args.handler, communication_command.handle_process_queued)
 
     def test_parser_registers_queue_commands(self) -> None:
         publish_args = build_parser().parse_args(
-            ["communication", "publish-queued", "--limit", "25"]
+            [
+                "communication",
+                "publish-queued",
+                "--tenant-id",
+                self.TENANT_ID,
+                "--limit",
+                "25",
+            ]
         )
         recover_args = build_parser().parse_args(
             [
                 "communication",
                 "recover-stuck",
+                "--tenant-id",
+                self.TENANT_ID,
                 "--older-than-seconds",
                 "600",
                 "--limit",
@@ -56,6 +76,9 @@ class CommunicationManagementCommandTests(unittest.IsolatedAsyncioTestCase):
             async def __call__(self, command):
                 nonlocal recorded_limit
                 recorded_limit = command.limit
+                assert command.tenant_id == UUID(
+                    CommunicationManagementCommandTests.TENANT_ID
+                )
                 return ProcessQueuedResultDTO(processed=3, succeeded=2, failed=1)
 
         class UnitOfWorkStub:
@@ -68,7 +91,7 @@ class CommunicationManagementCommandTests(unittest.IsolatedAsyncioTestCase):
             async def __aexit__(self, exc_type, exc, tb) -> None:
                 return None
 
-        args = argparse.Namespace(limit=10)
+        args = argparse.Namespace(limit=10, tenant_id=self.TENANT_ID)
 
         with (
             patch.object(
@@ -104,7 +127,7 @@ class CommunicationManagementCommandTests(unittest.IsolatedAsyncioTestCase):
             async def __aexit__(self, exc_type, exc, tb) -> None:
                 return None
 
-        args = argparse.Namespace(limit=10)
+        args = argparse.Namespace(limit=10, tenant_id=self.TENANT_ID)
 
         with (
             patch.object(
@@ -138,6 +161,9 @@ class CommunicationManagementCommandTests(unittest.IsolatedAsyncioTestCase):
             async def __call__(self, command):
                 nonlocal recorded_limit
                 recorded_limit = command.limit
+                assert command.tenant_id == UUID(
+                    CommunicationManagementCommandTests.TENANT_ID
+                )
                 return PublishQueuedResultDTO(scanned=3, published=2, failed=1)
 
         class UnitOfWorkStub:
@@ -150,7 +176,7 @@ class CommunicationManagementCommandTests(unittest.IsolatedAsyncioTestCase):
             async def __aexit__(self, exc_type, exc, tb) -> None:
                 return None
 
-        args = argparse.Namespace(limit=10)
+        args = argparse.Namespace(limit=10, tenant_id=self.TENANT_ID)
 
         with (
             patch.object(
@@ -180,6 +206,9 @@ class CommunicationManagementCommandTests(unittest.IsolatedAsyncioTestCase):
             async def __call__(self, command):
                 nonlocal recorded_seconds
                 recorded_seconds = command.older_than_seconds
+                assert command.tenant_id == UUID(
+                    CommunicationManagementCommandTests.TENANT_ID
+                )
                 return RecoverStuckResultDTO(recovered=4)
 
         class UnitOfWorkStub:
@@ -192,7 +221,11 @@ class CommunicationManagementCommandTests(unittest.IsolatedAsyncioTestCase):
             async def __aexit__(self, exc_type, exc, tb) -> None:
                 return None
 
-        args = argparse.Namespace(older_than_seconds=600, limit=5)
+        args = argparse.Namespace(
+            older_than_seconds=600,
+            limit=5,
+            tenant_id=self.TENANT_ID,
+        )
 
         with (
             patch.object(

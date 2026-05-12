@@ -104,6 +104,7 @@ class OutboundMessagePublisherProtocol(Protocol):
     async def publish(
         self,
         *,
+        tenant_id: UUID,
         outbound_message_id: UUID,
         source: str,
         published_at: datetime,

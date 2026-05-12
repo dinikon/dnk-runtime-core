@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import unittest
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from sqlalchemy.dialects.postgresql import JSONB
@@ -175,8 +175,8 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
         contact_id = uuid4()
         response_row = {
             "id": contact_id,
-            "created_at": datetime(2026, 1, 1, 10, 0, 0),
-            "updated_at": datetime(2026, 1, 1, 11, 0, 0),
+            "created_at": datetime(2026, 1, 1, 10, 0, 0, tzinfo=UTC),
+            "updated_at": datetime(2026, 1, 1, 11, 0, 0, tzinfo=UTC),
             "last_name": "Roe",
             "first_name": "Jane",
             "tags": [],
@@ -200,6 +200,61 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(session.statements[0]._bindparams["p_1"].type, JSONB)
         self.assertEqual(session.commit_calls, 0)
         self.assertEqual(session.rollback_calls, 0)
+
+    async def test_update_where_uses_filters_and_returns_rows(self) -> None:
+        contact_id = uuid4()
+        response_row = {
+            "id": contact_id,
+            "created_at": datetime(2026, 1, 1, 10, 0, 0, tzinfo=UTC),
+            "updated_at": datetime(2026, 1, 1, 11, 0, 0, tzinfo=UTC),
+            "last_name": "Roe",
+            "first_name": "Jane",
+            "tags": [],
+        }
+        session = _SessionSpy([_MappingsResult([response_row])])
+        gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
+
+        rows = await gateway.update_where(
+            descriptor=self._descriptor(),
+            filters=(FilterSpec(field="last_name", op="eq", value=None),),
+            patch={"last_name": "Roe"},
+        )
+
+        self.assertEqual(rows, [response_row])
+        sql, _params = session.calls[0]
+        self.assertIn('UPDATE "dnk_test"."contacts"', sql)
+        self.assertIn('SET "last_name" = :p_0, "updated_at" = CURRENT_TIMESTAMP', sql)
+        self.assertIn('WHERE "last_name" IS NULL', sql)
+
+    async def test_claim_uses_skip_locked_cte_and_limit(self) -> None:
+        contact_id = uuid4()
+        response_row = {
+            "id": contact_id,
+            "created_at": datetime(2026, 1, 1, 10, 0, 0),
+            "updated_at": datetime(2026, 1, 1, 11, 0, 0),
+            "last_name": "Doe",
+            "first_name": "Jane",
+            "tags": [],
+        }
+        session = _SessionSpy([_MappingsResult([response_row])])
+        gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
+
+        rows = await gateway.claim(
+            descriptor=self._descriptor(),
+            filters=(FilterSpec(field="first_name", op="in", value=["Jane"]),),
+            patch={"last_name": "Claimed"},
+            sorting=(SortSpec(field="created_at", direction="asc"),),
+            limit=5,
+        )
+
+        self.assertEqual(rows, [response_row])
+        sql, params = session.calls[0]
+        self.assertIn("WITH claimed AS", sql)
+        self.assertIn("FOR UPDATE SKIP LOCKED", sql)
+        self.assertIn('ORDER BY "created_at" ASC', sql)
+        self.assertIn("LIMIT :claim_limit", sql)
+        self.assertIn('WHERE "id" IN (SELECT id FROM claimed)', sql)
+        self.assertEqual(params["claim_limit"], 5)
 
     async def test_list_supports_filters_sorting_and_pagination(self) -> None:
         contact_id = uuid4()

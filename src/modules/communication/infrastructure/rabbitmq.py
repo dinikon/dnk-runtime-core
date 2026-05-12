@@ -138,6 +138,7 @@ class RabbitMQOutboundMessagePublisher:
     async def publish(
         self,
         *,
+        tenant_id: UUID,
         outbound_message_id: UUID,
         source: str,
         published_at: datetime,
@@ -145,6 +146,7 @@ class RabbitMQOutboundMessagePublisher:
         if not self._started:
             await self.start()
         job = OutboundMessageJob(
+            tenant_id=tenant_id,
             outbound_message_id=outbound_message_id,
             published_at=published_at,
             source=source,
@@ -176,6 +178,7 @@ async def handle_outbound_message_job(
     try:
         await processor(
             ProcessOutboundMessageByIdCommand(
+                tenant_id=job.tenant_id,
                 outbound_message_id=job.outbound_message_id,
             )
         )
@@ -225,6 +228,7 @@ def build_communication_faststream_app(
 
 
 def _parse_outbound_message_job(payload: Mapping[str, Any]) -> OutboundMessageJob:
+    tenant_id = UUID(str(payload["tenant_id"]))
     outbound_message_id = UUID(str(payload["outbound_message_id"]))
     published_at_raw = payload.get("published_at")
     published_at = (
@@ -234,6 +238,7 @@ def _parse_outbound_message_job(payload: Mapping[str, Any]) -> OutboundMessageJo
     )
     source = str(payload.get("source") or "unknown")
     return OutboundMessageJob(
+        tenant_id=tenant_id,
         outbound_message_id=outbound_message_id,
         published_at=published_at,
         source=source,

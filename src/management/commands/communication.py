@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from uuid import UUID
 
 from src.config import dnk_config
 from src.modules.communication.application.use_cases import (
@@ -30,7 +31,10 @@ async def handle_process_queued(args: argparse.Namespace) -> int:
         async with UnitOfWork(db_helper.session_factory) as uow:
             use_case = build_process_outbound_message_use_case(uow=uow)
             result = await use_case(
-                ProcessQueuedMessagesCommand(limit=args.limit),
+                ProcessQueuedMessagesCommand(
+                    tenant_id=UUID(args.tenant_id),
+                    limit=args.limit,
+                ),
             )
     except CommunicationError as exc:
         print(str(exc), file=sys.stderr)
@@ -61,6 +65,7 @@ async def handle_publish_queued(args: argparse.Namespace) -> int:
                 )
                 result = await use_case(
                     PublishQueuedOutboundMessagesCommand(
+                        tenant_id=UUID(args.tenant_id),
                         limit=args.limit,
                         source="republisher",
                     )
@@ -85,6 +90,7 @@ async def handle_recover_stuck(args: argparse.Namespace) -> int:
             use_case = build_recover_stuck_outbound_messages_use_case(uow=uow)
             result = await use_case(
                 RecoverStuckOutboundMessagesCommand(
+                    tenant_id=UUID(args.tenant_id),
                     older_than_seconds=args.older_than_seconds,
                     limit=args.limit,
                 )
@@ -133,6 +139,11 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
         help="Process queued outbound communication messages.",
     )
     process_queued_parser.add_argument(
+        "--tenant-id",
+        required=True,
+        help="Tenant id whose runtime communication queue should be processed.",
+    )
+    process_queued_parser.add_argument(
         "--limit",
         type=int,
         default=100,
@@ -145,6 +156,11 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
         help="Publish queued outbound communication messages to RabbitMQ.",
     )
     publish_queued_parser.add_argument(
+        "--tenant-id",
+        required=True,
+        help="Tenant id whose queued outbound messages should be published.",
+    )
+    publish_queued_parser.add_argument(
         "--limit",
         type=int,
         default=100,
@@ -155,6 +171,11 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     recover_stuck_parser = communication_subparsers.add_parser(
         "recover-stuck",
         help="Recover expired SENDING outbound communication messages.",
+    )
+    recover_stuck_parser.add_argument(
+        "--tenant-id",
+        required=True,
+        help="Tenant id whose stuck outbound messages should be recovered.",
     )
     recover_stuck_parser.add_argument(
         "--older-than-seconds",

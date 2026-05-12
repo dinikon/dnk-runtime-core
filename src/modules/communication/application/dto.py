@@ -143,12 +143,14 @@ class RecoverStuckResultDTO:
 
 @dataclass(frozen=True, slots=True)
 class OutboundMessageJob:
+    tenant_id: UUID
     outbound_message_id: UUID
     published_at: datetime
     source: str
 
     def to_payload(self) -> dict[str, str]:
         return {
+            "tenant_id": str(self.tenant_id),
             "outbound_message_id": str(self.outbound_message_id),
             "published_at": self.published_at.isoformat(),
             "source": self.source,

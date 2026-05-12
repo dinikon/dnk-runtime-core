@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 from src.modules.communication.application.services import (
     JsonPathService,
@@ -15,7 +17,6 @@ from src.modules.communication.domain import (
     CommunicationValidationError,
     OutboundMessageStatus,
 )
-from src.modules.communication.infrastructure.persistence import ProviderConnectionModel
 from src.modules.communication.infrastructure.repository import connection_to_dto
 
 VALID_PROVIDER_YAML = """
@@ -253,9 +254,10 @@ class CommunicationServicesTests(unittest.TestCase):
         self.assertNotIn("secret", encoded or "")
         self.assertEqual(codec.decode(encoded)["password"], "secret")
 
-        model = ProviderConnectionModel(
+        model = SimpleNamespace(
             tenant_id="00000000-0000-0000-0000-000000000001",
             provider_connector_id="00000000-0000-0000-0000-000000000002",
+            provider_connection_id="00000000-0000-0000-0000-000000000003",
             connection_code="gms_viber",
             connection_name="GMS Viber",
             channel_code="VIBER",
@@ -263,6 +265,8 @@ class CommunicationServicesTests(unittest.TestCase):
             secrets_b64=encoded,
             secret_ref=None,
             status="ACTIVE",
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+            updated_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
         dto = connection_to_dto(model)
 

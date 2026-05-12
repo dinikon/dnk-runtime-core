@@ -230,11 +230,17 @@ class WebhookResponseSchema(BaseModel):
 )
 async def import_provider_connector_yaml(
     payload: ImportYamlRequestSchema,
-    _context: AuthenticatedRequestContextDep,
+    context: AuthenticatedRequestContextDep,
     use_case: RegisterProviderConnectorUseCaseDep,
 ) -> ProviderConnectorResponseSchema:
+    tenant_id = _require_tenant_id(context)
     try:
-        result = await use_case(RegisterProviderConnectorCommand(payload.yaml_content))
+        result = await use_case(
+            RegisterProviderConnectorCommand(
+                tenant_id=tenant_id,
+                yaml_content=payload.yaml_content,
+            )
+        )
     except CommunicationError as exc:
         _raise_http_error(exc)
     return ProviderConnectorResponseSchema(**asdict(result))
@@ -245,10 +251,11 @@ async def import_provider_connector_yaml(
     response_model=ListProviderConnectorsResponseSchema,
 )
 async def list_provider_connectors(
-    _context: AuthenticatedRequestContextDep,
+    context: AuthenticatedRequestContextDep,
     use_case: ListProviderConnectorsUseCaseDep,
 ) -> ListProviderConnectorsResponseSchema:
-    connectors, message_types = await use_case()
+    tenant_id = _require_tenant_id(context)
+    connectors, message_types = await use_case(tenant_id)
     return ListProviderConnectorsResponseSchema(
         connectors=[
             ProviderConnectorResponseSchema(**asdict(item)) for item in connectors
@@ -430,6 +437,7 @@ async def send_communication(
         )
         await uow.commit()
         await _publish_send_job_after_commit(
+            tenant_id=tenant_id,
             result=result,
             repository=repository,
             publisher=publisher,
@@ -475,11 +483,12 @@ async def get_message(
 
 
 @router.post(
-    "/webhooks/{provider_code}",
+    "/webhooks/{tenant_id}/{provider_code}",
     response_model=WebhookResponseSchema,
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def handle_provider_webhook(
+    tenant_id: UUID,
     provider_code: str,
     raw_payload: dict[str, Any],
     _context: OptionalRequestContextDep,
@@ -488,6 +497,7 @@ async def handle_provider_webhook(
     try:
         result = await use_case(
             HandleProviderWebhookCommand(
+                tenant_id=tenant_id,
                 provider_code=provider_code,
                 raw_payload=raw_payload,
             )
@@ -526,6 +536,7 @@ def _raise_http_error(exc: CommunicationError) -> None:
 
 async def _publish_send_job_after_commit(
     *,
+    tenant_id: UUID,
     result: SendCommunicationResultDTO,
     repository: CommunicationRepositoryDep,
     publisher: OutboundMessagePublisherDep,
@@ -539,11 +550,13 @@ async def _publish_send_job_after_commit(
     published_at = utc_now()
     try:
         await publisher.publish(
+            tenant_id=tenant_id,
             outbound_message_id=result.outbound_message_id,
             published_at=published_at,
             source="send_communication",
         )
         await repository.mark_outbound_published(
+            tenant_id=tenant_id,
             outbound_message_id=result.outbound_message_id,
             published_at=published_at,
         )

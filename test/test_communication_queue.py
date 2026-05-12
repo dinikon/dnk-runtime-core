@@ -81,11 +81,13 @@ class CommunicationQueueTests(unittest.IsolatedAsyncioTestCase):
             settings=settings,
             manage_broker_lifecycle=True,
         )
+        tenant_id = uuid4()
         outbound_message_id = uuid4()
         published_at = datetime(2026, 5, 11, 12, 0, tzinfo=UTC)
 
         async with publisher:
             await publisher.publish(
+                tenant_id=tenant_id,
                 outbound_message_id=outbound_message_id,
                 source="republisher",
                 published_at=published_at,
@@ -96,6 +98,7 @@ class CommunicationQueueTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(broker.exchanges), 2)
         self.assertEqual(len(broker.queues), 2)
         payload, kwargs = broker.published[0]
+        self.assertEqual(payload["tenant_id"], str(tenant_id))
         self.assertEqual(payload["outbound_message_id"], str(outbound_message_id))
         self.assertEqual(payload["source"], "republisher")
         self.assertTrue(kwargs["persist"])
@@ -106,15 +109,17 @@ class CommunicationQueueTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         outbound_message_id = uuid4()
+        tenant_id = uuid4()
         message = _MessageStub()
         processed = []
 
         async def processor(command):
-            processed.append(command.outbound_message_id)
+            processed.append((command.tenant_id, command.outbound_message_id))
             return SimpleNamespace()
 
         await handle_outbound_message_job(
             payload={
+                "tenant_id": str(tenant_id),
                 "outbound_message_id": str(outbound_message_id),
                 "published_at": "2026-05-11T12:00:00+00:00",
                 "source": "republisher",
@@ -123,7 +128,7 @@ class CommunicationQueueTests(unittest.IsolatedAsyncioTestCase):
             processor=processor,
         )
 
-        self.assertEqual(processed, [outbound_message_id])
+        self.assertEqual(processed, [(tenant_id, outbound_message_id)])
         self.assertTrue(message.acked)
         self.assertFalse(message.rejected)
         self.assertFalse(message.nacked)
@@ -153,6 +158,7 @@ class CommunicationQueueTests(unittest.IsolatedAsyncioTestCase):
 
         await handle_outbound_message_job(
             payload={
+                "tenant_id": str(UUID(int=1)),
                 "outbound_message_id": str(UUID(int=1)),
                 "published_at": "2026-05-11T12:00:00+00:00",
                 "source": "republisher",

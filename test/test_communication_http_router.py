@@ -41,15 +41,25 @@ class CommunicationHttpRouterTests(unittest.TestCase):
         self.assertIn(("POST", "/communication/send"), routes)
         self.assertIn(("GET", "/communication/messages"), routes)
         self.assertIn(("GET", "/communication/messages/{outbound_message_id}"), routes)
-        self.assertIn(("POST", "/communication/webhooks/{provider_code}"), routes)
+        self.assertIn(
+            ("POST", "/communication/webhooks/{tenant_id}/{provider_code}"),
+            routes,
+        )
 
 
 class _PublisherStub:
     def __init__(self) -> None:
-        self.published: list[tuple[str, str]] = []
+        self.published: list[tuple[str, str, str]] = []
 
-    async def publish(self, *, outbound_message_id, source, published_at) -> None:
-        self.published.append((str(outbound_message_id), source))
+    async def publish(
+        self,
+        *,
+        tenant_id,
+        outbound_message_id,
+        source,
+        published_at,
+    ) -> None:
+        self.published.append((str(tenant_id), str(outbound_message_id), source))
 
 
 class _RepositoryStub:
@@ -59,10 +69,11 @@ class _RepositoryStub:
     async def mark_outbound_published(
         self,
         *,
+        tenant_id,
         outbound_message_id,
         published_at,
     ) -> None:
-        self.marked.append((str(outbound_message_id), published_at))
+        self.marked.append((str(tenant_id), str(outbound_message_id), published_at))
 
 
 class _UnitOfWorkStub:
@@ -83,8 +94,10 @@ class CommunicationSendPublishTests(unittest.IsolatedAsyncioTestCase):
         publisher = _PublisherStub()
         repository = _RepositoryStub()
         uow = _UnitOfWorkStub()
+        tenant_id = uuid4()
 
         await _publish_send_job_after_commit(
+            tenant_id=tenant_id,
             result=SendCommunicationResultDTO(
                 communication_request_id=uuid4(),
                 outbound_message_id=outbound_message_id,
@@ -99,10 +112,11 @@ class CommunicationSendPublishTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             publisher.published,
-            [(str(outbound_message_id), "send_communication")],
+            [(str(tenant_id), str(outbound_message_id), "send_communication")],
         )
         self.assertEqual(len(repository.marked), 1)
-        self.assertEqual(repository.marked[0][0], str(outbound_message_id))
+        self.assertEqual(repository.marked[0][0], str(tenant_id))
+        self.assertEqual(repository.marked[0][1], str(outbound_message_id))
         self.assertEqual(uow.commits, 1)
         self.assertEqual(uow.rollbacks, 0)
 
@@ -112,6 +126,7 @@ class CommunicationSendPublishTests(unittest.IsolatedAsyncioTestCase):
         uow = _UnitOfWorkStub()
 
         await _publish_send_job_after_commit(
+            tenant_id=uuid4(),
             result=SendCommunicationResultDTO(
                 communication_request_id=uuid4(),
                 outbound_message_id=uuid4(),

@@ -177,6 +177,24 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                 msg=f"{path} still resolves tenant_id in wiring",
             )
 
+    def test_communication_does_not_use_public_persistence_models(self) -> None:
+        persistence_path = (
+            PROJECT_ROOT / "src/modules/communication/infrastructure/persistence.py"
+        )
+        self.assertFalse(
+            persistence_path.exists(),
+            msg="Communication public SQLAlchemy persistence models still exist.",
+        )
+        forbidden_import = "src.modules.communication.infrastructure.persistence"
+        for root in ("src", "test"):
+            for path in iter_python_files(root):
+                for module_name in iter_imports(path):
+                    self.assertNotEqual(
+                        module_name,
+                        forbidden_import,
+                        msg=f"{path} imports removed communication persistence",
+                    )
+
     def test_shared_exports_only_generic_entity_id_vo(self) -> None:
         paths = [
             PROJECT_ROOT / "src/modules/shared/__init__.py",

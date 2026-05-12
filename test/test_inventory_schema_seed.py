@@ -129,3 +129,90 @@ class InventorySchemaSeedTests(unittest.IsolatedAsyncioTestCase):
             operation_positions["product_categories_id_uq"],
             operation_positions["products_category_id_fk"],
         )
+
+    async def test_default_seed_contains_communication_runtime_objects(self) -> None:
+        service = SchemaSeedService(
+            PythonModuleSeedReader(),
+            FieldTypeCatalog(),
+        )
+
+        seed = await service.load(
+            seed_path="src.modules.schema_registry.seed.schema_seed"
+        )
+
+        expected_objects = {
+            "communication_provider_connector",
+            "communication_provider_message_type",
+            "communication_provider_connection",
+            "communication_message_template",
+            "communication_template_version",
+            "communication_request",
+            "communication_outbound_message",
+            "communication_delivery_attempt",
+            "communication_delivery_event",
+        }
+        seeded_objects = {object_seed.singular_name for object_seed in seed.objects}
+
+        self.assertTrue(expected_objects <= seeded_objects)
+        for object_name in expected_objects:
+            object_seed = seed.get_object(object_name)
+            assert object_seed is not None
+            self.assertIn("id", {field.name for field in object_seed.fields})
+            self.assertNotIn("tenant_id", {field.name for field in object_seed.fields})
+
+    def test_create_plan_includes_communication_tables_indexes_and_fks(self) -> None:
+        plan_service = PostgresSchemaPlanService(
+            field_type_catalog=FieldTypeCatalog(),
+            postgres_field_canonicalizer=PostgresFieldCanonicalizer(),
+        )
+        seed_service = SchemaSeedService(
+            seed_reader=None,  # type: ignore[arg-type]
+            field_type_catalog=FieldTypeCatalog(),
+        )
+        seed = seed_service._normalize(SCHEMA_SEED)  # noqa: SLF001
+
+        plan = plan_service.build_create_plan(
+            schema_name="dnk_test",
+            seed=seed,
+        )
+
+        tables = [
+            operation.table_name
+            for operation in plan.operations
+            if isinstance(operation, CreateTableOperation)
+        ]
+        indexes = [
+            operation
+            for operation in plan.operations
+            if isinstance(operation, CreateIndexOperation)
+        ]
+        foreign_keys = [
+            operation
+            for operation in plan.operations
+            if isinstance(operation, AddForeignKeyOperation)
+        ]
+
+        self.assertIn("communication_provider_connectors", tables)
+        self.assertIn("communication_outbound_messages", tables)
+        self.assertTrue(
+            any(
+                index.index_name == "communication_provider_connectors_code_version_uq"
+                and index.is_unique
+                for index in indexes
+            )
+        )
+        self.assertTrue(
+            any(
+                index.index_name
+                == "communication_delivery_attempts_outbound_attempt_uq"
+                and index.is_unique
+                for index in indexes
+            )
+        )
+        self.assertTrue(
+            any(
+                fk.constraint_name == "communication_outbound_messages_request_fk"
+                and fk.target_table_name == "communication_requests"
+                for fk in foreign_keys
+            )
+        )

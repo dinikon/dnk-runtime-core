@@ -96,6 +96,7 @@ class _ProcessRepositoryStub:
             sent_at=None,
             delivered_at=None,
             failed_at=None,
+            processing_token=uuid4(),
         )
         self.request = SimpleNamespace(
             communication_request_id=self.outbound.communication_request_id,
@@ -167,10 +168,10 @@ class _ProcessRepositoryStub:
             finished_at=None,
         )
 
-    async def claim_queued_messages(self, limit: int):
+    async def claim_queued_messages(self, tenant_id, limit: int):
         return [self.outbound]
 
-    async def load_processing_context(self, outbound_message_id):
+    async def load_processing_context(self, tenant_id, outbound_message_id):
         return (
             self.outbound,
             self.request,
@@ -184,6 +185,20 @@ class _ProcessRepositoryStub:
     async def create_delivery_attempt(self, **_kwargs):
         self.attempt.request_payload = _kwargs["request_payload"]
         return self.attempt
+
+    async def complete_outbound_processing(self, **kwargs):
+        self.outbound.rendered_payload = kwargs["rendered_payload"]
+        self.outbound.provider_request_payload = kwargs["provider_request_payload"]
+        self.outbound.external_message_id = kwargs["external_message_id"]
+        self.outbound.external_status = kwargs["external_status"]
+        self.outbound.internal_status = kwargs["internal_status"]
+        return True
+
+    async def fail_outbound_processing(self, **kwargs):
+        self.outbound.internal_status = "FAILED"
+        self.outbound.error_code = kwargs["error_code"]
+        self.outbound.error_message = kwargs["error_message"]
+        return True
 
 
 class _ByIdRepositoryStub(_ProcessRepositoryStub):
@@ -203,7 +218,7 @@ class _ByIdRepositoryStub(_ProcessRepositoryStub):
         self.outbound.processing_token = kwargs["processing_token"]
         return self.outbound
 
-    async def get_outbound_by_id(self, _outbound_message_id):
+    async def get_outbound_by_id(self, _tenant_id, _outbound_message_id):
         return self.outbound
 
     async def complete_outbound_processing(self, **kwargs):
@@ -406,15 +421,24 @@ class _WebhookRepositoryStub:
         )
         self.events = []
 
-    async def get_active_connector_by_code(self, provider_code: str):
+    async def get_active_connector_by_code(self, tenant_id, provider_code: str):
         return self.connector
 
-    async def find_outbound_by_external_message_id(self, external_message_id: str):
+    async def find_outbound_by_external_message_id(
+        self,
+        *,
+        tenant_id,
+        external_message_id: str,
+    ):
         return self.outbound
 
     async def add_delivery_event(self, **kwargs):
         self.events.append(kwargs)
         return SimpleNamespace(**kwargs)
+
+    async def update_outbound_status_from_event(self, **kwargs):
+        self.outbound.internal_status = kwargs["internal_status"]
+        return self.outbound
 
 
 class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
@@ -437,7 +461,9 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
             template_renderer=TemplateRenderService(),
         )
 
-        result = await use_case(ProcessQueuedMessagesCommand(limit=10))
+        result = await use_case(
+            ProcessQueuedMessagesCommand(tenant_id=uuid4(), limit=10)
+        )
 
         self.assertEqual(result.processed, 1)
         self.assertEqual(result.succeeded, 1)
@@ -470,7 +496,9 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
             template_renderer=TemplateRenderService(),
         )
 
-        result = await use_case(ProcessQueuedMessagesCommand(limit=10))
+        result = await use_case(
+            ProcessQueuedMessagesCommand(tenant_id=uuid4(), limit=10)
+        )
 
         self.assertEqual(result.succeeded, 1)
         self.assertEqual(repository.outbound.external_message_id, "turbo-123")
@@ -531,7 +559,9 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
             template_renderer=TemplateRenderService(),
         )
 
-        result = await use_case(ProcessQueuedMessagesCommand(limit=10))
+        result = await use_case(
+            ProcessQueuedMessagesCommand(tenant_id=uuid4(), limit=10)
+        )
 
         self.assertEqual(result.succeeded, 0)
         self.assertEqual(result.failed, 1)
@@ -558,6 +588,7 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 ]
             ),
             template_renderer=TemplateRenderService(),
+            repository_factory=lambda _session: repository,
             processing_lease_seconds=300,
         )
 
@@ -566,13 +597,10 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 "src.modules.communication.application.use_cases.UnitOfWork",
                 _UnitOfWorkStub,
             ),
-            patch(
-                "src.modules.communication.application.use_cases.CommunicationRepository",
-                return_value=repository,
-            ),
         ):
             result = await use_case(
                 ProcessOutboundMessageByIdCommand(
+                    tenant_id=uuid4(),
                     outbound_message_id=repository.outbound.outbound_message_id,
                 )
             )
@@ -602,6 +630,7 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 ]
             ),
             template_renderer=TemplateRenderService(),
+            repository_factory=lambda _session: repository,
             processing_lease_seconds=300,
         )
 
@@ -610,13 +639,10 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 "src.modules.communication.application.use_cases.UnitOfWork",
                 _UnitOfWorkStub,
             ),
-            patch(
-                "src.modules.communication.application.use_cases.CommunicationRepository",
-                return_value=repository,
-            ),
         ):
             result = await use_case(
                 ProcessOutboundMessageByIdCommand(
+                    tenant_id=uuid4(),
                     outbound_message_id=repository.outbound.outbound_message_id,
                 )
             )
@@ -645,7 +671,9 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
             template_renderer=TemplateRenderService(),
         )
 
-        result = await use_case(ProcessQueuedMessagesCommand(limit=10))
+        result = await use_case(
+            ProcessQueuedMessagesCommand(tenant_id=uuid4(), limit=10)
+        )
 
         self.assertEqual(result.processed, 1)
         self.assertEqual(result.succeeded, 1)
@@ -690,7 +718,9 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
             template_renderer=TemplateRenderService(),
         )
 
-        result = await use_case(ProcessQueuedMessagesCommand(limit=10))
+        result = await use_case(
+            ProcessQueuedMessagesCommand(tenant_id=uuid4(), limit=10)
+        )
 
         self.assertEqual(result.succeeded, 1)
         message = _SmtpTransportStub.instances[0].sent_messages[0]
@@ -731,6 +761,7 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
         result = await use_case(
             HandleProviderWebhookCommand(
+                tenant_id=uuid4(),
                 provider_code="gms",
                 raw_payload={
                     "message_id": "ext-123",
@@ -755,6 +786,7 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
         result = await use_case(
             HandleProviderWebhookCommand(
+                tenant_id=uuid4(),
                 provider_code="gms",
                 raw_payload={"message_id": "missing", "status": "Delivered"},
             )

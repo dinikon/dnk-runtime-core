@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from collections.abc import Callable
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -35,12 +36,10 @@ from src.modules.communication.application.services import (
     TemplateRenderService,
 )
 from src.modules.communication.domain import (
-    AttemptStatus,
     CommunicationNotFoundError,
     CommunicationValidationError,
     DeliveryEventType,
     OutboundMessageStatus,
-    RequestStatus,
     TemplateVersionStatus,
 )
 from src.modules.communication.infrastructure.repository import (
@@ -55,8 +54,10 @@ from src.modules.communication.infrastructure.repository import (
 )
 from src.modules.shared.db.uow import UnitOfWork
 
+
 @dataclass(frozen=True, slots=True)
 class RegisterProviderConnectorCommand:
+    tenant_id: UUID
     yaml_content: str
 
 
@@ -120,28 +121,33 @@ class SendCommunicationCommand:
 
 @dataclass(frozen=True, slots=True)
 class ProcessQueuedMessagesCommand:
+    tenant_id: UUID
     limit: int = 100
 
 
 @dataclass(frozen=True, slots=True)
 class ProcessOutboundMessageByIdCommand:
+    tenant_id: UUID
     outbound_message_id: UUID
 
 
 @dataclass(frozen=True, slots=True)
 class PublishQueuedOutboundMessagesCommand:
+    tenant_id: UUID
     limit: int = 100
     source: str = "republisher"
 
 
 @dataclass(frozen=True, slots=True)
 class RecoverStuckOutboundMessagesCommand:
+    tenant_id: UUID
     older_than_seconds: int = 300
     limit: int = 100
 
 
 @dataclass(frozen=True, slots=True)
 class HandleProviderWebhookCommand:
+    tenant_id: UUID
     provider_code: str
     raw_payload: dict[str, Any]
 
@@ -164,6 +170,7 @@ class RegisterProviderConnectorUseCase:
         parsed = self._loader.load(command.yaml_content)
         spec = parsed.spec
         connector = await self._repository.upsert_connector(
+            tenant_id=command.tenant_id,
             provider_code=str(spec["provider_code"]),
             provider_name=str(spec["provider_name"]),
             version=str(spec["version"]),
@@ -173,6 +180,7 @@ class RegisterProviderConnectorUseCase:
         )
         for message_type in spec["message_types"]:
             await self._repository.upsert_message_type(
+                tenant_id=command.tenant_id,
                 provider_connector_id=connector.provider_connector_id,
                 message_type_code=str(message_type["code"]),
                 channel_code=str(message_type["channel"]),
@@ -191,13 +199,15 @@ class ListProviderConnectorsUseCase:
 
     async def __call__(
         self,
+        tenant_id: UUID,
     ) -> tuple[list[ProviderConnectorDTO], list[ProviderMessageTypeDTO]]:
         connectors = [
-            connector_to_dto(item) for item in await self._repository.list_connectors()
+            connector_to_dto(item)
+            for item in await self._repository.list_connectors(tenant_id)
         ]
         message_types = [
             message_type_to_dto(item)
-            for item in await self._repository.list_message_types()
+            for item in await self._repository.list_message_types(tenant_id)
         ]
         return connectors, message_types
 
@@ -219,7 +229,10 @@ class CreateProviderConnectionUseCase:
         self,
         command: CreateProviderConnectionCommand,
     ) -> ProviderConnectionDTO:
-        connector = await self._repository.get_connector(command.provider_connector_id)
+        connector = await self._repository.get_connector(
+            command.tenant_id,
+            command.provider_connector_id,
+        )
         if connector is None:
             raise CommunicationNotFoundError("Provider connector was not found.")
         spec = connector.yaml_spec
@@ -271,11 +284,14 @@ class CreateMessageTemplateUseCase:
         self,
         command: CreateMessageTemplateCommand,
     ) -> MessageTemplateDTO:
-        connector = await self._repository.get_connector(command.provider_connector_id)
+        connector = await self._repository.get_connector(
+            command.tenant_id,
+            command.provider_connector_id,
+        )
         if connector is None:
             raise CommunicationNotFoundError("Provider connector was not found.")
         message_type = await self._repository.get_message_type(
-            command.provider_message_type_id
+            command.tenant_id, command.provider_message_type_id
         )
         if message_type is None:
             raise CommunicationNotFoundError("Provider message type was not found.")
@@ -322,7 +338,7 @@ class CreateTemplateVersionUseCase:
         if template is None:
             raise CommunicationNotFoundError("Message template was not found.")
         message_type = await self._repository.get_message_type(
-            template.provider_message_type_id
+            command.tenant_id, template.provider_message_type_id
         )
         if message_type is None:
             raise CommunicationNotFoundError("Provider message type was not found.")
@@ -335,6 +351,7 @@ class CreateTemplateVersionUseCase:
             command.variables_schema, "variables_schema"
         )
         version = await self._repository.create_template_version(
+            tenant_id=command.tenant_id,
             template_id=template.template_id,
             template_payload=command.template_payload,
             variables_schema=command.variables_schema,
@@ -359,11 +376,12 @@ class ActivateTemplateVersionUseCase:
         if template is None:
             raise CommunicationNotFoundError("Message template was not found.")
         version = await self._repository.get_template_version(
-            command.template_version_id
+            command.tenant_id, command.template_version_id
         )
         if version is None or version.template_id != template.template_id:
             raise CommunicationNotFoundError("Template version was not found.")
         activated = await self._repository.activate_template_version(
+            tenant_id=command.tenant_id,
             template=template,
             version=version,
             now=utc_now(),
@@ -382,7 +400,7 @@ class ListMessageTemplatesUseCase:
         result: list[MessageTemplateDTO] = []
         for template in templates:
             active_version = await self._repository.get_active_template_version(
-                template.template_id
+                tenant_id, template.template_id
             )
             result.append(template_to_dto(template, active_version))
         return result
@@ -440,7 +458,7 @@ class SendCommunicationUseCase:
                 "Send channel must match template channel."
             )
         active_version = await self._repository.get_active_template_version(
-            template.template_id
+            command.tenant_id, template.template_id
         )
         if active_version is None:
             raise CommunicationValidationError(
@@ -505,12 +523,15 @@ class ProcessOutboundMessageUseCase:
         self,
         command: ProcessQueuedMessagesCommand,
     ) -> ProcessQueuedResultDTO:
-        queued = await self._repository.claim_queued_messages(command.limit)
+        queued = await self._repository.claim_queued_messages(
+            command.tenant_id,
+            command.limit,
+        )
         succeeded = 0
         failed = 0
         for message in queued:
             try:
-                await self._process_one(message.outbound_message_id)
+                await self._process_one(command.tenant_id, message.outbound_message_id)
                 succeeded += 1
             except Exception:
                 failed += 1
@@ -520,7 +541,7 @@ class ProcessOutboundMessageUseCase:
             failed=failed,
         )
 
-    async def _process_one(self, outbound_message_id: UUID) -> None:
+    async def _process_one(self, tenant_id: UUID, outbound_message_id: UUID) -> None:
         (
             outbound,
             request,
@@ -529,10 +550,10 @@ class ProcessOutboundMessageUseCase:
             connection,
             connector,
             message_type,
-        ) = await self._repository.load_processing_context(outbound_message_id)
+        ) = await self._repository.load_processing_context(
+            tenant_id, outbound_message_id
+        )
         now = utc_now()
-        outbound.internal_status = OutboundMessageStatus.SENDING.value
-        request.status = RequestStatus.PROCESSING.value
         attempt = None
 
         try:
@@ -560,47 +581,53 @@ class ProcessOutboundMessageUseCase:
             sender = self._sender_registry.get(str(send_spec["transport"]))
             prepared = sender.build(context)
             attempt = await self._repository.create_delivery_attempt(
+                tenant_id=tenant_id,
                 outbound_message_id=outbound.outbound_message_id,
                 provider_connection_id=connection.provider_connection_id,
                 request_payload=prepared.request_payload,
             )
             response = await sender.send(context, prepared)
-
-            outbound.rendered_payload = rendered_payload
-            outbound.provider_request_payload = prepared.request_payload
-            outbound.external_message_id = response.external_message_id
-            outbound.external_status = response.external_status
-            outbound.internal_status = response.internal_status
-            self._apply_status_timestamps(outbound, response.internal_status, now)
-            request.status = (
-                RequestStatus.COMPLETED.value
-                if response.success
-                else RequestStatus.FAILED.value
-            )
-            if not response.success:
-                outbound.error_code = response.error_code
-                outbound.error_message = response.error_message
-            attempt.status = (
-                AttemptStatus.SUCCESS.value
-                if response.success
-                else AttemptStatus.NON_RETRYABLE_FAILED.value
-            )
-            attempt.response_payload = response.response_payload
-            attempt.http_status_code = response.http_status_code
-            attempt.external_message_id = response.external_message_id
-            attempt.finished_at = now
+            if response.success:
+                await self._repository.complete_outbound_processing(
+                    tenant_id=tenant_id,
+                    outbound_message_id=outbound.outbound_message_id,
+                    processing_token=outbound.processing_token,
+                    delivery_attempt_id=attempt.delivery_attempt_id,
+                    rendered_payload=rendered_payload,
+                    provider_request_payload=prepared.request_payload,
+                    response_payload=response.response_payload,
+                    http_status_code=response.http_status_code,
+                    external_message_id=response.external_message_id,
+                    external_status=response.external_status,
+                    internal_status=response.internal_status,
+                    finished_at=now,
+                )
+            else:
+                await self._repository.fail_outbound_processing(
+                    tenant_id=tenant_id,
+                    outbound_message_id=outbound.outbound_message_id,
+                    processing_token=outbound.processing_token,
+                    delivery_attempt_id=attempt.delivery_attempt_id,
+                    error_code=response.error_code or "PROVIDER_FAILED",
+                    error_message=response.error_message or "Provider send failed.",
+                    finished_at=now,
+                    response_payload=response.response_payload,
+                    http_status_code=response.http_status_code,
+                    external_message_id=response.external_message_id,
+                    external_status=response.external_status,
+                )
         except Exception as exc:
-            if attempt is not None:
-                attempt.status = AttemptStatus.NON_RETRYABLE_FAILED.value
-                attempt.response_payload = {"error": str(exc)}
-                attempt.error_code = exc.__class__.__name__
-                attempt.error_message = str(exc)
-                attempt.finished_at = now
-            outbound.internal_status = OutboundMessageStatus.FAILED.value
-            outbound.error_code = exc.__class__.__name__
-            outbound.error_message = str(exc)
-            outbound.failed_at = now
-            request.status = RequestStatus.FAILED.value
+            await self._repository.fail_outbound_processing(
+                tenant_id=tenant_id,
+                outbound_message_id=outbound.outbound_message_id,
+                processing_token=outbound.processing_token,
+                delivery_attempt_id=(
+                    attempt.delivery_attempt_id if attempt is not None else None
+                ),
+                error_code=exc.__class__.__name__,
+                error_message=str(exc),
+                finished_at=now,
+            )
             raise
 
     def _build_render_context(
@@ -678,11 +705,13 @@ class ProcessOutboundMessageByIdUseCase:
         self,
         *,
         session_factory: async_sessionmaker[AsyncSession],
+        repository_factory: Callable[[AsyncSession], CommunicationRepository],
         sender_registry: ProviderSenderRegistryProtocol,
         template_renderer: TemplateRenderService,
         processing_lease_seconds: int,
     ) -> None:
         self._session_factory = session_factory
+        self._repository_factory = repository_factory
         self._sender_registry = sender_registry
         self._template_renderer = template_renderer
         self._processing_lease_seconds = processing_lease_seconds
@@ -697,6 +726,7 @@ class ProcessOutboundMessageByIdUseCase:
 
         try:
             claimed = await self._claim_and_build(
+                tenant_id=command.tenant_id,
                 outbound_message_id=command.outbound_message_id,
                 processing_token=token,
                 now=now,
@@ -731,6 +761,7 @@ class ProcessOutboundMessageByIdUseCase:
         except Exception as exc:
             await self._persist_send_exception(
                 outbound_message_id=command.outbound_message_id,
+                tenant_id=command.tenant_id,
                 processing_token=token,
                 delivery_attempt_id=attempt_id,
                 error=exc,
@@ -747,6 +778,7 @@ class ProcessOutboundMessageByIdUseCase:
         if response.success:
             applied = await self._persist_success(
                 outbound_message_id=command.outbound_message_id,
+                tenant_id=command.tenant_id,
                 processing_token=token,
                 delivery_attempt_id=attempt_id,
                 rendered_payload=send_context.rendered_payload,
@@ -770,6 +802,7 @@ class ProcessOutboundMessageByIdUseCase:
         )
         applied = await self._persist_provider_failure(
             outbound_message_id=command.outbound_message_id,
+            tenant_id=command.tenant_id,
             processing_token=token,
             delivery_attempt_id=attempt_id,
             response=response,
@@ -791,21 +824,26 @@ class ProcessOutboundMessageByIdUseCase:
     async def _claim_and_build(
         self,
         *,
+        tenant_id: UUID,
         outbound_message_id: UUID,
         processing_token: UUID,
         now: datetime,
         lease_until: datetime,
     ) -> "_PreparedProcessing | _BuildFailed":
         async with UnitOfWork(self._session_factory) as uow:
-            repository = CommunicationRepository(uow.session)
+            repository = self._repository_factory(uow.session)
             claimed = await repository.claim_outbound_for_processing(
+                tenant_id=tenant_id,
                 outbound_message_id=outbound_message_id,
                 processing_token=processing_token,
                 now=now,
                 lease_until=lease_until,
             )
             if claimed is None:
-                outbound = await repository.get_outbound_by_id(outbound_message_id)
+                outbound = await repository.get_outbound_by_id(
+                    tenant_id,
+                    outbound_message_id,
+                )
                 status = (
                     outbound.internal_status if outbound is not None else "NOT_FOUND"
                 )
@@ -822,8 +860,7 @@ class ProcessOutboundMessageByIdUseCase:
                 connection,
                 connector,
                 message_type,
-            ) = await repository.load_processing_context(outbound_message_id)
-            request.status = RequestStatus.PROCESSING.value
+            ) = await repository.load_processing_context(tenant_id, outbound_message_id)
             try:
                 rendered_payload = self._template_renderer.render(
                     version.template_payload,
@@ -848,6 +885,7 @@ class ProcessOutboundMessageByIdUseCase:
                 sender = self._sender_registry.get(str(context.send_spec["transport"]))
                 prepared = sender.build(context)
                 attempt = await repository.create_delivery_attempt(
+                    tenant_id=tenant_id,
                     outbound_message_id=outbound.outbound_message_id,
                     provider_connection_id=connection.provider_connection_id,
                     request_payload=prepared.request_payload,
@@ -860,6 +898,7 @@ class ProcessOutboundMessageByIdUseCase:
                 )
             except Exception as exc:
                 await repository.fail_outbound_processing(
+                    tenant_id=tenant_id,
                     outbound_message_id=outbound_message_id,
                     processing_token=processing_token,
                     delivery_attempt_id=None,
@@ -872,14 +911,16 @@ class ProcessOutboundMessageByIdUseCase:
     async def _persist_send_exception(
         self,
         *,
+        tenant_id: UUID,
         outbound_message_id: UUID,
         processing_token: UUID,
         delivery_attempt_id: UUID,
         error: Exception,
     ) -> None:
         async with UnitOfWork(self._session_factory) as uow:
-            repository = CommunicationRepository(uow.session)
+            repository = self._repository_factory(uow.session)
             await repository.fail_outbound_processing(
+                tenant_id=tenant_id,
                 outbound_message_id=outbound_message_id,
                 processing_token=processing_token,
                 delivery_attempt_id=delivery_attempt_id,
@@ -891,6 +932,7 @@ class ProcessOutboundMessageByIdUseCase:
     async def _persist_success(
         self,
         *,
+        tenant_id: UUID,
         outbound_message_id: UUID,
         processing_token: UUID,
         delivery_attempt_id: UUID,
@@ -899,8 +941,9 @@ class ProcessOutboundMessageByIdUseCase:
         response: ProviderSendResult,
     ) -> bool:
         async with UnitOfWork(self._session_factory) as uow:
-            repository = CommunicationRepository(uow.session)
+            repository = self._repository_factory(uow.session)
             return await repository.complete_outbound_processing(
+                tenant_id=tenant_id,
                 outbound_message_id=outbound_message_id,
                 processing_token=processing_token,
                 delivery_attempt_id=delivery_attempt_id,
@@ -917,6 +960,7 @@ class ProcessOutboundMessageByIdUseCase:
     async def _persist_provider_failure(
         self,
         *,
+        tenant_id: UUID,
         outbound_message_id: UUID,
         processing_token: UUID,
         delivery_attempt_id: UUID,
@@ -924,8 +968,9 @@ class ProcessOutboundMessageByIdUseCase:
         retry_at: datetime | None,
     ) -> bool:
         async with UnitOfWork(self._session_factory) as uow:
-            repository = CommunicationRepository(uow.session)
+            repository = self._repository_factory(uow.session)
             return await repository.fail_outbound_processing(
+                tenant_id=tenant_id,
                 outbound_message_id=outbound_message_id,
                 processing_token=processing_token,
                 delivery_attempt_id=delivery_attempt_id,
@@ -981,6 +1026,7 @@ class PublishQueuedOutboundMessagesUseCase:
     ) -> PublishQueuedResultDTO:
         now = utc_now()
         outbounds = await self._repository.list_publishable_outbounds(
+            tenant_id=command.tenant_id,
             limit=command.limit,
             now=now,
             republish_before=now - timedelta(seconds=self._republish_after_seconds),
@@ -990,11 +1036,13 @@ class PublishQueuedOutboundMessagesUseCase:
         for outbound in outbounds:
             try:
                 await self._publisher.publish(
+                    tenant_id=command.tenant_id,
                     outbound_message_id=outbound.outbound_message_id,
                     published_at=now,
                     source=command.source,
                 )
                 await self._repository.mark_outbound_published(
+                    tenant_id=command.tenant_id,
                     outbound_message_id=outbound.outbound_message_id,
                     published_at=now,
                 )
@@ -1020,6 +1068,7 @@ class RecoverStuckOutboundMessagesUseCase:
     ) -> RecoverStuckResultDTO:
         now = utc_now()
         recovered = await self._repository.recover_stuck_outbounds(
+            tenant_id=command.tenant_id,
             older_than=now - timedelta(seconds=command.older_than_seconds),
             now=now,
             limit=command.limit,
@@ -1045,7 +1094,7 @@ class HandleProviderWebhookUseCase:
         command: HandleProviderWebhookCommand,
     ) -> WebhookResultDTO:
         connector = await self._repository.get_active_connector_by_code(
-            command.provider_code
+            command.tenant_id, command.provider_code
         )
         if connector is None:
             raise CommunicationNotFoundError("Provider connector was not found.")
@@ -1063,7 +1112,8 @@ class HandleProviderWebhookUseCase:
                 "Webhook payload does not contain external message id."
             )
         outbound = await self._repository.find_outbound_by_external_message_id(
-            str(external_message_id)
+            tenant_id=command.tenant_id,
+            external_message_id=str(external_message_id),
         )
         if outbound is None:
             return WebhookResultDTO(
@@ -1083,7 +1133,7 @@ class HandleProviderWebhookUseCase:
             )
         )
         await self._repository.add_delivery_event(
-            tenant_id=outbound.tenant_id,
+            tenant_id=command.tenant_id,
             outbound_message_id=outbound.outbound_message_id,
             provider_connection_id=outbound.provider_connection_id,
             external_message_id=str(external_message_id),
@@ -1096,14 +1146,14 @@ class HandleProviderWebhookUseCase:
             raw_payload=command.raw_payload,
         )
         now = utc_now()
-        outbound.external_status = (
-            str(external_status) if external_status is not None else None
-        )
-        outbound.internal_status = internal_status
-        ProcessOutboundMessageUseCase._apply_status_timestamps(
-            outbound,
-            internal_status,
-            now,
+        await self._repository.update_outbound_status_from_event(
+            tenant_id=command.tenant_id,
+            outbound_message_id=outbound.outbound_message_id,
+            external_status=(
+                str(external_status) if external_status is not None else None
+            ),
+            internal_status=internal_status,
+            now=now,
         )
         return WebhookResultDTO(
             accepted=True,

@@ -41,11 +41,48 @@ from src.modules.communication.infrastructure.rabbitmq import (
     RabbitMQOutboundMessagePublisher,
 )
 from src.modules.communication.infrastructure.repository import CommunicationRepository
+from src.modules.runtime_data import PostgresRuntimeGateway, RuntimeFieldTypePolicy
+from src.modules.schema_registry.presentation.depends.application import (
+    RuntimeObjectResolverDep,
+)
 from src.modules.shared.depends.uow import UoWDep
 
 
-def get_communication_repository(uow: UoWDep) -> CommunicationRepository:
-    return CommunicationRepository(uow.session)
+def get_runtime_field_type_policy() -> RuntimeFieldTypePolicy:
+    return RuntimeFieldTypePolicy()
+
+
+RuntimeFieldTypePolicyDep = Annotated[
+    RuntimeFieldTypePolicy,
+    Depends(get_runtime_field_type_policy),
+]
+
+
+def get_runtime_gateway(
+    uow: UoWDep,
+    type_policy: RuntimeFieldTypePolicyDep,
+) -> PostgresRuntimeGateway:
+    return PostgresRuntimeGateway(
+        uow.session,
+        type_policy=type_policy,
+    )
+
+
+RuntimeGatewayDep = Annotated[
+    PostgresRuntimeGateway,
+    Depends(get_runtime_gateway),
+]
+
+
+def get_communication_repository(
+    runtime_object_resolver: RuntimeObjectResolverDep,
+    runtime_gateway: RuntimeGatewayDep,
+) -> CommunicationRepository:
+    return CommunicationRepository(
+        runtime_object_resolver=runtime_object_resolver,
+        command_gateway=runtime_gateway,
+        query_gateway=runtime_gateway,
+    )
 
 
 CommunicationRepositoryDep = Annotated[
@@ -352,4 +389,6 @@ __all__ = [
     "get_communication_repository",
     "get_outbound_message_publisher",
     "get_provider_sender_registry",
+    "get_runtime_field_type_policy",
+    "get_runtime_gateway",
 ]
