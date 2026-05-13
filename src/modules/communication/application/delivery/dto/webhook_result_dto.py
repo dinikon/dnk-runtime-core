@@ -6,6 +6,8 @@ from uuid import UUID
 
 @dataclass(frozen=True, slots=True)
 class WebhookResultDTO:
+    """DTO результата обработки provider webhook."""
+
     accepted: bool
     matched: bool
     outbound_message_id: UUID | None

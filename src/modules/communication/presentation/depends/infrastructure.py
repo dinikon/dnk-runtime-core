@@ -16,6 +16,9 @@ from src.modules.communication.application.services import (
     SecretCodec,
     TemplateRenderService,
 )
+from src.modules.communication.infrastructure.delivery import (
+    DeliveryRuntimeRepository,
+)
 from src.modules.communication.infrastructure.http_client import HttpxProviderHttpClient
 from src.modules.communication.infrastructure.message_template import (
     MessageTemplateQueryRuntimeRepository,
@@ -86,6 +89,24 @@ def get_communication_repository(
 CommunicationRepositoryDep = Annotated[
     CommunicationRepository,
     Depends(get_communication_repository),
+]
+
+
+def get_delivery_repository(
+    runtime_object_resolver: RuntimeObjectResolverDep,
+    runtime_gateway: RuntimeGatewayDep,
+) -> DeliveryRuntimeRepository:
+    """Создает runtime repository delivery aggregate."""
+    return DeliveryRuntimeRepository(
+        runtime_object_resolver=runtime_object_resolver,
+        runtime_command_gateway=runtime_gateway,
+        runtime_query_gateway=runtime_gateway,
+    )
+
+
+DeliveryRuntimeRepositoryDep = Annotated[
+    DeliveryRuntimeRepository,
+    Depends(get_delivery_repository),
 ]
 
 
@@ -286,6 +307,7 @@ OutboundMessagePublisherDep = Annotated[
 
 __all__ = [
     "CommunicationRepositoryDep",
+    "DeliveryRuntimeRepositoryDep",
     "HttpClientDep",
     "JsonPathServiceDep",
     "JsonSchemaValidationServiceDep",
@@ -304,6 +326,7 @@ __all__ = [
     "SecretCodecDep",
     "TemplateRenderServiceDep",
     "get_communication_repository",
+    "get_delivery_repository",
     "get_message_template_repository",
     "get_outbound_message_repository",
     "get_outbound_message_publisher",

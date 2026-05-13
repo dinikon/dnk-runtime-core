@@ -32,9 +32,11 @@ from src.modules.communication.application.outbound_message.queue.ports import (
 from src.modules.communication.application.message_template.query import (
     MessageTemplateQueryRepositoryProtocol,
 )
-from src.modules.communication.application.delivery.ports import (
-    ProviderWebhookRepositoryProtocol,
+from src.modules.communication.domain.delivery import (
+    DeliveryWebhookLookupProtocol,
 )
+
+ProviderWebhookRepositoryProtocol = DeliveryWebhookLookupProtocol
 
 __all__ = [
     "CommunicationRepositoryFactory",

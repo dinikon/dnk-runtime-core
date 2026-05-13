@@ -15,6 +15,11 @@ from src.modules.communication.application.use_cases import (
     PublishQueuedOutboundMessagesUseCase,
     RecoverStuckOutboundMessagesUseCase,
 )
+from src.modules.communication.domain.delivery import DeliveryService
+from src.modules.communication.infrastructure.delivery import (
+    DeliveryRuntimeRepository,
+    OutboundProcessingRuntimeRepository,
+)
 from src.modules.communication.infrastructure.http_client import HttpxProviderHttpClient
 from src.modules.communication.infrastructure.outbound_message import (
     OutboundMessageRuntimeRepository,
@@ -76,7 +81,7 @@ def build_process_outbound_message_use_case(
     sender_registry = build_provider_sender_registry()
     clock = UtcClock()
     return ProcessOutboundMessageUseCase(
-        repository=build_outbound_message_repository(uow.session),
+        repository=build_outbound_processing_repository(uow.session),
         sender_registry=sender_registry,
         template_renderer=TemplateRenderService(),
         clock=clock,
@@ -92,7 +97,7 @@ def build_process_outbound_message_by_id_use_case(
     return ProcessOutboundMessageByIdUseCase(
         repository_context_factory=OutboundProcessingRepositoryContextFactory(
             session_factory=session_factory,
-            repository_factory=build_outbound_message_repository,
+            repository_factory=build_outbound_processing_repository,
         ),
         sender_registry=build_provider_sender_registry(),
         template_renderer=TemplateRenderService(),
@@ -188,11 +193,58 @@ def build_outbound_message_repository(
     )
 
 
+def build_delivery_repository(session: AsyncSession) -> DeliveryRuntimeRepository:
+    """Builds delivery runtime repository outside FastAPI DI."""
+    clock = UtcClock()
+    field_type_catalog = FieldTypeCatalog()
+    data_source_service = DataSourceService(
+        repository=SqlAlchemyDataSourceRepository(session),
+        clock=clock,
+        id_provider=lambda: DataSourceIdVO.from_value(uuid6.uuid7()),
+    )
+    object_service = ObjectService(
+        object_repository=SqlAlchemyObjectRepository(session),
+        clock=clock,
+        object_id_provider=lambda: RuntimeObjectIdVO.from_value(uuid6.uuid7()),
+        field_id_provider=lambda: RuntimeFieldIdVO.from_value(uuid6.uuid7()),
+        field_type_catalog=field_type_catalog,
+    )
+    runtime_gateway = PostgresRuntimeGateway(
+        session,
+        type_policy=RuntimeFieldTypePolicy(),
+    )
+    return DeliveryRuntimeRepository(
+        runtime_object_resolver=SchemaRegistryRuntimeObjectResolver(
+            data_source_service=data_source_service,
+            object_service=object_service,
+        ),
+        runtime_command_gateway=runtime_gateway,
+        runtime_query_gateway=runtime_gateway,
+    )
+
+
+def build_outbound_processing_repository(
+    session: AsyncSession,
+) -> OutboundProcessingRuntimeRepository:
+    """Builds processing adapter outside FastAPI DI."""
+    clock = UtcClock()
+    delivery_repository = build_delivery_repository(session)
+    return OutboundProcessingRuntimeRepository(
+        outbound_repository=build_outbound_message_repository(session),
+        delivery_service=DeliveryService(
+            repository=delivery_repository,
+            clock=clock,
+        ),
+    )
+
+
 __all__ = [
+    "build_delivery_repository",
     "build_process_outbound_message_by_id_use_case",
     "build_process_outbound_message_use_case",
     "build_communication_repository",
     "build_outbound_message_repository",
+    "build_outbound_processing_repository",
     "build_provider_sender_registry",
     "build_publish_queued_outbound_messages_use_case",
     "build_recover_stuck_outbound_messages_use_case",

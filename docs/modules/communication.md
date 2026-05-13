@@ -41,8 +41,8 @@ Communication ids are concrete `EntityIdVO` subclasses in the communication doma
 - persistence uses tenant runtime tables from the schema seed, not public SQLAlchemy communication models
 - provider connector, provider connection, message template and outbound message aggregates use dedicated runtime
   repositories with explicit row-to-entity/DTO mapping
-- outbound send, query, queue publication and worker processing use `OutboundMessageRuntimeRepository`; delivery webhook
-  operations remain in `CommunicationRepository`
+- delivery events and provider send attempts use `DeliveryRuntimeRepository`; outbound worker processing uses a small
+  adapter that delegates outbound/request state to `OutboundMessageRuntimeRepository` and attempts to delivery
 - provider senders implement application ports for YAML HTTP and YAML SMTP transports
 - RabbitMQ publisher/worker code lives in infrastructure and is wired from presentation/management builders
 - HTTP and management wiring assemble session-bound repositories from the active `UnitOfWork`

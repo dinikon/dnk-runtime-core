@@ -28,17 +28,24 @@ from src.modules.communication.application.delivery import (
     HandleProviderWebhookCommand,
     HandleProviderWebhookUseCase,
 )
+from src.modules.communication.domain.delivery import (
+    DeliveryEventIdVO,
+    DeliveryService,
+)
 from src.modules.communication.domain.outbound_message import (
     CommunicationRequestIdVO,
     OutboundMessageService,
     OutboundMessageIdVO,
     OutboundMessageStatus,
 )
+from src.modules.communication.domain.provider_connection import ProviderConnectionIdVO
+from src.modules.communication.domain.provider_connector import ProviderConnectorCodeVO
 from src.modules.communication.infrastructure.provider_senders import (
     ProviderSenderRegistry,
     YamlHttpProviderSender,
     YamlSmtpProviderSender,
 )
+from src.modules.shared import EntityIdVO
 
 
 class _HttpClientStub:
@@ -461,9 +468,9 @@ class _WebhookRepositoryStub:
         )
         self.outbound = (
             SimpleNamespace(
-                tenant_id=uuid4(),
-                outbound_message_id=uuid4(),
-                provider_connection_id=uuid4(),
+                tenant_id=EntityIdVO.from_value(uuid4()),
+                outbound_message_id=OutboundMessageIdVO.from_value(uuid4()),
+                provider_connection_id=ProviderConnectionIdVO.from_value(uuid4()),
                 external_status=None,
                 internal_status="SENT",
                 sent_at=None,
@@ -475,7 +482,7 @@ class _WebhookRepositoryStub:
         )
         self.events = []
 
-    async def get_active_connector_by_code(self, tenant_id, provider_code: str):
+    async def get_active_connector_by_code(self, *, tenant_id, provider_code):
         return self.connector
 
     async def find_outbound_by_external_message_id(
@@ -486,9 +493,9 @@ class _WebhookRepositoryStub:
     ):
         return self.outbound
 
-    async def add_delivery_event(self, **kwargs):
-        self.events.append(kwargs)
-        return SimpleNamespace(**kwargs)
+    async def add_delivery_event(self, *, tenant_id, event):
+        self.events.append(event)
+        return event
 
     async def update_outbound_status_from_event(self, **kwargs):
         self.outbound.internal_status = kwargs["internal_status"]
@@ -854,16 +861,18 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
     async def test_webhook_updates_outbound_and_creates_delivery_event(self) -> None:
         repository = _WebhookRepositoryStub(matched=True)
         use_case = HandleProviderWebhookUseCase(
-            repository,
-            JsonPathService(),
-            ProviderStatusMappingService(),
-            _ClockStub(),
+            repository=repository,
+            service=DeliveryService(repository=repository, clock=_ClockStub()),
+            json_path=JsonPathService(),
+            status_mapper=ProviderStatusMappingService(),
         )
+        tenant_id = EntityIdVO.from_value(uuid4())
 
         result = await use_case(
             HandleProviderWebhookCommand(
-                tenant_id=uuid4(),
-                provider_code="gms",
+                tenant_id=tenant_id,
+                delivery_event_id=DeliveryEventIdVO.from_value(uuid4()),
+                provider_code=ProviderConnectorCodeVO("gms"),
                 raw_payload={
                     "message_id": "ext-123",
                     "status": "Delivered",
@@ -875,21 +884,23 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result.matched)
         self.assertEqual(repository.outbound.internal_status, "DELIVERED")
         self.assertEqual(len(repository.events), 1)
-        self.assertEqual(repository.events[0]["external_message_id"], "ext-123")
+        self.assertEqual(repository.events[0].external_message_id, "ext-123")
 
     async def test_webhook_accepts_unknown_external_message_without_event(self) -> None:
         repository = _WebhookRepositoryStub(matched=False)
         use_case = HandleProviderWebhookUseCase(
-            repository,
-            JsonPathService(),
-            ProviderStatusMappingService(),
-            _ClockStub(),
+            repository=repository,
+            service=DeliveryService(repository=repository, clock=_ClockStub()),
+            json_path=JsonPathService(),
+            status_mapper=ProviderStatusMappingService(),
         )
+        tenant_id = EntityIdVO.from_value(uuid4())
 
         result = await use_case(
             HandleProviderWebhookCommand(
-                tenant_id=uuid4(),
-                provider_code="gms",
+                tenant_id=tenant_id,
+                delivery_event_id=DeliveryEventIdVO.from_value(uuid4()),
+                provider_code=ProviderConnectorCodeVO("gms"),
                 raw_payload={"message_id": "missing", "status": "Delivered"},
             )
         )

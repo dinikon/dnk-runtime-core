@@ -8,10 +8,6 @@ from uuid import UUID
 from src.modules.communication.application.outbound_message.dto import (
     OutboundMessageDTO,
 )
-from src.modules.communication.domain.delivery import (
-    DeliveryAttempt,
-    DeliveryAttemptIdVO,
-)
 from src.modules.communication.domain.message_template import (
     MessageTemplateIdVO,
     TemplateVersionIdVO,
@@ -133,33 +129,6 @@ def outbound_message_dto(
     )
 
 
-def delivery_attempt_entity(row: Mapping[str, Any]) -> DeliveryAttempt:
-    """Мапит runtime row в DeliveryAttempt."""
-    return DeliveryAttempt(
-        delivery_attempt_id=DeliveryAttemptIdVO.from_value(as_uuid(row.get("id"))),
-        outbound_message_id=OutboundMessageIdVO.from_value(
-            as_uuid(row.get("outbound_message_id"))
-        ),
-        provider_connection_id=ProviderConnectionIdVO.from_value(
-            as_uuid(row.get("provider_connection_id"))
-        ),
-        attempt_no=int(row.get("attempt_no")),
-        status=as_str(row.get("status")),
-        request_payload=as_optional_dict(row.get("request_payload")),
-        response_payload=as_optional_dict(row.get("response_payload")),
-        http_status_code=(
-            None
-            if row.get("http_status_code") is None
-            else int(row.get("http_status_code"))
-        ),
-        external_message_id=as_optional_str(row.get("external_message_id")),
-        error_code=as_optional_str(row.get("error_code")),
-        error_message=as_optional_str(row.get("error_message")),
-        started_at=as_optional_datetime(row.get("started_at")),
-        finished_at=as_optional_datetime(row.get("finished_at")),
-    )
-
-
 def as_uuid(value: Any) -> UUID:
     """Достает UUID из runtime row."""
     if isinstance(value, UUID):
@@ -232,7 +201,6 @@ def as_optional_entity_id(value: Any) -> EntityIdVO | None:
 __all__ = [
     "as_uuid",
     "communication_request_entity",
-    "delivery_attempt_entity",
     "outbound_message_dto",
     "outbound_message_entity",
 ]

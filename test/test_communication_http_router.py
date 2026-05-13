@@ -18,7 +18,9 @@ from src.modules.communication.domain.error import (
 from src.modules.communication.domain.outbound_message import (
     OutboundMessageStatus,
 )
+from src.modules.communication.domain.delivery import DeliveryEventIdVO
 from src.modules.communication.domain.provider_connector import (
+    ProviderConnectorCodeVO,
     ProviderConnectorIdVO,
     ProviderConnectorNotFoundError,
 )
@@ -40,6 +42,9 @@ from src.modules.communication.presentation.http.router import (
     _publish_send_job_after_commit,
 )
 from src.modules.communication.presentation.http.router import router
+from src.modules.communication.presentation.http.delivery.controller.handle_provider_webhook import (
+    handle_provider_webhook,
+)
 from src.modules.runtime_data import RuntimeDataPersistenceError
 from src.modules.shared import EntityIdVO
 
@@ -151,6 +156,20 @@ class _CreateProviderConnectionUseCase:
         )
 
 
+class _HandleProviderWebhookUseCase:
+    def __init__(self) -> None:
+        self.command = None
+
+    async def __call__(self, command):
+        self.command = command
+        return SimpleNamespace(
+            accepted=True,
+            matched=True,
+            outbound_message_id=uuid4(),
+            internal_status="DELIVERED",
+        )
+
+
 def _context():
     return SimpleNamespace(principal=SimpleNamespace(tenant_id=uuid4()))
 
@@ -192,6 +211,39 @@ class CommunicationControllerErrorTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(
             type(use_case.command.provider_connector_id),
             ProviderConnectorIdVO,
+        )
+
+    async def test_handle_provider_webhook_generates_id_and_converts_command_vo(
+        self,
+    ) -> None:
+        tenant_id = uuid4()
+        delivery_event_id = uuid4()
+        use_case = _HandleProviderWebhookUseCase()
+
+        with patch(
+            "src.modules.communication.presentation.http.delivery.controller.handle_provider_webhook.uuid6.uuid7",
+            return_value=delivery_event_id,
+        ):
+            response = await handle_provider_webhook(
+                tenant_id=tenant_id,
+                provider_code="gms",
+                raw_payload={"message_id": "ext-1"},
+                _context=None,
+                use_case=use_case,
+            )
+
+        self.assertTrue(response.accepted)
+        self.assertTrue(response.matched)
+        self.assertIs(type(use_case.command.tenant_id), EntityIdVO)
+        self.assertEqual(use_case.command.tenant_id.uuid, tenant_id)
+        self.assertIs(
+            type(use_case.command.delivery_event_id),
+            DeliveryEventIdVO,
+        )
+        self.assertEqual(use_case.command.delivery_event_id.uuid, delivery_event_id)
+        self.assertIs(
+            type(use_case.command.provider_code),
+            ProviderConnectorCodeVO,
         )
 
     async def test_create_provider_connection_maps_not_found_to_404(self) -> None:

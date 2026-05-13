@@ -5,7 +5,6 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
-from src.modules.communication.domain.delivery import AttemptStatus, DeliveryAttempt
 from src.modules.communication.domain.message_template import (
     MessageTemplateCodeVO,
     MessageTemplateEntity,
@@ -40,7 +39,6 @@ from src.modules.communication.infrastructure.message_template.row_mapper import
 from src.modules.communication.infrastructure.outbound_message.row_mapper import (
     as_uuid,
     communication_request_entity,
-    delivery_attempt_entity,
     outbound_message_dto,
     outbound_message_entity,
 )
@@ -48,7 +46,6 @@ from src.modules.communication.infrastructure.provider_connection.row_mapper imp
     provider_connection_entity,
 )
 from src.modules.communication.infrastructure.runtime_object_names import (
-    _ATTEMPT,
     _CONNECTION,
     _CONNECTOR,
     _MESSAGE_TYPE,
@@ -512,33 +509,6 @@ class OutboundMessageRuntimeRepository:
         )
         return outbound, request, template, version, connection, connector, message_type
 
-    async def create_delivery_attempt(
-        self,
-        *,
-        tenant_id: EntityIdVO,
-        outbound_message_id: OutboundMessageIdVO,
-        provider_connection_id: ProviderConnectionIdVO,
-        request_payload: dict[str, Any],
-    ) -> DeliveryAttempt:
-        """Создает delivery attempt для provider request."""
-        tenant_vo = _entity_id(tenant_id)
-        outbound_id = _outbound_message_id(outbound_message_id)
-        attempt_no = await self._next_attempt_no(tenant_vo, outbound_id)
-        row = await self._insert(
-            tenant_id=tenant_vo,
-            object_name=_ATTEMPT,
-            payload={
-                "outbound_message_id": outbound_id.uuid,
-                "provider_connection_id": _provider_connection_id(
-                    provider_connection_id
-                ).uuid,
-                "attempt_no": attempt_no,
-                "status": AttemptStatus.STARTED.value,
-                "request_payload": dict(request_payload),
-            },
-        )
-        return delivery_attempt_entity(row)
-
     async def complete_outbound_processing(
         self,
         *,
@@ -594,17 +564,6 @@ class OutboundMessageRuntimeRepository:
             descriptor=await self._resolve_descriptor(tenant_vo, _REQUEST),
             object_id=outbound.communication_request_id.uuid,
             patch={"status": _request_status_for_internal_status(internal_status)},
-        )
-        await self._runtime_command_gateway.update(
-            descriptor=await self._resolve_descriptor(tenant_vo, _ATTEMPT),
-            object_id=_id_uuid(delivery_attempt_id),
-            patch={
-                "status": AttemptStatus.SUCCESS.value,
-                "response_payload": dict(response_payload),
-                "http_status_code": http_status_code,
-                "external_message_id": external_message_id,
-                "finished_at": finished_at,
-            },
         )
         return True
 
@@ -674,24 +633,6 @@ class OutboundMessageRuntimeRepository:
                 )
             },
         )
-        if delivery_attempt_id is not None:
-            await self._runtime_command_gateway.update(
-                descriptor=await self._resolve_descriptor(tenant_vo, _ATTEMPT),
-                object_id=_id_uuid(delivery_attempt_id),
-                patch={
-                    "status": (
-                        AttemptStatus.RETRYABLE_FAILED.value
-                        if retryable
-                        else AttemptStatus.NON_RETRYABLE_FAILED.value
-                    ),
-                    "response_payload": response_payload or {"error": error_message},
-                    "http_status_code": http_status_code,
-                    "external_message_id": external_message_id,
-                    "error_code": error_code,
-                    "error_message": error_message,
-                    "finished_at": finished_at,
-                },
-            )
         return True
 
     async def recover_stuck_outbounds(
@@ -771,23 +712,6 @@ class OutboundMessageRuntimeRepository:
             offset=offset,
         )
         return [outbound_message_dto(tenant_id=tenant_vo, row=row) for row in rows]
-
-    async def _next_attempt_no(
-        self,
-        tenant_id: EntityIdVO,
-        outbound_message_id: OutboundMessageIdVO,
-    ) -> int:
-        """Возвращает следующий attempt_no для outbound message."""
-        rows = await self._list(
-            tenant_id=tenant_id,
-            object_name=_ATTEMPT,
-            filters=(
-                FilterSpec("outbound_message_id", "eq", outbound_message_id.uuid),
-            ),
-            sorting=(SortSpec("attempt_no", "desc"),),
-            limit=1,
-        )
-        return int(rows[0]["attempt_no"] if rows else 0) + 1
 
     async def _insert(
         self,

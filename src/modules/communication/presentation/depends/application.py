@@ -24,13 +24,17 @@ from src.modules.communication.application.use_cases import (
     SendCommunicationUseCase,
 )
 from src.modules.communication.domain.message_template import MessageTemplateService
+from src.modules.communication.domain.delivery import DeliveryService
 from src.modules.communication.domain.outbound_message import OutboundMessageService
 from src.modules.communication.domain.provider_connection import (
     ProviderConnectionService,
 )
 from src.modules.communication.domain.provider_connector import ProviderConnectorService
+from src.modules.communication.infrastructure.delivery import (
+    OutboundProcessingRuntimeRepository,
+)
 from src.modules.communication.presentation.depends.infrastructure import (
-    CommunicationRepositoryDep,
+    DeliveryRuntimeRepositoryDep,
     JsonPathServiceDep,
     JsonSchemaValidationServiceDep,
     MessageTemplateQueryRuntimeRepositoryDep,
@@ -44,7 +48,6 @@ from src.modules.communication.presentation.depends.infrastructure import (
     ProviderYamlLoaderDep,
     SecretCodecDep,
     TemplateRenderServiceDep,
-    get_communication_repository,
     get_outbound_message_publisher,
     get_provider_sender_registry,
     get_runtime_field_type_policy,
@@ -219,6 +222,37 @@ OutboundMessageServiceDep = Annotated[
 ]
 
 
+def get_delivery_service(
+    repository: DeliveryRuntimeRepositoryDep,
+    clock: ClockDep,
+) -> DeliveryService:
+    """Создает domain service delivery aggregate."""
+    return DeliveryService(repository=repository, clock=clock)
+
+
+DeliveryServiceDep = Annotated[
+    DeliveryService,
+    Depends(get_delivery_service),
+]
+
+
+def get_outbound_processing_repository(
+    outbound_repository: OutboundMessageRuntimeRepositoryDep,
+    delivery_service: DeliveryServiceDep,
+) -> OutboundProcessingRuntimeRepository:
+    """Создает processing adapter для outbound и delivery attempts."""
+    return OutboundProcessingRuntimeRepository(
+        outbound_repository=outbound_repository,
+        delivery_service=delivery_service,
+    )
+
+
+OutboundProcessingRuntimeRepositoryDep = Annotated[
+    OutboundProcessingRuntimeRepository,
+    Depends(get_outbound_processing_repository),
+]
+
+
 def get_send_communication_use_case(
     repository: OutboundMessageRuntimeRepositoryDep,
     service: OutboundMessageServiceDep,
@@ -242,7 +276,7 @@ SendCommunicationUseCaseDep = Annotated[
 
 
 def get_process_outbound_message_use_case(
-    repository: OutboundMessageRuntimeRepositoryDep,
+    repository: OutboundProcessingRuntimeRepositoryDep,
     sender_registry: ProviderSenderRegistryDep,
     template_renderer: TemplateRenderServiceDep,
     clock: ClockDep,
@@ -262,12 +296,17 @@ ProcessOutboundMessageUseCaseDep = Annotated[
 
 
 def get_handle_provider_webhook_use_case(
-    repository: CommunicationRepositoryDep,
+    repository: DeliveryRuntimeRepositoryDep,
+    service: DeliveryServiceDep,
     json_path: JsonPathServiceDep,
     status_mapper: ProviderStatusMappingServiceDep,
-    clock: ClockDep,
 ) -> HandleProviderWebhookUseCase:
-    return HandleProviderWebhookUseCase(repository, json_path, status_mapper, clock)
+    return HandleProviderWebhookUseCase(
+        repository=repository,
+        service=service,
+        json_path=json_path,
+        status_mapper=status_mapper,
+    )
 
 
 HandleProviderWebhookUseCaseDep = Annotated[
@@ -302,10 +341,11 @@ ListOutboundMessagesUseCaseDep = Annotated[
 
 __all__ = [
     "ActivateTemplateVersionUseCaseDep",
-    "CommunicationRepositoryDep",
     "CreateMessageTemplateUseCaseDep",
     "CreateProviderConnectionUseCaseDep",
     "CreateTemplateVersionUseCaseDep",
+    "DeliveryRuntimeRepositoryDep",
+    "DeliveryServiceDep",
     "GetOutboundMessageUseCaseDep",
     "HandleProviderWebhookUseCaseDep",
     "ListMessageTemplatesUseCaseDep",
@@ -316,14 +356,16 @@ __all__ = [
     "OutboundMessageRuntimeRepositoryDep",
     "OutboundMessageServiceDep",
     "OutboundMessagePublisherDep",
+    "OutboundProcessingRuntimeRepositoryDep",
     "ProcessOutboundMessageUseCaseDep",
     "ProviderConnectionServiceDep",
     "ProviderConnectorServiceDep",
     "ProviderSenderRegistryDep",
     "RegisterProviderConnectorUseCaseDep",
     "SendCommunicationUseCaseDep",
-    "get_communication_repository",
+    "get_delivery_service",
     "get_message_template_service",
+    "get_outbound_processing_repository",
     "get_outbound_message_publisher",
     "get_provider_sender_registry",
     "get_runtime_field_type_policy",
