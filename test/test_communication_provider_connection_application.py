@@ -81,7 +81,8 @@ class ProviderConnectionApplicationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.provider_connection_id, provider_connection_id.uuid)
         self.assertEqual(result.connection_code, "sms_main")
         self.assertTrue(result.has_secrets)
-        self.assertNotIn("secret", str(result))
+        self.assertFalse(hasattr(result, "secrets_b64"))
+        self.assertNotIn("token", str(result))
         self.assertEqual(service.calls[0]["secrets"], {"token": "secret"})
         self.assertNotIn("secret", service.calls[0]["secrets_b64"] or "")
 

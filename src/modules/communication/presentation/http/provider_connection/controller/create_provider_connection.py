@@ -1,3 +1,5 @@
+from dataclasses import asdict
+
 import uuid6
 from fastapi import APIRouter, HTTPException, status
 
@@ -94,7 +96,7 @@ async def create_provider_connection(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
-    return ProviderConnectionResponseSchema(**result.__dict__)
+    return ProviderConnectionResponseSchema(**asdict(result))
 
 
 __all__ = [

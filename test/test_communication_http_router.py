@@ -1,13 +1,17 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 from uuid import uuid4
 
 from fastapi import HTTPException
 
 from src.modules.communication.application.dto import SendCommunicationResultDTO
+from src.modules.communication.application.provider_connection import (
+    ProviderConnectionDTO,
+)
 from src.modules.communication.domain.error import (
     CommunicationValidationError,
 )
@@ -15,7 +19,11 @@ from src.modules.communication.domain.outbound_message import (
     OutboundMessageStatus,
 )
 from src.modules.communication.domain.provider_connector import (
+    ProviderConnectorIdVO,
     ProviderConnectorNotFoundError,
+)
+from src.modules.communication.domain.provider_connection import (
+    ProviderConnectionIdVO,
 )
 from src.modules.communication.presentation.http.outbound_message.router import (
     list_messages,
@@ -33,7 +41,7 @@ from src.modules.communication.presentation.http.router import (
 )
 from src.modules.communication.presentation.http.router import router
 from src.modules.runtime_data import RuntimeDataPersistenceError
-
+from src.modules.shared import EntityIdVO
 
 class CommunicationHttpRouterTests(unittest.TestCase):
     def test_router_exposes_mvp_routes(self) -> None:
@@ -119,11 +127,72 @@ class _FailingUseCase:
         raise self.exc
 
 
+class _CreateProviderConnectionUseCase:
+    def __init__(self) -> None:
+        self.command = None
+
+    async def __call__(self, command):
+        self.command = command
+        now = datetime(2026, 5, 13, 12, 0, tzinfo=UTC)
+        return ProviderConnectionDTO(
+            provider_connection_id=command.provider_connection_id.uuid,
+            tenant_id=command.tenant_id.uuid,
+            provider_connector_id=command.provider_connector_id.uuid,
+            connection_code=command.connection_code,
+            connection_name=command.connection_name,
+            channel_code=command.channel_code,
+            config=command.config,
+            secret_ref=command.secret_ref,
+            has_secrets=bool(command.secrets),
+            status="ACTIVE",
+            created_at=now,
+            updated_at=now,
+        )
+
+
 def _context():
     return SimpleNamespace(principal=SimpleNamespace(tenant_id=uuid4()))
 
 
 class CommunicationControllerErrorTests(unittest.IsolatedAsyncioTestCase):
+
+    async def test_create_provider_connection_generates_id_and_converts_command_vo(
+        self,
+    ) -> None:
+        tenant_id = uuid4()
+        provider_connection_id = uuid4()
+        provider_connector_id = uuid4()
+        use_case = _CreateProviderConnectionUseCase()
+
+        with patch(
+            "src.modules.communication.presentation.http.provider_connection.controller.create_provider_connection.uuid6.uuid7",
+            return_value=provider_connection_id,
+        ):
+            response = await create_provider_connection(
+                payload=CreateProviderConnectionRequestSchema(
+                    provider_connector_id=provider_connector_id,
+                    connection_code="gms",
+                    connection_name="GMS",
+                    channel_code="SMS",
+                    config={"client_id": "abc"},
+                    secrets={"token": "secret"},
+                ),
+                context=SimpleNamespace(principal=SimpleNamespace(tenant_id=tenant_id)),
+                use_case=use_case,
+            )
+
+        self.assertEqual(response.provider_connection_id, provider_connection_id)
+        self.assertEqual(response.tenant_id, tenant_id)
+        self.assertIs(type(use_case.command.tenant_id), EntityIdVO)
+        self.assertIs(
+            type(use_case.command.provider_connection_id),
+            ProviderConnectionIdVO,
+        )
+        self.assertIs(
+            type(use_case.command.provider_connector_id),
+            ProviderConnectorIdVO,
+        )
+
     async def test_create_provider_connection_maps_not_found_to_404(self) -> None:
         with self.assertRaises(HTTPException) as caught:
             await create_provider_connection(
