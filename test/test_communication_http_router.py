@@ -43,6 +43,7 @@ from src.modules.communication.presentation.http.router import router
 from src.modules.runtime_data import RuntimeDataPersistenceError
 from src.modules.shared import EntityIdVO
 
+
 class CommunicationHttpRouterTests(unittest.TestCase):
     def test_router_exposes_mvp_routes(self) -> None:
         routes = {
