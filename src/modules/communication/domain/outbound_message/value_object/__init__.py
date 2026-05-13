@@ -1,19 +1,9 @@
-from __future__ import annotations
-
-from dataclasses import dataclass
-
-from src.modules.shared import EntityIdVO
-
-
-@dataclass(frozen=True, slots=True)
-class CommunicationRequestIdVO(EntityIdVO):
-    """Communication request id."""
-
-
-@dataclass(frozen=True, slots=True)
-class OutboundMessageIdVO(EntityIdVO):
-    """Communication outbound message id."""
-
+from src.modules.communication.domain.outbound_message.value_object.communication_request_id import (
+    CommunicationRequestIdVO,
+)
+from src.modules.communication.domain.outbound_message.value_object.outbound_message_id import (
+    OutboundMessageIdVO,
+)
 
 __all__ = [
     "CommunicationRequestIdVO",

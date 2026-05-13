@@ -1,19 +1,9 @@
-from __future__ import annotations
-
-from dataclasses import dataclass
-
-from src.modules.shared import EntityIdVO
-
-
-@dataclass(frozen=True, slots=True)
-class ProviderConnectorIdVO(EntityIdVO):
-    """Communication provider connector id."""
-
-
-@dataclass(frozen=True, slots=True)
-class ProviderMessageTypeIdVO(EntityIdVO):
-    """Communication provider message type id."""
-
+from src.modules.communication.domain.provider_connector.value_object.provider_connector_id import (
+    ProviderConnectorIdVO,
+)
+from src.modules.communication.domain.provider_connector.value_object.provider_message_type_id import (
+    ProviderMessageTypeIdVO,
+)
 
 __all__ = [
     "ProviderConnectorIdVO",

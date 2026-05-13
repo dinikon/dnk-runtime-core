@@ -1,19 +1,9 @@
-from __future__ import annotations
-
-from dataclasses import dataclass
-
-from src.modules.shared import EntityIdVO
-
-
-@dataclass(frozen=True, slots=True)
-class MessageTemplateIdVO(EntityIdVO):
-    """Communication message template id."""
-
-
-@dataclass(frozen=True, slots=True)
-class TemplateVersionIdVO(EntityIdVO):
-    """Communication template version id."""
-
+from src.modules.communication.domain.message_template.value_object.message_template_id import (
+    MessageTemplateIdVO,
+)
+from src.modules.communication.domain.message_template.value_object.template_version_id import (
+    TemplateVersionIdVO,
+)
 
 __all__ = [
     "MessageTemplateIdVO",

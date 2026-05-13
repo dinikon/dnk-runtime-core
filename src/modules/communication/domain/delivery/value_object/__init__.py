@@ -1,19 +1,9 @@
-from __future__ import annotations
-
-from dataclasses import dataclass
-
-from src.modules.shared import EntityIdVO
-
-
-@dataclass(frozen=True, slots=True)
-class DeliveryAttemptIdVO(EntityIdVO):
-    """Communication delivery attempt id."""
-
-
-@dataclass(frozen=True, slots=True)
-class DeliveryEventIdVO(EntityIdVO):
-    """Communication delivery event id."""
-
+from src.modules.communication.domain.delivery.value_object.delivery_attempt_id import (
+    DeliveryAttemptIdVO,
+)
+from src.modules.communication.domain.delivery.value_object.delivery_event_id import (
+    DeliveryEventIdVO,
+)
 
 __all__ = [
     "DeliveryAttemptIdVO",
