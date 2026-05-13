@@ -115,13 +115,7 @@ class ProviderMessageType:
         )
 
 
-ProviderConnectorEntity = ProviderConnector
-ProviderMessageTypeEntity = ProviderMessageType
-
-
 __all__ = [
     "ProviderConnector",
-    "ProviderConnectorEntity",
     "ProviderMessageType",
-    "ProviderMessageTypeEntity",
 ]

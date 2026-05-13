@@ -10,7 +10,6 @@ from src.modules.communication.application.outbound_message.provider_send.ports 
 from src.modules.communication.application.outbound_message.provider_send.service import (
     build_provider_send_context,
     id_uuid,
-    parse_event_time,
     resolve_send_spec,
 )
 
@@ -24,6 +23,5 @@ __all__ = [
     "ProviderSenderRegistryProtocol",
     "build_provider_send_context",
     "id_uuid",
-    "parse_event_time",
     "resolve_send_spec",
 ]

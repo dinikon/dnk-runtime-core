@@ -13,8 +13,10 @@ from src.modules.communication.domain.outbound_message import (
     OutboundMessage,
     OutboundMessageIdVO,
 )
-from src.modules.communication.domain.provider_connection import ProviderConnection
-from src.modules.communication.domain.provider_connection import ProviderConnectionIdVO
+from src.modules.communication.domain.provider_connection import (
+    ProviderConnectionEntity,
+    ProviderConnectionIdVO,
+)
 from src.modules.communication.domain.provider_connector import (
     ProviderConnector,
     ProviderMessageType,
@@ -26,7 +28,7 @@ ProcessingContext = tuple[
     CommunicationRequest,
     MessageTemplateEntity,
     TemplateVersionEntity,
-    ProviderConnection,
+    ProviderConnectionEntity,
     ProviderConnector,
     ProviderMessageType,
 ]

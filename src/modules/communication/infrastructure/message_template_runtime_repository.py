@@ -1,9 +1,0 @@
-from src.modules.communication.infrastructure.message_template import (
-    MessageTemplateQueryRuntimeRepository,
-    MessageTemplateRuntimeRepository,
-)
-
-__all__ = [
-    "MessageTemplateQueryRuntimeRepository",
-    "MessageTemplateRuntimeRepository",
-]

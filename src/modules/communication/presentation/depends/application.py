@@ -4,24 +4,30 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from src.modules.communication.application.use_cases import (
+from src.modules.communication.application.delivery import HandleProviderWebhookUseCase
+from src.modules.communication.application.message_template import (
     ActivateTemplateVersionUseCase,
+    CreateTemplateVersionUseCase,
     CreateMessageTemplateUseCase,
+    ListMessageTemplatesUseCase,
+)
+from src.modules.communication.application.outbound_message import (
+    GetOutboundMessageUseCase,
+    ListOutboundMessagesUseCase,
+    ProcessOutboundMessageUseCase,
+    SendCommunicationUseCase,
+)
+from src.modules.communication.application.provider_connection import (
     CreateProviderConnectionUseCase,
     CreateProviderConnectionUseCaseProtocol,
-    CreateTemplateVersionUseCase,
-    GetOutboundMessageUseCase,
-    HandleProviderWebhookUseCase,
-    ListMessageTemplatesUseCase,
-    ListOutboundMessagesUseCase,
     ListProviderConnectionsUseCase,
     ListProviderConnectionsUseCaseProtocol,
+)
+from src.modules.communication.application.provider_connector import (
     ListProviderConnectorsUseCase,
     ListProviderConnectorsUseCaseProtocol,
-    ProcessOutboundMessageUseCase,
     RegisterProviderConnectorUseCase,
     RegisterProviderConnectorUseCaseProtocol,
-    SendCommunicationUseCase,
 )
 from src.modules.communication.domain.message_template import MessageTemplateService
 from src.modules.communication.domain.delivery import DeliveryService

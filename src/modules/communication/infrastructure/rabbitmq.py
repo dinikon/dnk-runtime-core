@@ -19,9 +19,13 @@ from faststream.rabbit import (
 from src.config.infrastructure.communication_queue_config import (
     CommunicationQueueSettings,
 )
-from src.modules.communication.application.dto import OutboundMessageJob
-from src.modules.communication.application.use_cases import (
+from src.modules.communication.application.outbound_message.command import (
     ProcessOutboundMessageByIdCommand,
+)
+from src.modules.communication.application.outbound_message.queue.dto import (
+    OutboundMessageJob,
+)
+from src.modules.communication.application.outbound_message.use_case import (
     ProcessOutboundMessageByIdUseCase,
 )
 from src.modules.communication.domain.outbound_message import OutboundMessageIdVO

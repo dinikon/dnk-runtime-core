@@ -9,9 +9,11 @@ from src.modules.communication.application.services import (
     SecretCodec,
     TemplateRenderService,
 )
-from src.modules.communication.application.use_cases import (
+from src.modules.communication.application.outbound_message import (
     ProcessOutboundMessageByIdUseCase,
     ProcessOutboundMessageUseCase,
+)
+from src.modules.communication.application.outbound_message.queue import (
     PublishQueuedOutboundMessagesUseCase,
     RecoverStuckOutboundMessagesUseCase,
 )
@@ -33,7 +35,6 @@ from src.modules.communication.infrastructure.provider_senders import (
 from src.modules.communication.infrastructure.rabbitmq import (
     RabbitMQOutboundMessagePublisher,
 )
-from src.modules.communication.infrastructure.repository import CommunicationRepository
 from src.modules.runtime_data import PostgresRuntimeGateway, RuntimeFieldTypePolicy
 from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
 from src.modules.schema_registry.domain.datasource.service import DataSourceService
@@ -132,35 +133,6 @@ def build_recover_stuck_outbound_messages_use_case(
     )
 
 
-def build_communication_repository(session: AsyncSession) -> CommunicationRepository:
-    clock = UtcClock()
-    field_type_catalog = FieldTypeCatalog()
-    data_source_service = DataSourceService(
-        repository=SqlAlchemyDataSourceRepository(session),
-        clock=clock,
-        id_provider=lambda: DataSourceIdVO.from_value(uuid6.uuid7()),
-    )
-    object_service = ObjectService(
-        object_repository=SqlAlchemyObjectRepository(session),
-        clock=clock,
-        object_id_provider=lambda: RuntimeObjectIdVO.from_value(uuid6.uuid7()),
-        field_id_provider=lambda: RuntimeFieldIdVO.from_value(uuid6.uuid7()),
-        field_type_catalog=field_type_catalog,
-    )
-    runtime_gateway = PostgresRuntimeGateway(
-        session,
-        type_policy=RuntimeFieldTypePolicy(),
-    )
-    return CommunicationRepository(
-        runtime_object_resolver=SchemaRegistryRuntimeObjectResolver(
-            data_source_service=data_source_service,
-            object_service=object_service,
-        ),
-        command_gateway=runtime_gateway,
-        query_gateway=runtime_gateway,
-    )
-
-
 def build_outbound_message_repository(
     session: AsyncSession,
 ) -> OutboundMessageRuntimeRepository:
@@ -242,7 +214,6 @@ __all__ = [
     "build_delivery_repository",
     "build_process_outbound_message_by_id_use_case",
     "build_process_outbound_message_use_case",
-    "build_communication_repository",
     "build_outbound_message_repository",
     "build_outbound_processing_repository",
     "build_provider_sender_registry",

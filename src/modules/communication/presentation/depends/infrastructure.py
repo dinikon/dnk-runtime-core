@@ -6,7 +6,9 @@ from typing import Annotated
 from fastapi import Depends, Request
 
 from src.config import dnk_config
-from src.modules.communication.application.ports import OutboundMessagePublisherProtocol
+from src.modules.communication.application.outbound_message.ports import (
+    OutboundMessagePublisherProtocol,
+)
 from src.modules.communication.application.services import (
     JsonPathService,
     JsonSchemaValidationService,
@@ -41,7 +43,6 @@ from src.modules.communication.infrastructure.provider_senders import (
 from src.modules.communication.infrastructure.rabbitmq import (
     RabbitMQOutboundMessagePublisher,
 )
-from src.modules.communication.infrastructure.repository import CommunicationRepository
 from src.modules.runtime_data import PostgresRuntimeGateway, RuntimeFieldTypePolicy
 from src.modules.schema_registry.presentation.depends.application import (
     RuntimeObjectResolverDep,
@@ -72,23 +73,6 @@ def get_runtime_gateway(
 RuntimeGatewayDep = Annotated[
     PostgresRuntimeGateway,
     Depends(get_runtime_gateway),
-]
-
-
-def get_communication_repository(
-    runtime_object_resolver: RuntimeObjectResolverDep,
-    runtime_gateway: RuntimeGatewayDep,
-) -> CommunicationRepository:
-    return CommunicationRepository(
-        runtime_object_resolver=runtime_object_resolver,
-        command_gateway=runtime_gateway,
-        query_gateway=runtime_gateway,
-    )
-
-
-CommunicationRepositoryDep = Annotated[
-    CommunicationRepository,
-    Depends(get_communication_repository),
 ]
 
 
@@ -306,7 +290,6 @@ OutboundMessagePublisherDep = Annotated[
 
 
 __all__ = [
-    "CommunicationRepositoryDep",
     "DeliveryRuntimeRepositoryDep",
     "HttpClientDep",
     "JsonPathServiceDep",
@@ -325,7 +308,6 @@ __all__ = [
     "RuntimeGatewayDep",
     "SecretCodecDep",
     "TemplateRenderServiceDep",
-    "get_communication_repository",
     "get_delivery_repository",
     "get_message_template_repository",
     "get_outbound_message_repository",

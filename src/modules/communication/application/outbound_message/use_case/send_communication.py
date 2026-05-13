@@ -25,7 +25,7 @@ from src.modules.communication.domain.outbound_message import (
     OutboundMessageService,
 )
 from src.modules.communication.domain.provider_connection import (
-    ProviderConnection,
+    ProviderConnectionEntity,
 )
 from src.modules.communication.domain.provider_connection.value_object import (
     ProviderConnectionIdVO,
@@ -73,7 +73,7 @@ class ProviderConnectionLookupProtocol(Protocol):
         tenant_id: EntityIdVO,
         provider_connector_id: ProviderConnectorIdVO,
         channel_code: str,
-    ) -> ProviderConnection | None:
+    ) -> ProviderConnectionEntity | None:
         """Ищет active provider connection по connector и channel."""
         ...
 

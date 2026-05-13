@@ -21,7 +21,7 @@ from src.modules.communication.domain.outbound_message import (
     RequestStatus,
 )
 from src.modules.communication.domain.provider_connection import (
-    ProviderConnection,
+    ProviderConnectionEntity,
     ProviderConnectionIdVO,
     ProviderConnectionStatusVO,
 )
@@ -175,7 +175,7 @@ class OutboundMessageRuntimeRepository:
         tenant_id: EntityIdVO,
         provider_connector_id: ProviderConnectorIdVO,
         channel_code: str,
-    ) -> ProviderConnection | None:
+    ) -> ProviderConnectionEntity | None:
         """Ищет active provider connection по connector и channel."""
         tenant_vo = _entity_id(tenant_id)
         connector_vo = _provider_connector_id(provider_connector_id)
@@ -433,7 +433,7 @@ class OutboundMessageRuntimeRepository:
         CommunicationRequest,
         MessageTemplateEntity,
         TemplateVersionEntity,
-        ProviderConnection,
+        ProviderConnectionEntity,
         ProviderConnector,
         ProviderMessageType,
     ]:

@@ -67,9 +67,6 @@ class ProviderConnectionEntity:
         )
 
 
-ProviderConnection = ProviderConnectionEntity
-
 __all__ = [
-    "ProviderConnection",
     "ProviderConnectionEntity",
 ]

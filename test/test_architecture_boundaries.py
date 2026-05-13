@@ -233,19 +233,77 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                     msg=f"{path} should map HTTP responses explicitly in return blocks",
                 )
 
+    def test_communication_cleanup_removed_legacy_files(self) -> None:
+        removed_files = (
+            "src/modules/communication/application/dto.py",
+            "src/modules/communication/application/use_cases.py",
+            "src/modules/communication/application/ports.py",
+            "src/modules/communication/infrastructure/repository.py",
+            "src/modules/communication/infrastructure/message_template_runtime_repository.py",
+        )
+        for relative_path in removed_files:
+            path = PROJECT_ROOT / relative_path
+            self.assertFalse(
+                path.exists(),
+                msg=f"{path} should be removed after communication cleanup",
+            )
+
+    def test_communication_has_no_import_aliases(self) -> None:
+        failures: list[str] = []
+        for path in iter_python_files("src/modules/communication"):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if alias.asname:
+                            failures.append(
+                                f"{path}:{node.lineno} imports {alias.name} as {alias.asname}"
+                            )
+                if isinstance(node, ast.ImportFrom):
+                    for alias in node.names:
+                        if alias.asname:
+                            failures.append(
+                                f"{path}:{node.lineno} imports {alias.name} as {alias.asname}"
+                            )
+
+        self.assertEqual(failures, [])
+
+    def test_communication_has_no_forbidden_alias_assignments(self) -> None:
+        forbidden_names = {
+            "CommunicationRepositoryFactory",
+            "ProviderConnection",
+            "ProviderConnectorEntity",
+            "ProviderMessageTypeEntity",
+            "ProviderWebhookRepositoryProtocol",
+            "SendCommunicationRepositoryProtocol",
+        }
+        failures: list[str] = []
+        for path in iter_python_files("src/modules/communication"):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Assign) and isinstance(node.value, ast.Name):
+                    for target in node.targets:
+                        if (
+                            isinstance(target, ast.Name)
+                            and target.id in forbidden_names
+                        ):
+                            failures.append(f"{path}:{node.lineno} assigns {target.id}")
+                if (
+                    isinstance(node, ast.AnnAssign)
+                    and isinstance(node.target, ast.Name)
+                    and isinstance(node.value, ast.Name)
+                    and node.target.id in forbidden_names
+                ):
+                    failures.append(f"{path}:{node.lineno} assigns {node.target.id}")
+
+        self.assertEqual(failures, [])
+
     def test_communication_repository_does_not_export_dto_mappers(self) -> None:
         path = PROJECT_ROOT / "src/modules/communication/infrastructure/repository.py"
-        content = path.read_text(encoding="utf-8")
-        forbidden_patterns = (
-            "connection_to_dto",
-            "connector_to_dto",
-            "message_type_to_dto",
-            "template_to_dto",
-            "template_version_to_dto",
-            "outbound_to_dto",
+        self.assertFalse(
+            path.exists(),
+            msg="Communication legacy runtime repository should be removed.",
         )
-        for pattern in forbidden_patterns:
-            self.assertNotIn(pattern, content)
 
     def test_shared_exports_only_generic_entity_id_vo(self) -> None:
         paths = [

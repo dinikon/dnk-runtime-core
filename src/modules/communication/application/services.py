@@ -9,7 +9,7 @@ from typing import Any, Mapping
 import yaml
 from jinja2 import StrictUndefined
 from jinja2.nativetypes import NativeEnvironment
-from jsonpath_ng import parse as parse_jsonpath
+from jsonpath_ng import parse
 from jsonschema import Draft202012Validator, ValidationError
 from jsonschema.exceptions import SchemaError
 
@@ -368,7 +368,7 @@ class JsonPathService:
         if not expression:
             return None
         try:
-            matches = parse_jsonpath(expression).find(payload)
+            matches = parse(expression).find(payload)
         except Exception as exc:
             raise CommunicationValidationError(
                 f"Invalid JSONPath expression '{expression}': {exc}"

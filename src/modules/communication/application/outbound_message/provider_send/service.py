@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -65,23 +64,6 @@ def resolve_send_spec(
     )
 
 
-def parse_event_time(value: Any) -> datetime | None:
-    """Парсит provider event timestamp в datetime, если формат поддержан."""
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        return value
-    if isinstance(value, (int, float)):
-        return datetime.fromtimestamp(float(value), tz=UTC)
-    if isinstance(value, str):
-        normalized = value.replace("Z", "+00:00")
-        try:
-            return datetime.fromisoformat(normalized)
-        except ValueError:
-            return None
-    return None
-
-
 def id_uuid(value: Any) -> UUID:
     """Возвращает UUID из UUID или domain id value object."""
     if isinstance(value, UUID):
@@ -94,6 +76,5 @@ def id_uuid(value: Any) -> UUID:
 __all__ = [
     "build_provider_send_context",
     "id_uuid",
-    "parse_event_time",
     "resolve_send_spec",
 ]

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
 
-from src.modules.communication.application.outbound_message.ports import (
+from src.modules.communication.application.outbound_message.provider_send import (
     ProviderHttpResponse,
 )
 from src.modules.communication.application.services import (
@@ -503,18 +503,6 @@ class _WebhookRepositoryStub:
 
 
 class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
-    def test_legacy_use_case_module_reexports_new_paths(self) -> None:
-        from src.modules.communication.application import use_cases
-
-        self.assertIs(
-            use_cases.ProcessOutboundMessageUseCase,
-            ProcessOutboundMessageUseCase,
-        )
-        self.assertIs(
-            use_cases.HandleProviderWebhookUseCase,
-            HandleProviderWebhookUseCase,
-        )
-
     async def test_process_queued_message_renders_payload_and_maps_status(self) -> None:
         repository = _ProcessRepositoryStub()
         http_client = _HttpClientStub()

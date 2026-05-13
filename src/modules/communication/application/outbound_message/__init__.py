@@ -10,40 +10,42 @@ from src.modules.communication.application.outbound_message.dto import (
     SendCommunicationResultDTO,
 )
 from src.modules.communication.application.outbound_message.ports import (
-    CommunicationRepositoryFactory,
-    HttpClientProtocol,
     OutboundMessagePublisherProtocol,
-    OutboundMessageQueryRepositoryProtocol,
-    OutboundMessageRepositoryProtocol,
+)
+from src.modules.communication.application.outbound_message.processing import (
     OutboundProcessingByIdRepositoryProtocol,
     OutboundProcessingRepositoryContextFactoryProtocol,
     OutboundProcessingRepositoryProtocol,
+    ProcessingContext,
+)
+from src.modules.communication.application.outbound_message.provider_send import (
+    HttpClientProtocol,
     ProviderHttpResponse,
     ProviderPreparedSend,
     ProviderSendContext,
     ProviderSendResult,
     ProviderSenderProtocol,
     ProviderSenderRegistryProtocol,
-    SendCommunicationRepositoryProtocol,
-    SendCommunicationTemplateLookupProtocol,
-)
-from src.modules.communication.application.outbound_message.provider_send import (
-    parse_event_time,
 )
 from src.modules.communication.application.outbound_message.query import (
     GetOutboundMessageQuery,
     ListOutboundMessagesQuery,
+    OutboundMessageQueryRepositoryProtocol,
 )
 from src.modules.communication.application.outbound_message.use_case import (
     GetOutboundMessageUseCase,
     ListOutboundMessagesUseCase,
     ProcessOutboundMessageByIdUseCase,
     ProcessOutboundMessageUseCase,
+    ProviderConnectionLookupProtocol,
+    SendCommunicationTemplateLookupProtocol,
     SendCommunicationUseCase,
+)
+from src.modules.communication.domain.outbound_message import (
+    OutboundMessageRepositoryProtocol,
 )
 
 __all__ = [
-    "CommunicationRepositoryFactory",
     "GetOutboundMessageQuery",
     "GetOutboundMessageUseCase",
     "HttpClientProtocol",
@@ -56,6 +58,7 @@ __all__ = [
     "OutboundProcessingByIdRepositoryProtocol",
     "OutboundProcessingRepositoryContextFactoryProtocol",
     "OutboundProcessingRepositoryProtocol",
+    "ProcessingContext",
     "ProcessOutboundMessageByIdCommand",
     "ProcessOutboundMessageByIdUseCase",
     "ProcessOutboundMessageResultDTO",
@@ -63,15 +66,14 @@ __all__ = [
     "ProcessQueuedMessagesCommand",
     "ProcessQueuedResultDTO",
     "ProviderHttpResponse",
+    "ProviderConnectionLookupProtocol",
     "ProviderPreparedSend",
     "ProviderSendContext",
     "ProviderSendResult",
     "ProviderSenderProtocol",
     "ProviderSenderRegistryProtocol",
     "SendCommunicationCommand",
-    "SendCommunicationRepositoryProtocol",
     "SendCommunicationResultDTO",
     "SendCommunicationTemplateLookupProtocol",
     "SendCommunicationUseCase",
-    "parse_event_time",
 ]

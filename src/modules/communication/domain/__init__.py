@@ -39,7 +39,6 @@ from src.modules.communication.domain.outbound_message import (
     RequestStatus,
 )
 from src.modules.communication.domain.provider_connection import (
-    ProviderConnection,
     ProviderConnectionCodeVO,
     ProviderConnectionEntity,
     ProviderConnectionIdVO,
@@ -86,7 +85,6 @@ __all__ = [
     "OutboundMessageIdVO",
     "OutboundMessageNotFoundError",
     "OutboundMessageStatus",
-    "ProviderConnection",
     "ProviderConnectionCodeVO",
     "ProviderConnectionEntity",
     "ProviderConnectionIdVO",

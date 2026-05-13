@@ -9,8 +9,10 @@ from uuid import UUID
 
 from src.management.cli import build_parser
 from src.management.commands import communication as communication_command
-from src.modules.communication.application.dto import (
+from src.modules.communication.application.outbound_message.dto import (
     ProcessQueuedResultDTO,
+)
+from src.modules.communication.application.outbound_message.queue.dto import (
     PublishQueuedResultDTO,
     RecoverStuckResultDTO,
 )

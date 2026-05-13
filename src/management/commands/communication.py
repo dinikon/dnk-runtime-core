@@ -5,8 +5,10 @@ import sys
 from uuid import UUID
 
 from src.config import dnk_config
-from src.modules.communication.application.use_cases import (
+from src.modules.communication.application.outbound_message.command import (
     ProcessQueuedMessagesCommand,
+)
+from src.modules.communication.application.outbound_message.queue import (
     PublishQueuedOutboundMessagesCommand,
     RecoverStuckOutboundMessagesCommand,
 )

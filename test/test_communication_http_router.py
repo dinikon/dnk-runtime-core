@@ -8,7 +8,9 @@ from uuid import uuid4
 
 from fastapi import HTTPException
 
-from src.modules.communication.application.dto import SendCommunicationResultDTO
+from src.modules.communication.application.outbound_message.dto import (
+    SendCommunicationResultDTO,
+)
 from src.modules.communication.application.provider_connection import (
     ProviderConnectionDTO,
 )
@@ -27,19 +29,23 @@ from src.modules.communication.domain.provider_connector import (
 from src.modules.communication.domain.provider_connection import (
     ProviderConnectionIdVO,
 )
-from src.modules.communication.presentation.http.outbound_message.router import (
+from src.modules.communication.presentation.http.outbound_message.controller.list_messages import (
     list_messages,
 )
-from src.modules.communication.presentation.http.provider_connection.router import (
-    CreateProviderConnectionRequestSchema,
+from src.modules.communication.presentation.http.outbound_message.controller.send_communication import (
+    _publish_send_job_after_commit,
+)
+from src.modules.communication.presentation.http.provider_connection.controller.create_provider_connection import (
     create_provider_connection,
 )
-from src.modules.communication.presentation.http.message_template.router import (
-    CreateMessageTemplateRequestSchema,
+from src.modules.communication.presentation.http.provider_connection.requests import (
+    CreateProviderConnectionRequestSchema,
+)
+from src.modules.communication.presentation.http.message_template.controller.create_message_template import (
     create_message_template,
 )
-from src.modules.communication.presentation.http.router import (
-    _publish_send_job_after_commit,
+from src.modules.communication.presentation.http.message_template.requests import (
+    CreateMessageTemplateRequestSchema,
 )
 from src.modules.communication.presentation.http.router import router
 from src.modules.communication.presentation.http.delivery.controller.handle_provider_webhook import (

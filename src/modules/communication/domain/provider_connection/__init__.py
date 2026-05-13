@@ -1,5 +1,4 @@
 from src.modules.communication.domain.provider_connection.entity import (
-    ProviderConnection,
     ProviderConnectionEntity,
 )
 from src.modules.communication.domain.provider_connection.enum import (
@@ -29,7 +28,6 @@ from src.modules.communication.domain.provider_connection.value_object import (
 __all__ = [
     "InvalidProviderConnectionCodeError",
     "InvalidProviderConnectionNameError",
-    "ProviderConnection",
     "ProviderConnectionCodeVO",
     "ProviderConnectionEntity",
     "ProviderConnectionIdVO",

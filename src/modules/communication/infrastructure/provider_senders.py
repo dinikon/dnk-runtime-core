@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from src.modules.communication.application.ports import (
+from src.modules.communication.application.outbound_message.provider_send import (
     HttpClientProtocol,
     ProviderPreparedSend,
     ProviderSendContext,

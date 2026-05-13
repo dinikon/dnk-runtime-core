@@ -1,8 +1,6 @@
 from src.modules.communication.domain.provider_connector.entity import (
     ProviderConnector,
-    ProviderConnectorEntity,
     ProviderMessageType,
-    ProviderMessageTypeEntity,
 )
 from src.modules.communication.domain.provider_connector.enum import (
     ConnectorStatus,
@@ -51,7 +49,6 @@ __all__ = [
     "ProviderChannelCodeVO",
     "ProviderConnector",
     "ProviderConnectorCodeVO",
-    "ProviderConnectorEntity",
     "ProviderConnectorIdVO",
     "ProviderConnectorNameVO",
     "ProviderConnectorNotFoundError",
@@ -60,7 +57,6 @@ __all__ = [
     "ProviderConnectorVersionVO",
     "ProviderMessageType",
     "ProviderMessageTypeCodeVO",
-    "ProviderMessageTypeEntity",
     "ProviderMessageTypeIdVO",
     "ProviderMessageTypeNameVO",
     "ProviderMessageTypeNotFoundError",
