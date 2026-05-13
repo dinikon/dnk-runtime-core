@@ -5,8 +5,10 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from src.modules.communication.application.template.dto import MessageTemplateDTO
-from src.modules.communication.application.template.query import (
+from src.modules.communication.application.message_template.dto import (
+    MessageTemplateDTO,
+)
+from src.modules.communication.application.message_template.query import (
     MessageTemplateQueryRepositoryProtocol,
 )
 from src.modules.communication.domain.message_template import (

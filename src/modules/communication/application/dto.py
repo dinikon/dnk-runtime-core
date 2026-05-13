@@ -1,26 +1,28 @@
 from __future__ import annotations
 
-from src.modules.communication.application.message.dto import (
+from src.modules.communication.application.outbound_message.dto import (
     OutboundMessageDTO,
     ProcessOutboundMessageResultDTO,
     ProcessQueuedResultDTO,
     SendCommunicationResultDTO,
 )
-from src.modules.communication.application.provider.dto import (
+from src.modules.communication.application.provider_connection.dto import (
     ProviderConnectionDTO,
+)
+from src.modules.communication.application.provider_connector.dto import (
     ProviderConnectorDTO,
     ProviderMessageTypeDTO,
 )
-from src.modules.communication.application.queue.dto import (
+from src.modules.communication.application.outbound_message.queue.dto import (
     OutboundMessageJob,
     PublishQueuedResultDTO,
     RecoverStuckResultDTO,
 )
-from src.modules.communication.application.template.dto import (
+from src.modules.communication.application.message_template.dto import (
     MessageTemplateDTO,
     TemplateVersionDTO,
 )
-from src.modules.communication.application.webhook.dto import WebhookResultDTO
+from src.modules.communication.application.delivery.dto import WebhookResultDTO
 
 __all__ = [
     "MessageTemplateDTO",

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.modules.communication.application.message.ports import (
+from src.modules.communication.application.outbound_message.ports import (
     CommunicationRepositoryFactory,
     HttpClientProtocol,
     OutboundMessagePublisherProtocol,
@@ -16,17 +16,19 @@ from src.modules.communication.application.message.ports import (
     ProviderSenderRegistryProtocol,
     SendCommunicationRepositoryProtocol,
 )
-from src.modules.communication.application.provider.ports import (
+from src.modules.communication.application.provider_connection.ports import (
     ProviderConnectionRepositoryProtocol,
+)
+from src.modules.communication.application.provider_connector.ports import (
     ProviderConnectorRepositoryProtocol,
 )
-from src.modules.communication.application.queue.ports import (
+from src.modules.communication.application.outbound_message.queue.ports import (
     OutboundQueueRepositoryProtocol,
 )
-from src.modules.communication.application.template.query import (
+from src.modules.communication.application.message_template.query import (
     MessageTemplateQueryRepositoryProtocol,
 )
-from src.modules.communication.application.webhook.ports import (
+from src.modules.communication.application.delivery.ports import (
     ProviderWebhookRepositoryProtocol,
 )
 

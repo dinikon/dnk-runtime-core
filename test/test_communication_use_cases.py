@@ -6,7 +6,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
 
-from src.modules.communication.application.message.ports import ProviderHttpResponse
+from src.modules.communication.application.outbound_message.ports import (
+    ProviderHttpResponse,
+)
 from src.modules.communication.application.services import (
     JsonPathService,
     ProviderPayloadBuildService,
@@ -14,7 +16,7 @@ from src.modules.communication.application.services import (
     SecretCodec,
     TemplateRenderService,
 )
-from src.modules.communication.application.message import (
+from src.modules.communication.application.outbound_message import (
     ProcessOutboundMessageByIdCommand,
     ProcessOutboundMessageByIdUseCase,
     ProcessOutboundMessageUseCase,
@@ -22,7 +24,7 @@ from src.modules.communication.application.message import (
     SendCommunicationCommand,
     SendCommunicationUseCase,
 )
-from src.modules.communication.application.webhook import (
+from src.modules.communication.application.delivery import (
     HandleProviderWebhookCommand,
     HandleProviderWebhookUseCase,
 )
@@ -643,7 +645,7 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch(
-                "src.modules.communication.application.message.use_case.UnitOfWork",
+                "src.modules.communication.application.outbound_message.use_case.UnitOfWork",
                 _UnitOfWorkStub,
             ),
         ):
@@ -686,7 +688,7 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch(
-                "src.modules.communication.application.message.use_case.UnitOfWork",
+                "src.modules.communication.application.outbound_message.use_case.UnitOfWork",
                 _UnitOfWorkStub,
             ),
         ):
@@ -729,7 +731,7 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch(
-                "src.modules.communication.application.message.use_case.UnitOfWork",
+                "src.modules.communication.application.outbound_message.use_case.UnitOfWork",
                 _UnitOfWorkStub,
             ),
         ):

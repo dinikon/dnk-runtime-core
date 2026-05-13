@@ -19,7 +19,9 @@ from src.modules.communication.domain.error import (
 from src.modules.communication.domain.outbound_message import (
     OutboundMessageStatus,
 )
-from src.modules.communication.application.provider.dto import ProviderConnectionDTO
+from src.modules.communication.application.provider_connection.dto import (
+    ProviderConnectionDTO,
+)
 
 VALID_PROVIDER_YAML = """
 provider_code: gms

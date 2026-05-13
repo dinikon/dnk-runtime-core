@@ -17,12 +17,14 @@ from src.modules.communication.domain.outbound_message import (
 from src.modules.communication.domain.provider_connector import (
     ProviderConnectorNotFoundError,
 )
-from src.modules.communication.presentation.http.message.router import list_messages
-from src.modules.communication.presentation.http.provider.router import (
+from src.modules.communication.presentation.http.outbound_message.router import (
+    list_messages,
+)
+from src.modules.communication.presentation.http.provider_connection.router import (
     CreateProviderConnectionRequestSchema,
     create_provider_connection,
 )
-from src.modules.communication.presentation.http.template.router import (
+from src.modules.communication.presentation.http.message_template.router import (
     CreateMessageTemplateRequestSchema,
     create_message_template,
 )

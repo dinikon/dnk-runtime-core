@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.modules.communication.application.message import (
+from src.modules.communication.application.outbound_message import (
     GetOutboundMessageUseCase,
     ListOutboundMessagesUseCase,
     ProcessOutboundMessageByIdCommand,
@@ -11,21 +11,23 @@ from src.modules.communication.application.message import (
     SendCommunicationUseCase,
     parse_event_time,
 )
-from src.modules.communication.application.provider import (
+from src.modules.communication.application.provider_connection import (
     CreateProviderConnectionCommand,
     CreateProviderConnectionUseCase,
     ListProviderConnectionsUseCase,
+)
+from src.modules.communication.application.provider_connector import (
     ListProviderConnectorsUseCase,
     RegisterProviderConnectorCommand,
     RegisterProviderConnectorUseCase,
 )
-from src.modules.communication.application.queue import (
+from src.modules.communication.application.outbound_message.queue import (
     PublishQueuedOutboundMessagesCommand,
     PublishQueuedOutboundMessagesUseCase,
     RecoverStuckOutboundMessagesCommand,
     RecoverStuckOutboundMessagesUseCase,
 )
-from src.modules.communication.application.template import (
+from src.modules.communication.application.message_template import (
     ActivateTemplateVersionCommand,
     ActivateTemplateVersionUseCase,
     CreateMessageTemplateCommand,
@@ -34,7 +36,7 @@ from src.modules.communication.application.template import (
     CreateTemplateVersionUseCase,
     ListMessageTemplatesUseCase,
 )
-from src.modules.communication.application.webhook import (
+from src.modules.communication.application.delivery import (
     HandleProviderWebhookCommand,
     HandleProviderWebhookUseCase,
 )
