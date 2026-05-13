@@ -15,12 +15,15 @@ from src.modules.communication.domain.delivery import (
 from src.modules.communication.domain.message_template import (
     ChannelCodeVO,
     MessageClassVO,
-    MessageTemplate,
+    MessageTemplateCodeVO,
+    MessageTemplateEntity,
     MessageTemplateIdVO,
+    MessageTemplateNameVO,
     TemplateStatusVO,
-    TemplateVersion,
+    TemplateVersionEntity,
     TemplateVersionIdVO,
     TemplateVersionStatusVO,
+    TemplateVersionTimestampVO,
 )
 from src.modules.communication.domain.outbound_message import (
     CommunicationRequest,
@@ -1146,12 +1149,12 @@ def _connection_model(tenant_id: UUID, row: Mapping[str, Any]) -> ProviderConnec
     )
 
 
-def _template_model(tenant_id: UUID, row: Mapping[str, Any]) -> MessageTemplate:
-    return MessageTemplate(
+def _template_model(tenant_id: UUID, row: Mapping[str, Any]) -> MessageTemplateEntity:
+    return MessageTemplateEntity(
         template_id=MessageTemplateIdVO.from_value(_as_uuid(row["id"])),
         tenant_id=EntityIdVO.from_value(tenant_id),
-        template_code=_as_str(row.get("template_code")),
-        name=_as_str(row.get("name")),
+        template_code=MessageTemplateCodeVO(_as_str(row.get("template_code"))),
+        name=MessageTemplateNameVO(_as_str(row.get("name"))),
         description=_as_optional_str(row.get("description")),
         provider_connector_id=ProviderConnectorIdVO.from_value(
             _as_uuid(row.get("provider_connector_id"))
@@ -1167,12 +1170,12 @@ def _template_model(tenant_id: UUID, row: Mapping[str, Any]) -> MessageTemplate:
     )
 
 
-def _template_version_model(row: Mapping[str, Any]) -> TemplateVersion:
+def _template_version_model(row: Mapping[str, Any]) -> TemplateVersionEntity:
     version = row.get("version") or row.get("created_at")
-    return TemplateVersion(
+    return TemplateVersionEntity(
         template_version_id=TemplateVersionIdVO.from_value(_as_uuid(row["id"])),
         template_id=MessageTemplateIdVO.from_value(_as_uuid(row.get("template_id"))),
-        version=_utc_seconds(_as_datetime(version)),
+        version=TemplateVersionTimestampVO(_as_datetime(version)),
         template_payload=_as_dict(row.get("template_payload")),
         variables_schema=_as_dict(row.get("variables_schema")),
         status=TemplateVersionStatusVO(_as_str(row.get("status"))),

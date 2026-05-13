@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any, Self
 
 from src.modules.communication.domain.error import CommunicationValidationError
@@ -11,10 +11,13 @@ from src.modules.communication.domain.message_template.error import (
 from src.modules.communication.domain.message_template.value_object import (
     ChannelCodeVO,
     MessageClassVO,
+    MessageTemplateCodeVO,
     MessageTemplateIdVO,
+    MessageTemplateNameVO,
     TemplateStatusVO,
     TemplateVersionIdVO,
     TemplateVersionStatusVO,
+    TemplateVersionTimestampVO,
 )
 from src.modules.communication.domain.provider_connector.entity import (
     ProviderMessageType,
@@ -27,7 +30,7 @@ from src.modules.shared import EntityIdVO
 
 
 @dataclass(slots=True)
-class MessageTemplate:
+class MessageTemplateEntity:
     """Доменная сущность шаблона сообщения, привязанного к tenant."""
 
     template_id: MessageTemplateIdVO
@@ -35,8 +38,8 @@ class MessageTemplate:
     updated_at: datetime
     tenant_id: EntityIdVO
 
-    template_code: str
-    name: str
+    template_code: MessageTemplateCodeVO
+    name: MessageTemplateNameVO
     description: str | None
     provider_connector_id: ProviderConnectorIdVO
     provider_message_type_id: ProviderMessageTypeIdVO
@@ -65,8 +68,8 @@ class MessageTemplate:
             created_at=now,
             updated_at=now,
             tenant_id=tenant_id,
-            template_code=template_code,
-            name=name,
+            template_code=MessageTemplateCodeVO(template_code),
+            name=MessageTemplateNameVO(name),
             description=description,
             provider_connector_id=provider_connector_id,
             provider_message_type_id=provider_message_type_id,
@@ -81,7 +84,7 @@ class MessageTemplate:
             raise CommunicationValidationError(
                 "Provider message type does not belong to provider connector."
             )
-        if message_type.channel_code != self.channel_code:
+        if ChannelCodeVO(message_type.channel_code) != self.channel_code:
             raise CommunicationValidationError(
                 "Template channel must match provider message type channel."
             )
@@ -95,7 +98,7 @@ class MessageTemplate:
 
 
 @dataclass(slots=True)
-class TemplateVersion:
+class TemplateVersionEntity:
     """Доменная сущность версии шаблона сообщения."""
 
     template_version_id: TemplateVersionIdVO
@@ -103,7 +106,7 @@ class TemplateVersion:
     activated_at: datetime | None
 
     template_id: MessageTemplateIdVO
-    version: datetime
+    version: TemplateVersionTimestampVO
     template_payload: dict[str, Any]
     variables_schema: dict[str, Any]
     status: TemplateVersionStatusVO
@@ -125,7 +128,7 @@ class TemplateVersion:
             created_at=now,
             activated_at=None,
             template_id=template_id,
-            version=_utc_seconds(version),
+            version=TemplateVersionTimestampVO(version),
             template_payload=dict(template_payload),
             variables_schema=dict(variables_schema),
             status=TemplateVersionStatusVO.DRAFT,
@@ -136,7 +139,7 @@ class TemplateVersion:
         """Возвращает признак активной версии."""
         return self.status == TemplateVersionStatusVO.ACTIVE
 
-    def ensure_belongs_to(self, template: MessageTemplate) -> None:
+    def ensure_belongs_to(self, template: MessageTemplateEntity) -> None:
         """Проверяет, что версия принадлежит переданному шаблону."""
         if self.template_id != template.template_id:
             raise TemplateVersionNotFoundError()
@@ -154,12 +157,6 @@ class TemplateVersion:
 
 
 __all__ = [
-    "MessageTemplate",
-    "TemplateVersion",
+    "MessageTemplateEntity",
+    "TemplateVersionEntity",
 ]
-
-
-def _utc_seconds(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=UTC)
-    return value.astimezone(UTC).replace(microsecond=0)

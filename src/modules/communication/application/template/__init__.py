@@ -7,8 +7,8 @@ from src.modules.communication.application.template.dto import (
     MessageTemplateDTO,
     TemplateVersionDTO,
 )
-from src.modules.communication.application.template.ports import (
-    MessageTemplateRepositoryProtocol,
+from src.modules.communication.application.template.query import (
+    MessageTemplateQueryRepositoryProtocol,
 )
 from src.modules.communication.application.template.use_case import (
     ActivateTemplateVersionUseCase,
@@ -26,6 +26,6 @@ __all__ = [
     "CreateTemplateVersionUseCase",
     "ListMessageTemplatesUseCase",
     "MessageTemplateDTO",
-    "MessageTemplateRepositoryProtocol",
+    "MessageTemplateQueryRepositoryProtocol",
     "TemplateVersionDTO",
 ]

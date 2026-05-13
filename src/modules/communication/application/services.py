@@ -216,6 +216,18 @@ class ProviderYamlLoader:
 class JsonSchemaValidationService:
     """Validates JSON payloads against JSON Schema."""
 
+    def validate_template_payload(
+        self,
+        payload: dict[str, Any],
+        field_schema: dict[str, Any],
+    ) -> None:
+        """Validate template payload against provider field schema."""
+        self.validate(payload, field_schema, "template_payload")
+
+    def validate_variables_schema(self, schema: dict[str, Any]) -> None:
+        """Validate template variables JSON Schema."""
+        self.check_schema(schema, "variables_schema")
+
     def check_schema(self, schema: Mapping[str, Any] | None, label: str) -> None:
         """Validate a JSON Schema document without validating an instance."""
         if not schema:

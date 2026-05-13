@@ -7,3 +7,5 @@ class MessageClassVO(str, enum.Enum):
     MARKETING = "MARKETING"
     TRANSACTIONAL = "TRANSACTIONAL"
     SERVICE = "SERVICE"
+    OTP = "OTP"
+    INFO = "INFO"

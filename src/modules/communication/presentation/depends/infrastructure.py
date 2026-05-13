@@ -17,6 +17,9 @@ from src.modules.communication.application.services import (
     TemplateRenderService,
 )
 from src.modules.communication.infrastructure.http_client import HttpxProviderHttpClient
+from src.modules.communication.infrastructure.message_template_runtime_repository import (
+    MessageTemplateRuntimeRepository,
+)
 from src.modules.communication.infrastructure.provider_senders import (
     ProviderSenderRegistry,
     YamlHttpProviderSender,
@@ -73,6 +76,23 @@ def get_communication_repository(
 CommunicationRepositoryDep = Annotated[
     CommunicationRepository,
     Depends(get_communication_repository),
+]
+
+
+def get_message_template_repository(
+    runtime_object_resolver: RuntimeObjectResolverDep,
+    runtime_gateway: RuntimeGatewayDep,
+) -> MessageTemplateRuntimeRepository:
+    return MessageTemplateRuntimeRepository(
+        runtime_object_resolver=runtime_object_resolver,
+        runtime_command_gateway=runtime_gateway,
+        runtime_query_gateway=runtime_gateway,
+    )
+
+
+MessageTemplateRuntimeRepositoryDep = Annotated[
+    MessageTemplateRuntimeRepository,
+    Depends(get_message_template_repository),
 ]
 
 
@@ -190,6 +210,7 @@ __all__ = [
     "HttpClientDep",
     "JsonPathServiceDep",
     "JsonSchemaValidationServiceDep",
+    "MessageTemplateRuntimeRepositoryDep",
     "OutboundMessagePublisherDep",
     "ProviderPayloadBuildServiceDep",
     "ProviderSenderRegistryDep",
@@ -200,6 +221,7 @@ __all__ = [
     "SecretCodecDep",
     "TemplateRenderServiceDep",
     "get_communication_repository",
+    "get_message_template_repository",
     "get_outbound_message_publisher",
     "get_provider_sender_registry",
     "get_runtime_field_type_policy",

@@ -1,6 +1,30 @@
 from __future__ import annotations
 
-from src.modules.communication.domain.error import CommunicationNotFoundError
+from src.modules.communication.domain.error import (
+    CommunicationNotFoundError,
+    CommunicationValidationError,
+)
+
+
+class InvalidMessageTemplateCodeError(CommunicationValidationError):
+    """Raised when message template code is invalid."""
+
+    def __init__(self) -> None:
+        super().__init__("Message template code cannot be empty.")
+
+
+class InvalidMessageTemplateNameError(CommunicationValidationError):
+    """Raised when message template name is invalid."""
+
+    def __init__(self) -> None:
+        super().__init__("Message template name cannot be empty.")
+
+
+class InvalidTemplateVersionTimestampError(CommunicationValidationError):
+    """Raised when template version timestamp is invalid."""
+
+    def __init__(self) -> None:
+        super().__init__("Template version timestamp must be datetime.")
 
 
 class MessageTemplateNotFoundError(CommunicationNotFoundError):
@@ -18,6 +42,9 @@ class TemplateVersionNotFoundError(CommunicationNotFoundError):
 
 
 __all__ = [
+    "InvalidMessageTemplateCodeError",
+    "InvalidMessageTemplateNameError",
+    "InvalidTemplateVersionTimestampError",
     "MessageTemplateNotFoundError",
     "TemplateVersionNotFoundError",
 ]

@@ -95,7 +95,7 @@ class SendCommunicationUseCase:
             )
         if template is None:
             raise MessageTemplateNotFoundError()
-        if template.channel_code != command.channel_code:
+        if template.channel_code.value != command.channel_code:
             raise CommunicationValidationError(
                 "Send channel must match template channel."
             )
@@ -115,7 +115,7 @@ class SendCommunicationUseCase:
         connection = await self._repository.find_active_connection(
             tenant_id=command.tenant_id,
             provider_connector_id=_id_uuid(template.provider_connector_id),
-            channel_code=template.channel_code,
+            channel_code=template.channel_code.value,
         )
         if connection is None:
             raise CommunicationValidationError(

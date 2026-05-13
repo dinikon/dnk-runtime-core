@@ -1,21 +1,21 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any, Protocol
 
 from src.modules.communication.domain.message_template.entity import (
-    MessageTemplate,
-    TemplateVersion,
+    MessageTemplateEntity,
+    TemplateVersionEntity,
 )
 from src.modules.communication.domain.message_template.error import (
     MessageTemplateNotFoundError,
     TemplateVersionNotFoundError,
 )
 from src.modules.communication.domain.message_template.repository import (
-    MessageTemplateProviderLookupProtocol,
     MessageTemplateRepositoryProtocol,
+    MessageTemplateProviderLookupProtocol,
 )
 from src.modules.communication.domain.message_template.value_object import (
+    MessageTemplateCodeVO,
     MessageTemplateIdVO,
     TemplateVersionIdVO,
 )
@@ -32,45 +32,43 @@ from src.modules.shared.kernel.time.ports import ClockPort
 
 
 class MessageTemplateSchemaValidatorProtocol(Protocol):
-    """Port for validating template payloads and variables schemas."""
+    """Порт валидации payload и variables schema шаблонов."""
 
     def validate_template_payload(
         self,
         payload: dict[str, Any],
         field_schema: dict[str, Any],
     ) -> None:
-        """Validates a template payload against provider message type schema."""
+        """Проверяет payload шаблона по provider field schema."""
         ...
 
     def validate_variables_schema(self, schema: dict[str, Any]) -> None:
-        """Validates template variables schema."""
+        """Проверяет JSON Schema переменных шаблона."""
         ...
 
 
 class MessageTemplateService:
-    """Domain service for message template aggregate workflows."""
+    """Доменный сервис сценариев message template aggregate."""
 
     def __init__(
         self,
         *,
-        repository: MessageTemplateRepositoryProtocol,
+        command_repository: MessageTemplateRepositoryProtocol,
         provider_lookup: MessageTemplateProviderLookupProtocol,
         schema_validator: MessageTemplateSchemaValidatorProtocol,
         clock: ClockPort,
-        template_id_provider: Callable[[], MessageTemplateIdVO],
-        template_version_id_provider: Callable[[], TemplateVersionIdVO],
     ) -> None:
-        self._repository = repository
+        """Инициализирует сервис repository, provider lookup и clock-портом."""
+        self._command_repository = command_repository
         self._provider_lookup = provider_lookup
         self._schema_validator = schema_validator
         self._clock = clock
-        self._template_id_provider = template_id_provider
-        self._template_version_id_provider = template_version_id_provider
 
     async def create_template(
         self,
         *,
         tenant_id: EntityIdVO,
+        template_id: MessageTemplateIdVO,
         template_code: str,
         name: str,
         description: str | None,
@@ -78,8 +76,8 @@ class MessageTemplateService:
         provider_message_type_id: ProviderMessageTypeIdVO,
         channel_code: str,
         message_class: str,
-    ) -> MessageTemplate:
-        """Creates a draft provider-bound message template."""
+    ) -> MessageTemplateEntity:
+        """Создает provider-bound шаблон сообщения и сохраняет его."""
         connector = await self._provider_lookup.load_provider_connector(
             tenant_id=tenant_id,
             provider_connector_id=provider_connector_id,
@@ -94,8 +92,9 @@ class MessageTemplateService:
         if message_type is None:
             raise ProviderMessageTypeNotFoundError()
 
-        template = MessageTemplate.create(
-            template_id=self._template_id_provider(),
+        now = self._clock.now()
+        template = MessageTemplateEntity.create(
+            template_id=template_id,
             tenant_id=tenant_id,
             template_code=template_code,
             name=name,
@@ -104,10 +103,10 @@ class MessageTemplateService:
             provider_message_type_id=provider_message_type_id,
             channel_code=channel_code,
             message_class=message_class,
-            now=self._clock.now(),
+            now=now,
         )
         template.ensure_message_type_binding(message_type)
-        return await self._repository.save_template(
+        return await self._command_repository.save_template(
             tenant_id=tenant_id,
             template=template,
         )
@@ -117,16 +116,15 @@ class MessageTemplateService:
         *,
         tenant_id: EntityIdVO,
         template_id: MessageTemplateIdVO,
+        template_version_id: TemplateVersionIdVO,
         template_payload: dict[str, Any],
         variables_schema: dict[str, Any],
-    ) -> TemplateVersion:
-        """Creates a validated draft template version."""
-        template = await self._repository.load_template(
+    ) -> TemplateVersionEntity:
+        """Создает валидированную черновую версию шаблона."""
+        template = await self.get_template(
             tenant_id=tenant_id,
             template_id=template_id,
         )
-        if template is None:
-            raise MessageTemplateNotFoundError()
 
         message_type = await self._provider_lookup.load_provider_message_type(
             tenant_id=tenant_id,
@@ -142,15 +140,15 @@ class MessageTemplateService:
         self._schema_validator.validate_variables_schema(variables_schema)
 
         now = self._clock.now()
-        version = TemplateVersion.create(
-            template_version_id=self._template_version_id_provider(),
+        version = TemplateVersionEntity.create(
+            template_version_id=template_version_id,
             template_id=template.template_id,
             version=now,
             template_payload=template_payload,
             variables_schema=variables_schema,
             now=now,
         )
-        return await self._repository.save_template_version(
+        return await self._command_repository.save_template_version(
             tenant_id=tenant_id,
             version=version,
         )
@@ -161,16 +159,13 @@ class MessageTemplateService:
         tenant_id: EntityIdVO,
         template_id: MessageTemplateIdVO,
         template_version_id: TemplateVersionIdVO,
-    ) -> TemplateVersion:
-        """Activates a template version and deprecates previous active versions."""
-        template = await self._repository.load_template(
+    ) -> TemplateVersionEntity:
+        """Активирует версию шаблона и деактуализирует прежнюю active version."""
+        template = await self.get_template(
             tenant_id=tenant_id,
             template_id=template_id,
         )
-        if template is None:
-            raise MessageTemplateNotFoundError()
-
-        selected = await self._repository.load_template_version(
+        selected = await self._command_repository.load_template_version(
             tenant_id=tenant_id,
             template_version_id=template_version_id,
         )
@@ -181,7 +176,7 @@ class MessageTemplateService:
         now = self._clock.now()
         versions_by_id = {
             version.template_version_id: version
-            for version in await self._repository.list_template_versions(
+            for version in await self._command_repository.list_template_versions(
                 tenant_id=tenant_id,
                 template_id=template.template_id,
             )
@@ -195,11 +190,11 @@ class MessageTemplateService:
                 version.deprecate()
 
         template.mark_active(now=now)
-        await self._repository.save_template(
+        await self._command_repository.save_template(
             tenant_id=tenant_id,
             template=template,
         )
-        saved_versions = await self._repository.save_template_versions(
+        saved_versions = await self._command_repository.save_template_versions(
             tenant_id=tenant_id,
             versions=list(versions_by_id.values()),
         )
@@ -207,6 +202,33 @@ class MessageTemplateService:
             if version.template_version_id == selected.template_version_id:
                 return version
         return selected
+
+    async def get_template(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        template_id: MessageTemplateIdVO,
+    ) -> MessageTemplateEntity:
+        """Возвращает шаблон tenant или поднимает MessageTemplateNotFoundError."""
+        template = await self._command_repository.load_template(
+            tenant_id=tenant_id,
+            template_id=template_id,
+        )
+        if template is None:
+            raise MessageTemplateNotFoundError()
+        return template
+
+    async def load_template_by_code(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        template_code: MessageTemplateCodeVO,
+    ) -> MessageTemplateEntity | None:
+        """Загружает шаблон tenant по коду, если он существует."""
+        return await self._command_repository.load_template_by_code(
+            tenant_id=tenant_id,
+            template_code=template_code,
+        )
 
 
 __all__ = [

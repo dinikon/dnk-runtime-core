@@ -1,25 +1,12 @@
-from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
 from uuid import UUID
 
 
 @dataclass(frozen=True, slots=True)
-class TemplateVersionDTO:
-    template_version_id: UUID
-    template_id: UUID
-    version: datetime
-    template_payload: dict[str, Any]
-    variables_schema: dict[str, Any]
-    status: str
-    created_at: datetime
-    activated_at: datetime | None
-
-
-@dataclass(frozen=True, slots=True)
 class MessageTemplateDTO:
+    """DTO message template для application/presentation boundary."""
+
     template_id: UUID
     tenant_id: UUID
     template_code: str
@@ -36,7 +23,4 @@ class MessageTemplateDTO:
     active_version: datetime | None = None
 
 
-__all__ = [
-    "MessageTemplateDTO",
-    "TemplateVersionDTO",
-]
+__all__ = ["MessageTemplateDTO"]

@@ -23,8 +23,8 @@ from src.modules.communication.application.provider.ports import (
 from src.modules.communication.application.queue.ports import (
     OutboundQueueRepositoryProtocol,
 )
-from src.modules.communication.application.template.ports import (
-    MessageTemplateRepositoryProtocol,
+from src.modules.communication.application.template.query import (
+    MessageTemplateQueryRepositoryProtocol,
 )
 from src.modules.communication.application.webhook.ports import (
     ProviderWebhookRepositoryProtocol,
@@ -33,7 +33,7 @@ from src.modules.communication.application.webhook.ports import (
 __all__ = [
     "CommunicationRepositoryFactory",
     "HttpClientProtocol",
-    "MessageTemplateRepositoryProtocol",
+    "MessageTemplateQueryRepositoryProtocol",
     "OutboundMessagePublisherProtocol",
     "OutboundMessageQueryRepositoryProtocol",
     "OutboundProcessingByIdRepositoryProtocol",

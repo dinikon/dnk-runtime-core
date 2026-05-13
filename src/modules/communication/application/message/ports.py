@@ -12,8 +12,8 @@ from src.modules.communication.domain.delivery import (
     DeliveryAttempt,
 )
 from src.modules.communication.domain.message_template import (
-    MessageTemplate,
-    TemplateVersion,
+    MessageTemplateEntity,
+    TemplateVersionEntity,
 )
 from src.modules.communication.domain.outbound_message import (
     CommunicationRequest,
@@ -138,8 +138,8 @@ class OutboundMessagePublisherProtocol(Protocol):
 ProcessingContext = tuple[
     OutboundMessage,
     CommunicationRequest,
-    MessageTemplate,
-    TemplateVersion,
+    MessageTemplateEntity,
+    TemplateVersionEntity,
     ProviderConnection,
     ProviderConnector,
     ProviderMessageType,
@@ -159,20 +159,20 @@ class SendCommunicationRepositoryProtocol(Protocol):
         *,
         tenant_id: UUID,
         template_id: UUID,
-    ) -> MessageTemplate | None: ...
+    ) -> MessageTemplateEntity | None: ...
 
     async def get_template_by_code(
         self,
         *,
         tenant_id: UUID,
         template_code: str,
-    ) -> MessageTemplate | None: ...
+    ) -> MessageTemplateEntity | None: ...
 
     async def get_active_template_version(
         self,
         tenant_id: UUID,
         template_id: UUID,
-    ) -> TemplateVersion | None: ...
+    ) -> TemplateVersionEntity | None: ...
 
     async def find_active_connection(
         self,

@@ -6,14 +6,20 @@ from uuid import uuid4
 
 from src.modules.communication.domain.error import CommunicationValidationError
 from src.modules.communication.domain.message_template import (
-    MessageTemplate,
+    InvalidMessageTemplateCodeError,
+    InvalidMessageTemplateNameError,
+    InvalidTemplateVersionTimestampError,
+    MessageTemplateCodeVO,
+    MessageTemplateEntity,
     MessageTemplateIdVO,
+    MessageTemplateNameVO,
     MessageTemplateService,
     TemplateStatusVO,
-    TemplateVersion,
+    TemplateVersionEntity,
     TemplateVersionIdVO,
     TemplateVersionNotFoundError,
     TemplateVersionStatusVO,
+    TemplateVersionTimestampVO,
 )
 from src.modules.communication.domain.provider_connector import (
     ProviderConnector,
@@ -50,15 +56,17 @@ class _SchemaValidatorStub:
 
 class _RepositoryStub:
     def __init__(self) -> None:
-        self.templates: dict[MessageTemplateIdVO, MessageTemplate] = {}
-        self.versions: dict[TemplateVersionIdVO, TemplateVersion] = {}
+        self.templates: dict[MessageTemplateIdVO, MessageTemplateEntity] = {}
+        self.versions: dict[TemplateVersionIdVO, TemplateVersionEntity] = {}
         self.saved_templates = []
         self.saved_version_batches = []
 
     async def load_template(self, *, tenant_id, template_id):
         return self.templates.get(template_id)
 
-    async def load_template_by_code(self, *, tenant_id, template_code: str):
+    async def load_template_by_code(
+        self, *, tenant_id, template_code: MessageTemplateCodeVO
+    ):
         for template in self.templates.values():
             if template.template_code == template_code:
                 return template
@@ -159,9 +167,28 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
     def test_message_template_create_sets_draft_status_and_timestamps(self) -> None:
         template = self._template()
 
-        self.assertEqual(template.status, TemplateStatusVO.DRAFT.value)
+        self.assertEqual(template.status, TemplateStatusVO.DRAFT)
+        self.assertEqual(template.template_code, MessageTemplateCodeVO("otp_sms"))
+        self.assertEqual(template.name, MessageTemplateNameVO("OTP SMS"))
         self.assertEqual(template.created_at, NOW)
         self.assertEqual(template.updated_at, NOW)
+
+    def test_message_template_code_rejects_blank_value(self) -> None:
+        with self.assertRaises(InvalidMessageTemplateCodeError):
+            MessageTemplateCodeVO("  ")
+
+    def test_message_template_name_rejects_blank_value(self) -> None:
+        with self.assertRaises(InvalidMessageTemplateNameError):
+            MessageTemplateNameVO("")
+
+    def test_template_version_timestamp_normalizes_to_utc_seconds(self) -> None:
+        timestamp = TemplateVersionTimestampVO(datetime(2026, 5, 13, 15, 0, 5, 123456))
+
+        self.assertEqual(timestamp.value, datetime(2026, 5, 13, 15, 0, 5, tzinfo=UTC))
+
+    def test_template_version_timestamp_rejects_non_datetime(self) -> None:
+        with self.assertRaises(InvalidTemplateVersionTimestampError):
+            TemplateVersionTimestampVO("2026-05-13")  # type: ignore[arg-type]
 
     def test_message_template_binding_rejects_connector_mismatch(self) -> None:
         template = self._template()
@@ -187,7 +214,7 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
 
     def test_template_version_state_methods(self) -> None:
         template = self._template()
-        version = TemplateVersion.create(
+        version = TemplateVersionEntity.create(
             template_version_id=self.version_id,
             template_id=template.template_id,
             version=NOW,
@@ -196,7 +223,8 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
             now=NOW,
         )
 
-        self.assertEqual(version.status, TemplateVersionStatusVO.DRAFT.value)
+        self.assertEqual(version.status, TemplateVersionStatusVO.DRAFT)
+        self.assertEqual(version.version.value, NOW)
         self.assertIsNone(version.activated_at)
         self.assertFalse(version.is_active)
 
@@ -208,10 +236,10 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
 
         version.deprecate()
 
-        self.assertEqual(version.status, TemplateVersionStatusVO.DEPRECATED.value)
+        self.assertEqual(version.status, TemplateVersionStatusVO.DEPRECATED)
 
     def test_template_version_ensure_belongs_to_rejects_other_template(self) -> None:
-        version = TemplateVersion.create(
+        version = TemplateVersionEntity.create(
             template_version_id=self.version_id,
             template_id=MessageTemplateIdVO.from_value(uuid4()),
             version=NOW,
@@ -229,6 +257,7 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
 
         template = await service.create_template(
             tenant_id=self.tenant_id,
+            template_id=self.template_id,
             template_code="otp_sms",
             name="OTP SMS",
             description=None,
@@ -239,7 +268,7 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(template.template_id, self.template_id)
-        self.assertEqual(template.status, TemplateStatusVO.DRAFT.value)
+        self.assertEqual(template.status, TemplateStatusVO.DRAFT)
         self.assertEqual(repository.saved_templates, [template])
 
     async def test_service_create_template_rejects_missing_connector(self) -> None:
@@ -253,6 +282,7 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ProviderConnectorNotFoundError):
             await service.create_template(
                 tenant_id=self.tenant_id,
+                template_id=self.template_id,
                 template_code="otp_sms",
                 name="OTP SMS",
                 description=None,
@@ -273,6 +303,7 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ProviderMessageTypeNotFoundError):
             await service.create_template(
                 tenant_id=self.tenant_id,
+                template_id=self.template_id,
                 template_code="otp_sms",
                 name="OTP SMS",
                 description=None,
@@ -290,7 +321,7 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
         template = self._template()
         repository.templates[template.template_id] = template
         repository.versions[TemplateVersionIdVO.from_value(uuid4())] = (
-            TemplateVersion.create(
+            TemplateVersionEntity.create(
                 template_version_id=TemplateVersionIdVO.from_value(uuid4()),
                 template_id=template.template_id,
                 version=NOW - timedelta(minutes=5),
@@ -304,12 +335,13 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
         version = await service.create_template_version(
             tenant_id=self.tenant_id,
             template_id=template.template_id,
+            template_version_id=self.version_id,
             template_payload={"text": "Hello"},
             variables_schema={"type": "object"},
         )
 
         self.assertEqual(version.template_version_id, self.version_id)
-        self.assertEqual(version.version, NOW)
+        self.assertEqual(version.version.value, NOW)
         self.assertEqual(
             validator.template_payload_calls,
             [({"text": "Hello"}, self.message_type.field_schema)],
@@ -319,7 +351,7 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
     async def test_service_activate_version_deprecates_previous_active(self) -> None:
         repository = _RepositoryStub()
         template = self._template()
-        previous = TemplateVersion.create(
+        previous = TemplateVersionEntity.create(
             template_version_id=TemplateVersionIdVO.from_value(uuid4()),
             template_id=template.template_id,
             version=NOW - timedelta(minutes=5),
@@ -328,7 +360,7 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
             now=NOW,
         )
         previous.activate(now=NOW)
-        selected = TemplateVersion.create(
+        selected = TemplateVersionEntity.create(
             template_version_id=self.version_id,
             template_id=template.template_id,
             version=NOW,
@@ -347,14 +379,14 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
             template_version_id=selected.template_version_id,
         )
 
-        self.assertEqual(activated.status, TemplateVersionStatusVO.ACTIVE.value)
-        self.assertEqual(previous.status, TemplateVersionStatusVO.DEPRECATED.value)
-        self.assertEqual(template.status, TemplateStatusVO.ACTIVE.value)
+        self.assertEqual(activated.status, TemplateVersionStatusVO.ACTIVE)
+        self.assertEqual(previous.status, TemplateVersionStatusVO.DEPRECATED)
+        self.assertEqual(template.status, TemplateStatusVO.ACTIVE)
         self.assertEqual(repository.saved_templates[-1], template)
         self.assertEqual(len(repository.saved_version_batches[-1]), 2)
 
-    def _template(self, *, channel_code: str = "SMS") -> MessageTemplate:
-        return MessageTemplate.create(
+    def _template(self, *, channel_code: str = "SMS") -> MessageTemplateEntity:
+        return MessageTemplateEntity.create(
             template_id=self.template_id,
             tenant_id=self.tenant_id,
             template_code="otp_sms",
@@ -375,7 +407,7 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
         validator: _SchemaValidatorStub | None = None,
     ) -> MessageTemplateService:
         return MessageTemplateService(
-            repository=repository or _RepositoryStub(),
+            command_repository=repository or _RepositoryStub(),
             provider_lookup=provider_lookup
             or _ProviderLookupStub(
                 connector=self.connector,
@@ -383,8 +415,6 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
             ),
             schema_validator=validator or _SchemaValidatorStub(),
             clock=_ClockStub(),
-            template_id_provider=lambda: self.template_id,
-            template_version_id_provider=lambda: self.version_id,
         )
 
 

@@ -19,10 +19,12 @@ from src.modules.communication.application.use_cases import (
     RegisterProviderConnectorUseCase,
     SendCommunicationUseCase,
 )
+from src.modules.communication.domain.message_template import MessageTemplateService
 from src.modules.communication.presentation.depends.infrastructure import (
     CommunicationRepositoryDep,
     JsonPathServiceDep,
     JsonSchemaValidationServiceDep,
+    MessageTemplateRuntimeRepositoryDep,
     OutboundMessagePublisherDep,
     ProviderSenderRegistryDep,
     ProviderStatusMappingServiceDep,
@@ -89,10 +91,29 @@ ListProviderConnectionsUseCaseDep = Annotated[
 ]
 
 
+def get_message_template_service(
+    repository: MessageTemplateRuntimeRepositoryDep,
+    schema_validator: JsonSchemaValidationServiceDep,
+    clock: ClockDep,
+) -> MessageTemplateService:
+    return MessageTemplateService(
+        command_repository=repository,
+        provider_lookup=repository,
+        schema_validator=schema_validator,
+        clock=clock,
+    )
+
+
+MessageTemplateServiceDep = Annotated[
+    MessageTemplateService,
+    Depends(get_message_template_service),
+]
+
+
 def get_create_message_template_use_case(
-    repository: CommunicationRepositoryDep,
+    service: MessageTemplateServiceDep,
 ) -> CreateMessageTemplateUseCase:
-    return CreateMessageTemplateUseCase(repository)
+    return CreateMessageTemplateUseCase(service)
 
 
 CreateMessageTemplateUseCaseDep = Annotated[
@@ -102,11 +123,9 @@ CreateMessageTemplateUseCaseDep = Annotated[
 
 
 def get_create_template_version_use_case(
-    repository: CommunicationRepositoryDep,
-    schema_validator: JsonSchemaValidationServiceDep,
-    clock: ClockDep,
+    service: MessageTemplateServiceDep,
 ) -> CreateTemplateVersionUseCase:
-    return CreateTemplateVersionUseCase(repository, schema_validator, clock)
+    return CreateTemplateVersionUseCase(service)
 
 
 CreateTemplateVersionUseCaseDep = Annotated[
@@ -116,10 +135,9 @@ CreateTemplateVersionUseCaseDep = Annotated[
 
 
 def get_activate_template_version_use_case(
-    repository: CommunicationRepositoryDep,
-    clock: ClockDep,
+    service: MessageTemplateServiceDep,
 ) -> ActivateTemplateVersionUseCase:
-    return ActivateTemplateVersionUseCase(repository, clock)
+    return ActivateTemplateVersionUseCase(service)
 
 
 ActivateTemplateVersionUseCaseDep = Annotated[
@@ -129,7 +147,7 @@ ActivateTemplateVersionUseCaseDep = Annotated[
 
 
 def get_list_message_templates_use_case(
-    repository: CommunicationRepositoryDep,
+    repository: MessageTemplateRuntimeRepositoryDep,
 ) -> ListMessageTemplatesUseCase:
     return ListMessageTemplatesUseCase(repository)
 
@@ -225,12 +243,14 @@ __all__ = [
     "ListOutboundMessagesUseCaseDep",
     "ListProviderConnectionsUseCaseDep",
     "ListProviderConnectorsUseCaseDep",
+    "MessageTemplateServiceDep",
     "OutboundMessagePublisherDep",
     "ProcessOutboundMessageUseCaseDep",
     "ProviderSenderRegistryDep",
     "RegisterProviderConnectorUseCaseDep",
     "SendCommunicationUseCaseDep",
     "get_communication_repository",
+    "get_message_template_service",
     "get_outbound_message_publisher",
     "get_provider_sender_registry",
     "get_runtime_field_type_policy",
