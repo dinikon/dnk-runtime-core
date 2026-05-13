@@ -24,6 +24,7 @@ from src.modules.communication.presentation.depends.infrastructure import (
     CommunicationRepositoryDep,
     JsonPathServiceDep,
     JsonSchemaValidationServiceDep,
+    MessageTemplateQueryRuntimeRepositoryDep,
     MessageTemplateRuntimeRepositoryDep,
     OutboundMessagePublisherDep,
     ProviderSenderRegistryDep,
@@ -147,7 +148,7 @@ ActivateTemplateVersionUseCaseDep = Annotated[
 
 
 def get_list_message_templates_use_case(
-    repository: MessageTemplateRuntimeRepositoryDep,
+    repository: MessageTemplateQueryRuntimeRepositoryDep,
 ) -> ListMessageTemplatesUseCase:
     return ListMessageTemplatesUseCase(repository)
 

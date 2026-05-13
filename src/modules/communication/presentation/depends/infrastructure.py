@@ -17,7 +17,8 @@ from src.modules.communication.application.services import (
     TemplateRenderService,
 )
 from src.modules.communication.infrastructure.http_client import HttpxProviderHttpClient
-from src.modules.communication.infrastructure.message_template_runtime_repository import (
+from src.modules.communication.infrastructure.message_template import (
+    MessageTemplateQueryRuntimeRepository,
     MessageTemplateRuntimeRepository,
 )
 from src.modules.communication.infrastructure.provider_senders import (
@@ -93,6 +94,22 @@ def get_message_template_repository(
 MessageTemplateRuntimeRepositoryDep = Annotated[
     MessageTemplateRuntimeRepository,
     Depends(get_message_template_repository),
+]
+
+
+def get_message_template_query_repository(
+    runtime_object_resolver: RuntimeObjectResolverDep,
+    runtime_gateway: RuntimeGatewayDep,
+) -> MessageTemplateQueryRuntimeRepository:
+    return MessageTemplateQueryRuntimeRepository(
+        runtime_object_resolver=runtime_object_resolver,
+        runtime_query_gateway=runtime_gateway,
+    )
+
+
+MessageTemplateQueryRuntimeRepositoryDep = Annotated[
+    MessageTemplateQueryRuntimeRepository,
+    Depends(get_message_template_query_repository),
 ]
 
 
@@ -210,6 +227,7 @@ __all__ = [
     "HttpClientDep",
     "JsonPathServiceDep",
     "JsonSchemaValidationServiceDep",
+    "MessageTemplateQueryRuntimeRepositoryDep",
     "MessageTemplateRuntimeRepositoryDep",
     "OutboundMessagePublisherDep",
     "ProviderPayloadBuildServiceDep",
