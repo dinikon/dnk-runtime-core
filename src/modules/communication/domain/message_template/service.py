@@ -141,16 +141,14 @@ class MessageTemplateService:
         )
         self._schema_validator.validate_variables_schema(variables_schema)
 
+        now = self._clock.now()
         version = TemplateVersion.create(
             template_version_id=self._template_version_id_provider(),
             template_id=template.template_id,
-            version_no=await self._repository.next_template_version_no(
-                tenant_id=tenant_id,
-                template_id=template.template_id,
-            ),
+            version=now,
             template_payload=template_payload,
             variables_schema=variables_schema,
-            now=self._clock.now(),
+            now=now,
         )
         return await self._repository.save_template_version(
             tenant_id=tenant_id,

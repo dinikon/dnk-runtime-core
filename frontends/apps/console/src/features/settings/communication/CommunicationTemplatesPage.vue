@@ -121,6 +121,13 @@ function openSendSheet(template?: MessageTemplate) {
   isSendOpen.value = true;
 }
 
+function formatVersion(version: string | null) {
+  if (!version) {
+    return "—";
+  }
+  return new Date(version).toISOString().replace(".000Z", "Z");
+}
+
 async function submitTemplate() {
   if (!selectedMessageType.value || !selectedConnector.value) {
     templateError.value = "Provider message type is required.";
@@ -275,7 +282,7 @@ async function handleApiFailure(error: unknown, fallback: string) {
               {{ messageTypeName(template.provider_message_type_id) }}
             </td>
             <td class="px-3 py-2 text-muted-foreground">{{ template.status }} v{{
-                template.active_version_no ?? "—"
+                formatVersion(template.active_version)
               }}
             </td>
             <td class="px-3 py-2 text-right">

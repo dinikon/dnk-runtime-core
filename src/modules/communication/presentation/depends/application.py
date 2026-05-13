@@ -104,8 +104,9 @@ CreateMessageTemplateUseCaseDep = Annotated[
 def get_create_template_version_use_case(
     repository: CommunicationRepositoryDep,
     schema_validator: JsonSchemaValidationServiceDep,
+    clock: ClockDep,
 ) -> CreateTemplateVersionUseCase:
-    return CreateTemplateVersionUseCase(repository, schema_validator)
+    return CreateTemplateVersionUseCase(repository, schema_validator, clock)
 
 
 CreateTemplateVersionUseCaseDep = Annotated[

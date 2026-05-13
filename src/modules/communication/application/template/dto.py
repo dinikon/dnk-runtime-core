@@ -10,7 +10,7 @@ from uuid import UUID
 class TemplateVersionDTO:
     template_version_id: UUID
     template_id: UUID
-    version_no: int
+    version: datetime
     template_payload: dict[str, Any]
     variables_schema: dict[str, Any]
     status: str
@@ -33,7 +33,7 @@ class MessageTemplateDTO:
     created_at: datetime
     updated_at: datetime
     active_version_id: UUID | None = None
-    active_version_no: int | None = None
+    active_version: datetime | None = None
 
 
 __all__ = [

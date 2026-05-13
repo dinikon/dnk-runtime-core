@@ -9,11 +9,11 @@ from src.modules.communication.domain.message_template import (
     MessageTemplate,
     MessageTemplateIdVO,
     MessageTemplateService,
-    TemplateStatus,
+    TemplateStatusVO,
     TemplateVersion,
     TemplateVersionIdVO,
     TemplateVersionNotFoundError,
-    TemplateVersionStatus,
+    TemplateVersionStatusVO,
 )
 from src.modules.communication.domain.provider_connector import (
     ProviderConnector,
@@ -87,14 +87,6 @@ class _RepositoryStub:
             for version in self.versions.values()
             if version.template_id == template_id
         ]
-
-    async def next_template_version_no(self, *, tenant_id, template_id):
-        existing = [
-            version.version_no
-            for version in self.versions.values()
-            if version.template_id == template_id
-        ]
-        return max(existing, default=0) + 1
 
     async def save_template_version(self, *, tenant_id, version):
         self.versions[version.template_version_id] = version
@@ -198,7 +190,7 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
         version = TemplateVersion.create(
             template_version_id=self.version_id,
             template_id=template.template_id,
-            version_no=1,
+            version=NOW,
             template_payload={"text": "Hello"},
             variables_schema={},
             now=NOW,
@@ -222,7 +214,7 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
         version = TemplateVersion.create(
             template_version_id=self.version_id,
             template_id=MessageTemplateIdVO.from_value(uuid4()),
-            version_no=1,
+            version=NOW,
             template_payload={},
             variables_schema={},
             now=NOW,
@@ -290,7 +282,7 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
                 message_class="OTP",
             )
 
-    async def test_service_create_template_version_validates_and_increments(
+    async def test_service_create_template_version_validates_and_sets_utc_version(
         self,
     ) -> None:
         repository = _RepositoryStub()
@@ -301,7 +293,7 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
             TemplateVersion.create(
                 template_version_id=TemplateVersionIdVO.from_value(uuid4()),
                 template_id=template.template_id,
-                version_no=1,
+                version=NOW - timedelta(minutes=5),
                 template_payload={"text": "Old"},
                 variables_schema={},
                 now=NOW,
@@ -317,7 +309,7 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(version.template_version_id, self.version_id)
-        self.assertEqual(version.version_no, 2)
+        self.assertEqual(version.version, NOW)
         self.assertEqual(
             validator.template_payload_calls,
             [({"text": "Hello"}, self.message_type.field_schema)],
@@ -330,7 +322,7 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
         previous = TemplateVersion.create(
             template_version_id=TemplateVersionIdVO.from_value(uuid4()),
             template_id=template.template_id,
-            version_no=1,
+            version=NOW - timedelta(minutes=5),
             template_payload={"text": "Old"},
             variables_schema={},
             now=NOW,
@@ -339,7 +331,7 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
         selected = TemplateVersion.create(
             template_version_id=self.version_id,
             template_id=template.template_id,
-            version_no=2,
+            version=NOW,
             template_payload={"text": "New"},
             variables_schema={},
             now=NOW,

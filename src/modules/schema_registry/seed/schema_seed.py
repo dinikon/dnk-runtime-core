@@ -274,7 +274,7 @@ COMMUNICATION_OBJECTS = (
         fields=(
             *_system_fields("Template version identifier."),
             FieldSeed("template_id", "uuid", "Template ID", is_nullable=False),
-            FieldSeed("version_no", "int", "Version No", is_nullable=False),
+            FieldSeed("version", "datetime", "Version", is_nullable=False),
             FieldSeed(
                 "template_payload", "json", "Template Payload", is_nullable=False
             ),
@@ -292,7 +292,7 @@ COMMUNICATION_OBJECTS = (
             IndexSeed("communication_template_versions_id_uq", ("id",), True),
             IndexSeed(
                 "communication_template_versions_template_version_uq",
-                ("template_id", "version_no"),
+                ("template_id", "version"),
                 True,
             ),
             IndexSeed("communication_template_versions_template_idx", ("template_id",)),

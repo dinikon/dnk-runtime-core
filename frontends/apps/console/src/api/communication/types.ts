@@ -85,7 +85,7 @@ export interface MessageTemplate {
     created_at: string;
     updated_at: string;
     active_version_id: string | null;
-    active_version_no: number | null;
+    active_version: string | null;
 }
 
 export interface CreateMessageTemplatePayload {
@@ -101,7 +101,7 @@ export interface CreateMessageTemplatePayload {
 export interface TemplateVersion {
     template_version_id: string;
     template_id: string;
-    version_no: number;
+    version: string;
     template_payload: Record<string, unknown>;
     variables_schema: Record<string, unknown>;
     status: string;
@@ -164,4 +164,3 @@ export interface OutboundMessage {
 export interface ListOutboundMessagesResponse {
     items: OutboundMessage[];
 }
-

@@ -65,7 +65,7 @@ class MessageTemplateResponseSchema(BaseModel):
     created_at: datetime
     updated_at: datetime
     active_version_id: UUID | None = None
-    active_version_no: int | None = None
+    active_version: datetime | None = None
 
 
 class CreateTemplateVersionRequestSchema(BaseModel):
@@ -76,7 +76,7 @@ class CreateTemplateVersionRequestSchema(BaseModel):
 class TemplateVersionResponseSchema(BaseModel):
     template_version_id: UUID
     template_id: UUID
-    version_no: int
+    version: datetime
     template_payload: dict[str, Any]
     variables_schema: dict[str, Any]
     status: str
@@ -151,7 +151,7 @@ async def create_message_template(
         created_at=result.created_at,
         updated_at=result.updated_at,
         active_version_id=result.active_version_id,
-        active_version_no=result.active_version_no,
+        active_version=result.active_version,
     )
 
 
@@ -204,7 +204,7 @@ async def create_template_version(
     return TemplateVersionResponseSchema(
         template_version_id=result.template_version_id,
         template_id=result.template_id,
-        version_no=result.version_no,
+        version=result.version,
         template_payload=dict(result.template_payload),
         variables_schema=dict(result.variables_schema),
         status=result.status,
@@ -260,7 +260,7 @@ async def activate_template_version(
     return TemplateVersionResponseSchema(
         template_version_id=result.template_version_id,
         template_id=result.template_id,
-        version_no=result.version_no,
+        version=result.version,
         template_payload=dict(result.template_payload),
         variables_schema=dict(result.variables_schema),
         status=result.status,
@@ -318,7 +318,7 @@ async def list_message_templates(
                 created_at=item.created_at,
                 updated_at=item.updated_at,
                 active_version_id=item.active_version_id,
-                active_version_no=item.active_version_no,
+                active_version=item.active_version,
             )
             for item in items
         ]

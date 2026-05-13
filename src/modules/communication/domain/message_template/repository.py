@@ -86,15 +86,6 @@ class MessageTemplateRepositoryProtocol(Protocol):
         """Lists all versions for a template."""
         ...
 
-    async def next_template_version_no(
-        self,
-        *,
-        tenant_id: EntityIdVO,
-        template_id: MessageTemplateIdVO,
-    ) -> int:
-        """Returns the next version number for a template."""
-        ...
-
     async def save_template_version(
         self,
         *,

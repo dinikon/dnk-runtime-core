@@ -14,19 +14,15 @@ from src.modules.communication.domain.error import (
     CommunicationValidationError,
 )
 from src.modules.communication.domain.message_template import (
-    ChannelCode,
     ChannelCodeVO,
-    MessageClass,
     MessageClassVO,
     MessageTemplate,
     MessageTemplateIdVO,
     MessageTemplateNotFoundError,
-    TemplateStatus,
     TemplateStatusVO,
     TemplateVersion,
     TemplateVersionIdVO,
     TemplateVersionNotFoundError,
-    TemplateVersionStatus,
     TemplateVersionStatusVO,
 )
 from src.modules.communication.domain.outbound_message import (
@@ -59,7 +55,6 @@ from src.modules.communication.domain.provider_connector import (
 
 __all__ = [
     "AttemptStatus",
-    "ChannelCode",
     "ChannelCodeVO",
     "CommunicationRequest",
     "CommunicationRequestIdVO",
@@ -74,7 +69,6 @@ __all__ = [
     "DeliveryEvent",
     "DeliveryEventIdVO",
     "DeliveryEventType",
-    "MessageClass",
     "MessageClassVO",
     "MessageTemplate",
     "MessageTemplateIdVO",
@@ -96,12 +90,10 @@ __all__ = [
     "ProviderPayloadValidationError",
     "ProviderSecretsValidationError",
     "RequestStatus",
-    "TemplateStatus",
     "TemplateStatusVO",
     "TemplateVersion",
     "TemplateVersionIdVO",
     "TemplateVersionNotFoundError",
-    "TemplateVersionStatus",
     "TemplateVersionStatusVO",
     "WebhookPayloadValidationError",
 ]

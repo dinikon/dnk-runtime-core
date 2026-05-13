@@ -17,11 +17,9 @@ from src.modules.communication.domain.message_template import (
     MessageClassVO,
     MessageTemplate,
     MessageTemplateIdVO,
-    TemplateStatus,
     TemplateStatusVO,
     TemplateVersion,
     TemplateVersionIdVO,
-    TemplateVersionStatus,
     TemplateVersionStatusVO,
 )
 from src.modules.communication.domain.outbound_message import (
@@ -302,7 +300,7 @@ class CommunicationRepository:
         provider_message_type_id: UUID,
         channel_code: str,
         message_class: str,
-        status: str = TemplateStatus.DRAFT.value,
+        status: str = TemplateStatusVO.DRAFT.value,
     ):
         row = await self._insert(
             tenant_id=tenant_id,
@@ -351,19 +349,19 @@ class CommunicationRepository:
         *,
         tenant_id: UUID,
         template_id: UUID,
+        version: datetime,
         template_payload: dict[str, Any],
         variables_schema: dict[str, Any],
     ):
-        version_no = await self._next_template_version_no(tenant_id, template_id)
         row = await self._insert(
             tenant_id=tenant_id,
             object_name=_TEMPLATE_VERSION,
             payload={
                 "template_id": template_id,
-                "version_no": version_no,
+                "version": _utc_seconds(version),
                 "template_payload": template_payload,
                 "variables_schema": variables_schema,
-                "status": TemplateVersionStatus.DRAFT.value,
+                "status": TemplateVersionStatusVO.DRAFT.value,
             },
         )
         return _template_version_model(row)
@@ -380,7 +378,7 @@ class CommunicationRepository:
             object_name=_TEMPLATE_VERSION,
             filters=[
                 FilterSpec("template_id", "eq", template_id),
-                FilterSpec("status", "eq", TemplateVersionStatus.ACTIVE.value),
+                FilterSpec("status", "eq", TemplateVersionStatusVO.ACTIVE.value),
             ],
             limit=1,
         )
@@ -402,11 +400,11 @@ class CommunicationRepository:
         descriptor = await self._descriptor(tenant_id, _TEMPLATE_VERSION)
         for item in versions:
             status = (
-                TemplateVersionStatus.ACTIVE.value
+                TemplateVersionStatusVO.ACTIVE.value
                 if item["id"] == version.template_version_id.uuid
                 else (
-                    TemplateVersionStatus.DEPRECATED.value
-                    if item["status"] == TemplateVersionStatus.ACTIVE.value
+                    TemplateVersionStatusVO.DEPRECATED.value
+                    if item["status"] == TemplateVersionStatusVO.ACTIVE.value
                     else item["status"]
                 )
             )
@@ -421,7 +419,7 @@ class CommunicationRepository:
         await self._command_gateway.update(
             descriptor=await self._descriptor(tenant_id, _TEMPLATE),
             object_id=template.template_id.uuid,
-            patch={"status": TemplateStatus.ACTIVE.value},
+            patch={"status": TemplateStatusVO.ACTIVE.value},
         )
         fresh = await self._get(
             tenant_id, _TEMPLATE_VERSION, version.template_version_id.uuid
@@ -997,18 +995,6 @@ class CommunicationRepository:
             },
         )
 
-    async def _next_template_version_no(
-        self, tenant_id: UUID, template_id: UUID
-    ) -> int:
-        rows = await self._list(
-            tenant_id=tenant_id,
-            object_name=_TEMPLATE_VERSION,
-            filters=[FilterSpec("template_id", "eq", template_id)],
-            sorting=(SortSpec("version_no", "desc"),),
-            limit=1,
-        )
-        return int(rows[0]["version_no"] if rows else 0) + 1
-
     async def _next_attempt_no(self, tenant_id: UUID, outbound_message_id: UUID) -> int:
         rows = await self._list(
             tenant_id=tenant_id,
@@ -1103,6 +1089,12 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+def _utc_seconds(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.astimezone(UTC).replace(microsecond=0)
+
+
 def _connector_model(row: Mapping[str, Any]) -> ProviderConnector:
     return ProviderConnector(
         provider_connector_id=ProviderConnectorIdVO.from_value(_as_uuid(row["id"])),
@@ -1176,10 +1168,11 @@ def _template_model(tenant_id: UUID, row: Mapping[str, Any]) -> MessageTemplate:
 
 
 def _template_version_model(row: Mapping[str, Any]) -> TemplateVersion:
+    version = row.get("version") or row.get("created_at")
     return TemplateVersion(
         template_version_id=TemplateVersionIdVO.from_value(_as_uuid(row["id"])),
         template_id=MessageTemplateIdVO.from_value(_as_uuid(row.get("template_id"))),
-        version_no=int(row.get("version_no")),
+        version=_utc_seconds(_as_datetime(version)),
         template_payload=_as_dict(row.get("template_payload")),
         variables_schema=_as_dict(row.get("variables_schema")),
         status=TemplateVersionStatusVO(_as_str(row.get("status"))),

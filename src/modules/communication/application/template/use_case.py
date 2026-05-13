@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from src.modules.communication.application.services import JsonSchemaValidationService
 from src.modules.communication.application.template.command import (
     ActivateTemplateVersionCommand,
@@ -90,9 +92,11 @@ class CreateTemplateVersionUseCase:
         self,
         repository: MessageTemplateRepositoryProtocol,
         schema_validator: JsonSchemaValidationService,
+        clock: ClockPort,
     ) -> None:
         self._repository = repository
         self._schema_validator = schema_validator
+        self._clock = clock
 
     async def __call__(
         self,
@@ -122,13 +126,14 @@ class CreateTemplateVersionUseCase:
         version = await self._repository.create_template_version(
             tenant_id=command.tenant_id,
             template_id=template.template_id.uuid,
+            version=_utc_seconds(self._clock.now()),
             template_payload=command.template_payload,
             variables_schema=command.variables_schema,
         )
         return TemplateVersionDTO(
             template_version_id=version.template_version_id.uuid,
             template_id=version.template_id.uuid,
-            version_no=version.version_no,
+            version=version.version,
             template_payload=dict(version.template_payload or {}),
             variables_schema=dict(version.variables_schema or {}),
             status=version.status,
@@ -173,7 +178,7 @@ class ActivateTemplateVersionUseCase:
         return TemplateVersionDTO(
             template_version_id=activated.template_version_id.uuid,
             template_id=activated.template_id.uuid,
-            version_no=activated.version_no,
+            version=activated.version,
             template_payload=dict(activated.template_payload or {}),
             variables_schema=dict(activated.variables_schema or {}),
             status=activated.status,
@@ -215,10 +220,8 @@ class ListMessageTemplatesUseCase:
                         if active_version is not None
                         else None
                     ),
-                    active_version_no=(
-                        active_version.version_no
-                        if active_version is not None
-                        else None
+                    active_version=(
+                        active_version.version if active_version is not None else None
                     ),
                 )
             )
@@ -231,3 +234,9 @@ __all__ = [
     "CreateTemplateVersionUseCase",
     "ListMessageTemplatesUseCase",
 ]
+
+
+def _utc_seconds(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.astimezone(UTC).replace(microsecond=0)

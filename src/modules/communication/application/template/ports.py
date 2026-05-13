@@ -53,6 +53,7 @@ class MessageTemplateRepositoryProtocol(Protocol):
         *,
         tenant_id: UUID,
         template_id: UUID,
+        version: datetime,
         template_payload: dict[str, Any],
         variables_schema: dict[str, Any],
     ) -> TemplateVersion: ...
