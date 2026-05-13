@@ -159,7 +159,7 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
     def test_message_template_create_sets_draft_status_and_timestamps(self) -> None:
         template = self._template()
 
-        self.assertEqual(template.status, TemplateStatus.DRAFT.value)
+        self.assertEqual(template.status, TemplateStatusVO.DRAFT.value)
         self.assertEqual(template.created_at, NOW)
         self.assertEqual(template.updated_at, NOW)
 
@@ -196,7 +196,7 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
             now=NOW,
         )
 
-        self.assertEqual(version.status, TemplateVersionStatus.DRAFT.value)
+        self.assertEqual(version.status, TemplateVersionStatusVO.DRAFT.value)
         self.assertIsNone(version.activated_at)
         self.assertFalse(version.is_active)
 
@@ -208,7 +208,7 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
 
         version.deprecate()
 
-        self.assertEqual(version.status, TemplateVersionStatus.DEPRECATED.value)
+        self.assertEqual(version.status, TemplateVersionStatusVO.DEPRECATED.value)
 
     def test_template_version_ensure_belongs_to_rejects_other_template(self) -> None:
         version = TemplateVersion.create(
@@ -239,7 +239,7 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(template.template_id, self.template_id)
-        self.assertEqual(template.status, TemplateStatus.DRAFT.value)
+        self.assertEqual(template.status, TemplateStatusVO.DRAFT.value)
         self.assertEqual(repository.saved_templates, [template])
 
     async def test_service_create_template_rejects_missing_connector(self) -> None:
@@ -347,9 +347,9 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
             template_version_id=selected.template_version_id,
         )
 
-        self.assertEqual(activated.status, TemplateVersionStatus.ACTIVE.value)
-        self.assertEqual(previous.status, TemplateVersionStatus.DEPRECATED.value)
-        self.assertEqual(template.status, TemplateStatus.ACTIVE.value)
+        self.assertEqual(activated.status, TemplateVersionStatusVO.ACTIVE.value)
+        self.assertEqual(previous.status, TemplateVersionStatusVO.DEPRECATED.value)
+        self.assertEqual(template.status, TemplateStatusVO.ACTIVE.value)
         self.assertEqual(repository.saved_templates[-1], template)
         self.assertEqual(len(repository.saved_version_batches[-1]), 2)
 
