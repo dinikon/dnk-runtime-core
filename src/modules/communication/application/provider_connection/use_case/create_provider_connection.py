@@ -1,3 +1,5 @@
+from typing import Protocol
+
 from src.modules.communication.application.provider_connection.command import (
     CreateProviderConnectionCommand,
 )
@@ -9,6 +11,16 @@ from src.modules.communication.domain.provider_connection import (
     ProviderConnectionEntity,
     ProviderConnectionService,
 )
+
+
+class CreateProviderConnectionUseCaseProtocol(Protocol):
+    """Порт доменного сервиса создания provider connection."""
+
+    async def __call__(
+        self, command: CreateProviderConnectionCommand
+    ) -> ProviderConnectionEntity:
+        """Создает provider connection через domain layer."""
+        ...
 
 
 class CreateProviderConnectionUseCase:
@@ -61,4 +73,4 @@ class CreateProviderConnectionUseCase:
         )
 
 
-__all__ = ["CreateProviderConnectionUseCase"]
+__all__ = ["CreateProviderConnectionUseCase", "CreateProviderConnectionUseCaseProtocol"]

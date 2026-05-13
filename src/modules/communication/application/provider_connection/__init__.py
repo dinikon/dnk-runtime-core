@@ -10,6 +10,7 @@ from src.modules.communication.application.provider_connection.query import (
 from src.modules.communication.application.provider_connection.use_case import (
     CreateProviderConnectionUseCase,
     ListProviderConnectionsUseCase,
+    CreateProviderConnectionUseCaseProtocol,
 )
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "ListProviderConnectionsUseCase",
     "ProviderConnectionDTO",
     "ProviderConnectionQueryRepositoryProtocol",
+    "CreateProviderConnectionUseCaseProtocol",
 ]

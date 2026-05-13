@@ -1,3 +1,5 @@
+from typing import Protocol
+
 from src.modules.communication.application.provider_connection.dto import (
     ProviderConnectionDTO,
 )
@@ -5,6 +7,14 @@ from src.modules.communication.application.provider_connection.query import (
     ProviderConnectionQueryRepositoryProtocol,
 )
 from src.modules.shared import EntityIdVO
+
+
+class ListProviderConnectionsUseCaseProtocol(Protocol):
+    """Порт use case списка provider connections."""
+
+    async def __call__(self, tenant_id: EntityIdVO) -> list[ProviderConnectionDTO]:
+        """Возвращает список provider connections tenant."""
+        ...
 
 
 class ListProviderConnectionsUseCase:
@@ -19,4 +29,7 @@ class ListProviderConnectionsUseCase:
         return await self._repository.list_connections(tenant_id=tenant_id)
 
 
-__all__ = ["ListProviderConnectionsUseCase"]
+__all__ = [
+    "ListProviderConnectionsUseCase",
+    "ListProviderConnectionsUseCaseProtocol",
+]

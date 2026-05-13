@@ -8,12 +8,14 @@ from src.modules.communication.application.use_cases import (
     ActivateTemplateVersionUseCase,
     CreateMessageTemplateUseCase,
     CreateProviderConnectionUseCase,
+    CreateProviderConnectionUseCaseProtocol,
     CreateTemplateVersionUseCase,
     GetOutboundMessageUseCase,
     HandleProviderWebhookUseCase,
     ListMessageTemplatesUseCase,
     ListOutboundMessagesUseCase,
     ListProviderConnectionsUseCase,
+    ListProviderConnectionsUseCaseProtocol,
     ListProviderConnectorsUseCase,
     ProcessOutboundMessageUseCase,
     RegisterProviderConnectorUseCase,
@@ -92,24 +94,24 @@ ProviderConnectionServiceDep = Annotated[
 def get_create_provider_connection_use_case(
     service: ProviderConnectionServiceDep,
     secret_codec: SecretCodecDep,
-) -> CreateProviderConnectionUseCase:
+) -> CreateProviderConnectionUseCaseProtocol:
     return CreateProviderConnectionUseCase(service, secret_codec)
 
 
 CreateProviderConnectionUseCaseDep = Annotated[
-    CreateProviderConnectionUseCase,
+    CreateProviderConnectionUseCaseProtocol,
     Depends(get_create_provider_connection_use_case),
 ]
 
 
 def get_list_provider_connections_use_case(
     repository: ProviderConnectionRuntimeRepositoryDep,
-) -> ListProviderConnectionsUseCase:
+) -> ListProviderConnectionsUseCaseProtocol:
     return ListProviderConnectionsUseCase(repository)
 
 
 ListProviderConnectionsUseCaseDep = Annotated[
-    ListProviderConnectionsUseCase,
+    ListProviderConnectionsUseCaseProtocol,
     Depends(get_list_provider_connections_use_case),
 ]
 

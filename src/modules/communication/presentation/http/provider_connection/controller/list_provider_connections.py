@@ -1,5 +1,3 @@
-from dataclasses import asdict
-
 from fastapi import APIRouter, HTTPException, status
 
 from src.modules.communication.domain.error import (
@@ -71,7 +69,23 @@ async def list_provider_connections(
             detail=str(exc),
         ) from exc
     return ListProviderConnectionsResponseSchema(
-        items=[ProviderConnectionResponseSchema(**asdict(item)) for item in items]
+        items=[
+            ProviderConnectionResponseSchema(
+                provider_connection_id=item.provider_connection_id,
+                tenant_id=item.tenant_id,
+                provider_connector_id=item.provider_connector_id,
+                connection_code=item.connection_code,
+                connection_name=item.connection_name,
+                channel_code=item.channel_code,
+                config=item.config,
+                secret_ref=item.secret_ref,
+                has_secrets=item.has_secrets,
+                status=item.status,
+                created_at=item.created_at,
+                updated_at=item.updated_at,
+            )
+            for item in items
+        ]
     )
 
 
