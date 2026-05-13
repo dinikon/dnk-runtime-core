@@ -4,9 +4,13 @@ from src.modules.communication.domain.message_template.entity import (
 )
 from src.modules.communication.domain.message_template.enum import (
     ChannelCode,
+    ChannelCodeVO,
     MessageClass,
+    MessageClassVO,
     TemplateStatus,
+    TemplateStatusVO,
     TemplateVersionStatus,
+    TemplateVersionStatusVO,
 )
 from src.modules.communication.domain.message_template.error import (
     MessageTemplateNotFoundError,
@@ -27,7 +31,9 @@ from src.modules.communication.domain.message_template.value_object import (
 
 __all__ = [
     "ChannelCode",
+    "ChannelCodeVO",
     "MessageClass",
+    "MessageClassVO",
     "MessageTemplate",
     "MessageTemplateIdVO",
     "MessageTemplateNotFoundError",
@@ -36,8 +42,10 @@ __all__ = [
     "MessageTemplateSchemaValidatorProtocol",
     "MessageTemplateService",
     "TemplateStatus",
+    "TemplateStatusVO",
     "TemplateVersion",
     "TemplateVersionIdVO",
     "TemplateVersionNotFoundError",
     "TemplateVersionStatus",
+    "TemplateVersionStatusVO",
 ]

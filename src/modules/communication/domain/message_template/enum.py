@@ -1,39 +1,23 @@
-from __future__ import annotations
+from src.modules.communication.domain.message_template.value_object import (
+    ChannelCodeVO,
+    MessageClassVO,
+    TemplateStatusVO,
+    TemplateVersionStatusVO,
+)
 
-from enum import StrEnum
-
-
-class ChannelCode(StrEnum):
-    SMS = "SMS"
-    VIBER = "VIBER"
-    EMAIL = "EMAIL"
-    CUSTOM = "CUSTOM"
-
-
-class MessageClass(StrEnum):
-    MARKETING = "MARKETING"
-    TRANSACTIONAL = "TRANSACTIONAL"
-    SERVICE = "SERVICE"
-    OTP = "OTP"
-    INFO = "INFO"
-
-
-class TemplateStatus(StrEnum):
-    DRAFT = "DRAFT"
-    ACTIVE = "ACTIVE"
-    ARCHIVED = "ARCHIVED"
-
-
-class TemplateVersionStatus(StrEnum):
-    DRAFT = "DRAFT"
-    ACTIVE = "ACTIVE"
-    DEPRECATED = "DEPRECATED"
+ChannelCode = ChannelCodeVO
+MessageClass = MessageClassVO
+TemplateStatus = TemplateStatusVO
+TemplateVersionStatus = TemplateVersionStatusVO
 
 
 __all__ = [
     "ChannelCode",
+    "ChannelCodeVO",
     "MessageClass",
+    "MessageClassVO",
     "TemplateStatus",
+    "TemplateStatusVO",
     "TemplateVersionStatus",
+    "TemplateVersionStatusVO",
 ]
-

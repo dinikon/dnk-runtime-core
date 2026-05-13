@@ -13,12 +13,16 @@ from src.modules.communication.domain.delivery import (
     DeliveryEventIdVO,
 )
 from src.modules.communication.domain.message_template import (
+    ChannelCodeVO,
+    MessageClassVO,
     MessageTemplate,
     MessageTemplateIdVO,
     TemplateStatus,
+    TemplateStatusVO,
     TemplateVersion,
     TemplateVersionIdVO,
     TemplateVersionStatus,
+    TemplateVersionStatusVO,
 )
 from src.modules.communication.domain.outbound_message import (
     CommunicationRequest,
@@ -1163,9 +1167,9 @@ def _template_model(tenant_id: UUID, row: Mapping[str, Any]) -> MessageTemplate:
         provider_message_type_id=ProviderMessageTypeIdVO.from_value(
             _as_uuid(row.get("provider_message_type_id"))
         ),
-        channel_code=_as_str(row.get("channel_code")),
-        message_class=_as_str(row.get("message_class")),
-        status=_as_str(row.get("status")),
+        channel_code=ChannelCodeVO(_as_str(row.get("channel_code"))),
+        message_class=MessageClassVO(_as_str(row.get("message_class"))),
+        status=TemplateStatusVO(_as_str(row.get("status"))),
         created_at=_as_datetime(row.get("created_at")),
         updated_at=_as_datetime(row.get("updated_at")),
     )
@@ -1178,7 +1182,7 @@ def _template_version_model(row: Mapping[str, Any]) -> TemplateVersion:
         version_no=int(row.get("version_no")),
         template_payload=_as_dict(row.get("template_payload")),
         variables_schema=_as_dict(row.get("variables_schema")),
-        status=_as_str(row.get("status")),
+        status=TemplateVersionStatusVO(_as_str(row.get("status"))),
         created_at=_as_datetime(row.get("created_at")),
         activated_at=_as_optional_datetime(row.get("activated_at")),
     )

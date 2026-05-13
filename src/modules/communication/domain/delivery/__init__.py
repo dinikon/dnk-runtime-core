@@ -6,7 +6,9 @@ from src.modules.communication.domain.delivery.enum import (
     AttemptStatus,
     DeliveryEventType,
 )
-from src.modules.communication.domain.delivery.error import WebhookPayloadValidationError
+from src.modules.communication.domain.delivery.error import (
+    WebhookPayloadValidationError,
+)
 from src.modules.communication.domain.delivery.value_object import (
     DeliveryAttemptIdVO,
     DeliveryEventIdVO,
