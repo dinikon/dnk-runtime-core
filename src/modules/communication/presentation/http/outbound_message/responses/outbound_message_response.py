@@ -6,8 +6,6 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from src.modules.communication.application.outbound_message import OutboundMessageDTO
-
 
 class OutboundMessageResponseSchema(BaseModel):
     """HTTP response outbound message."""
@@ -34,35 +32,4 @@ class OutboundMessageResponseSchema(BaseModel):
     updated_at: datetime
 
 
-def outbound_message_response(
-    item: OutboundMessageDTO,
-) -> OutboundMessageResponseSchema:
-    """Мапит application DTO в HTTP response schema."""
-    return OutboundMessageResponseSchema(
-        outbound_message_id=item.outbound_message_id,
-        tenant_id=item.tenant_id,
-        communication_request_id=item.communication_request_id,
-        provider_connection_id=item.provider_connection_id,
-        channel_code=item.channel_code,
-        contact_id=item.contact_id,
-        recipient_address=item.recipient_address,
-        rendered_payload=dict(item.rendered_payload),
-        provider_request_payload=dict(item.provider_request_payload),
-        external_message_id=item.external_message_id,
-        external_status=item.external_status,
-        internal_status=item.internal_status,
-        error_code=item.error_code,
-        error_message=item.error_message,
-        queued_at=item.queued_at,
-        sent_at=item.sent_at,
-        delivered_at=item.delivered_at,
-        failed_at=item.failed_at,
-        created_at=item.created_at,
-        updated_at=item.updated_at,
-    )
-
-
-__all__ = [
-    "OutboundMessageResponseSchema",
-    "outbound_message_response",
-]
+__all__ = ["OutboundMessageResponseSchema"]

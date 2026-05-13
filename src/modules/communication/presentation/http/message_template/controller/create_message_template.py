@@ -97,7 +97,22 @@ async def create_message_template(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
-    return MessageTemplateResponseSchema(**result.__dict__)
+    return MessageTemplateResponseSchema(
+        template_id=result.template_id,
+        tenant_id=result.tenant_id,
+        template_code=result.template_code,
+        name=result.name,
+        description=result.description,
+        provider_connector_id=result.provider_connector_id,
+        provider_message_type_id=result.provider_message_type_id,
+        channel_code=result.channel_code,
+        message_class=result.message_class,
+        status=result.status,
+        created_at=result.created_at,
+        updated_at=result.updated_at,
+        active_version_id=result.active_version_id,
+        active_version=result.active_version,
+    )
 
 
 __all__ = [

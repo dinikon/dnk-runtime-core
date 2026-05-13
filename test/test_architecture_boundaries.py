@@ -211,6 +211,28 @@ class ArchitectureBoundariesTests(unittest.TestCase):
         self.assertNotIn("asdict(", content)
         self.assertIn("include_router", content)
 
+    def test_communication_controllers_map_responses_explicitly(self) -> None:
+        forbidden_patterns = (
+            ".__dict__",
+            "ResponseSchema(**",
+            "outbound_message_response(",
+        )
+        for path in iter_python_files("src/modules/communication/presentation/http"):
+            is_controller = "/controller/" in path.as_posix()
+            is_legacy_router_controller = (
+                path.name == "router.py"
+                and not path.as_posix().endswith("/presentation/http/router.py")
+            )
+            if not is_controller and not is_legacy_router_controller:
+                continue
+            content = path.read_text(encoding="utf-8")
+            for pattern in forbidden_patterns:
+                self.assertNotIn(
+                    pattern,
+                    content,
+                    msg=f"{path} should map HTTP responses explicitly in return blocks",
+                )
+
     def test_communication_repository_does_not_export_dto_mappers(self) -> None:
         path = PROJECT_ROOT / "src/modules/communication/infrastructure/repository.py"
         content = path.read_text(encoding="utf-8")

@@ -14,7 +14,7 @@ from src.modules.communication.presentation.http.outbound_message.controller.err
 )
 from src.modules.communication.presentation.http.outbound_message.responses import (
     ListOutboundMessagesResponseSchema,
-    outbound_message_response,
+    OutboundMessageResponseSchema,
 )
 from src.modules.shared import EntityIdVO
 from src.modules.shared.depends import AuthenticatedRequestContextDep
@@ -42,7 +42,31 @@ async def list_messages(
     except Exception as exc:
         raise map_outbound_http_error(exc) from exc
     return ListOutboundMessagesResponseSchema(
-        items=[outbound_message_response(item) for item in items]
+        items=[
+            OutboundMessageResponseSchema(
+                outbound_message_id=item.outbound_message_id,
+                tenant_id=item.tenant_id,
+                communication_request_id=item.communication_request_id,
+                provider_connection_id=item.provider_connection_id,
+                channel_code=item.channel_code,
+                contact_id=item.contact_id,
+                recipient_address=item.recipient_address,
+                rendered_payload=dict(item.rendered_payload),
+                provider_request_payload=dict(item.provider_request_payload),
+                external_message_id=item.external_message_id,
+                external_status=item.external_status,
+                internal_status=item.internal_status,
+                error_code=item.error_code,
+                error_message=item.error_message,
+                queued_at=item.queued_at,
+                sent_at=item.sent_at,
+                delivered_at=item.delivered_at,
+                failed_at=item.failed_at,
+                created_at=item.created_at,
+                updated_at=item.updated_at,
+            )
+            for item in items
+        ]
     )
 
 

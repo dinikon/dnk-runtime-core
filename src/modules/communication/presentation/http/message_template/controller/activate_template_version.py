@@ -83,7 +83,16 @@ async def activate_template_version(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
-    return TemplateVersionResponseSchema(**result.__dict__)
+    return TemplateVersionResponseSchema(
+        template_version_id=result.template_version_id,
+        template_id=result.template_id,
+        version=result.version,
+        template_payload=dict(result.template_payload),
+        variables_schema=dict(result.variables_schema),
+        status=result.status,
+        created_at=result.created_at,
+        activated_at=result.activated_at,
+    )
 
 
 __all__ = [

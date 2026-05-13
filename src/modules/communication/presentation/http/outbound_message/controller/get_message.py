@@ -17,7 +17,6 @@ from src.modules.communication.presentation.http.outbound_message.controller.err
 )
 from src.modules.communication.presentation.http.outbound_message.responses import (
     OutboundMessageResponseSchema,
-    outbound_message_response,
 )
 from src.modules.shared import EntityIdVO
 from src.modules.shared.depends import AuthenticatedRequestContextDep
@@ -45,7 +44,28 @@ async def get_message(
         )
     except Exception as exc:
         raise map_outbound_http_error(exc) from exc
-    return outbound_message_response(result)
+    return OutboundMessageResponseSchema(
+        outbound_message_id=result.outbound_message_id,
+        tenant_id=result.tenant_id,
+        communication_request_id=result.communication_request_id,
+        provider_connection_id=result.provider_connection_id,
+        channel_code=result.channel_code,
+        contact_id=result.contact_id,
+        recipient_address=result.recipient_address,
+        rendered_payload=dict(result.rendered_payload),
+        provider_request_payload=dict(result.provider_request_payload),
+        external_message_id=result.external_message_id,
+        external_status=result.external_status,
+        internal_status=result.internal_status,
+        error_code=result.error_code,
+        error_message=result.error_message,
+        queued_at=result.queued_at,
+        sent_at=result.sent_at,
+        delivered_at=result.delivered_at,
+        failed_at=result.failed_at,
+        created_at=result.created_at,
+        updated_at=result.updated_at,
+    )
 
 
 __all__ = ["get_message", "router"]
