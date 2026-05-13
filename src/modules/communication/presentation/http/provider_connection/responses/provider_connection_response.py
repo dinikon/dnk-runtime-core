@@ -1,13 +1,13 @@
-from __future__ import annotations
-
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from pydantic import BaseModel
 
-@dataclass(frozen=True, slots=True)
-class ProviderConnectionDTO:
+
+class ProviderConnectionResponseSchema(BaseModel):
+    """Pydantic-схема HTTP-ответа provider connection."""
+
     provider_connection_id: UUID
     tenant_id: UUID
     provider_connector_id: UUID
@@ -22,4 +22,4 @@ class ProviderConnectionDTO:
     updated_at: datetime
 
 
-__all__ = ["ProviderConnectionDTO"]
+__all__ = ["ProviderConnectionResponseSchema"]

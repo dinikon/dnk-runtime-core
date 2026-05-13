@@ -22,6 +22,7 @@ from src.modules.communication.application.outbound_message.ports import (
     CommunicationRepositoryFactory,
     OutboundMessageQueryRepositoryProtocol,
     OutboundProcessingRepositoryProtocol,
+    ProviderConnectionLookupProtocol,
     ProviderPreparedSend,
     ProviderSendContext,
     ProviderSendResult,
@@ -54,10 +55,12 @@ class SendCommunicationUseCase:
         repository: SendCommunicationRepositoryProtocol,
         schema_validator: JsonSchemaValidationService,
         clock: ClockPort,
+        provider_connection_lookup: ProviderConnectionLookupProtocol | None = None,
     ) -> None:
         self._repository = repository
         self._schema_validator = schema_validator
         self._clock = clock
+        self._provider_connection_lookup = provider_connection_lookup or repository
 
     async def __call__(
         self,
@@ -112,7 +115,7 @@ class SendCommunicationUseCase:
             active_version.variables_schema,
             "variables",
         )
-        connection = await self._repository.find_active_connection(
+        connection = await self._provider_connection_lookup.find_active_connection(
             tenant_id=command.tenant_id,
             provider_connector_id=_id_uuid(template.provider_connector_id),
             channel_code=template.channel_code.value,

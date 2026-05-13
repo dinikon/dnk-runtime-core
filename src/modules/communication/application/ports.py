@@ -8,6 +8,7 @@ from src.modules.communication.application.outbound_message.ports import (
     OutboundProcessingByIdRepositoryProtocol,
     OutboundProcessingRepositoryProtocol,
     ProcessingContext,
+    ProviderConnectionLookupProtocol,
     ProviderHttpResponse,
     ProviderPreparedSend,
     ProviderSendContext,
@@ -16,8 +17,8 @@ from src.modules.communication.application.outbound_message.ports import (
     ProviderSenderRegistryProtocol,
     SendCommunicationRepositoryProtocol,
 )
-from src.modules.communication.application.provider_connection.ports import (
-    ProviderConnectionRepositoryProtocol,
+from src.modules.communication.application.provider_connection.query import (
+    ProviderConnectionQueryRepositoryProtocol,
 )
 from src.modules.communication.application.provider_connector.ports import (
     ProviderConnectorRepositoryProtocol,
@@ -42,7 +43,8 @@ __all__ = [
     "OutboundProcessingRepositoryProtocol",
     "OutboundQueueRepositoryProtocol",
     "ProcessingContext",
-    "ProviderConnectionRepositoryProtocol",
+    "ProviderConnectionQueryRepositoryProtocol",
+    "ProviderConnectionLookupProtocol",
     "ProviderConnectorRepositoryProtocol",
     "ProviderHttpResponse",
     "ProviderPreparedSend",

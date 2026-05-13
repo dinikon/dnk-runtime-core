@@ -21,6 +21,9 @@ from src.modules.communication.infrastructure.message_template import (
     MessageTemplateQueryRuntimeRepository,
     MessageTemplateRuntimeRepository,
 )
+from src.modules.communication.infrastructure.provider_connection import (
+    ProviderConnectionRuntimeRepository,
+)
 from src.modules.communication.infrastructure.provider_senders import (
     ProviderSenderRegistry,
     YamlHttpProviderSender,
@@ -110,6 +113,23 @@ def get_message_template_query_repository(
 MessageTemplateQueryRuntimeRepositoryDep = Annotated[
     MessageTemplateQueryRuntimeRepository,
     Depends(get_message_template_query_repository),
+]
+
+
+def get_provider_connection_repository(
+    runtime_object_resolver: RuntimeObjectResolverDep,
+    runtime_gateway: RuntimeGatewayDep,
+) -> ProviderConnectionRuntimeRepository:
+    return ProviderConnectionRuntimeRepository(
+        runtime_object_resolver=runtime_object_resolver,
+        runtime_command_gateway=runtime_gateway,
+        runtime_query_gateway=runtime_gateway,
+    )
+
+
+ProviderConnectionRuntimeRepositoryDep = Annotated[
+    ProviderConnectionRuntimeRepository,
+    Depends(get_provider_connection_repository),
 ]
 
 
@@ -230,6 +250,7 @@ __all__ = [
     "MessageTemplateQueryRuntimeRepositoryDep",
     "MessageTemplateRuntimeRepositoryDep",
     "OutboundMessagePublisherDep",
+    "ProviderConnectionRuntimeRepositoryDep",
     "ProviderPayloadBuildServiceDep",
     "ProviderSenderRegistryDep",
     "ProviderStatusMappingServiceDep",

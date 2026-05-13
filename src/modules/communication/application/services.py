@@ -216,6 +216,22 @@ class ProviderYamlLoader:
 class JsonSchemaValidationService:
     """Validates JSON payloads against JSON Schema."""
 
+    def validate_provider_config(
+        self,
+        payload: dict[str, Any],
+        schema: Mapping[str, Any] | None,
+    ) -> None:
+        """Validate provider connection config against connector schema."""
+        self.validate(payload, schema, "config")
+
+    def validate_provider_secrets(
+        self,
+        payload: dict[str, Any],
+        schema: Mapping[str, Any] | None,
+    ) -> None:
+        """Validate provider connection secrets against connector schema."""
+        self.validate(payload, schema, "secrets")
+
     def validate_template_payload(
         self,
         payload: dict[str, Any],

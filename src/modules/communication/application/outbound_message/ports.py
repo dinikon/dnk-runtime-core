@@ -205,6 +205,20 @@ class SendCommunicationRepositoryProtocol(Protocol):
     ) -> tuple[CommunicationRequest, OutboundMessage]: ...
 
 
+class ProviderConnectionLookupProtocol(Protocol):
+    """Порт lookup active provider connection для send-сценария."""
+
+    async def find_active_connection(
+        self,
+        *,
+        tenant_id: UUID,
+        provider_connector_id: UUID,
+        channel_code: str,
+    ) -> ProviderConnection | None:
+        """Ищет active provider connection по connector и channel."""
+        ...
+
+
 class OutboundProcessingRepositoryProtocol(Protocol):
     async def claim_queued_messages(
         self,
@@ -284,6 +298,7 @@ __all__ = [
     "OutboundProcessingRepositoryProtocol",
     "ProcessingContext",
     "ProviderHttpResponse",
+    "ProviderConnectionLookupProtocol",
     "ProviderPreparedSend",
     "ProviderSendContext",
     "ProviderSendResult",

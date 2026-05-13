@@ -20,6 +20,9 @@ from src.modules.communication.application.use_cases import (
     SendCommunicationUseCase,
 )
 from src.modules.communication.domain.message_template import MessageTemplateService
+from src.modules.communication.domain.provider_connection import (
+    ProviderConnectionService,
+)
 from src.modules.communication.presentation.depends.infrastructure import (
     CommunicationRepositoryDep,
     JsonPathServiceDep,
@@ -27,6 +30,7 @@ from src.modules.communication.presentation.depends.infrastructure import (
     MessageTemplateQueryRuntimeRepositoryDep,
     MessageTemplateRuntimeRepositoryDep,
     OutboundMessagePublisherDep,
+    ProviderConnectionRuntimeRepositoryDep,
     ProviderSenderRegistryDep,
     ProviderStatusMappingServiceDep,
     ProviderYamlLoaderDep,
@@ -66,12 +70,30 @@ ListProviderConnectorsUseCaseDep = Annotated[
 ]
 
 
-def get_create_provider_connection_use_case(
-    repository: CommunicationRepositoryDep,
+def get_provider_connection_service(
+    repository: ProviderConnectionRuntimeRepositoryDep,
     schema_validator: JsonSchemaValidationServiceDep,
+    clock: ClockDep,
+) -> ProviderConnectionService:
+    return ProviderConnectionService(
+        command_repository=repository,
+        provider_lookup=repository,
+        schema_validator=schema_validator,
+        clock=clock,
+    )
+
+
+ProviderConnectionServiceDep = Annotated[
+    ProviderConnectionService,
+    Depends(get_provider_connection_service),
+]
+
+
+def get_create_provider_connection_use_case(
+    service: ProviderConnectionServiceDep,
     secret_codec: SecretCodecDep,
 ) -> CreateProviderConnectionUseCase:
-    return CreateProviderConnectionUseCase(repository, schema_validator, secret_codec)
+    return CreateProviderConnectionUseCase(service, secret_codec)
 
 
 CreateProviderConnectionUseCaseDep = Annotated[
@@ -81,7 +103,7 @@ CreateProviderConnectionUseCaseDep = Annotated[
 
 
 def get_list_provider_connections_use_case(
-    repository: CommunicationRepositoryDep,
+    repository: ProviderConnectionRuntimeRepositoryDep,
 ) -> ListProviderConnectionsUseCase:
     return ListProviderConnectionsUseCase(repository)
 
@@ -161,10 +183,16 @@ ListMessageTemplatesUseCaseDep = Annotated[
 
 def get_send_communication_use_case(
     repository: CommunicationRepositoryDep,
+    provider_connection_lookup: ProviderConnectionRuntimeRepositoryDep,
     schema_validator: JsonSchemaValidationServiceDep,
     clock: ClockDep,
 ) -> SendCommunicationUseCase:
-    return SendCommunicationUseCase(repository, schema_validator, clock)
+    return SendCommunicationUseCase(
+        repository,
+        schema_validator,
+        clock,
+        provider_connection_lookup=provider_connection_lookup,
+    )
 
 
 SendCommunicationUseCaseDep = Annotated[
@@ -247,6 +275,7 @@ __all__ = [
     "MessageTemplateServiceDep",
     "OutboundMessagePublisherDep",
     "ProcessOutboundMessageUseCaseDep",
+    "ProviderConnectionServiceDep",
     "ProviderSenderRegistryDep",
     "RegisterProviderConnectorUseCaseDep",
     "SendCommunicationUseCaseDep",

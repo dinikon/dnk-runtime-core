@@ -35,7 +35,9 @@ from src.modules.communication.domain.outbound_message import (
 )
 from src.modules.communication.domain.provider_connection import (
     ProviderConnection,
+    ProviderConnectionCodeVO,
     ProviderConnectionIdVO,
+    ProviderConnectionNameVO,
     ProviderConnectionStatus,
 )
 from src.modules.communication.domain.provider_connector import (
@@ -1137,13 +1139,13 @@ def _connection_model(tenant_id: UUID, row: Mapping[str, Any]) -> ProviderConnec
         provider_connector_id=ProviderConnectorIdVO.from_value(
             _as_uuid(row.get("provider_connector_id"))
         ),
-        connection_code=_as_str(row.get("connection_code")),
-        connection_name=_as_str(row.get("connection_name")),
+        connection_code=ProviderConnectionCodeVO(_as_str(row.get("connection_code"))),
+        connection_name=ProviderConnectionNameVO(_as_str(row.get("connection_name"))),
         channel_code=_as_str(row.get("channel_code")),
         config=_as_dict(row.get("config")),
         secret_ref=_as_optional_str(row.get("secret_ref")),
         secrets_b64=_as_optional_str(row.get("secrets_b64")),
-        status=_as_str(row.get("status")),
+        status=ProviderConnectionStatus(_as_str(row.get("status"))),
         created_at=_as_datetime(row.get("created_at")),
         updated_at=_as_datetime(row.get("updated_at")),
     )

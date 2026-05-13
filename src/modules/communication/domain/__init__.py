@@ -40,9 +40,13 @@ from src.modules.communication.domain.outbound_message import (
 )
 from src.modules.communication.domain.provider_connection import (
     ProviderConnection,
+    ProviderConnectionCodeVO,
+    ProviderConnectionEntity,
     ProviderConnectionIdVO,
+    ProviderConnectionNameVO,
     ProviderConnectionNotFoundError,
     ProviderConnectionStatus,
+    ProviderConnectionStatusVO,
     ProviderSecretsValidationError,
 )
 from src.modules.communication.domain.provider_connector import (
@@ -83,9 +87,13 @@ __all__ = [
     "OutboundMessageNotFoundError",
     "OutboundMessageStatus",
     "ProviderConnection",
+    "ProviderConnectionCodeVO",
+    "ProviderConnectionEntity",
     "ProviderConnectionIdVO",
+    "ProviderConnectionNameVO",
     "ProviderConnectionNotFoundError",
     "ProviderConnectionStatus",
+    "ProviderConnectionStatusVO",
     "ProviderConnector",
     "ProviderConnectorIdVO",
     "ProviderConnectorNotFoundError",

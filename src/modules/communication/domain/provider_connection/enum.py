@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from enum import StrEnum
+from src.modules.communication.domain.provider_connection.value_object import (
+    ProviderConnectionStatusVO,
+)
 
-
-class ProviderConnectionStatus(StrEnum):
-    ACTIVE = "ACTIVE"
-    DISABLED = "DISABLED"
+ProviderConnectionStatus = ProviderConnectionStatusVO
 
 
 __all__ = ["ProviderConnectionStatus"]
