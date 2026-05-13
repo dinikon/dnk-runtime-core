@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from src.modules.communication.application.outbound_message.use_case import (
+from src.modules.communication.application.outbound_message.provider_send import (
     parse_event_time,
 )
 from src.modules.communication.application.services import (

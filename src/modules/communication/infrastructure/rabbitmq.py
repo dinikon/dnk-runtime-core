@@ -24,6 +24,8 @@ from src.modules.communication.application.use_cases import (
     ProcessOutboundMessageByIdCommand,
     ProcessOutboundMessageByIdUseCase,
 )
+from src.modules.communication.domain.outbound_message import OutboundMessageIdVO
+from src.modules.shared import EntityIdVO
 
 
 def build_communication_exchange(
@@ -177,8 +179,10 @@ async def handle_outbound_message_job(
     try:
         await processor(
             ProcessOutboundMessageByIdCommand(
-                tenant_id=job.tenant_id,
-                outbound_message_id=job.outbound_message_id,
+                tenant_id=EntityIdVO.from_value(job.tenant_id),
+                outbound_message_id=OutboundMessageIdVO.from_value(
+                    job.outbound_message_id
+                ),
             )
         )
     except Exception:

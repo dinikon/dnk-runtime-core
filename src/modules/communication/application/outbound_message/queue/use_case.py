@@ -16,6 +16,8 @@ from src.modules.communication.application.outbound_message.queue.ports import (
     OutboundMessagePublisherProtocol,
     OutboundQueueRepositoryProtocol,
 )
+from src.modules.communication.domain.outbound_message import OutboundMessageIdVO
+from src.modules.shared import EntityIdVO
 from src.modules.shared.kernel.time.ports import ClockPort
 
 
@@ -40,8 +42,9 @@ class PublishQueuedOutboundMessagesUseCase:
         command: PublishQueuedOutboundMessagesCommand,
     ) -> PublishQueuedResultDTO:
         now = self._clock.now()
+        tenant_id = EntityIdVO.from_value(command.tenant_id)
         outbounds = await self._repository.list_publishable_outbounds(
-            tenant_id=command.tenant_id,
+            tenant_id=tenant_id,
             limit=command.limit,
             now=now,
             republish_before=now - timedelta(seconds=self._republish_after_seconds),
@@ -57,8 +60,10 @@ class PublishQueuedOutboundMessagesUseCase:
                     source=command.source,
                 )
                 await self._repository.mark_outbound_published(
-                    tenant_id=command.tenant_id,
-                    outbound_message_id=_id_uuid(outbound.outbound_message_id),
+                    tenant_id=tenant_id,
+                    outbound_message_id=OutboundMessageIdVO.from_value(
+                        _id_uuid(outbound.outbound_message_id)
+                    ),
                     published_at=now,
                 )
                 published += 1
@@ -88,7 +93,7 @@ class RecoverStuckOutboundMessagesUseCase:
     ) -> RecoverStuckResultDTO:
         now = self._clock.now()
         recovered = await self._repository.recover_stuck_outbounds(
-            tenant_id=command.tenant_id,
+            tenant_id=EntityIdVO.from_value(command.tenant_id),
             older_than=now - timedelta(seconds=command.older_than_seconds),
             now=now,
             limit=command.limit,

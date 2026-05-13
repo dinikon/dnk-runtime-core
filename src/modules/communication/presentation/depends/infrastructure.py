@@ -21,6 +21,9 @@ from src.modules.communication.infrastructure.message_template import (
     MessageTemplateQueryRuntimeRepository,
     MessageTemplateRuntimeRepository,
 )
+from src.modules.communication.infrastructure.outbound_message import (
+    OutboundMessageRuntimeRepository,
+)
 from src.modules.communication.infrastructure.provider_connection import (
     ProviderConnectionRuntimeRepository,
 )
@@ -83,6 +86,24 @@ def get_communication_repository(
 CommunicationRepositoryDep = Annotated[
     CommunicationRepository,
     Depends(get_communication_repository),
+]
+
+
+def get_outbound_message_repository(
+    runtime_object_resolver: RuntimeObjectResolverDep,
+    runtime_gateway: RuntimeGatewayDep,
+) -> OutboundMessageRuntimeRepository:
+    """Создает runtime repository outbound message aggregate."""
+    return OutboundMessageRuntimeRepository(
+        runtime_object_resolver=runtime_object_resolver,
+        runtime_command_gateway=runtime_gateway,
+        runtime_query_gateway=runtime_gateway,
+    )
+
+
+OutboundMessageRuntimeRepositoryDep = Annotated[
+    OutboundMessageRuntimeRepository,
+    Depends(get_outbound_message_repository),
 ]
 
 
@@ -270,6 +291,7 @@ __all__ = [
     "JsonSchemaValidationServiceDep",
     "MessageTemplateQueryRuntimeRepositoryDep",
     "MessageTemplateRuntimeRepositoryDep",
+    "OutboundMessageRuntimeRepositoryDep",
     "OutboundMessagePublisherDep",
     "ProviderConnectionRuntimeRepositoryDep",
     "ProviderConnectorRuntimeRepositoryDep",
@@ -283,6 +305,7 @@ __all__ = [
     "TemplateRenderServiceDep",
     "get_communication_repository",
     "get_message_template_repository",
+    "get_outbound_message_repository",
     "get_outbound_message_publisher",
     "get_provider_sender_registry",
     "get_runtime_field_type_policy",

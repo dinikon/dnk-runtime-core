@@ -12,6 +12,8 @@ from src.modules.communication.infrastructure.rabbitmq import (
     RabbitMQOutboundMessagePublisher,
     handle_outbound_message_job,
 )
+from src.modules.communication.domain.outbound_message import OutboundMessageIdVO
+from src.modules.shared import EntityIdVO
 
 
 class _DeclaredQueueStub:
@@ -128,7 +130,10 @@ class CommunicationQueueTests(unittest.IsolatedAsyncioTestCase):
             processor=processor,
         )
 
-        self.assertEqual(processed, [(tenant_id, outbound_message_id)])
+        self.assertIs(type(processed[0][0]), EntityIdVO)
+        self.assertIs(type(processed[0][1]), OutboundMessageIdVO)
+        self.assertEqual(processed[0][0].uuid, tenant_id)
+        self.assertEqual(processed[0][1].uuid, outbound_message_id)
         self.assertTrue(message.acked)
         self.assertFalse(message.rejected)
         self.assertFalse(message.nacked)

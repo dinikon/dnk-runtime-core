@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -7,16 +5,9 @@ from uuid import UUID
 
 
 @dataclass(frozen=True, slots=True)
-class SendCommunicationResultDTO:
-    communication_request_id: UUID
-    outbound_message_id: UUID
-    status: str
-    internal_status: str
-    idempotent: bool
-
-
-@dataclass(frozen=True, slots=True)
 class OutboundMessageDTO:
+    """DTO outbound message для application boundary."""
+
     outbound_message_id: UUID
     tenant_id: UUID
     communication_request_id: UUID
@@ -39,26 +30,4 @@ class OutboundMessageDTO:
     updated_at: datetime
 
 
-@dataclass(frozen=True, slots=True)
-class ProcessQueuedResultDTO:
-    processed: int
-    succeeded: int
-    failed: int
-
-
-@dataclass(frozen=True, slots=True)
-class ProcessOutboundMessageResultDTO:
-    outbound_message_id: UUID
-    processed: bool
-    succeeded: bool
-    skipped: bool
-    status: str
-    error_message: str | None = None
-
-
-__all__ = [
-    "OutboundMessageDTO",
-    "ProcessOutboundMessageResultDTO",
-    "ProcessQueuedResultDTO",
-    "SendCommunicationResultDTO",
-]
+__all__ = ["OutboundMessageDTO"]

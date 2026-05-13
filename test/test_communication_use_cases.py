@@ -28,7 +28,12 @@ from src.modules.communication.application.delivery import (
     HandleProviderWebhookCommand,
     HandleProviderWebhookUseCase,
 )
-from src.modules.communication.domain.outbound_message import OutboundMessageStatus
+from src.modules.communication.domain.outbound_message import (
+    CommunicationRequestIdVO,
+    OutboundMessageService,
+    OutboundMessageIdVO,
+    OutboundMessageStatus,
+)
 from src.modules.communication.infrastructure.provider_senders import (
     ProviderSenderRegistry,
     YamlHttpProviderSender,
@@ -274,6 +279,20 @@ class _UnitOfWorkStub:
         return None
 
 
+class _RepositoryContextFactoryStub:
+    def __init__(self, repository) -> None:
+        self.repository = repository
+
+    def __call__(self):
+        return self
+
+    async def __aenter__(self):
+        return self.repository
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
+
+
 class _ClockStub:
     def now(self):
         return datetime.now(UTC)
@@ -411,11 +430,11 @@ class _TurboSmsProcessRepositoryStub(_ProcessRepositoryStub):
 class _IdempotencyRepositoryStub:
     def __init__(self) -> None:
         self.request = SimpleNamespace(
-            communication_request_id=uuid4(),
+            communication_request_id=CommunicationRequestIdVO.from_value(uuid4()),
             status="QUEUED",
         )
         self.outbound = SimpleNamespace(
-            outbound_message_id=uuid4(),
+            outbound_message_id=OutboundMessageIdVO.from_value(uuid4()),
             internal_status="QUEUED",
         )
         self.created = False
@@ -625,7 +644,7 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         repository = _ByIdRepositoryStub()
         http_client = _HttpClientStub()
         use_case = ProcessOutboundMessageByIdUseCase(
-            session_factory=object(),
+            repository_context_factory=_RepositoryContextFactoryStub(repository),
             sender_registry=ProviderSenderRegistry(
                 [
                     YamlHttpProviderSender(
@@ -638,23 +657,16 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 ]
             ),
             template_renderer=TemplateRenderService(),
-            repository_factory=lambda _session: repository,
             processing_lease_seconds=300,
             clock=_ClockStub(),
         )
 
-        with (
-            patch(
-                "src.modules.communication.application.outbound_message.use_case.UnitOfWork",
-                _UnitOfWorkStub,
-            ),
-        ):
-            result = await use_case(
-                ProcessOutboundMessageByIdCommand(
-                    tenant_id=uuid4(),
-                    outbound_message_id=repository.outbound.outbound_message_id,
-                )
+        result = await use_case(
+            ProcessOutboundMessageByIdCommand(
+                tenant_id=uuid4(),
+                outbound_message_id=repository.outbound.outbound_message_id,
             )
+        )
 
         self.assertTrue(result.processed)
         self.assertTrue(result.succeeded)
@@ -668,7 +680,7 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         repository = _ByIdRepositoryStub()
         http_client = _FailingHttpClientStub()
         use_case = ProcessOutboundMessageByIdUseCase(
-            session_factory=object(),
+            repository_context_factory=_RepositoryContextFactoryStub(repository),
             sender_registry=ProviderSenderRegistry(
                 [
                     YamlHttpProviderSender(
@@ -681,23 +693,16 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 ]
             ),
             template_renderer=TemplateRenderService(),
-            repository_factory=lambda _session: repository,
             processing_lease_seconds=300,
             clock=_ClockStub(),
         )
 
-        with (
-            patch(
-                "src.modules.communication.application.outbound_message.use_case.UnitOfWork",
-                _UnitOfWorkStub,
-            ),
-        ):
-            result = await use_case(
-                ProcessOutboundMessageByIdCommand(
-                    tenant_id=uuid4(),
-                    outbound_message_id=repository.outbound.outbound_message_id,
-                )
+        result = await use_case(
+            ProcessOutboundMessageByIdCommand(
+                tenant_id=uuid4(),
+                outbound_message_id=repository.outbound.outbound_message_id,
             )
+        )
 
         self.assertTrue(result.processed)
         self.assertFalse(result.succeeded)
@@ -711,7 +716,7 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         repository = _ByIdRepositoryStub(claimable=False)
         http_client = _HttpClientStub()
         use_case = ProcessOutboundMessageByIdUseCase(
-            session_factory=object(),
+            repository_context_factory=_RepositoryContextFactoryStub(repository),
             sender_registry=ProviderSenderRegistry(
                 [
                     YamlHttpProviderSender(
@@ -724,23 +729,16 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 ]
             ),
             template_renderer=TemplateRenderService(),
-            repository_factory=lambda _session: repository,
             processing_lease_seconds=300,
             clock=_ClockStub(),
         )
 
-        with (
-            patch(
-                "src.modules.communication.application.outbound_message.use_case.UnitOfWork",
-                _UnitOfWorkStub,
-            ),
-        ):
-            result = await use_case(
-                ProcessOutboundMessageByIdCommand(
-                    tenant_id=uuid4(),
-                    outbound_message_id=repository.outbound.outbound_message_id,
-                )
+        result = await use_case(
+            ProcessOutboundMessageByIdCommand(
+                tenant_id=uuid4(),
+                outbound_message_id=repository.outbound.outbound_message_id,
             )
+        )
 
         self.assertFalse(result.processed)
         self.assertTrue(result.skipped)
@@ -827,7 +825,11 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
     async def test_send_communication_returns_existing_idempotent_message(self) -> None:
         repository = _IdempotencyRepositoryStub()
         use_case = SendCommunicationUseCase(
-            repository, schema_validator=SimpleNamespace(), clock=_ClockStub()
+            repository=repository,
+            service=OutboundMessageService(repository=repository, clock=_ClockStub()),
+            template_lookup=repository,
+            schema_validator=SimpleNamespace(),
+            provider_connection_lookup=repository,
         )
 
         result = await use_case(
@@ -845,7 +847,8 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result.idempotent)
         self.assertFalse(repository.created)
         self.assertEqual(
-            result.outbound_message_id, repository.outbound.outbound_message_id
+            result.outbound_message_id,
+            repository.outbound.outbound_message_id.uuid,
         )
 
     async def test_webhook_updates_outbound_and_creates_delivery_event(self) -> None:

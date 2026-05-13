@@ -5,7 +5,9 @@ from src.modules.communication.application.outbound_message.ports import (
     HttpClientProtocol,
     OutboundMessagePublisherProtocol,
     OutboundMessageQueryRepositoryProtocol,
+    OutboundMessageRepositoryProtocol,
     OutboundProcessingByIdRepositoryProtocol,
+    OutboundProcessingRepositoryContextFactoryProtocol,
     OutboundProcessingRepositoryProtocol,
     ProcessingContext,
     ProviderConnectionLookupProtocol,
@@ -16,6 +18,7 @@ from src.modules.communication.application.outbound_message.ports import (
     ProviderSenderProtocol,
     ProviderSenderRegistryProtocol,
     SendCommunicationRepositoryProtocol,
+    SendCommunicationTemplateLookupProtocol,
 )
 from src.modules.communication.application.provider_connection.query import (
     ProviderConnectionQueryRepositoryProtocol,
@@ -39,7 +42,9 @@ __all__ = [
     "MessageTemplateQueryRepositoryProtocol",
     "OutboundMessagePublisherProtocol",
     "OutboundMessageQueryRepositoryProtocol",
+    "OutboundMessageRepositoryProtocol",
     "OutboundProcessingByIdRepositoryProtocol",
+    "OutboundProcessingRepositoryContextFactoryProtocol",
     "OutboundProcessingRepositoryProtocol",
     "OutboundQueueRepositoryProtocol",
     "ProcessingContext",
@@ -54,4 +59,5 @@ __all__ = [
     "ProviderSenderRegistryProtocol",
     "ProviderWebhookRepositoryProtocol",
     "SendCommunicationRepositoryProtocol",
+    "SendCommunicationTemplateLookupProtocol",
 ]

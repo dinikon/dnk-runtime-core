@@ -24,6 +24,7 @@ from src.modules.communication.application.use_cases import (
     SendCommunicationUseCase,
 )
 from src.modules.communication.domain.message_template import MessageTemplateService
+from src.modules.communication.domain.outbound_message import OutboundMessageService
 from src.modules.communication.domain.provider_connection import (
     ProviderConnectionService,
 )
@@ -34,6 +35,7 @@ from src.modules.communication.presentation.depends.infrastructure import (
     JsonSchemaValidationServiceDep,
     MessageTemplateQueryRuntimeRepositoryDep,
     MessageTemplateRuntimeRepositoryDep,
+    OutboundMessageRuntimeRepositoryDep,
     OutboundMessagePublisherDep,
     ProviderConnectionRuntimeRepositoryDep,
     ProviderConnectorRuntimeRepositoryDep,
@@ -203,16 +205,32 @@ ListMessageTemplatesUseCaseDep = Annotated[
 ]
 
 
+def get_outbound_message_service(
+    repository: OutboundMessageRuntimeRepositoryDep,
+    clock: ClockDep,
+) -> OutboundMessageService:
+    """Создает domain service outbound message aggregate."""
+    return OutboundMessageService(repository=repository, clock=clock)
+
+
+OutboundMessageServiceDep = Annotated[
+    OutboundMessageService,
+    Depends(get_outbound_message_service),
+]
+
+
 def get_send_communication_use_case(
-    repository: CommunicationRepositoryDep,
+    repository: OutboundMessageRuntimeRepositoryDep,
+    service: OutboundMessageServiceDep,
     provider_connection_lookup: ProviderConnectionRuntimeRepositoryDep,
     schema_validator: JsonSchemaValidationServiceDep,
-    clock: ClockDep,
 ) -> SendCommunicationUseCase:
+    """Создает use case постановки outbound communication send."""
     return SendCommunicationUseCase(
-        repository,
-        schema_validator,
-        clock,
+        repository=repository,
+        service=service,
+        template_lookup=repository,
+        schema_validator=schema_validator,
         provider_connection_lookup=provider_connection_lookup,
     )
 
@@ -224,7 +242,7 @@ SendCommunicationUseCaseDep = Annotated[
 
 
 def get_process_outbound_message_use_case(
-    repository: CommunicationRepositoryDep,
+    repository: OutboundMessageRuntimeRepositoryDep,
     sender_registry: ProviderSenderRegistryDep,
     template_renderer: TemplateRenderServiceDep,
     clock: ClockDep,
@@ -259,7 +277,7 @@ HandleProviderWebhookUseCaseDep = Annotated[
 
 
 def get_get_outbound_message_use_case(
-    repository: CommunicationRepositoryDep,
+    repository: OutboundMessageRuntimeRepositoryDep,
 ) -> GetOutboundMessageUseCase:
     return GetOutboundMessageUseCase(repository)
 
@@ -271,7 +289,7 @@ GetOutboundMessageUseCaseDep = Annotated[
 
 
 def get_list_outbound_messages_use_case(
-    repository: CommunicationRepositoryDep,
+    repository: OutboundMessageRuntimeRepositoryDep,
 ) -> ListOutboundMessagesUseCase:
     return ListOutboundMessagesUseCase(repository)
 
@@ -295,6 +313,8 @@ __all__ = [
     "ListProviderConnectionsUseCaseDep",
     "ListProviderConnectorsUseCaseDep",
     "MessageTemplateServiceDep",
+    "OutboundMessageRuntimeRepositoryDep",
+    "OutboundMessageServiceDep",
     "OutboundMessagePublisherDep",
     "ProcessOutboundMessageUseCaseDep",
     "ProviderConnectionServiceDep",

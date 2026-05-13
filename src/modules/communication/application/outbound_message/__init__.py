@@ -14,7 +14,9 @@ from src.modules.communication.application.outbound_message.ports import (
     HttpClientProtocol,
     OutboundMessagePublisherProtocol,
     OutboundMessageQueryRepositoryProtocol,
+    OutboundMessageRepositoryProtocol,
     OutboundProcessingByIdRepositoryProtocol,
+    OutboundProcessingRepositoryContextFactoryProtocol,
     OutboundProcessingRepositoryProtocol,
     ProviderHttpResponse,
     ProviderPreparedSend,
@@ -23,6 +25,14 @@ from src.modules.communication.application.outbound_message.ports import (
     ProviderSenderProtocol,
     ProviderSenderRegistryProtocol,
     SendCommunicationRepositoryProtocol,
+    SendCommunicationTemplateLookupProtocol,
+)
+from src.modules.communication.application.outbound_message.provider_send import (
+    parse_event_time,
+)
+from src.modules.communication.application.outbound_message.query import (
+    GetOutboundMessageQuery,
+    ListOutboundMessagesQuery,
 )
 from src.modules.communication.application.outbound_message.use_case import (
     GetOutboundMessageUseCase,
@@ -30,18 +40,21 @@ from src.modules.communication.application.outbound_message.use_case import (
     ProcessOutboundMessageByIdUseCase,
     ProcessOutboundMessageUseCase,
     SendCommunicationUseCase,
-    parse_event_time,
 )
 
 __all__ = [
     "CommunicationRepositoryFactory",
+    "GetOutboundMessageQuery",
     "GetOutboundMessageUseCase",
     "HttpClientProtocol",
     "ListOutboundMessagesUseCase",
+    "ListOutboundMessagesQuery",
     "OutboundMessageDTO",
     "OutboundMessagePublisherProtocol",
     "OutboundMessageQueryRepositoryProtocol",
+    "OutboundMessageRepositoryProtocol",
     "OutboundProcessingByIdRepositoryProtocol",
+    "OutboundProcessingRepositoryContextFactoryProtocol",
     "OutboundProcessingRepositoryProtocol",
     "ProcessOutboundMessageByIdCommand",
     "ProcessOutboundMessageByIdUseCase",
@@ -58,6 +71,7 @@ __all__ = [
     "SendCommunicationCommand",
     "SendCommunicationRepositoryProtocol",
     "SendCommunicationResultDTO",
+    "SendCommunicationTemplateLookupProtocol",
     "SendCommunicationUseCase",
     "parse_event_time",
 ]
