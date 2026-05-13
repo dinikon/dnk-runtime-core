@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from src.modules.communication.domain.error import CommunicationNotFoundError
+from src.modules.communication.domain.error import (
+    CommunicationNotFoundError,
+    CommunicationValidationError,
+)
 
 
 class ProviderConnectorNotFoundError(CommunicationNotFoundError):
@@ -17,7 +20,71 @@ class ProviderMessageTypeNotFoundError(CommunicationNotFoundError):
         super().__init__("Provider message type was not found.")
 
 
+class InvalidProviderConnectorCodeError(CommunicationValidationError):
+    """Raised when provider connector code is invalid."""
+
+    def __init__(self) -> None:
+        super().__init__("Provider connector code is invalid.")
+
+
+class InvalidProviderConnectorNameError(CommunicationValidationError):
+    """Raised when provider connector name is invalid."""
+
+    def __init__(self) -> None:
+        super().__init__("Provider connector name is invalid.")
+
+
+class InvalidProviderConnectorVersionError(CommunicationValidationError):
+    """Raised when provider connector version is invalid."""
+
+    def __init__(self) -> None:
+        super().__init__("Provider connector version is invalid.")
+
+
+class InvalidProviderConnectorTypeError(CommunicationValidationError):
+    """Raised when provider connector type is invalid."""
+
+    def __init__(self) -> None:
+        super().__init__("Provider connector type is invalid.")
+
+
+class InvalidProviderConnectorStatusError(CommunicationValidationError):
+    """Raised when provider connector status is invalid."""
+
+    def __init__(self) -> None:
+        super().__init__("Provider connector status is invalid.")
+
+
+class InvalidProviderMessageTypeCodeError(CommunicationValidationError):
+    """Raised when provider message type code is invalid."""
+
+    def __init__(self) -> None:
+        super().__init__("Provider message type code is invalid.")
+
+
+class InvalidProviderMessageTypeNameError(CommunicationValidationError):
+    """Raised when provider message type name is invalid."""
+
+    def __init__(self) -> None:
+        super().__init__("Provider message type name is invalid.")
+
+
+class InvalidProviderChannelCodeError(CommunicationValidationError):
+    """Raised when provider channel code is invalid."""
+
+    def __init__(self) -> None:
+        super().__init__("Provider channel code is invalid.")
+
+
 __all__ = [
+    "InvalidProviderChannelCodeError",
+    "InvalidProviderConnectorCodeError",
+    "InvalidProviderConnectorNameError",
+    "InvalidProviderConnectorStatusError",
+    "InvalidProviderConnectorTypeError",
+    "InvalidProviderConnectorVersionError",
+    "InvalidProviderMessageTypeCodeError",
+    "InvalidProviderMessageTypeNameError",
     "ProviderConnectorNotFoundError",
     "ProviderMessageTypeNotFoundError",
 ]

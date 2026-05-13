@@ -17,14 +17,17 @@ from src.modules.communication.application.use_cases import (
     ListProviderConnectionsUseCase,
     ListProviderConnectionsUseCaseProtocol,
     ListProviderConnectorsUseCase,
+    ListProviderConnectorsUseCaseProtocol,
     ProcessOutboundMessageUseCase,
     RegisterProviderConnectorUseCase,
+    RegisterProviderConnectorUseCaseProtocol,
     SendCommunicationUseCase,
 )
 from src.modules.communication.domain.message_template import MessageTemplateService
 from src.modules.communication.domain.provider_connection import (
     ProviderConnectionService,
 )
+from src.modules.communication.domain.provider_connector import ProviderConnectorService
 from src.modules.communication.presentation.depends.infrastructure import (
     CommunicationRepositoryDep,
     JsonPathServiceDep,
@@ -33,6 +36,7 @@ from src.modules.communication.presentation.depends.infrastructure import (
     MessageTemplateRuntimeRepositoryDep,
     OutboundMessagePublisherDep,
     ProviderConnectionRuntimeRepositoryDep,
+    ProviderConnectorRuntimeRepositoryDep,
     ProviderSenderRegistryDep,
     ProviderStatusMappingServiceDep,
     ProviderYamlLoaderDep,
@@ -47,27 +51,43 @@ from src.modules.communication.presentation.depends.infrastructure import (
 from src.modules.shared.depends.clock import ClockDep
 
 
+def get_provider_connector_service(
+    repository: ProviderConnectorRuntimeRepositoryDep,
+    clock: ClockDep,
+) -> ProviderConnectorService:
+    """Создает domain service provider connector aggregate."""
+    return ProviderConnectorService(repository=repository, clock=clock)
+
+
+ProviderConnectorServiceDep = Annotated[
+    ProviderConnectorService,
+    Depends(get_provider_connector_service),
+]
+
+
 def get_register_provider_connector_use_case(
-    repository: CommunicationRepositoryDep,
+    service: ProviderConnectorServiceDep,
     loader: ProviderYamlLoaderDep,
-) -> RegisterProviderConnectorUseCase:
-    return RegisterProviderConnectorUseCase(repository, loader)
+) -> RegisterProviderConnectorUseCaseProtocol:
+    """Создает use case регистрации provider connector."""
+    return RegisterProviderConnectorUseCase(service, loader)
 
 
 RegisterProviderConnectorUseCaseDep = Annotated[
-    RegisterProviderConnectorUseCase,
+    RegisterProviderConnectorUseCaseProtocol,
     Depends(get_register_provider_connector_use_case),
 ]
 
 
 def get_list_provider_connectors_use_case(
-    repository: CommunicationRepositoryDep,
-) -> ListProviderConnectorsUseCase:
+    repository: ProviderConnectorRuntimeRepositoryDep,
+) -> ListProviderConnectorsUseCaseProtocol:
+    """Создает use case списка provider connectors."""
     return ListProviderConnectorsUseCase(repository)
 
 
 ListProviderConnectorsUseCaseDep = Annotated[
-    ListProviderConnectorsUseCase,
+    ListProviderConnectorsUseCaseProtocol,
     Depends(get_list_provider_connectors_use_case),
 ]
 
@@ -278,6 +298,7 @@ __all__ = [
     "OutboundMessagePublisherDep",
     "ProcessOutboundMessageUseCaseDep",
     "ProviderConnectionServiceDep",
+    "ProviderConnectorServiceDep",
     "ProviderSenderRegistryDep",
     "RegisterProviderConnectorUseCaseDep",
     "SendCommunicationUseCaseDep",

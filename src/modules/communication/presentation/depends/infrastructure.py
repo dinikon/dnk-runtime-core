@@ -24,6 +24,9 @@ from src.modules.communication.infrastructure.message_template import (
 from src.modules.communication.infrastructure.provider_connection import (
     ProviderConnectionRuntimeRepository,
 )
+from src.modules.communication.infrastructure.provider_connector import (
+    ProviderConnectorRuntimeRepository,
+)
 from src.modules.communication.infrastructure.provider_senders import (
     ProviderSenderRegistry,
     YamlHttpProviderSender,
@@ -130,6 +133,24 @@ def get_provider_connection_repository(
 ProviderConnectionRuntimeRepositoryDep = Annotated[
     ProviderConnectionRuntimeRepository,
     Depends(get_provider_connection_repository),
+]
+
+
+def get_provider_connector_repository(
+    runtime_object_resolver: RuntimeObjectResolverDep,
+    runtime_gateway: RuntimeGatewayDep,
+) -> ProviderConnectorRuntimeRepository:
+    """Создает runtime repository provider connector aggregate."""
+    return ProviderConnectorRuntimeRepository(
+        runtime_object_resolver=runtime_object_resolver,
+        runtime_command_gateway=runtime_gateway,
+        runtime_query_gateway=runtime_gateway,
+    )
+
+
+ProviderConnectorRuntimeRepositoryDep = Annotated[
+    ProviderConnectorRuntimeRepository,
+    Depends(get_provider_connector_repository),
 ]
 
 
@@ -251,6 +272,7 @@ __all__ = [
     "MessageTemplateRuntimeRepositoryDep",
     "OutboundMessagePublisherDep",
     "ProviderConnectionRuntimeRepositoryDep",
+    "ProviderConnectorRuntimeRepositoryDep",
     "ProviderPayloadBuildServiceDep",
     "ProviderSenderRegistryDep",
     "ProviderStatusMappingServiceDep",

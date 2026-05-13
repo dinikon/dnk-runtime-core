@@ -39,7 +39,10 @@ Communication ids are concrete `EntityIdVO` subclasses in the communication doma
 ## Infrastructure / Persistence
 
 - persistence uses tenant runtime tables from the schema seed, not public SQLAlchemy communication models
-- `CommunicationRepository` maps runtime rows to domain dataclasses explicitly
+- provider connector, provider connection and message template aggregates use dedicated runtime repositories with
+  explicit
+  row-to-entity/DTO mapping
+- `CommunicationRepository` still owns outbound, delivery and worker-oriented runtime operations
 - provider senders implement application ports for YAML HTTP and YAML SMTP transports
 - RabbitMQ publisher/worker code lives in infrastructure and is wired from presentation/management builders
 - HTTP and management wiring assemble session-bound repositories from the active `UnitOfWork`
@@ -74,6 +77,7 @@ providers call them without console session context.
 ## Tests Covering This Module
 
 - communication service tests for YAML validation, rendering, JSONPath/status mapping and secret encoding
+- provider connector domain/application/runtime/DI tests for YAML import aggregation and catalog listing
 - communication use case tests for send idempotency, outbound processing, retry behavior and webhooks
 - communication HTTP router tests for routes, publish-after-commit and controller error mapping
 - communication management command tests for process/publish/recover/worker wiring

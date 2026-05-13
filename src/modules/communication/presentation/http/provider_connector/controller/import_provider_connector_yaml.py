@@ -1,27 +1,24 @@
 import uuid6
 from fastapi import APIRouter, HTTPException, status
 
-from src.modules.communication.application.provider_connection import (
-    CreateProviderConnectionCommand,
+from src.modules.communication.application.provider_connector import (
+    RegisterProviderConnectorCommand,
 )
 from src.modules.communication.domain.error import (
     CommunicationNotFoundError,
     CommunicationRuntimeStateError,
     CommunicationValidationError,
 )
-from src.modules.communication.domain.provider_connection import (
-    ProviderConnectionIdVO,
-)
 from src.modules.communication.domain.provider_connector import ProviderConnectorIdVO
 from src.modules.communication.presentation.depends.application import (
-    CreateProviderConnectionUseCaseDep,
+    RegisterProviderConnectorUseCaseDep,
 )
 from src.modules.communication.presentation.http.common import require_tenant_id
-from src.modules.communication.presentation.http.provider_connection.requests import (
-    CreateProviderConnectionRequestSchema,
+from src.modules.communication.presentation.http.provider_connector.requests import (
+    ImportYamlRequestSchema,
 )
-from src.modules.communication.presentation.http.provider_connection.responses import (
-    ProviderConnectionResponseSchema,
+from src.modules.communication.presentation.http.provider_connector.responses import (
+    ProviderConnectorResponseSchema,
 )
 from src.modules.runtime_data import (
     RuntimeDataFilterError,
@@ -42,31 +39,23 @@ router = APIRouter(prefix="/communication/providers", tags=["communication"])
 
 
 @router.post(
-    "/connections",
-    response_model=ProviderConnectionResponseSchema,
+    "/connectors/import-yaml",
+    response_model=ProviderConnectorResponseSchema,
     status_code=status.HTTP_201_CREATED,
 )
-async def create_provider_connection(
-    payload: CreateProviderConnectionRequestSchema,
+async def import_provider_connector_yaml(
+    payload: ImportYamlRequestSchema,
     context: AuthenticatedRequestContextDep,
-    use_case: CreateProviderConnectionUseCaseDep,
-) -> ProviderConnectionResponseSchema:
-    """HTTP endpoint создания provider connection текущего tenant."""
+    use_case: RegisterProviderConnectorUseCaseDep,
+) -> ProviderConnectorResponseSchema:
+    """HTTP endpoint импорта provider connector YAML текущего tenant."""
     tenant_id = EntityIdVO.from_value(require_tenant_id(context))
     try:
         result = await use_case(
-            CreateProviderConnectionCommand(
+            RegisterProviderConnectorCommand(
                 tenant_id=tenant_id,
-                provider_connection_id=ProviderConnectionIdVO.from_value(uuid6.uuid7()),
-                provider_connector_id=ProviderConnectorIdVO.from_value(
-                    payload.provider_connector_id
-                ),
-                connection_code=payload.connection_code,
-                connection_name=payload.connection_name,
-                channel_code=payload.channel_code,
-                config=payload.config,
-                secrets=payload.secrets,
-                secret_ref=payload.secret_ref,
+                provider_connector_id=ProviderConnectorIdVO.from_value(uuid6.uuid7()),
+                yaml_content=payload.yaml_content,
             )
         )
     except CommunicationNotFoundError as exc:
@@ -94,16 +83,15 @@ async def create_provider_connection(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
-    return ProviderConnectionResponseSchema(
-        provider_connection_id=result.provider_connection_id,
-        tenant_id=result.tenant_id,
+    return ProviderConnectorResponseSchema(
         provider_connector_id=result.provider_connector_id,
-        connection_code=result.connection_code,
-        connection_name=result.connection_name,
-        channel_code=result.channel_code,
-        config=result.config,
-        secret_ref=result.secret_ref,
-        has_secrets=result.has_secrets,
+        provider_code=result.provider_code,
+        provider_name=result.provider_name,
+        version=result.version,
+        connector_type=result.connector_type,
+        channels=list(result.channels),
+        config_schema=dict(result.config_schema),
+        secrets_schema=dict(result.secrets_schema),
         status=result.status,
         created_at=result.created_at,
         updated_at=result.updated_at,
@@ -111,7 +99,7 @@ async def create_provider_connection(
 
 
 __all__ = [
-    "CreateProviderConnectionRequestSchema",
-    "create_provider_connection",
+    "ImportYamlRequestSchema",
+    "import_provider_connector_yaml",
     "router",
 ]

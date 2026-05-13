@@ -14,12 +14,16 @@ from src.modules.communication.application.outbound_message import (
 from src.modules.communication.application.provider_connection import (
     CreateProviderConnectionCommand,
     CreateProviderConnectionUseCase,
+    CreateProviderConnectionUseCaseProtocol,
     ListProviderConnectionsUseCase,
+    ListProviderConnectionsUseCaseProtocol,
 )
 from src.modules.communication.application.provider_connector import (
     ListProviderConnectorsUseCase,
+    ListProviderConnectorsUseCaseProtocol,
     RegisterProviderConnectorCommand,
     RegisterProviderConnectorUseCase,
+    RegisterProviderConnectorUseCaseProtocol,
 )
 from src.modules.communication.application.outbound_message.queue import (
     PublishQueuedOutboundMessagesCommand,
@@ -48,6 +52,7 @@ __all__ = [
     "CreateMessageTemplateUseCase",
     "CreateProviderConnectionCommand",
     "CreateProviderConnectionUseCase",
+    "CreateProviderConnectionUseCaseProtocol",
     "CreateTemplateVersionCommand",
     "CreateTemplateVersionUseCase",
     "GetOutboundMessageUseCase",
@@ -56,7 +61,9 @@ __all__ = [
     "ListMessageTemplatesUseCase",
     "ListOutboundMessagesUseCase",
     "ListProviderConnectionsUseCase",
+    "ListProviderConnectionsUseCaseProtocol",
     "ListProviderConnectorsUseCase",
+    "ListProviderConnectorsUseCaseProtocol",
     "ProcessOutboundMessageByIdCommand",
     "ProcessOutboundMessageByIdUseCase",
     "ProcessOutboundMessageUseCase",
@@ -67,6 +74,7 @@ __all__ = [
     "RecoverStuckOutboundMessagesUseCase",
     "RegisterProviderConnectorCommand",
     "RegisterProviderConnectorUseCase",
+    "RegisterProviderConnectorUseCaseProtocol",
     "SendCommunicationCommand",
     "SendCommunicationUseCase",
     "parse_event_time",
