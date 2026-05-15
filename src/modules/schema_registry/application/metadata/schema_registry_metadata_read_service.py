@@ -11,7 +11,6 @@ from src.modules.schema_registry.domain.error import (
 from src.modules.schema_registry.domain.object.service import ObjectService
 from src.modules.schema_registry.domain.relation.service import RelationService
 
-
 class SchemaRegistryMetadataReadService:
     """Собирает сохраненную metadata-картину schema_registry для tenant."""
 

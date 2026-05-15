@@ -44,7 +44,6 @@ from src.modules.schema_registry.presentation.depends.infrastructure import (
     TenantSchemaInspectorDep,
 )
 
-
 def get_schema_seed_service(
     seed_reader: SchemaSeedReaderDep,
     field_type_catalog: FieldTypeCatalogDep,

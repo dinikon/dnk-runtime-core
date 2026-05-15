@@ -27,7 +27,6 @@ from src.modules.schema_registry.presentation.depends.infrastructure import (
     get_tenant_schema_inspector,
 )
 
-
 def build_diff_schema_use_case(
     *,
     uow: UnitOfWorkProtocol,
