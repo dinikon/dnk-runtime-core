@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import unittest
+from datetime import UTC, datetime
 from types import SimpleNamespace
+from unittest.mock import patch
 from uuid import uuid4
 
-from src.modules.communication.application.ports import ProviderHttpResponse
+from src.modules.communication.application.outbound_message.provider_send import (
+    ProviderHttpResponse,
+)
 from src.modules.communication.application.services import (
     JsonPathService,
     ProviderPayloadBuildService,
@@ -12,20 +16,36 @@ from src.modules.communication.application.services import (
     SecretCodec,
     TemplateRenderService,
 )
-from src.modules.communication.application.use_cases import (
-    HandleProviderWebhookCommand,
-    HandleProviderWebhookUseCase,
+from src.modules.communication.application.outbound_message import (
+    ProcessOutboundMessageByIdCommand,
+    ProcessOutboundMessageByIdUseCase,
     ProcessOutboundMessageUseCase,
     ProcessQueuedMessagesCommand,
     SendCommunicationCommand,
     SendCommunicationUseCase,
 )
-from src.modules.communication.domain import OutboundMessageStatus
+from src.modules.communication.application.delivery import (
+    HandleProviderWebhookCommand,
+    HandleProviderWebhookUseCase,
+)
+from src.modules.communication.domain.delivery import (
+    DeliveryEventIdVO,
+    DeliveryService,
+)
+from src.modules.communication.domain.outbound_message import (
+    CommunicationRequestIdVO,
+    OutboundMessageService,
+    OutboundMessageIdVO,
+    OutboundMessageStatus,
+)
+from src.modules.communication.domain.provider_connection import ProviderConnectionIdVO
+from src.modules.communication.domain.provider_connector import ProviderConnectorCodeVO
 from src.modules.communication.infrastructure.provider_senders import (
     ProviderSenderRegistry,
     YamlHttpProviderSender,
     YamlSmtpProviderSender,
 )
+from src.modules.shared import EntityIdVO
 
 
 class _HttpClientStub:
@@ -48,6 +68,50 @@ class _HttpClientStub:
         )
 
 
+class _TurboSmsHttpClientStub(_HttpClientStub):
+    async def request(self, *, method, url, headers, json_body, basic_auth=None):
+        self.requests.append(
+            {
+                "method": method,
+                "url": url,
+                "headers": headers,
+                "json_body": json_body,
+                "basic_auth": basic_auth,
+            }
+        )
+        return ProviderHttpResponse(
+            status_code=200,
+            payload={
+                "response_code": 0,
+                "response_status": "OK",
+                "response_result": [
+                    {
+                        "phone": "380671112233",
+                        "message_id": "turbo-123",
+                        "response_status": "OK",
+                    }
+                ],
+            },
+        )
+
+
+class _FailingHttpClientStub(_HttpClientStub):
+    async def request(self, *, method, url, headers, json_body, basic_auth=None):
+        self.requests.append(
+            {
+                "method": method,
+                "url": url,
+                "headers": headers,
+                "json_body": json_body,
+                "basic_auth": basic_auth,
+            }
+        )
+        return ProviderHttpResponse(
+            status_code=500,
+            payload={"error": "temporary"},
+        )
+
+
 class _ProcessRepositoryStub:
     def __init__(self) -> None:
         self.secret_codec = SecretCodec()
@@ -66,6 +130,7 @@ class _ProcessRepositoryStub:
             sent_at=None,
             delivered_at=None,
             failed_at=None,
+            processing_token=uuid4(),
         )
         self.request = SimpleNamespace(
             communication_request_id=self.outbound.communication_request_id,
@@ -122,9 +187,15 @@ class _ProcessRepositoryStub:
                     },
                 ],
                 "status_mapping": {"23033": "DELIVERED"},
+                "retry_policy": {
+                    "max_attempts": 3,
+                    "backoff": {"initial_seconds": 30, "max_seconds": 600},
+                },
             }
         )
         self.attempt = SimpleNamespace(
+            delivery_attempt_id=uuid4(),
+            attempt_no=1,
             status="STARTED",
             request_payload=None,
             response_payload=None,
@@ -135,10 +206,10 @@ class _ProcessRepositoryStub:
             finished_at=None,
         )
 
-    async def claim_queued_messages(self, limit: int):
+    async def claim_queued_messages(self, tenant_id, limit: int):
         return [self.outbound]
 
-    async def load_processing_context(self, outbound_message_id):
+    async def load_processing_context(self, tenant_id, outbound_message_id):
         return (
             self.outbound,
             self.request,
@@ -152,6 +223,86 @@ class _ProcessRepositoryStub:
     async def create_delivery_attempt(self, **_kwargs):
         self.attempt.request_payload = _kwargs["request_payload"]
         return self.attempt
+
+    async def complete_outbound_processing(self, **kwargs):
+        self.outbound.rendered_payload = kwargs["rendered_payload"]
+        self.outbound.provider_request_payload = kwargs["provider_request_payload"]
+        self.outbound.external_message_id = kwargs["external_message_id"]
+        self.outbound.external_status = kwargs["external_status"]
+        self.outbound.internal_status = kwargs["internal_status"]
+        return True
+
+    async def fail_outbound_processing(self, **kwargs):
+        self.outbound.internal_status = "FAILED"
+        self.outbound.error_code = kwargs["error_code"]
+        self.outbound.error_message = kwargs["error_message"]
+        return True
+
+
+class _ByIdRepositoryStub(_ProcessRepositoryStub):
+    def __init__(self, *, claimable: bool = True) -> None:
+        super().__init__()
+        self.claimable = claimable
+        self.completed = False
+        self.failed_processing = False
+        self.last_failure_kwargs = None
+        self.claim_tokens = []
+
+    async def claim_outbound_for_processing(self, **kwargs):
+        self.claim_tokens.append(kwargs["processing_token"])
+        if not self.claimable:
+            self.outbound.internal_status = "SENT"
+            return None
+        self.outbound.internal_status = "SENDING"
+        self.outbound.processing_token = kwargs["processing_token"]
+        return self.outbound
+
+    async def get_outbound_by_id(self, _tenant_id, _outbound_message_id):
+        return self.outbound
+
+    async def complete_outbound_processing(self, **kwargs):
+        self.completed = True
+        self.outbound.internal_status = kwargs["internal_status"]
+        self.outbound.external_message_id = kwargs["external_message_id"]
+        return True
+
+    async def fail_outbound_processing(self, **kwargs):
+        self.last_failure_kwargs = kwargs
+        self.failed_processing = True
+        self.outbound.internal_status = (
+            "QUEUED" if kwargs.get("retry_at") is not None else "FAILED"
+        )
+        return True
+
+
+class _UnitOfWorkStub:
+    def __init__(self, _session_factory):
+        self.session = object()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
+
+
+class _RepositoryContextFactoryStub:
+    def __init__(self, repository) -> None:
+        self.repository = repository
+
+    def __call__(self):
+        return self
+
+    async def __aenter__(self):
+        return self.repository
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
+
+
+class _ClockStub:
+    def now(self):
+        return datetime.now(UTC)
 
 
 class _SmtpTransportStub:
@@ -241,14 +392,56 @@ class _SmtpProcessRepositoryStub(_ProcessRepositoryStub):
         }
 
 
+class _TurboSmsProcessRepositoryStub(_ProcessRepositoryStub):
+    def __init__(self) -> None:
+        super().__init__()
+        self.message_type.message_type_code = "sms_text"
+        self.connection.connection_code = "turbosms_sms"
+        self.connection.channel_code = "SMS"
+        self.connection.config = {"sender": "TurboSMS"}
+        self.connection.secrets_b64 = self.secret_codec.encode(
+            {"api_key": "turbo-secret-token"}
+        )
+        self.connector.yaml_spec = {
+            "auth": {
+                "type": "bearer",
+                "token_secret_key": "api_key",
+            },
+            "message_types": [
+                {
+                    "code": "sms_text",
+                    "send": {
+                        "transport": "http",
+                        "method": "POST",
+                        "url": "https://api.turbosms.ua/message/send.json",
+                        "headers": {"Content-Type": "application/json"},
+                        "body": {
+                            "sequence_id": "{{ message.outbound_message_id }}",
+                            "recipients": ["{{ recipient.address }}"],
+                            "sms": {
+                                "sender": "{{ config.sender }}",
+                                "text": "{{ template.text }}",
+                            },
+                        },
+                        "response_mapping": {
+                            "external_message_id": "$.response_result[0].message_id",
+                            "external_status": "$.response_result[0].response_status",
+                        },
+                    },
+                },
+            ],
+            "status_mapping": {"OK": "SENT"},
+        }
+
+
 class _IdempotencyRepositoryStub:
     def __init__(self) -> None:
         self.request = SimpleNamespace(
-            communication_request_id=uuid4(),
+            communication_request_id=CommunicationRequestIdVO.from_value(uuid4()),
             status="QUEUED",
         )
         self.outbound = SimpleNamespace(
-            outbound_message_id=uuid4(),
+            outbound_message_id=OutboundMessageIdVO.from_value(uuid4()),
             internal_status="QUEUED",
         )
         self.created = False
@@ -275,9 +468,9 @@ class _WebhookRepositoryStub:
         )
         self.outbound = (
             SimpleNamespace(
-                tenant_id=uuid4(),
-                outbound_message_id=uuid4(),
-                provider_connection_id=uuid4(),
+                tenant_id=EntityIdVO.from_value(uuid4()),
+                outbound_message_id=OutboundMessageIdVO.from_value(uuid4()),
+                provider_connection_id=ProviderConnectionIdVO.from_value(uuid4()),
                 external_status=None,
                 internal_status="SENT",
                 sent_at=None,
@@ -289,15 +482,24 @@ class _WebhookRepositoryStub:
         )
         self.events = []
 
-    async def get_active_connector_by_code(self, provider_code: str):
+    async def get_active_connector_by_code(self, *, tenant_id, provider_code):
         return self.connector
 
-    async def find_outbound_by_external_message_id(self, external_message_id: str):
+    async def find_outbound_by_external_message_id(
+        self,
+        *,
+        tenant_id,
+        external_message_id: str,
+    ):
         return self.outbound
 
-    async def add_delivery_event(self, **kwargs):
-        self.events.append(kwargs)
-        return SimpleNamespace(**kwargs)
+    async def add_delivery_event(self, *, tenant_id, event):
+        self.events.append(event)
+        return event
+
+    async def update_outbound_status_from_event(self, **kwargs):
+        self.outbound.internal_status = kwargs["internal_status"]
+        return self.outbound
 
 
 class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
@@ -318,9 +520,12 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 ]
             ),
             template_renderer=TemplateRenderService(),
+            clock=_ClockStub(),
         )
 
-        result = await use_case(ProcessQueuedMessagesCommand(limit=10))
+        result = await use_case(
+            ProcessQueuedMessagesCommand(tenant_id=uuid4(), limit=10)
+        )
 
         self.assertEqual(result.processed, 1)
         self.assertEqual(result.succeeded, 1)
@@ -331,6 +536,50 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(http_client.requests[0]["basic_auth"], ("user", "secret"))
         self.assertEqual(http_client.requests[0]["json_body"]["ttl"], 60)
+
+    async def test_process_queued_http_bearer_auth_uses_secret_without_persisting_it(
+        self,
+    ) -> None:
+        repository = _TurboSmsProcessRepositoryStub()
+        http_client = _TurboSmsHttpClientStub()
+        use_case = ProcessOutboundMessageUseCase(
+            repository=repository,
+            sender_registry=ProviderSenderRegistry(
+                [
+                    YamlHttpProviderSender(
+                        http_client=http_client,
+                        payload_builder=ProviderPayloadBuildService(),
+                        status_mapper=ProviderStatusMappingService(),
+                        json_path=JsonPathService(),
+                        secret_codec=SecretCodec(),
+                    )
+                ]
+            ),
+            template_renderer=TemplateRenderService(),
+            clock=_ClockStub(),
+        )
+
+        result = await use_case(
+            ProcessQueuedMessagesCommand(tenant_id=uuid4(), limit=10)
+        )
+
+        self.assertEqual(result.succeeded, 1)
+        self.assertEqual(repository.outbound.external_message_id, "turbo-123")
+        self.assertEqual(repository.outbound.internal_status, "SENT")
+        self.assertEqual(
+            http_client.requests[0]["headers"]["Authorization"],
+            "Bearer turbo-secret-token",
+        )
+        self.assertIsNone(http_client.requests[0]["basic_auth"])
+        self.assertEqual(
+            http_client.requests[0]["json_body"]["sequence_id"],
+            str(repository.outbound.outbound_message_id),
+        )
+        snapshot = repository.outbound.provider_request_payload
+        attempt_snapshot = repository.attempt.request_payload
+        self.assertEqual(snapshot["headers"]["Authorization"], "[REDACTED]")
+        self.assertNotIn("turbo-secret-token", str(snapshot))
+        self.assertNotIn("turbo-secret-token", str(attempt_snapshot))
 
     async def test_process_queued_message_rejects_old_root_send_without_message_type_send(
         self,
@@ -371,15 +620,125 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 ]
             ),
             template_renderer=TemplateRenderService(),
+            clock=_ClockStub(),
         )
 
-        result = await use_case(ProcessQueuedMessagesCommand(limit=10))
+        result = await use_case(
+            ProcessQueuedMessagesCommand(tenant_id=uuid4(), limit=10)
+        )
 
         self.assertEqual(result.succeeded, 0)
         self.assertEqual(result.failed, 1)
         self.assertEqual(http_client.requests, [])
         self.assertEqual(repository.outbound.internal_status, "FAILED")
         self.assertIn("Send spec is missing", repository.outbound.error_message)
+
+    async def test_process_outbound_by_id_claims_sends_and_persists_success(
+        self,
+    ) -> None:
+        repository = _ByIdRepositoryStub()
+        http_client = _HttpClientStub()
+        use_case = ProcessOutboundMessageByIdUseCase(
+            repository_context_factory=_RepositoryContextFactoryStub(repository),
+            sender_registry=ProviderSenderRegistry(
+                [
+                    YamlHttpProviderSender(
+                        http_client=http_client,
+                        payload_builder=ProviderPayloadBuildService(),
+                        status_mapper=ProviderStatusMappingService(),
+                        json_path=JsonPathService(),
+                        secret_codec=SecretCodec(),
+                    )
+                ]
+            ),
+            template_renderer=TemplateRenderService(),
+            processing_lease_seconds=300,
+            clock=_ClockStub(),
+        )
+
+        result = await use_case(
+            ProcessOutboundMessageByIdCommand(
+                tenant_id=uuid4(),
+                outbound_message_id=repository.outbound.outbound_message_id,
+            )
+        )
+
+        self.assertTrue(result.processed)
+        self.assertTrue(result.succeeded)
+        self.assertTrue(repository.completed)
+        self.assertEqual(repository.outbound.external_message_id, "ext-123")
+        self.assertEqual(http_client.requests[0]["json_body"]["text"], "Approved 15000")
+
+    async def test_process_outbound_by_id_requeues_retryable_provider_failure(
+        self,
+    ) -> None:
+        repository = _ByIdRepositoryStub()
+        http_client = _FailingHttpClientStub()
+        use_case = ProcessOutboundMessageByIdUseCase(
+            repository_context_factory=_RepositoryContextFactoryStub(repository),
+            sender_registry=ProviderSenderRegistry(
+                [
+                    YamlHttpProviderSender(
+                        http_client=http_client,
+                        payload_builder=ProviderPayloadBuildService(),
+                        status_mapper=ProviderStatusMappingService(),
+                        json_path=JsonPathService(),
+                        secret_codec=SecretCodec(),
+                    )
+                ]
+            ),
+            template_renderer=TemplateRenderService(),
+            processing_lease_seconds=300,
+            clock=_ClockStub(),
+        )
+
+        result = await use_case(
+            ProcessOutboundMessageByIdCommand(
+                tenant_id=uuid4(),
+                outbound_message_id=repository.outbound.outbound_message_id,
+            )
+        )
+
+        self.assertTrue(result.processed)
+        self.assertFalse(result.succeeded)
+        self.assertEqual(result.status, OutboundMessageStatus.QUEUED.value)
+        self.assertIsNotNone(repository.last_failure_kwargs["retry_at"])
+        self.assertEqual(repository.outbound.internal_status, "QUEUED")
+
+    async def test_process_outbound_by_id_skips_duplicate_non_queued_message(
+        self,
+    ) -> None:
+        repository = _ByIdRepositoryStub(claimable=False)
+        http_client = _HttpClientStub()
+        use_case = ProcessOutboundMessageByIdUseCase(
+            repository_context_factory=_RepositoryContextFactoryStub(repository),
+            sender_registry=ProviderSenderRegistry(
+                [
+                    YamlHttpProviderSender(
+                        http_client=http_client,
+                        payload_builder=ProviderPayloadBuildService(),
+                        status_mapper=ProviderStatusMappingService(),
+                        json_path=JsonPathService(),
+                        secret_codec=SecretCodec(),
+                    )
+                ]
+            ),
+            template_renderer=TemplateRenderService(),
+            processing_lease_seconds=300,
+            clock=_ClockStub(),
+        )
+
+        result = await use_case(
+            ProcessOutboundMessageByIdCommand(
+                tenant_id=uuid4(),
+                outbound_message_id=repository.outbound.outbound_message_id,
+            )
+        )
+
+        self.assertFalse(result.processed)
+        self.assertTrue(result.skipped)
+        self.assertEqual(result.status, "SENT")
+        self.assertEqual(http_client.requests, [])
 
     async def test_process_queued_smtp_message_sends_email_and_redacts_secrets(
         self,
@@ -398,9 +757,12 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 ]
             ),
             template_renderer=TemplateRenderService(),
+            clock=_ClockStub(),
         )
 
-        result = await use_case(ProcessQueuedMessagesCommand(limit=10))
+        result = await use_case(
+            ProcessQueuedMessagesCommand(tenant_id=uuid4(), limit=10)
+        )
 
         self.assertEqual(result.processed, 1)
         self.assertEqual(result.succeeded, 1)
@@ -443,9 +805,12 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 ]
             ),
             template_renderer=TemplateRenderService(),
+            clock=_ClockStub(),
         )
 
-        result = await use_case(ProcessQueuedMessagesCommand(limit=10))
+        result = await use_case(
+            ProcessQueuedMessagesCommand(tenant_id=uuid4(), limit=10)
+        )
 
         self.assertEqual(result.succeeded, 1)
         message = _SmtpTransportStub.instances[0].sent_messages[0]
@@ -455,7 +820,11 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
     async def test_send_communication_returns_existing_idempotent_message(self) -> None:
         repository = _IdempotencyRepositoryStub()
         use_case = SendCommunicationUseCase(
-            repository, schema_validator=SimpleNamespace()
+            repository=repository,
+            service=OutboundMessageService(repository=repository, clock=_ClockStub()),
+            template_lookup=repository,
+            schema_validator=SimpleNamespace(),
+            provider_connection_lookup=repository,
         )
 
         result = await use_case(
@@ -473,20 +842,25 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result.idempotent)
         self.assertFalse(repository.created)
         self.assertEqual(
-            result.outbound_message_id, repository.outbound.outbound_message_id
+            result.outbound_message_id,
+            repository.outbound.outbound_message_id.uuid,
         )
 
     async def test_webhook_updates_outbound_and_creates_delivery_event(self) -> None:
         repository = _WebhookRepositoryStub(matched=True)
         use_case = HandleProviderWebhookUseCase(
-            repository,
-            JsonPathService(),
-            ProviderStatusMappingService(),
+            repository=repository,
+            service=DeliveryService(repository=repository, clock=_ClockStub()),
+            json_path=JsonPathService(),
+            status_mapper=ProviderStatusMappingService(),
         )
+        tenant_id = EntityIdVO.from_value(uuid4())
 
         result = await use_case(
             HandleProviderWebhookCommand(
-                provider_code="gms",
+                tenant_id=tenant_id,
+                delivery_event_id=DeliveryEventIdVO.from_value(uuid4()),
+                provider_code=ProviderConnectorCodeVO("gms"),
                 raw_payload={
                     "message_id": "ext-123",
                     "status": "Delivered",
@@ -498,19 +872,23 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result.matched)
         self.assertEqual(repository.outbound.internal_status, "DELIVERED")
         self.assertEqual(len(repository.events), 1)
-        self.assertEqual(repository.events[0]["external_message_id"], "ext-123")
+        self.assertEqual(repository.events[0].external_message_id, "ext-123")
 
     async def test_webhook_accepts_unknown_external_message_without_event(self) -> None:
         repository = _WebhookRepositoryStub(matched=False)
         use_case = HandleProviderWebhookUseCase(
-            repository,
-            JsonPathService(),
-            ProviderStatusMappingService(),
+            repository=repository,
+            service=DeliveryService(repository=repository, clock=_ClockStub()),
+            json_path=JsonPathService(),
+            status_mapper=ProviderStatusMappingService(),
         )
+        tenant_id = EntityIdVO.from_value(uuid4())
 
         result = await use_case(
             HandleProviderWebhookCommand(
-                provider_code="gms",
+                tenant_id=tenant_id,
+                delivery_event_id=DeliveryEventIdVO.from_value(uuid4()),
+                provider_code=ProviderConnectorCodeVO("gms"),
                 raw_payload={"message_id": "missing", "status": "Delivered"},
             )
         )

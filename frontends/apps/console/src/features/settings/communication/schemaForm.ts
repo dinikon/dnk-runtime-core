@@ -8,6 +8,8 @@ export interface SchemaField {
     property: JsonSchemaProperty;
 }
 
+export type SchemaFormValues = Record<string, string | boolean | undefined>;
+
 export function schemaFields(schema: JsonSchemaObject | null | undefined): SchemaField[] {
     const properties = schema?.properties ?? {};
     const required = new Set(schema?.required ?? []);
@@ -21,16 +23,16 @@ export function schemaFields(schema: JsonSchemaObject | null | undefined): Schem
     }));
 }
 
-export function initialSchemaForm(schema: JsonSchemaObject | null | undefined): Record<string, string> {
+export function initialSchemaForm(schema: JsonSchemaObject | null | undefined): SchemaFormValues {
     return Object.fromEntries(schemaFields(schema).map((field) => [
         field.key,
-        field.property.default === undefined ? "" : String(field.property.default)
+        initialSchemaFieldValue(field)
     ]));
 }
 
 export function coerceSchemaValues(
     schema: JsonSchemaObject | null | undefined,
-    values: Record<string, string>
+    values: SchemaFormValues
 ): Record<string, unknown> {
     const result: Record<string, unknown> = {};
 
@@ -41,17 +43,29 @@ export function coerceSchemaValues(
         }
 
         if (field.type === "integer") {
-            result[field.key] = Number.parseInt(rawValue, 10);
+            result[field.key] = Number.parseInt(String(rawValue), 10);
         } else if (field.type === "number") {
             result[field.key] = Number(rawValue);
         } else if (field.type === "boolean") {
-            result[field.key] = rawValue === "true";
+            result[field.key] = typeof rawValue === "boolean" ? rawValue : rawValue === "true";
         } else {
             result[field.key] = rawValue;
         }
     }
 
     return result;
+}
+
+function initialSchemaFieldValue(field: SchemaField): string | boolean | undefined {
+    if (field.property.default === undefined) {
+        return field.type === "boolean" ? undefined : "";
+    }
+
+    if (field.type === "boolean") {
+        return Boolean(field.property.default);
+    }
+
+    return String(field.property.default);
 }
 
 export function parseJsonObject(value: string, label: string): Record<string, unknown> {

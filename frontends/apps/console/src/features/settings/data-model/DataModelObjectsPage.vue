@@ -209,8 +209,8 @@ function validateLabel(value: string, label: string, errors: string[]) {
     return;
   }
 
-  if (value.length > 32) {
-    errors.push(`${label} must be 32 characters or fewer.`);
+  if (value.length > 63) {
+    errors.push(`${label} must be 63 characters or fewer.`);
   }
 }
 

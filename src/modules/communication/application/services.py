@@ -9,13 +9,19 @@ from typing import Any, Mapping
 import yaml
 from jinja2 import StrictUndefined
 from jinja2.nativetypes import NativeEnvironment
-from jsonpath_ng import parse as parse_jsonpath
+from jsonpath_ng import parse
 from jsonschema import Draft202012Validator, ValidationError
 from jsonschema.exceptions import SchemaError
 
-from src.modules.communication.domain import (
+from src.modules.communication.domain.error import (
     CommunicationValidationError,
+)
+from src.modules.communication.domain.outbound_message import (
     OutboundMessageStatus,
+    ProviderPayloadValidationError,
+)
+from src.modules.communication.domain.provider_connection import (
+    ProviderSecretsValidationError,
 )
 
 _JSON_SCHEMA_META_SCHEMA = "https://json-schema.org/draft/2020-12/schema"
@@ -210,6 +216,34 @@ class ProviderYamlLoader:
 class JsonSchemaValidationService:
     """Validates JSON payloads against JSON Schema."""
 
+    def validate_provider_config(
+        self,
+        payload: dict[str, Any],
+        schema: Mapping[str, Any] | None,
+    ) -> None:
+        """Validate provider connection config against connector schema."""
+        self.validate(payload, schema, "config")
+
+    def validate_provider_secrets(
+        self,
+        payload: dict[str, Any],
+        schema: Mapping[str, Any] | None,
+    ) -> None:
+        """Validate provider connection secrets against connector schema."""
+        self.validate(payload, schema, "secrets")
+
+    def validate_template_payload(
+        self,
+        payload: dict[str, Any],
+        field_schema: dict[str, Any],
+    ) -> None:
+        """Validate template payload against provider field schema."""
+        self.validate(payload, field_schema, "template_payload")
+
+    def validate_variables_schema(self, schema: dict[str, Any]) -> None:
+        """Validate template variables JSON Schema."""
+        self.check_schema(schema, "variables_schema")
+
     def check_schema(self, schema: Mapping[str, Any] | None, label: str) -> None:
         """Validate a JSON Schema document without validating an instance."""
         if not schema:
@@ -276,7 +310,7 @@ class ProviderPayloadBuildService:
             try:
                 return self._environment.from_string(value).render(**context)
             except Exception as exc:
-                raise CommunicationValidationError(
+                raise ProviderPayloadValidationError(
                     f"Provider payload rendering failed: {exc}"
                 ) from exc
         if isinstance(value, list):
@@ -299,7 +333,9 @@ class ProviderPayloadBuildService:
         headers = self.render_value(send_spec.get("headers", {}), context)
         body = self.render_value(send_spec.get("body", {}), context)
         if not isinstance(headers, dict):
-            raise CommunicationValidationError("send.headers must render to an object.")
+            raise ProviderPayloadValidationError(
+                "send.headers must render to an object."
+            )
         return method, str(url), {str(k): str(v) for k, v in headers.items()}, body
 
 
@@ -332,7 +368,7 @@ class JsonPathService:
         if not expression:
             return None
         try:
-            matches = parse_jsonpath(expression).find(payload)
+            matches = parse(expression).find(payload)
         except Exception as exc:
             raise CommunicationValidationError(
                 f"Invalid JSONPath expression '{expression}': {exc}"
@@ -365,11 +401,11 @@ class SecretCodec:
             raw = base64.b64decode(secrets_b64.encode("ascii"))
             decoded = json.loads(raw.decode("utf-8"))
         except Exception as exc:
-            raise CommunicationValidationError(
+            raise ProviderSecretsValidationError(
                 "Provider connection secrets are not valid base64 JSON."
             ) from exc
         if not isinstance(decoded, dict):
-            raise CommunicationValidationError(
+            raise ProviderSecretsValidationError(
                 "Provider connection secrets must decode to an object."
             )
         return decoded

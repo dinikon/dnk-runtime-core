@@ -17,6 +17,9 @@ from src.config.deploy.control_plane import ControlPlaneConfig
 from src.config.deploy import DeploymentConfig
 from src.config.feature import FeatureConfig
 from src.config.infrastructure import DatabaseConfig
+from src.config.infrastructure.communication_queue_config import (
+    CommunicationQueueConfig,
+)
 from src.config.infrastructure.email_config import EmailConfig
 from src.config.infrastructure.redis_config import RedisConfig
 
@@ -93,6 +96,7 @@ class DnkConfig(
     # Infra config
     DatabaseConfig,
     EmailConfig,
+    CommunicationQueueConfig,
     # Redis config
     RedisConfig,
     # Auth config

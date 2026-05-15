@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from src.modules.communication.application.ports import (
+from src.modules.communication.application.outbound_message.provider_send import (
     HttpClientProtocol,
     ProviderPreparedSend,
     ProviderSendContext,
@@ -16,9 +16,15 @@ from src.modules.communication.application.services import (
     ProviderStatusMappingService,
     SecretCodec,
 )
-from src.modules.communication.domain import (
+from src.modules.communication.domain.error import (
     CommunicationValidationError,
+)
+from src.modules.communication.domain.outbound_message import (
     OutboundMessageStatus,
+    ProviderPayloadValidationError,
+)
+from src.modules.communication.domain.provider_connection import (
+    ProviderSecretsValidationError,
 )
 from src.modules.shared.infrastructure.email.models import RenderedEmailMessage
 from src.modules.shared.infrastructure.email.smtp_email_transport import (
@@ -65,21 +71,26 @@ class YamlHttpProviderSender:
     def build(self, context: ProviderSendContext) -> ProviderPreparedSend:
         """Build HTTP request details and persistable request snapshot."""
         send_spec = context.send_spec
+        secrets = self._secret_codec.decode(context.secrets_b64)
         method, url, headers, body = self._payload_builder.build(
             send_spec=send_spec,
-            context=_render_context(context, secrets={}),
+            context=_render_context(context, secrets=secrets),
         )
+        auth_headers = self._build_auth_headers(context.connector_spec, secrets)
+        transport_headers = {**headers, **auth_headers}
+        request_headers = _redact_headers(transport_headers, secrets)
+        request_body = _redact_secret_values(body, secrets)
         request_payload = {
             "transport": self.transport,
             "method": method,
             "url": url,
-            "headers": headers,
-            "body": body,
+            "headers": request_headers,
+            "body": request_body,
         }
         transport_payload = {
             "method": method,
             "url": url,
-            "headers": headers,
+            "headers": transport_headers,
             "body": body,
             "basic_auth": self._build_basic_auth(
                 context.connector_spec,
@@ -156,10 +167,25 @@ class YamlHttpProviderSender:
         username_key = auth.get("username_secret_key")
         password_key = auth.get("password_secret_key")
         if username_key not in secrets or password_key not in secrets:
-            raise CommunicationValidationError(
+            raise ProviderSecretsValidationError(
                 "Provider connection secrets are missing basic auth credentials."
             )
         return str(secrets[username_key]), str(secrets[password_key])
+
+    def _build_auth_headers(
+        self,
+        yaml_spec: dict[str, Any],
+        secrets: dict[str, Any],
+    ) -> dict[str, str]:
+        auth = yaml_spec.get("auth") or {}
+        if auth.get("type") != "bearer":
+            return {}
+        token_key = auth.get("token_secret_key")
+        if token_key not in secrets:
+            raise ProviderSecretsValidationError(
+                "Provider connection secrets are missing bearer auth token."
+            )
+        return {"Authorization": f"Bearer {secrets[token_key]}"}
 
 
 class YamlSmtpProviderSender:
@@ -186,7 +212,9 @@ class YamlSmtpProviderSender:
             _render_context(context, secrets=secrets),
         )
         if not isinstance(rendered_send, dict):
-            raise CommunicationValidationError("SMTP send spec must render to object.")
+            raise ProviderPayloadValidationError(
+                "SMTP send spec must render to object."
+            )
 
         text_body = str(rendered_send.get("text_body") or "")
         html_body = rendered_send.get("html_body")
@@ -290,6 +318,47 @@ def _as_bool(value: Any) -> bool:
     if isinstance(value, str):
         return value.strip().lower() in {"1", "true", "yes", "on"}
     return bool(value)
+
+
+def _redact_headers(headers: dict[str, str], secrets: dict[str, Any]) -> dict[str, str]:
+    sensitive_names = {"authorization", "proxy-authorization", "x-api-key"}
+    secret_values = {
+        str(item) for item in secrets.values() if item is not None and str(item) != ""
+    }
+    return {
+        name: (
+            "[REDACTED]"
+            if name.lower() in sensitive_names
+            else _redact_text(value, secret_values)
+        )
+        for name, value in headers.items()
+    }
+
+
+def _redact_secret_values(value: Any, secrets: dict[str, Any]) -> Any:
+    secret_values = {
+        str(item) for item in secrets.values() if item is not None and str(item) != ""
+    }
+    if not secret_values:
+        return value
+    return _redact_value(value, secret_values)
+
+
+def _redact_value(value: Any, secret_values: set[str]) -> Any:
+    if isinstance(value, str):
+        return _redact_text(value, secret_values)
+    if isinstance(value, list):
+        return [_redact_value(item, secret_values) for item in value]
+    if isinstance(value, dict):
+        return {key: _redact_value(item, secret_values) for key, item in value.items()}
+    return value
+
+
+def _redact_text(value: str, secret_values: set[str]) -> str:
+    redacted = value
+    for secret in secret_values:
+        redacted = redacted.replace(secret, "[REDACTED]")
+    return redacted
 
 
 __all__ = [

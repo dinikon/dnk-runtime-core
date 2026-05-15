@@ -4,7 +4,7 @@ from typing import Any
 
 import httpx
 
-from src.modules.communication.application.ports import (
+from src.modules.communication.application.outbound_message.provider_send import (
     ProviderHttpResponse,
 )
 

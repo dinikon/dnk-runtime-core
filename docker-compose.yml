@@ -58,7 +58,36 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: dnk-rabbitmq
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-rabbitmq}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-rabbitmq}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/}
+
+    ports:
+      # AMQP
+      - "${RABBITMQ_PORT:-5672}:5672"
+
+      # Management UI
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:
   redis_data:
+  rabbitmq_data:

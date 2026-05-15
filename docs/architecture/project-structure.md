@@ -58,6 +58,7 @@ src/modules/
 ├── custom_object/
 ├── crm/
 ├── inventory/
+├── communication/
 ├── schema_registry/
 └── shared/
 ```

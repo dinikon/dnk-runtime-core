@@ -1,0 +1,222 @@
+from __future__ import annotations
+
+import unittest
+from datetime import UTC, datetime
+from uuid import uuid4
+
+from src.modules.communication.domain.provider_connector import (
+    ProviderChannelCodeVO,
+    ProviderConnectorCodeVO,
+    ProviderConnectorIdVO,
+    ProviderConnectorNameVO,
+    ProviderConnectorVersionVO,
+    ProviderMessageTypeCodeVO,
+    ProviderMessageTypeNameVO,
+)
+from src.modules.communication.infrastructure.provider_connector import (
+    ProviderConnectorRuntimeRepository,
+)
+from src.modules.communication.infrastructure.runtime_object_names import (
+    _CONNECTOR,
+    _MESSAGE_TYPE,
+)
+from src.modules.shared import EntityIdVO
+
+
+class _ResolverStub:
+    def __init__(self) -> None:
+        self.calls: list[tuple[EntityIdVO, str]] = []
+
+    async def resolve(self, *, tenant_id, object_name):
+        self.calls.append((tenant_id, object_name))
+        return object_name
+
+
+class _QueryGatewayStub:
+    def __init__(self) -> None:
+        self.list_rows_by_descriptor = {}
+        self.list_calls = []
+
+    async def list(
+        self, *, descriptor, filters=(), sorting=(), page=None, fetch_plan=None
+    ):
+        self.list_calls.append(
+            {
+                "descriptor": descriptor,
+                "filters": filters,
+                "sorting": sorting,
+                "page": page,
+            }
+        )
+        return self.list_rows_by_descriptor.get(descriptor, [])
+
+
+class _CommandGatewayStub:
+    def __init__(self, row) -> None:
+        self.row = row
+        self.inserts = []
+        self.updates = []
+        self.update_result = row
+
+    async def insert(self, *, descriptor, payload):
+        self.inserts.append((descriptor, payload))
+        return self.row | payload
+
+    async def update(self, *, descriptor, object_id, patch):
+        self.updates.append((descriptor, object_id, patch))
+        return self.update_result
+
+
+def _connector_row(provider_connector_id=None) -> dict:
+    now = datetime(2026, 5, 13, 12, 0, tzinfo=UTC)
+    return {
+        "id": provider_connector_id or uuid4(),
+        "provider_code": "gms",
+        "provider_name": "GMS",
+        "version": "1.0.0",
+        "connector_type": "YAML_HTTP",
+        "yaml_spec": {
+            "channels": ["SMS"],
+            "config_schema": {"type": "object"},
+            "secrets_schema": {"type": "object"},
+        },
+        "yaml_checksum": "abc",
+        "status": "ACTIVE",
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
+def _message_type_row(provider_connector_id=None) -> dict:
+    return {
+        "id": uuid4(),
+        "provider_connector_id": provider_connector_id or uuid4(),
+        "message_type_code": "sms_text",
+        "channel_code": "SMS",
+        "name": "SMS text",
+        "field_schema": {"type": "object"},
+        "ui_schema": {},
+        "is_active": True,
+    }
+
+
+class ProviderConnectorRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_upsert_connector_inserts_payload_with_entity_id(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        provider_connector_id = ProviderConnectorIdVO.from_value(uuid4())
+        row = _connector_row(provider_connector_id.uuid)
+        query = _QueryGatewayStub()
+        command = _CommandGatewayStub(row)
+        repository = ProviderConnectorRuntimeRepository(
+            runtime_object_resolver=_ResolverStub(),
+            runtime_command_gateway=command,
+            runtime_query_gateway=query,
+        )
+
+        result = await repository.upsert_connector(
+            tenant_id=tenant_id,
+            provider_connector_id=provider_connector_id,
+            provider_code=ProviderConnectorCodeVO("gms"),
+            provider_name=ProviderConnectorNameVO("GMS"),
+            version=ProviderConnectorVersionVO("1.0.0"),
+            connector_type="YAML_HTTP",
+            yaml_spec=row["yaml_spec"],
+            yaml_checksum="abc",
+            status="ACTIVE",
+        )
+
+        payload = command.inserts[0][1]
+        filters = query.list_calls[0]["filters"]
+        self.assertEqual(payload["id"], provider_connector_id.uuid)
+        self.assertEqual(filters[0].field, "provider_code")
+        self.assertEqual(filters[0].value, "gms")
+        self.assertEqual(filters[1].field, "version")
+        self.assertEqual(filters[1].value, "1.0.0")
+        self.assertEqual(result.provider_connector_id, provider_connector_id)
+
+    async def test_upsert_connector_updates_existing_row(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        provider_connector_id = ProviderConnectorIdVO.from_value(uuid4())
+        row = _connector_row(provider_connector_id.uuid)
+        query = _QueryGatewayStub()
+        query.list_rows_by_descriptor[_CONNECTOR] = [row]
+        command = _CommandGatewayStub(row)
+        repository = ProviderConnectorRuntimeRepository(
+            runtime_object_resolver=_ResolverStub(),
+            runtime_command_gateway=command,
+            runtime_query_gateway=query,
+        )
+
+        result = await repository.upsert_connector(
+            tenant_id=tenant_id,
+            provider_connector_id=ProviderConnectorIdVO.from_value(uuid4()),
+            provider_code=ProviderConnectorCodeVO("gms"),
+            provider_name=ProviderConnectorNameVO("GMS"),
+            version=ProviderConnectorVersionVO("1.0.0"),
+            connector_type="YAML_HTTP",
+            yaml_spec=row["yaml_spec"],
+            yaml_checksum="abc",
+            status="ACTIVE",
+        )
+
+        self.assertEqual(command.updates[0][1], provider_connector_id.uuid)
+        self.assertEqual(result.provider_connector_id, provider_connector_id)
+        self.assertEqual(command.inserts, [])
+
+    async def test_upsert_message_type_filters_by_connector_and_code(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        provider_connector_id = ProviderConnectorIdVO.from_value(uuid4())
+        row = _message_type_row(provider_connector_id.uuid)
+        query = _QueryGatewayStub()
+        command = _CommandGatewayStub(row)
+        repository = ProviderConnectorRuntimeRepository(
+            runtime_object_resolver=_ResolverStub(),
+            runtime_command_gateway=command,
+            runtime_query_gateway=query,
+        )
+
+        result = await repository.upsert_message_type(
+            tenant_id=tenant_id,
+            provider_connector_id=provider_connector_id,
+            message_type_code=ProviderMessageTypeCodeVO("sms_text"),
+            channel_code=ProviderChannelCodeVO("SMS"),
+            name=ProviderMessageTypeNameVO("SMS text"),
+            field_schema={"type": "object"},
+            ui_schema={},
+            is_active=True,
+        )
+
+        filters = query.list_calls[0]["filters"]
+        self.assertEqual(query.list_calls[0]["descriptor"], _MESSAGE_TYPE)
+        self.assertEqual(filters[0].field, "provider_connector_id")
+        self.assertEqual(filters[0].value, provider_connector_id.uuid)
+        self.assertEqual(filters[1].field, "message_type_code")
+        self.assertEqual(filters[1].value, "sms_text")
+        self.assertEqual(result.provider_connector_id, provider_connector_id)
+
+    async def test_list_connectors_and_message_types_map_dtos(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        provider_connector_id = uuid4()
+        query = _QueryGatewayStub()
+        query.list_rows_by_descriptor[_CONNECTOR] = [
+            _connector_row(provider_connector_id)
+        ]
+        query.list_rows_by_descriptor[_MESSAGE_TYPE] = [
+            _message_type_row(provider_connector_id)
+        ]
+        repository = ProviderConnectorRuntimeRepository(
+            runtime_object_resolver=_ResolverStub(),
+            runtime_command_gateway=_CommandGatewayStub(_connector_row()),
+            runtime_query_gateway=query,
+        )
+
+        connectors = await repository.list_connectors(tenant_id=tenant_id)
+        message_types = await repository.list_message_types(tenant_id=tenant_id)
+
+        self.assertEqual(connectors[0].provider_connector_id, provider_connector_id)
+        self.assertEqual(connectors[0].channels, ["SMS"])
+        self.assertEqual(message_types[0].provider_connector_id, provider_connector_id)
+        self.assertEqual(message_types[0].message_type_code, "sms_text")
+
+
+__all__ = ["ProviderConnectorRuntimeRepositoryTests"]

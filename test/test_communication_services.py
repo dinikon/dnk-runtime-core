@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
+from uuid import UUID
 
 from src.modules.communication.application.services import (
     JsonPathService,
@@ -11,12 +13,15 @@ from src.modules.communication.application.services import (
     SecretCodec,
     TemplateRenderService,
 )
-from src.modules.communication.domain import (
+from src.modules.communication.domain.error import (
     CommunicationValidationError,
+)
+from src.modules.communication.domain.outbound_message import (
     OutboundMessageStatus,
 )
-from src.modules.communication.infrastructure.persistence import ProviderConnectionModel
-from src.modules.communication.infrastructure.repository import connection_to_dto
+from src.modules.communication.application.provider_connection.dto import (
+    ProviderConnectionDTO,
+)
 
 VALID_PROVIDER_YAML = """
 provider_code: gms
@@ -176,6 +181,22 @@ class CommunicationServicesTests(unittest.TestCase):
         self.assertEqual(parsed.spec["message_types"][0]["send"]["transport"], "smtp")
         self.assertEqual(parsed.spec["message_types"][0]["channel"], "EMAIL")
 
+    def test_provider_yaml_loader_accepts_turbosms_sms_contract(self) -> None:
+        yaml_content = (
+            PROJECT_ROOT / "docs/communication/providers/turbosms_sms.yaml"
+        ).read_text(encoding="utf-8")
+
+        parsed = ProviderYamlLoader().load(yaml_content)
+
+        self.assertEqual(parsed.spec["provider_code"], "turbosms")
+        self.assertEqual(parsed.spec["connector_type"], "YAML_HTTP")
+        self.assertEqual(parsed.spec["auth"]["type"], "bearer")
+        self.assertEqual(parsed.spec["message_types"][0]["channel"], "SMS")
+        self.assertEqual(
+            parsed.spec["message_types"][0]["send"]["url"],
+            "https://api.turbosms.ua/message/send.json",
+        )
+
     def test_provider_yaml_loader_rejects_invalid_yaml_smtp_contract(self) -> None:
         yaml_content = (
             PROJECT_ROOT / "docs/communication/providers/smtp_email.yaml"
@@ -237,18 +258,20 @@ class CommunicationServicesTests(unittest.TestCase):
         self.assertNotIn("secret", encoded or "")
         self.assertEqual(codec.decode(encoded)["password"], "secret")
 
-        model = ProviderConnectionModel(
-            tenant_id="00000000-0000-0000-0000-000000000001",
-            provider_connector_id="00000000-0000-0000-0000-000000000002",
+        dto = ProviderConnectionDTO(
+            tenant_id=UUID("00000000-0000-0000-0000-000000000001"),
+            provider_connector_id=UUID("00000000-0000-0000-0000-000000000002"),
+            provider_connection_id=UUID("00000000-0000-0000-0000-000000000003"),
             connection_code="gms_viber",
             connection_name="GMS Viber",
             channel_code="VIBER",
             config={"client_id": "abc"},
-            secrets_b64=encoded,
             secret_ref=None,
+            has_secrets=bool(encoded),
             status="ACTIVE",
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+            updated_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
-        dto = connection_to_dto(model)
 
         self.assertTrue(dto.has_secrets)
         self.assertFalse(hasattr(dto, "secrets_b64"))

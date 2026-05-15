@@ -173,6 +173,99 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         )
         return result.scalar() is not None
 
+    async def update_where(
+        self,
+        *,
+        descriptor: RuntimeObjectDescriptor,
+        filters: Sequence[FilterExpression],
+        patch: Mapping[str, Any],
+    ) -> list[Mapping[str, Any]]:
+        """Обновляет runtime-строки по фильтрам и возвращает свежие значения."""
+        self._ensure_descriptor(descriptor)
+        coerced_patch = self._type_policy.coerce_patch_payload(
+            descriptor=descriptor,
+            patch=patch,
+        )
+        set_clauses, params, bind_fields = self._build_set_clauses(
+            descriptor=descriptor,
+            patch=coerced_patch,
+        )
+        if not set_clauses:
+            return []
+
+        where_sql, where_params, where_bind_fields = self._build_where_clause(
+            descriptor=descriptor,
+            filters=filters,
+        )
+        params.update(where_params)
+        bind_fields.update(where_bind_fields)
+
+        sql = (
+            f"UPDATE {self._qualified_table(descriptor)} "
+            f"SET {', '.join(set_clauses)} "
+            f"{where_sql} "
+            f"RETURNING {', '.join(self._selectable_columns(descriptor=descriptor, fetch_plan=None))}"
+        )
+        result = await self._execute(sql, params, bind_fields=bind_fields)
+        return [
+            self._type_policy.normalize_row(descriptor=descriptor, row=row)
+            for row in result.mappings().all()
+        ]
+
+    async def claim(
+        self,
+        *,
+        descriptor: RuntimeObjectDescriptor,
+        filters: Sequence[FilterExpression],
+        patch: Mapping[str, Any],
+        sorting: Sequence[SortSpec] = (),
+        limit: int = 1,
+    ) -> list[Mapping[str, Any]]:
+        """Claims rows with SKIP LOCKED, applies patch, and returns claimed rows."""
+        self._ensure_descriptor(descriptor)
+        if limit < 1:
+            raise RuntimeDataValidationError("Claim limit must be >= 1.")
+        coerced_patch = self._type_policy.coerce_patch_payload(
+            descriptor=descriptor,
+            patch=patch,
+        )
+        set_clauses, params, bind_fields = self._build_set_clauses(
+            descriptor=descriptor,
+            patch=coerced_patch,
+        )
+        if not set_clauses:
+            return []
+
+        where_sql, where_params, where_bind_fields = self._build_where_clause(
+            descriptor=descriptor,
+            filters=filters,
+        )
+        params.update(where_params)
+        bind_fields.update(where_bind_fields)
+        params["claim_limit"] = limit
+        order_sql = self._build_sort_clause(descriptor=descriptor, sorting=sorting)
+        table_ref = self._qualified_table(descriptor)
+        pk_sql = self._qi(descriptor.pk)
+        columns = self._selectable_columns(descriptor=descriptor, fetch_plan=None)
+        sql = (
+            "WITH claimed AS ("
+            f"SELECT {pk_sql} FROM {table_ref} "
+            f"{where_sql} "
+            f"{order_sql} "
+            "LIMIT :claim_limit "
+            "FOR UPDATE SKIP LOCKED"
+            ") "
+            f"UPDATE {table_ref} "
+            f"SET {', '.join(set_clauses)} "
+            f"WHERE {pk_sql} IN (SELECT {pk_sql} FROM claimed) "
+            f"RETURNING {', '.join(columns)}"
+        )
+        result = await self._execute(sql, params, bind_fields=bind_fields)
+        return [
+            self._type_policy.normalize_row(descriptor=descriptor, row=row)
+            for row in result.mappings().all()
+        ]
+
     async def get_by_id(
         self,
         *,
@@ -322,6 +415,54 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         raise RuntimeDataFilterError(
             f"Unsupported filter expression '{type(filter_spec).__name__}'."
         )
+
+    def _build_where_clause(
+        self,
+        *,
+        descriptor: RuntimeObjectDescriptor,
+        filters: Sequence[FilterExpression],
+    ) -> tuple[str, dict[str, Any], dict[str, RuntimeFieldDescriptor]]:
+        """Строит WHERE для update/claim операций."""
+        params: dict[str, Any] = {}
+        bind_fields: dict[str, RuntimeFieldDescriptor] = {}
+        where_parts: list[str] = []
+        position = 0
+        for filter_spec in filters:
+            (
+                where_sql,
+                where_params,
+                where_bind_fields,
+                position,
+            ) = self._build_filter_expression(
+                descriptor=descriptor,
+                filter_spec=filter_spec,
+                position=position,
+            )
+            where_parts.append(where_sql)
+            params.update(where_params)
+            bind_fields.update(where_bind_fields)
+        where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+        return where_sql, params, bind_fields
+
+    def _build_set_clauses(
+        self,
+        *,
+        descriptor: RuntimeObjectDescriptor,
+        patch: Mapping[str, Any],
+    ) -> tuple[list[str], dict[str, Any], dict[str, RuntimeFieldDescriptor]]:
+        """Строит SET clauses для update/claim операций."""
+        set_clauses: list[str] = []
+        params: dict[str, Any] = {}
+        bind_fields: dict[str, RuntimeFieldDescriptor] = {}
+        for index, (field_name, value) in enumerate(patch.items()):
+            field = descriptor.fields_by_name[field_name]
+            param_name = f"u_{index}"
+            set_clauses.append(f"{self._qi(field_name)} = :{param_name}")
+            params[param_name] = value
+            bind_fields[param_name] = field
+        if descriptor.field_by_name("updated_at") is not None:
+            set_clauses.append(f'{self._qi("updated_at")} = CURRENT_TIMESTAMP')
+        return set_clauses, params, bind_fields
 
     def _build_filter_clause(
         self,

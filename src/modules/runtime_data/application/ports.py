@@ -44,6 +44,28 @@ class RuntimeCommandGateway(Protocol):
         """Удаляет строку runtime-объекта и сообщает, была ли она найдена."""
         ...
 
+    async def update_where(
+        self,
+        *,
+        descriptor: RuntimeObjectDescriptor,
+        filters: Sequence[FilterExpression],
+        patch: Mapping[str, Any],
+    ) -> list[Mapping[str, Any]]:
+        """Обновляет строки по фильтрам и возвращает измененные записи."""
+        ...
+
+    async def claim(
+        self,
+        *,
+        descriptor: RuntimeObjectDescriptor,
+        filters: Sequence[FilterExpression],
+        patch: Mapping[str, Any],
+        sorting: Sequence[SortSpec] = (),
+        limit: int = 1,
+    ) -> list[Mapping[str, Any]]:
+        """Атомарно выбирает строки FOR UPDATE SKIP LOCKED, обновляет и возвращает их."""
+        ...
+
 
 class RuntimeQueryGateway(Protocol):
     """Порт чтения runtime-данных по descriptor объекта."""
