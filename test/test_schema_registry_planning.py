@@ -35,6 +35,7 @@ from src.modules.schema_registry.application.service.schema_seed_service import 
 from src.modules.schema_registry.domain.error import UnsupportedSchemaChangeError
 from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
 from src.modules.schema_registry.domain.seed.field_seed import FieldSeed
+from src.modules.schema_registry.domain.seed.index_seed import IndexSeed
 from src.modules.schema_registry.domain.seed.object_seed import ObjectSeed
 from src.modules.schema_registry.domain.seed.relation_seed import RelationSeed
 from src.modules.schema_registry.domain.seed.schema_seed import SchemaSeed
@@ -86,17 +87,20 @@ class PostgresSchemaPlanServiceTests(unittest.TestCase):
                         ),
                         FieldSeed(
                             name="company_id",
-                            type="uuid",
+                            type="reference",
                             label="Company ID",
                             is_nullable=False,
                         ),
                     ),
                     relations=(
                         RelationSeed(
-                            name="contacts_company_id_fk",
+                            name="contacts_company",
                             relation_type="many_to_one",
-                            source_field="company_id",
+                            source_object="contact",
                             target_object="company",
+                            owning_object="contact",
+                            fk_field="company_id",
+                            referenced_object="company",
                         ),
                     ),
                 ),
@@ -105,7 +109,7 @@ class PostgresSchemaPlanServiceTests(unittest.TestCase):
 
         plan = self.service.build_create_plan(
             schema_name="dnk_test",
-            seed=seed,
+            seed=self._normalize(seed),
         )
 
         create_tables = [
@@ -153,17 +157,20 @@ class PostgresSchemaPlanServiceTests(unittest.TestCase):
                         ),
                         FieldSeed(
                             name="company_id",
-                            type="uuid",
+                            type="reference",
                             label="Company ID",
                             is_nullable=False,
                         ),
                     ),
                     relations=(
                         RelationSeed(
-                            name="contacts_company_id_fk",
+                            name="contacts_company",
                             relation_type="one_to_one",
-                            source_field="company_id",
+                            source_object="contact",
                             target_object="company",
+                            owning_object="contact",
+                            fk_field="company_id",
+                            referenced_object="company",
                         ),
                     ),
                 ),
@@ -188,12 +195,303 @@ class PostgresSchemaPlanServiceTests(unittest.TestCase):
 
         self.assertTrue(
             any(
-                operation.index_name == "contacts_company_id_one_to_one_uq"
+                operation.index_name == "uq_contacts_company_id"
                 and operation.columns == ("company_id",)
                 for operation in unique_indexes
             )
         )
-        self.assertEqual(foreign_keys[0].constraint_name, "contacts_company_id_fk")
+        self.assertEqual(
+            foreign_keys[0].constraint_name,
+            "fk_contacts_company_id_companies",
+        )
+
+    def test_one_to_many_relation_adds_fk_to_owning_table(self) -> None:
+        seed = SchemaSeed(
+            version=None,
+            code="crm",
+            label="CRM",
+            objects=(
+                ObjectSeed(
+                    singular_name="company",
+                    plural_name="companies",
+                    singular_label="Company",
+                    plural_label="Companies",
+                    description="Companies.",
+                    fields=(
+                        FieldSeed(
+                            name="id", type="uuid", label="ID", is_nullable=False
+                        ),
+                    ),
+                    relations=(
+                        RelationSeed(
+                            name="company_contacts",
+                            relation_type="one_to_many",
+                            source_object="company",
+                            target_object="contact",
+                            owning_object="contact",
+                            fk_field="company_id",
+                            referenced_object="company",
+                            source_relation_name="contacts",
+                            target_relation_name="company",
+                        ),
+                    ),
+                ),
+                ObjectSeed(
+                    singular_name="contact",
+                    plural_name="contacts",
+                    singular_label="Contact",
+                    plural_label="Contacts",
+                    description="Contacts.",
+                    fields=(
+                        FieldSeed(
+                            name="id", type="uuid", label="ID", is_nullable=False
+                        ),
+                        FieldSeed(
+                            name="company_id",
+                            type="reference",
+                            label="Company ID",
+                            is_nullable=True,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        plan = self.service.build_create_plan(
+            schema_name="dnk_test",
+            seed=self._normalize(seed),
+        )
+
+        foreign_keys = [
+            operation
+            for operation in plan.operations
+            if isinstance(operation, AddForeignKeyOperation)
+        ]
+        indexes = [
+            operation
+            for operation in plan.operations
+            if isinstance(operation, CreateIndexOperation)
+        ]
+
+        self.assertTrue(
+            any(
+                fk.constraint_name == "fk_contacts_company_id_companies"
+                and fk.table_name == "contacts"
+                and fk.target_table_name == "companies"
+                for fk in foreign_keys
+            )
+        )
+        self.assertTrue(
+            any(
+                index.index_name == "idx_contacts_company_id"
+                and index.columns == ("company_id",)
+                for index in indexes
+            )
+        )
+
+    def test_many_to_many_relation_adds_join_table_indexes_and_fks(self) -> None:
+        seed = SchemaSeed(
+            version=None,
+            code="crm",
+            label="CRM",
+            objects=(
+                ObjectSeed(
+                    singular_name="contact",
+                    plural_name="contacts",
+                    singular_label="Contact",
+                    plural_label="Contacts",
+                    description="Contacts.",
+                    fields=(
+                        FieldSeed(
+                            name="id", type="uuid", label="ID", is_nullable=False
+                        ),
+                    ),
+                    relations=(
+                        RelationSeed(
+                            name="contact_tags",
+                            relation_type="many_to_many",
+                            source_object="contact",
+                            target_object="tag",
+                            relation_table_name="contacts_tags",
+                            source_join_column_name="contact_id",
+                            target_join_column_name="tag_id",
+                            on_delete="cascade",
+                        ),
+                    ),
+                ),
+                ObjectSeed(
+                    singular_name="tag",
+                    plural_name="tags",
+                    singular_label="Tag",
+                    plural_label="Tags",
+                    description="Tags.",
+                    fields=(
+                        FieldSeed(
+                            name="id", type="uuid", label="ID", is_nullable=False
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        plan = self.service.build_create_plan(
+            schema_name="dnk_test",
+            seed=self._normalize(seed),
+        )
+
+        create_tables = [
+            operation.table_name
+            for operation in plan.operations
+            if isinstance(operation, CreateTableOperation)
+        ]
+        indexes = [
+            operation
+            for operation in plan.operations
+            if isinstance(operation, CreateIndexOperation)
+        ]
+        foreign_keys = [
+            operation
+            for operation in plan.operations
+            if isinstance(operation, AddForeignKeyOperation)
+        ]
+
+        self.assertIn("contacts_tags", create_tables)
+        self.assertTrue(
+            any(
+                index.index_name == "uq_contacts_tags_contact_id_tag_id"
+                and index.columns == ("contact_id", "tag_id")
+                and index.is_unique
+                for index in indexes
+            )
+        )
+        self.assertTrue(
+            any(
+                fk.constraint_name == "fk_contacts_tags_contact_id_contacts"
+                and fk.table_name == "contacts_tags"
+                and fk.target_table_name == "contacts"
+                and fk.on_delete == "cascade"
+                for fk in foreign_keys
+            )
+        )
+        self.assertTrue(
+            any(
+                fk.constraint_name == "fk_contacts_tags_tag_id_tags"
+                and fk.target_table_name == "tags"
+                for fk in foreign_keys
+            )
+        )
+
+    def test_build_diff_plan_adds_referenced_unique_index_before_m2m_fk(
+        self,
+    ) -> None:
+        seed = SchemaSeed(
+            version=None,
+            code="crm",
+            label="CRM",
+            objects=(
+                ObjectSeed(
+                    singular_name="contact",
+                    plural_name="contacts",
+                    singular_label="Contact",
+                    plural_label="Contacts",
+                    description="Contacts.",
+                    fields=(
+                        FieldSeed(
+                            name="id", type="uuid", label="ID", is_nullable=False
+                        ),
+                    ),
+                    indexes=(
+                        IndexSeed(
+                            name="contacts_id_uq",
+                            fields=("id",),
+                            is_unique=True,
+                        ),
+                    ),
+                    relations=(
+                        RelationSeed(
+                            name="contact_tags",
+                            relation_type="many_to_many",
+                            source_object="contact",
+                            target_object="tag",
+                            relation_table_name="contacts_tags",
+                            source_join_column_name="contact_id",
+                            target_join_column_name="tag_id",
+                            on_delete="restrict",
+                        ),
+                    ),
+                ),
+                ObjectSeed(
+                    singular_name="tag",
+                    plural_name="tags",
+                    singular_label="Tag",
+                    plural_label="Tags",
+                    description="Tags.",
+                    fields=(
+                        FieldSeed(
+                            name="id", type="uuid", label="ID", is_nullable=False
+                        ),
+                    ),
+                    indexes=(
+                        IndexSeed(
+                            name="tags_id_uq",
+                            fields=("id",),
+                            is_unique=True,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        actual_schema = PhysicalSchemaSnapshot(
+            schema_name="dnk_test",
+            tables=(
+                TableSnapshot(
+                    name="contacts",
+                    columns=(
+                        ColumnSnapshot(
+                            name="id",
+                            sql_preset=SqlTypePresetEnum.UUID,
+                            is_nullable=False,
+                            default_value=None,
+                        ),
+                    ),
+                ),
+                TableSnapshot(
+                    name="tags",
+                    columns=(
+                        ColumnSnapshot(
+                            name="id",
+                            sql_preset=SqlTypePresetEnum.UUID,
+                            is_nullable=False,
+                            default_value=None,
+                        ),
+                    ),
+                    indexes=(
+                        IndexSnapshot(
+                            name="tags_id_uq",
+                            columns=("id",),
+                            is_unique=True,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        plan = self.service.build_diff_plan(
+            schema_name="dnk_test",
+            seed=self._normalize(seed),
+            actual_schema=actual_schema,
+        )
+        operation_positions = {
+            getattr(
+                operation, "index_name", getattr(operation, "constraint_name", "")
+            ): index
+            for index, operation in enumerate(plan.operations)
+        }
+
+        self.assertLess(
+            operation_positions["contacts_id_uq"],
+            operation_positions["fk_contacts_tags_contact_id_contacts"],
+        )
 
     def test_raw_one_to_one_seed_does_not_degrade_to_plain_fk(self) -> None:
         seed = SchemaSeed(
@@ -222,17 +520,20 @@ class PostgresSchemaPlanServiceTests(unittest.TestCase):
                     fields=(
                         FieldSeed(
                             name="company_id",
-                            type="uuid",
+                            type="reference",
                             label="Company ID",
                             is_nullable=False,
                         ),
                     ),
                     relations=(
                         RelationSeed(
-                            name="contacts_company_id_fk",
+                            name="contacts_company",
                             relation_type="one_to_one",
-                            source_field="company_id",
+                            source_object="contact",
                             target_object="company",
+                            owning_object="contact",
+                            fk_field="company_id",
+                            referenced_object="company",
                         ),
                     ),
                 ),

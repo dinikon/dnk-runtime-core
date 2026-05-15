@@ -54,9 +54,14 @@ class SchemaRegistryMetadataReadServiceTests(unittest.IsolatedAsyncioTestCase):
             async def list_by_tenant_id(self, *, tenant_id):
                 return [object_entity]
 
+        class RelationServiceStub:
+            async def list_by_tenant_id(self, *, tenant_id):
+                return []
+
         service = SchemaRegistryMetadataReadService(
             data_source_service=DataSourceServiceStub(),
             object_service=ObjectServiceStub(),
+            relation_service=RelationServiceStub(),
         )
 
         snapshot = await service.get_required_by_tenant(tenant_id=tenant_id)
@@ -91,9 +96,14 @@ class SchemaRegistryMetadataReadServiceTests(unittest.IsolatedAsyncioTestCase):
             async def list_by_tenant_id(self, *, tenant_id):
                 return [object_entity]
 
+        class RelationServiceStub:
+            async def list_by_tenant_id(self, *, tenant_id):
+                return []
+
         service = SchemaRegistryMetadataReadService(
             data_source_service=DataSourceServiceStub(),
             object_service=ObjectServiceStub(),
+            relation_service=RelationServiceStub(),
         )
 
         with self.assertRaises(SchemaRegistryMetadataInconsistentError):

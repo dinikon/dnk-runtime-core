@@ -12,5 +12,6 @@ class FieldTypeEnum(str, Enum):
     DATETIME = "datetime"
     JSON = "json"
     UUID = "uuid"
+    REFERENCE = "reference"
     SELECT = "select"
     MULTISELECT = "multiselect"

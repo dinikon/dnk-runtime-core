@@ -34,6 +34,7 @@ class PostgresFieldCanonicalizer:
             FieldTypeEnum.JSON: SqlTypePresetEnum.JSONB,
             FieldTypeEnum.SELECT: SqlTypePresetEnum.TEXT,
             FieldTypeEnum.MULTISELECT: SqlTypePresetEnum.JSONB,
+            FieldTypeEnum.REFERENCE: SqlTypePresetEnum.UUID,
         }
         try:
             return mapping[field_type.code]

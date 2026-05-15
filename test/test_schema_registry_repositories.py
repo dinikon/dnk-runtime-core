@@ -23,16 +23,23 @@ from src.modules.schema_registry.domain.object.value_object.object_label import 
 from src.modules.schema_registry.domain.object.value_object.object_name import (
     ObjectNameVO,
 )
+from src.modules.schema_registry.domain.relation.entity import RelationEntity
+from src.modules.schema_registry.domain.relation.value_object import RuntimeRelationIdVO
+from src.modules.schema_registry.domain.seed.relation_type import RelationTypeEnum
 from src.modules.schema_registry.infrastructure.persistence.data_source import (
     DataSourceORM,
 )
 from src.modules.schema_registry.infrastructure.persistence.field import FieldORM
 from src.modules.schema_registry.infrastructure.persistence.object import ObjectORM
+from src.modules.schema_registry.infrastructure.persistence.relation import RelationORM
 from src.modules.schema_registry.infrastructure.repository.data_source_repository import (
     SqlAlchemyDataSourceRepository,
 )
 from src.modules.schema_registry.infrastructure.repository.object_repository import (
     SqlAlchemyObjectRepository,
+)
+from src.modules.schema_registry.infrastructure.repository.relation_repository import (
+    SqlAlchemyRelationRepository,
 )
 from src.modules.shared import EntityIdVO
 
@@ -311,3 +318,71 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(
             any(isinstance(model, FieldORM) for model in session.added_models)
         )
+
+    async def test_relation_repository_replace_all_maps_entity_to_orm_model(
+        self,
+    ) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        datasource_id = DataSourceIdVO.from_value(uuid4())
+        now = datetime.now(UTC)
+        source_object_id = RuntimeObjectIdVO.from_value(uuid4())
+        target_object_id = RuntimeObjectIdVO.from_value(uuid4())
+        fk_field_id = RuntimeFieldIdVO.from_value(uuid4())
+        referenced_field_id = RuntimeFieldIdVO.from_value(uuid4())
+        relation = RelationEntity.create(
+            id_=RuntimeRelationIdVO.from_value(uuid4()),
+            now=now,
+            tenant_id=tenant_id,
+            data_source_id=datasource_id,
+            name="contacts_company",
+            relation_type=RelationTypeEnum.MANY_TO_ONE,
+            source_object_id=source_object_id,
+            target_object_id=target_object_id,
+            owning_object_id=source_object_id,
+            fk_field_id=fk_field_id,
+            referenced_object_id=target_object_id,
+            referenced_field_id=referenced_field_id,
+            source_relation_name="company",
+            target_relation_name="contacts",
+            relation_table_name=None,
+            source_join_column_name=None,
+            target_join_column_name=None,
+            on_delete="restrict",
+            is_required=False,
+            is_unique=False,
+            kind="standard",
+        )
+
+        class SessionSpy:
+            def __init__(self) -> None:
+                self.added_models: list[object] = []
+                self.execute_count = 0
+                self.flush_count = 0
+
+            async def execute(self, *_args, **_kwargs) -> None:
+                self.execute_count += 1
+                return None
+
+            def add(self, model) -> None:
+                self.added_models.append(model)
+
+            async def flush(self) -> None:
+                self.flush_count += 1
+
+        session = SessionSpy()
+        repository = SqlAlchemyRelationRepository(session)  # type: ignore[arg-type]
+
+        await repository.replace_all_for_tenant(
+            tenant_id=tenant_id,
+            relations=[relation],
+        )
+
+        self.assertEqual(session.execute_count, 1)
+        self.assertEqual(session.flush_count, 2)
+        self.assertEqual(len(session.added_models), 1)
+        model = session.added_models[0]
+        self.assertIsInstance(model, RelationORM)
+        assert isinstance(model, RelationORM)
+        self.assertEqual(model.name, "contacts_company")
+        self.assertEqual(model.relation_type, "many_to_one")
+        self.assertEqual(model.fk_field_id, fk_field_id.uuid)

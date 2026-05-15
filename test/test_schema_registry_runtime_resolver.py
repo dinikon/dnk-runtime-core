@@ -27,6 +27,9 @@ from src.modules.schema_registry.domain.object.value_object.object_label import 
 from src.modules.schema_registry.domain.object.value_object.object_name import (
     ObjectNameVO,
 )
+from src.modules.schema_registry.domain.relation.entity import RelationEntity
+from src.modules.schema_registry.domain.relation.value_object import RuntimeRelationIdVO
+from src.modules.schema_registry.domain.seed.relation_type import RelationTypeEnum
 from src.modules.schema_registry.runtime import SchemaRegistryRuntimeObjectResolver
 from src.modules.shared import EntityIdVO
 from src.modules.shared.infrastructure.time import UtcClock
@@ -109,6 +112,129 @@ class SchemaRegistryRuntimeObjectResolverTests(unittest.IsolatedAsyncioTestCase)
         self.assertEqual(
             [field.kind for field in descriptor.fields], ["system", "standard"]
         )
+
+    async def test_resolve_includes_relation_descriptors_from_metadata(self) -> None:
+        now = UtcClock().now()
+        tenant_id = EntityIdVO.from_value(uuid4())
+        data_source = DataSourceEntity.create(
+            id_=DataSourceIdVO.from_value(uuid4()),
+            now=now,
+            tenant_id=tenant_id,
+            schema_name=SchemaNameVO("dnk_test"),
+        )
+        field_types = FieldTypeCatalog()
+        company = ObjectEntity.create(
+            id_=RuntimeObjectIdVO.from_value(uuid4()),
+            tenant_id=tenant_id,
+            data_source_id=data_source.id,
+            now=now,
+            object_name=ObjectNameVO(singular="company", plural="companies"),
+            object_label=ObjectLabelVO(singular="Company", plural="Companies"),
+            description="Companies.",
+        )
+        company.add_field(
+            field_id=RuntimeFieldIdVO.from_value(uuid4()),
+            now=now,
+            field_name="id",
+            field_type=field_types.from_seed_type("uuid"),
+            label="ID",
+            description="Company identifier.",
+            is_nullable=False,
+            default_value="gen_random_uuid()",
+            kind=FieldKind.SYSTEM,
+        )
+        contact = ObjectEntity.create(
+            id_=RuntimeObjectIdVO.from_value(uuid4()),
+            tenant_id=tenant_id,
+            data_source_id=data_source.id,
+            now=now,
+            object_name=ObjectNameVO(singular="contact", plural="contacts"),
+            object_label=ObjectLabelVO(singular="Contact", plural="Contacts"),
+            description="Contacts.",
+        )
+        contact.add_field(
+            field_id=RuntimeFieldIdVO.from_value(uuid4()),
+            now=now,
+            field_name="id",
+            field_type=field_types.from_seed_type("uuid"),
+            label="ID",
+            description="Contact identifier.",
+            is_nullable=False,
+            default_value="gen_random_uuid()",
+            kind=FieldKind.SYSTEM,
+        )
+        contact.add_field(
+            field_id=RuntimeFieldIdVO.from_value(uuid4()),
+            now=now,
+            field_name="company_id",
+            field_type=field_types.from_seed_type("reference"),
+            label="Company ID",
+            description="Company reference.",
+            is_nullable=True,
+        )
+        relation = RelationEntity.create(
+            id_=RuntimeRelationIdVO.from_value(uuid4()),
+            now=now,
+            tenant_id=tenant_id,
+            data_source_id=data_source.id,
+            name="contacts_company",
+            relation_type=RelationTypeEnum.MANY_TO_ONE,
+            source_object_id=contact.id,
+            target_object_id=company.id,
+            owning_object_id=contact.id,
+            fk_field_id=contact.fields[1].id,
+            referenced_object_id=company.id,
+            referenced_field_id=company.fields[0].id,
+            source_relation_name="company",
+            target_relation_name="contacts",
+            relation_table_name=None,
+            source_join_column_name=None,
+            target_join_column_name=None,
+            on_delete="set_null",
+            is_required=False,
+            is_unique=False,
+            kind="standard",
+        )
+
+        class DataSourceServiceStub:
+            async def get_required_by_tenant(self, *, tenant_id):
+                return data_source
+
+        class ObjectServiceStub:
+            async def get_by_tenant_and_singular_name(
+                self, *, tenant_id, singular_name
+            ):
+                if singular_name == "contact":
+                    return contact
+                return None
+
+            async def list_by_tenant_id(self, *, tenant_id):
+                return [company, contact]
+
+        class RelationServiceStub:
+            async def list_by_tenant_id(self, *, tenant_id):
+                return [relation]
+
+        resolver = SchemaRegistryRuntimeObjectResolver(
+            data_source_service=DataSourceServiceStub(),
+            object_service=ObjectServiceStub(),
+            relation_service=RelationServiceStub(),
+        )
+
+        descriptor = await resolver.resolve(
+            tenant_id=tenant_id,
+            object_name="contact",
+        )
+
+        self.assertEqual(len(descriptor.relations), 1)
+        relation_descriptor = descriptor.relations[0]
+        self.assertEqual(relation_descriptor.name, "contacts_company")
+        self.assertEqual(relation_descriptor.relation_type, "many_to_one")
+        self.assertEqual(relation_descriptor.source_object, "contacts")
+        self.assertEqual(relation_descriptor.target_object, "companies")
+        self.assertEqual(relation_descriptor.fk_field, "company_id")
+        self.assertFalse(relation_descriptor.is_collection)
+        self.assertFalse(relation_descriptor.is_virtual)
 
     async def test_resolve_by_id_returns_descriptor_from_metadata(self) -> None:
         now = UtcClock().now()

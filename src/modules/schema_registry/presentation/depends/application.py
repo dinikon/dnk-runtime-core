@@ -38,11 +38,11 @@ from src.modules.schema_registry.presentation.depends.infrastructure import (
     FieldTypeCatalogDep,
     ObjectServiceDep,
     PostgresFieldCanonicalizerDep,
+    RelationServiceDep,
     SchemaSeedReaderDep,
     TenantSchemaExecutorDep,
     TenantSchemaInspectorDep,
 )
-
 
 def get_schema_seed_service(
     seed_reader: SchemaSeedReaderDep,
@@ -81,11 +81,13 @@ PostgresSchemaServiceDep: TypeAlias = Annotated[
 def get_schema_registry_metadata_read_service(
     data_source_service: DataSourceServiceDep,
     object_service: ObjectServiceDep,
+    relation_service: RelationServiceDep,
 ) -> SchemaRegistryMetadataReadService:
     """Создает сервис чтения metadata schema_registry."""
     return SchemaRegistryMetadataReadService(
         data_source_service=data_source_service,
         object_service=object_service,
+        relation_service=relation_service,
     )
 
 
@@ -98,11 +100,13 @@ SchemaRegistryMetadataReadServiceDep: TypeAlias = Annotated[
 def get_schema_registry_metadata_write_service(
     data_source_service: DataSourceServiceDep,
     object_service: ObjectServiceDep,
+    relation_service: RelationServiceDep,
 ) -> SchemaRegistryMetadataWriteService:
     """Создает сервис записи metadata schema_registry."""
     return SchemaRegistryMetadataWriteService(
         data_source_service=data_source_service,
         object_service=object_service,
+        relation_service=relation_service,
     )
 
 
@@ -193,11 +197,13 @@ DescribeRuntimeObjectUseCaseDep: TypeAlias = Annotated[
 def get_runtime_object_resolver(
     data_source_service: DataSourceServiceDep,
     object_service: ObjectServiceDep,
+    relation_service: RelationServiceDep,
 ) -> RuntimeObjectResolverProtocol:
     """Создает resolver runtime descriptor из metadata schema_registry."""
     return SchemaRegistryRuntimeObjectResolver(
         data_source_service=data_source_service,
         object_service=object_service,
+        relation_service=relation_service,
     )
 
 

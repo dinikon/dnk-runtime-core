@@ -34,15 +34,23 @@ class InventorySchemaSeedTests(unittest.IsolatedAsyncioTestCase):
             seed_path="src.modules.schema_registry.seed.schema_seed"
         )
 
+        contact = seed.get_object("contact")
+        company = seed.get_object("company")
         product = seed.get_object("product")
         category = seed.get_object("product_category")
 
+        self.assertIsNotNone(contact)
+        self.assertIsNotNone(company)
         self.assertIsNotNone(product)
         self.assertIsNotNone(category)
+        assert contact is not None
+        assert company is not None
         assert product is not None
         assert category is not None
+        self.assertEqual(company.plural_name, "companies")
         self.assertEqual(product.plural_name, "products")
         self.assertEqual(category.plural_name, "product_categories")
+        self.assertIn("company_name", {field.name for field in company.fields})
         self.assertIn("sku", {field.name for field in product.fields})
         self.assertIn("parent_category_id", {field.name for field in category.fields})
         self.assertTrue(
@@ -53,8 +61,15 @@ class InventorySchemaSeedTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertTrue(
             any(
-                relation.name == "product_categories_parent_category_id_fk"
+                relation.name == "product_categories_parent_category"
                 for relation in category.relations
+            )
+        )
+        self.assertTrue(
+            any(
+                relation.name == "contact_companies"
+                and relation.relation_type.value == "many_to_many"
+                for relation in contact.relations
             )
         )
 
@@ -98,6 +113,8 @@ class InventorySchemaSeedTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("product_categories", tables)
         self.assertIn("products", tables)
+        self.assertIn("companies", tables)
+        self.assertIn("contacts_companies", tables)
         self.assertTrue(
             any(
                 index.index_name == "products_sku_uq" and index.is_unique
@@ -112,22 +129,56 @@ class InventorySchemaSeedTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertTrue(
             any(
-                fk.constraint_name == "products_category_id_fk"
+                index.index_name == "contacts_id_uq" and index.is_unique
+                for index in indexes
+            )
+        )
+        self.assertTrue(
+            any(
+                fk.constraint_name == "fk_products_category_id_product_categories"
                 and fk.target_table_name == "product_categories"
                 for fk in foreign_keys
             )
         )
         self.assertTrue(
             any(
-                fk.constraint_name == "product_categories_parent_category_id_fk"
+                fk.constraint_name
+                == "fk_product_categories_parent_category_id_product_categories"
                 and fk.table_name == "product_categories"
                 and fk.target_table_name == "product_categories"
                 for fk in foreign_keys
             )
         )
+        self.assertTrue(
+            any(
+                fk.constraint_name == "fk_contacts_companies_contact_id_contacts"
+                and fk.table_name == "contacts_companies"
+                and fk.target_table_name == "contacts"
+                for fk in foreign_keys
+            )
+        )
+        self.assertTrue(
+            any(
+                fk.constraint_name == "fk_contacts_companies_company_id_companies"
+                and fk.table_name == "contacts_companies"
+                and fk.target_table_name == "companies"
+                for fk in foreign_keys
+            )
+        )
+        self.assertTrue(
+            any(
+                index.index_name == "uq_contacts_companies_contact_id_company_id"
+                and index.is_unique
+                for index in indexes
+            )
+        )
         self.assertLess(
             operation_positions["product_categories_id_uq"],
-            operation_positions["products_category_id_fk"],
+            operation_positions["fk_products_category_id_product_categories"],
+        )
+        self.assertLess(
+            operation_positions["contacts_id_uq"],
+            operation_positions["fk_contacts_companies_contact_id_contacts"],
         )
 
     async def test_default_seed_contains_communication_runtime_objects(self) -> None:
@@ -211,7 +262,8 @@ class InventorySchemaSeedTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertTrue(
             any(
-                fk.constraint_name == "communication_outbound_messages_request_fk"
+                fk.constraint_name
+                == "fk_communication_outbound_messages_communication_reque_79614ab6"
                 and fk.target_table_name == "communication_requests"
                 for fk in foreign_keys
             )

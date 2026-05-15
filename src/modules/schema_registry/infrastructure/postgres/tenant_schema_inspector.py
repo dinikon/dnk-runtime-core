@@ -201,10 +201,10 @@ class PostgresTenantSchemaInspector(TenantSchemaInspectorPort):
                         tgt.relname AS target_table_name,
                         array_agg(tgt_att.attname ORDER BY src_ord.ordinality) AS target_columns,
                         CASE con.confdeltype
-                            WHEN 'a' THEN 'no action'
+                            WHEN 'a' THEN 'no_action'
                             WHEN 'r' THEN 'restrict'
                             WHEN 'c' THEN 'cascade'
-                            WHEN 'n' THEN 'set null'
+                            WHEN 'n' THEN 'set_null'
                             WHEN 'd' THEN 'set default'
                         END AS on_delete
                     FROM pg_constraint con

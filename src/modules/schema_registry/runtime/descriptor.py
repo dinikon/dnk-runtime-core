@@ -20,14 +20,29 @@ class RuntimeFieldDescriptor:
 
 @dataclass(frozen=True, slots=True)
 class RuntimeRelationDescriptor:
-    """Runtime-описание relation между объектами для fetch plan."""
+    """Runtime-описание relation между объектами для schema/API descriptor."""
 
+    id: str
     name: str
     relation_type: str
-    source_field: str
+    source_object: str
     target_object: str
-    target_field: str
+    source_relation_name: str
+    target_relation_name: str
+    owning_object: str | None
+    fk_field: str | None
+    referenced_object: str | None
+    referenced_field: str | None
+    relation_table_name: str | None
+    source_join_column_name: str | None
+    target_join_column_name: str | None
     on_delete: str
+    is_required: bool
+    is_collection: bool
+    is_virtual: bool
+    is_unique: bool
+    kind: str
+    settings: Mapping[str, str]
 
 
 @dataclass(frozen=True, slots=True)

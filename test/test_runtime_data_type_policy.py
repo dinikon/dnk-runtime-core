@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import UTC, datetime
 from decimal import Decimal
+from uuid import UUID
 
 from src.modules.runtime_data.application.type_policy import RuntimeFieldTypePolicy
 from src.modules.runtime_data.domain import RuntimeDataValidationError
@@ -220,6 +221,40 @@ class RuntimeFieldTypePolicyTests(unittest.TestCase):
         )
 
         self.assertEqual(coerced["first_name"], "")
+
+    def test_reference_field_is_coerced_as_uuid(self) -> None:
+        policy = RuntimeFieldTypePolicy()
+        base_descriptor = _contact_descriptor()
+        descriptor = RuntimeObjectDescriptor(
+            schema_name=base_descriptor.schema_name,
+            object_name=base_descriptor.object_name,
+            table_name=base_descriptor.table_name,
+            pk=base_descriptor.pk,
+            title_field=base_descriptor.title_field,
+            fields=base_descriptor.fields
+            + (
+                RuntimeFieldDescriptor(
+                    name="company_id",
+                    type_code="reference",
+                    is_nullable=True,
+                    default_value=None,
+                    options={},
+                    settings={},
+                ),
+            ),
+            relations=base_descriptor.relations,
+            kind=base_descriptor.kind,
+        )
+
+        coerced = policy.coerce_patch_payload(
+            descriptor=descriptor,
+            patch={"company_id": "d58f4b4d-4bf1-4cca-a3ea-6a99898fbf4c"},
+        )
+
+        self.assertEqual(
+            coerced["company_id"],
+            UUID("d58f4b4d-4bf1-4cca-a3ea-6a99898fbf4c"),
+        )
 
     def test_select_and_multiselect_validate_options(self) -> None:
         policy = RuntimeFieldTypePolicy()
