@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 
 from src.modules.schema_registry.domain.error import SeedValidationError
@@ -11,6 +12,14 @@ class SchemaNamingStrategy:
     """Централизует правила именования PostgreSQL-идентификаторов schema_registry."""
 
     @classmethod
+    def primary_key_name(cls, *, table_name: str) -> str:
+        """Генерирует имя primary key constraint для таблицы."""
+        return cls._generated_identifier(
+            f"pk_{table_name}",
+            title="Generated primary key constraint name",
+        )
+
+    @classmethod
     def one_to_one_unique_index_name(
         cls,
         *,
@@ -18,9 +27,50 @@ class SchemaNamingStrategy:
         column_name: str,
     ) -> str:
         """Генерирует имя unique-индекса для one_to_one связи и валидирует его."""
-        return cls._validate_identifier(
-            f"{table_name}_{column_name}_one_to_one_uq",
+        return cls._generated_identifier(
+            f"uq_{table_name}_{column_name}",
             title="Generated one_to_one unique index name",
+        )
+
+    @classmethod
+    def foreign_key_name(
+        cls,
+        *,
+        source_table_name: str,
+        source_column_name: str,
+        target_table_name: str,
+    ) -> str:
+        """Генерирует имя FK constraint по canonical naming convention."""
+        return cls._generated_identifier(
+            f"fk_{source_table_name}_{source_column_name}_{target_table_name}",
+            title="Generated foreign key name",
+        )
+
+    @classmethod
+    def foreign_key_index_name(
+        cls,
+        *,
+        table_name: str,
+        column_name: str,
+    ) -> str:
+        """Генерирует имя индекса для FK-колонки."""
+        return cls._generated_identifier(
+            f"idx_{table_name}_{column_name}",
+            title="Generated foreign key index name",
+        )
+
+    @classmethod
+    def many_to_many_unique_index_name(
+        cls,
+        *,
+        table_name: str,
+        source_column_name: str,
+        target_column_name: str,
+    ) -> str:
+        """Генерирует имя unique-индекса для пары join-колонок M2M."""
+        return cls._generated_identifier(
+            f"uq_{table_name}_{source_column_name}_{target_column_name}",
+            title="Generated many_to_many unique index name",
         )
 
     @staticmethod
@@ -44,3 +94,15 @@ class SchemaNamingStrategy:
                 f"{title} '{value}' must match ^[a-z][a-z0-9_]*$."
             )
         return normalized
+
+    @staticmethod
+    def _generated_identifier(value: str, *, title: str) -> str:
+        """Возвращает PostgreSQL-safe generated identifier с hash suffix при overflow."""
+        normalized = value.strip()
+        if len(normalized) > 63:
+            digest = hashlib.blake2s(
+                normalized.encode("utf-8"),
+                digest_size=4,
+            ).hexdigest()
+            normalized = f"{normalized[:54]}_{digest}"
+        return SchemaNamingStrategy._validate_identifier(normalized, title=title)

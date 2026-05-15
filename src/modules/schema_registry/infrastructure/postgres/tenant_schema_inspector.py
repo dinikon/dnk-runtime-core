@@ -13,6 +13,7 @@ from src.modules.schema_registry.application.migration.physical_schema_snapshot 
     ForeignKeySnapshot,
     IndexSnapshot,
     PhysicalSchemaSnapshot,
+    PrimaryKeySnapshot,
     TableSnapshot,
 )
 from src.modules.schema_registry.application.migration.postgres_field_canonicalizer import (
@@ -53,6 +54,7 @@ class PostgresTenantSchemaInspector(TenantSchemaInspectorPort):
         self._ensure_postgres()
         tables = await self._load_tables(schema_name=schema_name)
         columns = await self._load_columns(schema_name=schema_name)
+        primary_keys = await self._load_primary_keys(schema_name=schema_name)
         indexes = await self._load_indexes(schema_name=schema_name)
         foreign_keys = await self._load_foreign_keys(schema_name=schema_name)
 
@@ -62,11 +64,45 @@ class PostgresTenantSchemaInspector(TenantSchemaInspectorPort):
                 TableSnapshot(
                     name=table_name,
                     columns=tuple(columns.get(table_name, [])),
+                    primary_key=primary_keys.get(table_name),
                     indexes=tuple(indexes.get(table_name, [])),
                     foreign_keys=tuple(foreign_keys.get(table_name, [])),
                 )
             )
         return PhysicalSchemaSnapshot(schema_name=schema_name, tables=tuple(snapshots))
+
+    async def table_has_rows(self, *, schema_name: str, table_name: str) -> bool:
+        """Проверяет наличие хотя бы одной строки в таблице tenant-схемы."""
+        self._ensure_postgres()
+        result = await self._session.scalar(
+            text(
+                "SELECT EXISTS ("
+                "SELECT 1 FROM "
+                f"{self._qualified_table(schema_name, table_name)} "
+                "LIMIT 1)"
+            )
+        )
+        return bool(result)
+
+    async def column_has_non_null_values(
+        self,
+        *,
+        schema_name: str,
+        table_name: str,
+        column_name: str,
+    ) -> bool:
+        """Проверяет наличие хотя бы одного non-null значения в колонке."""
+        self._ensure_postgres()
+        result = await self._session.scalar(
+            text(
+                "SELECT EXISTS ("
+                "SELECT 1 FROM "
+                f"{self._qualified_table(schema_name, table_name)} "
+                f"WHERE {self._qi(column_name)} IS NOT NULL "
+                "LIMIT 1)"
+            )
+        )
+        return bool(result)
 
     def _ensure_postgres(self) -> None:
         """Проверяет, что текущий SQLAlchemy bind указывает на PostgreSQL dialect."""
@@ -185,6 +221,44 @@ class PostgresTenantSchemaInspector(TenantSchemaInspectorPort):
             )
         return grouped
 
+    async def _load_primary_keys(
+        self,
+        *,
+        schema_name: str,
+    ) -> dict[str, PrimaryKeySnapshot]:
+        """Загружает primary key constraints и их упорядоченные колонки."""
+        rows = (
+            await self._session.execute(
+                text("""
+                    SELECT
+                        tab.relname AS table_name,
+                        con.conname AS constraint_name,
+                        array_agg(att.attname ORDER BY ord.ordinality) AS columns
+                    FROM pg_constraint con
+                    JOIN pg_class tab ON tab.oid = con.conrelid
+                    JOIN pg_namespace nsp ON nsp.oid = tab.relnamespace
+                    JOIN LATERAL unnest(con.conkey) WITH ORDINALITY AS ord(attnum, ordinality)
+                      ON TRUE
+                    JOIN pg_attribute att
+                      ON att.attrelid = tab.oid
+                     AND att.attnum = ord.attnum
+                    WHERE nsp.nspname = :schema_name
+                      AND tab.relkind = 'r'
+                      AND con.contype = 'p'
+                    GROUP BY tab.relname, con.conname
+                    ORDER BY tab.relname
+                    """),
+                {"schema_name": schema_name},
+            )
+        ).all()
+        return {
+            row.table_name: PrimaryKeySnapshot(
+                name=row.constraint_name,
+                columns=tuple(row.columns),
+            )
+            for row in rows
+        }
+
     async def _load_foreign_keys(
         self,
         *,
@@ -201,10 +275,10 @@ class PostgresTenantSchemaInspector(TenantSchemaInspectorPort):
                         tgt.relname AS target_table_name,
                         array_agg(tgt_att.attname ORDER BY src_ord.ordinality) AS target_columns,
                         CASE con.confdeltype
-                            WHEN 'a' THEN 'no action'
+                            WHEN 'a' THEN 'no_action'
                             WHEN 'r' THEN 'restrict'
                             WHEN 'c' THEN 'cascade'
-                            WHEN 'n' THEN 'set null'
+                            WHEN 'n' THEN 'set_null'
                             WHEN 'd' THEN 'set default'
                         END AS on_delete
                     FROM pg_constraint con
@@ -241,3 +315,13 @@ class PostgresTenantSchemaInspector(TenantSchemaInspectorPort):
                 )
             )
         return grouped
+
+    @staticmethod
+    def _qi(identifier: str) -> str:
+        """Кавычит PostgreSQL-идентификатор для запросов к tenant-схеме."""
+        return f'"{identifier.replace(chr(34), chr(34) + chr(34))}"'
+
+    @classmethod
+    def _qualified_table(cls, schema_name: str, table_name: str) -> str:
+        """Возвращает fully-qualified имя таблицы schema.table."""
+        return f"{cls._qi(schema_name)}.{cls._qi(table_name)}"

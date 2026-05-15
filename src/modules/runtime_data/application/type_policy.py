@@ -33,6 +33,7 @@ class RuntimeFieldTypePolicy:
 
     _TYPE_TABLE: dict[str, RuntimeFieldTypeDefinition] = {
         "uuid": RuntimeFieldTypeDefinition("uuid", "UUID", "uuid"),
+        "reference": RuntimeFieldTypeDefinition("reference", "UUID", "uuid"),
         "text": RuntimeFieldTypeDefinition("text", "str", "text"),
         "select": RuntimeFieldTypeDefinition("select", "str", "text"),
         "int": RuntimeFieldTypeDefinition("int", "int", "integer"),
@@ -182,7 +183,7 @@ class RuntimeFieldTypePolicy:
         type_code = field.type_code
         self.type_definition(type_code)
 
-        if type_code == "uuid":
+        if type_code in {"uuid", "reference"}:
             return self._coerce_uuid(field_name=field.name, raw_value=raw_value)
         if type_code in {"text", "select"}:
             value = self._coerce_str(field_name=field.name, raw_value=raw_value)

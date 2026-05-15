@@ -90,9 +90,20 @@ class SchemaRegistryMetadataWriteServiceTests(unittest.IsolatedAsyncioTestCase):
             field_id_provider=lambda: RuntimeFieldIdVO.from_value(uuid4()),
             field_type_catalog=FieldTypeCatalog(),
         )
+
+        class RelationServiceStub:
+            async def clear_for_tenant(self, *, tenant_id):
+                return None
+
+            async def replace_all_for_tenant_from_spec(
+                self, *, tenant_id, data_source_id, schema_spec, objects
+            ):
+                return []
+
         service = SchemaRegistryMetadataWriteService(
             data_source_service=DataSourceServiceStub(),
             object_service=object_service,
+            relation_service=RelationServiceStub(),
         )
         schema_spec = ValidatedSchemaSpec(
             version=None,
@@ -190,9 +201,20 @@ class SchemaRegistryMetadataWriteServiceTests(unittest.IsolatedAsyncioTestCase):
             field_id_provider=lambda: RuntimeFieldIdVO.from_value(uuid4()),
             field_type_catalog=FieldTypeCatalog(),
         )
+
+        class RelationServiceStub:
+            async def clear_for_tenant(self, *, tenant_id):
+                return None
+
+            async def replace_all_for_tenant_from_spec(
+                self, *, tenant_id, data_source_id, schema_spec, objects
+            ):
+                return []
+
         service = SchemaRegistryMetadataWriteService(
             data_source_service=DataSourceServiceStub(),
             object_service=object_service,
+            relation_service=RelationServiceStub(),
         )
         schema_spec = ValidatedSchemaSpec(
             version=None,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from src.modules.schema_registry.domain.field.value_object.field_kind import FieldKind
 from src.modules.schema_registry.domain.field.value_object.field_type import (
@@ -43,11 +44,26 @@ class ValidatedRelationSpec:
     """Нормализованное и валидированное описание relation/FK."""
 
     name: str
+    label: str | None
     relation_type: RelationTypeEnum
-    source_field: str
+    source_object: str
     target_object: str
-    target_field: str
+    owning_object: str | None
+    fk_field: str | None
+    referenced_object: str | None
+    referenced_field: str | None
+    source_relation_name: str
+    target_relation_name: str
+    relation_table_name: str | None
+    source_join_column_name: str | None
+    target_join_column_name: str | None
     on_delete: str
+    is_required: bool
+    is_unique: bool
+    kind: str
+    settings: dict[str, Any]
+    foreign_key_name: str | None = None
+    fk_index_name: str | None = None
     unique_index_name: str | None = None
 
 

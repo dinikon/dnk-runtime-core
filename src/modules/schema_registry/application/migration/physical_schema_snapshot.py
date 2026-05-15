@@ -38,11 +38,20 @@ class ForeignKeySnapshot:
 
 
 @dataclass(frozen=True, slots=True)
+class PrimaryKeySnapshot:
+    """Снимок primary key constraint таблицы."""
+
+    name: str
+    columns: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class TableSnapshot:
     """Снимок таблицы вместе с колонками, индексами и foreign key."""
 
     name: str
     columns: tuple[ColumnSnapshot, ...]
+    primary_key: PrimaryKeySnapshot | None = None
     indexes: tuple[IndexSnapshot, ...] = ()
     foreign_keys: tuple[ForeignKeySnapshot, ...] = ()
 
@@ -61,6 +70,15 @@ class TableSnapshot:
             if item.name == normalized:
                 return item
         return None
+
+    def has_unique_constraint_for_columns(self, columns: tuple[str, ...]) -> bool:
+        """Проверяет наличие PK или unique-индекса по точному списку колонок."""
+        if self.primary_key is not None and self.primary_key.columns == columns:
+            return True
+        for item in self.indexes:
+            if item.is_unique and item.columns == columns:
+                return True
+        return False
 
     def get_foreign_key(self, name: str) -> ForeignKeySnapshot | None:
         """Ищет foreign key constraint по имени после trim входного значения."""

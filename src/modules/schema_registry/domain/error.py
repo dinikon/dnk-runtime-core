@@ -25,6 +25,12 @@ class FieldNotFoundError(SchemaRegistryError):
     pass
 
 
+class RelationNotFoundError(SchemaRegistryError):
+    """Ошибка поиска отсутствующей relation metadata."""
+
+    pass
+
+
 class FieldAlreadyExistsError(SchemaRegistryError):
     """Ошибка добавления поля с уже занятым именем."""
 
@@ -45,6 +51,12 @@ class InvalidFieldOperationError(SchemaRegistryError):
 
 class InvalidObjectOperationError(SchemaRegistryError):
     """Ошибка неподдержанной или запрещенной операции над runtime-объектом."""
+
+    pass
+
+
+class InvalidRelationOperationError(SchemaRegistryError):
+    """Ошибка неподдержанной или запрещенной операции над relation metadata."""
 
     pass
 

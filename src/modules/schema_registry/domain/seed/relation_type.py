@@ -15,3 +15,11 @@ class RelationTypeEnum(str, Enum):
             RelationTypeEnum.MANY_TO_ONE,
             RelationTypeEnum.ONE_TO_ONE,
         }
+
+    def is_fk_based(self) -> bool:
+        """Показывает, хранится ли relation через физическую FK-колонку."""
+        return self in {
+            RelationTypeEnum.MANY_TO_ONE,
+            RelationTypeEnum.ONE_TO_ONE,
+            RelationTypeEnum.ONE_TO_MANY,
+        }
