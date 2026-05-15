@@ -9,6 +9,7 @@ from src.modules.schema_registry.application.ports.tenant_schema_executor import
 from src.modules.schema_registry.application.migration.operations import (
     AddColumnOperation,
     AddForeignKeyOperation,
+    AddPrimaryKeyOperation,
     AlterColumnDefaultOperation,
     AlterColumnNullableOperation,
     CreateIndexOperation,
@@ -17,6 +18,7 @@ from src.modules.schema_registry.application.migration.operations import (
     DropColumnOperation,
     DropForeignKeyOperation,
     DropIndexOperation,
+    DropPrimaryKeyOperation,
     DropTableOperation,
     MigrationOperation,
 )
@@ -113,6 +115,28 @@ class PostgresTenantSchemaExecutor(TenantSchemaExecutorPort):
             else:
                 sql += "SET NOT NULL"
             await self._session.execute(text(sql))
+            return
+
+        if isinstance(operation, AddPrimaryKeyOperation):
+            columns = ", ".join(self._qi(column) for column in operation.columns)
+            await self._session.execute(
+                text(
+                    "ALTER TABLE "
+                    f"{self._qualified_table(operation.schema_name, operation.table_name)} "
+                    f"ADD CONSTRAINT {self._qi(operation.constraint_name)} "
+                    f"PRIMARY KEY ({columns})"
+                )
+            )
+            return
+
+        if isinstance(operation, DropPrimaryKeyOperation):
+            await self._session.execute(
+                text(
+                    "ALTER TABLE "
+                    f"{self._qualified_table(operation.schema_name, operation.table_name)} "
+                    f"DROP CONSTRAINT {self._qi(operation.constraint_name)}"
+                )
+            )
             return
 
         if isinstance(operation, CreateIndexOperation):

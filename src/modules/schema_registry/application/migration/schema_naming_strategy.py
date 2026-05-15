@@ -12,6 +12,14 @@ class SchemaNamingStrategy:
     """Централизует правила именования PostgreSQL-идентификаторов schema_registry."""
 
     @classmethod
+    def primary_key_name(cls, *, table_name: str) -> str:
+        """Генерирует имя primary key constraint для таблицы."""
+        return cls._generated_identifier(
+            f"pk_{table_name}",
+            title="Generated primary key constraint name",
+        )
+
+    @classmethod
     def one_to_one_unique_index_name(
         cls,
         *,

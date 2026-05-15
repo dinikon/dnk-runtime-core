@@ -2,6 +2,8 @@ from datetime import datetime
 from uuid import UUID
 
 import uuid6
+from typing import Any
+
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -45,6 +47,7 @@ class RelationORM(Base):
     )
 
     name: Mapped[str] = mapped_column(String(63), nullable=False)
+    label: Mapped[str | None] = mapped_column(String(255), nullable=True)
     relation_type: Mapped[str] = mapped_column(String(32), nullable=False)
 
     source_object_id: Mapped[UUID] = mapped_column(
@@ -109,8 +112,13 @@ class RelationORM(Base):
         nullable=False,
         server_default="standard",
     )
-    settings: Mapped[dict[str, str]] = mapped_column(PortableJSON, nullable=False)
+    settings: Mapped[dict[str, Any]] = mapped_column(PortableJSON, nullable=False)
 
     __table_args__ = (
-        UniqueConstraint("tenant_id", "name", name="uq_relations_tenant_name"),
+        UniqueConstraint(
+            "tenant_id",
+            "data_source_id",
+            "name",
+            name="uq_relations_tenant_datasource_name",
+        ),
     )

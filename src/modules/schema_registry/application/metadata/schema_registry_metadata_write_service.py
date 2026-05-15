@@ -86,13 +86,17 @@ class SchemaRegistryMetadataWriteService:
         datasource = await self._data_source_service.get_required_by_tenant(
             tenant_id=tenant_id
         )
-        await self._relation_service.clear_for_tenant(tenant_id=tenant_id)
         objects = await self._object_service.reconcile_for_tenant_from_spec(
             tenant_id=tenant_id,
             data_source_id=datasource.id,
             schema_spec=schema_spec,
         )
-        await self._relation_service.replace_all_for_tenant_from_spec(
+        reconcile_relations = getattr(
+            self._relation_service,
+            "reconcile_for_tenant_from_spec",
+            self._relation_service.replace_all_for_tenant_from_spec,
+        )
+        await reconcile_relations(
             tenant_id=tenant_id,
             data_source_id=datasource.id,
             schema_spec=schema_spec,

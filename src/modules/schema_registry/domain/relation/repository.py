@@ -4,6 +4,7 @@ from typing import Protocol
 
 from src.modules.schema_registry.domain.relation.entity import RelationEntity
 from src.modules.schema_registry.domain.relation.value_object import RuntimeRelationIdVO
+from src.modules.schema_registry.domain.object.value_object import RuntimeObjectIdVO
 from src.modules.shared import EntityIdVO
 
 
@@ -24,6 +25,37 @@ class RelationRepositoryProtocol(Protocol):
         tenant_id: EntityIdVO,
     ) -> list[RelationEntity]:
         """Возвращает все relations tenant."""
+        ...
+
+    async def list_by_object_id(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        object_id: RuntimeObjectIdVO,
+    ) -> list[RelationEntity]:
+        """Возвращает relations tenant, где object является source или target."""
+        ...
+
+    async def get_by_tenant_and_name(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        name: str,
+    ) -> RelationEntity | None:
+        """Возвращает relation по tenant/name или None."""
+        ...
+
+    async def add(self, relation: RelationEntity) -> None:
+        """Добавляет одну relation metadata."""
+        ...
+
+    async def delete(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        relation_id: RuntimeRelationIdVO,
+    ) -> None:
+        """Удаляет одну relation metadata."""
         ...
 
     async def replace_all_for_tenant(

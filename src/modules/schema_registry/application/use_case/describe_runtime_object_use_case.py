@@ -5,6 +5,7 @@ from typing import Protocol
 from src.modules.schema_registry.application.dto.runtime_object_description import (
     RuntimeFieldDescriptionDTO,
     RuntimeObjectDescriptionDTO,
+    RuntimeRelationDescriptionDTO,
 )
 from src.modules.schema_registry.domain.datasource.service import DataSourceService
 from src.modules.schema_registry.domain.error import (
@@ -12,6 +13,11 @@ from src.modules.schema_registry.domain.error import (
     SchemaRegistryMetadataInconsistentError,
 )
 from src.modules.schema_registry.domain.object.service import ObjectService
+from src.modules.schema_registry.domain.relation.service import RelationService
+from src.modules.schema_registry.runtime.resolver import (
+    RuntimeObjectResolverProtocol,
+    SchemaRegistryRuntimeObjectResolver,
+)
 from src.modules.shared import EntityIdVO
 
 
@@ -35,10 +41,22 @@ class DescribeRuntimeObjectUseCase:
         self,
         data_source_service: DataSourceService,
         object_service: ObjectService,
+        relation_service: RelationService | None = None,
+        runtime_object_resolver: RuntimeObjectResolverProtocol | None = None,
     ) -> None:
         """Инициализирует use case сервисами datasource и object metadata."""
         self._data_source_service = data_source_service
         self._object_service = object_service
+        self._include_relations = (
+            relation_service is not None or runtime_object_resolver is not None
+        )
+        self._runtime_object_resolver = runtime_object_resolver or (
+            SchemaRegistryRuntimeObjectResolver(
+                data_source_service=data_source_service,
+                object_service=object_service,
+                relation_service=relation_service,
+            )
+        )
 
     async def __call__(
         self,
@@ -69,6 +87,38 @@ class DescribeRuntimeObjectUseCase:
             raise SchemaRegistryMetadataInconsistentError(
                 "schema_registry object metadata has mismatched data_source_id."
             )
+        relation_descriptions: tuple[RuntimeRelationDescriptionDTO, ...] = ()
+        if self._include_relations:
+            descriptor = await self._runtime_object_resolver.resolve(
+                tenant_id=tenant_id,
+                object_name=normalized_object_name,
+            )
+            relation_descriptions = tuple(
+                RuntimeRelationDescriptionDTO(
+                    id=relation.id,
+                    name=relation.name,
+                    label=relation.label,
+                    relation_type=relation.relation_type,
+                    source_object=relation.source_object,
+                    target_object=relation.target_object,
+                    source_relation_name=relation.source_relation_name,
+                    target_relation_name=relation.target_relation_name,
+                    owning_object=relation.owning_object,
+                    fk_field=relation.fk_field,
+                    referenced_object=relation.referenced_object,
+                    referenced_field=relation.referenced_field,
+                    relation_table_name=relation.relation_table_name,
+                    source_join_column_name=relation.source_join_column_name,
+                    target_join_column_name=relation.target_join_column_name,
+                    is_collection=relation.is_collection,
+                    is_virtual=relation.is_virtual,
+                    is_unique=relation.is_unique,
+                    is_required=relation.is_required,
+                    kind=relation.kind,
+                    settings=dict(relation.settings),
+                )
+                for relation in descriptor.relations
+            )
 
         return RuntimeObjectDescriptionDTO(
             id=object_entity.id.uuid,
@@ -90,4 +140,5 @@ class DescribeRuntimeObjectUseCase:
                 )
                 for field in object_entity.fields
             ),
+            relations=relation_descriptions,
         )

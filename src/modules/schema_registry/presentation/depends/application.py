@@ -44,6 +44,7 @@ from src.modules.schema_registry.presentation.depends.infrastructure import (
     TenantSchemaInspectorDep,
 )
 
+
 def get_schema_seed_service(
     seed_reader: SchemaSeedReaderDep,
     field_type_catalog: FieldTypeCatalogDep,
@@ -180,11 +181,13 @@ DiffSchemaUseCaseDep: TypeAlias = Annotated[
 def get_describe_runtime_object_use_case(
     data_source_service: DataSourceServiceDep,
     object_service: ObjectServiceDep,
+    relation_service: RelationServiceDep,
 ) -> DescribeRuntimeObjectUseCaseProtocol:
     """Создает use case чтения описания runtime-объекта tenant."""
     return DescribeRuntimeObjectUseCase(
         data_source_service=data_source_service,
         object_service=object_service,
+        relation_service=relation_service,
     )
 
 

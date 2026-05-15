@@ -4,6 +4,7 @@ from collections.abc import Callable
 from datetime import datetime
 
 from src.modules.schema_registry.domain.datasource.value_object import DataSourceIdVO
+from src.modules.schema_registry.domain.error import UnsupportedSchemaChangeError
 from src.modules.schema_registry.domain.field.entity import FieldEntity
 from src.modules.schema_registry.domain.object.entity import ObjectEntity
 from src.modules.schema_registry.domain.object.value_object import RuntimeObjectIdVO
@@ -86,7 +87,9 @@ class RelationService:
         )
         spec_relation_names = {relation.name for relation in relations}
         for relation in existing_relations:
-            if relation.kind == "custom" and relation.name not in spec_relation_names:
+            if relation.name in spec_relation_names:
+                continue
+            if self._can_preserve_relation(relation=relation, objects=objects):
                 relations.append(relation)
 
         await self._relation_repository.reconcile_for_tenant(
@@ -102,6 +105,46 @@ class RelationService:
     ) -> list[RelationEntity]:
         """Возвращает все relation metadata tenant."""
         return await self._relation_repository.list_by_tenant_id(tenant_id=tenant_id)
+
+    async def list_by_object_id(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        object_id: RuntimeObjectIdVO,
+    ) -> list[RelationEntity]:
+        """Возвращает relations объекта как source/target."""
+        return await self._relation_repository.list_by_object_id(
+            tenant_id=tenant_id,
+            object_id=object_id,
+        )
+
+    async def get_by_tenant_and_name(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        name: str,
+    ) -> RelationEntity | None:
+        """Возвращает relation tenant по имени."""
+        return await self._relation_repository.get_by_tenant_and_name(
+            tenant_id=tenant_id,
+            name=name,
+        )
+
+    async def add(self, relation: RelationEntity) -> None:
+        """Добавляет одну relation metadata."""
+        await self._relation_repository.add(relation)
+
+    async def delete(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        relation_id: RuntimeRelationIdVO,
+    ) -> None:
+        """Удаляет одну relation metadata."""
+        await self._relation_repository.delete(
+            tenant_id=tenant_id,
+            relation_id=relation_id,
+        )
 
     def _build_relation_entities(
         self,
@@ -141,6 +184,13 @@ class RelationService:
                     created_at=created_at,
                     updated_at=now,
                 )
+                if existing_relation is not None and not self._same_physical_shape(
+                    existing_relation,
+                    relation,
+                ):
+                    raise UnsupportedSchemaChangeError(
+                        f"Relation '{relation.name}' physical shape cannot be changed by seed diff."
+                    )
                 relations.append(relation)
 
         return relations
@@ -188,6 +238,7 @@ class RelationService:
             tenant_id=tenant_id,
             data_source_id=data_source_id,
             name=relation_spec.name,
+            label=relation_spec.label,
             relation_type=relation_spec.relation_type,
             source_object_id=source_object.id,
             target_object_id=target_object.id,
@@ -209,6 +260,52 @@ class RelationService:
             is_unique=relation_spec.is_unique,
             kind=relation_spec.kind,
             settings=relation_spec.settings,
+        )
+
+    @staticmethod
+    def _can_preserve_relation(
+        *,
+        relation: RelationEntity,
+        objects: list[ObjectEntity],
+    ) -> bool:
+        """Проверяет, можно ли сохранить relation, отсутствующую в seed."""
+        object_ids = {object_entity.id for object_entity in objects}
+        field_ids = {
+            field_entity.id
+            for object_entity in objects
+            for field_entity in object_entity.fields
+        }
+        relation_object_ids = {
+            relation.source_object_id,
+            relation.target_object_id,
+            relation.owning_object_id,
+            relation.referenced_object_id,
+        } - {None}
+        if relation_object_ids - object_ids:
+            return False
+        relation_field_ids = {
+            relation.fk_field_id,
+            relation.referenced_field_id,
+        } - {None}
+        return not (relation_field_ids - field_ids)
+
+    @staticmethod
+    def _same_physical_shape(left: RelationEntity, right: RelationEntity) -> bool:
+        """Сравнивает физический контракт relation, который нельзя менять через diff."""
+        return (
+            left.relation_type == right.relation_type
+            and left.source_object_id == right.source_object_id
+            and left.target_object_id == right.target_object_id
+            and left.owning_object_id == right.owning_object_id
+            and left.fk_field_id == right.fk_field_id
+            and left.referenced_object_id == right.referenced_object_id
+            and left.referenced_field_id == right.referenced_field_id
+            and left.relation_table_name == right.relation_table_name
+            and left.source_join_column_name == right.source_join_column_name
+            and left.target_join_column_name == right.target_join_column_name
+            and left.on_delete == right.on_delete
+            and left.is_required == right.is_required
+            and left.is_unique == right.is_unique
         )
 
     @staticmethod

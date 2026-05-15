@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Any
 from typing import Literal
 
 from src.modules.schema_registry.domain.seed.relation_type import RelationTypeEnum
@@ -13,6 +14,7 @@ class RelationSeed:
 
     name: str
     relation_type: str | RelationTypeEnum
+    label: str | None = None
 
     source_object: str | None = None
     target_object: str | None = None
@@ -33,4 +35,4 @@ class RelationSeed:
     on_delete: RelationOnDeleteValue = "restrict"
     is_required: bool = False
     kind: RelationKindValue = "standard"
-    settings: dict[str, str] | None = None
+    settings: dict[str, Any] | None = None

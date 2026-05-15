@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Self
+from typing import Any, Self
 
 from src.modules.schema_registry.domain.datasource.value_object import DataSourceIdVO
 from src.modules.schema_registry.domain.field.value_object import RuntimeFieldIdVO
@@ -24,6 +24,7 @@ class RelationEntity:
     data_source_id: DataSourceIdVO
 
     name: str
+    label: str | None
     relation_type: RelationTypeEnum
 
     source_object_id: RuntimeObjectIdVO
@@ -45,7 +46,7 @@ class RelationEntity:
     is_required: bool
     is_unique: bool
     kind: str
-    settings: dict[str, str]
+    settings: dict[str, Any]
 
     @classmethod
     def create(
@@ -72,7 +73,8 @@ class RelationEntity:
         is_required: bool,
         is_unique: bool,
         kind: str,
-        settings: dict[str, str] | None = None,
+        settings: dict[str, Any] | None = None,
+        label: str | None = None,
     ) -> Self:
         """Создает relation metadata с нормализованными строковыми полями."""
         return cls(
@@ -82,6 +84,7 @@ class RelationEntity:
             tenant_id=tenant_id,
             data_source_id=data_source_id,
             name=name.strip(),
+            label=label.strip() if label else None,
             relation_type=relation_type,
             source_object_id=source_object_id,
             target_object_id=target_object_id,

@@ -227,6 +227,7 @@ class SchemaRegistryRuntimeObjectResolver:
         return RuntimeRelationDescriptor(
             id=str(relation.id),
             name=relation.name,
+            label=relation.label,
             relation_type=relation.relation_type.value,
             source_object=source_object.object_name.plural,
             target_object=target_object.object_name.plural,

@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from src.modules.schema_registry.application.migration.operations import (
     AddColumnOperation,
     AlterColumnDefaultOperation,
     AlterColumnNullableOperation,
     AddForeignKeyOperation,
+    AddPrimaryKeyOperation,
     CreateIndexOperation,
     CreateSchemaOperation,
     CreateTableOperation,
     DropColumnOperation,
     DropForeignKeyOperation,
     DropIndexOperation,
+    DropPrimaryKeyOperation,
     DropTableOperation,
 )
 from src.modules.schema_registry.application.migration.physical_schema_snapshot import (
@@ -18,6 +22,7 @@ from src.modules.schema_registry.application.migration.physical_schema_snapshot 
     ForeignKeySnapshot,
     IndexSnapshot,
     PhysicalSchemaSnapshot,
+    PrimaryKeySnapshot,
     TableSnapshot,
 )
 from src.modules.schema_registry.application.migration.plan import MigrationPlan
@@ -43,6 +48,27 @@ from src.modules.schema_registry.domain.seed.validated_schema_spec import (
     ValidatedRelationSpec,
     ValidatedSchemaSpec,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class PreservedSchemaArtifacts:
+    """Физические артефакты, которые diff не должен удалять автоматически."""
+
+    table_names: frozenset[str] = frozenset()
+    index_names: frozenset[str] = frozenset()
+    foreign_keys: frozenset[tuple[str, str]] = frozenset()
+
+    def has_table(self, table_name: str) -> bool:
+        """Проверяет, нужно ли сохранить таблицу даже если ее нет в desired."""
+        return table_name in self.table_names
+
+    def has_index(self, index_name: str) -> bool:
+        """Проверяет, нужно ли сохранить индекс даже если его нет в desired."""
+        return index_name in self.index_names
+
+    def has_foreign_key(self, table_name: str, constraint_name: str) -> bool:
+        """Проверяет, нужно ли сохранить FK даже если его нет в desired."""
+        return (table_name, constraint_name) in self.foreign_keys
 
 
 class PostgresSchemaPlanService:
@@ -91,6 +117,18 @@ class PostgresSchemaPlanService:
                 )
 
         for table in desired_schema.tables:
+            if table.primary_key is None:
+                continue
+            plan.add(
+                AddPrimaryKeyOperation(
+                    schema_name=schema_name,
+                    table_name=table.name,
+                    constraint_name=table.primary_key.name,
+                    columns=table.primary_key.columns,
+                )
+            )
+
+        for table in desired_schema.tables:
             for index in table.indexes:
                 plan.add(
                     CreateIndexOperation(
@@ -125,6 +163,7 @@ class PostgresSchemaPlanService:
         schema_name: str,
         seed: SchemaSeed | ValidatedSchemaSpec,
         actual_schema: PhysicalSchemaSnapshot,
+        preserved_artifacts: PreservedSchemaArtifacts | None = None,
     ) -> MigrationPlan:
         """Строит diff-план между желаемой и фактической схемой PostgreSQL.
 
@@ -133,6 +172,7 @@ class PostgresSchemaPlanService:
         Небезопасные изменения retained-колонок явно отклоняются.
         """
         plan = MigrationPlan()
+        preserved = preserved_artifacts or PreservedSchemaArtifacts()
         desired_schema = self._build_desired_schema(seed=seed, schema_name=schema_name)
         actual_tables = {table.name: table for table in actual_schema.tables}
         desired_tables = {table.name: table for table in desired_schema.tables}
@@ -156,6 +196,11 @@ class PostgresSchemaPlanService:
                     or desired_foreign_key is None
                     or desired_foreign_key != foreign_key
                 ):
+                    if preserved.has_foreign_key(
+                        actual_table.name,
+                        foreign_key.name,
+                    ):
+                        continue
                     plan.add_destructive(
                         DropForeignKeyOperation(
                             schema_name=schema_name,
@@ -179,12 +224,37 @@ class PostgresSchemaPlanService:
                     or desired_index is None
                     or desired_index != index
                 ):
+                    if preserved.has_index(index.name):
+                        continue
                     plan.add_destructive(
                         DropIndexOperation(
                             schema_name=schema_name,
                             index_name=index.name,
                         )
                     )
+
+        for actual_table in sorted(actual_schema.tables, key=lambda item: item.name):
+            desired_table = desired_tables.get(actual_table.name)
+            if desired_table is None:
+                continue
+            if actual_table.primary_key == desired_table.primary_key:
+                continue
+            if actual_table.primary_key is None:
+                continue
+            if desired_table.primary_key is None:
+                if preserved.has_table(actual_table.name):
+                    continue
+                plan.add_destructive(
+                    DropPrimaryKeyOperation(
+                        schema_name=schema_name,
+                        table_name=actual_table.name,
+                        constraint_name=actual_table.primary_key.name,
+                    )
+                )
+                continue
+            raise UnsupportedSchemaChangeError(
+                "Unsupported retained primary key change " f"for '{actual_table.name}'."
+            )
 
         for actual_table in sorted(actual_schema.tables, key=lambda item: item.name):
             desired_table = desired_tables.get(actual_table.name)
@@ -234,7 +304,9 @@ class PostgresSchemaPlanService:
 
         for actual_table in sorted(actual_schema.tables, key=lambda item: item.name):
             if actual_table.name not in desired_tables:
-                if self._is_custom_table(actual_table.name):
+                if self._is_custom_table(actual_table.name) or preserved.has_table(
+                    actual_table.name
+                ):
                     continue
                 plan.add_destructive(
                     DropTableOperation(
@@ -279,6 +351,26 @@ class PostgresSchemaPlanService:
                         default_value=column.default_value,
                     )
                 )
+
+        for desired_table in desired_schema.tables:
+            actual_table = actual_tables.get(desired_table.name)
+            if desired_table.primary_key is None:
+                continue
+            actual_primary_key = (
+                None if actual_table is None else actual_table.primary_key
+            )
+            if actual_primary_key == desired_table.primary_key:
+                continue
+            if actual_primary_key is not None:
+                continue
+            plan.add(
+                AddPrimaryKeyOperation(
+                    schema_name=schema_name,
+                    table_name=desired_table.name,
+                    constraint_name=desired_table.primary_key.name,
+                    columns=desired_table.primary_key.columns,
+                )
+            )
 
         for operation in alter_nullable_operations:
             plan.add(operation)
@@ -401,6 +493,10 @@ class PostgresSchemaPlanService:
         return TableSnapshot(
             name=object_seed.plural_name,
             columns=columns,
+            primary_key=self._build_primary_key_snapshot(
+                table_name=object_seed.plural_name,
+                columns=columns,
+            ),
             indexes=indexes,
             foreign_keys=(),
         )
@@ -438,6 +534,10 @@ class PostgresSchemaPlanService:
         return TableSnapshot(
             name=object_spec.plural_name,
             columns=columns,
+            primary_key=self._build_primary_key_snapshot(
+                table_name=object_spec.plural_name,
+                columns=columns,
+            ),
             indexes=indexes,
             foreign_keys=tuple(foreign_keys),
         )
@@ -539,6 +639,18 @@ class PostgresSchemaPlanService:
                     name=table_name,
                     columns=(
                         ColumnSnapshot(
+                            name="id",
+                            sql_preset=SqlTypePresetEnum.UUID,
+                            is_nullable=False,
+                            default_value="gen_random_uuid()",
+                        ),
+                        ColumnSnapshot(
+                            name="created_at",
+                            sql_preset=SqlTypePresetEnum.TIMESTAMP,
+                            is_nullable=False,
+                            default_value="CURRENT_TIMESTAMP",
+                        ),
+                        ColumnSnapshot(
                             name=source_column,
                             sql_preset=SqlTypePresetEnum.UUID,
                             is_nullable=False,
@@ -550,6 +662,12 @@ class PostgresSchemaPlanService:
                             is_nullable=False,
                             default_value=None,
                         ),
+                    ),
+                    primary_key=PrimaryKeySnapshot(
+                        name=SchemaNamingStrategy.primary_key_name(
+                            table_name=table_name,
+                        ),
+                        columns=("id",),
                     ),
                     indexes=(
                         IndexSnapshot(
@@ -609,6 +727,21 @@ class PostgresSchemaPlanService:
                 )
             )
         return tables
+
+    @staticmethod
+    def _build_primary_key_snapshot(
+        *,
+        table_name: str,
+        columns: tuple[ColumnSnapshot, ...],
+    ) -> PrimaryKeySnapshot | None:
+        """Создает PK snapshot по id-колонке, если она есть в таблице."""
+        for column in columns:
+            if column.name == "id":
+                return PrimaryKeySnapshot(
+                    name=SchemaNamingStrategy.primary_key_name(table_name=table_name),
+                    columns=("id",),
+                )
+        return None
 
     def _fk_relations_for_table(
         self,

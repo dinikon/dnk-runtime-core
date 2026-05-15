@@ -82,6 +82,7 @@ class SchemaSeedService:
             str,
             tuple[ObjectNameVO, tuple[ValidatedFieldSpec, ...]],
         ] = {}
+        object_kinds_by_name: dict[str, ObjectKind] = {}
 
         for object_seed in seed.objects:
             object_kind = self._normalize_object_kind(object_seed.kind)
@@ -161,10 +162,16 @@ class SchemaSeedService:
             )
             objects_by_name[object_name.singular] = (object_name, normalized_fields)
             objects_by_name[object_name.plural] = (object_name, normalized_fields)
+            object_kinds_by_name[object_name.singular] = object_kind
+            object_kinds_by_name[object_name.plural] = object_kind
 
         indexes_by_object: dict[str, list[ValidatedIndexSpec]] = {}
         relations_by_source_object: dict[str, list[ValidatedRelationSpec]] = {}
         seen_relation_names: set[str] = set()
+        source_relation_names_by_object: dict[str, set[str]] = {}
+        target_relation_names_by_object: dict[str, set[str]] = {}
+        relation_table_names: set[str] = set()
+        object_table_names = {partial.name.plural for partial in object_partials}
 
         for partial in object_partials:
             object_seed = partial.seed
@@ -252,6 +259,7 @@ class SchemaSeedService:
                         source_object_name=source_object_name,
                         target_object_name=target_object_name,
                         objects_by_name=objects_by_name,
+                        object_kinds_by_name=object_kinds_by_name,
                         indexes_by_object=indexes_by_object,
                         global_index_names=global_index_names,
                     )
@@ -262,7 +270,24 @@ class SchemaSeedService:
                         relation_type=relation_type,
                         source_object_name=source_object_name,
                         target_object_name=target_object_name,
+                        object_kinds_by_name=object_kinds_by_name,
+                        object_table_names=object_table_names,
+                        relation_table_names=relation_table_names,
                     )
+                self._ensure_relation_api_name_is_unique(
+                    object_name=source_object_name.plural,
+                    api_name=relation_spec.source_relation_name,
+                    relation_name=relation_name,
+                    role="source_relation_name",
+                    seen_by_object=source_relation_names_by_object,
+                )
+                self._ensure_relation_api_name_is_unique(
+                    object_name=target_object_name.plural,
+                    api_name=relation_spec.target_relation_name,
+                    relation_name=relation_name,
+                    role="target_relation_name",
+                    seen_by_object=target_relation_names_by_object,
+                )
                 relations_by_source_object[source_object_name.plural].append(
                     relation_spec
                 )
@@ -304,6 +329,7 @@ class SchemaSeedService:
         source_object_name: ObjectNameVO,
         target_object_name: ObjectNameVO,
         objects_by_name: dict[str, tuple[ObjectNameVO, tuple[ValidatedFieldSpec, ...]]],
+        object_kinds_by_name: dict[str, ObjectKind],
         indexes_by_object: dict[str, list[ValidatedIndexSpec]],
         global_index_names: set[str],
     ) -> ValidatedRelationSpec:
@@ -317,6 +343,18 @@ class SchemaSeedService:
         referenced_object_name, referenced_fields = self._require_object(
             object_name=relation_seed.referenced_object,
             objects_by_name=objects_by_name,
+            relation_name=relation_name,
+            role="referenced_object",
+        )
+        self._ensure_relation_physical_object_is_not_view(
+            object_name=owning_object_name,
+            object_kinds_by_name=object_kinds_by_name,
+            relation_name=relation_name,
+            role="owning_object",
+        )
+        self._ensure_relation_physical_object_is_not_view(
+            object_name=referenced_object_name,
+            object_kinds_by_name=object_kinds_by_name,
             relation_name=relation_name,
             role="referenced_object",
         )
@@ -373,13 +411,22 @@ class SchemaSeedService:
             relation_name=relation_name,
             role="referenced_field",
         )
-        self._require_field(
+        referenced_field_spec = self._require_field(
             field_name=referenced_field,
             fields=referenced_fields,
             object_name=referenced_object_name,
             relation_name=relation_name,
             role="referenced_field",
         )
+        if not self._has_unique_or_primary_key_guarantee(
+            field_spec=referenced_field_spec,
+            indexes=indexes_by_object[referenced_object_name.plural],
+        ):
+            raise SeedValidationError(
+                f"Relation '{relation_name}' referenced_field '{referenced_field}' "
+                f"on object '{referenced_object_name.plural}' must be primary key "
+                "or have a unique index."
+            )
 
         foreign_key_name = SchemaNamingStrategy.foreign_key_name(
             source_table_name=owning_object_name.plural,
@@ -436,6 +483,7 @@ class SchemaSeedService:
 
         return ValidatedRelationSpec(
             name=relation_name,
+            label=self._normalize_optional_label(relation_seed.label),
             relation_type=relation_type,
             source_object=source_object_name.singular,
             target_object=target_object_name.singular,
@@ -480,8 +528,23 @@ class SchemaSeedService:
         relation_type: RelationTypeEnum,
         source_object_name: ObjectNameVO,
         target_object_name: ObjectNameVO,
+        object_kinds_by_name: dict[str, ObjectKind],
+        object_table_names: set[str],
+        relation_table_names: set[str],
     ) -> ValidatedRelationSpec:
         """Валидирует many_to_many relation и генерирует имена join-таблицы."""
+        self._ensure_relation_physical_object_is_not_view(
+            object_name=source_object_name,
+            object_kinds_by_name=object_kinds_by_name,
+            relation_name=relation_name,
+            role="source_object",
+        )
+        self._ensure_relation_physical_object_is_not_view(
+            object_name=target_object_name,
+            object_kinds_by_name=object_kinds_by_name,
+            relation_name=relation_name,
+            role="target_object",
+        )
         relation_table_name = self._validate_identifier(
             relation_seed.relation_table_name
             or f"{source_object_name.plural}_{target_object_name.plural}",
@@ -497,8 +560,23 @@ class SchemaSeedService:
             or f"{target_object_name.singular}_id",
             "Target join column name",
         )
+        if source_join_column_name == target_join_column_name:
+            raise SeedValidationError(
+                f"Relation '{relation_name}' many_to_many join columns must differ."
+            )
+        if relation_table_name in object_table_names:
+            raise SeedValidationError(
+                f"Relation '{relation_name}' relation_table_name "
+                f"'{relation_table_name}' conflicts with object table name."
+            )
+        if relation_table_name in relation_table_names:
+            raise SeedValidationError(
+                f"Duplicate many_to_many relation_table_name '{relation_table_name}'."
+            )
+        relation_table_names.add(relation_table_name)
         return ValidatedRelationSpec(
             name=relation_name,
+            label=self._normalize_optional_label(relation_seed.label),
             relation_type=relation_type,
             source_object=source_object_name.singular,
             target_object=target_object_name.singular,
@@ -606,9 +684,64 @@ class SchemaSeedService:
         )
 
     @staticmethod
+    def _has_unique_or_primary_key_guarantee(
+        *,
+        field_spec: ValidatedFieldSpec,
+        indexes: list[ValidatedIndexSpec],
+    ) -> bool:
+        """Проверяет, можно ли ссылаться FK на поле как на unique/primary key."""
+        if field_spec.name == "id" and not field_spec.is_nullable:
+            return True
+        return any(
+            index.fields == (field_spec.name,) and index.is_unique for index in indexes
+        )
+
+    @staticmethod
+    def _ensure_relation_physical_object_is_not_view(
+        *,
+        object_name: ObjectNameVO,
+        object_kinds_by_name: dict[str, ObjectKind],
+        relation_name: str,
+        role: str,
+    ) -> None:
+        """Запрещает использовать VIEW object как physical side relation."""
+        if object_kinds_by_name[object_name.singular] != ObjectKind.VIEW:
+            return
+        raise SeedValidationError(
+            f"Relation '{relation_name}' cannot use VIEW object "
+            f"'{object_name.plural}' as {role} physical side."
+        )
+
+    @staticmethod
+    def _ensure_relation_api_name_is_unique(
+        *,
+        object_name: str,
+        api_name: str,
+        relation_name: str,
+        role: str,
+        seen_by_object: dict[str, set[str]],
+    ) -> None:
+        """Гарантирует уникальность API relation name внутри object side."""
+        seen_names = seen_by_object.setdefault(object_name, set())
+        if api_name in seen_names:
+            raise SeedValidationError(
+                f"Duplicate {role} '{api_name}' for object '{object_name}' "
+                f"in relation '{relation_name}'."
+            )
+        seen_names.add(api_name)
+
+    @staticmethod
     def _normalize_relation_api_name(value: str | None, *, default: str) -> str:
         """Нормализует API-имя relation или возвращает default."""
         return (value or default).strip()
+
+    @staticmethod
+    def _normalize_optional_label(value: str | None) -> str | None:
+        """Нормализует optional label relation."""
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
 
     @staticmethod
     def _validate_identifier(value: str, title: str) -> str:

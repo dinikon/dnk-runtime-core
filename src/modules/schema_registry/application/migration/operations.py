@@ -71,6 +71,25 @@ class AlterColumnNullableOperation:
 
 
 @dataclass(frozen=True, slots=True)
+class AddPrimaryKeyOperation:
+    """Операция добавления primary key constraint к таблице."""
+
+    schema_name: str
+    table_name: str
+    constraint_name: str
+    columns: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class DropPrimaryKeyOperation:
+    """Destructive-операция удаления primary key constraint."""
+
+    schema_name: str
+    table_name: str
+    constraint_name: str
+
+
+@dataclass(frozen=True, slots=True)
 class CreateIndexOperation:
     """Операция создания обычного или unique-индекса."""
 
@@ -120,6 +139,8 @@ MigrationOperation: TypeAlias = (
     | DropColumnOperation
     | AlterColumnDefaultOperation
     | AlterColumnNullableOperation
+    | AddPrimaryKeyOperation
+    | DropPrimaryKeyOperation
     | CreateIndexOperation
     | DropIndexOperation
     | AddForeignKeyOperation

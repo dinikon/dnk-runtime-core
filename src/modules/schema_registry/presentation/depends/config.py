@@ -20,6 +20,14 @@ from src.modules.schema_registry.application.config.object.use_case import (
     DescribeCustomObjectUseCase,
     ListCustomObjectsUseCase,
 )
+from src.modules.schema_registry.application.config.relation.repository import (
+    SchemaConfigRelationRepositoryProtocol,
+)
+from src.modules.schema_registry.application.config.relation.use_case import (
+    CreateRelationUseCase,
+    DeleteRelationUseCase,
+    ListObjectRelationsUseCase,
+)
 from src.modules.schema_registry.infrastructure.config.schema_config_repository import (
     SchemaConfigRepository,
 )
@@ -28,17 +36,22 @@ from src.modules.schema_registry.presentation.depends.infrastructure import (
     FieldTypeCatalogDep,
     ObjectRepositoryDep,
     PostgresFieldCanonicalizerDep,
+    RelationRepositoryDep,
     TenantSchemaExecutorDep,
+    TenantSchemaInspectorDep,
     get_runtime_field_id_provider,
     get_runtime_object_id_provider,
+    get_runtime_relation_id_provider,
 )
 from src.modules.shared.depends import ClockDep
 
 
 def get_schema_config_repository(
     object_repository: ObjectRepositoryDep,
+    relation_repository: RelationRepositoryDep,
     data_source_service: DataSourceServiceDep,
     tenant_schema_executor: TenantSchemaExecutorDep,
+    tenant_schema_inspector: TenantSchemaInspectorDep,
     postgres_field_canonicalizer: PostgresFieldCanonicalizerDep,
     field_type_catalog: FieldTypeCatalogDep,
     clock: ClockDep,
@@ -46,13 +59,16 @@ def get_schema_config_repository(
     """Создает schema config repository поверх schema_registry metadata и DDL."""
     return SchemaConfigRepository(
         object_repository=object_repository,
+        relation_repository=relation_repository,
         data_source_service=data_source_service,
         tenant_schema_executor=tenant_schema_executor,
+        tenant_schema_inspector=tenant_schema_inspector,
         postgres_field_canonicalizer=postgres_field_canonicalizer,
         field_type_catalog=field_type_catalog,
         clock=clock,
         object_id_provider=get_runtime_object_id_provider(),
         field_id_provider=get_runtime_field_id_provider(),
+        relation_id_provider=get_runtime_relation_id_provider(),
     )
 
 
@@ -63,6 +79,11 @@ SchemaConfigRepositoryDep = Annotated[
 
 SchemaConfigFieldRepositoryDep = Annotated[
     SchemaConfigFieldRepositoryProtocol,
+    Depends(get_schema_config_repository),
+]
+
+SchemaConfigRelationRepositoryDep = Annotated[
+    SchemaConfigRelationRepositoryProtocol,
     Depends(get_schema_config_repository),
 ]
 
@@ -145,20 +166,66 @@ DeleteCustomFieldUseCaseDep = Annotated[
 ]
 
 
+def get_create_relation_use_case(
+    repository: SchemaConfigRelationRepositoryDep,
+) -> CreateRelationUseCase:
+    """Создает use case создания custom relation."""
+    return CreateRelationUseCase(repository)
+
+
+CreateRelationUseCaseDep = Annotated[
+    CreateRelationUseCase,
+    Depends(get_create_relation_use_case),
+]
+
+
+def get_delete_relation_use_case(
+    repository: SchemaConfigRelationRepositoryDep,
+) -> DeleteRelationUseCase:
+    """Создает use case удаления custom relation."""
+    return DeleteRelationUseCase(repository)
+
+
+DeleteRelationUseCaseDep = Annotated[
+    DeleteRelationUseCase,
+    Depends(get_delete_relation_use_case),
+]
+
+
+def get_list_object_relations_use_case(
+    repository: SchemaConfigRelationRepositoryDep,
+) -> ListObjectRelationsUseCase:
+    """Создает use case списка object relations."""
+    return ListObjectRelationsUseCase(repository)
+
+
+ListObjectRelationsUseCaseDep = Annotated[
+    ListObjectRelationsUseCase,
+    Depends(get_list_object_relations_use_case),
+]
+
+
 __all__ = [
     "AddCustomFieldUseCaseDep",
     "CreateCustomObjectUseCaseDep",
+    "CreateRelationUseCaseDep",
     "DeleteCustomFieldUseCaseDep",
     "DeleteCustomObjectUseCaseDep",
+    "DeleteRelationUseCaseDep",
     "DescribeCustomObjectUseCaseDep",
+    "ListObjectRelationsUseCaseDep",
     "ListCustomObjectsUseCaseDep",
     "SchemaConfigFieldRepositoryDep",
+    "SchemaConfigRelationRepositoryDep",
     "SchemaConfigRepositoryDep",
     "get_add_custom_field_use_case",
     "get_create_custom_object_use_case",
+    "get_create_relation_use_case",
     "get_delete_custom_field_use_case",
     "get_delete_custom_object_use_case",
+    "get_delete_relation_use_case",
     "get_describe_custom_object_use_case",
+    "get_list_object_relations_use_case",
     "get_list_custom_objects_use_case",
     "get_schema_config_repository",
 ]

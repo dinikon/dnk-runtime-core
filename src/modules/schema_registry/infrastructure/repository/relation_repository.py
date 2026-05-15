@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.schema_registry.domain.datasource.value_object import DataSourceIdVO
@@ -49,6 +49,64 @@ class SqlAlchemyRelationRepository(RelationRepositoryProtocol):
         ).all()
         return [self._map_model(model) for model in models]
 
+    async def list_by_object_id(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        object_id: RuntimeObjectIdVO,
+    ) -> list[RelationEntity]:
+        """Возвращает relations tenant, где object участвует как source или target."""
+        models = (
+            await self._session.scalars(
+                select(RelationORM)
+                .where(RelationORM.tenant_id == tenant_id.uuid)
+                .where(
+                    or_(
+                        RelationORM.source_object_id == object_id.uuid,
+                        RelationORM.target_object_id == object_id.uuid,
+                    )
+                )
+                .order_by(RelationORM.created_at, RelationORM.id)
+            )
+        ).all()
+        return [self._map_model(model) for model in models]
+
+    async def get_by_tenant_and_name(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        name: str,
+    ) -> RelationEntity | None:
+        """Ищет relation metadata по tenant/name."""
+        model = await self._session.scalar(
+            select(RelationORM)
+            .where(RelationORM.tenant_id == tenant_id.uuid)
+            .where(RelationORM.name == name.strip())
+            .limit(1)
+        )
+        if model is None:
+            return None
+        return self._map_model(model)
+
+    async def add(self, relation: RelationEntity) -> None:
+        """Добавляет одну relation metadata."""
+        self._session.add(self._to_model(relation))
+        await self._session.flush()
+
+    async def delete(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        relation_id: RuntimeRelationIdVO,
+    ) -> None:
+        """Удаляет одну relation metadata по tenant/id."""
+        await self._session.execute(
+            delete(RelationORM)
+            .where(RelationORM.tenant_id == tenant_id.uuid)
+            .where(RelationORM.id == relation_id.uuid)
+        )
+        await self._session.flush()
+
     async def replace_all_for_tenant(
         self,
         *,
@@ -78,8 +136,17 @@ class SqlAlchemyRelationRepository(RelationRepositoryProtocol):
         tenant_id: EntityIdVO,
         relations: list[RelationEntity],
     ) -> None:
-        """Синхронизирует relation metadata tenant через replace."""
-        await self.replace_all_for_tenant(tenant_id=tenant_id, relations=relations)
+        """Синхронизирует relation metadata tenant без удаления сохраненных строк."""
+        relation_ids = [relation.id.uuid for relation in relations]
+        delete_query = delete(RelationORM).where(
+            RelationORM.tenant_id == tenant_id.uuid
+        )
+        if relation_ids:
+            delete_query = delete_query.where(RelationORM.id.notin_(relation_ids))
+        await self._session.execute(delete_query)
+        for relation in relations:
+            await self._session.merge(self._to_model(relation))
+        await self._session.flush()
 
     @staticmethod
     def _to_model(relation: RelationEntity) -> RelationORM:
@@ -91,6 +158,7 @@ class SqlAlchemyRelationRepository(RelationRepositoryProtocol):
             tenant_id=relation.tenant_id.uuid,
             data_source_id=relation.data_source_id.uuid,
             name=relation.name,
+            label=relation.label,
             relation_type=relation.relation_type.value,
             source_object_id=relation.source_object_id.uuid,
             target_object_id=relation.target_object_id.uuid,
@@ -134,6 +202,7 @@ class SqlAlchemyRelationRepository(RelationRepositoryProtocol):
             tenant_id=EntityIdVO.from_value(model.tenant_id),
             data_source_id=DataSourceIdVO.from_value(model.data_source_id),
             name=model.name,
+            label=model.label,
             relation_type=RelationTypeEnum(model.relation_type),
             source_object_id=RuntimeObjectIdVO.from_value(model.source_object_id),
             target_object_id=RuntimeObjectIdVO.from_value(model.target_object_id),

@@ -6,6 +6,7 @@ from src.modules.schema_registry.domain.datasource.entity import DataSourceEntit
 from src.modules.schema_registry.domain.object.entity import ObjectEntity
 from src.modules.schema_registry.domain.relation.entity import RelationEntity
 
+
 @dataclass(frozen=True, slots=True)
 class SchemaRegistryMetadataSnapshot:
     """Снимок metadata schema_registry: datasource tenant и его runtime-объекты."""

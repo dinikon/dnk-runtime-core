@@ -105,3 +105,71 @@ class RuntimeRelationLoader(Protocol):
     ) -> list[Mapping[str, Any]]:
         """Обогащает runtime-строки relation-данными согласно fetch plan."""
         ...
+
+
+class RuntimeRelationCommandGateway(Protocol):
+    """Порт команд и точечного чтения runtime relation data."""
+
+    async def get_related_record(
+        self,
+        *,
+        descriptor: RuntimeObjectDescriptor,
+        relation_name: str,
+        object_id: Any,
+    ) -> Mapping[str, Any] | None:
+        """Возвращает single related record или None."""
+        ...
+
+    async def list_related_records(
+        self,
+        *,
+        descriptor: RuntimeObjectDescriptor,
+        relation_name: str,
+        object_id: Any,
+    ) -> list[Mapping[str, Any]]:
+        """Возвращает related records collection."""
+        ...
+
+    async def attach_related_record(
+        self,
+        *,
+        descriptor: RuntimeObjectDescriptor,
+        relation_name: str,
+        object_id: Any,
+        related_id: Any,
+    ) -> None:
+        """Создает M2M связь между двумя records."""
+        ...
+
+    async def detach_related_record(
+        self,
+        *,
+        descriptor: RuntimeObjectDescriptor,
+        relation_name: str,
+        object_id: Any,
+        related_id: Any,
+    ) -> None:
+        """Удаляет M2M связь между двумя records."""
+        ...
+
+    async def set_relation(
+        self,
+        *,
+        descriptor: RuntimeObjectDescriptor,
+        relation_name: str,
+        object_id: Any,
+        related_id: Any,
+    ) -> None:
+        """Устанавливает FK-based relation."""
+        ...
+
+    async def unset_relation(
+        self,
+        *,
+        descriptor: RuntimeObjectDescriptor,
+        relation_name: str,
+        object_id: Any,
+        related_id: Any | None = None,
+    ) -> None:
+        """Сбрасывает FK-based relation."""
+        ...

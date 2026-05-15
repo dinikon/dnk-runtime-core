@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Mapping
+from typing import Any, Mapping
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +24,7 @@ class RuntimeRelationDescriptor:
 
     id: str
     name: str
+    label: str | None
     relation_type: str
     source_object: str
     target_object: str
@@ -42,7 +43,7 @@ class RuntimeRelationDescriptor:
     is_virtual: bool
     is_unique: bool
     kind: str
-    settings: Mapping[str, str]
+    settings: Mapping[str, Any]
 
 
 @dataclass(frozen=True, slots=True)
