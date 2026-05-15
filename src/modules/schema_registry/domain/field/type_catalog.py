@@ -19,6 +19,7 @@ class FieldTypeCatalog:
         FieldTypeEnum.JSON.value: FieldTypeEnum.JSON,
         FieldTypeEnum.SELECT.value: FieldTypeEnum.SELECT,
         FieldTypeEnum.MULTISELECT.value: FieldTypeEnum.MULTISELECT,
+        FieldTypeEnum.REFERENCE.value: FieldTypeEnum.REFERENCE,
     }
 
     def from_seed_type(self, raw_type: str) -> FieldTypeVO:

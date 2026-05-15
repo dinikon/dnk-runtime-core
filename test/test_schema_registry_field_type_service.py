@@ -30,6 +30,13 @@ class FieldTypeCatalogTests(unittest.TestCase):
             SqlTypePresetEnum.TIMESTAMP,
         )
 
+    def test_reference_field_uses_uuid_sql_preset(self) -> None:
+        field_type = self.catalog.from_seed_type("reference")
+        self.assertEqual(
+            self.canonicalizer.sql_preset_from_field_type(field_type),
+            SqlTypePresetEnum.UUID,
+        )
+
     def test_canonicalizes_seed_and_postgres_defaults_to_same_timestamp_value(
         self,
     ) -> None:

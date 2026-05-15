@@ -7,6 +7,7 @@ from src.modules.schema_registry.application.migration.schema_naming_strategy im
 )
 from src.modules.schema_registry.application.ports.seed_reader import SeedReaderPort
 from src.modules.schema_registry.domain.error import SeedValidationError
+from src.modules.schema_registry.domain.field.enum.field_type import FieldTypeEnum
 from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
 from src.modules.schema_registry.domain.field.value_object.field_kind import FieldKind
 from src.modules.schema_registry.domain.field.value_object.field_label import (
@@ -161,12 +162,13 @@ class SchemaSeedService:
             objects_by_name[object_name.singular] = (object_name, normalized_fields)
             objects_by_name[object_name.plural] = (object_name, normalized_fields)
 
-        objects: list[ValidatedObjectSpec] = []
+        indexes_by_object: dict[str, list[ValidatedIndexSpec]] = {}
+        relations_by_source_object: dict[str, list[ValidatedRelationSpec]] = {}
+        seen_relation_names: set[str] = set()
+
         for partial in object_partials:
             object_seed = partial.seed
             object_name = partial.name
-            object_label = partial.label
-            object_kind = partial.kind
             normalized_fields = partial.fields
             field_names = {field_spec.name for field_spec in normalized_fields}
             indexes: list[ValidatedIndexSpec] = []
@@ -198,71 +200,79 @@ class SchemaSeedService:
                     )
                 )
 
-            relations: list[ValidatedRelationSpec] = []
+            indexes_by_object[object_name.plural] = indexes
+            relations_by_source_object[object_name.plural] = []
+
+        for partial in object_partials:
+            object_seed = partial.seed
+            object_name = partial.name
             for relation_seed in object_seed.relations:
                 relation_name = self._validate_identifier(
                     relation_seed.name, "Relation name"
                 )
+                if relation_name in seen_relation_names:
+                    raise SeedValidationError(
+                        f"Duplicate relation name '{relation_name}' in schema seed."
+                    )
+                seen_relation_names.add(relation_name)
+
                 relation_type = self._normalize_relation_type(
                     relation_seed.relation_type
                 )
-                source_field = relation_seed.source_field.strip()
-                if source_field not in field_names:
+                source_object_name, _ = self._require_object(
+                    object_name=relation_seed.source_object,
+                    objects_by_name=objects_by_name,
+                    relation_name=relation_name,
+                    role="source_object",
+                )
+                if source_object_name != object_name:
                     raise SeedValidationError(
-                        f"Relation '{relation_name}' references unknown source field "
-                        f"'{relation_seed.source_field}' "
-                        f"in object '{object_name.plural}'."
+                        f"Relation '{relation_name}' must be declared under "
+                        f"its source object '{source_object_name.plural}'."
+                    )
+                target_object_name, _ = self._require_object(
+                    object_name=relation_seed.target_object,
+                    objects_by_name=objects_by_name,
+                    relation_name=relation_name,
+                    role="target_object",
+                )
+                if (
+                    source_object_name == target_object_name
+                    and relation_type == RelationTypeEnum.MANY_TO_MANY
+                ):
+                    raise SeedValidationError(
+                        "Self many_to_many relations are not supported in MVP."
                     )
 
-                target_object = objects_by_name.get(relation_seed.target_object.strip())
-                if target_object is None:
-                    raise SeedValidationError(
-                        f"Relation '{relation_name}' references unknown target object "
-                        f"'{relation_seed.target_object}'."
-                    )
-
-                target_object_name, target_fields = target_object
-                target_field_names = {field.name for field in target_fields}
-                target_field = relation_seed.target_field.strip()
-                if target_field not in target_field_names:
-                    raise SeedValidationError(
-                        f"Relation '{relation_name}' references unknown target field "
-                        f"'{relation_seed.target_field}' "
-                        f"on object '{target_object_name.plural}'."
-                    )
-
-                unique_index_name = None
-                if relation_type == RelationTypeEnum.ONE_TO_ONE:
-                    unique_index_name = (
-                        SchemaNamingStrategy.one_to_one_unique_index_name(
-                            table_name=object_name.plural,
-                            column_name=source_field,
-                        )
-                    )
-                    self._ensure_global_index_name_is_unique(
-                        index_name=unique_index_name,
+                if relation_type.is_fk_based():
+                    relation_spec = self._normalize_fk_relation(
+                        relation_seed=relation_seed,
+                        relation_name=relation_name,
+                        relation_type=relation_type,
+                        source_object_name=source_object_name,
+                        target_object_name=target_object_name,
+                        objects_by_name=objects_by_name,
+                        indexes_by_object=indexes_by_object,
                         global_index_names=global_index_names,
                     )
-                    indexes.append(
-                        ValidatedIndexSpec(
-                            name=unique_index_name,
-                            fields=(source_field,),
-                            is_unique=True,
-                            is_generated=True,
-                        )
-                    )
-
-                relations.append(
-                    ValidatedRelationSpec(
-                        name=relation_name,
+                else:
+                    relation_spec = self._normalize_many_to_many_relation(
+                        relation_seed=relation_seed,
+                        relation_name=relation_name,
                         relation_type=relation_type,
-                        source_field=source_field,
-                        target_object=target_object_name.singular,
-                        target_field=target_field,
-                        on_delete=self._normalize_on_delete(relation_seed.on_delete),
-                        unique_index_name=unique_index_name,
+                        source_object_name=source_object_name,
+                        target_object_name=target_object_name,
                     )
+                relations_by_source_object[source_object_name.plural].append(
+                    relation_spec
                 )
+
+        objects: list[ValidatedObjectSpec] = []
+        for partial in object_partials:
+            object_seed = partial.seed
+            object_name = partial.name
+            object_label = partial.label
+            object_kind = partial.kind
 
             objects.append(
                 ValidatedObjectSpec(
@@ -272,9 +282,9 @@ class SchemaSeedService:
                     plural_label=object_label.plural,
                     description=object_seed.description.strip(),
                     kind=object_kind,
-                    fields=normalized_fields,
-                    indexes=tuple(indexes),
-                    relations=tuple(relations),
+                    fields=partial.fields,
+                    indexes=tuple(indexes_by_object[object_name.plural]),
+                    relations=tuple(relations_by_source_object[object_name.plural]),
                 )
             )
 
@@ -285,6 +295,321 @@ class SchemaSeedService:
             objects=tuple(objects),
         )
 
+    def _normalize_fk_relation(
+        self,
+        *,
+        relation_seed,
+        relation_name: str,
+        relation_type: RelationTypeEnum,
+        source_object_name: ObjectNameVO,
+        target_object_name: ObjectNameVO,
+        objects_by_name: dict[str, tuple[ObjectNameVO, tuple[ValidatedFieldSpec, ...]]],
+        indexes_by_object: dict[str, list[ValidatedIndexSpec]],
+        global_index_names: set[str],
+    ) -> ValidatedRelationSpec:
+        """Валидирует FK-based relation и добавляет generated index metadata."""
+        owning_object_name, owning_fields = self._require_object(
+            object_name=relation_seed.owning_object,
+            objects_by_name=objects_by_name,
+            relation_name=relation_name,
+            role="owning_object",
+        )
+        referenced_object_name, referenced_fields = self._require_object(
+            object_name=relation_seed.referenced_object,
+            objects_by_name=objects_by_name,
+            relation_name=relation_name,
+            role="referenced_object",
+        )
+        if relation_type in {
+            RelationTypeEnum.MANY_TO_ONE,
+            RelationTypeEnum.ONE_TO_ONE,
+        }:
+            self._ensure_object_matches(
+                actual=owning_object_name,
+                expected=source_object_name,
+                relation_name=relation_name,
+                role="owning_object",
+            )
+            self._ensure_object_matches(
+                actual=referenced_object_name,
+                expected=target_object_name,
+                relation_name=relation_name,
+                role="referenced_object",
+            )
+        if relation_type == RelationTypeEnum.ONE_TO_MANY:
+            self._ensure_object_matches(
+                actual=owning_object_name,
+                expected=target_object_name,
+                relation_name=relation_name,
+                role="owning_object",
+            )
+            self._ensure_object_matches(
+                actual=referenced_object_name,
+                expected=source_object_name,
+                relation_name=relation_name,
+                role="referenced_object",
+            )
+
+        fk_field = self._require_identifier(
+            relation_seed.fk_field,
+            relation_name=relation_name,
+            role="fk_field",
+        )
+        fk_field_spec = self._require_field(
+            field_name=fk_field,
+            fields=owning_fields,
+            object_name=owning_object_name,
+            relation_name=relation_name,
+            role="fk_field",
+        )
+        if fk_field_spec.field_type.code != FieldTypeEnum.REFERENCE:
+            raise SeedValidationError(
+                f"Relation '{relation_name}' fk_field '{fk_field}' "
+                "must have type 'reference'."
+            )
+
+        referenced_field = self._require_identifier(
+            relation_seed.referenced_field,
+            relation_name=relation_name,
+            role="referenced_field",
+        )
+        self._require_field(
+            field_name=referenced_field,
+            fields=referenced_fields,
+            object_name=referenced_object_name,
+            relation_name=relation_name,
+            role="referenced_field",
+        )
+
+        foreign_key_name = SchemaNamingStrategy.foreign_key_name(
+            source_table_name=owning_object_name.plural,
+            source_column_name=fk_field,
+            target_table_name=referenced_object_name.plural,
+        )
+        fk_index_name = None
+        unique_index_name = None
+        is_unique = relation_type == RelationTypeEnum.ONE_TO_ONE
+        if is_unique:
+            unique_index_name = SchemaNamingStrategy.one_to_one_unique_index_name(
+                table_name=owning_object_name.plural,
+                column_name=fk_field,
+            )
+            if not self._has_matching_index(
+                indexes=indexes_by_object[owning_object_name.plural],
+                fields=(fk_field,),
+                is_unique=True,
+            ):
+                self._ensure_global_index_name_is_unique(
+                    index_name=unique_index_name,
+                    global_index_names=global_index_names,
+                )
+                indexes_by_object[owning_object_name.plural].append(
+                    ValidatedIndexSpec(
+                        name=unique_index_name,
+                        fields=(fk_field,),
+                        is_unique=True,
+                        is_generated=True,
+                    )
+                )
+        else:
+            fk_index_name = SchemaNamingStrategy.foreign_key_index_name(
+                table_name=owning_object_name.plural,
+                column_name=fk_field,
+            )
+            if not self._has_matching_index(
+                indexes=indexes_by_object[owning_object_name.plural],
+                fields=(fk_field,),
+                is_unique=False,
+            ):
+                self._ensure_global_index_name_is_unique(
+                    index_name=fk_index_name,
+                    global_index_names=global_index_names,
+                )
+                indexes_by_object[owning_object_name.plural].append(
+                    ValidatedIndexSpec(
+                        name=fk_index_name,
+                        fields=(fk_field,),
+                        is_unique=False,
+                        is_generated=True,
+                    )
+                )
+
+        return ValidatedRelationSpec(
+            name=relation_name,
+            relation_type=relation_type,
+            source_object=source_object_name.singular,
+            target_object=target_object_name.singular,
+            owning_object=owning_object_name.singular,
+            fk_field=fk_field,
+            referenced_object=referenced_object_name.singular,
+            referenced_field=referenced_field,
+            source_relation_name=self._normalize_relation_api_name(
+                relation_seed.source_relation_name,
+                default=(
+                    target_object_name.singular
+                    if relation_type != RelationTypeEnum.ONE_TO_MANY
+                    else target_object_name.plural
+                ),
+            ),
+            target_relation_name=self._normalize_relation_api_name(
+                relation_seed.target_relation_name,
+                default=(
+                    source_object_name.plural
+                    if relation_type != RelationTypeEnum.ONE_TO_MANY
+                    else source_object_name.singular
+                ),
+            ),
+            relation_table_name=None,
+            source_join_column_name=None,
+            target_join_column_name=None,
+            on_delete=self._normalize_on_delete(relation_seed.on_delete),
+            is_required=relation_seed.is_required,
+            is_unique=is_unique,
+            kind=self._normalize_relation_kind(relation_seed.kind),
+            settings=dict(relation_seed.settings or {}),
+            foreign_key_name=foreign_key_name,
+            fk_index_name=fk_index_name,
+            unique_index_name=unique_index_name,
+        )
+
+    def _normalize_many_to_many_relation(
+        self,
+        *,
+        relation_seed,
+        relation_name: str,
+        relation_type: RelationTypeEnum,
+        source_object_name: ObjectNameVO,
+        target_object_name: ObjectNameVO,
+    ) -> ValidatedRelationSpec:
+        """Валидирует many_to_many relation и генерирует имена join-таблицы."""
+        relation_table_name = self._validate_identifier(
+            relation_seed.relation_table_name
+            or f"{source_object_name.plural}_{target_object_name.plural}",
+            "Relation table name",
+        )
+        source_join_column_name = self._validate_identifier(
+            relation_seed.source_join_column_name
+            or f"{source_object_name.singular}_id",
+            "Source join column name",
+        )
+        target_join_column_name = self._validate_identifier(
+            relation_seed.target_join_column_name
+            or f"{target_object_name.singular}_id",
+            "Target join column name",
+        )
+        return ValidatedRelationSpec(
+            name=relation_name,
+            relation_type=relation_type,
+            source_object=source_object_name.singular,
+            target_object=target_object_name.singular,
+            owning_object=None,
+            fk_field=None,
+            referenced_object=None,
+            referenced_field=None,
+            source_relation_name=self._normalize_relation_api_name(
+                relation_seed.source_relation_name,
+                default=target_object_name.plural,
+            ),
+            target_relation_name=self._normalize_relation_api_name(
+                relation_seed.target_relation_name,
+                default=source_object_name.plural,
+            ),
+            relation_table_name=relation_table_name,
+            source_join_column_name=source_join_column_name,
+            target_join_column_name=target_join_column_name,
+            on_delete=self._normalize_on_delete(relation_seed.on_delete),
+            is_required=relation_seed.is_required,
+            is_unique=False,
+            kind=self._normalize_relation_kind(relation_seed.kind),
+            settings=dict(relation_seed.settings or {}),
+        )
+
+    @staticmethod
+    def _require_object(
+        *,
+        object_name: str | None,
+        objects_by_name: dict[str, tuple[ObjectNameVO, tuple[ValidatedFieldSpec, ...]]],
+        relation_name: str,
+        role: str,
+    ) -> tuple[ObjectNameVO, tuple[ValidatedFieldSpec, ...]]:
+        """Возвращает object lookup entry или поднимает SeedValidationError."""
+        normalized = SchemaSeedService._require_identifier(
+            object_name,
+            relation_name=relation_name,
+            role=role,
+        )
+        relation_object = objects_by_name.get(normalized)
+        if relation_object is None:
+            raise SeedValidationError(
+                f"Relation '{relation_name}' references unknown {role} "
+                f"'{normalized}'."
+            )
+        return relation_object
+
+    @staticmethod
+    def _require_field(
+        *,
+        field_name: str,
+        fields: tuple[ValidatedFieldSpec, ...],
+        object_name: ObjectNameVO,
+        relation_name: str,
+        role: str,
+    ) -> ValidatedFieldSpec:
+        """Возвращает field spec или поднимает SeedValidationError."""
+        for field_spec in fields:
+            if field_spec.name == field_name:
+                return field_spec
+        raise SeedValidationError(
+            f"Relation '{relation_name}' references unknown {role} "
+            f"'{field_name}' on object '{object_name.plural}'."
+        )
+
+    @staticmethod
+    def _require_identifier(
+        value: str | None,
+        *,
+        relation_name: str,
+        role: str,
+    ) -> str:
+        """Проверяет обязательное строковое relation поле."""
+        normalized = (value or "").strip()
+        if not normalized:
+            raise SeedValidationError(f"Relation '{relation_name}' requires {role}.")
+        return normalized
+
+    @staticmethod
+    def _ensure_object_matches(
+        *,
+        actual: ObjectNameVO,
+        expected: ObjectNameVO,
+        relation_name: str,
+        role: str,
+    ) -> None:
+        """Проверяет canonical role direction для relation."""
+        if actual == expected:
+            return
+        raise SeedValidationError(
+            f"Relation '{relation_name}' has invalid {role} "
+            f"'{actual.plural}', expected '{expected.plural}'."
+        )
+
+    @staticmethod
+    def _has_matching_index(
+        *,
+        indexes: list[ValidatedIndexSpec],
+        fields: tuple[str, ...],
+        is_unique: bool,
+    ) -> bool:
+        """Проверяет наличие индекса с теми же колонками и unique-флагом."""
+        return any(
+            index.fields == fields and index.is_unique == is_unique for index in indexes
+        )
+
+    @staticmethod
+    def _normalize_relation_api_name(value: str | None, *, default: str) -> str:
+        """Нормализует API-имя relation или возвращает default."""
+        return (value or default).strip()
+
     @staticmethod
     def _validate_identifier(value: str, title: str) -> str:
         """Делегирует валидацию PostgreSQL-идентификатора общей naming-стратегии."""
@@ -292,7 +617,7 @@ class SchemaSeedService:
 
     @staticmethod
     def _normalize_relation_type(raw_type: str | RelationTypeEnum) -> RelationTypeEnum:
-        """Валидирует тип связи seed и ограничивает его supported MVP-вариантами."""
+        """Валидирует тип связи seed."""
         normalized = str(
             raw_type.value if isinstance(raw_type, RelationTypeEnum) else raw_type
         )
@@ -303,10 +628,6 @@ class SchemaSeedService:
             raise SeedValidationError(
                 f"Unsupported relation_type '{raw_type}'."
             ) from exc
-        if not relation_type.is_source_owned_fk():
-            raise SeedValidationError(
-                f"Unsupported relation_type '{relation_type.value}' for MVP."
-            )
         return relation_type
 
     @staticmethod
@@ -315,10 +636,10 @@ class SchemaSeedService:
         mapping = {
             "restrict": "restrict",
             "cascade": "cascade",
-            "set null": "set null",
-            "set_null": "set null",
-            "no action": "no action",
-            "no_action": "no action",
+            "set null": "set_null",
+            "set_null": "set_null",
+            "no action": "no_action",
+            "no_action": "no_action",
         }
         normalized = value.strip().lower()
         try:
@@ -327,6 +648,14 @@ class SchemaSeedService:
             raise SeedValidationError(
                 f"Unsupported relation on_delete '{value}'."
             ) from exc
+
+    @staticmethod
+    def _normalize_relation_kind(value: str) -> str:
+        """Валидирует и нормализует kind relation metadata."""
+        normalized = value.strip().lower()
+        if normalized not in {"system", "standard", "custom"}:
+            raise SeedValidationError(f"Unsupported relation kind '{value}'.")
+        return normalized
 
     @staticmethod
     def _normalize_default(value: str | None) -> str | None:

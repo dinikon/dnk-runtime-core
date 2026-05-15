@@ -30,6 +30,13 @@ from src.modules.schema_registry.domain.object.repository import (
 )
 from src.modules.schema_registry.domain.object.service import ObjectService
 from src.modules.schema_registry.domain.object.value_object import RuntimeObjectIdVO
+from src.modules.schema_registry.domain.relation.repository import (
+    RelationRepositoryProtocol,
+)
+from src.modules.schema_registry.domain.relation.service import RelationService
+from src.modules.schema_registry.domain.relation.value_object import (
+    RuntimeRelationIdVO,
+)
 from src.modules.schema_registry.infrastructure.postgres.tenant_schema_executor import (
     PostgresTenantSchemaExecutor,
 )
@@ -41,6 +48,9 @@ from src.modules.schema_registry.infrastructure.repository.data_source_repositor
 )
 from src.modules.schema_registry.infrastructure.repository.object_repository import (
     SqlAlchemyObjectRepository,
+)
+from src.modules.schema_registry.infrastructure.repository.relation_repository import (
+    SqlAlchemyRelationRepository,
 )
 from src.modules.schema_registry.infrastructure.seed.python_module_seed_reader import (
     PythonModuleSeedReader,
@@ -108,6 +118,17 @@ ObjectRepositoryDep = Annotated[
 ]
 
 
+def get_relation_repository(uow: UoWDep) -> RelationRepositoryProtocol:
+    """Создает SQLAlchemy relation repository для текущей UoW."""
+    return SqlAlchemyRelationRepository(uow.session)
+
+
+RelationRepositoryDep = Annotated[
+    RelationRepositoryProtocol,
+    Depends(get_relation_repository),
+]
+
+
 def get_data_source_id_provider() -> Callable[[], DataSourceIdVO]:
     """Возвращает provider UUIDv7 DataSourceIdVO для datasource metadata."""
     return lambda: DataSourceIdVO.from_value(uuid6.uuid7())
@@ -121,6 +142,11 @@ def get_runtime_object_id_provider() -> Callable[[], RuntimeObjectIdVO]:
 def get_runtime_field_id_provider() -> Callable[[], RuntimeFieldIdVO]:
     """Возвращает provider UUIDv7 RuntimeFieldIdVO для field metadata."""
     return lambda: RuntimeFieldIdVO.from_value(uuid6.uuid7())
+
+
+def get_runtime_relation_id_provider() -> Callable[[], RuntimeRelationIdVO]:
+    """Возвращает provider UUIDv7 RuntimeRelationIdVO для relation metadata."""
+    return lambda: RuntimeRelationIdVO.from_value(uuid6.uuid7())
 
 
 def get_field_type_catalog() -> FieldTypeCatalog:
@@ -184,11 +210,31 @@ ObjectServiceDep = Annotated[
 ]
 
 
+def get_relation_service(
+    repository: RelationRepositoryDep,
+    clock: ClockDep,
+) -> RelationService:
+    """Создает доменный сервис relation metadata."""
+    return RelationService(
+        relation_repository=repository,
+        clock=clock,
+        relation_id_provider=get_runtime_relation_id_provider(),
+    )
+
+
+RelationServiceDep = Annotated[
+    RelationService,
+    Depends(get_relation_service),
+]
+
+
 __all__ = [
     "DataSourceRepositoryDep",
     "DataSourceServiceDep",
     "ObjectRepositoryDep",
     "ObjectServiceDep",
+    "RelationRepositoryDep",
+    "RelationServiceDep",
     "FieldTypeCatalogDep",
     "PostgresFieldCanonicalizerDep",
     "SchemaSeedReaderDep",
@@ -199,10 +245,13 @@ __all__ = [
     "get_data_source_id_provider",
     "get_object_repository",
     "get_object_service",
+    "get_relation_repository",
+    "get_relation_service",
     "get_field_type_catalog",
     "get_postgres_field_canonicalizer",
     "get_runtime_field_id_provider",
     "get_runtime_object_id_provider",
+    "get_runtime_relation_id_provider",
     "get_schema_seed_reader",
     "get_tenant_schema_executor",
     "get_tenant_schema_inspector",

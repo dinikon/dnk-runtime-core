@@ -9,3 +9,10 @@ __all__ = [
     "SqlAlchemyDataSourceRepository",
     "SqlAlchemyObjectRepository",
 ]
+from src.modules.schema_registry.infrastructure.repository.relation_repository import (
+    SqlAlchemyRelationRepository,
+)
+
+__all__ = [
+    "SqlAlchemyRelationRepository",
+]

@@ -273,6 +273,66 @@ class SchemaSeedServiceTests(unittest.IsolatedAsyncioTestCase):
                     fields=(
                         FieldSeed(
                             name="company_id",
+                            type="reference",
+                            label="Company ID",
+                            is_nullable=False,
+                        ),
+                    ),
+                    relations=(
+                        RelationSeed(
+                            name="contacts_companies",
+                            relation_type="belongs_to",
+                            source_object="contact",
+                            target_object="company",
+                            owning_object="contact",
+                            fk_field="company_id",
+                            referenced_object="company",
+                        ),
+                    ),
+                ),
+            ),
+        )
+        sys.modules[module_name] = module
+
+        try:
+            service = SchemaSeedService(
+                PythonModuleSeedReader(),
+                FieldTypeCatalog(),
+            )
+            with self.assertRaises(SeedValidationError):
+                await service.load(seed_path=module_name)
+        finally:
+            sys.modules.pop(module_name, None)
+
+    async def test_rejects_fk_relation_when_field_is_not_reference(self) -> None:
+        module_name = "test_schema_seed_non_reference_fk"
+        module = types.ModuleType(module_name)
+        module.SCHEMA_SEED = SchemaSeed(
+            version=None,
+            code="crm",
+            label="CRM",
+            objects=(
+                ObjectSeed(
+                    singular_name="company",
+                    plural_name="companies",
+                    singular_label="Company",
+                    plural_label="Companies",
+                    description="Companies.",
+                    fields=(
+                        FieldSeed(
+                            name="id", type="uuid", label="ID", is_nullable=False
+                        ),
+                    ),
+                ),
+                ObjectSeed(
+                    singular_name="contact",
+                    plural_name="contacts",
+                    singular_label="Contact",
+                    plural_label="Contacts",
+                    description="Contacts.",
+                    fields=(
+                        FieldSeed(
+                            name="company_id",
                             type="uuid",
                             label="Company ID",
                             is_nullable=False,
@@ -280,10 +340,56 @@ class SchemaSeedServiceTests(unittest.IsolatedAsyncioTestCase):
                     ),
                     relations=(
                         RelationSeed(
-                            name="contacts_companies_fk",
-                            relation_type="many_to_many",
-                            source_field="company_id",
+                            name="contacts_company",
+                            relation_type="many_to_one",
+                            source_object="contact",
                             target_object="company",
+                            owning_object="contact",
+                            fk_field="company_id",
+                            referenced_object="company",
+                        ),
+                    ),
+                ),
+            ),
+        )
+        sys.modules[module_name] = module
+
+        try:
+            service = SchemaSeedService(
+                PythonModuleSeedReader(),
+                FieldTypeCatalog(),
+            )
+            with self.assertRaises(SeedValidationError):
+                await service.load(seed_path=module_name)
+        finally:
+            sys.modules.pop(module_name, None)
+
+    async def test_rejects_self_many_to_many_relation(self) -> None:
+        module_name = "test_schema_seed_self_many_to_many"
+        module = types.ModuleType(module_name)
+        module.SCHEMA_SEED = SchemaSeed(
+            version=None,
+            code="crm",
+            label="CRM",
+            objects=(
+                ObjectSeed(
+                    singular_name="tag",
+                    plural_name="tags",
+                    singular_label="Tag",
+                    plural_label="Tags",
+                    description="Tags.",
+                    fields=(
+                        FieldSeed(
+                            name="id", type="uuid", label="ID", is_nullable=False
+                        ),
+                    ),
+                    relations=(
+                        RelationSeed(
+                            name="related_tags",
+                            relation_type="many_to_many",
+                            source_object="tag",
+                            target_object="tag",
+                            relation_table_name="related_tags",
                         ),
                     ),
                 ),
@@ -378,24 +484,27 @@ class SchemaSeedServiceTests(unittest.IsolatedAsyncioTestCase):
                     fields=(
                         FieldSeed(
                             name="company_id",
-                            type="uuid",
+                            type="reference",
                             label="Company ID",
                             is_nullable=False,
                         ),
                     ),
                     indexes=(
                         IndexSeed(
-                            name="contacts_company_id_one_to_one_uq",
+                            name="uq_contacts_company_id",
                             fields=("company_id",),
-                            is_unique=True,
+                            is_unique=False,
                         ),
                     ),
                     relations=(
                         RelationSeed(
-                            name="contacts_company_id_fk",
+                            name="contacts_company",
                             relation_type="one_to_one",
-                            source_field="company_id",
+                            source_object="contact",
                             target_object="company",
+                            owning_object="contact",
+                            fk_field="company_id",
+                            referenced_object="company",
                         ),
                     ),
                 ),
