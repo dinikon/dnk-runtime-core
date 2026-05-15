@@ -128,7 +128,7 @@ OneToMany
 ManyToMany
 ```
 
-внутри нужно оставить `MANY_TO_ONE`, потому что текущий seed и физическая FK-модель уже используют этот тип.
+внутри нужно оставить `MANY_TO_ONE`, потому что физическая FK-модель использует этот тип.
 
 ## 3.3. RelationKind
 
@@ -275,41 +275,6 @@ UseCase обязан:
 Если сделать `ON DELETE CASCADE`, можно случайно удалить metadata relation и оставить physical FK/index/relation table в
 tenant schema. Это создаст рассинхронизацию metadata graph и физической схемы.
 
-## 4.3. PR-1 migration flow
-
-PR-1 не должен менять physical tenant schemas и не должен менять таблицу `fields`.
-
-Flow:
-
-```text
-1. Создать metadata-таблицу relations.
-2. Не менять таблицу fields.
-3. Не менять физические tenant schemas.
-4. При следующем metadata write/diff/create-schema записывать RelationEntity из seed.
-5. Для уже существующих datasource сделать backfill из текущего seed.
-```
-
-Backfill должен:
-
-```text
-1. Прочитать текущий seed.
-2. Найти many_to_one и one_to_one relations.
-3. Найти source object.
-4. Найти target object.
-5. Найти FK field.
-6. Найти referenced field, обычно id.
-7. Вставить rows в relations.
-```
-
-Backfill не должен:
-
-```text
-- создавать/удалять tenant tables
-- создавать/удалять tenant columns
-- создавать/удалять FK/index constraints
-- менять rows в fields
-```
-
 ---
 
 # 5. FieldEntity changes
@@ -319,52 +284,86 @@ Backfill не должен:
 Decision:
 
 ```text
-Не добавлять FieldType.REFERENCE в MVP.
+Добавить FieldType.REFERENCE.
 ```
 
-FK-поля остаются обычным типом:
+FK-поля должны создаваться явно как `reference`:
+
+```text
+FieldEntity.type = reference
+```
+
+Физически PostgreSQL-колонка остается:
 
 ```text
 uuid
 ```
 
-То, что поле является FK, определяется через:
-
-```text
-relations.fk_field_id -> fields.id
-```
-
 То есть:
 
 ```text
-FieldEntity.type = uuid
+FieldEntity.type = reference
+PostgreSQL column type = uuid
 RelationEntity.fk_field_id = fields.id
 ```
 
 Почему так:
 
 ```text
-1. В текущем enum нет reference.
-2. Физически FK-колонка в PostgreSQL — это uuid.
-3. UI/API может показывать field как relation field через RelationDescriptor.
-4. Не нужно мигрировать существующие fields.
+1. FK-колонка явно видна в metadata как reference.
+2. UI/API не нужно угадывать semantic type по RelationDescriptor.
+3. Физически FK-колонка в PostgreSQL остается uuid.
+4. RelationEntity все равно остается источником target/relation metadata.
 ```
 
-Позже можно добавить computed descriptor:
+Нужно добавить:
 
-```json
-{
-  "field_name": "company_id",
-  "field_type": "uuid",
-  "semantic_type": "reference",
-  "relation_id": "...",
-  "target_object": "companies"
-}
+```text
+FieldTypeEnum.REFERENCE = "reference"
+FieldTypeCatalog supports "reference"
+PostgresFieldCanonicalizer maps reference -> uuid
+RuntimeFieldTypePolicy maps reference -> UUID
 ```
 
-## 5.2. Решение по FieldEntity.relation_id, is_unique, is_indexed
+## 5.2. Где создается reference field
 
-Decision для PR-1:
+Для seed/bootstrap:
+
+```text
+FK field должен быть явно объявлен в object.fields как type="reference".
+RelationSeed ссылается на него через fk_field.
+Validator проверяет, что fk_field существует на owning_object и имеет type="reference".
+```
+
+Пример:
+
+```python
+FieldSeed(
+    name="company_id",
+    type="reference",
+    label="Company",
+    description="Referenced company.",
+    is_nullable=True,
+)
+```
+
+Для config API:
+
+```text
+CreateRelationUseCase сам создает FieldEntity(type=reference), если relation требует новую physical FK column.
+```
+
+В обоих случаях:
+
+```text
+metadata type = reference
+physical SQL type = uuid
+relation metadata = relations.fk_field_id -> fields.id
+```
+
+## 5.3. Решение по FieldEntity.relation_id, is_unique, is_indexed
+
+Decision:
 
 ```text
 Не добавлять в fields новые колонки:
@@ -386,7 +385,7 @@ relations.is_unique
 FieldEntity сейчас отвечает за logical type, label, nullability,
 default, options и settings.
 
-RelationEntity должен стать отдельной частью metadata graph.
+RelationEntity хранит target/relation metadata и остается отдельной частью metadata graph.
 ```
 
 Resolver не должен искать `field.relation_id`.
@@ -397,7 +396,7 @@ fields = read fields by object
 relations = read relations where source_object_id = object.id OR target_object_id = object.id
 ```
 
-## 5.3. Важное правило
+## 5.4. Важное правило
 
 ```text
 FieldEntity создается только там, где есть физическая колонка.
@@ -426,20 +425,7 @@ ManyToMany:
 
 ## 6.1. Новый RelationSeed contract
 
-Текущий `RelationSeed` слишком узкий:
-
-```text
-name
-relation_type
-source_field
-target_object
-target_field
-on_delete
-```
-
-Он подходит для legacy `many_to_one` и `one_to_one`, но не подходит для `one_to_many` и `many_to_many`.
-
-Новый contract:
+Единственный поддержанный формат seed:
 
 ```python
 from dataclasses import dataclass
@@ -500,55 +486,21 @@ class RelationSeed:
     kind: RelationKindValue = "standard"
 
     settings: dict | None = None
-
-    # Legacy compatibility.
-    source_field: str | None = None
-    target_field: str | None = None
 ```
 
-## 6.2. Legacy compatibility mapping
+Seed-файл нужно переписать под этот формат сразу. Другие форматы seed не поддерживаются.
 
-Старый формат:
+## 6.2. Пример OneToOne
 
 ```python
-RelationSeed(
-    name="contact_company",
-    relation_type="many_to_one",
-    source_field="company_id",
-    target_object="companies",
-    target_field="id",
-    on_delete="set_null",
+FieldSeed(
+    name="profile_id",
+    type="reference",
+    label="Profile",
+    description="Contact profile reference.",
+    is_nullable=True,
 )
-```
 
-Нормализация:
-
-```text
-source_object = current_object_from_seed_context
-target_object = target_object
-
-owning_object = current_object_from_seed_context
-fk_field = source_field
-
-referenced_object = target_object
-referenced_field = target_field or "id"
-
-source_relation_name = target_object singular name by default
-target_relation_name = current object plural name by default
-```
-
-Legacy `on_delete` значения должны нормализоваться:
-
-```text
-"set null" -> "set_null"
-"no action" -> "no_action"
-```
-
-Это сохраняет текущие seed relations без массовой правки seed в PR-1.
-
-## 6.3. Пример OneToOne
-
-```python
 RelationSeed(
     name="contact_profile",
     relation_type="one_to_one",
@@ -573,14 +525,23 @@ RelationSeed(
 Физический результат:
 
 ```text
-contacts.profile_id uuid
+contacts.profile_id reference metadata
+contacts.profile_id uuid physical
 FK contacts.profile_id -> contact_profiles.id
 UNIQUE contacts.profile_id
 ```
 
-## 6.4. Пример OneToMany
+## 6.3. Пример OneToMany
 
 ```python
+FieldSeed(
+    name="company_id",
+    type="reference",
+    label="Company",
+    description="Company reference.",
+    is_nullable=True,
+)
+
 RelationSeed(
     name="company_contacts",
     relation_type="one_to_many",
@@ -605,7 +566,8 @@ RelationSeed(
 Физический результат:
 
 ```text
-contacts.company_id uuid
+contacts.company_id reference metadata
+contacts.company_id uuid physical
 FK contacts.company_id -> companies.id
 ```
 
@@ -616,7 +578,7 @@ company.contacts = virtual relation
 contact.company = physical FK relation
 ```
 
-## 6.5. Пример ManyToMany
+## 6.4. Пример ManyToMany
 
 ```python
 RelationSeed(
@@ -652,7 +614,7 @@ CREATE TABLE tenant_schema.contacts_tags
 );
 ```
 
-## 6.6. Canonical direction
+## 6.5. Canonical direction
 
 Самое важное правило: `source_object` и `target_object` описывают logical/API direction, а `owning_object/fk_field`
 описывают physical FK side.
@@ -837,16 +799,6 @@ DropColumnOperation
 
 # 8. Planning rules
 
-PR-1 scope:
-
-```text
-- CreateRelationMetadataOperation для seed/backfill
-- без DDL изменений tenant schemas
-- без изменений fields
-```
-
-Полные DDL planning rules нужны для следующих PR.
-
 ## 8.1. ManyToOne
 
 План для create schema/bootstrap:
@@ -861,7 +813,8 @@ PR-1 scope:
 Пример:
 
 ```text
-contacts.company_id uuid null
+contacts.company_id reference metadata
+contacts.company_id uuid null physical
 fk_contacts_company_id_companies
 idx_contacts_company_id
 ```
@@ -874,6 +827,7 @@ relation.fk_field_id = contacts.company_id
 relation.referenced_object_id = companies
 relation.referenced_field_id = companies.id
 relation.is_unique = false
+fk_field.type = reference
 ```
 
 ## 8.2. OneToOne
@@ -890,7 +844,8 @@ relation.is_unique = false
 Пример:
 
 ```text
-contacts.profile_id uuid null
+contacts.profile_id reference metadata
+contacts.profile_id uuid null physical
 fk_contacts_profile_id_contact_profiles
 uq_contacts_profile_id
 ```
@@ -903,6 +858,7 @@ relation.fk_field_id = contacts.profile_id
 relation.referenced_object_id = contact_profiles
 relation.referenced_field_id = contact_profiles.id
 relation.is_unique = true
+fk_field.type = reference
 field.is_nullable = not relation.is_required
 ```
 
@@ -922,7 +878,8 @@ field.is_nullable = not relation.is_required
 ```text
 companies -> contacts[]
 
-contacts.company_id uuid null
+contacts.company_id reference metadata
+contacts.company_id uuid null physical
 fk_contacts_company_id_companies
 ```
 
@@ -934,6 +891,7 @@ relation.owning_object_id = contacts
 relation.fk_field_id = contacts.company_id
 relation.referenced_object_id = companies
 relation.referenced_field_id = companies.id
+fk_field.type = reference
 ```
 
 ## 8.4. ManyToMany
@@ -1071,6 +1029,8 @@ POST /api/config/objects/relations/schema
   "on_delete": "set_null"
 }
 ```
+
+`fk_field` создается как `FieldEntity.type = reference`, физический SQL type = `uuid`.
 
 Для `many_to_many`:
 
@@ -1225,7 +1185,7 @@ RebuildRelationMetadataUseCase
 6. Проверить уникальность relation names внутри object schema
 7. Проверить fk_field, если relation требует физическое FK-поле
 8. Построить RelationEntity
-9. Построить FieldEntity, если нужна новая physical column и это не PR-1
+9. Построить FieldEntity, если нужна новая physical column
 10. Построить MigrationPlan
 11. Применить DDL
 12. Сохранить FieldEntity
@@ -1266,11 +1226,11 @@ ALTER TABLE contacts
 
 если таблица уже содержит строки.
 
-Безопасный flow позже:
+Безопасный flow для отдельного расширения:
 
 ```text
 1. add nullable column
-2. backfill
+2. заполнить значения
 3. validate no nulls
 4. set not null
 ```
@@ -1359,7 +1319,7 @@ if relation.source_object == relation.target_object:
 
 ## 13.3. Validator changes
 
-Сейчас validator требует `source_field` для любой relation. Это нужно заменить на type-specific validation.
+Validator должен быть type-specific.
 
 ### many_to_one
 
@@ -1368,8 +1328,11 @@ if relation.source_object == relation.target_object:
 ```text
 source_object/current object
 target_object
-fk_field или legacy source_field
-referenced_field или legacy target_field
+owning_object = source_object
+fk_field
+fk_field.type = reference
+referenced_object = target_object
+referenced_field
 ```
 
 ### one_to_one
@@ -1379,8 +1342,11 @@ referenced_field или legacy target_field
 ```text
 source_object/current object
 target_object
-fk_field или legacy source_field
-referenced_field или legacy target_field
+owning_object = source_object
+fk_field
+fk_field.type = reference
+referenced_object = target_object
+referenced_field
 ```
 
 Дополнительно:
@@ -1398,9 +1364,9 @@ source_object
 target_object
 owning_object = target_object
 fk_field
+fk_field.type = reference
 referenced_object = source_object
 referenced_field = id
-source_field не требуется
 ```
 
 ### many_to_many
@@ -1413,7 +1379,6 @@ target_object
 relation_table_name или возможность сгенерировать имя
 source_join_column_name или возможность сгенерировать имя
 target_join_column_name или возможность сгенерировать имя
-source_field не требуется
 ```
 
 ---
@@ -1421,13 +1386,6 @@ source_field не требуется
 # 14. Runtime data behavior
 
 После добавления связей `runtime_data` должен читать metadata relations из `schema_registry`.
-
-PR-1 boundary:
-
-```text
-Resolver должен вернуть нормальную форму relation descriptors,
-но runtime loading behavior в PR-1 не реализуется.
-```
 
 ## 14.1. Object schema response
 
@@ -1441,7 +1399,7 @@ Resolver должен вернуть нормальную форму relation de
   "fields": [
     {
       "name": "company_id",
-      "type": "uuid",
+      "type": "reference",
       "is_nullable": true
     }
   ],
@@ -1509,11 +1467,7 @@ Resolver должен вернуть нормальную форму relation de
 }
 ```
 
-## 14.4. Future runtime behavior
-
-Следующие пункты не входят в PR-1, но остаются целевым поведением runtime layer.
-
-## 14.5. OneToOne
+## 14.4. OneToOne
 
 Должен уметь:
 
@@ -1534,7 +1488,7 @@ FROM tenant.contacts c
 WHERE c.id = :contact_id;
 ```
 
-## 14.6. OneToMany
+## 14.5. OneToMany
 
 Должен уметь:
 
@@ -1553,7 +1507,7 @@ FROM tenant.contacts
 WHERE company_id = :company_id;
 ```
 
-## 14.7. ManyToMany
+## 14.6. ManyToMany
 
 Должен уметь:
 
@@ -1629,16 +1583,8 @@ ManyToMany:
 
 ## 16.1. Seed relation added
 
-PR-1:
-
 ```text
 - создать missing RelationEntity metadata
-- не менять physical tenant schema
-```
-
-Следующие PR:
-
-```text
 - создать FK / unique / relation table
 - сохранить metadata
 ```
@@ -1807,6 +1753,8 @@ src/modules/schema_registry/
 ## 19.1. Domain
 
 ```text
+- FieldTypeEnum supports reference
+- FieldTypeCatalog maps reference
 - RelationEntity validates many_to_one
 - RelationEntity validates one_to_one
 - RelationEntity validates one_to_many
@@ -1833,20 +1781,22 @@ src/modules/schema_registry/
 - reject delete standard relation
 ```
 
-## 19.3. Metadata/backfill
+## 19.3. Metadata
 
 ```text
-- creates relations table without changing fields table
-- backfills many_to_one relation from legacy seed
-- backfills one_to_one relation from legacy seed
-- normalizes legacy source_field/target_field into fk_field/referenced_field
-- normalizes legacy on_delete values
+- creates relations table
+- stores FK fields as type reference
+- writes many_to_one relation metadata from new seed format
+- writes one_to_one relation metadata from new seed format
+- writes one_to_many relation metadata from new seed format
+- writes many_to_many relation metadata from new seed format
 - resolver returns relation descriptors
 ```
 
 ## 19.4. Planning
 
 ```text
+- reference field maps to PostgreSQL uuid column
 - many_to_one creates add column + FK + index
 - one_to_one creates add column + FK + unique
 - one_to_many creates add column on many side + FK + index
@@ -1866,7 +1816,7 @@ src/modules/schema_registry/
 ## 19.6. Runtime data
 
 ```text
-- PR-1 does not load relation data
+- RuntimeFieldTypePolicy coerces reference values as UUID
 - resolver exposes many_to_one descriptors
 - resolver exposes one_to_many virtual descriptors
 - resolver exposes many_to_many descriptors
@@ -1894,14 +1844,16 @@ src/modules/schema_registry/
 ## Этап 1 — Relation metadata
 
 ```text
-1. Добавить RelationEntity
-2. Добавить enum/value objects
-3. Добавить metadata table relations
-4. Добавить RelationRepository
-5. Добавить row mapper
-6. Добавить PR-1 backfill из текущего seed
-7. Не менять fields table
-8. Не менять physical tenant schemas
+1. Добавить FieldTypeEnum.REFERENCE
+2. Добавить mapping reference -> uuid в PostgreSQL canonicalizer
+3. Добавить RuntimeFieldTypePolicy support для reference как UUID
+4. Добавить RelationEntity
+5. Добавить enum/value objects
+6. Добавить metadata table relations
+7. Добавить RelationRepository
+8. Добавить row mapper
+9. Переписать seed на новый RelationSeed format
+10. Записывать RelationEntity из seed при create/diff
 ```
 
 ## Этап 2 — Application services
@@ -1911,7 +1863,7 @@ src/modules/schema_registry/
 2. RelationMetadataReadService
 3. RelationMetadataWriteService
 4. RelationPlanService
-5. Runtime resolver descriptors без relation loading
+5. Runtime resolver descriptors
 ```
 
 ## Этап 3 — Migration operations
