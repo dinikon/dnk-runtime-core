@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from src.modules.runtime_data.application.models import (
+    FetchPlan,
     FilterExpression,
     PageSpec,
     SortSpec,
@@ -18,6 +19,7 @@ class RuntimeQueryPlan:
     filters: tuple[FilterExpression, ...]
     sorting: tuple[SortSpec, ...]
     page: PageSpec
+    fetch_plan: FetchPlan | None = None
 
 
 __all__ = ["RuntimeQueryPlan"]

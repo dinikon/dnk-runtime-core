@@ -5,7 +5,13 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import uuid4
 
-from src.modules.runtime_data import RuntimeDataFilterError
+from src.modules.runtime_data import (
+    RuntimeDataFilterError,
+    RuntimeObjectQueryService,
+    RuntimeQueryPlan,
+    RuntimeRowsPage,
+    RuntimeSearchRecordsQuery,
+)
 from src.modules.runtime_data.application.query.filter_dsl import (
     FilterDslParser,
     FilterSemanticValidator,
@@ -18,6 +24,7 @@ from src.modules.schema_registry.runtime import (
     RuntimeFieldDescriptor,
     RuntimeObjectDescriptor,
 )
+from src.modules.shared import EntityIdVO
 
 
 def _descriptor() -> RuntimeObjectDescriptor:
@@ -460,6 +467,75 @@ class RuntimeDataFilterDslTests(unittest.TestCase):
                     self.assertEqual(caught.exception.details["operator"], "contains")
 
 
+class RuntimeObjectQueryServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_search_records_passes_validated_query_plan_to_gateway(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        record_id = uuid4()
+        descriptor = _descriptor()
+
+        class RuntimeObjectResolverStub:
+            resolved_tenant_id = None
+            resolved_object_name = None
+
+            async def resolve(self, tenant_id, object_name):
+                self.resolved_tenant_id = tenant_id
+                self.resolved_object_name = object_name
+                return descriptor
+
+        class RuntimeQueryGatewaySpy:
+            received_plan = None
+
+            async def search(self, query_plan):
+                self.received_plan = query_plan
+                return RuntimeRowsPage(
+                    rows=(
+                        {
+                            "id": record_id,
+                            "first_name": "Denis",
+                            "status": "lead",
+                            "tags": ["vip"],
+                        },
+                    ),
+                    total=1,
+                )
+
+        resolver = RuntimeObjectResolverStub()
+        gateway = RuntimeQueryGatewaySpy()
+        service = RuntimeObjectQueryService(
+            runtime_object_resolver=resolver,
+            runtime_query_gateway=gateway,
+        )
+
+        result = await service.search_records(
+            RuntimeSearchRecordsQuery(
+                tenant_id=tenant_id,
+                object_name="contact",
+                filter_dsl={"field": "status", "op": "eq", "value": "lead"},
+                sort_dsl=[{"field": "created_at", "direction": "desc"}],
+                limit=10,
+                offset=5,
+            )
+        )
+
+        self.assertEqual(resolver.resolved_tenant_id, tenant_id)
+        self.assertEqual(resolver.resolved_object_name, "contact")
+        self.assertIsInstance(gateway.received_plan, RuntimeQueryPlan)
+        assert gateway.received_plan is not None
+        self.assertIs(gateway.received_plan.descriptor, descriptor)
+        self.assertEqual(gateway.received_plan.filters[0].field, "status")
+        self.assertEqual(gateway.received_plan.filters[0].op, "eq")
+        self.assertEqual(gateway.received_plan.filters[0].value, "lead")
+        self.assertEqual(gateway.received_plan.sorting[0].field, "created_at")
+        self.assertEqual(gateway.received_plan.sorting[0].direction, "desc")
+        self.assertEqual(gateway.received_plan.page.limit, 10)
+        self.assertEqual(gateway.received_plan.page.offset, 5)
+        self.assertIsNone(gateway.received_plan.fetch_plan)
+        self.assertEqual(result.rows[0].id, record_id)
+        self.assertEqual(result.total, 1)
+        self.assertEqual(result.limit, 10)
+        self.assertEqual(result.offset, 5)
+
+
 class RuntimeDataSortDslTests(unittest.TestCase):
     def test_sort_parser_and_validator_accept_valid_sort(self) -> None:
         ast = SortDslParser().parse([{"field": "created_at", "direction": "DESC"}])
@@ -534,4 +610,8 @@ class RuntimeDataSortDslTests(unittest.TestCase):
         self.assertEqual(caught.exception.details["field"], "tags")
 
 
-__all__ = ["RuntimeDataFilterDslTests", "RuntimeDataSortDslTests"]
+__all__ = [
+    "RuntimeDataFilterDslTests",
+    "RuntimeDataSortDslTests",
+    "RuntimeObjectQueryServiceTests",
+]

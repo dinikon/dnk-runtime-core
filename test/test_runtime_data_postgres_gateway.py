@@ -13,6 +13,7 @@ from src.modules.runtime_data import (
     PageSpec,
     PostgresRuntimeGateway,
     RuntimeDataPersistenceError,
+    RuntimeQueryPlan,
     SortSpec,
 )
 from src.modules.schema_registry.runtime import (
@@ -454,21 +455,23 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
         gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
 
         page = await gateway.search(
-            descriptor=self._descriptor(),
-            filters=(
-                FilterSpec(field="last_name", op="neq", value="Roe"),
-                FilterSpec(
-                    field="created_at",
-                    op="between",
-                    value=[
-                        "2026-01-01T00:00:00",
-                        "2026-02-01T00:00:00",
-                    ],
+            RuntimeQueryPlan(
+                descriptor=self._descriptor(),
+                filters=(
+                    FilterSpec(field="last_name", op="neq", value="Roe"),
+                    FilterSpec(
+                        field="created_at",
+                        op="between",
+                        value=[
+                            "2026-01-01T00:00:00",
+                            "2026-02-01T00:00:00",
+                        ],
+                    ),
+                    FilterSpec(field="first_name", op="is_not_null", value=None),
                 ),
-                FilterSpec(field="first_name", op="is_not_null", value=None),
+                sorting=(SortSpec(field="created_at", direction="desc"),),
+                page=PageSpec(limit=25, offset=10),
             ),
-            sorting=(SortSpec(field="created_at", direction="desc"),),
-            page=PageSpec(limit=25, offset=10),
         )
 
         self.assertEqual(page.total, 42)

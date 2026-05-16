@@ -73,12 +73,7 @@ class RuntimeObjectQueryService:
             sorting=sorting,
             page=PageSpec(limit=query.limit, offset=query.offset),
         )
-        page = await self._runtime_query_gateway.search(
-            descriptor=query_plan.descriptor,
-            filters=query_plan.filters,
-            sorting=query_plan.sorting,
-            page=query_plan.page,
-        )
+        page = await self._runtime_query_gateway.search(query_plan)
 
         return RuntimeSearchRecordsResult(
             rows=tuple(

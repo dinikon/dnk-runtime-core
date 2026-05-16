@@ -25,6 +25,7 @@ from src.modules.runtime_data.application.ports import (
     RuntimeRelationCommandGateway,
     RuntimeRelationLoader,
 )
+from src.modules.runtime_data.application.query.query_plan import RuntimeQueryPlan
 from src.modules.runtime_data.application.type_policy import RuntimeFieldTypePolicy
 from src.modules.runtime_data.domain import (
     RuntimeDataFilterError,
@@ -378,14 +379,15 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
 
     async def search(
         self,
-        *,
-        descriptor: RuntimeObjectDescriptor,
-        filters: Sequence[FilterExpression] = (),
-        sorting: Sequence[SortSpec] = (),
-        page: PageSpec,
-        fetch_plan: FetchPlan | None = None,
+        query_plan: RuntimeQueryPlan,
     ) -> RuntimeRowsPage:
         """Возвращает runtime-страницу с total count по тем же фильтрам."""
+        descriptor = query_plan.descriptor
+        filters = query_plan.filters
+        sorting = query_plan.sorting
+        page = query_plan.page
+        fetch_plan = query_plan.fetch_plan
+
         self._ensure_descriptor(descriptor)
         if page.limit < 1:
             raise RuntimeDataValidationError("Page limit must be >= 1.")
