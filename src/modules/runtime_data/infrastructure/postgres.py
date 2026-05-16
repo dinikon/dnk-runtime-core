@@ -735,6 +735,61 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
                 {},
             )
 
+        if op in {"contains_any", "contains_all", "not_contains_any"}:
+            if field.type_code != "multiselect":
+                raise RuntimeDataFilterError(
+                    code="UNSUPPORTED_OPERATOR_FOR_FIELD_TYPE",
+                    message=(
+                        f"Filter '{op}' supports only multiselect fields, "
+                        f"got '{field.name}'."
+                    ),
+                    details={
+                        "field": field.name,
+                        "field_type": field.type_code,
+                        "operator": op,
+                    },
+                )
+            if not isinstance(filter_spec.value, Sequence) or isinstance(
+                filter_spec.value,
+                (str, bytes),
+            ):
+                raise RuntimeDataFilterError(
+                    code="INVALID_FILTER_VALUE_TYPE",
+                    message=(
+                        f"Filter '{field.name}' with operator '{op}' "
+                        "requires a non-string sequence."
+                    ),
+                    details={
+                        "field": field.name,
+                        "operator": op,
+                    },
+                )
+            items = list(filter_spec.value)
+            if not items:
+                raise RuntimeDataFilterError(
+                    code="INVALID_FILTER_VALUE_TYPE",
+                    message=(
+                        f"Filter '{field.name}' with operator '{op}' "
+                        "requires at least one value."
+                    ),
+                    details={
+                        "field": field.name,
+                        "operator": op,
+                    },
+                )
+            params: dict[str, Any] = {}
+            placeholders: list[str] = []
+            for item_index, item in enumerate(items):
+                param_name = f"f_{position}_{item_index}"
+                placeholders.append(f":{param_name}")
+                params[param_name] = item
+            array_sql = f"array[{', '.join(placeholders)}]"
+            if op == "contains_all":
+                return (f"{field_sql} ?& {array_sql}", params, {})
+            if op == "not_contains_any":
+                return (f"NOT ({field_sql} ?| {array_sql})", params, {})
+            return (f"{field_sql} ?| {array_sql}", params, {})
+
         if op in {"gt", "gte", "lt", "lte"}:
             coerced = self._type_policy.coerce_value_for_field(
                 field=field,
@@ -803,6 +858,38 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
                     end_param: field,
                 },
             )
+
+        if op == "is_empty":
+            if field.type_code != "multiselect":
+                raise RuntimeDataFilterError(
+                    code="UNSUPPORTED_OPERATOR_FOR_FIELD_TYPE",
+                    message=(
+                        "Filter 'is_empty' supports only multiselect fields, "
+                        f"got '{field.name}'."
+                    ),
+                    details={
+                        "field": field.name,
+                        "field_type": field.type_code,
+                        "operator": op,
+                    },
+                )
+            return (f"COALESCE(jsonb_array_length({field_sql}), 0) = 0", {}, {})
+
+        if op == "is_not_empty":
+            if field.type_code != "multiselect":
+                raise RuntimeDataFilterError(
+                    code="UNSUPPORTED_OPERATOR_FOR_FIELD_TYPE",
+                    message=(
+                        "Filter 'is_not_empty' supports only multiselect fields, "
+                        f"got '{field.name}'."
+                    ),
+                    details={
+                        "field": field.name,
+                        "field_type": field.type_code,
+                        "operator": op,
+                    },
+                )
+            return (f"COALESCE(jsonb_array_length({field_sql}), 0) > 0", {}, {})
 
         if op == "is_null":
             return (f"{field_sql} IS NULL", {}, {})

@@ -17,6 +17,11 @@ FilterNodeOperator = Literal[
     "between",
     "is_null",
     "is_not_null",
+    "contains_any",
+    "contains_all",
+    "not_contains_any",
+    "is_empty",
+    "is_not_empty",
 ]
 FilterNodeLogic = Literal["and", "or"]
 

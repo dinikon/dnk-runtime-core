@@ -9,6 +9,8 @@ FilterOperator = Literal[
     "neq",
     "in",
     "contains",
+    "starts_with",
+    "ends_with",
     "gt",
     "gte",
     "lt",
@@ -16,6 +18,11 @@ FilterOperator = Literal[
     "between",
     "is_null",
     "is_not_null",
+    "contains_any",
+    "contains_all",
+    "not_contains_any",
+    "is_empty",
+    "is_not_empty",
 ]
 FilterLogic = Literal["and", "or"]
 SortDirection = Literal["asc", "desc"]

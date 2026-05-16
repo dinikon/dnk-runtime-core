@@ -75,7 +75,7 @@ def _descriptor() -> RuntimeObjectDescriptor:
                 type_code="multiselect",
                 is_nullable=True,
                 default_value=None,
-                options={"vip": "VIP"},
+                options={"vip": "VIP", "newsletter": "Newsletter"},
                 settings={},
             ),
         ),
@@ -164,6 +164,11 @@ class RuntimeDataFilterDslTests(unittest.TestCase):
                     {"field": "first_name", "op": "ends_with", "value": "is"},
                     {"field": "status", "op": "eq", "value": "lead"},
                     {"field": "status", "op": "in", "value": ["lead", "partner"]},
+                    {
+                        "field": "tags",
+                        "op": "contains_any",
+                        "value": ["vip", "newsletter"],
+                    },
                     {"field": "score", "op": "between", "value": ["1.5", "2.5"]},
                     {
                         "field": "created_at",
@@ -186,8 +191,129 @@ class RuntimeDataFilterDslTests(unittest.TestCase):
         self.assertEqual(group.items[2].op, "ends_with")
         self.assertEqual(group.items[3].value, "lead")
         self.assertEqual(group.items[4].value, ["lead", "partner"])
-        self.assertIsInstance(group.items[5].value[0], Decimal)
-        self.assertIsInstance(group.items[6].value, datetime)
+        self.assertEqual(group.items[5].value, ["vip", "newsletter"])
+        self.assertIsInstance(group.items[6].value[0], Decimal)
+        self.assertIsInstance(group.items[7].value, datetime)
+
+    def test_multiselect_contains_any_validates(self) -> None:
+        filters = FilterSemanticValidator().validate(
+            descriptor=_descriptor(),
+            filter_ast=FilterDslParser().parse(
+                {
+                    "field": "tags",
+                    "op": "contains_any",
+                    "value": ["vip"],
+                }
+            ),
+        )
+
+        self.assertEqual(filters[0].field, "tags")
+        self.assertEqual(filters[0].op, "contains_any")
+        self.assertEqual(filters[0].value, ["vip"])
+
+    def test_multiselect_contains_all_validates(self) -> None:
+        filters = FilterSemanticValidator().validate(
+            descriptor=_descriptor(),
+            filter_ast=FilterDslParser().parse(
+                {
+                    "field": "tags",
+                    "op": "contains_all",
+                    "value": ["vip", "newsletter"],
+                }
+            ),
+        )
+
+        self.assertEqual(filters[0].field, "tags")
+        self.assertEqual(filters[0].op, "contains_all")
+        self.assertEqual(filters[0].value, ["vip", "newsletter"])
+
+    def test_multiselect_not_contains_any_validates(self) -> None:
+        filters = FilterSemanticValidator().validate(
+            descriptor=_descriptor(),
+            filter_ast=FilterDslParser().parse(
+                {
+                    "field": "tags",
+                    "op": "not_contains_any",
+                    "value": ["vip"],
+                }
+            ),
+        )
+
+        self.assertEqual(filters[0].field, "tags")
+        self.assertEqual(filters[0].op, "not_contains_any")
+        self.assertEqual(filters[0].value, ["vip"])
+
+    def test_multiselect_rejects_scalar_value(self) -> None:
+        with self.assertRaisesRegex(
+            RuntimeDataFilterError,
+            "INVALID_FILTER_VALUE_TYPE",
+        ) as caught:
+            FilterSemanticValidator().validate(
+                descriptor=_descriptor(),
+                filter_ast=FilterDslParser().parse(
+                    {
+                        "field": "tags",
+                        "op": "contains_any",
+                        "value": "vip",
+                    }
+                ),
+            )
+
+        self.assertEqual(caught.exception.code, "INVALID_FILTER_VALUE_TYPE")
+        self.assertEqual(caught.exception.details["field"], "tags")
+        self.assertEqual(caught.exception.details["operator"], "contains_any")
+
+    def test_multiselect_rejects_unknown_option(self) -> None:
+        with self.assertRaisesRegex(
+            RuntimeDataFilterError,
+            "INVALID_FIELD_OPTION",
+        ) as caught:
+            FilterSemanticValidator().validate(
+                descriptor=_descriptor(),
+                filter_ast=FilterDslParser().parse(
+                    {
+                        "field": "tags",
+                        "op": "contains_any",
+                        "value": ["unknown"],
+                    }
+                ),
+            )
+
+        self.assertEqual(caught.exception.code, "INVALID_FIELD_OPTION")
+        self.assertEqual(caught.exception.details["field"], "tags")
+        self.assertEqual(caught.exception.details["value"], "unknown")
+
+    def test_multiselect_is_empty_ignores_value(self) -> None:
+        filters = FilterSemanticValidator().validate(
+            descriptor=_descriptor(),
+            filter_ast=FilterDslParser().parse(
+                {
+                    "field": "tags",
+                    "op": "is_empty",
+                    "value": ["vip"],
+                }
+            ),
+        )
+
+        self.assertEqual(filters[0].field, "tags")
+        self.assertEqual(filters[0].op, "is_empty")
+        self.assertIsNone(filters[0].value)
+
+    def test_multiselect_is_not_empty_ignores_value(self) -> None:
+        filters = FilterSemanticValidator().validate(
+            descriptor=_descriptor(),
+            filter_ast=FilterDslParser().parse(
+                {
+                    "field": "tags",
+                    "op": "is_not_empty",
+                    "value": ["vip"],
+                }
+            ),
+        )
+
+        self.assertEqual(filters[0].field, "tags")
+        self.assertEqual(filters[0].op, "is_not_empty")
+        self.assertIsNone(filters[0].value)
 
     def test_semantic_validator_rejects_unknown_field_operator_and_value(self) -> None:
         descriptor = _descriptor()
@@ -200,6 +326,10 @@ class RuntimeDataFilterDslTests(unittest.TestCase):
             ),
             (
                 {"field": "status", "op": "contains", "value": "lead"},
+                "UNSUPPORTED_OPERATOR_FOR_FIELD_TYPE",
+            ),
+            (
+                {"field": "tags", "op": "contains", "value": "vip"},
                 "UNSUPPORTED_OPERATOR_FOR_FIELD_TYPE",
             ),
             (
@@ -221,9 +351,18 @@ class RuntimeDataFilterDslTests(unittest.TestCase):
                         filter_ast=FilterDslParser().parse(payload),
                     )
                 self.assertEqual(caught.exception.code, expected_code)
-                if expected_code == "UNSUPPORTED_OPERATOR_FOR_FIELD_TYPE":
+                if payload["field"] == "status" and expected_code == (
+                    "UNSUPPORTED_OPERATOR_FOR_FIELD_TYPE"
+                ):
                     self.assertEqual(caught.exception.details["field"], "status")
                     self.assertEqual(caught.exception.details["field_type"], "select")
+                    self.assertEqual(caught.exception.details["operator"], "contains")
+                if payload["field"] == "tags":
+                    self.assertEqual(caught.exception.details["field"], "tags")
+                    self.assertEqual(
+                        caught.exception.details["field_type"],
+                        "multiselect",
+                    )
                     self.assertEqual(caught.exception.details["operator"], "contains")
 
 

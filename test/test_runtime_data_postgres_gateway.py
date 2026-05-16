@@ -364,6 +364,77 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(params["f_0"], "Do\\_\\%%")
         self.assertEqual(params["f_1"], "%ne\\%")
 
+    async def test_postgres_compiles_contains_any_for_multiselect(self) -> None:
+        contact_id = uuid4()
+        response_row = {
+            "id": contact_id,
+            "created_at": datetime(2026, 1, 1, 10, 0, 0),
+            "updated_at": datetime(2026, 1, 1, 11, 0, 0),
+            "last_name": "Doe",
+            "first_name": "Jane",
+            "tags": ["vip"],
+        }
+        session = _SessionSpy([_MappingsResult([response_row])])
+        gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
+
+        rows = await gateway.list(
+            descriptor=self._descriptor(),
+            filters=(
+                FilterSpec(
+                    field="tags",
+                    op="contains_any",
+                    value=["vip", "newsletter"],
+                ),
+            ),
+        )
+
+        self.assertEqual(len(rows), 1)
+        sql, params = session.calls[0]
+        self.assertIn('"tags" ?| array[:f_0_0, :f_0_1]', sql)
+        self.assertEqual(params["f_0_0"], "vip")
+        self.assertEqual(params["f_0_1"], "newsletter")
+
+    async def test_list_supports_multiselect_filters(self) -> None:
+        contact_id = uuid4()
+        response_row = {
+            "id": contact_id,
+            "created_at": datetime(2026, 1, 1, 10, 0, 0),
+            "updated_at": datetime(2026, 1, 1, 11, 0, 0),
+            "last_name": "Doe",
+            "first_name": "Jane",
+            "tags": ["vip", "newsletter"],
+        }
+        session = _SessionSpy([_MappingsResult([response_row])])
+        gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
+
+        rows = await gateway.list(
+            descriptor=self._descriptor(),
+            filters=(
+                FilterSpec(
+                    field="tags",
+                    op="contains_all",
+                    value=["vip", "newsletter"],
+                ),
+                FilterSpec(
+                    field="tags",
+                    op="not_contains_any",
+                    value=["inactive"],
+                ),
+                FilterSpec(field="tags", op="is_empty", value=None),
+                FilterSpec(field="tags", op="is_not_empty", value=None),
+            ),
+        )
+
+        self.assertEqual(len(rows), 1)
+        sql, params = session.calls[0]
+        self.assertIn('"tags" ?& array[:f_0_0, :f_0_1]', sql)
+        self.assertIn('NOT ("tags" ?| array[:f_1_0])', sql)
+        self.assertIn('COALESCE(jsonb_array_length("tags"), 0) = 0', sql)
+        self.assertIn('COALESCE(jsonb_array_length("tags"), 0) > 0', sql)
+        self.assertEqual(params["f_0_0"], "vip")
+        self.assertEqual(params["f_0_1"], "newsletter")
+        self.assertEqual(params["f_1_0"], "inactive")
+
     async def test_search_returns_rows_and_total_with_same_filters(self) -> None:
         contact_id = uuid4()
         response_row = {

@@ -46,6 +46,11 @@ _ALLOWED_BY_TYPE: dict[str, frozenset[str]] = {
     ),
     "multiselect": frozenset(
         {
+            "contains_any",
+            "contains_all",
+            "not_contains_any",
+            "is_empty",
+            "is_not_empty",
             "is_null",
             "is_not_null",
         }
