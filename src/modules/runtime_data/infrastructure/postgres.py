@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -13,8 +12,6 @@ from sqlalchemy.sql.elements import TextClause
 from src.modules.runtime_data.application.models import (
     FetchPlan,
     FilterExpression,
-    FilterGroupSpec,
-    FilterSpec,
     PageSpec,
     RuntimeRowsPage,
     SortSpec,
@@ -28,18 +25,25 @@ from src.modules.runtime_data.application.ports import (
 from src.modules.runtime_data.application.query.query_plan import RuntimeQueryPlan
 from src.modules.runtime_data.application.type_policy import RuntimeFieldTypePolicy
 from src.modules.runtime_data.domain import (
-    RuntimeDataFilterError,
     RuntimeDataPersistenceError,
     RuntimeDataPolicyError,
     RuntimeDataValidationError,
+)
+from src.modules.runtime_data.infrastructure.persistence.postgres.compiler import (
+    PostgresRuntimeQueryCompiler,
+)
+from src.modules.runtime_data.infrastructure.persistence.postgres.compiler.identifier import (
+    ensure_descriptor_identifiers,
+    qualified_descriptor_table,
+    qualified_table,
+    quote_identifier,
+    validate_identifier,
 )
 from src.modules.schema_registry.runtime import (
     RuntimeFieldDescriptor,
     RuntimeObjectDescriptor,
     RuntimeRelationDescriptor,
 )
-
-_IDENTIFIER_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
@@ -49,11 +53,15 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         self,
         session: AsyncSession,
         type_policy: RuntimeFieldTypePolicy | None = None,
+        query_compiler: PostgresRuntimeQueryCompiler | None = None,
         relation_loader: RuntimeRelationLoader | None = None,
     ) -> None:
         """Инициализирует gateway async-сессией и политикой runtime-типов."""
         self._session = session
         self._type_policy = type_policy or RuntimeFieldTypePolicy()
+        self._query_compiler = query_compiler or PostgresRuntimeQueryCompiler(
+            type_policy=self._type_policy,
+        )
         self._relation_loader = relation_loader or PostgresRuntimeRelationLoader(
             session=session,
         )
@@ -69,8 +77,8 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
             descriptor=descriptor,
             payload=payload,
         )
-        table_ref = self._qualified_table(descriptor)
-        selected_columns = self._selectable_columns(
+        table_ref = qualified_descriptor_table(descriptor)
+        selected_columns = self._query_compiler.compile_projection(
             descriptor=descriptor, fetch_plan=None
         )
 
@@ -81,7 +89,7 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
             bind_fields: dict[str, RuntimeFieldDescriptor] = {}
             for index, (field_name, value) in enumerate(coerced_payload.items()):
                 field = descriptor.fields_by_name[field_name]
-                columns.append(self._qi(field_name))
+                columns.append(quote_identifier(field_name))
                 param_name = f"v_{index}"
                 values.append(f":{param_name}")
                 params[param_name] = value
@@ -128,12 +136,12 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         for index, (field_name, value) in enumerate(coerced_patch.items()):
             field = descriptor.fields_by_name[field_name]
             param_name = f"p_{index}"
-            set_clauses.append(f"{self._qi(field_name)} = :{param_name}")
+            set_clauses.append(f"{quote_identifier(field_name)} = :{param_name}")
             params[param_name] = value
             bind_fields[param_name] = field
 
         if descriptor.field_by_name("updated_at") is not None:
-            set_clauses.append(f'{self._qi("updated_at")} = CURRENT_TIMESTAMP')
+            set_clauses.append(f'{quote_identifier("updated_at")} = CURRENT_TIMESTAMP')
 
         if not set_clauses:
             return await self.get_by_id(
@@ -141,14 +149,14 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
                 object_id=pk_value,
             )
 
-        table_ref = self._qualified_table(descriptor)
-        selected_columns = self._selectable_columns(
+        table_ref = qualified_descriptor_table(descriptor)
+        selected_columns = self._query_compiler.compile_projection(
             descriptor=descriptor, fetch_plan=None
         )
         sql = (
             f"UPDATE {table_ref} "
             f"SET {', '.join(set_clauses)} "
-            f"WHERE {self._qi(descriptor.pk)} = :pk_value "
+            f"WHERE {quote_identifier(descriptor.pk)} = :pk_value "
             f"RETURNING {', '.join(selected_columns)}"
         )
 
@@ -172,9 +180,9 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
             raw_value=object_id,
         )
         sql = (
-            f"DELETE FROM {self._qualified_table(descriptor)} "
-            f"WHERE {self._qi(descriptor.pk)} = :pk_value "
-            f"RETURNING {self._qi(descriptor.pk)}"
+            f"DELETE FROM {qualified_descriptor_table(descriptor)} "
+            f"WHERE {quote_identifier(descriptor.pk)} = :pk_value "
+            f"RETURNING {quote_identifier(descriptor.pk)}"
         )
         result = await self._execute(
             sql, {"pk_value": pk_value}, bind_fields={"pk_value": pk_field}
@@ -201,18 +209,22 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         if not set_clauses:
             return []
 
-        where_sql, where_params, where_bind_fields = self._build_where_clause(
+        where = self._query_compiler.compile_where(
             descriptor=descriptor,
             filters=filters,
         )
-        params.update(where_params)
-        bind_fields.update(where_bind_fields)
+        params.update(where.params)
+        bind_fields.update(where.bind_fields)
+        columns = self._query_compiler.compile_projection(
+            descriptor=descriptor,
+            fetch_plan=None,
+        )
 
         sql = (
-            f"UPDATE {self._qualified_table(descriptor)} "
+            f"UPDATE {qualified_descriptor_table(descriptor)} "
             f"SET {', '.join(set_clauses)} "
-            f"{where_sql} "
-            f"RETURNING {', '.join(self._selectable_columns(descriptor=descriptor, fetch_plan=None))}"
+            f"{where.sql} "
+            f"RETURNING {', '.join(columns)}"
         )
         result = await self._execute(sql, params, bind_fields=bind_fields)
         return [
@@ -244,21 +256,27 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         if not set_clauses:
             return []
 
-        where_sql, where_params, where_bind_fields = self._build_where_clause(
+        where = self._query_compiler.compile_where(
             descriptor=descriptor,
             filters=filters,
         )
-        params.update(where_params)
-        bind_fields.update(where_bind_fields)
+        params.update(where.params)
+        bind_fields.update(where.bind_fields)
         params["claim_limit"] = limit
-        order_sql = self._build_sort_clause(descriptor=descriptor, sorting=sorting)
-        table_ref = self._qualified_table(descriptor)
-        pk_sql = self._qi(descriptor.pk)
-        columns = self._selectable_columns(descriptor=descriptor, fetch_plan=None)
+        order_sql = self._query_compiler.compile_sort(
+            descriptor=descriptor,
+            sorting=sorting,
+        )
+        table_ref = qualified_descriptor_table(descriptor)
+        pk_sql = quote_identifier(descriptor.pk)
+        columns = self._query_compiler.compile_projection(
+            descriptor=descriptor,
+            fetch_plan=None,
+        )
         sql = (
             "WITH claimed AS ("
             f"SELECT {pk_sql} FROM {table_ref} "
-            f"{where_sql} "
+            f"{where.sql} "
             f"{order_sql} "
             "LIMIT :claim_limit "
             "FOR UPDATE SKIP LOCKED"
@@ -289,11 +307,14 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
             raw_value=object_id,
         )
 
-        columns = self._selectable_columns(descriptor=descriptor, fetch_plan=fetch_plan)
+        columns = self._query_compiler.compile_projection(
+            descriptor=descriptor,
+            fetch_plan=fetch_plan,
+        )
         sql = (
             f"SELECT {', '.join(columns)} "
-            f"FROM {self._qualified_table(descriptor)} "
-            f"WHERE {self._qi(descriptor.pk)} = :pk_value "
+            f"FROM {qualified_descriptor_table(descriptor)} "
+            f"WHERE {quote_identifier(descriptor.pk)} = :pk_value "
             "LIMIT 1"
         )
         result = await self._execute(
@@ -321,50 +342,18 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
     ) -> list[Mapping[str, Any]]:
         """Возвращает список runtime-записей с filters, sorting, pagination и projection."""
         self._ensure_descriptor(descriptor)
-        columns = self._selectable_columns(descriptor=descriptor, fetch_plan=fetch_plan)
-
-        params: dict[str, Any] = {}
-        bind_fields: dict[str, RuntimeFieldDescriptor] = {}
-        where_parts: list[str] = []
-        position = 0
-        for filter_spec in filters:
-            (
-                where_sql,
-                where_params,
-                where_bind_fields,
-                position,
-            ) = self._build_filter_expression(
-                descriptor=descriptor,
-                filter_spec=filter_spec,
-                position=position,
-            )
-            where_parts.append(where_sql)
-            params.update(where_params)
-            bind_fields.update(where_bind_fields)
-
-        order_sql = self._build_sort_clause(descriptor=descriptor, sorting=sorting)
-
-        sql_parts = [
-            f"SELECT {', '.join(columns)}",
-            f"FROM {self._qualified_table(descriptor)}",
-        ]
-        if where_parts:
-            sql_parts.append(f"WHERE {' AND '.join(where_parts)}")
-        if order_sql:
-            sql_parts.append(order_sql)
-        if page is not None:
-            if page.limit < 1:
-                raise RuntimeDataValidationError("Page limit must be >= 1.")
-            if page.offset < 0:
-                raise RuntimeDataValidationError("Page offset must be >= 0.")
-            sql_parts.append("LIMIT :page_limit OFFSET :page_offset")
-            params["page_limit"] = page.limit
-            params["page_offset"] = page.offset
+        compiled = self._query_compiler.compile_list(
+            descriptor=descriptor,
+            filters=filters,
+            sorting=sorting,
+            page=page,
+            fetch_plan=fetch_plan,
+        )
 
         result = await self._execute(
-            " ".join(sql_parts),
-            params,
-            bind_fields=bind_fields,
+            compiled.sql,
+            compiled.params,
+            bind_fields=compiled.bind_fields,
         )
         rows = result.mappings().all()
         normalized_rows = [
@@ -383,64 +372,23 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
     ) -> RuntimeRowsPage:
         """Возвращает runtime-страницу с total count по тем же фильтрам."""
         descriptor = query_plan.descriptor
-        filters = query_plan.filters
-        sorting = query_plan.sorting
-        page = query_plan.page
         fetch_plan = query_plan.fetch_plan
 
         self._ensure_descriptor(descriptor)
-        if page.limit < 1:
-            raise RuntimeDataValidationError("Page limit must be >= 1.")
-        if page.offset < 0:
-            raise RuntimeDataValidationError("Page offset must be >= 0.")
 
-        columns = self._selectable_columns(descriptor=descriptor, fetch_plan=fetch_plan)
-        where_parts: list[str] = []
-        params: dict[str, Any] = {}
-        bind_fields: dict[str, RuntimeFieldDescriptor] = {}
-        position = 0
-        for filter_spec in filters:
-            (
-                where_sql,
-                where_params,
-                where_bind_fields,
-                position,
-            ) = self._build_filter_expression(
-                descriptor=descriptor,
-                filter_spec=filter_spec,
-                position=position,
-            )
-            where_parts.append(where_sql)
-            params.update(where_params)
-            bind_fields.update(where_bind_fields)
-
-        where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
-        table_ref = self._qualified_table(descriptor)
-        count_sql = f"SELECT COUNT(*) AS total FROM {table_ref} {where_sql}"
+        compiled_count = self._query_compiler.compile_count(query_plan)
         count_result = await self._execute(
-            count_sql,
-            dict(params),
-            bind_fields=bind_fields,
+            compiled_count.sql,
+            compiled_count.params,
+            bind_fields=compiled_count.bind_fields,
         )
         total = int(count_result.scalar() or 0)
 
-        page_params = dict(params)
-        page_params["page_limit"] = page.limit
-        page_params["page_offset"] = page.offset
-        order_sql = self._build_sort_clause(descriptor=descriptor, sorting=sorting)
-        sql_parts = [
-            f"SELECT {', '.join(columns)}",
-            f"FROM {table_ref}",
-        ]
-        if where_sql:
-            sql_parts.append(where_sql)
-        if order_sql:
-            sql_parts.append(order_sql)
-        sql_parts.append("LIMIT :page_limit OFFSET :page_offset")
+        compiled_page = self._query_compiler.compile_search(query_plan)
         result = await self._execute(
-            " ".join(sql_parts),
-            page_params,
-            bind_fields=bind_fields,
+            compiled_page.sql,
+            compiled_page.params,
+            bind_fields=compiled_page.bind_fields,
         )
         rows = result.mappings().all()
         normalized_rows = [
@@ -470,104 +418,6 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
             fetch_plan=fetch_plan,
         )
 
-    def _build_filter_expression(
-        self,
-        *,
-        descriptor: RuntimeObjectDescriptor,
-        filter_spec: FilterExpression,
-        position: int,
-    ) -> tuple[str, dict[str, Any], dict[str, RuntimeFieldDescriptor], int]:
-        """Строит SQL-фрагмент WHERE для одиночного фильтра или AND/OR группы."""
-        if isinstance(filter_spec, FilterSpec):
-            where_sql, where_params, where_bind_fields = self._build_filter_clause(
-                descriptor=descriptor,
-                filter_spec=filter_spec,
-                position=position,
-            )
-            return where_sql, where_params, where_bind_fields, position + 1
-
-        if isinstance(filter_spec, FilterGroupSpec):
-            logic = str(filter_spec.logic).strip().lower()
-            if logic not in {"and", "or"}:
-                raise RuntimeDataFilterError(
-                    code="UNSUPPORTED_FILTER_GROUP_LOGIC",
-                    message=f"Unsupported filter group logic '{filter_spec.logic}'.",
-                    details={
-                        "logic": filter_spec.logic,
-                    },
-                )
-            if not filter_spec.items:
-                raise RuntimeDataFilterError(
-                    code="INVALID_FILTER_GROUP",
-                    message=f"Filter group '{logic}' requires at least one item.",
-                    details={
-                        "logic": logic,
-                    },
-                )
-
-            parts: list[str] = []
-            params: dict[str, Any] = {}
-            bind_fields: dict[str, RuntimeFieldDescriptor] = {}
-            next_position = position
-            for item in filter_spec.items:
-                (
-                    item_sql,
-                    item_params,
-                    item_bind_fields,
-                    next_position,
-                ) = self._build_filter_expression(
-                    descriptor=descriptor,
-                    filter_spec=item,
-                    position=next_position,
-                )
-                parts.append(item_sql)
-                params.update(item_params)
-                bind_fields.update(item_bind_fields)
-
-            joiner = f" {logic.upper()} "
-            return (
-                f"({joiner.join(parts)})",
-                params,
-                bind_fields,
-                next_position,
-            )
-
-        raise RuntimeDataFilterError(
-            code="UNSUPPORTED_FILTER_EXPRESSION",
-            message=f"Unsupported filter expression '{type(filter_spec).__name__}'.",
-            details={
-                "expression_type": type(filter_spec).__name__,
-            },
-        )
-
-    def _build_where_clause(
-        self,
-        *,
-        descriptor: RuntimeObjectDescriptor,
-        filters: Sequence[FilterExpression],
-    ) -> tuple[str, dict[str, Any], dict[str, RuntimeFieldDescriptor]]:
-        """Строит WHERE для update/claim операций."""
-        params: dict[str, Any] = {}
-        bind_fields: dict[str, RuntimeFieldDescriptor] = {}
-        where_parts: list[str] = []
-        position = 0
-        for filter_spec in filters:
-            (
-                where_sql,
-                where_params,
-                where_bind_fields,
-                position,
-            ) = self._build_filter_expression(
-                descriptor=descriptor,
-                filter_spec=filter_spec,
-                position=position,
-            )
-            where_parts.append(where_sql)
-            params.update(where_params)
-            bind_fields.update(where_bind_fields)
-        where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
-        return where_sql, params, bind_fields
-
     def _build_set_clauses(
         self,
         *,
@@ -581,396 +431,12 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         for index, (field_name, value) in enumerate(patch.items()):
             field = descriptor.fields_by_name[field_name]
             param_name = f"u_{index}"
-            set_clauses.append(f"{self._qi(field_name)} = :{param_name}")
+            set_clauses.append(f"{quote_identifier(field_name)} = :{param_name}")
             params[param_name] = value
             bind_fields[param_name] = field
         if descriptor.field_by_name("updated_at") is not None:
-            set_clauses.append(f'{self._qi("updated_at")} = CURRENT_TIMESTAMP')
+            set_clauses.append(f'{quote_identifier("updated_at")} = CURRENT_TIMESTAMP')
         return set_clauses, params, bind_fields
-
-    def _build_filter_clause(
-        self,
-        *,
-        descriptor: RuntimeObjectDescriptor,
-        filter_spec: FilterSpec,
-        position: int,
-    ) -> tuple[str, dict[str, Any], dict[str, RuntimeFieldDescriptor]]:
-        """Строит SQL-фрагмент WHERE для одного runtime-фильтра.
-
-        Значения фильтров приводятся через RuntimeFieldTypePolicy, а поля json/jsonb
-        возвращаются в bind_fields, чтобы `_statement` мог назначить тип bindparam.
-        """
-        field = descriptor.field_by_name(filter_spec.field)
-        if field is None:
-            raise RuntimeDataFilterError(
-                code="UNKNOWN_FILTER_FIELD",
-                message=f"Unknown filter field '{filter_spec.field}'.",
-                details={
-                    "field": filter_spec.field,
-                },
-            )
-
-        op = filter_spec.op
-        field_sql = self._qi(field.name)
-
-        if op == "eq":
-            if filter_spec.value is None:
-                return (f"{field_sql} IS NULL", {}, {})
-            coerced = self._type_policy.coerce_value_for_field(
-                field=field,
-                raw_value=filter_spec.value,
-            )
-            param_name = f"f_{position}"
-            return (
-                f"{field_sql} = :{param_name}",
-                {param_name: coerced},
-                {param_name: field},
-            )
-
-        if op == "neq":
-            if filter_spec.value is None:
-                return (f"{field_sql} IS NOT NULL", {}, {})
-            coerced = self._type_policy.coerce_value_for_field(
-                field=field,
-                raw_value=filter_spec.value,
-            )
-            param_name = f"f_{position}"
-            return (
-                f"{field_sql} <> :{param_name}",
-                {param_name: coerced},
-                {param_name: field},
-            )
-
-        if op == "in":
-            if not isinstance(filter_spec.value, Sequence) or isinstance(
-                filter_spec.value,
-                (str, bytes),
-            ):
-                raise RuntimeDataFilterError(
-                    code="INVALID_FILTER_VALUE_TYPE",
-                    message=(
-                        f"Filter '{field.name}' with operator 'in' "
-                        "requires a non-string sequence."
-                    ),
-                    details={
-                        "field": field.name,
-                        "operator": op,
-                    },
-                )
-            items = list(filter_spec.value)
-            if not items:
-                raise RuntimeDataFilterError(
-                    code="INVALID_FILTER_VALUE_TYPE",
-                    message=(
-                        f"Filter '{field.name}' with operator 'in' "
-                        "requires at least one value."
-                    ),
-                    details={
-                        "field": field.name,
-                        "operator": op,
-                    },
-                )
-            params: dict[str, Any] = {}
-            bind_fields: dict[str, RuntimeFieldDescriptor] = {}
-            placeholders: list[str] = []
-            for item_index, item in enumerate(items):
-                param_name = f"f_{position}_{item_index}"
-                placeholders.append(f":{param_name}")
-                params[param_name] = self._type_policy.coerce_value_for_field(
-                    field=field,
-                    raw_value=item,
-                )
-                bind_fields[param_name] = field
-            return (f"{field_sql} IN ({', '.join(placeholders)})", params, bind_fields)
-
-        if op == "contains":
-            if field.type_code != "text":
-                raise RuntimeDataFilterError(
-                    code="UNSUPPORTED_OPERATOR_FOR_FIELD_TYPE",
-                    message=(
-                        f"Filter 'contains' supports only text fields, "
-                        f"got '{field.name}'."
-                    ),
-                    details={
-                        "field": field.name,
-                        "field_type": field.type_code,
-                        "operator": op,
-                    },
-                )
-            value = self._type_policy.coerce_value_for_field(
-                field=field,
-                raw_value=filter_spec.value,
-            )
-            param_name = f"f_{position}"
-            return (
-                f"CAST({field_sql} AS text) ILIKE :{param_name} ESCAPE '\\'",
-                {param_name: f"%{self._escape_like_value(value)}%"},
-                {},
-            )
-
-        if op in {"starts_with", "ends_with"}:
-            if field.type_code != "text":
-                raise RuntimeDataFilterError(
-                    code="UNSUPPORTED_OPERATOR_FOR_FIELD_TYPE",
-                    message=(
-                        f"Filter '{op}' supports only text fields, "
-                        f"got '{field.name}'."
-                    ),
-                    details={
-                        "field": field.name,
-                        "field_type": field.type_code,
-                        "operator": op,
-                    },
-                )
-            value = self._type_policy.coerce_value_for_field(
-                field=field,
-                raw_value=filter_spec.value,
-            )
-            escaped_value = self._escape_like_value(value)
-            pattern = (
-                f"{escaped_value}%" if op == "starts_with" else f"%{escaped_value}"
-            )
-            param_name = f"f_{position}"
-            return (
-                f"CAST({field_sql} AS text) ILIKE :{param_name} ESCAPE '\\'",
-                {param_name: pattern},
-                {},
-            )
-
-        if op in {"contains_any", "contains_all", "not_contains_any"}:
-            if field.type_code != "multiselect":
-                raise RuntimeDataFilterError(
-                    code="UNSUPPORTED_OPERATOR_FOR_FIELD_TYPE",
-                    message=(
-                        f"Filter '{op}' supports only multiselect fields, "
-                        f"got '{field.name}'."
-                    ),
-                    details={
-                        "field": field.name,
-                        "field_type": field.type_code,
-                        "operator": op,
-                    },
-                )
-            if not isinstance(filter_spec.value, Sequence) or isinstance(
-                filter_spec.value,
-                (str, bytes),
-            ):
-                raise RuntimeDataFilterError(
-                    code="INVALID_FILTER_VALUE_TYPE",
-                    message=(
-                        f"Filter '{field.name}' with operator '{op}' "
-                        "requires a non-string sequence."
-                    ),
-                    details={
-                        "field": field.name,
-                        "operator": op,
-                    },
-                )
-            items = list(filter_spec.value)
-            if not items:
-                raise RuntimeDataFilterError(
-                    code="INVALID_FILTER_VALUE_TYPE",
-                    message=(
-                        f"Filter '{field.name}' with operator '{op}' "
-                        "requires at least one value."
-                    ),
-                    details={
-                        "field": field.name,
-                        "operator": op,
-                    },
-                )
-            params: dict[str, Any] = {}
-            placeholders: list[str] = []
-            for item_index, item in enumerate(items):
-                param_name = f"f_{position}_{item_index}"
-                placeholders.append(f":{param_name}")
-                params[param_name] = item
-            array_sql = f"array[{', '.join(placeholders)}]"
-            if op == "contains_all":
-                return (f"{field_sql} ?& {array_sql}", params, {})
-            if op == "not_contains_any":
-                return (f"NOT ({field_sql} ?| {array_sql})", params, {})
-            return (f"{field_sql} ?| {array_sql}", params, {})
-
-        if op in {"gt", "gte", "lt", "lte"}:
-            coerced = self._type_policy.coerce_value_for_field(
-                field=field,
-                raw_value=filter_spec.value,
-            )
-            param_name = f"f_{position}"
-            comparison = {
-                "gt": ">",
-                "gte": ">=",
-                "lt": "<",
-                "lte": "<=",
-            }[op]
-            return (
-                f"{field_sql} {comparison} :{param_name}",
-                {param_name: coerced},
-                {param_name: field},
-            )
-
-        if op == "between":
-            if not isinstance(filter_spec.value, Sequence) or isinstance(
-                filter_spec.value,
-                (str, bytes),
-            ):
-                raise RuntimeDataFilterError(
-                    code="INVALID_FILTER_VALUE_TYPE",
-                    message=(
-                        f"Filter '{field.name}' with operator 'between' "
-                        "requires a two-item sequence."
-                    ),
-                    details={
-                        "field": field.name,
-                        "operator": op,
-                    },
-                )
-            items = list(filter_spec.value)
-            if len(items) != 2:
-                raise RuntimeDataFilterError(
-                    code="INVALID_FILTER_VALUE_TYPE",
-                    message=(
-                        f"Filter '{field.name}' with operator 'between' "
-                        "requires exactly two values."
-                    ),
-                    details={
-                        "field": field.name,
-                        "operator": op,
-                        "expected_length": 2,
-                        "actual_length": len(items),
-                    },
-                )
-            start_param = f"f_{position}_start"
-            end_param = f"f_{position}_end"
-            return (
-                f"{field_sql} BETWEEN :{start_param} AND :{end_param}",
-                {
-                    start_param: self._type_policy.coerce_value_for_field(
-                        field=field,
-                        raw_value=items[0],
-                    ),
-                    end_param: self._type_policy.coerce_value_for_field(
-                        field=field,
-                        raw_value=items[1],
-                    ),
-                },
-                {
-                    start_param: field,
-                    end_param: field,
-                },
-            )
-
-        if op == "is_empty":
-            if field.type_code != "multiselect":
-                raise RuntimeDataFilterError(
-                    code="UNSUPPORTED_OPERATOR_FOR_FIELD_TYPE",
-                    message=(
-                        "Filter 'is_empty' supports only multiselect fields, "
-                        f"got '{field.name}'."
-                    ),
-                    details={
-                        "field": field.name,
-                        "field_type": field.type_code,
-                        "operator": op,
-                    },
-                )
-            return (f"COALESCE(jsonb_array_length({field_sql}), 0) = 0", {}, {})
-
-        if op == "is_not_empty":
-            if field.type_code != "multiselect":
-                raise RuntimeDataFilterError(
-                    code="UNSUPPORTED_OPERATOR_FOR_FIELD_TYPE",
-                    message=(
-                        "Filter 'is_not_empty' supports only multiselect fields, "
-                        f"got '{field.name}'."
-                    ),
-                    details={
-                        "field": field.name,
-                        "field_type": field.type_code,
-                        "operator": op,
-                    },
-                )
-            return (f"COALESCE(jsonb_array_length({field_sql}), 0) > 0", {}, {})
-
-        if op == "is_null":
-            return (f"{field_sql} IS NULL", {}, {})
-
-        if op == "is_not_null":
-            return (f"{field_sql} IS NOT NULL", {}, {})
-
-        raise RuntimeDataFilterError(
-            code="UNSUPPORTED_FILTER_OPERATOR",
-            message=f"Unsupported filter operator '{op}'.",
-            details={
-                "field": field.name,
-                "operator": op,
-            },
-        )
-
-    def _build_sort_clause(
-        self,
-        *,
-        descriptor: RuntimeObjectDescriptor,
-        sorting: Sequence[SortSpec],
-    ) -> str:
-        """Строит ORDER BY по валидированным полям descriptor."""
-        if not sorting:
-            return ""
-
-        sort_chunks: list[str] = []
-        for sort_spec in sorting:
-            field = descriptor.field_by_name(sort_spec.field)
-            if field is None:
-                raise RuntimeDataFilterError(
-                    code="UNKNOWN_SORT_FIELD",
-                    message=f"Unknown sort field '{sort_spec.field}'.",
-                    details={
-                        "field": sort_spec.field,
-                    },
-                )
-            direction = sort_spec.direction.lower()
-            if direction not in {"asc", "desc"}:
-                raise RuntimeDataFilterError(
-                    code="INVALID_SORT_DSL",
-                    message=f"Unsupported sort direction '{sort_spec.direction}'.",
-                    details={
-                        "field": sort_spec.field,
-                        "direction": sort_spec.direction,
-                    },
-                )
-            sort_chunks.append(f"{self._qi(field.name)} {direction.upper()}")
-
-        return f"ORDER BY {', '.join(sort_chunks)}"
-
-    def _selectable_columns(
-        self,
-        *,
-        descriptor: RuntimeObjectDescriptor,
-        fetch_plan: FetchPlan | None,
-    ) -> list[str]:
-        """Возвращает список SELECT-колонок и всегда добавляет pk к projection."""
-        projections = fetch_plan.projections if fetch_plan is not None else ()
-        if not projections:
-            fields = [field.name for field in descriptor.fields]
-            return [self._qi(field) for field in fields]
-
-        selected: list[str] = []
-        seen: set[str] = set()
-        for field_name in projections:
-            field = descriptor.field_by_name(field_name)
-            if field is None:
-                raise RuntimeDataValidationError(
-                    f"Unknown projection field '{field_name}'."
-                )
-            if field.name in seen:
-                continue
-            selected.append(field.name)
-            seen.add(field.name)
-
-        if descriptor.pk not in seen:
-            selected.append(descriptor.pk)
-        return [self._qi(field_name) for field_name in selected]
 
     async def _execute(
         self,
@@ -1022,33 +488,8 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
 
     def _ensure_descriptor(self, descriptor: RuntimeObjectDescriptor) -> None:
         """Проверяет SQL-идентификаторы descriptor перед динамическим SQL."""
-        self._validate_identifier(descriptor.schema_name, "schema_name")
-        self._validate_identifier(descriptor.table_name, "table_name")
+        ensure_descriptor_identifiers(descriptor)
         self._required_field(descriptor, descriptor.pk)
-        for field in descriptor.fields:
-            self._validate_identifier(field.name, "field")
-
-    @classmethod
-    def _validate_identifier(cls, value: str, title: str) -> None:
-        """Проверяет, что identifier безопасен для использования в SQL."""
-        normalized = value.strip()
-        if not _IDENTIFIER_RE.fullmatch(normalized):
-            raise RuntimeDataPolicyError(f"Invalid {title} identifier '{value}'.")
-
-    @classmethod
-    def _qualified_table(cls, descriptor: RuntimeObjectDescriptor) -> str:
-        """Возвращает quoted schema.table для descriptor."""
-        return f"{cls._qi(descriptor.schema_name)}.{cls._qi(descriptor.table_name)}"
-
-    @staticmethod
-    def _qi(identifier: str) -> str:
-        """Кавычит PostgreSQL-идентификатор."""
-        return f'"{identifier}"'
-
-    @staticmethod
-    def _escape_like_value(value: str) -> str:
-        """Escapes user text for PostgreSQL LIKE patterns with backslash ESCAPE."""
-        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 class PostgresRuntimeRelationLoader(RuntimeRelationLoader):
@@ -1321,18 +762,15 @@ class PostgresRuntimeRelationLoader(RuntimeRelationLoader):
 
     @classmethod
     def _qualified_table(cls, schema_name: str, table_name: str) -> str:
-        cls._validate_identifier(schema_name, "schema_name")
-        cls._validate_identifier(table_name, "table_name")
-        return f"{cls._qi(schema_name)}.{cls._qi(table_name)}"
+        return qualified_table(schema_name, table_name)
 
     @classmethod
     def _validate_identifier(cls, value: str, title: str) -> None:
-        if not _IDENTIFIER_RE.fullmatch(value.strip()):
-            raise RuntimeDataPolicyError(f"Invalid {title} identifier '{value}'.")
+        validate_identifier(value, title)
 
     @staticmethod
     def _qi(identifier: str) -> str:
-        return f'"{identifier}"'
+        return quote_identifier(identifier)
 
 
 class NoopRuntimeRelationLoader(RuntimeRelationLoader):
@@ -1599,10 +1037,8 @@ class PostgresRuntimeRelationCommandGateway(RuntimeRelationCommandGateway):
 
     @classmethod
     def _qualified_table(cls, schema_name: str, table_name: str) -> str:
-        PostgresRuntimeRelationLoader._validate_identifier(schema_name, "schema_name")
-        PostgresRuntimeRelationLoader._validate_identifier(table_name, "table_name")
-        return f"{cls._qi(schema_name)}.{cls._qi(table_name)}"
+        return qualified_table(schema_name, table_name)
 
     @staticmethod
     def _qi(identifier: str) -> str:
-        return f'"{identifier}"'
+        return quote_identifier(identifier)
