@@ -13,6 +13,10 @@ from src.modules.schema_registry.application.dto.runtime_object_description impo
     RuntimeFieldDescriptionDTO,
     RuntimeObjectDescriptionDTO,
 )
+from src.modules.schema_registry.runtime import (
+    RuntimeFieldDescriptor,
+    RuntimeObjectDescriptor,
+)
 from src.modules.shared import EntityIdVO
 
 
@@ -63,12 +67,54 @@ class ContactModelDescriptionRepositoryTests(unittest.IsolatedAsyncioTestCase):
                 )
 
         use_case_stub = DescribeRuntimeObjectUseCaseStub()
-        repository = ContactModelDescriptionRepository(use_case_stub)
+
+        class RuntimeObjectResolverStub:
+            async def resolve(self, tenant_id, object_name):
+                self.tenant_id = tenant_id
+                self.object_name = object_name
+                return RuntimeObjectDescriptor(
+                    schema_name="dnk_test",
+                    object_name="contact",
+                    table_name="contacts",
+                    pk="id",
+                    title_field="id",
+                    fields=(
+                        RuntimeFieldDescriptor(
+                            name="status",
+                            type_code="select",
+                            is_nullable=False,
+                            default_value="'lead'",
+                            options={
+                                "lead": "Lead",
+                                "customer": "Customer",
+                            },
+                            settings={},
+                            kind="system",
+                        ),
+                        RuntimeFieldDescriptor(
+                            name="first_name",
+                            type_code="text",
+                            is_nullable=False,
+                            default_value=None,
+                            options={},
+                            settings={},
+                        ),
+                    ),
+                    relations=(),
+                )
+
+        resolver_stub = RuntimeObjectResolverStub()
+        repository = ContactModelDescriptionRepository(
+            use_case_stub,
+            runtime_object_resolver=resolver_stub,
+        )
 
         description = await repository.describe_fields(tenant_id=tenant_id)
 
         self.assertEqual(use_case_stub.tenant_id, tenant_id)
         self.assertEqual(use_case_stub.object_name, "contact")
+        self.assertEqual(resolver_stub.tenant_id, tenant_id)
+        self.assertEqual(resolver_stub.object_name, "contact")
         self.assertEqual(description.object_description.id, object_id)
         self.assertEqual(description.object_description.singular_label, "Contact")
         self.assertEqual(description.object_description.plural_label, "Contacts")
@@ -80,6 +126,14 @@ class ContactModelDescriptionRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(description.fields[0].default_value, "'lead'")
         self.assertEqual(description.fields[0].kind, "system")
         self.assertEqual(description.fields[1].kind, "standard")
+        self.assertEqual(
+            description.fields[0].filter.operators,
+            ("eq", "neq", "in", "is_null", "is_not_null"),
+        )
+        self.assertEqual(description.fields[0].filter.input, "select")
+        self.assertTrue(description.fields[0].sort.enabled)
+        self.assertEqual(description.fields[1].filter.input, "text")
+        self.assertIn("contains", description.fields[1].filter.operators)
         self.assertEqual(
             description.fields[0].options,
             (

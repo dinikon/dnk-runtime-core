@@ -13,6 +13,11 @@ from src.modules.crm.application.contact.dto.contact_fields_description_dto impo
 )
 from src.modules.crm.presentation.http.contact.controller.describe_contact_fields import (
     describe_contact_fields,
+    router,
+)
+from src.modules.runtime_data.application.query.capabilities import (
+    FieldFilterCapability,
+    FieldSortCapability,
 )
 from src.modules.schema_registry.domain.error import RuntimeObjectNotFoundError
 from src.modules.shared import EntityIdVO, Principal, RequestContext
@@ -51,6 +56,15 @@ class _FailingUseCase:
 
 
 class ContactFieldsControllerTests(unittest.IsolatedAsyncioTestCase):
+    def test_exposes_get_metadata_route(self) -> None:
+        routes = {
+            (method, route.path)
+            for route in router.routes
+            for method in getattr(route, "methods", set())
+        }
+
+        self.assertIn(("GET", "/crm/contacts/fields"), routes)
+
     async def test_returns_contact_fields_response(self) -> None:
         object_id = uuid4()
         field_id = uuid4()
@@ -80,6 +94,17 @@ class ContactFieldsControllerTests(unittest.IsolatedAsyncioTestCase):
                                 label="Customer",
                             ),
                         ),
+                        filter=FieldFilterCapability(
+                            enabled=True,
+                            operators=("eq", "neq", "in"),
+                            input="select",
+                            value_type="string",
+                            options=(
+                                {"value": "lead", "label": "Lead"},
+                                {"value": "customer", "label": "Customer"},
+                            ),
+                        ),
+                        sort=FieldSortCapability(enabled=True),
                     ),
                 ),
             )
@@ -111,6 +136,20 @@ class ContactFieldsControllerTests(unittest.IsolatedAsyncioTestCase):
                 {"value": "customer", "label": "Customer"},
             ],
         )
+        self.assertEqual(
+            response.fields[0].filter.model_dump(),
+            {
+                "enabled": True,
+                "operators": ["eq", "neq", "in"],
+                "input": "select",
+                "value_type": "string",
+                "options": [
+                    {"value": "lead", "label": "Lead"},
+                    {"value": "customer", "label": "Customer"},
+                ],
+            },
+        )
+        self.assertEqual(response.fields[0].sort.model_dump(), {"enabled": True})
 
     async def test_returns_401_when_context_has_no_principal(self) -> None:
         with self.assertRaises(HTTPException) as caught:

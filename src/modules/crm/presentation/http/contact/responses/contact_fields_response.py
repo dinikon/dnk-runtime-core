@@ -10,6 +10,22 @@ class ContactFieldOptionResponseSchema(BaseModel):
     label: str
 
 
+class ContactFieldFilterCapabilityResponseSchema(BaseModel):
+    """Pydantic schema for frontend filter capability of a CRM field."""
+
+    enabled: bool
+    operators: list[str]
+    input: str
+    value_type: str
+    options: list[ContactFieldOptionResponseSchema]
+
+
+class ContactFieldSortCapabilityResponseSchema(BaseModel):
+    """Pydantic schema for frontend sort capability of a CRM field."""
+
+    enabled: bool
+
+
 class ContactFieldDescriptionResponseSchema(BaseModel):
     """Pydantic-схема описания одного поля CRM-модели."""
 
@@ -22,6 +38,8 @@ class ContactFieldDescriptionResponseSchema(BaseModel):
     is_nullable: bool
     default_value: str | None
     options: list[ContactFieldOptionResponseSchema]
+    filter: ContactFieldFilterCapabilityResponseSchema
+    sort: ContactFieldSortCapabilityResponseSchema
 
 
 class ContactObjectDescriptionResponseSchema(BaseModel):

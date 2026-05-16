@@ -123,9 +123,39 @@ _ALLOWED_BY_TYPE: dict[str, frozenset[str]] = {
     ),
 }
 
+_PUBLIC_OPERATOR_ORDER: tuple[str, ...] = (
+    "eq",
+    "neq",
+    "contains",
+    "starts_with",
+    "ends_with",
+    "in",
+    "gt",
+    "gte",
+    "lt",
+    "lte",
+    "between",
+    "contains_any",
+    "contains_all",
+    "not_contains_any",
+    "is_empty",
+    "is_not_empty",
+    "is_null",
+    "is_not_null",
+)
+
 
 class FilterOperatorRegistry:
     """Knows which public filter operators are valid for each runtime field type."""
+
+    def operators_for(self, field_type: str) -> tuple[str, ...]:
+        """Return public operators for a runtime field type in deterministic order."""
+        allowed = _ALLOWED_BY_TYPE.get(field_type)
+        if allowed is None:
+            return ()
+        return tuple(
+            operator for operator in _PUBLIC_OPERATOR_ORDER if operator in allowed
+        )
 
     def validate(self, *, field_type: str, operator: str, field_name: str) -> None:
         allowed = _ALLOWED_BY_TYPE.get(field_type)

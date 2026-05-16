@@ -1,3 +1,9 @@
+from src.modules.runtime_data.application.query.capabilities import (
+    FieldFilterCapability,
+    FieldQueryCapability,
+    FieldSortCapability,
+    QueryCapabilityResolver,
+)
 from src.modules.runtime_data.application.query.query import RuntimeSearchRecordsQuery
 from src.modules.runtime_data.application.query.query_plan import RuntimeQueryPlan
 from src.modules.runtime_data.application.query.result import (
@@ -9,6 +15,10 @@ from src.modules.runtime_data.application.query.runtime_object_query_service imp
 )
 
 __all__ = [
+    "FieldFilterCapability",
+    "FieldQueryCapability",
+    "FieldSortCapability",
+    "QueryCapabilityResolver",
     "RuntimeObjectQueryService",
     "RuntimeQueryPlan",
     "RuntimeRecordDTO",

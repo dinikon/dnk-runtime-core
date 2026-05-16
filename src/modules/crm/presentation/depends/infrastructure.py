@@ -30,6 +30,7 @@ from src.modules.crm.infrastructure import (
 )
 from src.modules.runtime_data import (
     PostgresRuntimeGateway,
+    QueryCapabilityResolver,
     RuntimeFieldTypePolicy,
 )
 from src.modules.runtime_data.application.query import RuntimeObjectQueryService
@@ -83,6 +84,17 @@ def get_runtime_object_query_service(
 RuntimeObjectQueryServiceDep = Annotated[
     RuntimeObjectQueryService,
     Depends(get_runtime_object_query_service),
+]
+
+
+def get_query_capability_resolver() -> QueryCapabilityResolver:
+    """Creates runtime query capability resolver for metadata endpoints."""
+    return QueryCapabilityResolver()
+
+
+QueryCapabilityResolverDep = Annotated[
+    QueryCapabilityResolver,
+    Depends(get_query_capability_resolver),
 ]
 
 
@@ -160,10 +172,14 @@ CompanyCommandRepositoryDep = Annotated[
 
 def get_contact_fields_description_repository(
     describe_runtime_object_use_case: DescribeRuntimeObjectUseCaseDep,
+    runtime_object_resolver: RuntimeObjectResolverDep,
+    query_capability_resolver: QueryCapabilityResolverDep,
 ) -> ContactFieldsDescriptionRepositoryProtocol:
     """Создает repository описания модели contact через schema_registry."""
     return ContactModelDescriptionRepository(
         describe_runtime_object_use_case=describe_runtime_object_use_case,
+        runtime_object_resolver=runtime_object_resolver,
+        query_capability_resolver=query_capability_resolver,
     )
 
 
@@ -195,6 +211,7 @@ __all__ = [
     "ContactCommandRepositoryDep",
     "ContactFieldsDescriptionRepositoryDep",
     "ContactQueryRepositoryDep",
+    "QueryCapabilityResolverDep",
     "RuntimeGatewayDep",
     "RuntimeFieldTypePolicyDep",
     "RuntimeObjectQueryServiceDep",
@@ -204,6 +221,7 @@ __all__ = [
     "get_contact_command_repository",
     "get_contact_fields_description_repository",
     "get_contact_query_repository",
+    "get_query_capability_resolver",
     "get_runtime_field_type_policy",
     "get_runtime_gateway",
     "get_runtime_object_query_service",

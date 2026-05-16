@@ -1,5 +1,12 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from uuid import UUID
+
+from src.modules.runtime_data.application.query.capabilities import (
+    FieldFilterCapability,
+    FieldSortCapability,
+    disabled_filter_capability,
+    disabled_sort_capability,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +30,8 @@ class ContactFieldDescriptionDTO:
     default_value: str | None
     options: tuple[ContactFieldOptionDTO, ...]
     kind: str = "standard"
+    filter: FieldFilterCapability = field(default_factory=disabled_filter_capability)
+    sort: FieldSortCapability = field(default_factory=disabled_sort_capability)
 
 
 @dataclass(frozen=True, slots=True)
