@@ -9,7 +9,15 @@
   "scripts": {
     "dev:console": "npm --workspace @dnk/console run dev",
     "build:console": "npm --workspace @dnk/console run build",
+    "lint:console": "npm --workspace @dnk/console run lint",
     "preview:console": "npm --workspace @dnk/console run preview",
     "typecheck:console": "npm --workspace @dnk/console run typecheck"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.4.0",
+    "eslint-plugin-vue": "^10.9.1",
+    "globals": "^17.6.0",
+    "typescript-eslint": "^8.59.3"
   }
 }
