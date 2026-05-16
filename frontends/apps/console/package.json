@@ -11,6 +11,8 @@
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
+    "@tanstack/vue-query": "^5.100.10",
+    "@tanstack/vue-table": "^8.21.3",
     "@vueuse/core": "^14.3.0",
     "axios": "^1.16.0",
     "class-variance-authority": "^0.7.1",
