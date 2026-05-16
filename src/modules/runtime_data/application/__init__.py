@@ -4,6 +4,7 @@ from src.modules.runtime_data.application.models import (
     FilterGroupSpec,
     FilterSpec,
     PageSpec,
+    RuntimeRowsPage,
     SortSpec,
 )
 from src.modules.runtime_data.application.ports import (
@@ -11,6 +12,13 @@ from src.modules.runtime_data.application.ports import (
     RuntimeQueryGateway,
     RuntimeRelationCommandGateway,
     RuntimeRelationLoader,
+)
+from src.modules.runtime_data.application.query import (
+    RuntimeObjectQueryService,
+    RuntimeQueryPlan,
+    RuntimeRecordDTO,
+    RuntimeSearchRecordsQuery,
+    RuntimeSearchRecordsResult,
 )
 from src.modules.runtime_data.application.relation_use_cases import (
     AttachRelatedRecordUseCase,
@@ -38,9 +46,15 @@ __all__ = [
     "RuntimeCommandGateway",
     "RuntimeFieldTypeDefinition",
     "RuntimeFieldTypePolicy",
+    "RuntimeObjectQueryService",
     "RuntimeQueryGateway",
+    "RuntimeQueryPlan",
+    "RuntimeRecordDTO",
     "RuntimeRelationCommandGateway",
     "RuntimeRelationLoader",
+    "RuntimeRowsPage",
+    "RuntimeSearchRecordsQuery",
+    "RuntimeSearchRecordsResult",
     "SetRelationUseCase",
     "SortSpec",
     "UnsetRelationUseCase",

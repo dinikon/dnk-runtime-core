@@ -16,6 +16,7 @@ from src.modules.runtime_data.application.models import (
     FilterGroupSpec,
     FilterSpec,
     PageSpec,
+    RuntimeRowsPage,
     SortSpec,
 )
 from src.modules.runtime_data.application.ports import (
@@ -375,6 +376,82 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
             fetch_plan=fetch_plan,
         )
 
+    async def search(
+        self,
+        *,
+        descriptor: RuntimeObjectDescriptor,
+        filters: Sequence[FilterExpression] = (),
+        sorting: Sequence[SortSpec] = (),
+        page: PageSpec,
+        fetch_plan: FetchPlan | None = None,
+    ) -> RuntimeRowsPage:
+        """Возвращает runtime-страницу с total count по тем же фильтрам."""
+        self._ensure_descriptor(descriptor)
+        if page.limit < 1:
+            raise RuntimeDataValidationError("Page limit must be >= 1.")
+        if page.offset < 0:
+            raise RuntimeDataValidationError("Page offset must be >= 0.")
+
+        columns = self._selectable_columns(descriptor=descriptor, fetch_plan=fetch_plan)
+        where_parts: list[str] = []
+        params: dict[str, Any] = {}
+        bind_fields: dict[str, RuntimeFieldDescriptor] = {}
+        position = 0
+        for filter_spec in filters:
+            (
+                where_sql,
+                where_params,
+                where_bind_fields,
+                position,
+            ) = self._build_filter_expression(
+                descriptor=descriptor,
+                filter_spec=filter_spec,
+                position=position,
+            )
+            where_parts.append(where_sql)
+            params.update(where_params)
+            bind_fields.update(where_bind_fields)
+
+        where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+        table_ref = self._qualified_table(descriptor)
+        count_sql = f"SELECT COUNT(*) AS total FROM {table_ref} {where_sql}"
+        count_result = await self._execute(
+            count_sql,
+            dict(params),
+            bind_fields=bind_fields,
+        )
+        total = int(count_result.scalar() or 0)
+
+        page_params = dict(params)
+        page_params["page_limit"] = page.limit
+        page_params["page_offset"] = page.offset
+        order_sql = self._build_sort_clause(descriptor=descriptor, sorting=sorting)
+        sql_parts = [
+            f"SELECT {', '.join(columns)}",
+            f"FROM {table_ref}",
+        ]
+        if where_sql:
+            sql_parts.append(where_sql)
+        if order_sql:
+            sql_parts.append(order_sql)
+        sql_parts.append("LIMIT :page_limit OFFSET :page_offset")
+        result = await self._execute(
+            " ".join(sql_parts),
+            page_params,
+            bind_fields=bind_fields,
+        )
+        rows = result.mappings().all()
+        normalized_rows = [
+            self._type_policy.normalize_row(descriptor=descriptor, row=row)
+            for row in rows
+        ]
+        loaded_rows = await self._load_relations_if_needed(
+            descriptor=descriptor,
+            rows=normalized_rows,
+            fetch_plan=fetch_plan,
+        )
+        return RuntimeRowsPage(rows=tuple(loaded_rows), total=total)
+
     async def _load_relations_if_needed(
         self,
         *,
@@ -530,6 +607,20 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
                 {param_name: field},
             )
 
+        if op == "neq":
+            if filter_spec.value is None:
+                return (f"{field_sql} IS NOT NULL", {}, {})
+            coerced = self._type_policy.coerce_value_for_field(
+                field=field,
+                raw_value=filter_spec.value,
+            )
+            param_name = f"f_{position}"
+            return (
+                f"{field_sql} <> :{param_name}",
+                {param_name: coerced},
+                {param_name: field},
+            )
+
         if op == "in":
             if not isinstance(filter_spec.value, Sequence) or isinstance(
                 filter_spec.value,
@@ -572,18 +663,62 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
                 {},
             )
 
-        if op in {"gte", "lte"}:
+        if op in {"gt", "gte", "lt", "lte"}:
             coerced = self._type_policy.coerce_value_for_field(
                 field=field,
                 raw_value=filter_spec.value,
             )
             param_name = f"f_{position}"
-            comparison = ">=" if op == "gte" else "<="
+            comparison = {
+                "gt": ">",
+                "gte": ">=",
+                "lt": "<",
+                "lte": "<=",
+            }[op]
             return (
                 f"{field_sql} {comparison} :{param_name}",
                 {param_name: coerced},
                 {param_name: field},
             )
+
+        if op == "between":
+            if not isinstance(filter_spec.value, Sequence) or isinstance(
+                filter_spec.value,
+                (str, bytes),
+            ):
+                raise RuntimeDataFilterError(
+                    f"Filter '{field.name}' with operator 'between' requires a two-item sequence."
+                )
+            items = list(filter_spec.value)
+            if len(items) != 2:
+                raise RuntimeDataFilterError(
+                    f"Filter '{field.name}' with operator 'between' requires exactly two values."
+                )
+            start_param = f"f_{position}_start"
+            end_param = f"f_{position}_end"
+            return (
+                f"{field_sql} BETWEEN :{start_param} AND :{end_param}",
+                {
+                    start_param: self._type_policy.coerce_value_for_field(
+                        field=field,
+                        raw_value=items[0],
+                    ),
+                    end_param: self._type_policy.coerce_value_for_field(
+                        field=field,
+                        raw_value=items[1],
+                    ),
+                },
+                {
+                    start_param: field,
+                    end_param: field,
+                },
+            )
+
+        if op == "is_null":
+            return (f"{field_sql} IS NULL", {}, {})
+
+        if op == "is_not_null":
+            return (f"{field_sql} IS NOT NULL", {}, {})
 
         raise RuntimeDataFilterError(f"Unsupported filter operator '{op}'.")
 

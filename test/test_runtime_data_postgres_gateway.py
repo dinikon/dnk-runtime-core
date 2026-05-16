@@ -336,6 +336,57 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(params["f_1"], "%Ja%")
         self.assertEqual(params["f_2"], "%Do%")
 
+    async def test_search_returns_rows_and_total_with_same_filters(self) -> None:
+        contact_id = uuid4()
+        response_row = {
+            "id": contact_id,
+            "created_at": datetime(2026, 1, 1, 10, 0, 0),
+            "updated_at": datetime(2026, 1, 1, 11, 0, 0),
+            "last_name": "Doe",
+            "first_name": "Jane",
+            "tags": ["vip"],
+        }
+        session = _SessionSpy(
+            [
+                _MappingsResult([], scalar_value=42),
+                _MappingsResult([response_row]),
+            ]
+        )
+        gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
+
+        page = await gateway.search(
+            descriptor=self._descriptor(),
+            filters=(
+                FilterSpec(field="last_name", op="neq", value="Roe"),
+                FilterSpec(
+                    field="created_at",
+                    op="between",
+                    value=[
+                        "2026-01-01T00:00:00",
+                        "2026-02-01T00:00:00",
+                    ],
+                ),
+                FilterSpec(field="first_name", op="is_not_null", value=None),
+            ),
+            sorting=(SortSpec(field="created_at", direction="desc"),),
+            page=PageSpec(limit=25, offset=10),
+        )
+
+        self.assertEqual(page.total, 42)
+        self.assertEqual(len(page.rows), 1)
+        count_sql, count_params = session.calls[0]
+        page_sql, page_params = session.calls[1]
+        self.assertIn("SELECT COUNT(*) AS total", count_sql)
+        self.assertIn('"last_name" <> :f_0', count_sql)
+        self.assertIn('"created_at" BETWEEN :f_1_start AND :f_1_end', count_sql)
+        self.assertIn('"first_name" IS NOT NULL', count_sql)
+        self.assertNotIn("LIMIT :page_limit", count_sql)
+        self.assertEqual(count_params["f_0"], "Roe")
+        self.assertIn('ORDER BY "created_at" DESC', page_sql)
+        self.assertIn("LIMIT :page_limit OFFSET :page_offset", page_sql)
+        self.assertEqual(page_params["page_limit"], 25)
+        self.assertEqual(page_params["page_offset"], 10)
+
     async def test_sqlalchemy_error_becomes_runtime_persistence_error(self) -> None:
         class FailingSession:
             async def execute(self, statement, params=None):

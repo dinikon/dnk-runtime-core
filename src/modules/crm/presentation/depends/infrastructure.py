@@ -28,7 +28,11 @@ from src.modules.crm.infrastructure import (
     ContactModelDescriptionRepository,
     ContactRuntimeRepository,
 )
-from src.modules.runtime_data import PostgresRuntimeGateway, RuntimeFieldTypePolicy
+from src.modules.runtime_data import (
+    PostgresRuntimeGateway,
+    RuntimeFieldTypePolicy,
+)
+from src.modules.runtime_data.application.query import RuntimeObjectQueryService
 from src.modules.schema_registry.presentation.depends.application import (
     DescribeRuntimeObjectUseCaseDep,
     RuntimeObjectResolverDep,
@@ -62,6 +66,23 @@ def get_runtime_gateway(
 RuntimeGatewayDep = Annotated[
     PostgresRuntimeGateway,
     Depends(get_runtime_gateway),
+]
+
+
+def get_runtime_object_query_service(
+    runtime_object_resolver: RuntimeObjectResolverDep,
+    runtime_gateway: RuntimeGatewayDep,
+) -> RuntimeObjectQueryService:
+    """Создает application service runtime search для CRM read paths."""
+    return RuntimeObjectQueryService(
+        runtime_object_resolver=runtime_object_resolver,
+        runtime_query_gateway=runtime_gateway,
+    )
+
+
+RuntimeObjectQueryServiceDep = Annotated[
+    RuntimeObjectQueryService,
+    Depends(get_runtime_object_query_service),
 ]
 
 
@@ -176,6 +197,7 @@ __all__ = [
     "ContactQueryRepositoryDep",
     "RuntimeGatewayDep",
     "RuntimeFieldTypePolicyDep",
+    "RuntimeObjectQueryServiceDep",
     "get_company_command_repository",
     "get_company_fields_description_repository",
     "get_company_query_repository",
@@ -184,4 +206,5 @@ __all__ = [
     "get_contact_query_repository",
     "get_runtime_field_type_policy",
     "get_runtime_gateway",
+    "get_runtime_object_query_service",
 ]

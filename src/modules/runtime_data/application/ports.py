@@ -8,6 +8,7 @@ from src.modules.runtime_data.application.models import (
     FilterExpression,
     FilterSpec,
     PageSpec,
+    RuntimeRowsPage,
     SortSpec,
 )
 from src.modules.schema_registry.runtime import RuntimeObjectDescriptor
@@ -90,6 +91,18 @@ class RuntimeQueryGateway(Protocol):
         fetch_plan: FetchPlan | None = None,
     ) -> list[Mapping[str, Any]]:
         """Возвращает список runtime-записей с фильтрами, сортировкой и projection."""
+        ...
+
+    async def search(
+        self,
+        *,
+        descriptor: RuntimeObjectDescriptor,
+        filters: Sequence[FilterExpression] = (),
+        sorting: Sequence[SortSpec] = (),
+        page: PageSpec,
+        fetch_plan: FetchPlan | None = None,
+    ) -> RuntimeRowsPage:
+        """Возвращает страницу runtime-записей и total count по тем же фильтрам."""
         ...
 
 

@@ -1,0 +1,235 @@
+from __future__ import annotations
+
+import unittest
+from datetime import datetime
+from decimal import Decimal
+from uuid import uuid4
+
+from src.modules.runtime_data import RuntimeDataFilterError
+from src.modules.runtime_data.application.query.filter_dsl import (
+    FilterDslParser,
+    FilterSemanticValidator,
+)
+from src.modules.runtime_data.application.query.sort_dsl import (
+    SortDslParser,
+    SortSemanticValidator,
+)
+from src.modules.schema_registry.runtime import (
+    RuntimeFieldDescriptor,
+    RuntimeObjectDescriptor,
+)
+
+
+def _descriptor() -> RuntimeObjectDescriptor:
+    return RuntimeObjectDescriptor(
+        schema_name="dnk_test",
+        object_name="contact",
+        table_name="contacts",
+        pk="id",
+        title_field="id",
+        fields=(
+            RuntimeFieldDescriptor(
+                name="id",
+                type_code="uuid",
+                is_nullable=False,
+                default_value="gen_random_uuid()",
+                options={},
+                settings={},
+                kind="system",
+            ),
+            RuntimeFieldDescriptor(
+                name="created_at",
+                type_code="datetime",
+                is_nullable=False,
+                default_value="CURRENT_TIMESTAMP",
+                options={},
+                settings={},
+                kind="system",
+            ),
+            RuntimeFieldDescriptor(
+                name="first_name",
+                type_code="text",
+                is_nullable=False,
+                default_value=None,
+                options={},
+                settings={},
+            ),
+            RuntimeFieldDescriptor(
+                name="status",
+                type_code="select",
+                is_nullable=False,
+                default_value="'lead'",
+                options={"lead": "Lead", "partner": "Partner"},
+                settings={},
+            ),
+            RuntimeFieldDescriptor(
+                name="score",
+                type_code="decimal",
+                is_nullable=True,
+                default_value=None,
+                options={},
+                settings={},
+            ),
+            RuntimeFieldDescriptor(
+                name="tags",
+                type_code="multiselect",
+                is_nullable=True,
+                default_value=None,
+                options={"vip": "VIP"},
+                settings={},
+            ),
+        ),
+        relations=(),
+    )
+
+
+class RuntimeDataFilterDslTests(unittest.TestCase):
+    def test_parser_accepts_nested_groups_and_conditions(self) -> None:
+        parsed = FilterDslParser().parse(
+            {
+                "and": [
+                    {"field": "status", "op": "eq", "value": "lead"},
+                    {
+                        "or": [
+                            {"field": "first_name", "op": "contains", "value": "den"},
+                            {"field": "score", "op": "gte", "value": "10.5"},
+                        ]
+                    },
+                ]
+            }
+        )
+
+        self.assertEqual(len(parsed), 1)
+        self.assertEqual(parsed[0].logic, "and")
+
+    def test_parser_rejects_unknown_keys(self) -> None:
+        with self.assertRaisesRegex(RuntimeDataFilterError, "INVALID_FILTER_DSL"):
+            FilterDslParser().parse(
+                {"field": "status", "operator": "eq", "value": "lead"}
+            )
+
+    def test_parser_enforces_depth_and_condition_limits(self) -> None:
+        too_deep = {
+            "and": [
+                {
+                    "and": [
+                        {
+                            "and": [
+                                {
+                                    "and": [
+                                        {
+                                            "and": [
+                                                {
+                                                    "field": "status",
+                                                    "op": "eq",
+                                                    "value": "lead",
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+        with self.assertRaisesRegex(RuntimeDataFilterError, "depth"):
+            FilterDslParser(max_depth=5).parse(too_deep)
+
+        with self.assertRaisesRegex(RuntimeDataFilterError, "condition count"):
+            FilterDslParser(max_conditions=2).parse(
+                {
+                    "and": [
+                        {"field": "status", "op": "eq", "value": "lead"},
+                        {"field": "status", "op": "eq", "value": "partner"},
+                        {"field": "first_name", "op": "contains", "value": "den"},
+                    ]
+                }
+            )
+
+    def test_semantic_validator_coerces_valid_values(self) -> None:
+        ast = FilterDslParser().parse(
+            {
+                "and": [
+                    {"field": "first_name", "op": "contains", "value": "den"},
+                    {"field": "status", "op": "in", "value": ["lead", "partner"]},
+                    {"field": "score", "op": "between", "value": ["1.5", "2.5"]},
+                    {
+                        "field": "created_at",
+                        "op": "gte",
+                        "value": "2026-01-01T00:00:00",
+                    },
+                    {"field": "id", "op": "eq", "value": str(uuid4())},
+                ]
+            }
+        )
+
+        filters = FilterSemanticValidator().validate(
+            descriptor=_descriptor(),
+            filter_ast=ast,
+        )
+
+        group = filters[0]
+        self.assertEqual(group.logic, "and")
+        self.assertIsInstance(group.items[2].value[0], Decimal)
+        self.assertIsInstance(group.items[3].value, datetime)
+
+    def test_semantic_validator_rejects_unknown_field_operator_and_value(self) -> None:
+        descriptor = _descriptor()
+        validator = FilterSemanticValidator()
+
+        for payload, expected_code in (
+            (
+                {"field": "unknown", "op": "eq", "value": "lead"},
+                "UNKNOWN_FILTER_FIELD",
+            ),
+            (
+                {"field": "status", "op": "contains", "value": "lead"},
+                "UNSUPPORTED_OPERATOR_FOR_FIELD_TYPE",
+            ),
+            (
+                {"field": "status", "op": "eq", "value": "archived"},
+                "INVALID_FIELD_OPTION",
+            ),
+            (
+                {"field": "created_at", "op": "gte", "value": "not-a-date"},
+                "INVALID_FILTER_VALUE_TYPE",
+            ),
+        ):
+            with self.subTest(expected_code=expected_code):
+                with self.assertRaisesRegex(RuntimeDataFilterError, expected_code):
+                    validator.validate(
+                        descriptor=descriptor,
+                        filter_ast=FilterDslParser().parse(payload),
+                    )
+
+
+class RuntimeDataSortDslTests(unittest.TestCase):
+    def test_sort_parser_and_validator_accept_valid_sort(self) -> None:
+        ast = SortDslParser().parse([{"field": "created_at", "direction": "DESC"}])
+        sorting = SortSemanticValidator().validate(
+            descriptor=_descriptor(),
+            sort_ast=ast,
+        )
+
+        self.assertEqual(sorting[0].field, "created_at")
+        self.assertEqual(sorting[0].direction, "desc")
+
+    def test_sort_rejects_invalid_direction_unknown_field_and_multiselect(self) -> None:
+        with self.assertRaisesRegex(RuntimeDataFilterError, "INVALID_SORT_DSL"):
+            SortDslParser().parse([{"field": "created_at", "direction": "sideways"}])
+
+        for payload, expected_code in (
+            ([{"field": "unknown", "direction": "asc"}], "UNKNOWN_SORT_FIELD"),
+            ([{"field": "tags", "direction": "asc"}], "FIELD_IS_NOT_SORTABLE"),
+        ):
+            with self.subTest(expected_code=expected_code):
+                with self.assertRaisesRegex(RuntimeDataFilterError, expected_code):
+                    SortSemanticValidator().validate(
+                        descriptor=_descriptor(),
+                        sort_ast=SortDslParser().parse(payload),
+                    )
+
+
+__all__ = ["RuntimeDataFilterDslTests", "RuntimeDataSortDslTests"]

@@ -6,6 +6,10 @@ from .contact_fields_response import (
     ContactObjectDescriptionResponseSchema,
 )
 from .list_contacts_response import ListContactsResponseSchema
+from .search_contacts_response import (
+    ContactSearchPaginationResponseSchema,
+    ContactSearchResponseSchema,
+)
 
 __all__ = [
     "ContactFieldDescriptionResponseSchema",
@@ -13,5 +17,7 @@ __all__ = [
     "ContactFieldsResponseSchema",
     "ContactObjectDescriptionResponseSchema",
     "ContactResponseSchema",
+    "ContactSearchPaginationResponseSchema",
+    "ContactSearchResponseSchema",
     "ListContactsResponseSchema",
 ]

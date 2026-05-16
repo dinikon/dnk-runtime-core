@@ -1,4 +1,6 @@
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 from src.modules.shared import EntityIdVO
 
@@ -10,3 +12,5 @@ class ListContactsQuery:
     tenant_id: EntityIdVO
     limit: int
     offset: int
+    filter_dsl: Mapping[str, Any] | None = None
+    sort_dsl: Sequence[Mapping[str, Any]] = ()

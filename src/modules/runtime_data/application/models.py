@@ -1,9 +1,22 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal, TypeAlias
 
-FilterOperator = Literal["eq", "in", "contains", "gte", "lte"]
+FilterOperator = Literal[
+    "eq",
+    "neq",
+    "in",
+    "contains",
+    "gt",
+    "gte",
+    "lt",
+    "lte",
+    "between",
+    "is_null",
+    "is_not_null",
+]
 FilterLogic = Literal["and", "or"]
 SortDirection = Literal["asc", "desc"]
 
@@ -42,6 +55,14 @@ class PageSpec:
 
     limit: int
     offset: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeRowsPage:
+    """Страница runtime-строк с total count по тем же фильтрам."""
+
+    rows: tuple[Mapping[str, Any], ...]
+    total: int
 
 
 @dataclass(frozen=True, slots=True)

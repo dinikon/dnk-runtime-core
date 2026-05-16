@@ -1,0 +1,45 @@
+from __future__ import annotations
+
+from src.modules.runtime_data.application.query.filter_dsl.errors import (
+    filter_dsl_error,
+)
+
+_ALLOWED_BY_TYPE: dict[str, frozenset[str]] = {
+    "uuid": frozenset({"eq", "neq", "in", "is_null", "is_not_null"}),
+    "reference": frozenset({"eq", "neq", "in", "is_null", "is_not_null"}),
+    "text": frozenset({"eq", "neq", "contains", "in", "is_null", "is_not_null"}),
+    "select": frozenset({"eq", "neq", "in", "is_null", "is_not_null"}),
+    "datetime": frozenset(
+        {"eq", "neq", "gt", "gte", "lt", "lte", "between", "is_null", "is_not_null"}
+    ),
+    "date": frozenset(
+        {"eq", "neq", "gt", "gte", "lt", "lte", "between", "is_null", "is_not_null"}
+    ),
+    "int": frozenset(
+        {"eq", "neq", "gt", "gte", "lt", "lte", "between", "is_null", "is_not_null"}
+    ),
+    "decimal": frozenset(
+        {"eq", "neq", "gt", "gte", "lt", "lte", "between", "is_null", "is_not_null"}
+    ),
+    "bool": frozenset({"eq", "neq", "is_null", "is_not_null"}),
+    "json": frozenset({"is_null", "is_not_null"}),
+    "multiselect": frozenset({"is_null", "is_not_null"}),
+}
+
+
+class FilterOperatorRegistry:
+    """Knows which public filter operators are valid for each runtime field type."""
+
+    def validate(self, *, field_type: str, operator: str, field_name: str) -> None:
+        allowed = _ALLOWED_BY_TYPE.get(field_type)
+        if allowed is None or operator not in allowed:
+            raise filter_dsl_error(
+                "UNSUPPORTED_OPERATOR_FOR_FIELD_TYPE",
+                (
+                    f"Field '{field_name}' of type '{field_type}' "
+                    f"does not support operator '{operator}'."
+                ),
+            )
+
+
+__all__ = ["FilterOperatorRegistry"]

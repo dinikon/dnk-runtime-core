@@ -7,8 +7,14 @@ from src.modules.runtime_data.application import (
     RuntimeCommandGateway,
     RuntimeFieldTypeDefinition,
     RuntimeFieldTypePolicy,
+    RuntimeObjectQueryService,
     RuntimeQueryGateway,
+    RuntimeQueryPlan,
+    RuntimeRecordDTO,
     RuntimeRelationLoader,
+    RuntimeRowsPage,
+    RuntimeSearchRecordsQuery,
+    RuntimeSearchRecordsResult,
     SortSpec,
 )
 from src.modules.runtime_data.domain import (
@@ -41,7 +47,13 @@ __all__ = [
     "RuntimeDataValidationError",
     "RuntimeFieldTypeDefinition",
     "RuntimeFieldTypePolicy",
+    "RuntimeObjectQueryService",
     "RuntimeQueryGateway",
+    "RuntimeQueryPlan",
+    "RuntimeRecordDTO",
     "RuntimeRelationLoader",
+    "RuntimeRowsPage",
+    "RuntimeSearchRecordsQuery",
+    "RuntimeSearchRecordsResult",
     "SortSpec",
 ]
