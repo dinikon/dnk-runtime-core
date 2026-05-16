@@ -14,7 +14,14 @@ from src.modules.runtime_data.application.query.filter_dsl.errors import (
 
 
 class FilterDslParser:
-    """Parses public JSON filter DSL into a small syntax AST."""
+    """Parses public JSON filter DSL into a syntax AST.
+
+    This parser owns only the public wire-format contract:
+    conditions are strict objects with exactly `field`, `op`, and `value`,
+    while groups are strict objects with exactly one of `and` or `or`.
+    Descriptor-dependent checks such as field existence, field type, and
+    operator compatibility belong to the semantic validator.
+    """
 
     def __init__(
         self,
@@ -106,6 +113,11 @@ class FilterDslParser:
         payload: Mapping[Any, Any],
         counter: "_ConditionCounter",
     ) -> FilterConditionNode:
+        """Parse a strict `{field, op, value}` public condition object.
+
+        `value` is mandatory for every operator, including `is_null` and
+        `is_not_null`, where clients must send JSON null.
+        """
         if set(payload.keys()) != {"field", "op", "value"}:
             raise filter_dsl_error(
                 "INVALID_FILTER_DSL",

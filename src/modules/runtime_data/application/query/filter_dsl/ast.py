@@ -21,7 +21,14 @@ FilterNodeLogic = Literal["and", "or"]
 
 @dataclass(frozen=True, slots=True)
 class FilterConditionNode:
-    """Синтаксически разобранное условие публичного filter DSL."""
+    """Syntax node for one public filter DSL condition.
+
+    The public condition shape is always exactly `{field, op, value}`.
+    Nullary operators such as `is_null` and `is_not_null` still require
+    an explicit JSON `value: null`; the parser validates only this syntax
+    contract and does not know whether the field or operator is meaningful
+    for a runtime object descriptor.
+    """
 
     field: str
     operator: str
@@ -30,7 +37,7 @@ class FilterConditionNode:
 
 @dataclass(frozen=True, slots=True)
 class FilterGroupNode:
-    """Синтаксически разобранная группа публичного filter DSL."""
+    """Syntax node for an `and` or `or` group in public filter DSL."""
 
     logic: FilterNodeLogic
     items: tuple["FilterNode", ...]
