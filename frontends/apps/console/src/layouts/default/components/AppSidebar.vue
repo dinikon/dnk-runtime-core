@@ -5,7 +5,6 @@ import type {SidebarProps} from "@/components/ui/sidebar";
 import {
   Command,
   ContactRound,
-  Settings,
 } from "lucide-vue-next";
 import {RouterLink, useRoute} from "vue-router";
 
@@ -36,13 +35,8 @@ const crmItems: NavigationItem[] = [
   {label: "Contacts", icon: ContactRound, to: "/crm/contacts"}
 ];
 
-const otherItems: NavigationItem[] = [
-  {label: "Settings", icon: Settings, to: "/settings/profile"}
-];
-
 const navigationGroups = [
-  {label: "CRM", items: crmItems},
-  {label: "Other", items: otherItems}
+  {label: "CRM", items: crmItems}
 ];
 
 function isActive(to?: string): boolean {
