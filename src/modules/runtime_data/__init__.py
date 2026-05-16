@@ -34,7 +34,11 @@ from src.modules.runtime_data.domain import (
 )
 from src.modules.runtime_data.infrastructure import (
     NoopRuntimeRelationLoader,
+    PostgresRuntimeCommandGateway,
     PostgresRuntimeGateway,
+    PostgresRuntimeQueryGateway,
+    PostgresRuntimeRelationCommandGateway,
+    PostgresRuntimeRelationLoader,
 )
 
 __all__ = [
@@ -47,7 +51,11 @@ __all__ = [
     "FilterSpec",
     "NoopRuntimeRelationLoader",
     "PageSpec",
+    "PostgresRuntimeCommandGateway",
     "PostgresRuntimeGateway",
+    "PostgresRuntimeQueryGateway",
+    "PostgresRuntimeRelationCommandGateway",
+    "PostgresRuntimeRelationLoader",
     "QueryCapabilityResolver",
     "RuntimeCommandGateway",
     "RuntimeDataError",
