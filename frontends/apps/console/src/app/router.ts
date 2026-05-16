@@ -9,6 +9,7 @@ import {
     ProfileSettingsPage,
     SettingsPlaceholderPage
 } from "@/features/settings";
+import {ContactsPage} from "@/features/crm";
 import HomePage from "@/pages/HomePage.vue";
 import LoginPage from "@/pages/auth/LoginPage.vue";
 
@@ -100,6 +101,11 @@ export const router = createRouter({
             meta: {
                 layout: "auth"
             }
+        },
+        {
+            path: "/crm/contacts",
+            name: "crm-contacts",
+            component: ContactsPage
         },
         {
             path: "/settings",

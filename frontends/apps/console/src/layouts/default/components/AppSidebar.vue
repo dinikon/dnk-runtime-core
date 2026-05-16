@@ -41,7 +41,7 @@ const route = useRoute();
 
 const workspaceItems: NavigationItem[] = [
   {label: "Objects", icon: Database, to: "/"},
-  {label: "Contacts", icon: ContactRound},
+  {label: "Contacts", icon: ContactRound, to: "/crm/contacts"},
   {label: "Tasks", icon: CheckSquare},
   {label: "Notes", icon: FileText},
   {label: "Opportunities", icon: Target},
