@@ -19,8 +19,8 @@ class SortSemanticValidator:
     ) -> tuple[SortSpec, ...]:
         sorting: list[SortSpec] = []
         for node in sort_ast:
-            field = descriptor.field_by_name(node.field)
-            if field is None:
+            field_descriptor = descriptor.field_by_name(node.field)
+            if field_descriptor is None:
                 raise filter_dsl_error(
                     "UNKNOWN_SORT_FIELD",
                     f"Unknown sort field '{node.field}'.",
@@ -28,15 +28,17 @@ class SortSemanticValidator:
                         "field": node.field,
                     },
                 )
-            if not field.is_sortable:
+            if not field_descriptor.is_sortable:
                 raise filter_dsl_error(
                     "FIELD_IS_NOT_SORTABLE",
-                    f"Field '{field.name}' is not sortable.",
+                    f"Field '{field_descriptor.name}' is not sortable.",
                     details={
-                        "field": field.name,
+                        "field": field_descriptor.name,
                     },
                 )
-            sorting.append(SortSpec(field=field.name, direction=node.direction))
+            sorting.append(
+                SortSpec(field=field_descriptor.name, direction=node.direction)
+            )
         return tuple(sorting)
 
 

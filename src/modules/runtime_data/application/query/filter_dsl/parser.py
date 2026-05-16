@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, Literal
 
 from src.modules.runtime_data.application.query.filter_dsl.ast import (
     FilterConditionNode,
@@ -99,7 +99,7 @@ class FilterDslParser:
                 },
             )
 
-        logic = "and" if has_and else "or"
+        logic: Literal["and", "or"] = "and" if has_and else "or"
         raw_items = payload[logic]
         if not isinstance(raw_items, Sequence) or isinstance(raw_items, (str, bytes)):
             raise filter_dsl_error(

@@ -24,8 +24,8 @@ class PostgresSortSqlCompiler:
 
         sort_chunks: list[str] = []
         for sort_spec in sorting:
-            field = descriptor.field_by_name(sort_spec.field)
-            if field is None:
+            field_descriptor = descriptor.field_by_name(sort_spec.field)
+            if field_descriptor is None:
                 raise RuntimeDataFilterError(
                     code="UNKNOWN_SORT_FIELD",
                     message=f"Unknown sort field '{sort_spec.field}'.",
@@ -43,7 +43,9 @@ class PostgresSortSqlCompiler:
                         "direction": sort_spec.direction,
                     },
                 )
-            sort_chunks.append(f"{quote_identifier(field.name)} {direction.upper()}")
+            sort_chunks.append(
+                f"{quote_identifier(field_descriptor.name)} {direction.upper()}"
+            )
 
         return f"ORDER BY {', '.join(sort_chunks)}"
 

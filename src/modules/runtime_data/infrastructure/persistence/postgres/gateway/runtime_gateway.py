@@ -35,16 +35,16 @@ class PostgresRuntimeGateway(
         relation_loader: RuntimeRelationLoader | None = None,
         executor: PostgresSqlExecutor | None = None,
     ) -> None:
-        self._init_runtime_gateway_base(
+        super().__init__(
             session=session,
             type_policy=type_policy,
             query_compiler=query_compiler,
+            query_gateway=self,
             executor=executor,
         )
         self._relation_loader = relation_loader or PostgresRuntimeRelationLoader(
             session=session,
         )
-        self._query_gateway = self
 
 
 __all__ = ["PostgresRuntimeGateway"]
