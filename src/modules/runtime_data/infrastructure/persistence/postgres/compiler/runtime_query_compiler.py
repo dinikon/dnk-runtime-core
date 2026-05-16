@@ -4,12 +4,11 @@ from collections.abc import Sequence
 
 from src.modules.runtime_data.application.models import (
     FetchPlan,
-    FilterExpression,
     PageSpec,
     SortSpec,
+    TypedFilterExpression,
 )
 from src.modules.runtime_data.application.query.query_plan import RuntimeQueryPlan
-from src.modules.runtime_data.application.type_policy import RuntimeFieldTypePolicy
 from src.modules.runtime_data.domain import RuntimeDataValidationError
 from src.modules.runtime_data.infrastructure.persistence.postgres.compiler.compiled_query import (
     CompiledQuery,
@@ -36,14 +35,11 @@ class PostgresRuntimeQueryCompiler:
     def __init__(
         self,
         *,
-        type_policy: RuntimeFieldTypePolicy | None = None,
         filter_compiler: PostgresFilterSqlCompiler | None = None,
         sort_compiler: PostgresSortSqlCompiler | None = None,
         projection_compiler: PostgresProjectionSqlCompiler | None = None,
     ) -> None:
-        self._filter_compiler = filter_compiler or PostgresFilterSqlCompiler(
-            type_policy=type_policy,
-        )
+        self._filter_compiler = filter_compiler or PostgresFilterSqlCompiler()
         self._sort_compiler = sort_compiler or PostgresSortSqlCompiler()
         self._projection_compiler = (
             projection_compiler or PostgresProjectionSqlCompiler()
@@ -53,7 +49,6 @@ class PostgresRuntimeQueryCompiler:
         descriptor = query_plan.descriptor
         ensure_descriptor_identifiers(descriptor)
         where = self.compile_where(
-            descriptor=descriptor,
             filters=query_plan.filters,
         )
         sql_parts = [
@@ -79,7 +74,6 @@ class PostgresRuntimeQueryCompiler:
             fetch_plan=query_plan.fetch_plan,
         )
         where = self.compile_where(
-            descriptor=descriptor,
             filters=query_plan.filters,
         )
         order_sql = self.compile_sort(
@@ -109,7 +103,7 @@ class PostgresRuntimeQueryCompiler:
         self,
         *,
         descriptor: RuntimeObjectDescriptor,
-        filters: Sequence[FilterExpression],
+        filters: Sequence[TypedFilterExpression],
         sorting: Sequence[SortSpec],
         page: PageSpec | None,
         fetch_plan: FetchPlan | None,
@@ -119,7 +113,7 @@ class PostgresRuntimeQueryCompiler:
             self._validate_page(page)
 
         columns = self.compile_projection(descriptor=descriptor, fetch_plan=fetch_plan)
-        where = self.compile_where(descriptor=descriptor, filters=filters)
+        where = self.compile_where(filters=filters)
         order_sql = self.compile_sort(descriptor=descriptor, sorting=sorting)
 
         params = dict(where.params)
@@ -145,11 +139,9 @@ class PostgresRuntimeQueryCompiler:
     def compile_where(
         self,
         *,
-        descriptor: RuntimeObjectDescriptor,
-        filters: Sequence[FilterExpression],
+        filters: Sequence[TypedFilterExpression],
     ) -> CompiledQuery:
         return self._filter_compiler.compile_where(
-            descriptor=descriptor,
             filters=filters,
         )
 

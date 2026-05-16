@@ -16,6 +16,9 @@ from src.modules.runtime_data.application import (
     RuntimeSearchRecordsQuery,
     RuntimeSearchRecordsResult,
     SortSpec,
+    TypedFilterExpression,
+    TypedFilterGroupSpec,
+    TypedFilterSpec,
 )
 from src.modules.runtime_data.domain import (
     RuntimeDataError,
@@ -56,4 +59,7 @@ __all__ = [
     "RuntimeSearchRecordsQuery",
     "RuntimeSearchRecordsResult",
     "SortSpec",
+    "TypedFilterExpression",
+    "TypedFilterGroupSpec",
+    "TypedFilterSpec",
 ]

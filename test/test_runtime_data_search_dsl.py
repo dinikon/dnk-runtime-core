@@ -258,7 +258,7 @@ class RuntimeDataFilterDslTests(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(filters[0].field, "tags")
+        self.assertEqual(filters[0].field.name, "tags")
         self.assertEqual(filters[0].op, "contains_any")
         self.assertEqual(filters[0].value, ["vip"])
 
@@ -274,7 +274,7 @@ class RuntimeDataFilterDslTests(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(filters[0].field, "tags")
+        self.assertEqual(filters[0].field.name, "tags")
         self.assertEqual(filters[0].op, "contains_all")
         self.assertEqual(filters[0].value, ["vip", "newsletter"])
 
@@ -290,7 +290,7 @@ class RuntimeDataFilterDslTests(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(filters[0].field, "tags")
+        self.assertEqual(filters[0].field.name, "tags")
         self.assertEqual(filters[0].op, "not_contains_any")
         self.assertEqual(filters[0].value, ["vip"])
 
@@ -346,7 +346,7 @@ class RuntimeDataFilterDslTests(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(filters[0].field, "tags")
+        self.assertEqual(filters[0].field.name, "tags")
         self.assertEqual(filters[0].op, "is_empty")
         self.assertIsNone(filters[0].value)
 
@@ -362,7 +362,7 @@ class RuntimeDataFilterDslTests(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(filters[0].field, "tags")
+        self.assertEqual(filters[0].field.name, "tags")
         self.assertEqual(filters[0].op, "is_not_empty")
         self.assertIsNone(filters[0].value)
 
@@ -429,7 +429,7 @@ class RuntimeDataFilterDslTests(unittest.TestCase):
                 }
             ),
         )
-        self.assertEqual(filters[0].field, "internal_hash")
+        self.assertEqual(filters[0].field.name, "internal_hash")
 
         with self.assertRaisesRegex(
             RuntimeDataFilterError,
@@ -602,7 +602,7 @@ class RuntimeObjectQueryServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(gateway.received_plan, RuntimeQueryPlan)
         assert gateway.received_plan is not None
         self.assertIs(gateway.received_plan.descriptor, descriptor)
-        self.assertEqual(gateway.received_plan.filters[0].field, "status")
+        self.assertEqual(gateway.received_plan.filters[0].field.name, "status")
         self.assertEqual(gateway.received_plan.filters[0].op, "eq")
         self.assertEqual(gateway.received_plan.filters[0].value, "lead")
         self.assertEqual(gateway.received_plan.sorting[0].field, "created_at")
@@ -735,7 +735,7 @@ class RuntimeDataSortDslTests(unittest.TestCase):
                 }
             ),
         )
-        self.assertEqual(filters[0].field, "tags")
+        self.assertEqual(filters[0].field.name, "tags")
 
         with self.assertRaisesRegex(
             RuntimeDataFilterError,

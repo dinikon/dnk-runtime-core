@@ -15,6 +15,7 @@ from src.modules.runtime_data import (
     RuntimeDataPersistenceError,
     RuntimeQueryPlan,
     SortSpec,
+    TypedFilterSpec,
 )
 from src.modules.schema_registry.runtime import (
     RuntimeFieldDescriptor,
@@ -129,6 +130,7 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
                     options={
                         "vip": "VIP",
                         "newsletter": "Newsletter",
+                        "inactive": "Inactive",
                     },
                     settings={},
                 ),
@@ -453,21 +455,30 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
             ]
         )
         gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
+        descriptor = self._descriptor()
 
         page = await gateway.search(
             RuntimeQueryPlan(
-                descriptor=self._descriptor(),
+                descriptor=descriptor,
                 filters=(
-                    FilterSpec(field="last_name", op="neq", value="Roe"),
-                    FilterSpec(
-                        field="created_at",
-                        op="between",
-                        value=[
-                            "2026-01-01T00:00:00",
-                            "2026-02-01T00:00:00",
-                        ],
+                    TypedFilterSpec(
+                        field=descriptor.fields_by_name["last_name"],
+                        op="neq",
+                        value="Roe",
                     ),
-                    FilterSpec(field="first_name", op="is_not_null", value=None),
+                    TypedFilterSpec(
+                        field=descriptor.fields_by_name["created_at"],
+                        op="between",
+                        value=(
+                            datetime(2026, 1, 1, 0, 0, 0),
+                            datetime(2026, 2, 1, 0, 0, 0),
+                        ),
+                    ),
+                    TypedFilterSpec(
+                        field=descriptor.fields_by_name["first_name"],
+                        op="is_not_null",
+                        value=None,
+                    ),
                 ),
                 sorting=(SortSpec(field="created_at", direction="desc"),),
                 page=PageSpec(limit=25, offset=10),

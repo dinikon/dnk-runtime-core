@@ -5,12 +5,12 @@ from datetime import datetime
 from uuid import uuid4
 
 from src.modules.runtime_data import (
-    FilterGroupSpec,
-    FilterSpec,
     PageSpec,
     PostgresRuntimeGateway,
     RuntimeQueryPlan,
     SortSpec,
+    TypedFilterGroupSpec,
+    TypedFilterSpec,
 )
 from src.modules.runtime_data.domain import RuntimeDataPolicyError
 from src.modules.runtime_data.infrastructure.persistence.postgres.compiler import (
@@ -109,10 +109,33 @@ def _query_plan(
     )
 
 
+def _typed_filter(
+    descriptor: RuntimeObjectDescriptor,
+    *,
+    field: str,
+    op: str,
+    value,
+) -> TypedFilterSpec:
+    field_descriptor = descriptor.field_by_name(field)
+    assert field_descriptor is not None
+    return TypedFilterSpec(field=field_descriptor, op=op, value=value)
+
+
 class PostgresRuntimeQueryCompilerTests(unittest.TestCase):
     def test_compiler_compiles_eq_filter(self) -> None:
+        descriptor = _descriptor()
         compiled = PostgresRuntimeQueryCompiler().compile_search(
-            _query_plan(filters=(FilterSpec(field="last_name", op="eq", value="Doe"),))
+            _query_plan(
+                descriptor=descriptor,
+                filters=(
+                    _typed_filter(
+                        descriptor,
+                        field="last_name",
+                        op="eq",
+                        value="Doe",
+                    ),
+                ),
+            )
         )
 
         self.assertIn('WHERE "last_name" = :f_0', compiled.sql)
@@ -122,22 +145,31 @@ class PostgresRuntimeQueryCompilerTests(unittest.TestCase):
         self.assertEqual(compiled.params["page_offset"], 10)
 
     def test_compiler_compiles_nested_group(self) -> None:
+        descriptor = _descriptor()
         compiled = PostgresRuntimeQueryCompiler().compile_search(
             _query_plan(
+                descriptor=descriptor,
                 filters=(
-                    FilterGroupSpec(
+                    TypedFilterGroupSpec(
                         logic="and",
                         items=(
-                            FilterSpec(field="last_name", op="eq", value="Doe"),
-                            FilterGroupSpec(
+                            _typed_filter(
+                                descriptor,
+                                field="last_name",
+                                op="eq",
+                                value="Doe",
+                            ),
+                            TypedFilterGroupSpec(
                                 logic="or",
                                 items=(
-                                    FilterSpec(
+                                    _typed_filter(
+                                        descriptor,
                                         field="first_name",
                                         op="contains",
                                         value="Ja",
                                     ),
-                                    FilterSpec(
+                                    _typed_filter(
+                                        descriptor,
                                         field="last_name",
                                         op="contains",
                                         value="Do",
@@ -146,7 +178,7 @@ class PostgresRuntimeQueryCompilerTests(unittest.TestCase):
                             ),
                         ),
                     ),
-                )
+                ),
             )
         )
 
@@ -166,6 +198,25 @@ class PostgresRuntimeQueryCompilerTests(unittest.TestCase):
         )
 
         self.assertIn('ORDER BY "created_at" DESC', compiled.sql)
+
+    def test_compiler_uses_typed_value_without_recoercion(self) -> None:
+        descriptor = _descriptor()
+        sentinel_value = object()
+        compiled = PostgresRuntimeQueryCompiler().compile_search(
+            _query_plan(
+                descriptor=descriptor,
+                filters=(
+                    _typed_filter(
+                        descriptor,
+                        field="created_at",
+                        op="gte",
+                        value=sentinel_value,
+                    ),
+                ),
+            )
+        )
+
+        self.assertIs(compiled.params["f_0"], sentinel_value)
 
     def test_compiler_rejects_invalid_identifier(self) -> None:
         with self.assertRaises(RuntimeDataPolicyError):

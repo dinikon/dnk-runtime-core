@@ -4,11 +4,10 @@ from collections.abc import Sequence
 from typing import Any
 
 from src.modules.runtime_data.application.models import (
-    FilterExpression,
-    FilterGroupSpec,
-    FilterSpec,
+    TypedFilterExpression,
+    TypedFilterGroupSpec,
+    TypedFilterSpec,
 )
-from src.modules.runtime_data.application.type_policy import RuntimeFieldTypePolicy
 from src.modules.runtime_data.domain import RuntimeDataFilterError
 from src.modules.runtime_data.infrastructure.persistence.postgres.compiler.compiled_query import (
     CompiledQuery,
@@ -16,26 +15,16 @@ from src.modules.runtime_data.infrastructure.persistence.postgres.compiler.compi
 from src.modules.runtime_data.infrastructure.persistence.postgres.compiler.identifier import (
     quote_identifier,
 )
-from src.modules.schema_registry.runtime import (
-    RuntimeFieldDescriptor,
-    RuntimeObjectDescriptor,
-)
+from src.modules.schema_registry.runtime import RuntimeFieldDescriptor
 
 
 class PostgresFilterSqlCompiler:
     """Compiles validated runtime filter specs to PostgreSQL WHERE SQL."""
 
-    def __init__(
-        self,
-        type_policy: RuntimeFieldTypePolicy | None = None,
-    ) -> None:
-        self._type_policy = type_policy or RuntimeFieldTypePolicy()
-
     def compile_where(
         self,
         *,
-        descriptor: RuntimeObjectDescriptor,
-        filters: Sequence[FilterExpression],
+        filters: Sequence[TypedFilterExpression],
     ) -> CompiledQuery:
         params: dict[str, Any] = {}
         bind_fields: dict[str, RuntimeFieldDescriptor] = {}
@@ -48,7 +37,6 @@ class PostgresFilterSqlCompiler:
                 where_bind_fields,
                 position,
             ) = self._compile_expression(
-                descriptor=descriptor,
                 filter_spec=filter_spec,
                 position=position,
             )
@@ -61,19 +49,17 @@ class PostgresFilterSqlCompiler:
     def _compile_expression(
         self,
         *,
-        descriptor: RuntimeObjectDescriptor,
-        filter_spec: FilterExpression,
+        filter_spec: TypedFilterExpression,
         position: int,
     ) -> tuple[str, dict[str, Any], dict[str, RuntimeFieldDescriptor], int]:
-        if isinstance(filter_spec, FilterSpec):
+        if isinstance(filter_spec, TypedFilterSpec):
             where_sql, where_params, where_bind_fields = self._compile_clause(
-                descriptor=descriptor,
                 filter_spec=filter_spec,
                 position=position,
             )
             return where_sql, where_params, where_bind_fields, position + 1
 
-        if isinstance(filter_spec, FilterGroupSpec):
+        if isinstance(filter_spec, TypedFilterGroupSpec):
             logic = str(filter_spec.logic).strip().lower()
             if logic not in {"and", "or"}:
                 raise RuntimeDataFilterError(
@@ -103,7 +89,6 @@ class PostgresFilterSqlCompiler:
                     item_bind_fields,
                     next_position,
                 ) = self._compile_expression(
-                    descriptor=descriptor,
                     filter_spec=item,
                     position=next_position,
                 )
@@ -130,54 +115,37 @@ class PostgresFilterSqlCompiler:
     def _compile_clause(
         self,
         *,
-        descriptor: RuntimeObjectDescriptor,
-        filter_spec: FilterSpec,
+        filter_spec: TypedFilterSpec,
         position: int,
     ) -> tuple[str, dict[str, Any], dict[str, RuntimeFieldDescriptor]]:
-        field = descriptor.field_by_name(filter_spec.field)
-        if field is None:
-            raise RuntimeDataFilterError(
-                code="UNKNOWN_FILTER_FIELD",
-                message=f"Unknown filter field '{filter_spec.field}'.",
-                details={
-                    "field": filter_spec.field,
-                },
-            )
-
+        field = filter_spec.field
         op = filter_spec.op
         field_sql = quote_identifier(field.name)
+        value = filter_spec.value
 
         if op == "eq":
-            if filter_spec.value is None:
+            if value is None:
                 return (f"{field_sql} IS NULL", {}, {})
-            coerced = self._type_policy.coerce_value_for_field(
-                field=field,
-                raw_value=filter_spec.value,
-            )
             param_name = f"f_{position}"
             return (
                 f"{field_sql} = :{param_name}",
-                {param_name: coerced},
+                {param_name: value},
                 {param_name: field},
             )
 
         if op == "neq":
-            if filter_spec.value is None:
+            if value is None:
                 return (f"{field_sql} IS NOT NULL", {}, {})
-            coerced = self._type_policy.coerce_value_for_field(
-                field=field,
-                raw_value=filter_spec.value,
-            )
             param_name = f"f_{position}"
             return (
                 f"{field_sql} <> :{param_name}",
-                {param_name: coerced},
+                {param_name: value},
                 {param_name: field},
             )
 
         if op == "in":
-            if not isinstance(filter_spec.value, Sequence) or isinstance(
-                filter_spec.value,
+            if not isinstance(value, Sequence) or isinstance(
+                value,
                 (str, bytes),
             ):
                 raise RuntimeDataFilterError(
@@ -191,7 +159,7 @@ class PostgresFilterSqlCompiler:
                         "operator": op,
                     },
                 )
-            items = list(filter_spec.value)
+            items = list(value)
             if not items:
                 raise RuntimeDataFilterError(
                     code="INVALID_FILTER_VALUE_TYPE",
@@ -210,31 +178,11 @@ class PostgresFilterSqlCompiler:
             for item_index, item in enumerate(items):
                 param_name = f"f_{position}_{item_index}"
                 placeholders.append(f":{param_name}")
-                params[param_name] = self._type_policy.coerce_value_for_field(
-                    field=field,
-                    raw_value=item,
-                )
+                params[param_name] = item
                 bind_fields[param_name] = field
             return (f"{field_sql} IN ({', '.join(placeholders)})", params, bind_fields)
 
         if op == "contains":
-            if field.type_code != "text":
-                raise RuntimeDataFilterError(
-                    code="UNSUPPORTED_OPERATOR_FOR_FIELD_TYPE",
-                    message=(
-                        f"Filter 'contains' supports only text fields, "
-                        f"got '{field.name}'."
-                    ),
-                    details={
-                        "field": field.name,
-                        "field_type": field.type_code,
-                        "operator": op,
-                    },
-                )
-            value = self._type_policy.coerce_value_for_field(
-                field=field,
-                raw_value=filter_spec.value,
-            )
             param_name = f"f_{position}"
             return (
                 f"CAST({field_sql} AS text) ILIKE :{param_name} ESCAPE '\\'",
@@ -243,23 +191,6 @@ class PostgresFilterSqlCompiler:
             )
 
         if op in {"starts_with", "ends_with"}:
-            if field.type_code != "text":
-                raise RuntimeDataFilterError(
-                    code="UNSUPPORTED_OPERATOR_FOR_FIELD_TYPE",
-                    message=(
-                        f"Filter '{op}' supports only text fields, "
-                        f"got '{field.name}'."
-                    ),
-                    details={
-                        "field": field.name,
-                        "field_type": field.type_code,
-                        "operator": op,
-                    },
-                )
-            value = self._type_policy.coerce_value_for_field(
-                field=field,
-                raw_value=filter_spec.value,
-            )
             escaped_value = self._escape_like_value(value)
             pattern = (
                 f"{escaped_value}%" if op == "starts_with" else f"%{escaped_value}"
@@ -272,21 +203,8 @@ class PostgresFilterSqlCompiler:
             )
 
         if op in {"contains_any", "contains_all", "not_contains_any"}:
-            if field.type_code != "multiselect":
-                raise RuntimeDataFilterError(
-                    code="UNSUPPORTED_OPERATOR_FOR_FIELD_TYPE",
-                    message=(
-                        f"Filter '{op}' supports only multiselect fields, "
-                        f"got '{field.name}'."
-                    ),
-                    details={
-                        "field": field.name,
-                        "field_type": field.type_code,
-                        "operator": op,
-                    },
-                )
-            if not isinstance(filter_spec.value, Sequence) or isinstance(
-                filter_spec.value,
+            if not isinstance(value, Sequence) or isinstance(
+                value,
                 (str, bytes),
             ):
                 raise RuntimeDataFilterError(
@@ -300,7 +218,7 @@ class PostgresFilterSqlCompiler:
                         "operator": op,
                     },
                 )
-            items = list(filter_spec.value)
+            items = list(value)
             if not items:
                 raise RuntimeDataFilterError(
                     code="INVALID_FILTER_VALUE_TYPE",
@@ -327,10 +245,6 @@ class PostgresFilterSqlCompiler:
             return (f"{field_sql} ?| {array_sql}", params, {})
 
         if op in {"gt", "gte", "lt", "lte"}:
-            coerced = self._type_policy.coerce_value_for_field(
-                field=field,
-                raw_value=filter_spec.value,
-            )
             param_name = f"f_{position}"
             comparison = {
                 "gt": ">",
@@ -340,13 +254,13 @@ class PostgresFilterSqlCompiler:
             }[op]
             return (
                 f"{field_sql} {comparison} :{param_name}",
-                {param_name: coerced},
+                {param_name: value},
                 {param_name: field},
             )
 
         if op == "between":
-            if not isinstance(filter_spec.value, Sequence) or isinstance(
-                filter_spec.value,
+            if not isinstance(value, Sequence) or isinstance(
+                value,
                 (str, bytes),
             ):
                 raise RuntimeDataFilterError(
@@ -360,7 +274,7 @@ class PostgresFilterSqlCompiler:
                         "operator": op,
                     },
                 )
-            items = list(filter_spec.value)
+            items = list(value)
             if len(items) != 2:
                 raise RuntimeDataFilterError(
                     code="INVALID_FILTER_VALUE_TYPE",
@@ -380,14 +294,8 @@ class PostgresFilterSqlCompiler:
             return (
                 f"{field_sql} BETWEEN :{start_param} AND :{end_param}",
                 {
-                    start_param: self._type_policy.coerce_value_for_field(
-                        field=field,
-                        raw_value=items[0],
-                    ),
-                    end_param: self._type_policy.coerce_value_for_field(
-                        field=field,
-                        raw_value=items[1],
-                    ),
+                    start_param: items[0],
+                    end_param: items[1],
                 },
                 {
                     start_param: field,
@@ -396,35 +304,9 @@ class PostgresFilterSqlCompiler:
             )
 
         if op == "is_empty":
-            if field.type_code != "multiselect":
-                raise RuntimeDataFilterError(
-                    code="UNSUPPORTED_OPERATOR_FOR_FIELD_TYPE",
-                    message=(
-                        "Filter 'is_empty' supports only multiselect fields, "
-                        f"got '{field.name}'."
-                    ),
-                    details={
-                        "field": field.name,
-                        "field_type": field.type_code,
-                        "operator": op,
-                    },
-                )
             return (f"COALESCE(jsonb_array_length({field_sql}), 0) = 0", {}, {})
 
         if op == "is_not_empty":
-            if field.type_code != "multiselect":
-                raise RuntimeDataFilterError(
-                    code="UNSUPPORTED_OPERATOR_FOR_FIELD_TYPE",
-                    message=(
-                        "Filter 'is_not_empty' supports only multiselect fields, "
-                        f"got '{field.name}'."
-                    ),
-                    details={
-                        "field": field.name,
-                        "field_type": field.type_code,
-                        "operator": op,
-                    },
-                )
             return (f"COALESCE(jsonb_array_length({field_sql}), 0) > 0", {}, {})
 
         if op == "is_null":

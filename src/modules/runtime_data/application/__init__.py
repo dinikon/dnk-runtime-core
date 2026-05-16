@@ -6,6 +6,9 @@ from src.modules.runtime_data.application.models import (
     PageSpec,
     RuntimeRowsPage,
     SortSpec,
+    TypedFilterExpression,
+    TypedFilterGroupSpec,
+    TypedFilterSpec,
 )
 from src.modules.runtime_data.application.ports import (
     RuntimeCommandGateway,
@@ -57,5 +60,8 @@ __all__ = [
     "RuntimeSearchRecordsResult",
     "SetRelationUseCase",
     "SortSpec",
+    "TypedFilterExpression",
+    "TypedFilterGroupSpec",
+    "TypedFilterSpec",
     "UnsetRelationUseCase",
 ]

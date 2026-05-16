@@ -4,9 +4,9 @@ from dataclasses import dataclass
 
 from src.modules.runtime_data.application.models import (
     FetchPlan,
-    FilterExpression,
     PageSpec,
     SortSpec,
+    TypedFilterExpression,
 )
 from src.modules.schema_registry.runtime import RuntimeObjectDescriptor
 
@@ -16,7 +16,7 @@ class RuntimeQueryPlan:
     """Descriptor-backed, semantically validated plan for runtime querying."""
 
     descriptor: RuntimeObjectDescriptor
-    filters: tuple[FilterExpression, ...]
+    filters: tuple[TypedFilterExpression, ...]
     sorting: tuple[SortSpec, ...]
     page: PageSpec
     fetch_plan: FetchPlan | None = None

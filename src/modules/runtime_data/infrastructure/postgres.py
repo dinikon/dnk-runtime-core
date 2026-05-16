@@ -12,9 +12,14 @@ from sqlalchemy.sql.elements import TextClause
 from src.modules.runtime_data.application.models import (
     FetchPlan,
     FilterExpression,
+    FilterGroupSpec,
+    FilterSpec,
     PageSpec,
     RuntimeRowsPage,
     SortSpec,
+    TypedFilterExpression,
+    TypedFilterGroupSpec,
+    TypedFilterSpec,
 )
 from src.modules.runtime_data.application.ports import (
     RuntimeCommandGateway,
@@ -22,6 +27,7 @@ from src.modules.runtime_data.application.ports import (
     RuntimeRelationCommandGateway,
     RuntimeRelationLoader,
 )
+from src.modules.runtime_data.application.query.filter_dsl import FilterValueCoercer
 from src.modules.runtime_data.application.query.query_plan import RuntimeQueryPlan
 from src.modules.runtime_data.application.type_policy import RuntimeFieldTypePolicy
 from src.modules.runtime_data.domain import (
@@ -59,9 +65,8 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         """Инициализирует gateway async-сессией и политикой runtime-типов."""
         self._session = session
         self._type_policy = type_policy or RuntimeFieldTypePolicy()
-        self._query_compiler = query_compiler or PostgresRuntimeQueryCompiler(
-            type_policy=self._type_policy,
-        )
+        self._value_coercer = FilterValueCoercer(self._type_policy)
+        self._query_compiler = query_compiler or PostgresRuntimeQueryCompiler()
         self._relation_loader = relation_loader or PostgresRuntimeRelationLoader(
             session=session,
         )
@@ -209,10 +214,11 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         if not set_clauses:
             return []
 
-        where = self._query_compiler.compile_where(
+        typed_filters = self._typed_filter_expressions(
             descriptor=descriptor,
             filters=filters,
         )
+        where = self._query_compiler.compile_where(filters=typed_filters)
         params.update(where.params)
         bind_fields.update(where.bind_fields)
         columns = self._query_compiler.compile_projection(
@@ -256,10 +262,11 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         if not set_clauses:
             return []
 
-        where = self._query_compiler.compile_where(
+        typed_filters = self._typed_filter_expressions(
             descriptor=descriptor,
             filters=filters,
         )
+        where = self._query_compiler.compile_where(filters=typed_filters)
         params.update(where.params)
         bind_fields.update(where.bind_fields)
         params["claim_limit"] = limit
@@ -342,9 +349,13 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
     ) -> list[Mapping[str, Any]]:
         """Возвращает список runtime-записей с filters, sorting, pagination и projection."""
         self._ensure_descriptor(descriptor)
-        compiled = self._query_compiler.compile_list(
+        typed_filters = self._typed_filter_expressions(
             descriptor=descriptor,
             filters=filters,
+        )
+        compiled = self._query_compiler.compile_list(
+            descriptor=descriptor,
+            filters=typed_filters,
             sorting=sorting,
             page=page,
             fetch_plan=fetch_plan,
@@ -401,6 +412,55 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
             fetch_plan=fetch_plan,
         )
         return RuntimeRowsPage(rows=tuple(loaded_rows), total=total)
+
+    def _typed_filter_expressions(
+        self,
+        *,
+        descriptor: RuntimeObjectDescriptor,
+        filters: Sequence[FilterExpression],
+    ) -> tuple[TypedFilterExpression, ...]:
+        return tuple(
+            self._typed_filter_expression(descriptor=descriptor, filter_spec=item)
+            for item in filters
+        )
+
+    def _typed_filter_expression(
+        self,
+        *,
+        descriptor: RuntimeObjectDescriptor,
+        filter_spec: FilterExpression,
+    ) -> TypedFilterExpression:
+        if isinstance(filter_spec, FilterGroupSpec):
+            return TypedFilterGroupSpec(
+                logic=filter_spec.logic,
+                items=tuple(
+                    self._typed_filter_expression(
+                        descriptor=descriptor,
+                        filter_spec=item,
+                    )
+                    for item in filter_spec.items
+                ),
+            )
+
+        if isinstance(filter_spec, FilterSpec):
+            field = descriptor.field_by_name(filter_spec.field)
+            if field is None:
+                raise RuntimeDataValidationError(
+                    f"Unknown filter field '{filter_spec.field}'."
+                )
+            return TypedFilterSpec(
+                field=field,
+                op=filter_spec.op,
+                value=self._value_coercer.coerce(
+                    field=field,
+                    operator=filter_spec.op,
+                    value=filter_spec.value,
+                ),
+            )
+
+        raise RuntimeDataValidationError(
+            f"Unsupported filter expression '{type(filter_spec).__name__}'."
+        )
 
     async def _load_relations_if_needed(
         self,

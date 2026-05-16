@@ -4,6 +4,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal, TypeAlias
 
+from src.modules.schema_registry.runtime import RuntimeFieldDescriptor
+
 FilterOperator = Literal[
     "eq",
     "neq",
@@ -49,6 +51,26 @@ class FilterGroupSpec:
 
 
 FilterExpression: TypeAlias = FilterSpec | FilterGroupSpec
+
+
+@dataclass(frozen=True, slots=True)
+class TypedFilterSpec:
+    """Semantically validated runtime filter with resolved field descriptor."""
+
+    field: RuntimeFieldDescriptor
+    op: str
+    value: Any
+
+
+@dataclass(frozen=True, slots=True)
+class TypedFilterGroupSpec:
+    """Semantically validated runtime filter group."""
+
+    logic: FilterLogic
+    items: tuple["TypedFilterExpression", ...]
+
+
+TypedFilterExpression: TypeAlias = TypedFilterSpec | TypedFilterGroupSpec
 
 
 @dataclass(frozen=True, slots=True)

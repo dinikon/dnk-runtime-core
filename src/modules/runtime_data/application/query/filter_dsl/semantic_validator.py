@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from src.modules.runtime_data.application.models import (
-    FilterExpression,
-    FilterGroupSpec,
-    FilterSpec,
+    TypedFilterExpression,
+    TypedFilterGroupSpec,
+    TypedFilterSpec,
 )
 from src.modules.runtime_data.application.query.filter_dsl.ast import (
     FilterConditionNode,
@@ -39,7 +39,7 @@ class FilterSemanticValidator:
         *,
         descriptor: RuntimeObjectDescriptor,
         filter_ast: tuple[FilterNode, ...],
-    ) -> tuple[FilterExpression, ...]:
+    ) -> tuple[TypedFilterExpression, ...]:
         return tuple(
             self._validate_node(descriptor=descriptor, node=node) for node in filter_ast
         )
@@ -49,9 +49,9 @@ class FilterSemanticValidator:
         *,
         descriptor: RuntimeObjectDescriptor,
         node: FilterNode,
-    ) -> FilterExpression:
+    ) -> TypedFilterExpression:
         if isinstance(node, FilterGroupNode):
-            return FilterGroupSpec(
+            return TypedFilterGroupSpec(
                 logic=node.logic,
                 items=tuple(
                     self._validate_node(descriptor=descriptor, node=item)
@@ -87,8 +87,8 @@ class FilterSemanticValidator:
                 operator=node.operator,
                 value=node.value,
             )
-            return FilterSpec(
-                field=field.name,
+            return TypedFilterSpec(
+                field=field,
                 op=node.operator,
                 value=coerced_value,
             )
