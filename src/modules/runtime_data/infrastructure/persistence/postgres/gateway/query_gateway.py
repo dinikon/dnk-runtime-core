@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, List
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -104,7 +104,7 @@ class PostgresRuntimeQueryGateway(PostgresRuntimeGatewayBase, RuntimeQueryGatewa
         sorting: Sequence[SortSpec] = (),
         page: PageSpec | None = None,
         fetch_plan: FetchPlan | None = None,
-    ) -> list[Mapping[str, Any]]:
+    ) -> List[Mapping[str, Any]]:
         self._ensure_descriptor(descriptor)
         typed_filters = self._typed_filter_expressions(
             descriptor=descriptor,
@@ -175,7 +175,7 @@ class PostgresRuntimeQueryGateway(PostgresRuntimeGatewayBase, RuntimeQueryGatewa
         descriptor: RuntimeObjectDescriptor,
         rows: Sequence[Mapping[str, Any]],
         fetch_plan: FetchPlan | None,
-    ) -> list[Mapping[str, Any]]:
+    ) -> List[Mapping[str, Any]]:
         if fetch_plan is None or not fetch_plan.relations or not rows:
             return [dict(row) for row in rows]
         return await self._relation_loader.load(

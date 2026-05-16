@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, List
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -68,7 +68,7 @@ class PostgresRuntimeRelationCommandGateway(RuntimeRelationCommandGateway):
         descriptor: RuntimeObjectDescriptor,
         relation_name: str,
         object_id: Any,
-    ) -> list[Mapping[str, Any]]:
+    ) -> List[Mapping[str, Any]]:
         relation = self._required_relation(descriptor, relation_name)
         row = await self._select_base_row(
             descriptor=descriptor,

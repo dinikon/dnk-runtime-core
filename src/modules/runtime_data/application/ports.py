@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, List
 
 from src.modules.runtime_data.application.models import (
     FetchPlan,
     FilterExpression,
-    FilterSpec,
     PageSpec,
     RuntimeRowsPage,
     SortSpec,
@@ -92,7 +91,7 @@ class RuntimeQueryGateway(Protocol):
         sorting: Sequence[SortSpec] = (),
         page: PageSpec | None = None,
         fetch_plan: FetchPlan | None = None,
-    ) -> list[Mapping[str, Any]]:
+    ) -> List[Mapping[str, Any]]:
         """Возвращает список runtime-записей с фильтрами, сортировкой и projection."""
         ...
 

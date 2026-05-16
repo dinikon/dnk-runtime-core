@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, List
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -239,7 +239,7 @@ class PostgresRuntimeRelationLoader(RuntimeRelationLoader):
         table_name: str,
         column_name: str,
         values: Sequence[Any],
-    ) -> list[dict[str, Any]]:
+    ) -> List[dict[str, Any]]:
         if not values:
             return []
         params = {f"value_{index}": value for index, value in enumerate(values)}
