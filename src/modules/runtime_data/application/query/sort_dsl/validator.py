@@ -7,9 +7,6 @@ from src.modules.runtime_data.application.query.filter_dsl.errors import (
 from src.modules.runtime_data.application.query.sort_dsl.ast import SortExpressionNode
 from src.modules.schema_registry.runtime import RuntimeObjectDescriptor
 
-_SORTABLE_SYSTEM_FIELDS = frozenset({"id", "created_at", "updated_at"})
-_UNSORTABLE_TYPES = frozenset({"json", "multiselect"})
-
 
 class SortSemanticValidator:
     """Validates sort syntax AST against a runtime object descriptor."""
@@ -31,24 +28,12 @@ class SortSemanticValidator:
                         "field": node.field,
                     },
                 )
-            if (
-                field.kind.strip().lower() == "system"
-                and field.name not in _SORTABLE_SYSTEM_FIELDS
-            ):
+            if not field.is_sortable:
                 raise filter_dsl_error(
                     "FIELD_IS_NOT_SORTABLE",
                     f"Field '{field.name}' is not sortable.",
                     details={
                         "field": field.name,
-                    },
-                )
-            if field.type_code in _UNSORTABLE_TYPES:
-                raise filter_dsl_error(
-                    "FIELD_IS_NOT_SORTABLE",
-                    f"Field '{field.name}' of type '{field.type_code}' is not sortable.",
-                    details={
-                        "field": field.name,
-                        "field_type": field.type_code,
                     },
                 )
             sorting.append(SortSpec(field=field.name, direction=node.direction))

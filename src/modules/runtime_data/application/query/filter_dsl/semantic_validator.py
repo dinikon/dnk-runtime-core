@@ -21,8 +21,6 @@ from src.modules.runtime_data.application.query.filter_dsl.value_coercer import 
 )
 from src.modules.schema_registry.runtime import RuntimeObjectDescriptor
 
-_FILTERABLE_SYSTEM_FIELDS = frozenset({"id", "created_at", "updated_at"})
-
 
 class FilterSemanticValidator:
     """Validates filter syntax AST against a runtime object descriptor."""
@@ -71,10 +69,7 @@ class FilterSemanticValidator:
                         "field": node.field,
                     },
                 )
-            if (
-                field.kind.strip().lower() == "system"
-                and field.name not in _FILTERABLE_SYSTEM_FIELDS
-            ):
+            if not field.is_filterable:
                 raise filter_dsl_error(
                     "FIELD_IS_NOT_FILTERABLE",
                     f"Field '{field.name}' is not filterable.",

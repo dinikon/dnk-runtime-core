@@ -77,6 +77,18 @@ def _descriptor() -> RuntimeObjectDescriptor:
                 default_value=None,
                 options={"vip": "VIP", "newsletter": "Newsletter"},
                 settings={},
+                is_filterable=True,
+                is_sortable=False,
+            ),
+            RuntimeFieldDescriptor(
+                name="internal_hash",
+                type_code="text",
+                is_nullable=True,
+                default_value=None,
+                options={},
+                settings={},
+                is_filterable=False,
+                is_sortable=False,
             ),
         ),
         relations=(),
@@ -315,6 +327,88 @@ class RuntimeDataFilterDslTests(unittest.TestCase):
         self.assertEqual(filters[0].op, "is_not_empty")
         self.assertIsNone(filters[0].value)
 
+    def test_filter_rejects_not_filterable_field(self) -> None:
+        with self.assertRaisesRegex(
+            RuntimeDataFilterError,
+            "FIELD_IS_NOT_FILTERABLE",
+        ) as caught:
+            FilterSemanticValidator().validate(
+                descriptor=_descriptor(),
+                filter_ast=FilterDslParser().parse(
+                    {
+                        "field": "internal_hash",
+                        "op": "eq",
+                        "value": "abc",
+                    }
+                ),
+            )
+
+        self.assertEqual(caught.exception.code, "FIELD_IS_NOT_FILTERABLE")
+        self.assertEqual(caught.exception.details["field"], "internal_hash")
+
+    def test_system_field_filterability_comes_from_descriptor(self) -> None:
+        descriptor = RuntimeObjectDescriptor(
+            schema_name="dnk_test",
+            object_name="contact",
+            table_name="contacts",
+            pk="id",
+            title_field="id",
+            fields=(
+                RuntimeFieldDescriptor(
+                    name="id",
+                    type_code="uuid",
+                    is_nullable=False,
+                    default_value="gen_random_uuid()",
+                    options={},
+                    settings={},
+                    kind="system",
+                    is_filterable=False,
+                    is_sortable=True,
+                ),
+                RuntimeFieldDescriptor(
+                    name="internal_hash",
+                    type_code="text",
+                    is_nullable=True,
+                    default_value=None,
+                    options={},
+                    settings={},
+                    kind="system",
+                    is_filterable=True,
+                    is_sortable=False,
+                ),
+            ),
+            relations=(),
+        )
+
+        filters = FilterSemanticValidator().validate(
+            descriptor=descriptor,
+            filter_ast=FilterDslParser().parse(
+                {
+                    "field": "internal_hash",
+                    "op": "eq",
+                    "value": "abc",
+                }
+            ),
+        )
+        self.assertEqual(filters[0].field, "internal_hash")
+
+        with self.assertRaisesRegex(
+            RuntimeDataFilterError,
+            "FIELD_IS_NOT_FILTERABLE",
+        ) as caught:
+            FilterSemanticValidator().validate(
+                descriptor=descriptor,
+                filter_ast=FilterDslParser().parse(
+                    {
+                        "field": "id",
+                        "op": "eq",
+                        "value": str(uuid4()),
+                    }
+                ),
+            )
+        self.assertEqual(caught.exception.code, "FIELD_IS_NOT_FILTERABLE")
+        self.assertEqual(caught.exception.details["field"], "id")
+
     def test_semantic_validator_rejects_unknown_field_operator_and_value(self) -> None:
         descriptor = _descriptor()
         validator = FilterSemanticValidator()
@@ -398,6 +492,46 @@ class RuntimeDataSortDslTests(unittest.TestCase):
                         sort_ast=SortDslParser().parse(payload),
                     )
                 self.assertEqual(caught.exception.code, expected_code)
+
+    def test_sort_rejects_not_sortable_field(self) -> None:
+        with self.assertRaisesRegex(
+            RuntimeDataFilterError,
+            "FIELD_IS_NOT_SORTABLE",
+        ) as caught:
+            SortSemanticValidator().validate(
+                descriptor=_descriptor(),
+                sort_ast=SortDslParser().parse(
+                    [{"field": "internal_hash", "direction": "asc"}]
+                ),
+            )
+
+        self.assertEqual(caught.exception.code, "FIELD_IS_NOT_SORTABLE")
+        self.assertEqual(caught.exception.details["field"], "internal_hash")
+
+    def test_multiselect_is_filterable_but_not_sortable(self) -> None:
+        filters = FilterSemanticValidator().validate(
+            descriptor=_descriptor(),
+            filter_ast=FilterDslParser().parse(
+                {
+                    "field": "tags",
+                    "op": "contains_any",
+                    "value": ["vip"],
+                }
+            ),
+        )
+        self.assertEqual(filters[0].field, "tags")
+
+        with self.assertRaisesRegex(
+            RuntimeDataFilterError,
+            "FIELD_IS_NOT_SORTABLE",
+        ) as caught:
+            SortSemanticValidator().validate(
+                descriptor=_descriptor(),
+                sort_ast=SortDslParser().parse([{"field": "tags", "direction": "asc"}]),
+            )
+
+        self.assertEqual(caught.exception.code, "FIELD_IS_NOT_SORTABLE")
+        self.assertEqual(caught.exception.details["field"], "tags")
 
 
 __all__ = ["RuntimeDataFilterDslTests", "RuntimeDataSortDslTests"]
