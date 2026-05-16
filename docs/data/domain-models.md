@@ -244,6 +244,7 @@ Each custom object has system fields `id`, `created_at` and `updated_at`.
 - `src/modules/identity/domain/user/entity.py`
 - `src/modules/identity/domain/auth/error.py`
 - `src/modules/crm/domain/contact/entity.py`
+- `src/modules/crm/domain/company/entity.py`
 - `src/modules/inventory/domain/product/entity.py`
 - `src/modules/inventory/domain/category/entity.py`
 - `src/modules/communication/domain/models.py`
