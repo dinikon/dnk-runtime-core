@@ -52,12 +52,19 @@ class FilterDslParser:
             raise filter_dsl_error(
                 "INVALID_FILTER_DSL",
                 f"Filter nesting depth must not exceed {self._max_depth}.",
+                details={
+                    "max_depth": self._max_depth,
+                },
             )
 
         if not isinstance(payload, Mapping):
             raise filter_dsl_error(
                 "INVALID_FILTER_DSL",
                 "Filter expression must be an object.",
+                details={
+                    "expected": "object",
+                    "actual": type(payload).__name__,
+                },
             )
 
         has_and = "and" in payload
@@ -79,11 +86,17 @@ class FilterDslParser:
             raise filter_dsl_error(
                 "INVALID_FILTER_DSL",
                 "Filter group must contain only one of 'and' or 'or'.",
+                details={
+                    "keys": sorted(str(key) for key in payload.keys()),
+                },
             )
         if set(payload.keys()) != {"and"} and set(payload.keys()) != {"or"}:
             raise filter_dsl_error(
                 "INVALID_FILTER_DSL",
                 "Filter group cannot contain keys other than 'and' or 'or'.",
+                details={
+                    "keys": sorted(str(key) for key in payload.keys()),
+                },
             )
 
         logic = "and" if has_and else "or"
@@ -92,11 +105,19 @@ class FilterDslParser:
             raise filter_dsl_error(
                 "INVALID_FILTER_DSL",
                 f"Filter group '{logic}' requires a list of expressions.",
+                details={
+                    "group": logic,
+                    "expected": "list",
+                    "actual": type(raw_items).__name__,
+                },
             )
         if not raw_items:
             raise filter_dsl_error(
                 "INVALID_FILTER_DSL",
                 f"Filter group '{logic}' requires at least one expression.",
+                details={
+                    "group": logic,
+                },
             )
 
         return FilterGroupNode(
@@ -122,6 +143,10 @@ class FilterDslParser:
             raise filter_dsl_error(
                 "INVALID_FILTER_DSL",
                 "Filter condition must contain only field, op and value.",
+                details={
+                    "keys": sorted(str(key) for key in payload.keys()),
+                    "required_keys": ["field", "op", "value"],
+                },
             )
 
         field_name = payload["field"]
@@ -130,11 +155,17 @@ class FilterDslParser:
             raise filter_dsl_error(
                 "INVALID_FILTER_DSL",
                 "Filter condition field must be a non-empty string.",
+                details={
+                    "field": field_name,
+                },
             )
         if not isinstance(operator, str) or not operator.strip():
             raise filter_dsl_error(
                 "INVALID_FILTER_DSL",
                 "Filter condition op must be a non-empty string.",
+                details={
+                    "operator": operator,
+                },
             )
 
         counter.increment(max_conditions=self._max_conditions)
@@ -155,6 +186,9 @@ class _ConditionCounter:
             raise filter_dsl_error(
                 "INVALID_FILTER_DSL",
                 f"Filter condition count must not exceed {max_conditions}.",
+                details={
+                    "max_conditions": max_conditions,
+                },
             )
 
 

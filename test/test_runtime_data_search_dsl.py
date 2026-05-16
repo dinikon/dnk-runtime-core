@@ -103,10 +103,13 @@ class RuntimeDataFilterDslTests(unittest.TestCase):
         self.assertEqual(parsed[0].logic, "and")
 
     def test_parser_rejects_unknown_keys(self) -> None:
-        with self.assertRaisesRegex(RuntimeDataFilterError, "INVALID_FILTER_DSL"):
+        with self.assertRaisesRegex(
+            RuntimeDataFilterError, "INVALID_FILTER_DSL"
+        ) as caught:
             FilterDslParser().parse(
                 {"field": "status", "operator": "eq", "value": "lead"}
             )
+        self.assertEqual(caught.exception.code, "INVALID_FILTER_DSL")
 
     def test_parser_enforces_depth_and_condition_limits(self) -> None:
         too_deep = {
@@ -134,10 +137,13 @@ class RuntimeDataFilterDslTests(unittest.TestCase):
                 }
             ]
         }
-        with self.assertRaisesRegex(RuntimeDataFilterError, "depth"):
+        with self.assertRaisesRegex(RuntimeDataFilterError, "depth") as caught:
             FilterDslParser(max_depth=5).parse(too_deep)
+        self.assertEqual(caught.exception.code, "INVALID_FILTER_DSL")
 
-        with self.assertRaisesRegex(RuntimeDataFilterError, "condition count"):
+        with self.assertRaisesRegex(
+            RuntimeDataFilterError, "condition count"
+        ) as caught:
             FilterDslParser(max_conditions=2).parse(
                 {
                     "and": [
@@ -147,6 +153,7 @@ class RuntimeDataFilterDslTests(unittest.TestCase):
                     ]
                 }
             )
+        self.assertEqual(caught.exception.code, "INVALID_FILTER_DSL")
 
     def test_semantic_validator_coerces_valid_values(self) -> None:
         ast = FilterDslParser().parse(
@@ -198,11 +205,19 @@ class RuntimeDataFilterDslTests(unittest.TestCase):
             ),
         ):
             with self.subTest(expected_code=expected_code):
-                with self.assertRaisesRegex(RuntimeDataFilterError, expected_code):
+                with self.assertRaisesRegex(
+                    RuntimeDataFilterError,
+                    expected_code,
+                ) as caught:
                     validator.validate(
                         descriptor=descriptor,
                         filter_ast=FilterDslParser().parse(payload),
                     )
+                self.assertEqual(caught.exception.code, expected_code)
+                if expected_code == "UNSUPPORTED_OPERATOR_FOR_FIELD_TYPE":
+                    self.assertEqual(caught.exception.details["field"], "status")
+                    self.assertEqual(caught.exception.details["field_type"], "select")
+                    self.assertEqual(caught.exception.details["operator"], "contains")
 
 
 class RuntimeDataSortDslTests(unittest.TestCase):
@@ -217,19 +232,26 @@ class RuntimeDataSortDslTests(unittest.TestCase):
         self.assertEqual(sorting[0].direction, "desc")
 
     def test_sort_rejects_invalid_direction_unknown_field_and_multiselect(self) -> None:
-        with self.assertRaisesRegex(RuntimeDataFilterError, "INVALID_SORT_DSL"):
+        with self.assertRaisesRegex(
+            RuntimeDataFilterError, "INVALID_SORT_DSL"
+        ) as caught:
             SortDslParser().parse([{"field": "created_at", "direction": "sideways"}])
+        self.assertEqual(caught.exception.code, "INVALID_SORT_DSL")
 
         for payload, expected_code in (
             ([{"field": "unknown", "direction": "asc"}], "UNKNOWN_SORT_FIELD"),
             ([{"field": "tags", "direction": "asc"}], "FIELD_IS_NOT_SORTABLE"),
         ):
             with self.subTest(expected_code=expected_code):
-                with self.assertRaisesRegex(RuntimeDataFilterError, expected_code):
+                with self.assertRaisesRegex(
+                    RuntimeDataFilterError,
+                    expected_code,
+                ) as caught:
                     SortSemanticValidator().validate(
                         descriptor=_descriptor(),
                         sort_ast=SortDslParser().parse(payload),
                     )
+                self.assertEqual(caught.exception.code, expected_code)
 
 
 __all__ = ["RuntimeDataFilterDslTests", "RuntimeDataSortDslTests"]

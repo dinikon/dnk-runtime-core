@@ -19,6 +19,10 @@ class SortDslParser:
             raise filter_dsl_error(
                 "INVALID_SORT_DSL",
                 "Sort payload must be a list.",
+                details={
+                    "expected": "list",
+                    "actual": type(payload).__name__,
+                },
             )
 
         items: list[SortExpressionNode] = []
@@ -27,11 +31,19 @@ class SortDslParser:
                 raise filter_dsl_error(
                     "INVALID_SORT_DSL",
                     "Sort item must be an object.",
+                    details={
+                        "expected": "object",
+                        "actual": type(item).__name__,
+                    },
                 )
             if set(item.keys()) != {"field", "direction"}:
                 raise filter_dsl_error(
                     "INVALID_SORT_DSL",
                     "Sort item must contain only field and direction.",
+                    details={
+                        "keys": sorted(str(key) for key in item.keys()),
+                        "required_keys": ["field", "direction"],
+                    },
                 )
             field_name = item["field"]
             direction = item["direction"]
@@ -39,17 +51,28 @@ class SortDslParser:
                 raise filter_dsl_error(
                     "INVALID_SORT_DSL",
                     "Sort item field must be a non-empty string.",
+                    details={
+                        "field": field_name,
+                    },
                 )
             if not isinstance(direction, str):
                 raise filter_dsl_error(
                     "INVALID_SORT_DSL",
                     "Sort direction must be a string.",
+                    details={
+                        "field": field_name,
+                        "direction": direction,
+                    },
                 )
             normalized_direction = direction.strip().lower()
             if normalized_direction not in {"asc", "desc"}:
                 raise filter_dsl_error(
                     "INVALID_SORT_DSL",
                     "Sort direction must be 'asc' or 'desc'.",
+                    details={
+                        "field": field_name,
+                        "direction": direction,
+                    },
                 )
             items.append(
                 SortExpressionNode(

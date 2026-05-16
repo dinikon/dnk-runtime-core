@@ -80,18 +80,33 @@ class FilterDslParserPublicContractTests(unittest.TestCase):
         self.assertEqual(nested.items[1].value, "nik")
 
     def test_parse_rejects_unknown_condition_keys(self) -> None:
-        with self.assertRaisesRegex(RuntimeDataFilterError, "INVALID_FILTER_DSL"):
+        with self.assertRaisesRegex(
+            RuntimeDataFilterError, "INVALID_FILTER_DSL"
+        ) as caught:
             FilterDslParser().parse(
                 {"field": "status", "op": "eq", "value": "lead", "extra": True}
             )
+        self.assertEqual(caught.exception.code, "INVALID_FILTER_DSL")
+        self.assertEqual(
+            caught.exception.details["required_keys"],
+            ["field", "op", "value"],
+        )
 
     def test_parse_rejects_group_with_and_and_or_together(self) -> None:
-        with self.assertRaisesRegex(RuntimeDataFilterError, "INVALID_FILTER_DSL"):
+        with self.assertRaisesRegex(
+            RuntimeDataFilterError, "INVALID_FILTER_DSL"
+        ) as caught:
             FilterDslParser().parse({"and": [], "or": []})
+        self.assertEqual(caught.exception.code, "INVALID_FILTER_DSL")
+        self.assertEqual(caught.exception.details["keys"], ["and", "or"])
 
     def test_parse_rejects_empty_group(self) -> None:
-        with self.assertRaisesRegex(RuntimeDataFilterError, "INVALID_FILTER_DSL"):
+        with self.assertRaisesRegex(
+            RuntimeDataFilterError, "INVALID_FILTER_DSL"
+        ) as caught:
             FilterDslParser().parse({"and": []})
+        self.assertEqual(caught.exception.code, "INVALID_FILTER_DSL")
+        self.assertEqual(caught.exception.details["group"], "and")
 
     def test_parse_rejects_too_deep_filter(self) -> None:
         payload = {
@@ -120,11 +135,15 @@ class FilterDslParserPublicContractTests(unittest.TestCase):
             ]
         }
 
-        with self.assertRaisesRegex(RuntimeDataFilterError, "depth"):
+        with self.assertRaisesRegex(RuntimeDataFilterError, "depth") as caught:
             FilterDslParser(max_depth=5).parse(payload)
+        self.assertEqual(caught.exception.code, "INVALID_FILTER_DSL")
+        self.assertEqual(caught.exception.details["max_depth"], 5)
 
     def test_parse_rejects_too_many_conditions(self) -> None:
-        with self.assertRaisesRegex(RuntimeDataFilterError, "condition count"):
+        with self.assertRaisesRegex(
+            RuntimeDataFilterError, "condition count"
+        ) as caught:
             FilterDslParser(max_conditions=2).parse(
                 {
                     "and": [
@@ -134,10 +153,19 @@ class FilterDslParserPublicContractTests(unittest.TestCase):
                     ]
                 }
             )
+        self.assertEqual(caught.exception.code, "INVALID_FILTER_DSL")
+        self.assertEqual(caught.exception.details["max_conditions"], 2)
 
     def test_parse_requires_value_even_for_is_null(self) -> None:
-        with self.assertRaisesRegex(RuntimeDataFilterError, "INVALID_FILTER_DSL"):
+        with self.assertRaisesRegex(
+            RuntimeDataFilterError, "INVALID_FILTER_DSL"
+        ) as caught:
             FilterDslParser().parse({"field": "last_name", "op": "is_null"})
+        self.assertEqual(caught.exception.code, "INVALID_FILTER_DSL")
+        self.assertEqual(
+            caught.exception.details["required_keys"],
+            ["field", "op", "value"],
+        )
 
 
 __all__ = ["FilterDslParserPublicContractTests"]

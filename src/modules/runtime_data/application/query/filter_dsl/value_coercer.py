@@ -32,12 +32,22 @@ class FilterValueCoercer:
                 raise filter_dsl_error(
                     "INVALID_FILTER_VALUE_TYPE",
                     f"Field '{field.name}' with operator 'in' requires a list.",
+                    details={
+                        "field": field.name,
+                        "operator": operator,
+                        "expected": "list",
+                        "actual": type(value).__name__,
+                    },
                 )
             values = list(value)
             if not values:
                 raise filter_dsl_error(
                     "INVALID_FILTER_VALUE_TYPE",
                     f"Field '{field.name}' with operator 'in' requires at least one value.",
+                    details={
+                        "field": field.name,
+                        "operator": operator,
+                    },
                 )
             return [self._coerce_single(field=field, value=item) for item in values]
 
@@ -46,12 +56,24 @@ class FilterValueCoercer:
                 raise filter_dsl_error(
                     "INVALID_FILTER_VALUE_TYPE",
                     f"Field '{field.name}' with operator 'between' requires a two-item list.",
+                    details={
+                        "field": field.name,
+                        "operator": operator,
+                        "expected": "list",
+                        "actual": type(value).__name__,
+                    },
                 )
             values = list(value)
             if len(values) != 2:
                 raise filter_dsl_error(
                     "INVALID_FILTER_VALUE_TYPE",
                     f"Field '{field.name}' with operator 'between' requires exactly two values.",
+                    details={
+                        "field": field.name,
+                        "operator": operator,
+                        "expected_length": 2,
+                        "actual_length": len(values),
+                    },
                 )
             return tuple(
                 self._coerce_single(field=field, value=item) for item in values
@@ -64,6 +86,10 @@ class FilterValueCoercer:
             raise filter_dsl_error(
                 "INVALID_FIELD_OPTION",
                 f"Field '{field.name}' does not allow option '{value}'.",
+                details={
+                    "field": field.name,
+                    "value": value,
+                },
             )
         try:
             return self._type_policy.coerce_value_for_field(
@@ -74,6 +100,10 @@ class FilterValueCoercer:
             raise filter_dsl_error(
                 "INVALID_FILTER_VALUE_TYPE",
                 f"Field '{field.name}' has invalid value for type '{field.type_code}'.",
+                details={
+                    "field": field.name,
+                    "field_type": field.type_code,
+                },
             ) from exc
 
 

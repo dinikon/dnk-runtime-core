@@ -67,6 +67,9 @@ class FilterSemanticValidator:
                 raise filter_dsl_error(
                     "UNKNOWN_FILTER_FIELD",
                     f"Unknown filter field '{node.field}'.",
+                    details={
+                        "field": node.field,
+                    },
                 )
             if (
                 field.kind.strip().lower() == "system"
@@ -75,6 +78,9 @@ class FilterSemanticValidator:
                 raise filter_dsl_error(
                     "FIELD_IS_NOT_FILTERABLE",
                     f"Field '{field.name}' is not filterable.",
+                    details={
+                        "field": field.name,
+                    },
                 )
             self._operator_registry.validate(
                 field_type=field.type_code,
@@ -95,6 +101,9 @@ class FilterSemanticValidator:
         raise filter_dsl_error(
             "INVALID_FILTER_DSL",
             f"Unsupported filter AST node '{type(node).__name__}'.",
+            details={
+                "node_type": type(node).__name__,
+            },
         )
 
 

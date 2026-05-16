@@ -114,6 +114,11 @@ class FilterOperatorRegistry:
                     f"Field '{field_name}' of type '{field_type}' "
                     f"does not support operator '{operator}'."
                 ),
+                details={
+                    "field": field_name,
+                    "field_type": field_type,
+                    "operator": operator,
+                },
             )
 
 

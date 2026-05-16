@@ -180,7 +180,12 @@ class ContactControllerErrorTests(unittest.IsolatedAsyncioTestCase):
                 context=_context(),
                 use_case=_FailingUseCase(
                     RuntimeDataFilterError(
-                        "UNSUPPORTED_OPERATOR_FOR_FIELD_TYPE: bad operator"
+                        code="UNSUPPORTED_OPERATOR_FOR_FIELD_TYPE",
+                        message="bad operator",
+                        details={
+                            "field": "status",
+                            "operator": "contains",
+                        },
                     )
                 ),
             )

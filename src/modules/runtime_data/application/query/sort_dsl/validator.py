@@ -27,6 +27,9 @@ class SortSemanticValidator:
                 raise filter_dsl_error(
                     "UNKNOWN_SORT_FIELD",
                     f"Unknown sort field '{node.field}'.",
+                    details={
+                        "field": node.field,
+                    },
                 )
             if (
                 field.kind.strip().lower() == "system"
@@ -35,11 +38,18 @@ class SortSemanticValidator:
                 raise filter_dsl_error(
                     "FIELD_IS_NOT_SORTABLE",
                     f"Field '{field.name}' is not sortable.",
+                    details={
+                        "field": field.name,
+                    },
                 )
             if field.type_code in _UNSORTABLE_TYPES:
                 raise filter_dsl_error(
                     "FIELD_IS_NOT_SORTABLE",
                     f"Field '{field.name}' of type '{field.type_code}' is not sortable.",
+                    details={
+                        "field": field.name,
+                        "field_type": field.type_code,
+                    },
                 )
             sorting.append(SortSpec(field=field.name, direction=node.direction))
         return tuple(sorting)

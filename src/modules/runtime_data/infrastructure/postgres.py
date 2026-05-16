@@ -488,11 +488,19 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
             logic = str(filter_spec.logic).strip().lower()
             if logic not in {"and", "or"}:
                 raise RuntimeDataFilterError(
-                    f"Unsupported filter group logic '{filter_spec.logic}'."
+                    code="UNSUPPORTED_FILTER_GROUP_LOGIC",
+                    message=f"Unsupported filter group logic '{filter_spec.logic}'.",
+                    details={
+                        "logic": filter_spec.logic,
+                    },
                 )
             if not filter_spec.items:
                 raise RuntimeDataFilterError(
-                    f"Filter group '{logic}' requires at least one item."
+                    code="INVALID_FILTER_GROUP",
+                    message=f"Filter group '{logic}' requires at least one item.",
+                    details={
+                        "logic": logic,
+                    },
                 )
 
             parts: list[str] = []
@@ -523,7 +531,11 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
             )
 
         raise RuntimeDataFilterError(
-            f"Unsupported filter expression '{type(filter_spec).__name__}'."
+            code="UNSUPPORTED_FILTER_EXPRESSION",
+            message=f"Unsupported filter expression '{type(filter_spec).__name__}'.",
+            details={
+                "expression_type": type(filter_spec).__name__,
+            },
         )
 
     def _build_where_clause(
@@ -588,7 +600,13 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         """
         field = descriptor.field_by_name(filter_spec.field)
         if field is None:
-            raise RuntimeDataFilterError(f"Unknown filter field '{filter_spec.field}'.")
+            raise RuntimeDataFilterError(
+                code="UNKNOWN_FILTER_FIELD",
+                message=f"Unknown filter field '{filter_spec.field}'.",
+                details={
+                    "field": filter_spec.field,
+                },
+            )
 
         op = filter_spec.op
         field_sql = self._qi(field.name)
@@ -627,12 +645,28 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
                 (str, bytes),
             ):
                 raise RuntimeDataFilterError(
-                    f"Filter '{field.name}' with operator 'in' requires a non-string sequence."
+                    code="INVALID_FILTER_VALUE_TYPE",
+                    message=(
+                        f"Filter '{field.name}' with operator 'in' "
+                        "requires a non-string sequence."
+                    ),
+                    details={
+                        "field": field.name,
+                        "operator": op,
+                    },
                 )
             items = list(filter_spec.value)
             if not items:
                 raise RuntimeDataFilterError(
-                    f"Filter '{field.name}' with operator 'in' requires at least one value."
+                    code="INVALID_FILTER_VALUE_TYPE",
+                    message=(
+                        f"Filter '{field.name}' with operator 'in' "
+                        "requires at least one value."
+                    ),
+                    details={
+                        "field": field.name,
+                        "operator": op,
+                    },
                 )
             params: dict[str, Any] = {}
             bind_fields: dict[str, RuntimeFieldDescriptor] = {}
@@ -650,7 +684,16 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         if op == "contains":
             if field.type_code not in {"text", "select"}:
                 raise RuntimeDataFilterError(
-                    f"Filter 'contains' supports only text/select fields, got '{field.name}'."
+                    code="UNSUPPORTED_OPERATOR_FOR_FIELD_TYPE",
+                    message=(
+                        f"Filter 'contains' supports only text/select fields, "
+                        f"got '{field.name}'."
+                    ),
+                    details={
+                        "field": field.name,
+                        "field_type": field.type_code,
+                        "operator": op,
+                    },
                 )
             value = self._type_policy.coerce_value_for_field(
                 field=field,
@@ -687,12 +730,30 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
                 (str, bytes),
             ):
                 raise RuntimeDataFilterError(
-                    f"Filter '{field.name}' with operator 'between' requires a two-item sequence."
+                    code="INVALID_FILTER_VALUE_TYPE",
+                    message=(
+                        f"Filter '{field.name}' with operator 'between' "
+                        "requires a two-item sequence."
+                    ),
+                    details={
+                        "field": field.name,
+                        "operator": op,
+                    },
                 )
             items = list(filter_spec.value)
             if len(items) != 2:
                 raise RuntimeDataFilterError(
-                    f"Filter '{field.name}' with operator 'between' requires exactly two values."
+                    code="INVALID_FILTER_VALUE_TYPE",
+                    message=(
+                        f"Filter '{field.name}' with operator 'between' "
+                        "requires exactly two values."
+                    ),
+                    details={
+                        "field": field.name,
+                        "operator": op,
+                        "expected_length": 2,
+                        "actual_length": len(items),
+                    },
                 )
             start_param = f"f_{position}_start"
             end_param = f"f_{position}_end"
@@ -720,7 +781,14 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         if op == "is_not_null":
             return (f"{field_sql} IS NOT NULL", {}, {})
 
-        raise RuntimeDataFilterError(f"Unsupported filter operator '{op}'.")
+        raise RuntimeDataFilterError(
+            code="UNSUPPORTED_FILTER_OPERATOR",
+            message=f"Unsupported filter operator '{op}'.",
+            details={
+                "field": field.name,
+                "operator": op,
+            },
+        )
 
     def _build_sort_clause(
         self,
@@ -736,11 +804,22 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
         for sort_spec in sorting:
             field = descriptor.field_by_name(sort_spec.field)
             if field is None:
-                raise RuntimeDataFilterError(f"Unknown sort field '{sort_spec.field}'.")
+                raise RuntimeDataFilterError(
+                    code="UNKNOWN_SORT_FIELD",
+                    message=f"Unknown sort field '{sort_spec.field}'.",
+                    details={
+                        "field": sort_spec.field,
+                    },
+                )
             direction = sort_spec.direction.lower()
             if direction not in {"asc", "desc"}:
                 raise RuntimeDataFilterError(
-                    f"Unsupported sort direction '{sort_spec.direction}'."
+                    code="INVALID_SORT_DSL",
+                    message=f"Unsupported sort direction '{sort_spec.direction}'.",
+                    details={
+                        "field": sort_spec.field,
+                        "direction": sort_spec.direction,
+                    },
                 )
             sort_chunks.append(f"{self._qi(field.name)} {direction.upper()}")
 
