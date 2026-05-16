@@ -682,11 +682,11 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
             return (f"{field_sql} IN ({', '.join(placeholders)})", params, bind_fields)
 
         if op == "contains":
-            if field.type_code not in {"text", "select"}:
+            if field.type_code != "text":
                 raise RuntimeDataFilterError(
                     code="UNSUPPORTED_OPERATOR_FOR_FIELD_TYPE",
                     message=(
-                        f"Filter 'contains' supports only text/select fields, "
+                        f"Filter 'contains' supports only text fields, "
                         f"got '{field.name}'."
                     ),
                     details={
@@ -701,8 +701,37 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
             )
             param_name = f"f_{position}"
             return (
-                f"CAST({field_sql} AS text) ILIKE :{param_name}",
-                {param_name: f"%{value}%"},
+                f"CAST({field_sql} AS text) ILIKE :{param_name} ESCAPE '\\'",
+                {param_name: f"%{self._escape_like_value(value)}%"},
+                {},
+            )
+
+        if op in {"starts_with", "ends_with"}:
+            if field.type_code != "text":
+                raise RuntimeDataFilterError(
+                    code="UNSUPPORTED_OPERATOR_FOR_FIELD_TYPE",
+                    message=(
+                        f"Filter '{op}' supports only text fields, "
+                        f"got '{field.name}'."
+                    ),
+                    details={
+                        "field": field.name,
+                        "field_type": field.type_code,
+                        "operator": op,
+                    },
+                )
+            value = self._type_policy.coerce_value_for_field(
+                field=field,
+                raw_value=filter_spec.value,
+            )
+            escaped_value = self._escape_like_value(value)
+            pattern = (
+                f"{escaped_value}%" if op == "starts_with" else f"%{escaped_value}"
+            )
+            param_name = f"f_{position}"
+            return (
+                f"CAST({field_sql} AS text) ILIKE :{param_name} ESCAPE '\\'",
+                {param_name: pattern},
                 {},
             )
 
@@ -926,6 +955,11 @@ class PostgresRuntimeGateway(RuntimeCommandGateway, RuntimeQueryGateway):
     def _qi(identifier: str) -> str:
         """Кавычит PostgreSQL-идентификатор."""
         return f'"{identifier}"'
+
+    @staticmethod
+    def _escape_like_value(value: str) -> str:
+        """Escapes user text for PostgreSQL LIKE patterns with backslash ESCAPE."""
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 class PostgresRuntimeRelationLoader(RuntimeRelationLoader):

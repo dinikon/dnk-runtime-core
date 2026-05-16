@@ -8,6 +8,8 @@ FilterNodeOperator = Literal[
     "neq",
     "in",
     "contains",
+    "starts_with",
+    "ends_with",
     "gt",
     "gte",
     "lt",

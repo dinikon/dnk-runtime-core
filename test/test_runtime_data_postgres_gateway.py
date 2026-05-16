@@ -328,13 +328,41 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
         sql, params = session.calls[0]
         self.assertIn(
             'WHERE ("last_name" = :f_0 AND '
-            '(CAST("first_name" AS text) ILIKE :f_1 OR '
-            'CAST("last_name" AS text) ILIKE :f_2))',
+            "(CAST(\"first_name\" AS text) ILIKE :f_1 ESCAPE '\\' OR "
+            "CAST(\"last_name\" AS text) ILIKE :f_2 ESCAPE '\\'))",
             sql,
         )
         self.assertEqual(params["f_0"], "Doe")
         self.assertEqual(params["f_1"], "%Ja%")
         self.assertEqual(params["f_2"], "%Do%")
+
+    async def test_list_supports_text_prefix_and_suffix_filters(self) -> None:
+        contact_id = uuid4()
+        response_row = {
+            "id": contact_id,
+            "created_at": datetime(2026, 1, 1, 10, 0, 0),
+            "updated_at": datetime(2026, 1, 1, 11, 0, 0),
+            "last_name": "Doe",
+            "first_name": "Jane",
+            "tags": [],
+        }
+        session = _SessionSpy([_MappingsResult([response_row])])
+        gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
+
+        rows = await gateway.list(
+            descriptor=self._descriptor(),
+            filters=(
+                FilterSpec(field="last_name", op="starts_with", value="Do_%"),
+                FilterSpec(field="first_name", op="ends_with", value="ne%"),
+            ),
+        )
+
+        self.assertEqual(len(rows), 1)
+        sql, params = session.calls[0]
+        self.assertIn("CAST(\"last_name\" AS text) ILIKE :f_0 ESCAPE '\\'", sql)
+        self.assertIn("CAST(\"first_name\" AS text) ILIKE :f_1 ESCAPE '\\'", sql)
+        self.assertEqual(params["f_0"], "Do\\_\\%%")
+        self.assertEqual(params["f_1"], "%ne\\%")
 
     async def test_search_returns_rows_and_total_with_same_filters(self) -> None:
         contact_id = uuid4()

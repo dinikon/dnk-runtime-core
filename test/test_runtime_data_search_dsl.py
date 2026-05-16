@@ -160,6 +160,9 @@ class RuntimeDataFilterDslTests(unittest.TestCase):
             {
                 "and": [
                     {"field": "first_name", "op": "contains", "value": "den"},
+                    {"field": "first_name", "op": "starts_with", "value": "de"},
+                    {"field": "first_name", "op": "ends_with", "value": "is"},
+                    {"field": "status", "op": "eq", "value": "lead"},
                     {"field": "status", "op": "in", "value": ["lead", "partner"]},
                     {"field": "score", "op": "between", "value": ["1.5", "2.5"]},
                     {
@@ -179,8 +182,12 @@ class RuntimeDataFilterDslTests(unittest.TestCase):
 
         group = filters[0]
         self.assertEqual(group.logic, "and")
-        self.assertIsInstance(group.items[2].value[0], Decimal)
-        self.assertIsInstance(group.items[3].value, datetime)
+        self.assertEqual(group.items[1].op, "starts_with")
+        self.assertEqual(group.items[2].op, "ends_with")
+        self.assertEqual(group.items[3].value, "lead")
+        self.assertEqual(group.items[4].value, ["lead", "partner"])
+        self.assertIsInstance(group.items[5].value[0], Decimal)
+        self.assertIsInstance(group.items[6].value, datetime)
 
     def test_semantic_validator_rejects_unknown_field_operator_and_value(self) -> None:
         descriptor = _descriptor()
