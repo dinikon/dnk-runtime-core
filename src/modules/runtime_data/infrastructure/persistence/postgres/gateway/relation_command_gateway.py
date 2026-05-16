@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, List
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +17,7 @@ from src.modules.runtime_data.infrastructure.persistence.postgres.execution impo
 )
 from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.relation_loader import (
     PostgresRuntimeRelationLoader,
+    find_runtime_relation,
 )
 from src.modules.schema_registry.runtime import (
     RuntimeObjectDescriptor,
@@ -68,7 +69,7 @@ class PostgresRuntimeRelationCommandGateway(RuntimeRelationCommandGateway):
         descriptor: RuntimeObjectDescriptor,
         relation_name: str,
         object_id: Any,
-    ) -> List[Mapping[str, Any]]:
+    ) -> list[Mapping[str, Any]]:
         relation = self._required_relation(descriptor, relation_name)
         row = await self._select_base_row(
             descriptor=descriptor,
@@ -81,12 +82,25 @@ class PostgresRuntimeRelationCommandGateway(RuntimeRelationCommandGateway):
             rows=[row],
             fetch_plan=FetchPlan(relations=(relation_name,)),
         )
+
+        if not loaded:
+            return []
+
         value = loaded[0].get(self._output_name(descriptor, relation))
         if value is None:
             return []
         if isinstance(value, list):
-            return value
-        return [value]
+            related_rows: list[Mapping[str, Any]] = []
+            for item in value:
+                if not isinstance(item, Mapping):
+                    raise RuntimeDataValidationError(
+                        "Loaded relation collection must contain mapping rows."
+                    )
+                related_rows.append(_mapping_to_str_dict(item))
+            return related_rows
+        if not isinstance(value, Mapping):
+            raise RuntimeDataValidationError("Loaded relation value must be a mapping.")
+        return [_mapping_to_str_dict(value)]
 
     async def attach_related_record(
         self,
@@ -205,17 +219,16 @@ class PostgresRuntimeRelationCommandGateway(RuntimeRelationCommandGateway):
         )
         result = await self._execute(sql, {"object_id": object_id})
         row = result.mappings().first()
-        return None if row is None else dict(row)
+        if row is None:
+            return None
+        return _mapping_to_str_dict(row)
 
     @staticmethod
     def _required_relation(
         descriptor: RuntimeObjectDescriptor,
         relation_name: str,
     ) -> RuntimeRelationDescriptor:
-        relation = PostgresRuntimeRelationLoader._find_relation(
-            descriptor,
-            relation_name,
-        )
+        relation = find_runtime_relation(descriptor, relation_name)
         if relation is None:
             raise RuntimeDataValidationError(
                 f"Unknown relation '{relation_name}' for object '{descriptor.object_name}'."
@@ -284,3 +297,14 @@ class PostgresRuntimeRelationCommandGateway(RuntimeRelationCommandGateway):
 
 
 __all__ = ["PostgresRuntimeRelationCommandGateway"]
+
+
+def _mapping_to_str_dict(row: Mapping[Any, Any]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in row.items():
+        if not isinstance(key, str):
+            raise RuntimeDataValidationError(
+                "Runtime relation row contains a non-string column name."
+            )
+        result[key] = value
+    return result

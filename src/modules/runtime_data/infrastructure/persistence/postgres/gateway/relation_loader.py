@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any, List
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -48,11 +48,11 @@ class PostgresRuntimeRelationLoader(RuntimeRelationLoader):
         rows: Sequence[Mapping[str, Any]],
         fetch_plan: FetchPlan,
     ) -> list[Mapping[str, Any]]:
-        result_rows = [dict(row) for row in rows]
+        result_rows = [_mapping_to_str_dict(row) for row in rows]
         if not result_rows:
-            return result_rows
+            return []
         for relation_name in fetch_plan.relations:
-            relation = self._find_relation(descriptor, relation_name)
+            relation = find_runtime_relation(descriptor, relation_name)
             if relation is None:
                 raise RuntimeDataValidationError(
                     f"Unknown relation '{relation_name}' for object '{descriptor.object_name}'."
@@ -79,7 +79,7 @@ class PostgresRuntimeRelationLoader(RuntimeRelationLoader):
                 raise RuntimeDataValidationError(
                     f"Unsupported relation_type '{relation.relation_type}'."
                 )
-        return result_rows
+        return _as_mapping_list(result_rows)
 
     async def _load_fk_relation(
         self,
@@ -239,7 +239,7 @@ class PostgresRuntimeRelationLoader(RuntimeRelationLoader):
         table_name: str,
         column_name: str,
         values: Sequence[Any],
-    ) -> List[dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         if not values:
             return []
         params = {f"value_{index}": value for index, value in enumerate(values)}
@@ -249,7 +249,7 @@ class PostgresRuntimeRelationLoader(RuntimeRelationLoader):
             f"WHERE {self._qi(column_name)} IN ({placeholders})"
         )
         result = await self._execute(sql, params)
-        return [dict(row) for row in result.mappings().all()]
+        return [_mapping_to_str_dict(row) for row in result.mappings().all()]
 
     async def _select_many_to_many(
         self,
@@ -275,25 +275,10 @@ class PostgresRuntimeRelationLoader(RuntimeRelationLoader):
             f"WHERE rel.{self._qi(owner_column)} IN ({placeholders})"
         )
         result = await self._execute(sql, params)
-        return [dict(row) for row in result.mappings().all()]
+        return [_mapping_to_str_dict(row) for row in result.mappings().all()]
 
     async def _execute(self, sql: str, params: Mapping[str, Any]):
         return await self._executor.execute(sql, params)
-
-    @staticmethod
-    def _find_relation(
-        descriptor: RuntimeObjectDescriptor,
-        relation_name: str,
-    ) -> RuntimeRelationDescriptor | None:
-        normalized = relation_name.strip()
-        for relation in descriptor.relations:
-            if normalized in {
-                relation.name,
-                relation.source_relation_name,
-                relation.target_relation_name,
-            }:
-                return relation
-        return None
 
     @classmethod
     def _qualified_table(cls, schema_name: str, table_name: str) -> str:
@@ -316,10 +301,45 @@ class NoopRuntimeRelationLoader(RuntimeRelationLoader):
     ) -> list[Mapping[str, Any]]:
         _ = descriptor
         _ = fetch_plan
-        return [dict(row) for row in rows]
+        result: list[Mapping[str, Any]] = []
+        result.extend(_mapping_to_str_dict(row) for row in rows)
+        return result
 
 
 __all__ = [
     "NoopRuntimeRelationLoader",
     "PostgresRuntimeRelationLoader",
+    "find_runtime_relation",
 ]
+
+
+def _mapping_to_str_dict(row: Mapping[Any, Any]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in row.items():
+        if not isinstance(key, str):
+            raise RuntimeDataValidationError(
+                "Runtime relation row contains a non-string column name."
+            )
+        result[key] = value
+    return result
+
+
+def _as_mapping_list(rows: Sequence[dict[str, Any]]) -> list[Mapping[str, Any]]:
+    result: list[Mapping[str, Any]] = []
+    result.extend(rows)
+    return result
+
+
+def find_runtime_relation(
+    descriptor: RuntimeObjectDescriptor,
+    relation_name: str,
+) -> RuntimeRelationDescriptor | None:
+    normalized = relation_name.strip()
+    for relation in descriptor.relations:
+        if normalized in {
+            relation.name,
+            relation.source_relation_name,
+            relation.target_relation_name,
+        }:
+            return relation
+    return None
