@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import ContactsTable from "./ContactsTable.vue";
 import { AppLayout } from "@/layouts";
 </script>
 
@@ -10,7 +9,5 @@ import { AppLayout } from "@/layouts";
         Contacts
       </h1>
     </template>
-
-    <ContactsTable />
   </AppLayout>
 </template>
