@@ -27,6 +27,9 @@ FilterOperator = Literal[
 FilterLogic = Literal["and", "or"]
 SortDirection = Literal["asc", "desc"]
 
+DEFAULT_SEARCH_LIMIT = 50
+MAX_SEARCH_LIMIT = 500
+
 
 @dataclass(frozen=True, slots=True)
 class FilterSpec:

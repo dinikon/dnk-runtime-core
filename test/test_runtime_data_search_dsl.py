@@ -7,11 +7,13 @@ from uuid import uuid4
 
 from src.modules.runtime_data import (
     RuntimeDataFilterError,
+    RuntimeDataValidationError,
     RuntimeObjectQueryService,
     RuntimeQueryPlan,
     RuntimeRowsPage,
     RuntimeSearchRecordsQuery,
 )
+from src.modules.runtime_data.application.models import MAX_SEARCH_LIMIT
 from src.modules.runtime_data.application.query.filter_dsl import (
     FilterDslParser,
     FilterSemanticValidator,
@@ -96,6 +98,36 @@ def _descriptor() -> RuntimeObjectDescriptor:
                 settings={},
                 is_filterable=False,
                 is_sortable=False,
+            ),
+        ),
+        relations=(),
+    )
+
+
+def _descriptor_without_created_at() -> RuntimeObjectDescriptor:
+    return RuntimeObjectDescriptor(
+        schema_name="dnk_test",
+        object_name="contact",
+        table_name="contacts",
+        pk="id",
+        title_field="id",
+        fields=(
+            RuntimeFieldDescriptor(
+                name="id",
+                type_code="uuid",
+                is_nullable=False,
+                default_value="gen_random_uuid()",
+                options={},
+                settings={},
+                kind="system",
+            ),
+            RuntimeFieldDescriptor(
+                name="first_name",
+                type_code="text",
+                is_nullable=False,
+                default_value=None,
+                options={},
+                settings={},
             ),
         ),
         relations=(),
@@ -468,6 +500,54 @@ class RuntimeDataFilterDslTests(unittest.TestCase):
 
 
 class RuntimeObjectQueryServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def _search_with_descriptor(
+        self,
+        *,
+        descriptor: RuntimeObjectDescriptor,
+        sort_dsl=(),
+        limit: int = 10,
+        offset: int = 0,
+    ):
+        tenant_id = EntityIdVO.from_value(uuid4())
+        record_id = uuid4()
+
+        class RuntimeObjectResolverStub:
+            async def resolve(self, tenant_id, object_name):
+                return descriptor
+
+        class RuntimeQueryGatewaySpy:
+            received_plan = None
+
+            async def search(self, query_plan):
+                self.received_plan = query_plan
+                return RuntimeRowsPage(
+                    rows=(
+                        {
+                            "id": record_id,
+                            "first_name": "Denis",
+                        },
+                    ),
+                    total=1,
+                )
+
+        gateway = RuntimeQueryGatewaySpy()
+        service = RuntimeObjectQueryService(
+            runtime_object_resolver=RuntimeObjectResolverStub(),
+            runtime_query_gateway=gateway,
+        )
+
+        result = await service.search_records(
+            RuntimeSearchRecordsQuery(
+                tenant_id=tenant_id,
+                object_name="contact",
+                filter_dsl=None,
+                sort_dsl=sort_dsl,
+                limit=limit,
+                offset=offset,
+            )
+        )
+        return gateway, result
+
     async def test_search_records_passes_validated_query_plan_to_gateway(self) -> None:
         tenant_id = EntityIdVO.from_value(uuid4())
         record_id = uuid4()
@@ -534,6 +614,66 @@ class RuntimeObjectQueryServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.total, 1)
         self.assertEqual(result.limit, 10)
         self.assertEqual(result.offset, 5)
+
+    async def test_rejects_limit_above_max(self) -> None:
+        class RuntimeObjectResolverStub:
+            async def resolve(self, tenant_id, object_name):
+                raise AssertionError("resolve should not be called")
+
+        class RuntimeQueryGatewayStub:
+            async def search(self, query_plan):
+                raise AssertionError("search should not be called")
+
+        service = RuntimeObjectQueryService(
+            runtime_object_resolver=RuntimeObjectResolverStub(),
+            runtime_query_gateway=RuntimeQueryGatewayStub(),
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeDataValidationError,
+            f"<= {MAX_SEARCH_LIMIT}",
+        ):
+            await service.search_records(
+                RuntimeSearchRecordsQuery(
+                    tenant_id=EntityIdVO.from_value(uuid4()),
+                    object_name="contact",
+                    filter_dsl=None,
+                    limit=MAX_SEARCH_LIMIT + 1,
+                )
+            )
+
+    async def test_uses_default_sort_when_sort_dsl_is_empty(self) -> None:
+        gateway, _result = await self._search_with_descriptor(
+            descriptor=_descriptor(),
+            sort_dsl=[],
+        )
+
+        assert gateway.received_plan is not None
+        self.assertTrue(gateway.received_plan.sorting)
+
+    async def test_default_sort_uses_created_at_and_pk_when_available(self) -> None:
+        gateway, _result = await self._search_with_descriptor(
+            descriptor=_descriptor(),
+            sort_dsl=[],
+        )
+
+        assert gateway.received_plan is not None
+        self.assertEqual(
+            [(sort.field, sort.direction) for sort in gateway.received_plan.sorting],
+            [("created_at", "desc"), ("id", "desc")],
+        )
+
+    async def test_default_sort_falls_back_to_pk(self) -> None:
+        gateway, _result = await self._search_with_descriptor(
+            descriptor=_descriptor_without_created_at(),
+            sort_dsl=[],
+        )
+
+        assert gateway.received_plan is not None
+        self.assertEqual(
+            [(sort.field, sort.direction) for sort in gateway.received_plan.sorting],
+            [("id", "desc")],
+        )
 
 
 class RuntimeDataSortDslTests(unittest.TestCase):

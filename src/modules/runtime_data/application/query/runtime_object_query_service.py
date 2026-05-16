@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from src.modules.runtime_data.application.models import PageSpec
+from src.modules.runtime_data.application.models import (
+    MAX_SEARCH_LIMIT,
+    PageSpec,
+    SortSpec,
+)
 from src.modules.runtime_data.application.ports import RuntimeQueryGateway
 from src.modules.runtime_data.application.query.filter_dsl import (
     FilterDslParser,
@@ -17,7 +21,10 @@ from src.modules.runtime_data.application.query.sort_dsl import (
     SortSemanticValidator,
 )
 from src.modules.runtime_data.domain import RuntimeDataValidationError
-from src.modules.schema_registry.runtime import RuntimeObjectResolverProtocol
+from src.modules.schema_registry.runtime import (
+    RuntimeObjectDescriptor,
+    RuntimeObjectResolverProtocol,
+)
 
 
 class RuntimeObjectQueryService:
@@ -48,6 +55,10 @@ class RuntimeObjectQueryService:
 
         if query.limit < 1:
             raise RuntimeDataValidationError("Search limit must be >= 1.")
+        if query.limit > MAX_SEARCH_LIMIT:
+            raise RuntimeDataValidationError(
+                f"Search limit must be <= {MAX_SEARCH_LIMIT}."
+            )
         if query.offset < 0:
             raise RuntimeDataValidationError("Search offset must be >= 0.")
 
@@ -66,6 +77,8 @@ class RuntimeObjectQueryService:
             descriptor=descriptor,
             sort_ast=sort_ast,
         )
+        if not sorting:
+            sorting = self._default_sorting(descriptor)
 
         query_plan = RuntimeQueryPlan(
             descriptor=descriptor,
@@ -87,6 +100,28 @@ class RuntimeObjectQueryService:
             limit=query.limit,
             offset=query.offset,
         )
+
+    def _default_sorting(
+        self,
+        descriptor: RuntimeObjectDescriptor,
+    ) -> tuple[SortSpec, ...]:
+        sorting: list[SortSpec] = []
+        created_at = descriptor.field_by_name("created_at")
+        if created_at is not None and created_at.is_sortable:
+            sorting.append(SortSpec(field=created_at.name, direction="desc"))
+
+        pk_field = descriptor.field_by_name(descriptor.pk)
+        if pk_field is not None and pk_field.is_sortable:
+            seen_fields = {sort.field for sort in sorting}
+            if pk_field.name not in seen_fields:
+                sorting.append(SortSpec(field=pk_field.name, direction="desc"))
+
+        if not sorting:
+            raise RuntimeDataValidationError(
+                "Runtime object descriptor must contain a sortable field for default "
+                "search ordering."
+            )
+        return tuple(sorting)
 
 
 __all__ = ["RuntimeObjectQueryService"]
