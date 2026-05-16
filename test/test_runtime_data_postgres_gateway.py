@@ -490,7 +490,7 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
         count_sql, count_params = session.calls[0]
         page_sql, page_params = session.calls[1]
         self.assertIn("SELECT COUNT(*) AS total", count_sql)
-        self.assertIn('"last_name" <> :f_0', count_sql)
+        self.assertIn('"last_name" IS DISTINCT FROM :f_0', count_sql)
         self.assertIn('"created_at" BETWEEN :f_1_start AND :f_1_end', count_sql)
         self.assertIn('"first_name" IS NOT NULL', count_sql)
         self.assertNotIn("LIMIT :page_limit", count_sql)

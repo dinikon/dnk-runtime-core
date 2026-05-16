@@ -218,6 +218,95 @@ class PostgresRuntimeQueryCompilerTests(unittest.TestCase):
 
         self.assertIs(compiled.params["f_0"], sentinel_value)
 
+    def test_contains_escapes_percent(self) -> None:
+        descriptor = _descriptor()
+        compiled = PostgresRuntimeQueryCompiler().compile_search(
+            _query_plan(
+                descriptor=descriptor,
+                filters=(
+                    _typed_filter(
+                        descriptor,
+                        field="last_name",
+                        op="contains",
+                        value="100%",
+                    ),
+                ),
+            )
+        )
+
+        self.assertIn(
+            "CAST(\"last_name\" AS text) ILIKE :f_0 ESCAPE '\\'",
+            compiled.sql,
+        )
+        self.assertEqual(compiled.params["f_0"], "%100\\%%")
+
+    def test_contains_escapes_underscore(self) -> None:
+        descriptor = _descriptor()
+        compiled = PostgresRuntimeQueryCompiler().compile_search(
+            _query_plan(
+                descriptor=descriptor,
+                filters=(
+                    _typed_filter(
+                        descriptor,
+                        field="last_name",
+                        op="contains",
+                        value="do_e",
+                    ),
+                ),
+            )
+        )
+
+        self.assertIn(
+            "CAST(\"last_name\" AS text) ILIKE :f_0 ESCAPE '\\'",
+            compiled.sql,
+        )
+        self.assertEqual(compiled.params["f_0"], "%do\\_e%")
+
+    def test_neq_uses_is_distinct_from(self) -> None:
+        descriptor = _descriptor()
+        compiled = PostgresRuntimeQueryCompiler().compile_search(
+            _query_plan(
+                descriptor=descriptor,
+                filters=(
+                    _typed_filter(
+                        descriptor,
+                        field="last_name",
+                        op="neq",
+                        value="Roe",
+                    ),
+                ),
+            )
+        )
+
+        self.assertIn('"last_name" IS DISTINCT FROM :f_0', compiled.sql)
+        self.assertNotIn('"last_name" <> :f_0', compiled.sql)
+        self.assertEqual(compiled.params["f_0"], "Roe")
+
+    def test_between_uses_typed_tuple(self) -> None:
+        descriptor = _descriptor()
+        start = object()
+        end = object()
+        compiled = PostgresRuntimeQueryCompiler().compile_search(
+            _query_plan(
+                descriptor=descriptor,
+                filters=(
+                    _typed_filter(
+                        descriptor,
+                        field="created_at",
+                        op="between",
+                        value=(start, end),
+                    ),
+                ),
+            )
+        )
+
+        self.assertIn(
+            '"created_at" BETWEEN :f_0_start AND :f_0_end',
+            compiled.sql,
+        )
+        self.assertIs(compiled.params["f_0_start"], start)
+        self.assertIs(compiled.params["f_0_end"], end)
+
     def test_compiler_rejects_invalid_identifier(self) -> None:
         with self.assertRaises(RuntimeDataPolicyError):
             PostgresRuntimeQueryCompiler().compile_search(

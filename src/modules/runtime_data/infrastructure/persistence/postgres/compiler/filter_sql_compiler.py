@@ -18,6 +18,11 @@ from src.modules.runtime_data.infrastructure.persistence.postgres.compiler.ident
 from src.modules.schema_registry.runtime import RuntimeFieldDescriptor
 
 
+def escape_like(value: str) -> str:
+    """Escape PostgreSQL LIKE wildcards for literal user search text."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 class PostgresFilterSqlCompiler:
     """Compiles validated runtime filter specs to PostgreSQL WHERE SQL."""
 
@@ -138,7 +143,7 @@ class PostgresFilterSqlCompiler:
                 return (f"{field_sql} IS NOT NULL", {}, {})
             param_name = f"f_{position}"
             return (
-                f"{field_sql} <> :{param_name}",
+                f"{field_sql} IS DISTINCT FROM :{param_name}",
                 {param_name: value},
                 {param_name: field},
             )
@@ -186,12 +191,12 @@ class PostgresFilterSqlCompiler:
             param_name = f"f_{position}"
             return (
                 f"CAST({field_sql} AS text) ILIKE :{param_name} ESCAPE '\\'",
-                {param_name: f"%{self._escape_like_value(value)}%"},
+                {param_name: f"%{escape_like(value)}%"},
                 {},
             )
 
         if op in {"starts_with", "ends_with"}:
-            escaped_value = self._escape_like_value(value)
+            escaped_value = escape_like(value)
             pattern = (
                 f"{escaped_value}%" if op == "starts_with" else f"%{escaped_value}"
             )
@@ -259,43 +264,14 @@ class PostgresFilterSqlCompiler:
             )
 
         if op == "between":
-            if not isinstance(value, Sequence) or isinstance(
-                value,
-                (str, bytes),
-            ):
-                raise RuntimeDataFilterError(
-                    code="INVALID_FILTER_VALUE_TYPE",
-                    message=(
-                        f"Filter '{field.name}' with operator 'between' "
-                        "requires a two-item sequence."
-                    ),
-                    details={
-                        "field": field.name,
-                        "operator": op,
-                    },
-                )
-            items = list(value)
-            if len(items) != 2:
-                raise RuntimeDataFilterError(
-                    code="INVALID_FILTER_VALUE_TYPE",
-                    message=(
-                        f"Filter '{field.name}' with operator 'between' "
-                        "requires exactly two values."
-                    ),
-                    details={
-                        "field": field.name,
-                        "operator": op,
-                        "expected_length": 2,
-                        "actual_length": len(items),
-                    },
-                )
+            start, end = value
             start_param = f"f_{position}_start"
             end_param = f"f_{position}_end"
             return (
                 f"{field_sql} BETWEEN :{start_param} AND :{end_param}",
                 {
-                    start_param: items[0],
-                    end_param: items[1],
+                    start_param: start,
+                    end_param: end,
                 },
                 {
                     start_param: field,
@@ -324,9 +300,5 @@ class PostgresFilterSqlCompiler:
             },
         )
 
-    @staticmethod
-    def _escape_like_value(value: str) -> str:
-        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
-
-__all__ = ["PostgresFilterSqlCompiler"]
+__all__ = ["PostgresFilterSqlCompiler", "escape_like"]
