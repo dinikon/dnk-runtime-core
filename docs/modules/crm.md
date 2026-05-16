@@ -75,5 +75,4 @@ All routes currently require authenticated request context.
 
 - `src/modules/crm/presentation/http/router.py`
 - `src/modules/crm/domain/contact/entity.py`
-- `src/modules/crm/domain/contact/service.py`
 - `src/modules/crm/application/contact/use_case/`
