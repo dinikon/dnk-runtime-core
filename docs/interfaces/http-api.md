@@ -11,14 +11,20 @@ All public HTTP routes are mounted under `/api`.
 
 ## CRM
 
-| Method   | Path                             | Module | Request                        | Response                     | Auth                          | Main errors         |
-|----------|----------------------------------|--------|--------------------------------|------------------------------|-------------------------------|---------------------|
-| `POST`   | `/api/crm/contacts`              | `crm`  | `CreateContactRequestSchema`   | `ContactResponseSchema`      | authenticated request context | `401`, `422`        |
-| `POST`   | `/api/crm/contacts/fields`       | `crm`  | none                           | `ContactFieldsResponseSchema`| authenticated request context | `401`, `409`, `422` |
-| `GET`    | `/api/crm/contacts`              | `crm`  | query params `limit`, `offset` | `ListContactsResponseSchema` | authenticated request context | `401`, `422`        |
-| `GET`    | `/api/crm/contacts/{contact_id}` | `crm`  | path `contact_id`              | `ContactResponseSchema`      | authenticated request context | `401`, `404`, `422` |
-| `PUT`    | `/api/crm/contacts/{contact_id}` | `crm`  | `UpdateContactRequestSchema`   | `ContactResponseSchema`      | authenticated request context | `401`, `404`, `422` |
-| `DELETE` | `/api/crm/contacts/{contact_id}` | `crm`  | path `contact_id`              | empty `204`                  | authenticated request context | `401`, `404`, `422` |
+| Method   | Path                              | Module | Request                        | Response                      | Auth                          | Main errors         |
+|----------|-----------------------------------|--------|--------------------------------|-------------------------------|-------------------------------|---------------------|
+| `POST`   | `/api/crm/contacts`               | `crm`  | `CreateContactRequestSchema`   | `ContactResponseSchema`       | authenticated request context | `401`, `422`        |
+| `POST`   | `/api/crm/contacts/fields`        | `crm`  | none                           | `ContactFieldsResponseSchema` | authenticated request context | `401`, `409`, `422` |
+| `GET`    | `/api/crm/contacts`               | `crm`  | query params `limit`, `offset` | `ListContactsResponseSchema`  | authenticated request context | `401`, `422`        |
+| `GET`    | `/api/crm/contacts/{contact_id}`  | `crm`  | path `contact_id`              | `ContactResponseSchema`       | authenticated request context | `401`, `404`, `422` |
+| `PUT`    | `/api/crm/contacts/{contact_id}`  | `crm`  | `UpdateContactRequestSchema`   | `ContactResponseSchema`       | authenticated request context | `401`, `404`, `422` |
+| `DELETE` | `/api/crm/contacts/{contact_id}`  | `crm`  | path `contact_id`              | empty `204`                   | authenticated request context | `401`, `404`, `422` |
+| `POST`   | `/api/crm/companies`              | `crm`  | `CreateCompanyRequestSchema`   | `CompanyResponseSchema`       | authenticated request context | `401`, `422`        |
+| `POST`   | `/api/crm/companies/fields`       | `crm`  | none                           | `CompanyFieldsResponseSchema` | authenticated request context | `401`, `409`, `422` |
+| `GET`    | `/api/crm/companies`              | `crm`  | query params `limit`, `offset` | `ListCompaniesResponseSchema` | authenticated request context | `401`, `422`        |
+| `GET`    | `/api/crm/companies/{company_id}` | `crm`  | path `company_id`              | `CompanyResponseSchema`       | authenticated request context | `401`, `404`, `422` |
+| `PUT`    | `/api/crm/companies/{company_id}` | `crm`  | `UpdateCompanyRequestSchema`   | `CompanyResponseSchema`       | authenticated request context | `401`, `404`, `422` |
+| `DELETE` | `/api/crm/companies/{company_id}` | `crm`  | path `company_id`              | empty `204`                   | authenticated request context | `401`, `404`, `422` |
 
 ## Inventory
 

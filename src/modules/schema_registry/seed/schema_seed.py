@@ -816,23 +816,11 @@ SCHEMA_SEED = SchemaSeed(
             fields=(
                 *_system_fields("Company identifier."),
                 FieldSeed(
-                    name="company_name",
+                    name="legal_name",
                     type="text",
-                    label="Company Name",
-                    description="Company display name.",
+                    label="Legal Name",
+                    description="Company legal name.",
                     is_nullable=False,
-                ),
-                FieldSeed(
-                    name="status",
-                    type="select",
-                    label="Status",
-                    description="Company status.",
-                    is_nullable=False,
-                    default="'active'",
-                    options={
-                        "active": "Active",
-                        "inactive": "Inactive",
-                    },
                 ),
             ),
             indexes=(
@@ -842,13 +830,8 @@ SCHEMA_SEED = SchemaSeed(
                     is_unique=True,
                 ),
                 IndexSeed(
-                    name="companies_company_name_idx",
-                    fields=("company_name",),
-                    is_unique=False,
-                ),
-                IndexSeed(
-                    name="companies_status_idx",
-                    fields=("status",),
+                    name="companies_legal_name_idx",
+                    fields=("legal_name",),
                     is_unique=False,
                 ),
             ),

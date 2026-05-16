@@ -2,8 +2,7 @@
 
 ## Purpose
 
-`crm` currently exposes a small contact management surface. At this stage the module is intentionally narrow: it handles
-only contacts.
+`crm` currently exposes contact and company management surfaces backed by runtime schema tables.
 
 ## Public Functionality
 
@@ -13,6 +12,12 @@ only contacts.
 - list contacts with pagination
 - update contact name
 - delete contact
+- create company
+- get company model description
+- get company by id
+- list companies with pagination
+- update company legal name
+- delete company
 
 ## Main Flows / Use Cases
 
@@ -22,6 +27,12 @@ only contacts.
 - `ListContacts`
 - `UpdateContact`
 - `DeleteContact`
+- `CreateCompany`
+- `DescribeCompanyFields`
+- `GetCompany`
+- `ListCompanies`
+- `UpdateCompany`
+- `DeleteCompany`
 
 ## Domain Model
 
@@ -29,6 +40,10 @@ only contacts.
     - `id` as `ContactIdVO`
     - timestamps
     - `ContactNameVO` with last, first and middle name
+- `CompanyEntity`
+    - `id` as `CompanyIdVO`
+    - timestamps
+    - required `legal_name`
 
 ## Infrastructure / Persistence
 
@@ -36,13 +51,13 @@ only contacts.
 - current persistence integrates with shared database layer and authenticated request context
 - HTTP payloads do not accept `tenant_id`; controllers read it from request context and pass it through CRM commands,
   queries, use cases and repository calls
-- internally that tenant scope is `EntityIdVO`; contact ids are `ContactIdVO` and are converted to UUIDs only at
-  HTTP/runtime-data boundaries
+- internally that tenant scope is `EntityIdVO`; contact/company ids are concrete domain value objects and are converted
+  to UUIDs only at HTTP/runtime-data boundaries
 - wiring stays tenant-agnostic and does not bind repositories to a tenant
 
 ## Presentation / Entry Points
 
-All current CRM routes live under `/api/crm/contacts`:
+Contact routes live under `/api/crm/contacts`:
 
 - `POST /`
 - `POST /fields`
@@ -50,6 +65,15 @@ All current CRM routes live under `/api/crm/contacts`:
 - `GET /{contact_id}`
 - `PUT /{contact_id}`
 - `DELETE /{contact_id}`
+
+Company routes live under `/api/crm/companies`:
+
+- `POST /`
+- `POST /fields`
+- `GET /`
+- `GET /{company_id}`
+- `PUT /{company_id}`
+- `DELETE /{company_id}`
 
 All routes currently require authenticated request context.
 
@@ -62,6 +86,8 @@ All routes currently require authenticated request context.
 
 - contact endpoint tests
 - contact use case tests
+- company endpoint tests
+- company use case tests
 - CRM domain tests
 
 ## Related
@@ -75,4 +101,6 @@ All routes currently require authenticated request context.
 
 - `src/modules/crm/presentation/http/router.py`
 - `src/modules/crm/domain/contact/entity.py`
+- `src/modules/crm/domain/company/entity.py`
 - `src/modules/crm/application/contact/use_case/`
+- `src/modules/crm/application/company/use_case/`

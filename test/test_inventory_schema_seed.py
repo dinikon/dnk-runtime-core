@@ -50,7 +50,7 @@ class InventorySchemaSeedTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(company.plural_name, "companies")
         self.assertEqual(product.plural_name, "products")
         self.assertEqual(category.plural_name, "product_categories")
-        self.assertIn("company_name", {field.name for field in company.fields})
+        self.assertIn("legal_name", {field.name for field in company.fields})
         self.assertIn("sku", {field.name for field in product.fields})
         self.assertIn("parent_category_id", {field.name for field in category.fields})
         self.assertTrue(

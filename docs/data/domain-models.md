@@ -75,6 +75,15 @@ scope uses `EntityIdVO` directly; concrete entities expose concrete subclasses s
     - timestamps
     - `contact_name` with last/first/middle name
 
+### `CompanyEntity`
+
+- Module owner: `crm`
+- Business meaning: CRM company record
+- Key fields:
+    - `id` as `CompanyIdVO`
+    - timestamps
+    - `legal_name`
+
 ## Inventory
 
 ### `ProductEntity`

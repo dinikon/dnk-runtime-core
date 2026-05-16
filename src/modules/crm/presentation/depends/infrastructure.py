@@ -4,16 +4,27 @@ from typing import Annotated
 
 from fastapi import Depends
 
+from src.modules.crm.application.company.query.describe_company_fields_repository import (
+    CompanyFieldsDescriptionRepositoryProtocol,
+)
+from src.modules.crm.application.company.query.repository import (
+    CompanyQueryRepositoryProtocol,
+)
 from src.modules.crm.application.contact.query.describe_contact_fields_repository import (
     ContactFieldsDescriptionRepositoryProtocol,
 )
 from src.modules.crm.application.contact.query.repository import (
     ContactQueryRepositoryProtocol,
 )
+from src.modules.crm.domain.company.repository import (
+    CompanyCommandRepositoryProtocol,
+)
 from src.modules.crm.domain.contact.repository import (
     ContactCommandRepositoryProtocol,
 )
 from src.modules.crm.infrastructure import (
+    CompanyModelDescriptionRepository,
+    CompanyRuntimeRepository,
     ContactModelDescriptionRepository,
     ContactRuntimeRepository,
 )
@@ -90,6 +101,42 @@ ContactCommandRepositoryDep = Annotated[
 ]
 
 
+def get_company_query_repository(
+    runtime_object_resolver: RuntimeObjectResolverDep,
+    runtime_gateway: RuntimeGatewayDep,
+) -> CompanyQueryRepositoryProtocol:
+    """Создает query repository компаний поверх runtime gateway."""
+    return CompanyRuntimeRepository(
+        runtime_object_resolver=runtime_object_resolver,
+        runtime_command_gateway=runtime_gateway,
+        runtime_query_gateway=runtime_gateway,
+    )
+
+
+CompanyQueryRepositoryDep = Annotated[
+    CompanyQueryRepositoryProtocol,
+    Depends(get_company_query_repository),
+]
+
+
+def get_company_command_repository(
+    runtime_object_resolver: RuntimeObjectResolverDep,
+    runtime_gateway: RuntimeGatewayDep,
+) -> CompanyCommandRepositoryProtocol:
+    """Создает command repository компаний поверх runtime gateway."""
+    return CompanyRuntimeRepository(
+        runtime_object_resolver=runtime_object_resolver,
+        runtime_command_gateway=runtime_gateway,
+        runtime_query_gateway=runtime_gateway,
+    )
+
+
+CompanyCommandRepositoryDep = Annotated[
+    CompanyCommandRepositoryProtocol,
+    Depends(get_company_command_repository),
+]
+
+
 def get_contact_fields_description_repository(
     describe_runtime_object_use_case: DescribeRuntimeObjectUseCaseDep,
 ) -> ContactFieldsDescriptionRepositoryProtocol:
@@ -104,12 +151,34 @@ ContactFieldsDescriptionRepositoryDep = Annotated[
     Depends(get_contact_fields_description_repository),
 ]
 
+
+def get_company_fields_description_repository(
+    describe_runtime_object_use_case: DescribeRuntimeObjectUseCaseDep,
+) -> CompanyFieldsDescriptionRepositoryProtocol:
+    """Создает repository описания модели company через schema_registry."""
+    return CompanyModelDescriptionRepository(
+        describe_runtime_object_use_case=describe_runtime_object_use_case,
+    )
+
+
+CompanyFieldsDescriptionRepositoryDep = Annotated[
+    CompanyFieldsDescriptionRepositoryProtocol,
+    Depends(get_company_fields_description_repository),
+]
+
+
 __all__ = [
+    "CompanyCommandRepositoryDep",
+    "CompanyFieldsDescriptionRepositoryDep",
+    "CompanyQueryRepositoryDep",
     "ContactCommandRepositoryDep",
     "ContactFieldsDescriptionRepositoryDep",
     "ContactQueryRepositoryDep",
     "RuntimeGatewayDep",
     "RuntimeFieldTypePolicyDep",
+    "get_company_command_repository",
+    "get_company_fields_description_repository",
+    "get_company_query_repository",
     "get_contact_command_repository",
     "get_contact_fields_description_repository",
     "get_contact_query_repository",
