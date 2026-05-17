@@ -33,6 +33,9 @@ from src.modules.schema_registry.domain.object.value_object import RuntimeObject
 from src.modules.schema_registry.domain.object_feature.repository import (
     ObjectFeatureConfigRepositoryProtocol,
 )
+from src.modules.schema_registry.domain.object_feature.value_object import (
+    ObjectFeatureConfigIdVO,
+)
 from src.modules.schema_registry.domain.relation.repository import (
     RelationRepositoryProtocol,
 )
@@ -158,6 +161,11 @@ def get_runtime_object_id_provider() -> Callable[[], RuntimeObjectIdVO]:
     return lambda: RuntimeObjectIdVO.from_value(uuid6.uuid7())
 
 
+def get_object_feature_config_id_provider() -> Callable[[], ObjectFeatureConfigIdVO]:
+    """Возвращает provider UUIDv7 ObjectFeatureConfigIdVO для feature config."""
+    return lambda: ObjectFeatureConfigIdVO.from_value(uuid6.uuid7())
+
+
 def get_runtime_field_id_provider() -> Callable[[], RuntimeFieldIdVO]:
     """Возвращает provider UUIDv7 RuntimeFieldIdVO для field metadata."""
     return lambda: RuntimeFieldIdVO.from_value(uuid6.uuid7())
@@ -263,6 +271,7 @@ __all__ = [
     "get_data_source_repository",
     "get_data_source_service",
     "get_data_source_id_provider",
+    "get_object_feature_config_id_provider",
     "get_object_feature_config_repository",
     "get_object_repository",
     "get_object_service",

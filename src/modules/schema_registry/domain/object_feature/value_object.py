@@ -7,7 +7,7 @@ import re
 from src.modules.schema_registry.domain.error import InvalidValueObjectError
 from src.modules.shared import EntityIdVO
 
-_FEATURE_CODE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+_FEATURE_CODE_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 
 class ObjectFeatureConfigIdVO(EntityIdVO):
@@ -22,7 +22,7 @@ class FeatureCodeVO:
 
     def __post_init__(self) -> None:
         """Нормализует и валидирует feature code."""
-        normalized = self.value.strip()
+        normalized = self.value.strip().upper()
 
         if not normalized:
             raise InvalidValueObjectError("Feature code cannot be empty.")
@@ -30,12 +30,9 @@ class FeatureCodeVO:
         if len(normalized) > 63:
             raise InvalidValueObjectError("Feature code is too long. Max length is 63.")
 
-        if normalized.lower() != normalized:
-            raise InvalidValueObjectError("Feature code must be lowercase.")
-
         if not _FEATURE_CODE_RE.match(normalized):
             raise InvalidValueObjectError(
-                "Feature code must match pattern ^[a-z][a-z0-9_]*$."
+                "Feature code must match pattern ^[A-Z][A-Z0-9_]*$."
             )
 
         object.__setattr__(self, "value", normalized)

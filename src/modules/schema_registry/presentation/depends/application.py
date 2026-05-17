@@ -49,6 +49,7 @@ from src.modules.schema_registry.presentation.depends.infrastructure import (
     SchemaSeedReaderDep,
     TenantSchemaExecutorDep,
     TenantSchemaInspectorDep,
+    get_object_feature_config_id_provider,
 )
 from src.modules.shared.depends import ClockDep
 
@@ -229,7 +230,11 @@ def get_enable_object_feature_use_case(
     clock: ClockDep,
 ) -> EnableObjectFeatureUseCase:
     """Создает use case включения object feature config."""
-    return EnableObjectFeatureUseCase(repository=repository, clock=clock)
+    return EnableObjectFeatureUseCase(
+        repository=repository,
+        clock=clock,
+        id_provider=get_object_feature_config_id_provider(),
+    )
 
 
 EnableObjectFeatureUseCaseDep: TypeAlias = Annotated[
