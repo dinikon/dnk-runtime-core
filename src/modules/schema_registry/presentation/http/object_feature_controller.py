@@ -5,7 +5,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.modules.schema_registry.application.object_feature.command import (
     DisableObjectFeatureCommand,
@@ -22,12 +22,12 @@ from src.modules.schema_registry.domain.object_feature.entity import (
     ObjectFeatureConfigEntity,
 )
 from src.modules.schema_registry.domain.object_feature.error import (
+    ObjectFeatureConfigForbiddenError,
     ObjectFeatureConfigLockedError,
     ObjectFeatureConfigNotFoundError,
 )
 from src.modules.schema_registry.domain.object_feature.value_object import (
     FeatureCodeVO,
-    ObjectFeatureKind,
 )
 from src.modules.schema_registry.presentation.depends import (
     DisableObjectFeatureUseCaseDep,
@@ -45,14 +45,17 @@ router = APIRouter(prefix="/config/objects/features", tags=["config"])
 class EnableObjectFeatureRequestSchema(BaseModel):
     """HTTP request schema включения object feature."""
 
+    model_config = ConfigDict(extra="forbid")
+
     object_id: UUID
     feature_code: str
-    kind: str = "standard"
     config: dict[str, Any] = Field(default_factory=dict)
 
 
 class ObjectFeatureRequestSchema(BaseModel):
     """HTTP request schema чтения/выключения object feature."""
+
+    model_config = ConfigDict(extra="forbid")
 
     object_id: UUID
     feature_code: str
@@ -60,6 +63,8 @@ class ObjectFeatureRequestSchema(BaseModel):
 
 class ListObjectFeaturesRequestSchema(BaseModel):
     """HTTP request schema списка object feature configs."""
+
+    model_config = ConfigDict(extra="forbid")
 
     object_id: UUID
 
@@ -100,11 +105,10 @@ async def enable_object_feature(
                 tenant_id=tenant_id,
                 object_id=RuntimeObjectIdVO.from_value(payload.object_id),
                 feature_code=FeatureCodeVO(payload.feature_code),
-                kind=ObjectFeatureKind.from_value(payload.kind),
                 config=dict(payload.config),
             )
         )
-    except ObjectFeatureConfigLockedError as exc:
+    except (ObjectFeatureConfigForbiddenError, ObjectFeatureConfigLockedError) as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
@@ -139,7 +143,7 @@ async def disable_object_feature(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
         ) from exc
-    except ObjectFeatureConfigLockedError as exc:
+    except (ObjectFeatureConfigForbiddenError, ObjectFeatureConfigLockedError) as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),

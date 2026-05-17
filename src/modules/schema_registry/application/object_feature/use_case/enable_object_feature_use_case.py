@@ -19,6 +19,7 @@ from src.modules.schema_registry.domain.object_feature.repository import (
 )
 from src.modules.schema_registry.domain.object_feature.value_object import (
     ObjectFeatureConfigIdVO,
+    ObjectFeatureKind,
 )
 from src.modules.shared.kernel.time.ports import ClockPort
 
@@ -56,12 +57,11 @@ class EnableObjectFeatureUseCase:
                 tenant_id=command.tenant_id,
                 object_id=command.object_id,
                 feature_code=command.feature_code,
-                kind=command.kind,
+                kind=ObjectFeatureKind.CUSTOM,
                 config=command.config,
             )
         else:
             config.update_config(now=now, config=command.config)
-            config.kind = command.kind
 
         config.enable(now=now)
         await self._repository.save(config)

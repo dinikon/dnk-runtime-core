@@ -5,7 +5,6 @@ from uuid import UUID
 import uuid6
 from sqlalchemy import (
     Boolean,
-    CheckConstraint,
     DateTime,
     ForeignKey,
     String,
@@ -59,14 +58,6 @@ class ObjectFeatureConfigORM(Base):
     locked_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     __table_args__ = (
-        CheckConstraint(
-            "kind IN ('standard', 'custom')",
-            name="chk_object_feature_kind",
-        ),
-        CheckConstraint(
-            "status IN ('enabled', 'disabled')",
-            name="chk_object_feature_status",
-        ),
         UniqueConstraint(
             "tenant_id",
             "object_id",

@@ -14,6 +14,23 @@ class ObjectFeatureConfigIdVO(EntityIdVO):
     """Value object идентификатора object feature config metadata."""
 
 
+class ObjectFeatureCode(StrEnum):
+    """Строгий справочник поддержанных object feature codes."""
+
+    CONTACT_POINTS = "CONTACT_POINTS"
+    INVENTORY = "INVENTORY"
+
+    @classmethod
+    def from_value(
+        cls,
+        value: str | "ObjectFeatureCode",
+    ) -> "ObjectFeatureCode":
+        """Нормализует raw feature code в enum-значение справочника."""
+        if isinstance(value, cls):
+            return value
+        return cls(str(value).strip().upper())
+
+
 @dataclass(frozen=True, slots=True)
 class FeatureCodeVO:
     """Value object кода feature runtime-объекта."""
@@ -35,7 +52,15 @@ class FeatureCodeVO:
                 "Feature code must match pattern ^[A-Z][A-Z0-9_]*$."
             )
 
-        object.__setattr__(self, "value", normalized)
+        try:
+            feature_code = ObjectFeatureCode.from_value(normalized)
+        except ValueError as exc:
+            allowed = ", ".join(item.value for item in ObjectFeatureCode)
+            raise InvalidValueObjectError(
+                f"Unsupported feature code '{normalized}'. Allowed: {allowed}."
+            ) from exc
+
+        object.__setattr__(self, "value", feature_code.value)
 
 
 class ObjectFeatureKind(StrEnum):
@@ -43,6 +68,7 @@ class ObjectFeatureKind(StrEnum):
 
     CUSTOM = "custom"
     STANDARD = "standard"
+    SYSTEM = "system"
 
     @classmethod
     def from_value(

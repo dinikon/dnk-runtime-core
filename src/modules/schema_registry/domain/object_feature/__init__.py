@@ -2,6 +2,7 @@ from src.modules.schema_registry.domain.object_feature.entity import (
     ObjectFeatureConfigEntity,
 )
 from src.modules.schema_registry.domain.object_feature.error import (
+    ObjectFeatureConfigForbiddenError,
     ObjectFeatureConfigLockedError,
     ObjectFeatureConfigNotFoundError,
     ObjectFeatureNotEnabledError,
@@ -11,6 +12,7 @@ from src.modules.schema_registry.domain.object_feature.repository import (
 )
 from src.modules.schema_registry.domain.object_feature.value_object import (
     FeatureCodeVO,
+    ObjectFeatureCode,
     ObjectFeatureConfigIdVO,
     ObjectFeatureKind,
     ObjectFeatureStatus,
@@ -18,7 +20,9 @@ from src.modules.schema_registry.domain.object_feature.value_object import (
 
 __all__ = [
     "FeatureCodeVO",
+    "ObjectFeatureCode",
     "ObjectFeatureConfigEntity",
+    "ObjectFeatureConfigForbiddenError",
     "ObjectFeatureConfigIdVO",
     "ObjectFeatureConfigLockedError",
     "ObjectFeatureConfigNotFoundError",

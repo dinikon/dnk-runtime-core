@@ -7,6 +7,7 @@ from typing import Any, Self
 
 from src.modules.schema_registry.domain.object.value_object import RuntimeObjectIdVO
 from src.modules.schema_registry.domain.object_feature.error import (
+    ObjectFeatureConfigForbiddenError,
     ObjectFeatureConfigLockedError,
     ObjectFeatureNotEnabledError,
 )
@@ -76,6 +77,7 @@ class ObjectFeatureConfigEntity:
     def disable(self, *, now: datetime) -> None:
         """Выключает feature config, если он не locked."""
         self._ensure_not_locked()
+        self._ensure_user_mutable()
         self.status = ObjectFeatureStatus.DISABLED
         self.updated_at = now
 
@@ -87,6 +89,7 @@ class ObjectFeatureConfigEntity:
     ) -> None:
         """Полностью заменяет config, если feature config не locked."""
         self._ensure_not_locked()
+        self._ensure_user_mutable()
         self.config = dict(config)
         self.updated_at = now
 
@@ -119,6 +122,13 @@ class ObjectFeatureConfigEntity:
             )
             raise ObjectFeatureConfigLockedError(
                 f"Object feature '{self.feature_code.value}' is locked.{suffix}"
+            )
+
+    def _ensure_user_mutable(self) -> None:
+        """Проверяет, что пользователь может менять feature config."""
+        if self.kind != ObjectFeatureKind.CUSTOM:
+            raise ObjectFeatureConfigForbiddenError(
+                "Only custom object features can be changed by user operations."
             )
 
     @staticmethod

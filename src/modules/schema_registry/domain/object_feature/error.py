@@ -7,6 +7,12 @@ class ObjectFeatureConfigLockedError(SchemaRegistryError):
     pass
 
 
+class ObjectFeatureConfigForbiddenError(SchemaRegistryError):
+    """Ошибка запрещенной пользовательской операции над object feature config."""
+
+    pass
+
+
 class ObjectFeatureNotEnabledError(SchemaRegistryError):
     """Ошибка использования выключенной object feature."""
 
