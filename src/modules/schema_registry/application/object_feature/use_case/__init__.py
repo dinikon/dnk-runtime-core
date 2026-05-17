@@ -10,10 +10,18 @@ from src.modules.schema_registry.application.object_feature.use_case.enable_obje
 from src.modules.schema_registry.application.object_feature.use_case.get_object_feature_config_use_case import (
     GetObjectFeatureConfigUseCase,
 )
+from src.modules.schema_registry.application.object_feature.use_case.list_object_features_use_case import (
+    ListObjectFeaturesUseCase,
+)
+from src.modules.schema_registry.application.object_feature.use_case.update_object_feature_config_use_case import (
+    UpdateObjectFeatureConfigUseCase,
+)
 
 __all__ = [
     "AssertObjectFeatureEnabledUseCase",
     "DisableObjectFeatureUseCase",
     "EnableObjectFeatureUseCase",
     "GetObjectFeatureConfigUseCase",
+    "ListObjectFeaturesUseCase",
+    "UpdateObjectFeatureConfigUseCase",
 ]

@@ -23,10 +23,14 @@ class AssertObjectFeatureEnabledUseCase:
         *,
         tenant_id: EntityIdVO,
         object_id: RuntimeObjectIdVO,
-        feature_code: str,
+        feature_code: str | FeatureCodeVO,
     ) -> None:
         """Проверяет enabled-статус feature config для внешних модулей."""
-        feature_code_vo = FeatureCodeVO(feature_code)
+        feature_code_vo = (
+            feature_code
+            if isinstance(feature_code, FeatureCodeVO)
+            else FeatureCodeVO(feature_code)
+        )
         config = await self._repository.get(
             tenant_id=tenant_id,
             object_id=object_id,

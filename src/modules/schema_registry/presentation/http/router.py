@@ -13,7 +13,7 @@ from src.modules.schema_registry.presentation.http.config.object.controller impo
 from src.modules.schema_registry.presentation.http.config.relation.controller import (
     relation_router,
 )
-from src.modules.schema_registry.presentation.http.object_feature_controller import (
+from src.modules.schema_registry.presentation.http.object_feature.router import (
     router as object_feature_router,
 )
 

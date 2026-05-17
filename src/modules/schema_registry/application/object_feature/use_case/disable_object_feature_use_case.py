@@ -6,9 +6,6 @@ from src.modules.schema_registry.application.object_feature.command import (
 from src.modules.schema_registry.application.object_feature.dto import (
     ObjectFeatureConfigDTO,
 )
-from src.modules.schema_registry.application.object_feature.use_case.get_object_feature_config_use_case import (
-    GetObjectFeatureConfigUseCase,
-)
 from src.modules.schema_registry.domain.object_feature.error import (
     ObjectFeatureConfigNotFoundError,
 )
@@ -50,7 +47,18 @@ class DisableObjectFeatureUseCase:
 
         config.disable(now=self._clock.now())
         await self._repository.save(config)
-        return GetObjectFeatureConfigUseCase._to_dto(config)
+        return ObjectFeatureConfigDTO(
+            id=config.id.uuid,
+            created_at=config.created_at,
+            updated_at=config.updated_at,
+            object_id=config.object_id.uuid,
+            feature_code=config.feature_code.value,
+            kind=config.kind.value,
+            status=config.status.value,
+            config=dict(config.config),
+            is_locked=config.is_locked,
+            locked_reason=config.locked_reason,
+        )
 
 
 __all__ = ["DisableObjectFeatureUseCase"]

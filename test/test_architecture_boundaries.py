@@ -508,3 +508,176 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                 filtered,
                 msg=f"{path} uses raw UUID annotation in domain",
             )
+
+    def test_schema_registry_object_feature_domain_has_clean_boundaries(self) -> None:
+        forbidden_prefixes = (
+            "src.modules.schema_registry.application",
+            "src.modules.schema_registry.infrastructure",
+            "src.modules.schema_registry.presentation",
+        )
+        for path in iter_python_files(
+            "src/modules/schema_registry/domain/object_feature"
+        ):
+            for module_name in iter_imports(path):
+                self.assertFalse(
+                    any(
+                        module_name.startswith(prefix) for prefix in forbidden_prefixes
+                    ),
+                    msg=f"{path} imports forbidden module {module_name}",
+                )
+
+    def test_schema_registry_object_feature_application_has_clean_boundaries(
+        self,
+    ) -> None:
+        forbidden_prefixes = (
+            "src.modules.schema_registry.infrastructure",
+            "src.modules.schema_registry.presentation",
+        )
+        for path in iter_python_files(
+            "src/modules/schema_registry/application/object_feature"
+        ):
+            for module_name in iter_imports(path):
+                self.assertFalse(
+                    any(
+                        module_name.startswith(prefix) for prefix in forbidden_prefixes
+                    ),
+                    msg=f"{path} imports forbidden module {module_name}",
+                )
+
+    def test_schema_registry_object_feature_controllers_do_not_import_repositories_or_entities(
+        self,
+    ) -> None:
+        forbidden_modules = {
+            "src.modules.schema_registry.domain.object_feature.entity",
+            "src.modules.schema_registry.domain.object_feature.repository",
+            "src.modules.schema_registry.infrastructure.repository.object_feature_config_repository",
+        }
+        forbidden_names = (
+            "ObjectFeatureConfigRepositoryDep",
+            "ObjectFeatureConfigEntity",
+        )
+        for path in iter_python_files(
+            "src/modules/schema_registry/presentation/http/object_feature/controller"
+        ):
+            for module_name in iter_imports(path):
+                self.assertNotIn(
+                    module_name,
+                    forbidden_modules,
+                    msg=f"{path} imports forbidden module {module_name}",
+                )
+            content = path.read_text(encoding="utf-8")
+            for name in forbidden_names:
+                self.assertNotIn(name, content, msg=f"{path} uses forbidden {name}")
+
+    def test_schema_registry_object_feature_controller_files_have_one_endpoint(
+        self,
+    ) -> None:
+        controller_dir = (
+            PROJECT_ROOT
+            / "src/modules/schema_registry/presentation/http/object_feature/controller"
+        )
+        for path in sorted(controller_dir.glob("*_controller.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            endpoint_count = 0
+            for node in ast.walk(tree):
+                if not isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
+                    continue
+                for decorator in node.decorator_list:
+                    if (
+                        isinstance(decorator, ast.Call)
+                        and isinstance(decorator.func, ast.Attribute)
+                        and decorator.func.attr
+                        in {"get", "post", "put", "patch", "delete"}
+                    ):
+                        endpoint_count += 1
+            self.assertEqual(
+                endpoint_count,
+                1,
+                msg=f"{path} should contain exactly one HTTP endpoint",
+            )
+
+    def test_schema_registry_object_feature_value_objects_are_split_by_file(
+        self,
+    ) -> None:
+        base = PROJECT_ROOT / "src/modules/schema_registry/domain/object_feature"
+        self.assertFalse(base.joinpath("value_object.py").exists())
+        value_object_dir = base / "value_object"
+        expected_files = {
+            "__init__.py",
+            "feature_code.py",
+            "object_feature_code.py",
+            "object_feature_config_id.py",
+            "object_feature_kind.py",
+            "object_feature_status.py",
+        }
+        self.assertEqual(
+            {path.name for path in value_object_dir.glob("*.py")},
+            expected_files,
+        )
+        for path in value_object_dir.glob("*.py"):
+            if path.name == "__init__.py":
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            classes = [
+                node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)
+            ]
+            self.assertEqual(len(classes), 1, msg=f"{path} should define one class")
+
+    def test_schema_registry_object_feature_has_no_mapper_files(self) -> None:
+        removed_paths = (
+            "src/modules/schema_registry/application/object_feature/mapper.py",
+            "src/modules/schema_registry/application/object_feature/mapper",
+            "src/modules/schema_registry/infrastructure/mapper/object_feature_config_orm_mapper.py",
+            "src/modules/schema_registry/presentation/http/object_feature/mapper.py",
+        )
+        for relative_path in removed_paths:
+            self.assertFalse(
+                (PROJECT_ROOT / relative_path).exists(),
+                msg=f"{relative_path} should not exist",
+            )
+
+    def test_schema_registry_object_feature_use_cases_have_protocols(self) -> None:
+        protocol_path = (
+            PROJECT_ROOT
+            / "src/modules/schema_registry/application/object_feature/port/use_case.py"
+        )
+        content = protocol_path.read_text(encoding="utf-8")
+        expected_protocols = (
+            "EnableObjectFeatureUseCaseProtocol",
+            "DisableObjectFeatureUseCaseProtocol",
+            "UpdateObjectFeatureConfigUseCaseProtocol",
+            "GetObjectFeatureConfigUseCaseProtocol",
+            "ListObjectFeaturesUseCaseProtocol",
+            "AssertObjectFeatureEnabledUseCaseProtocol",
+        )
+        for protocol_name in expected_protocols:
+            self.assertIn(
+                f"class {protocol_name}(Protocol):",
+                content,
+                msg=f"{protocol_name} is missing",
+            )
+
+    def test_schema_registry_object_feature_use_cases_do_not_import_each_other(
+        self,
+    ) -> None:
+        for path in iter_python_files(
+            "src/modules/schema_registry/application/object_feature/use_case"
+        ):
+            if path.name == "__init__.py":
+                continue
+            for module_name in iter_imports(path):
+                self.assertFalse(
+                    module_name.startswith(
+                        "src.modules.schema_registry.application.object_feature.use_case."
+                    ),
+                    msg=f"{path} imports another object_feature use case {module_name}",
+                )
+
+    def test_schema_registry_object_feature_uses_contact_point_code(self) -> None:
+        for path in iter_python_files("src/modules/schema_registry"):
+            content = path.read_text(encoding="utf-8")
+            self.assertNotIn(
+                "CONTACT_POINTS",
+                content,
+                msg=f"{path} still uses legacy CONTACT_POINTS feature code",
+            )

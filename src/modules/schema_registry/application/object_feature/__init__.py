@@ -5,15 +5,19 @@ from src.modules.schema_registry.application.object_feature.command import (
 )
 from src.modules.schema_registry.application.object_feature.dto import (
     ObjectFeatureConfigDTO,
+    ObjectFeatureConfigListDTO,
 )
 from src.modules.schema_registry.application.object_feature.query import (
     GetObjectFeatureQuery,
+    ListObjectFeaturesQuery,
 )
 from src.modules.schema_registry.application.object_feature.use_case import (
     AssertObjectFeatureEnabledUseCase,
     DisableObjectFeatureUseCase,
     EnableObjectFeatureUseCase,
     GetObjectFeatureConfigUseCase,
+    ListObjectFeaturesUseCase,
+    UpdateObjectFeatureConfigUseCase,
 )
 
 __all__ = [
@@ -24,6 +28,10 @@ __all__ = [
     "EnableObjectFeatureUseCase",
     "GetObjectFeatureConfigUseCase",
     "GetObjectFeatureQuery",
+    "ListObjectFeaturesQuery",
+    "ListObjectFeaturesUseCase",
     "ObjectFeatureConfigDTO",
+    "ObjectFeatureConfigListDTO",
     "UpdateObjectFeatureConfigCommand",
+    "UpdateObjectFeatureConfigUseCase",
 ]

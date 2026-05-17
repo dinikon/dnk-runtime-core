@@ -1,66 +1,51 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-
 from src.modules.schema_registry.application.object_feature.command import (
-    EnableObjectFeatureCommand,
+    UpdateObjectFeatureConfigCommand,
 )
 from src.modules.schema_registry.application.object_feature.dto import (
     ObjectFeatureConfigDTO,
 )
-from src.modules.schema_registry.domain.object_feature.entity import (
-    ObjectFeatureConfigEntity,
+from src.modules.schema_registry.domain.object_feature.error import (
+    ObjectFeatureConfigNotFoundError,
 )
 from src.modules.schema_registry.domain.object_feature.repository import (
     ObjectFeatureConfigRepositoryProtocol,
 )
-from src.modules.schema_registry.domain.object_feature.value_object import (
-    ObjectFeatureConfigIdVO,
-    ObjectFeatureKind,
-)
 from src.modules.shared.kernel.time.ports import ClockPort
 
 
-class EnableObjectFeatureUseCase:
-    """Use case включения feature config runtime-объекта."""
+class UpdateObjectFeatureConfigUseCase:
+    """Use case обновления config feature runtime-объекта."""
 
     def __init__(
         self,
         *,
         repository: ObjectFeatureConfigRepositoryProtocol,
         clock: ClockPort,
-        id_provider: Callable[[], ObjectFeatureConfigIdVO],
     ) -> None:
         """Инициализирует use case repository-портом и clock-портом."""
         self._repository = repository
         self._clock = clock
-        self._id_provider = id_provider
 
     async def __call__(
         self,
-        command: EnableObjectFeatureCommand,
+        command: UpdateObjectFeatureConfigCommand,
     ) -> ObjectFeatureConfigDTO:
-        """Включает feature config и возвращает DTO."""
-        now = self._clock.now()
+        """Обновляет feature config и возвращает DTO."""
         config = await self._repository.get(
             tenant_id=command.tenant_id,
             object_id=command.object_id,
             feature_code=command.feature_code,
         )
         if config is None:
-            config = ObjectFeatureConfigEntity.create(
-                id_=self._id_provider(),
-                now=now,
-                tenant_id=command.tenant_id,
-                object_id=command.object_id,
-                feature_code=command.feature_code,
-                kind=ObjectFeatureKind.CUSTOM,
-                config=command.config,
+            raise ObjectFeatureConfigNotFoundError(
+                "Object feature config "
+                f"'{command.feature_code.value}' was not found for object "
+                f"'{command.object_id}'."
             )
-        else:
-            config.update_config(now=now, config=command.config)
 
-        config.enable(now=now)
+        config.update_config(now=self._clock.now(), config=command.config)
         await self._repository.save(config)
         return ObjectFeatureConfigDTO(
             id=config.id.uuid,
@@ -76,4 +61,4 @@ class EnableObjectFeatureUseCase:
         )
 
 
-__all__ = ["EnableObjectFeatureUseCase"]
+__all__ = ["UpdateObjectFeatureConfigUseCase"]

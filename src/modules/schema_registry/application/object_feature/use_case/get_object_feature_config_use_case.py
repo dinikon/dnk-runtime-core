@@ -6,9 +6,6 @@ from src.modules.schema_registry.application.object_feature.dto import (
 from src.modules.schema_registry.application.object_feature.query import (
     GetObjectFeatureQuery,
 )
-from src.modules.schema_registry.domain.object_feature.entity import (
-    ObjectFeatureConfigEntity,
-)
 from src.modules.schema_registry.domain.object_feature.error import (
     ObjectFeatureConfigNotFoundError,
 )
@@ -37,11 +34,6 @@ class GetObjectFeatureConfigUseCase:
                 f"'{query.feature_code.value}' was not found for object "
                 f"'{query.object_id}'."
             )
-        return self._to_dto(config)
-
-    @staticmethod
-    def _to_dto(config: ObjectFeatureConfigEntity) -> ObjectFeatureConfigDTO:
-        """Мапит ObjectFeatureConfigEntity в DTO."""
         return ObjectFeatureConfigDTO(
             id=config.id.uuid,
             created_at=config.created_at,
