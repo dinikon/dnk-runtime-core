@@ -21,6 +21,10 @@ class TenantRepositoryProtocol(Protocol):
         """Возвращает tenant по имени или None."""
         ...
 
+    async def list_ids(self) -> list[TenantIdVO]:
+        """Возвращает идентификаторы всех tenants."""
+        ...
+
     async def exists_by_external_id(self, external_id: str) -> bool:
         """Проверяет наличие tenant с указанным external_id."""
         ...

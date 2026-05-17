@@ -347,10 +347,13 @@ HTTP error mapping:
 
 ```bash
 dnk-manage schema-registry diff <tenant_id> [--seed-path ...]
+dnk-manage schema-registry diff --all [--seed-path ...]
 ```
 
 Command зарегистрирован в `src/management/commands/schema_registry.py`. Default `seed_path` берется из
 `dnk_config.DEFAULT_SEED_MODULE`, который указывает на `src.modules.schema_registry.seed.schema_seed`.
+Режим `--all` проходит по всем tenants без status-фильтрации, использует savepoint на tenant и откатывает весь batch,
+если хотя бы один tenant завершился ожидаемой `SchemaRegistryError`.
 
 ## Tests Covering This Module
 
