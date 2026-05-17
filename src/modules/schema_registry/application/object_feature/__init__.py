@@ -9,10 +9,20 @@ from src.modules.schema_registry.application.object_feature.dto import (
 from src.modules.schema_registry.application.object_feature.query import (
     GetObjectFeatureQuery,
 )
+from src.modules.schema_registry.application.object_feature.use_case import (
+    AssertObjectFeatureEnabledUseCase,
+    DisableObjectFeatureUseCase,
+    EnableObjectFeatureUseCase,
+    GetObjectFeatureConfigUseCase,
+)
 
 __all__ = [
+    "AssertObjectFeatureEnabledUseCase",
     "DisableObjectFeatureCommand",
+    "DisableObjectFeatureUseCase",
     "EnableObjectFeatureCommand",
+    "EnableObjectFeatureUseCase",
+    "GetObjectFeatureConfigUseCase",
     "GetObjectFeatureQuery",
     "ObjectFeatureConfigDTO",
     "UpdateObjectFeatureConfigCommand",

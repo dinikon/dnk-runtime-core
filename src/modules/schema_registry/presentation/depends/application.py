@@ -13,6 +13,12 @@ from src.modules.schema_registry.application.metadata.schema_registry_metadata_w
 from src.modules.schema_registry.application.migration.postgres_schema_plan_service import (
     PostgresSchemaPlanService,
 )
+from src.modules.schema_registry.application.object_feature.use_case import (
+    AssertObjectFeatureEnabledUseCase,
+    DisableObjectFeatureUseCase,
+    EnableObjectFeatureUseCase,
+    GetObjectFeatureConfigUseCase,
+)
 from src.modules.schema_registry.application.service.postgres_schema_service import (
     PostgresSchemaService,
 )
@@ -36,6 +42,7 @@ from src.modules.schema_registry.runtime import (
 from src.modules.schema_registry.presentation.depends.infrastructure import (
     DataSourceServiceDep,
     FieldTypeCatalogDep,
+    ObjectFeatureConfigRepositoryDep,
     ObjectServiceDep,
     PostgresFieldCanonicalizerDep,
     RelationServiceDep,
@@ -43,6 +50,7 @@ from src.modules.schema_registry.presentation.depends.infrastructure import (
     TenantSchemaExecutorDep,
     TenantSchemaInspectorDep,
 )
+from src.modules.shared.depends import ClockDep
 
 
 def get_schema_seed_service(
@@ -216,19 +224,81 @@ RuntimeObjectResolverDep: TypeAlias = Annotated[
 ]
 
 
+def get_enable_object_feature_use_case(
+    repository: ObjectFeatureConfigRepositoryDep,
+    clock: ClockDep,
+) -> EnableObjectFeatureUseCase:
+    """Создает use case включения object feature config."""
+    return EnableObjectFeatureUseCase(repository=repository, clock=clock)
+
+
+EnableObjectFeatureUseCaseDep: TypeAlias = Annotated[
+    EnableObjectFeatureUseCase,
+    Depends(get_enable_object_feature_use_case),
+]
+
+
+def get_disable_object_feature_use_case(
+    repository: ObjectFeatureConfigRepositoryDep,
+    clock: ClockDep,
+) -> DisableObjectFeatureUseCase:
+    """Создает use case выключения object feature config."""
+    return DisableObjectFeatureUseCase(repository=repository, clock=clock)
+
+
+DisableObjectFeatureUseCaseDep: TypeAlias = Annotated[
+    DisableObjectFeatureUseCase,
+    Depends(get_disable_object_feature_use_case),
+]
+
+
+def get_get_object_feature_config_use_case(
+    repository: ObjectFeatureConfigRepositoryDep,
+) -> GetObjectFeatureConfigUseCase:
+    """Создает use case чтения object feature config."""
+    return GetObjectFeatureConfigUseCase(repository)
+
+
+GetObjectFeatureConfigUseCaseDep: TypeAlias = Annotated[
+    GetObjectFeatureConfigUseCase,
+    Depends(get_get_object_feature_config_use_case),
+]
+
+
+def get_assert_object_feature_enabled_use_case(
+    repository: ObjectFeatureConfigRepositoryDep,
+) -> AssertObjectFeatureEnabledUseCase:
+    """Создает use case проверки enabled-статуса object feature."""
+    return AssertObjectFeatureEnabledUseCase(repository)
+
+
+AssertObjectFeatureEnabledUseCaseDep: TypeAlias = Annotated[
+    AssertObjectFeatureEnabledUseCase,
+    Depends(get_assert_object_feature_enabled_use_case),
+]
+
+
 __all__ = [
+    "AssertObjectFeatureEnabledUseCaseDep",
     "CreateSchemaUseCaseDep",
     "DescribeRuntimeObjectUseCaseDep",
+    "DisableObjectFeatureUseCaseDep",
     "DiffSchemaUseCaseDep",
+    "EnableObjectFeatureUseCaseDep",
+    "GetObjectFeatureConfigUseCaseDep",
     "PostgresSchemaServiceDep",
     "PostgresSchemaPlanServiceDep",
     "RuntimeObjectResolverDep",
     "SchemaSeedServiceDep",
     "SchemaRegistryMetadataReadServiceDep",
     "SchemaRegistryMetadataWriteServiceDep",
+    "get_assert_object_feature_enabled_use_case",
     "get_create_schema_use_case",
     "get_describe_runtime_object_use_case",
+    "get_disable_object_feature_use_case",
     "get_diff_schema_use_case",
+    "get_enable_object_feature_use_case",
+    "get_get_object_feature_config_use_case",
     "get_postgres_schema_service",
     "get_postgres_schema_plan_service",
     "get_schema_registry_metadata_read_service",

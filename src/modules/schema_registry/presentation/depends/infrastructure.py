@@ -30,6 +30,9 @@ from src.modules.schema_registry.domain.object.repository import (
 )
 from src.modules.schema_registry.domain.object.service import ObjectService
 from src.modules.schema_registry.domain.object.value_object import RuntimeObjectIdVO
+from src.modules.schema_registry.domain.object_feature.repository import (
+    ObjectFeatureConfigRepositoryProtocol,
+)
 from src.modules.schema_registry.domain.relation.repository import (
     RelationRepositoryProtocol,
 )
@@ -48,6 +51,9 @@ from src.modules.schema_registry.infrastructure.repository.data_source_repositor
 )
 from src.modules.schema_registry.infrastructure.repository.object_repository import (
     SqlAlchemyObjectRepository,
+)
+from src.modules.schema_registry.infrastructure.repository.object_feature_config_repository import (
+    SqlAlchemyObjectFeatureConfigRepository,
 )
 from src.modules.schema_registry.infrastructure.repository.relation_repository import (
     SqlAlchemyRelationRepository,
@@ -115,6 +121,19 @@ def get_object_repository(uow: UoWDep) -> ObjectRepositoryProtocol:
 ObjectRepositoryDep = Annotated[
     ObjectRepositoryProtocol,
     Depends(get_object_repository),
+]
+
+
+def get_object_feature_config_repository(
+    uow: UoWDep,
+) -> ObjectFeatureConfigRepositoryProtocol:
+    """Создает SQLAlchemy object feature config repository для текущей UoW."""
+    return SqlAlchemyObjectFeatureConfigRepository(uow.session)
+
+
+ObjectFeatureConfigRepositoryDep = Annotated[
+    ObjectFeatureConfigRepositoryProtocol,
+    Depends(get_object_feature_config_repository),
 ]
 
 
@@ -231,6 +250,7 @@ RelationServiceDep = Annotated[
 __all__ = [
     "DataSourceRepositoryDep",
     "DataSourceServiceDep",
+    "ObjectFeatureConfigRepositoryDep",
     "ObjectRepositoryDep",
     "ObjectServiceDep",
     "RelationRepositoryDep",
@@ -243,6 +263,7 @@ __all__ = [
     "get_data_source_repository",
     "get_data_source_service",
     "get_data_source_id_provider",
+    "get_object_feature_config_repository",
     "get_object_repository",
     "get_object_service",
     "get_relation_repository",
