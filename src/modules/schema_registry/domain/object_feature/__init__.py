@@ -6,6 +6,9 @@ from src.modules.schema_registry.domain.object_feature.error import (
     ObjectFeatureConfigNotFoundError,
     ObjectFeatureNotEnabledError,
 )
+from src.modules.schema_registry.domain.object_feature.repository import (
+    ObjectFeatureConfigRepositoryProtocol,
+)
 from src.modules.schema_registry.domain.object_feature.value_object import (
     FeatureCodeVO,
     ObjectFeatureConfigIdVO,
@@ -19,6 +22,7 @@ __all__ = [
     "ObjectFeatureConfigIdVO",
     "ObjectFeatureConfigLockedError",
     "ObjectFeatureConfigNotFoundError",
+    "ObjectFeatureConfigRepositoryProtocol",
     "ObjectFeatureKind",
     "ObjectFeatureNotEnabledError",
     "ObjectFeatureStatus",
