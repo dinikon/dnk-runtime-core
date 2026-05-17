@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Protocol
 
 from src.modules.schema_registry.application.object_feature.command import (
     EnableObjectFeatureCommand,
@@ -19,6 +20,13 @@ from src.modules.schema_registry.domain.object_feature.value_object import (
     ObjectFeatureKind,
 )
 from src.modules.shared.kernel.time.ports import ClockPort
+
+
+class EnableObjectFeatureUseCaseProtocol(Protocol):
+    async def __call__(
+        self,
+        command: EnableObjectFeatureCommand,
+    ) -> ObjectFeatureConfigDTO: ...
 
 
 class EnableObjectFeatureUseCase:
@@ -76,4 +84,7 @@ class EnableObjectFeatureUseCase:
         )
 
 
-__all__ = ["EnableObjectFeatureUseCase"]
+__all__ = [
+    "EnableObjectFeatureUseCase",
+    "EnableObjectFeatureUseCaseProtocol",
+]

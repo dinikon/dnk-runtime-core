@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Protocol
+
 from src.modules.schema_registry.application.object_feature.command import (
     UpdateObjectFeatureConfigCommand,
 )
@@ -13,6 +15,13 @@ from src.modules.schema_registry.domain.object_feature.repository import (
     ObjectFeatureConfigRepositoryProtocol,
 )
 from src.modules.shared.kernel.time.ports import ClockPort
+
+
+class UpdateObjectFeatureConfigUseCaseProtocol(Protocol):
+    async def __call__(
+        self,
+        command: UpdateObjectFeatureConfigCommand,
+    ) -> ObjectFeatureConfigDTO: ...
 
 
 class UpdateObjectFeatureConfigUseCase:
@@ -61,4 +70,7 @@ class UpdateObjectFeatureConfigUseCase:
         )
 
 
-__all__ = ["UpdateObjectFeatureConfigUseCase"]
+__all__ = [
+    "UpdateObjectFeatureConfigUseCase",
+    "UpdateObjectFeatureConfigUseCaseProtocol",
+]

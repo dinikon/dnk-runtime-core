@@ -58,4 +58,7 @@ class AssertObjectFeatureEnabledUseCase:
         config.assert_enabled()
 
 
-__all__ = ["AssertObjectFeatureEnabledUseCase"]
+__all__ = [
+    "AssertObjectFeatureEnabledUseCase",
+    "AssertObjectFeatureEnabledUseCaseProtocol",
+]

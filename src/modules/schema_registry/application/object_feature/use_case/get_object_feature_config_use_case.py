@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Protocol
+
 from src.modules.schema_registry.application.object_feature.dto import (
     ObjectFeatureConfigDTO,
 )
@@ -12,6 +14,13 @@ from src.modules.schema_registry.domain.object_feature.error import (
 from src.modules.schema_registry.domain.object_feature.repository import (
     ObjectFeatureConfigRepositoryProtocol,
 )
+
+
+class GetObjectFeatureConfigUseCaseProtocol(Protocol):
+    async def __call__(
+        self,
+        query: GetObjectFeatureQuery,
+    ) -> ObjectFeatureConfigDTO: ...
 
 
 class GetObjectFeatureConfigUseCase:
@@ -48,4 +57,7 @@ class GetObjectFeatureConfigUseCase:
         )
 
 
-__all__ = ["GetObjectFeatureConfigUseCase"]
+__all__ = [
+    "GetObjectFeatureConfigUseCase",
+    "GetObjectFeatureConfigUseCaseProtocol",
+]

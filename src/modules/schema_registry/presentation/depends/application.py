@@ -15,18 +15,16 @@ from src.modules.schema_registry.application.migration.postgres_schema_plan_serv
 )
 from src.modules.schema_registry.application.object_feature.use_case import (
     AssertObjectFeatureEnabledUseCase,
-    DisableObjectFeatureUseCase,
-    EnableObjectFeatureUseCase,
-    GetObjectFeatureConfigUseCase,
-    ListObjectFeaturesUseCase,
-    UpdateObjectFeatureConfigUseCase,
-)
-from src.modules.schema_registry.application.object_feature.port import (
     AssertObjectFeatureEnabledUseCaseProtocol,
+    DisableObjectFeatureUseCase,
     DisableObjectFeatureUseCaseProtocol,
+    EnableObjectFeatureUseCase,
     EnableObjectFeatureUseCaseProtocol,
+    GetObjectFeatureConfigUseCase,
     GetObjectFeatureConfigUseCaseProtocol,
+    ListObjectFeaturesUseCase,
     ListObjectFeaturesUseCaseProtocol,
+    UpdateObjectFeatureConfigUseCase,
     UpdateObjectFeatureConfigUseCaseProtocol,
 )
 from src.modules.schema_registry.application.service.postgres_schema_service import (

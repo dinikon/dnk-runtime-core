@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Protocol
+
 from src.modules.schema_registry.application.object_feature.command import (
     DisableObjectFeatureCommand,
 )
@@ -13,6 +15,13 @@ from src.modules.schema_registry.domain.object_feature.repository import (
     ObjectFeatureConfigRepositoryProtocol,
 )
 from src.modules.shared.kernel.time.ports import ClockPort
+
+
+class DisableObjectFeatureUseCaseProtocol(Protocol):
+    async def __call__(
+        self,
+        command: DisableObjectFeatureCommand,
+    ) -> ObjectFeatureConfigDTO: ...
 
 
 class DisableObjectFeatureUseCase:
@@ -61,4 +70,7 @@ class DisableObjectFeatureUseCase:
         )
 
 
-__all__ = ["DisableObjectFeatureUseCase"]
+__all__ = [
+    "DisableObjectFeatureUseCase",
+    "DisableObjectFeatureUseCaseProtocol",
+]

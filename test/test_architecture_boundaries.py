@@ -637,24 +637,31 @@ class ArchitectureBoundariesTests(unittest.TestCase):
             )
 
     def test_schema_registry_object_feature_use_cases_have_protocols(self) -> None:
-        protocol_path = (
+        self.assertFalse(
+            (
+                PROJECT_ROOT
+                / "src/modules/schema_registry/application/object_feature/port/use_case.py"
+            ).exists(),
+            msg="object_feature use case protocols should live in use case files.",
+        )
+        expected_protocols = {
+            "enable_object_feature_use_case.py": "EnableObjectFeatureUseCaseProtocol",
+            "disable_object_feature_use_case.py": "DisableObjectFeatureUseCaseProtocol",
+            "update_object_feature_config_use_case.py": "UpdateObjectFeatureConfigUseCaseProtocol",
+            "get_object_feature_config_use_case.py": "GetObjectFeatureConfigUseCaseProtocol",
+            "list_object_features_use_case.py": "ListObjectFeaturesUseCaseProtocol",
+            "assert_object_feature_enabled_use_case.py": "AssertObjectFeatureEnabledUseCaseProtocol",
+        }
+        base_path = (
             PROJECT_ROOT
-            / "src/modules/schema_registry/application/object_feature/port/use_case.py"
+            / "src/modules/schema_registry/application/object_feature/use_case"
         )
-        content = protocol_path.read_text(encoding="utf-8")
-        expected_protocols = (
-            "EnableObjectFeatureUseCaseProtocol",
-            "DisableObjectFeatureUseCaseProtocol",
-            "UpdateObjectFeatureConfigUseCaseProtocol",
-            "GetObjectFeatureConfigUseCaseProtocol",
-            "ListObjectFeaturesUseCaseProtocol",
-            "AssertObjectFeatureEnabledUseCaseProtocol",
-        )
-        for protocol_name in expected_protocols:
+        for file_name, protocol_name in expected_protocols.items():
+            content = base_path.joinpath(file_name).read_text(encoding="utf-8")
             self.assertIn(
                 f"class {protocol_name}(Protocol):",
                 content,
-                msg=f"{protocol_name} is missing",
+                msg=f"{protocol_name} is missing from {file_name}",
             )
 
     def test_schema_registry_object_feature_use_cases_do_not_import_each_other(
