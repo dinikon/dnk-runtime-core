@@ -18,10 +18,13 @@ from src.modules.inventory.domain.category.value_object import (
     CategoryIdVO,
     CategoryNameVO,
 )
-from src.modules.runtime_data import FilterSpec, PageSpec, SortSpec
+from src.modules.runtime_data.application.models import PageSpec, SortSpec
 from src.modules.runtime_data.application.ports import (
     RuntimeCommandGateway,
     RuntimeQueryGateway,
+)
+from src.modules.runtime_data.application.query.typed_filter_builder import (
+    RuntimeTypedFilterBuilder,
 )
 from src.modules.schema_registry.runtime import RuntimeObjectResolverProtocol
 from src.modules.shared import EntityIdVO
@@ -45,6 +48,7 @@ class CategoryRuntimeRepository(
         self._runtime_object_resolver = runtime_object_resolver
         self._runtime_command_gateway = runtime_command_gateway
         self._runtime_query_gateway = runtime_query_gateway
+        self._filter_builder = RuntimeTypedFilterBuilder()
 
     async def load(
         self,
@@ -147,7 +151,8 @@ class CategoryRuntimeRepository(
             ()
             if parent_category_id is None
             else (
-                FilterSpec(
+                self._filter_builder.condition(
+                    descriptor=descriptor,
                     field="parent_category_id",
                     op="eq",
                     value=parent_category_id.uuid,

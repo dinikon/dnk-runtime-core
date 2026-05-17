@@ -7,7 +7,7 @@ from src.modules.communication.domain.error import (
     CommunicationRuntimeStateError,
     CommunicationValidationError,
 )
-from src.modules.runtime_data import (
+from src.modules.runtime_data.domain.error import (
     RuntimeDataFilterError,
     RuntimeDataPersistenceError,
     RuntimeDataPolicyError,

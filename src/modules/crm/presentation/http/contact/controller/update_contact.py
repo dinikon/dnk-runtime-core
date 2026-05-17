@@ -14,7 +14,7 @@ from src.modules.crm.presentation.http.contact.requests import (
     UpdateContactRequestSchema,
 )
 from src.modules.crm.presentation.http.contact.responses import ContactResponseSchema
-from src.modules.runtime_data import (
+from src.modules.runtime_data.domain.error import (
     RuntimeDataFilterError,
     RuntimeDataPersistenceError,
     RuntimeDataPolicyError,

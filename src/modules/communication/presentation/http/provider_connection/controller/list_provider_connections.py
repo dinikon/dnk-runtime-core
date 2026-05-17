@@ -13,7 +13,7 @@ from src.modules.communication.presentation.http.provider_connection.responses i
     ListProviderConnectionsResponseSchema,
     ProviderConnectionResponseSchema,
 )
-from src.modules.runtime_data import (
+from src.modules.runtime_data.domain.error import (
     RuntimeDataFilterError,
     RuntimeDataPersistenceError,
     RuntimeDataPolicyError,

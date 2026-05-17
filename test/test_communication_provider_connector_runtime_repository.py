@@ -20,7 +20,46 @@ from src.modules.communication.infrastructure.runtime_object_names import (
     _CONNECTOR,
     _MESSAGE_TYPE,
 )
+from src.modules.schema_registry.runtime import (
+    RuntimeFieldDescriptor,
+    RuntimeObjectDescriptor,
+)
 from src.modules.shared import EntityIdVO
+
+
+def _descriptor_name(descriptor) -> str:
+    return getattr(descriptor, "object_name", descriptor)
+
+
+def _field(name: str, type_code: str = "text") -> RuntimeFieldDescriptor:
+    return RuntimeFieldDescriptor(
+        name=name,
+        type_code=type_code,
+        is_nullable=True,
+        default_value=None,
+        options={},
+        settings={},
+    )
+
+
+def _descriptor(object_name: str) -> RuntimeObjectDescriptor:
+    return RuntimeObjectDescriptor(
+        schema_name="dnk_test",
+        object_name=object_name,
+        table_name=object_name,
+        pk="id",
+        title_field="id",
+        fields=(
+            _field("id", "uuid"),
+            _field("created_at", "datetime"),
+            _field("updated_at", "datetime"),
+            _field("provider_code"),
+            _field("version"),
+            _field("provider_connector_id", "uuid"),
+            _field("message_type_code"),
+        ),
+        relations=(),
+    )
 
 
 class _ResolverStub:
@@ -29,7 +68,7 @@ class _ResolverStub:
 
     async def resolve(self, *, tenant_id, object_name):
         self.calls.append((tenant_id, object_name))
-        return object_name
+        return _descriptor(object_name)
 
 
 class _QueryGatewayStub:
@@ -48,7 +87,7 @@ class _QueryGatewayStub:
                 "page": page,
             }
         )
-        return self.list_rows_by_descriptor.get(descriptor, [])
+        return self.list_rows_by_descriptor.get(_descriptor_name(descriptor), [])
 
 
 class _CommandGatewayStub:
@@ -128,9 +167,9 @@ class ProviderConnectorRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
         payload = command.inserts[0][1]
         filters = query.list_calls[0]["filters"]
         self.assertEqual(payload["id"], provider_connector_id.uuid)
-        self.assertEqual(filters[0].field, "provider_code")
+        self.assertEqual(filters[0].field.name, "provider_code")
         self.assertEqual(filters[0].value, "gms")
-        self.assertEqual(filters[1].field, "version")
+        self.assertEqual(filters[1].field.name, "version")
         self.assertEqual(filters[1].value, "1.0.0")
         self.assertEqual(result.provider_connector_id, provider_connector_id)
 
@@ -187,10 +226,12 @@ class ProviderConnectorRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
         )
 
         filters = query.list_calls[0]["filters"]
-        self.assertEqual(query.list_calls[0]["descriptor"], _MESSAGE_TYPE)
-        self.assertEqual(filters[0].field, "provider_connector_id")
+        self.assertEqual(
+            _descriptor_name(query.list_calls[0]["descriptor"]), _MESSAGE_TYPE
+        )
+        self.assertEqual(filters[0].field.name, "provider_connector_id")
         self.assertEqual(filters[0].value, provider_connector_id.uuid)
-        self.assertEqual(filters[1].field, "message_type_code")
+        self.assertEqual(filters[1].field.name, "message_type_code")
         self.assertEqual(filters[1].value, "sms_text")
         self.assertEqual(result.provider_connector_id, provider_connector_id)
 

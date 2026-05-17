@@ -27,10 +27,13 @@ from src.modules.communication.infrastructure.runtime_object_names import (
     _CONNECTION,
     _CONNECTOR,
 )
-from src.modules.runtime_data import FilterSpec, PageSpec, SortSpec
+from src.modules.runtime_data.application.models import PageSpec, SortSpec
 from src.modules.runtime_data.application.ports import (
     RuntimeCommandGateway,
     RuntimeQueryGateway,
+)
+from src.modules.runtime_data.application.query.typed_filter_builder import (
+    RuntimeTypedFilterBuilder,
 )
 from src.modules.schema_registry.runtime import RuntimeObjectResolverProtocol
 from src.modules.shared import EntityIdVO
@@ -56,6 +59,7 @@ class ProviderConnectionRuntimeRepository(
         self._runtime_object_resolver = runtime_object_resolver
         self._runtime_command_gateway = runtime_command_gateway
         self._runtime_query_gateway = runtime_query_gateway
+        self._filter_builder = RuntimeTypedFilterBuilder()
 
     async def load(
         self,
@@ -125,9 +129,24 @@ class ProviderConnectionRuntimeRepository(
         rows = await self._runtime_query_gateway.list(
             descriptor=descriptor,
             filters=(
-                FilterSpec("provider_connector_id", "eq", provider_connector_id.uuid),
-                FilterSpec("channel_code", "eq", channel_code),
-                FilterSpec("status", "eq", ProviderConnectionStatusVO.ACTIVE.value),
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="provider_connector_id",
+                    op="eq",
+                    value=provider_connector_id.uuid,
+                ),
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="channel_code",
+                    op="eq",
+                    value=channel_code,
+                ),
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="status",
+                    op="eq",
+                    value=ProviderConnectionStatusVO.ACTIVE.value,
+                ),
             ),
             sorting=(SortSpec("created_at"),),
             page=PageSpec(limit=1, offset=0),

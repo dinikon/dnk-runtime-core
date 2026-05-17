@@ -16,7 +16,7 @@ from src.modules.custom_object.application.record.use_case import (
 )
 from src.modules.custom_object.domain import CustomObjectValidationError
 from src.modules.custom_object.infrastructure import CustomRecordRuntimeRepository
-from src.modules.runtime_data import FilterGroupSpec, FilterSpec, SortSpec
+from src.modules.runtime_data.application.models import TypedFilterGroupSpec
 from src.modules.schema_registry.domain.object.value_object import RuntimeObjectIdVO
 from src.modules.schema_registry.runtime import (
     RuntimeFieldDescriptor,
@@ -149,13 +149,12 @@ class CustomObjectRecordUseCaseTests(unittest.IsolatedAsyncioTestCase):
                     }
                 ]
 
-        filter_group = FilterGroupSpec(
-            logic="or",
-            items=(
-                FilterSpec(field="name", op="contains", value="Ac"),
-                FilterSpec(field="status", op="eq", value="new"),
-            ),
-        )
+        filter_dsl = {
+            "or": [
+                {"field": "name", "op": "contains", "value": "Ac"},
+                {"field": "status", "op": "eq", "value": "new"},
+            ]
+        }
         repository, _resolver = _repository(
             command_gateway=object(),
             query_gateway=QueryGatewaySpy(),
@@ -166,15 +165,20 @@ class CustomObjectRecordUseCaseTests(unittest.IsolatedAsyncioTestCase):
             ListCustomRecordsQuery(
                 tenant_id=tenant_id,
                 object_id=object_id,
-                filters=(filter_group,),
-                sorting=(SortSpec(field="created_at", direction="desc"),),
+                filter_dsl=filter_dsl,
+                sort_dsl=[{"field": "created_at", "direction": "desc"}],
                 limit=25,
                 offset=10,
             )
         )
 
         self.assertEqual(result[0].row_id, row_id)
-        self.assertEqual(recorded["filters"], (filter_group,))
+        self.assertIsInstance(recorded["filters"][0], TypedFilterGroupSpec)
+        self.assertEqual(recorded["filters"][0].logic, "or")
+        self.assertEqual(recorded["filters"][0].items[0].field.name, "name")
+        self.assertEqual(recorded["filters"][0].items[0].op, "contains")
+        self.assertEqual(recorded["filters"][0].items[1].field.name, "status")
+        self.assertEqual(recorded["filters"][0].items[1].op, "eq")
         self.assertEqual(recorded["sorting"][0].field, "created_at")
         self.assertEqual(recorded["page"].limit, 25)
         self.assertEqual(recorded["page"].offset, 10)

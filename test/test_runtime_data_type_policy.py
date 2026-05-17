@@ -6,7 +6,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from src.modules.runtime_data.application.type_policy import RuntimeFieldTypePolicy
-from src.modules.runtime_data.domain import RuntimeDataValidationError
+from src.modules.runtime_data.domain.error import RuntimeDataValidationError
 from src.modules.schema_registry.runtime import (
     RuntimeFieldDescriptor,
     RuntimeObjectDescriptor,

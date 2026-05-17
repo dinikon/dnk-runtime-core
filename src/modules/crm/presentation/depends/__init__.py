@@ -27,10 +27,12 @@ from src.modules.crm.presentation.depends.infrastructure import (
     CompanyQueryRepositoryDep,
     ContactCommandRepositoryDep,
     ContactQueryRepositoryDep,
+    RuntimeObjectQueryServiceDep,
     get_company_command_repository,
     get_company_query_repository,
     get_contact_command_repository,
     get_contact_query_repository,
+    get_runtime_object_query_service,
 )
 
 __all__ = [
@@ -38,6 +40,7 @@ __all__ = [
     "CompanyQueryRepositoryDep",
     "ContactCommandRepositoryDep",
     "ContactQueryRepositoryDep",
+    "RuntimeObjectQueryServiceDep",
     "CreateCompanyUseCaseDep",
     "CreateContactUseCaseDep",
     "DeleteCompanyUseCaseDep",
@@ -53,6 +56,7 @@ __all__ = [
     "get_company_query_repository",
     "get_contact_command_repository",
     "get_contact_query_repository",
+    "get_runtime_object_query_service",
     "get_create_company_use_case",
     "get_create_contact_use_case",
     "get_delete_company_use_case",

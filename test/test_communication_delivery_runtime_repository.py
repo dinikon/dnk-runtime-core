@@ -19,7 +19,45 @@ from src.modules.communication.infrastructure.runtime_object_names import (
     _CONNECTOR,
     _EVENT,
 )
+from src.modules.schema_registry.runtime import (
+    RuntimeFieldDescriptor,
+    RuntimeObjectDescriptor,
+)
 from src.modules.shared import EntityIdVO
+
+
+def _descriptor_name(descriptor) -> str:
+    return getattr(descriptor, "object_name", descriptor)
+
+
+def _field(name: str, type_code: str = "text") -> RuntimeFieldDescriptor:
+    return RuntimeFieldDescriptor(
+        name=name,
+        type_code=type_code,
+        is_nullable=True,
+        default_value=None,
+        options={},
+        settings={},
+    )
+
+
+def _descriptor(object_name: str) -> RuntimeObjectDescriptor:
+    return RuntimeObjectDescriptor(
+        schema_name="dnk_test",
+        object_name=object_name,
+        table_name=object_name,
+        pk="id",
+        title_field="id",
+        fields=(
+            _field("id", "uuid"),
+            _field("created_at", "datetime"),
+            _field("updated_at", "datetime"),
+            _field("outbound_message_id", "uuid"),
+            _field("provider_code"),
+            _field("status"),
+        ),
+        relations=(),
+    )
 
 
 class _ResolverStub:
@@ -28,7 +66,7 @@ class _ResolverStub:
 
     async def resolve(self, *, tenant_id, object_name):
         self.calls.append((tenant_id, object_name))
-        return object_name
+        return _descriptor(object_name)
 
 
 class _QueryGatewayStub:
@@ -38,20 +76,20 @@ class _QueryGatewayStub:
         self.list_calls = []
 
     async def get_by_id(self, *, descriptor, object_id, fetch_plan=None):
-        return self.by_id_rows.get((descriptor, object_id))
+        return self.by_id_rows.get((_descriptor_name(descriptor), object_id))
 
     async def list(
         self, *, descriptor, filters=(), sorting=(), page=None, fetch_plan=None
     ):
         self.list_calls.append(
             {
-                "descriptor": descriptor,
+                "descriptor": _descriptor_name(descriptor),
                 "filters": filters,
                 "sorting": sorting,
                 "page": page,
             }
         )
-        return self.list_rows_by_descriptor.get(descriptor, [])
+        return self.list_rows_by_descriptor.get(_descriptor_name(descriptor), [])
 
 
 class _CommandGatewayStub:
@@ -60,11 +98,11 @@ class _CommandGatewayStub:
         self.updates = []
 
     async def insert(self, *, descriptor, payload):
-        self.inserts.append((descriptor, payload))
+        self.inserts.append((_descriptor_name(descriptor), payload))
         return dict(payload)
 
     async def update(self, *, descriptor, object_id, patch):
-        self.updates.append((descriptor, object_id, patch))
+        self.updates.append((_descriptor_name(descriptor), object_id, patch))
         return {"id": object_id, **patch}
 
 
@@ -167,8 +205,8 @@ class CommunicationDeliveryRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCa
 
         self.assertEqual(result.provider_code, "gms")
         filters = query.list_calls[0]["filters"]
-        self.assertEqual(filters[0].field, "provider_code")
-        self.assertEqual(filters[1].field, "status")
+        self.assertEqual(filters[0].field.name, "provider_code")
+        self.assertEqual(filters[1].field.name, "status")
         self.assertEqual(query.list_calls[0]["page"].limit, 1)
 
 

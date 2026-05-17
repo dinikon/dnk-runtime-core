@@ -27,6 +27,7 @@ from src.modules.crm.presentation.depends.infrastructure import (
     ContactCommandRepositoryDep,
     ContactFieldsDescriptionRepositoryDep,
     ContactQueryRepositoryDep,
+    RuntimeObjectQueryServiceDep,
 )
 from src.modules.shared.depends import ClockDep
 
@@ -92,10 +93,10 @@ GetCompanyUseCaseDep = Annotated[
 
 
 def get_list_contacts_use_case(
-    query_repository: ContactQueryRepositoryDep,
+    runtime_query_service: RuntimeObjectQueryServiceDep,
 ) -> ListContactsUseCase:
     """Создает use case списка контактов."""
-    return ListContactsUseCase(query_repository)
+    return ListContactsUseCase(runtime_query_service)
 
 
 ListContactsUseCaseDep = Annotated[

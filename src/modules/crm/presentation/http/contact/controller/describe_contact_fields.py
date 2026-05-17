@@ -7,7 +7,9 @@ from src.modules.crm.presentation.depends.application import (
 )
 from src.modules.crm.presentation.http.contact.responses import (
     ContactFieldDescriptionResponseSchema,
+    ContactFieldFilterCapabilityResponseSchema,
     ContactFieldOptionResponseSchema,
+    ContactFieldSortCapabilityResponseSchema,
     ContactFieldsResponseSchema,
     ContactObjectDescriptionResponseSchema,
 )
@@ -23,9 +25,14 @@ from src.modules.shared.depends import AuthenticatedRequestContextDep
 router = APIRouter(prefix="/crm/contacts", tags=["crm-contacts"])
 
 
+@router.get(
+    "/fields",
+    response_model=ContactFieldsResponseSchema,
+)
 @router.post(
     "/fields",
     response_model=ContactFieldsResponseSchema,
+    include_in_schema=False,
 )
 async def describe_contact_fields(
     context: AuthenticatedRequestContextDep,
@@ -82,6 +89,22 @@ async def describe_contact_fields(
                     )
                     for option in field.options
                 ],
+                filter=ContactFieldFilterCapabilityResponseSchema(
+                    enabled=field.filter.enabled,
+                    operators=list(field.filter.operators),
+                    input=field.filter.input,
+                    value_type=field.filter.value_type,
+                    options=[
+                        ContactFieldOptionResponseSchema(
+                            value=option["value"],
+                            label=option["label"],
+                        )
+                        for option in field.filter.options
+                    ],
+                ),
+                sort=ContactFieldSortCapabilityResponseSchema(
+                    enabled=field.sort.enabled,
+                ),
             )
             for field in result.fields
         ],

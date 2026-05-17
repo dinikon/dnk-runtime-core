@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from src.modules.runtime_data.application.models import (
     FetchPlan,
-    FilterExpression,
-    FilterSpec,
     PageSpec,
+    RuntimeRowsPage,
     SortSpec,
+    TypedFilterExpression,
 )
 from src.modules.schema_registry.runtime import RuntimeObjectDescriptor
+
+if TYPE_CHECKING:
+    from src.modules.runtime_data.application.query.query_plan import RuntimeQueryPlan
 
 
 class RuntimeCommandGateway(Protocol):
@@ -48,7 +51,7 @@ class RuntimeCommandGateway(Protocol):
         self,
         *,
         descriptor: RuntimeObjectDescriptor,
-        filters: Sequence[FilterExpression],
+        filters: Sequence[TypedFilterExpression],
         patch: Mapping[str, Any],
     ) -> list[Mapping[str, Any]]:
         """Обновляет строки по фильтрам и возвращает измененные записи."""
@@ -58,7 +61,7 @@ class RuntimeCommandGateway(Protocol):
         self,
         *,
         descriptor: RuntimeObjectDescriptor,
-        filters: Sequence[FilterExpression],
+        filters: Sequence[TypedFilterExpression],
         patch: Mapping[str, Any],
         sorting: Sequence[SortSpec] = (),
         limit: int = 1,
@@ -84,12 +87,19 @@ class RuntimeQueryGateway(Protocol):
         self,
         *,
         descriptor: RuntimeObjectDescriptor,
-        filters: Sequence[FilterExpression] = (),
+        filters: Sequence[TypedFilterExpression] = (),
         sorting: Sequence[SortSpec] = (),
         page: PageSpec | None = None,
         fetch_plan: FetchPlan | None = None,
     ) -> list[Mapping[str, Any]]:
         """Возвращает список runtime-записей с фильтрами, сортировкой и projection."""
+        ...
+
+    async def search(
+        self,
+        query_plan: RuntimeQueryPlan,
+    ) -> RuntimeRowsPage:
+        """Возвращает страницу runtime-записей и total count по тем же фильтрам."""
         ...
 
 

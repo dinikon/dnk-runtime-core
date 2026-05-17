@@ -1,31 +1,56 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal, TypeAlias
 
-FilterOperator = Literal["eq", "in", "contains", "gte", "lte"]
+from src.modules.schema_registry.runtime import RuntimeFieldDescriptor
+
+FilterOperator = Literal[
+    "eq",
+    "neq",
+    "in",
+    "contains",
+    "starts_with",
+    "ends_with",
+    "gt",
+    "gte",
+    "lt",
+    "lte",
+    "between",
+    "is_null",
+    "is_not_null",
+    "contains_any",
+    "contains_all",
+    "not_contains_any",
+    "is_empty",
+    "is_not_empty",
+]
 FilterLogic = Literal["and", "or"]
 SortDirection = Literal["asc", "desc"]
 
+DEFAULT_SEARCH_LIMIT = 50
+MAX_SEARCH_LIMIT = 500
+
 
 @dataclass(frozen=True, slots=True)
-class FilterSpec:
-    """Описание одного runtime-фильтра для списка объектов."""
+class TypedFilterSpec:
+    """Semantically validated runtime filter with resolved field descriptor."""
 
-    field: str
-    op: FilterOperator
+    field: RuntimeFieldDescriptor
+    op: str
     value: Any
 
 
 @dataclass(frozen=True, slots=True)
-class FilterGroupSpec:
-    """Группа runtime-фильтров с явным AND/OR оператором."""
+class TypedFilterGroupSpec:
+    """Semantically validated runtime filter group."""
 
     logic: FilterLogic
-    items: tuple["FilterExpression", ...]
+    items: tuple["TypedFilterExpression", ...]
 
 
-FilterExpression: TypeAlias = FilterSpec | FilterGroupSpec
+TypedFilterExpression: TypeAlias = TypedFilterSpec | TypedFilterGroupSpec
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +67,14 @@ class PageSpec:
 
     limit: int
     offset: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeRowsPage:
+    """Страница runtime-строк с total count по тем же фильтрам."""
+
+    rows: tuple[Mapping[str, Any], ...]
+    total: int
 
 
 @dataclass(frozen=True, slots=True)

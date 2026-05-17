@@ -28,7 +28,19 @@ from src.modules.crm.infrastructure import (
     ContactModelDescriptionRepository,
     ContactRuntimeRepository,
 )
-from src.modules.runtime_data import PostgresRuntimeGateway, RuntimeFieldTypePolicy
+from src.modules.runtime_data.application.query.capabilities.query_capability_resolver import (
+    QueryCapabilityResolver,
+)
+from src.modules.runtime_data.application.query.runtime_object_query_service import (
+    RuntimeObjectQueryService,
+)
+from src.modules.runtime_data.application.type_policy import RuntimeFieldTypePolicy
+from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.command_gateway import (
+    PostgresRuntimeCommandGateway,
+)
+from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.query_gateway import (
+    PostgresRuntimeQueryGateway,
+)
 from src.modules.schema_registry.presentation.depends.application import (
     DescribeRuntimeObjectUseCaseDep,
     RuntimeObjectResolverDep,
@@ -48,32 +60,80 @@ RuntimeFieldTypePolicyDep = Annotated[
 ]
 
 
-def get_runtime_gateway(
+def get_runtime_query_gateway(
     uow: UoWDep,
     type_policy: RuntimeFieldTypePolicyDep,
-) -> PostgresRuntimeGateway:
-    """Создает PostgreSQL runtime gateway на базе текущей UoW-сессии."""
-    return PostgresRuntimeGateway(
+) -> PostgresRuntimeQueryGateway:
+    """Создает PostgreSQL runtime query gateway на базе текущей UoW-сессии."""
+    return PostgresRuntimeQueryGateway(
         uow.session,
         type_policy=type_policy,
     )
 
 
-RuntimeGatewayDep = Annotated[
-    PostgresRuntimeGateway,
-    Depends(get_runtime_gateway),
+RuntimeQueryGatewayDep = Annotated[
+    PostgresRuntimeQueryGateway,
+    Depends(get_runtime_query_gateway),
+]
+
+
+def get_runtime_command_gateway(
+    uow: UoWDep,
+    type_policy: RuntimeFieldTypePolicyDep,
+    runtime_query_gateway: RuntimeQueryGatewayDep,
+) -> PostgresRuntimeCommandGateway:
+    """Создает PostgreSQL runtime command gateway на базе текущей UoW-сессии."""
+    return PostgresRuntimeCommandGateway(
+        uow.session,
+        type_policy=type_policy,
+        query_gateway=runtime_query_gateway,
+    )
+
+
+RuntimeCommandGatewayDep = Annotated[
+    PostgresRuntimeCommandGateway,
+    Depends(get_runtime_command_gateway),
+]
+
+
+def get_runtime_object_query_service(
+    runtime_object_resolver: RuntimeObjectResolverDep,
+    runtime_query_gateway: RuntimeQueryGatewayDep,
+) -> RuntimeObjectQueryService:
+    """Создает application service runtime search для CRM read paths."""
+    return RuntimeObjectQueryService(
+        runtime_object_resolver=runtime_object_resolver,
+        runtime_query_gateway=runtime_query_gateway,
+    )
+
+
+RuntimeObjectQueryServiceDep = Annotated[
+    RuntimeObjectQueryService,
+    Depends(get_runtime_object_query_service),
+]
+
+
+def get_query_capability_resolver() -> QueryCapabilityResolver:
+    """Creates runtime query capability resolver for metadata endpoints."""
+    return QueryCapabilityResolver()
+
+
+QueryCapabilityResolverDep = Annotated[
+    QueryCapabilityResolver,
+    Depends(get_query_capability_resolver),
 ]
 
 
 def get_contact_query_repository(
     runtime_object_resolver: RuntimeObjectResolverDep,
-    runtime_gateway: RuntimeGatewayDep,
+    runtime_command_gateway: RuntimeCommandGatewayDep,
+    runtime_query_gateway: RuntimeQueryGatewayDep,
 ) -> ContactQueryRepositoryProtocol:
     """Создает query repository контактов поверх runtime gateway."""
     return ContactRuntimeRepository(
         runtime_object_resolver=runtime_object_resolver,
-        runtime_command_gateway=runtime_gateway,
-        runtime_query_gateway=runtime_gateway,
+        runtime_command_gateway=runtime_command_gateway,
+        runtime_query_gateway=runtime_query_gateway,
     )
 
 
@@ -85,13 +145,14 @@ ContactQueryRepositoryDep = Annotated[
 
 def get_contact_command_repository(
     runtime_object_resolver: RuntimeObjectResolverDep,
-    runtime_gateway: RuntimeGatewayDep,
+    runtime_command_gateway: RuntimeCommandGatewayDep,
+    runtime_query_gateway: RuntimeQueryGatewayDep,
 ) -> ContactCommandRepositoryProtocol:
     """Создает command repository контактов поверх runtime gateway."""
     return ContactRuntimeRepository(
         runtime_object_resolver=runtime_object_resolver,
-        runtime_command_gateway=runtime_gateway,
-        runtime_query_gateway=runtime_gateway,
+        runtime_command_gateway=runtime_command_gateway,
+        runtime_query_gateway=runtime_query_gateway,
     )
 
 
@@ -103,13 +164,14 @@ ContactCommandRepositoryDep = Annotated[
 
 def get_company_query_repository(
     runtime_object_resolver: RuntimeObjectResolverDep,
-    runtime_gateway: RuntimeGatewayDep,
+    runtime_command_gateway: RuntimeCommandGatewayDep,
+    runtime_query_gateway: RuntimeQueryGatewayDep,
 ) -> CompanyQueryRepositoryProtocol:
     """Создает query repository компаний поверх runtime gateway."""
     return CompanyRuntimeRepository(
         runtime_object_resolver=runtime_object_resolver,
-        runtime_command_gateway=runtime_gateway,
-        runtime_query_gateway=runtime_gateway,
+        runtime_command_gateway=runtime_command_gateway,
+        runtime_query_gateway=runtime_query_gateway,
     )
 
 
@@ -121,13 +183,14 @@ CompanyQueryRepositoryDep = Annotated[
 
 def get_company_command_repository(
     runtime_object_resolver: RuntimeObjectResolverDep,
-    runtime_gateway: RuntimeGatewayDep,
+    runtime_command_gateway: RuntimeCommandGatewayDep,
+    runtime_query_gateway: RuntimeQueryGatewayDep,
 ) -> CompanyCommandRepositoryProtocol:
     """Создает command repository компаний поверх runtime gateway."""
     return CompanyRuntimeRepository(
         runtime_object_resolver=runtime_object_resolver,
-        runtime_command_gateway=runtime_gateway,
-        runtime_query_gateway=runtime_gateway,
+        runtime_command_gateway=runtime_command_gateway,
+        runtime_query_gateway=runtime_query_gateway,
     )
 
 
@@ -139,10 +202,14 @@ CompanyCommandRepositoryDep = Annotated[
 
 def get_contact_fields_description_repository(
     describe_runtime_object_use_case: DescribeRuntimeObjectUseCaseDep,
+    runtime_object_resolver: RuntimeObjectResolverDep,
+    query_capability_resolver: QueryCapabilityResolverDep,
 ) -> ContactFieldsDescriptionRepositoryProtocol:
     """Создает repository описания модели contact через schema_registry."""
     return ContactModelDescriptionRepository(
         describe_runtime_object_use_case=describe_runtime_object_use_case,
+        runtime_object_resolver=runtime_object_resolver,
+        query_capability_resolver=query_capability_resolver,
     )
 
 
@@ -174,14 +241,20 @@ __all__ = [
     "ContactCommandRepositoryDep",
     "ContactFieldsDescriptionRepositoryDep",
     "ContactQueryRepositoryDep",
-    "RuntimeGatewayDep",
+    "QueryCapabilityResolverDep",
+    "RuntimeCommandGatewayDep",
     "RuntimeFieldTypePolicyDep",
+    "RuntimeObjectQueryServiceDep",
+    "RuntimeQueryGatewayDep",
     "get_company_command_repository",
     "get_company_fields_description_repository",
     "get_company_query_repository",
     "get_contact_command_repository",
     "get_contact_fields_description_repository",
     "get_contact_query_repository",
+    "get_query_capability_resolver",
+    "get_runtime_command_gateway",
     "get_runtime_field_type_policy",
-    "get_runtime_gateway",
+    "get_runtime_query_gateway",
+    "get_runtime_object_query_service",
 ]

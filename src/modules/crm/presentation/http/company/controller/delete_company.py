@@ -8,7 +8,7 @@ from src.modules.crm.application.company.command import DeleteCompanyCommand
 from src.modules.crm.domain.company.error import CompanyNotFoundError
 from src.modules.crm.domain.company.value_object import CompanyIdVO
 from src.modules.crm.presentation.depends.application import DeleteCompanyUseCaseDep
-from src.modules.runtime_data import (
+from src.modules.runtime_data.domain.error import (
     RuntimeDataFilterError,
     RuntimeDataPersistenceError,
     RuntimeDataPolicyError,

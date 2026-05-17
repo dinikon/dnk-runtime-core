@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Any, Mapping, Protocol
 
 from src.modules.schema_registry.domain.datasource.service import DataSourceService
 from src.modules.schema_registry.domain.error import (
@@ -20,6 +20,20 @@ from src.modules.schema_registry.runtime.descriptor import (
     RuntimeRelationDescriptor,
 )
 from src.modules.shared import EntityIdVO
+
+_DEFAULT_FIELD_CAPABILITIES: dict[str, tuple[bool, bool]] = {
+    "uuid": (True, True),
+    "reference": (True, True),
+    "text": (True, True),
+    "select": (True, True),
+    "multiselect": (True, False),
+    "datetime": (True, True),
+    "date": (True, True),
+    "int": (True, True),
+    "decimal": (True, True),
+    "bool": (True, True),
+    "json": (False, False),
+}
 
 
 class RuntimeObjectResolverProtocol(Protocol):
@@ -121,20 +135,29 @@ class SchemaRegistryRuntimeObjectResolver:
                 "schema_registry object metadata has mismatched data_source_id."
             )
 
-        fields = tuple(
-            RuntimeFieldDescriptor(
-                name=field.field_name.value,
-                type_code=field.field_type.code.value,
-                is_nullable=field.is_nullable,
-                default_value=field.default_value,
-                options=dict(field.options),
-                settings=dict(field.settings),
-                kind=field.kind.value,
+        fields: list[RuntimeFieldDescriptor] = []
+        for field in object_entity.fields:
+            type_code = field.field_type.code.value
+            is_filterable, is_sortable = self._field_capabilities(
+                type_code=type_code,
+                settings=field.settings,
             )
-            for field in object_entity.fields
-        )
+            fields.append(
+                RuntimeFieldDescriptor(
+                    name=field.field_name.value,
+                    type_code=type_code,
+                    is_nullable=field.is_nullable,
+                    default_value=field.default_value,
+                    options=dict(field.options),
+                    settings=dict(field.settings),
+                    kind=field.kind.value,
+                    is_filterable=is_filterable,
+                    is_sortable=is_sortable,
+                )
+            )
+        field_descriptors = tuple(fields)
 
-        field_names = {field.name for field in fields}
+        field_names = {field.name for field in field_descriptors}
         if "id" not in field_names:
             raise RuntimeObjectDescriptorError(
                 "Runtime object descriptor requires an 'id' field."
@@ -151,10 +174,55 @@ class SchemaRegistryRuntimeObjectResolver:
             table_name=object_entity.object_name.plural,
             pk="id",
             title_field="id",
-            fields=fields,
+            fields=field_descriptors,
             relations=relations,
             kind=object_entity.kind.value,
         )
+
+    @staticmethod
+    def _field_capabilities(
+        *,
+        type_code: str,
+        settings: Mapping[str, Any],
+    ) -> tuple[bool, bool]:
+        is_filterable, is_sortable = _DEFAULT_FIELD_CAPABILITIES.get(
+            type_code,
+            (True, True),
+        )
+        return (
+            SchemaRegistryRuntimeObjectResolver._settings_bool(
+                settings=settings,
+                keys=("is_filterable", "filterable"),
+                default=is_filterable,
+            ),
+            SchemaRegistryRuntimeObjectResolver._settings_bool(
+                settings=settings,
+                keys=("is_sortable", "sortable"),
+                default=is_sortable,
+            ),
+        )
+
+    @staticmethod
+    def _settings_bool(
+        *,
+        settings: Mapping[str, Any],
+        keys: tuple[str, ...],
+        default: bool,
+    ) -> bool:
+        for key in keys:
+            if key not in settings:
+                continue
+            value = settings[key]
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, str):
+                normalized = value.strip().lower()
+                if normalized in {"true", "1", "yes", "y", "on"}:
+                    return True
+                if normalized in {"false", "0", "no", "n", "off"}:
+                    return False
+            return default
+        return default
 
     async def _build_relation_descriptors(
         self,

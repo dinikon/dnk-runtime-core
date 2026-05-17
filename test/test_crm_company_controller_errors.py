@@ -27,7 +27,7 @@ from src.modules.crm.presentation.http.company.requests import (
     CreateCompanyRequestSchema,
     UpdateCompanyRequestSchema,
 )
-from src.modules.runtime_data import (
+from src.modules.runtime_data.domain.error import (
     RuntimeDataPersistenceError,
     RuntimeDataValidationError,
 )

@@ -16,7 +16,7 @@ from src.modules.crm.domain.company.value_object import (
     CompanyIdVO,
     CompanyLegalNameVO,
 )
-from src.modules.runtime_data import PageSpec, SortSpec
+from src.modules.runtime_data.application.models import PageSpec, SortSpec
 from src.modules.runtime_data.application.ports import (
     RuntimeCommandGateway,
     RuntimeQueryGateway,

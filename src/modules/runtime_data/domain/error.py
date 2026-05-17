@@ -1,3 +1,7 @@
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from typing import Any
+
 from src.modules.shared import DomainError
 
 
@@ -19,10 +23,17 @@ class RuntimeDataObjectNotFoundError(RuntimeDataError):
     pass
 
 
+@dataclass(frozen=True)
 class RuntimeDataFilterError(RuntimeDataError):
     """Ошибка некорректного фильтра или сортировки runtime-запроса."""
 
-    pass
+    code: str
+    message: str
+    details: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "details", dict(self.details))
+        object.__setattr__(self, "args", (f"{self.code}: {self.message}",))
 
 
 class RuntimeDataPolicyError(RuntimeDataError):

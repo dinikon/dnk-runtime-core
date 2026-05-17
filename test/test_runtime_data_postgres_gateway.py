@@ -7,13 +7,24 @@ from uuid import uuid4
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.modules.runtime_data import (
-    FilterGroupSpec,
-    FilterSpec,
+from src.modules.runtime_data.application.models import (
+    FilterLogic,
     PageSpec,
-    PostgresRuntimeGateway,
-    RuntimeDataPersistenceError,
     SortSpec,
+    TypedFilterExpression,
+    TypedFilterGroupSpec,
+    TypedFilterSpec,
+)
+from src.modules.runtime_data.application.query.query_plan import RuntimeQueryPlan
+from src.modules.runtime_data.application.query.typed_filter_builder import (
+    RuntimeTypedFilterBuilder,
+)
+from src.modules.runtime_data.domain.error import RuntimeDataPersistenceError
+from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.command_gateway import (
+    PostgresRuntimeCommandGateway,
+)
+from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.query_gateway import (
+    PostgresRuntimeQueryGateway,
 )
 from src.modules.schema_registry.runtime import (
     RuntimeFieldDescriptor,
@@ -71,7 +82,39 @@ class _SessionSpy:
         self.rollback_calls += 1
 
 
-class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
+class PostgresRuntimePersistenceGatewayTests(unittest.IsolatedAsyncioTestCase):
+    def _command_gateway(self, session) -> PostgresRuntimeCommandGateway:
+        return PostgresRuntimeCommandGateway(session)  # type: ignore[arg-type]
+
+    def _query_gateway(self, session) -> PostgresRuntimeQueryGateway:
+        return PostgresRuntimeQueryGateway(session)  # type: ignore[arg-type]
+
+    def _filter(
+        self,
+        descriptor: RuntimeObjectDescriptor,
+        *,
+        field: str,
+        op: str,
+        value,
+    ) -> TypedFilterSpec:
+        return RuntimeTypedFilterBuilder().condition(
+            descriptor=descriptor,
+            field=field,
+            op=op,
+            value=value,
+        )
+
+    def _group(
+        self,
+        *,
+        logic: FilterLogic,
+        items: tuple[TypedFilterExpression, ...],
+    ) -> TypedFilterGroupSpec:
+        return RuntimeTypedFilterBuilder().group(
+            logic=logic,
+            items=items,
+        )
+
     def _descriptor(self) -> RuntimeObjectDescriptor:
         return RuntimeObjectDescriptor(
             schema_name="dnk_test",
@@ -128,6 +171,7 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
                     options={
                         "vip": "VIP",
                         "newsletter": "Newsletter",
+                        "inactive": "Inactive",
                     },
                     settings={},
                 ),
@@ -146,7 +190,7 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
             "tags": ["vip"],
         }
         session = _SessionSpy([_MappingsResult([response_row])])
-        gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
+        gateway = self._command_gateway(session)
 
         row = await gateway.insert(
             descriptor=self._descriptor(),
@@ -182,7 +226,7 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
             "tags": [],
         }
         session = _SessionSpy([_MappingsResult([response_row])])
-        gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
+        gateway = self._command_gateway(session)
 
         row = await gateway.update(
             descriptor=self._descriptor(),
@@ -212,11 +256,12 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
             "tags": [],
         }
         session = _SessionSpy([_MappingsResult([response_row])])
-        gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
+        gateway = self._command_gateway(session)
+        descriptor = self._descriptor()
 
         rows = await gateway.update_where(
-            descriptor=self._descriptor(),
-            filters=(FilterSpec(field="last_name", op="eq", value=None),),
+            descriptor=descriptor,
+            filters=(self._filter(descriptor, field="last_name", op="eq", value=None),),
             patch={"last_name": "Roe"},
         )
 
@@ -237,11 +282,19 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
             "tags": [],
         }
         session = _SessionSpy([_MappingsResult([response_row])])
-        gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
+        gateway = self._command_gateway(session)
+        descriptor = self._descriptor()
 
         rows = await gateway.claim(
-            descriptor=self._descriptor(),
-            filters=(FilterSpec(field="first_name", op="in", value=["Jane"]),),
+            descriptor=descriptor,
+            filters=(
+                self._filter(
+                    descriptor,
+                    field="first_name",
+                    op="in",
+                    value=["Jane"],
+                ),
+            ),
             patch={"last_name": "Claimed"},
             sorting=(SortSpec(field="created_at", direction="asc"),),
             limit=5,
@@ -267,11 +320,19 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
             "tags": ["vip"],
         }
         session = _SessionSpy([_MappingsResult([response_row])])
-        gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
+        gateway = self._query_gateway(session)
+        descriptor = self._descriptor()
 
         rows = await gateway.list(
-            descriptor=self._descriptor(),
-            filters=(FilterSpec(field="last_name", op="contains", value="Do"),),
+            descriptor=descriptor,
+            filters=(
+                self._filter(
+                    descriptor,
+                    field="last_name",
+                    op="contains",
+                    value="Do",
+                ),
+            ),
             sorting=(SortSpec(field="created_at", direction="desc"),),
             page=PageSpec(limit=25, offset=10),
         )
@@ -295,24 +356,32 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
             "tags": [],
         }
         session = _SessionSpy([_MappingsResult([response_row])])
-        gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
+        gateway = self._query_gateway(session)
+        descriptor = self._descriptor()
 
         rows = await gateway.list(
-            descriptor=self._descriptor(),
+            descriptor=descriptor,
             filters=(
-                FilterGroupSpec(
+                self._group(
                     logic="and",
                     items=(
-                        FilterSpec(field="last_name", op="eq", value="Doe"),
-                        FilterGroupSpec(
+                        self._filter(
+                            descriptor,
+                            field="last_name",
+                            op="eq",
+                            value="Doe",
+                        ),
+                        self._group(
                             logic="or",
                             items=(
-                                FilterSpec(
+                                self._filter(
+                                    descriptor,
                                     field="first_name",
                                     op="contains",
                                     value="Ja",
                                 ),
-                                FilterSpec(
+                                self._filter(
+                                    descriptor,
                                     field="last_name",
                                     op="contains",
                                     value="Do",
@@ -328,20 +397,197 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
         sql, params = session.calls[0]
         self.assertIn(
             'WHERE ("last_name" = :f_0 AND '
-            '(CAST("first_name" AS text) ILIKE :f_1 OR '
-            'CAST("last_name" AS text) ILIKE :f_2))',
+            "(CAST(\"first_name\" AS text) ILIKE :f_1 ESCAPE '\\' OR "
+            "CAST(\"last_name\" AS text) ILIKE :f_2 ESCAPE '\\'))",
             sql,
         )
         self.assertEqual(params["f_0"], "Doe")
         self.assertEqual(params["f_1"], "%Ja%")
         self.assertEqual(params["f_2"], "%Do%")
 
+    async def test_list_supports_text_prefix_and_suffix_filters(self) -> None:
+        contact_id = uuid4()
+        response_row = {
+            "id": contact_id,
+            "created_at": datetime(2026, 1, 1, 10, 0, 0),
+            "updated_at": datetime(2026, 1, 1, 11, 0, 0),
+            "last_name": "Doe",
+            "first_name": "Jane",
+            "tags": [],
+        }
+        session = _SessionSpy([_MappingsResult([response_row])])
+        gateway = self._query_gateway(session)
+        descriptor = self._descriptor()
+
+        rows = await gateway.list(
+            descriptor=descriptor,
+            filters=(
+                self._filter(
+                    descriptor,
+                    field="last_name",
+                    op="starts_with",
+                    value="Do_%",
+                ),
+                self._filter(
+                    descriptor,
+                    field="first_name",
+                    op="ends_with",
+                    value="ne%",
+                ),
+            ),
+        )
+
+        self.assertEqual(len(rows), 1)
+        sql, params = session.calls[0]
+        self.assertIn("CAST(\"last_name\" AS text) ILIKE :f_0 ESCAPE '\\'", sql)
+        self.assertIn("CAST(\"first_name\" AS text) ILIKE :f_1 ESCAPE '\\'", sql)
+        self.assertEqual(params["f_0"], "Do\\_\\%%")
+        self.assertEqual(params["f_1"], "%ne\\%")
+
+    async def test_postgres_compiles_contains_any_for_multiselect(self) -> None:
+        contact_id = uuid4()
+        response_row = {
+            "id": contact_id,
+            "created_at": datetime(2026, 1, 1, 10, 0, 0),
+            "updated_at": datetime(2026, 1, 1, 11, 0, 0),
+            "last_name": "Doe",
+            "first_name": "Jane",
+            "tags": ["vip"],
+        }
+        session = _SessionSpy([_MappingsResult([response_row])])
+        gateway = self._query_gateway(session)
+        descriptor = self._descriptor()
+
+        rows = await gateway.list(
+            descriptor=descriptor,
+            filters=(
+                self._filter(
+                    descriptor,
+                    field="tags",
+                    op="contains_any",
+                    value=["vip", "newsletter"],
+                ),
+            ),
+        )
+
+        self.assertEqual(len(rows), 1)
+        sql, params = session.calls[0]
+        self.assertIn('"tags" ?| array[:f_0_0, :f_0_1]', sql)
+        self.assertEqual(params["f_0_0"], "vip")
+        self.assertEqual(params["f_0_1"], "newsletter")
+
+    async def test_list_supports_multiselect_filters(self) -> None:
+        contact_id = uuid4()
+        response_row = {
+            "id": contact_id,
+            "created_at": datetime(2026, 1, 1, 10, 0, 0),
+            "updated_at": datetime(2026, 1, 1, 11, 0, 0),
+            "last_name": "Doe",
+            "first_name": "Jane",
+            "tags": ["vip", "newsletter"],
+        }
+        session = _SessionSpy([_MappingsResult([response_row])])
+        gateway = self._query_gateway(session)
+        descriptor = self._descriptor()
+
+        rows = await gateway.list(
+            descriptor=descriptor,
+            filters=(
+                self._filter(
+                    descriptor,
+                    field="tags",
+                    op="contains_all",
+                    value=["vip", "newsletter"],
+                ),
+                self._filter(
+                    descriptor,
+                    field="tags",
+                    op="not_contains_any",
+                    value=["inactive"],
+                ),
+                self._filter(descriptor, field="tags", op="is_empty", value=None),
+                self._filter(descriptor, field="tags", op="is_not_empty", value=None),
+            ),
+        )
+
+        self.assertEqual(len(rows), 1)
+        sql, params = session.calls[0]
+        self.assertIn('"tags" ?& array[:f_0_0, :f_0_1]', sql)
+        self.assertIn('NOT ("tags" ?| array[:f_1_0])', sql)
+        self.assertIn('COALESCE(jsonb_array_length("tags"), 0) = 0', sql)
+        self.assertIn('COALESCE(jsonb_array_length("tags"), 0) > 0', sql)
+        self.assertEqual(params["f_0_0"], "vip")
+        self.assertEqual(params["f_0_1"], "newsletter")
+        self.assertEqual(params["f_1_0"], "inactive")
+
+    async def test_search_returns_rows_and_total_with_same_filters(self) -> None:
+        contact_id = uuid4()
+        response_row = {
+            "id": contact_id,
+            "created_at": datetime(2026, 1, 1, 10, 0, 0),
+            "updated_at": datetime(2026, 1, 1, 11, 0, 0),
+            "last_name": "Doe",
+            "first_name": "Jane",
+            "tags": ["vip"],
+        }
+        session = _SessionSpy(
+            [
+                _MappingsResult([], scalar_value=42),
+                _MappingsResult([response_row]),
+            ]
+        )
+        gateway = self._query_gateway(session)
+        descriptor = self._descriptor()
+
+        page = await gateway.search(
+            RuntimeQueryPlan(
+                descriptor=descriptor,
+                filters=(
+                    TypedFilterSpec(
+                        field=descriptor.fields_by_name["last_name"],
+                        op="neq",
+                        value="Roe",
+                    ),
+                    TypedFilterSpec(
+                        field=descriptor.fields_by_name["created_at"],
+                        op="between",
+                        value=(
+                            datetime(2026, 1, 1, 0, 0, 0),
+                            datetime(2026, 2, 1, 0, 0, 0),
+                        ),
+                    ),
+                    TypedFilterSpec(
+                        field=descriptor.fields_by_name["first_name"],
+                        op="is_not_null",
+                        value=None,
+                    ),
+                ),
+                sorting=(SortSpec(field="created_at", direction="desc"),),
+                page=PageSpec(limit=25, offset=10),
+            ),
+        )
+
+        self.assertEqual(page.total, 42)
+        self.assertEqual(len(page.rows), 1)
+        count_sql, count_params = session.calls[0]
+        page_sql, page_params = session.calls[1]
+        self.assertIn("SELECT COUNT(*) AS total", count_sql)
+        self.assertIn('"last_name" IS DISTINCT FROM :f_0', count_sql)
+        self.assertIn('"created_at" BETWEEN :f_1_start AND :f_1_end', count_sql)
+        self.assertIn('"first_name" IS NOT NULL', count_sql)
+        self.assertNotIn("LIMIT :page_limit", count_sql)
+        self.assertEqual(count_params["f_0"], "Roe")
+        self.assertIn('ORDER BY "created_at" DESC', page_sql)
+        self.assertIn("LIMIT :page_limit OFFSET :page_offset", page_sql)
+        self.assertEqual(page_params["page_limit"], 25)
+        self.assertEqual(page_params["page_offset"], 10)
+
     async def test_sqlalchemy_error_becomes_runtime_persistence_error(self) -> None:
         class FailingSession:
             async def execute(self, statement, params=None):
                 raise SQLAlchemyError("boom")
 
-        gateway = PostgresRuntimeGateway(FailingSession())  # type: ignore[arg-type]
+        gateway = self._command_gateway(FailingSession())
 
         with self.assertRaises(RuntimeDataPersistenceError):
             await gateway.insert(

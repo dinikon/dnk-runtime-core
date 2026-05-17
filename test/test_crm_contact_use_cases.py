@@ -19,12 +19,22 @@ from src.modules.crm.application.contact.use_case.create_contact import (
 from src.modules.crm.application.contact.use_case.delete_contact import (
     DeleteContactUseCase,
 )
+from src.modules.crm.application.contact.query.list_contacts_query import (
+    ListContactsQuery,
+)
+from src.modules.crm.application.contact.use_case.list_contacts import (
+    ListContactsUseCase,
+)
 from src.modules.crm.application.contact.use_case.update_contact import (
     UpdateContactUseCase,
 )
 from src.modules.crm.domain.contact.entity import ContactEntity
 from src.modules.crm.domain.contact.error import ContactNotFoundError
 from src.modules.crm.domain.contact.value_object import ContactIdVO
+from src.modules.runtime_data.application.query.result import (
+    RuntimeRecordDTO,
+    RuntimeSearchRecordsResult,
+)
 from src.modules.shared import EntityIdVO
 
 
@@ -172,6 +182,61 @@ class ContactUseCaseTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertTrue(repository.deleted)
+
+    async def test_list_contacts_delegates_raw_dsl_to_runtime_query_service(
+        self,
+    ) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        contact_id = uuid4()
+        now = datetime.now(UTC)
+        recorded_query = None
+
+        class RuntimeQueryServiceSpy:
+            async def search_records(self, query):
+                nonlocal recorded_query
+                recorded_query = query
+                return RuntimeSearchRecordsResult(
+                    rows=(
+                        RuntimeRecordDTO(
+                            id=contact_id,
+                            values={
+                                "id": contact_id,
+                                "created_at": now,
+                                "updated_at": now,
+                                "last_name": "Doe",
+                                "first_name": "Jane",
+                                "middle_name": None,
+                                "status": "lead",
+                                "tags": ["vip"],
+                            },
+                        ),
+                    ),
+                    total=7,
+                    limit=query.limit,
+                    offset=query.offset,
+                )
+
+        use_case = ListContactsUseCase(RuntimeQueryServiceSpy())
+        filter_dsl = {"field": "status", "op": "eq", "value": "lead"}
+        sort_dsl = [{"field": "created_at", "direction": "desc"}]
+
+        result = await use_case(
+            ListContactsQuery(
+                tenant_id=tenant_id,
+                filter_dsl=filter_dsl,
+                sort_dsl=sort_dsl,
+                limit=10,
+                offset=5,
+            )
+        )
+
+        self.assertEqual(recorded_query.tenant_id, tenant_id)
+        self.assertEqual(recorded_query.object_name, "contact")
+        self.assertEqual(recorded_query.filter_dsl, filter_dsl)
+        self.assertEqual(recorded_query.sort_dsl, sort_dsl)
+        self.assertEqual(result.total, 7)
+        self.assertEqual(result.items[0].id, contact_id)
+        self.assertEqual(result.items[0].tags, ["vip"])
 
     async def test_delete_contact_raises_when_contact_is_missing(self) -> None:
         tenant_id = EntityIdVO.from_value(uuid4())

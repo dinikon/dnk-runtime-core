@@ -189,7 +189,7 @@ class InventoryRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
             category_id=category_id,
         )
 
-        self.assertEqual(recorded_filters[0].field, "category_id")
+        self.assertEqual(recorded_filters[0].field.name, "category_id")
         self.assertEqual(recorded_filters[0].value, category_id.uuid)
         self.assertEqual(result[0].category_id, category_id.uuid)
 
@@ -264,6 +264,6 @@ class InventoryRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
             inserted_payload["parent_category_id"], parent_category_id.uuid
         )
         self.assertEqual(category.parent_category_id, parent_category_id)
-        self.assertEqual(recorded_filters[0].field, "parent_category_id")
+        self.assertEqual(recorded_filters[0].field.name, "parent_category_id")
         self.assertEqual(recorded_filters[0].value, parent_category_id.uuid)
         self.assertEqual(result[0].parent_category_id, parent_category_id.uuid)
