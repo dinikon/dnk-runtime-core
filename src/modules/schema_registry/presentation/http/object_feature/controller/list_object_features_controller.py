@@ -14,9 +14,6 @@ from src.modules.schema_registry.domain.object_feature.error import (
 from src.modules.schema_registry.presentation.depends import (
     ListObjectFeaturesUseCaseDep,
 )
-from src.modules.schema_registry.presentation.http.object_feature.controller._tenant import (
-    tenant_id_from_context,
-)
 from src.modules.schema_registry.presentation.http.object_feature.request import (
     ListObjectFeaturesRequestSchema,
 )
@@ -24,6 +21,7 @@ from src.modules.schema_registry.presentation.http.object_feature.response impor
     ListObjectFeatureConfigsResponseSchema,
     ObjectFeatureConfigResponseSchema,
 )
+from src.modules.shared import EntityIdVO
 from src.modules.shared.depends.authentication import AuthenticatedRequestContextDep
 from src.modules.shared.domain.errors import DomainError
 
@@ -37,11 +35,17 @@ async def list_object_features(
     use_case: ListObjectFeaturesUseCaseDep,
 ) -> ListObjectFeatureConfigsResponseSchema:
     """HTTP endpoint списка feature configs runtime-объекта."""
-    tenant_id = tenant_id_from_context(context)
+    principal = context.principal
+    if principal is None or principal.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized.",
+        )
+
     try:
         result = await use_case(
             ListObjectFeaturesQuery(
-                tenant_id=tenant_id,
+                tenant_id=EntityIdVO.from_value(principal.tenant_id),
                 object_id=RuntimeObjectIdVO.from_value(payload.object_id),
             )
         )

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Protocol
+
 from src.modules.schema_registry.domain.object.value_object import RuntimeObjectIdVO
 from src.modules.schema_registry.domain.object_feature.error import (
     ObjectFeatureConfigNotFoundError,
@@ -9,6 +11,16 @@ from src.modules.schema_registry.domain.object_feature.repository import (
 )
 from src.modules.schema_registry.domain.object_feature.value_object import FeatureCodeVO
 from src.modules.shared import EntityIdVO
+
+
+class AssertObjectFeatureEnabledUseCaseProtocol(Protocol):
+    async def __call__(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        object_id: RuntimeObjectIdVO,
+        feature_code: str | FeatureCodeVO,
+    ) -> None: ...
 
 
 class AssertObjectFeatureEnabledUseCase:

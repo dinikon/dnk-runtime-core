@@ -17,15 +17,13 @@ from src.modules.schema_registry.domain.object_feature.value_object import (
 from src.modules.schema_registry.presentation.depends import (
     EnableObjectFeatureUseCaseDep,
 )
-from src.modules.schema_registry.presentation.http.object_feature.controller._tenant import (
-    tenant_id_from_context,
-)
 from src.modules.schema_registry.presentation.http.object_feature.request import (
     EnableObjectFeatureRequestSchema,
 )
 from src.modules.schema_registry.presentation.http.object_feature.response import (
     ObjectFeatureConfigResponseSchema,
 )
+from src.modules.shared import EntityIdVO
 from src.modules.shared.depends.authentication import AuthenticatedRequestContextDep
 from src.modules.shared.domain.errors import DomainError
 
@@ -39,11 +37,17 @@ async def enable_object_feature(
     use_case: EnableObjectFeatureUseCaseDep,
 ) -> ObjectFeatureConfigResponseSchema:
     """HTTP endpoint включения object feature."""
-    tenant_id = tenant_id_from_context(context)
+    principal = context.principal
+    if principal is None or principal.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized.",
+        )
+
     try:
         result = await use_case(
             EnableObjectFeatureCommand(
-                tenant_id=tenant_id,
+                tenant_id=EntityIdVO.from_value(principal.tenant_id),
                 object_id=RuntimeObjectIdVO.from_value(payload.object_id),
                 feature_code=FeatureCodeVO(payload.feature_code),
                 config=dict(payload.config),

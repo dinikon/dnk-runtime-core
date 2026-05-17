@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, status
 
-from modules.shared import EntityIdVO
 from src.modules.schema_registry.application.object_feature.command import (
     DisableObjectFeatureCommand,
 )
@@ -18,15 +17,13 @@ from src.modules.schema_registry.domain.object_feature.value_object import (
 from src.modules.schema_registry.presentation.depends import (
     DisableObjectFeatureUseCaseDep,
 )
-from src.modules.schema_registry.presentation.http.object_feature.controller._tenant import (
-    tenant_id_from_context,
-)
 from src.modules.schema_registry.presentation.http.object_feature.request import (
     ObjectFeatureRequestSchema,
 )
 from src.modules.schema_registry.presentation.http.object_feature.response import (
     ObjectFeatureConfigResponseSchema,
 )
+from src.modules.shared import EntityIdVO
 from src.modules.shared.depends.authentication import AuthenticatedRequestContextDep
 from src.modules.shared.domain.errors import DomainError
 
