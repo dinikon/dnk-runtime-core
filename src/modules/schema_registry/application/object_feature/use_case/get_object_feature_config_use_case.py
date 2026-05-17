@@ -32,28 +32,28 @@ class GetObjectFeatureConfigUseCase:
 
     async def __call__(self, query: GetObjectFeatureQuery) -> ObjectFeatureConfigDTO:
         """Возвращает feature config или поднимает not-found ошибку."""
-        config = await self._repository.get(
+        feature_config = await self._repository.get(
             tenant_id=query.tenant_id,
             object_id=query.object_id,
             feature_code=query.feature_code,
         )
-        if config is None:
-            raise ObjectFeatureConfigNotFoundError(
-                "Object feature config "
-                f"'{query.feature_code.value}' was not found for object "
-                f"'{query.object_id}'."
-            )
+
+        if feature_config is None:
+            raise ObjectFeatureConfigNotFoundError(...)
+
+        dto_config = feature_config.config.copy()
+
         return ObjectFeatureConfigDTO(
-            id=config.id.uuid,
-            created_at=config.created_at,
-            updated_at=config.updated_at,
-            object_id=config.object_id.uuid,
-            feature_code=config.feature_code.value,
-            kind=config.kind.value,
-            status=config.status.value,
-            config=dict(config.config),
-            is_locked=config.is_locked,
-            locked_reason=config.locked_reason,
+            id=feature_config.id.uuid,
+            created_at=feature_config.created_at,
+            updated_at=feature_config.updated_at,
+            object_id=feature_config.object_id.uuid,
+            feature_code=feature_config.feature_code.value,
+            kind=feature_config.kind.value,
+            status=feature_config.status.value,
+            config=dto_config,
+            is_locked=feature_config.is_locked,
+            locked_reason=feature_config.locked_reason,
         )
 
 

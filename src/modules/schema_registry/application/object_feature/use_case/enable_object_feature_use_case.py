@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Protocol
+from typing import Protocol, Any
 
 from src.modules.schema_registry.application.object_feature.command import (
     EnableObjectFeatureCommand,
@@ -48,39 +48,46 @@ class EnableObjectFeatureUseCase:
         self,
         command: EnableObjectFeatureCommand,
     ) -> ObjectFeatureConfigDTO:
-        """Включает feature config и возвращает DTO."""
         now = self._clock.now()
-        config = await self._repository.get(
+
+        feature_config = await self._repository.get(
             tenant_id=command.tenant_id,
             object_id=command.object_id,
             feature_code=command.feature_code,
         )
-        if config is None:
-            config = ObjectFeatureConfigEntity.create(
+
+        command_config = command.config
+
+        if feature_config is None:
+            feature_config = ObjectFeatureConfigEntity.create(
                 id_=self._id_provider(),
                 now=now,
                 tenant_id=command.tenant_id,
                 object_id=command.object_id,
                 feature_code=command.feature_code,
                 kind=ObjectFeatureKind.CUSTOM,
-                config=command.config,
+                config=command_config,
             )
         else:
-            config.update_config(now=now, config=command.config)
+            feature_config.update_config(now=now, config=command_config)
 
-        config.enable(now=now)
-        await self._repository.save(config)
+        feature_config.enable(now=now)
+
+        await self._repository.save(feature_config)
+
+        dto_config = dict(feature_config.config)
+
         return ObjectFeatureConfigDTO(
-            id=config.id.uuid,
-            created_at=config.created_at,
-            updated_at=config.updated_at,
-            object_id=config.object_id.uuid,
-            feature_code=config.feature_code.value,
-            kind=config.kind.value,
-            status=config.status.value,
-            config=dict(config.config),
-            is_locked=config.is_locked,
-            locked_reason=config.locked_reason,
+            id=feature_config.id.uuid,
+            created_at=feature_config.created_at,
+            updated_at=feature_config.updated_at,
+            object_id=feature_config.object_id.uuid,
+            feature_code=feature_config.feature_code.value,
+            kind=feature_config.kind.value,
+            status=feature_config.status.value,
+            config=dto_config,
+            is_locked=feature_config.is_locked,
+            locked_reason=feature_config.locked_reason,
         )
 
 
