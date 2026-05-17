@@ -43,7 +43,6 @@ class ObjectFeatureKind(StrEnum):
 
     CUSTOM = "custom"
     STANDARD = "standard"
-    SYSTEM = "system"
 
     @classmethod
     def from_value(

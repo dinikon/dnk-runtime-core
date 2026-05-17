@@ -3,7 +3,15 @@ from typing import Any
 from uuid import UUID
 
 import uuid6
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.modules.shared.db import Base, PortableJSON, StringUUID
@@ -51,6 +59,14 @@ class ObjectFeatureConfigORM(Base):
     locked_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     __table_args__ = (
+        CheckConstraint(
+            "kind IN ('standard', 'custom')",
+            name="chk_object_feature_kind",
+        ),
+        CheckConstraint(
+            "status IN ('enabled', 'disabled')",
+            name="chk_object_feature_status",
+        ),
         UniqueConstraint(
             "tenant_id",
             "object_id",

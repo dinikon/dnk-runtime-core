@@ -18,7 +18,7 @@ class EnableObjectFeatureCommand:
     tenant_id: EntityIdVO
     object_id: RuntimeObjectIdVO
     feature_code: FeatureCodeVO
-    kind: ObjectFeatureKind = ObjectFeatureKind.STANDARD
+    kind: ObjectFeatureKind = ObjectFeatureKind.CUSTOM
     config: dict[str, Any] = field(default_factory=dict)
 
 

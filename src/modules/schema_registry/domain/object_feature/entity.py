@@ -46,7 +46,7 @@ class ObjectFeatureConfigEntity:
         tenant_id: EntityIdVO,
         object_id: RuntimeObjectIdVO,
         feature_code: FeatureCodeVO,
-        kind: ObjectFeatureKind = ObjectFeatureKind.STANDARD,
+        kind: ObjectFeatureKind = ObjectFeatureKind.CUSTOM,
         status: ObjectFeatureStatus = ObjectFeatureStatus.DISABLED,
         config: Mapping[str, Any] | None = None,
         is_locked: bool = False,
