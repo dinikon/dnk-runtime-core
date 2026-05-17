@@ -7,15 +7,24 @@ from uuid import uuid4
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.modules.runtime_data import (
-    FilterGroupSpec,
-    FilterSpec,
+from src.modules.runtime_data.application.models import (
+    FilterLogic,
     PageSpec,
-    PostgresRuntimeGateway,
-    RuntimeDataPersistenceError,
-    RuntimeQueryPlan,
     SortSpec,
+    TypedFilterExpression,
+    TypedFilterGroupSpec,
     TypedFilterSpec,
+)
+from src.modules.runtime_data.application.query.query_plan import RuntimeQueryPlan
+from src.modules.runtime_data.application.query.typed_filter_builder import (
+    RuntimeTypedFilterBuilder,
+)
+from src.modules.runtime_data.domain.error import RuntimeDataPersistenceError
+from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.command_gateway import (
+    PostgresRuntimeCommandGateway,
+)
+from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.query_gateway import (
+    PostgresRuntimeQueryGateway,
 )
 from src.modules.schema_registry.runtime import (
     RuntimeFieldDescriptor,
@@ -73,7 +82,39 @@ class _SessionSpy:
         self.rollback_calls += 1
 
 
-class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
+class PostgresRuntimePersistenceGatewayTests(unittest.IsolatedAsyncioTestCase):
+    def _command_gateway(self, session) -> PostgresRuntimeCommandGateway:
+        return PostgresRuntimeCommandGateway(session)  # type: ignore[arg-type]
+
+    def _query_gateway(self, session) -> PostgresRuntimeQueryGateway:
+        return PostgresRuntimeQueryGateway(session)  # type: ignore[arg-type]
+
+    def _filter(
+        self,
+        descriptor: RuntimeObjectDescriptor,
+        *,
+        field: str,
+        op: str,
+        value,
+    ) -> TypedFilterSpec:
+        return RuntimeTypedFilterBuilder().condition(
+            descriptor=descriptor,
+            field=field,
+            op=op,
+            value=value,
+        )
+
+    def _group(
+        self,
+        *,
+        logic: FilterLogic,
+        items: tuple[TypedFilterExpression, ...],
+    ) -> TypedFilterGroupSpec:
+        return RuntimeTypedFilterBuilder().group(
+            logic=logic,
+            items=items,
+        )
+
     def _descriptor(self) -> RuntimeObjectDescriptor:
         return RuntimeObjectDescriptor(
             schema_name="dnk_test",
@@ -149,7 +190,7 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
             "tags": ["vip"],
         }
         session = _SessionSpy([_MappingsResult([response_row])])
-        gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
+        gateway = self._command_gateway(session)
 
         row = await gateway.insert(
             descriptor=self._descriptor(),
@@ -185,7 +226,7 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
             "tags": [],
         }
         session = _SessionSpy([_MappingsResult([response_row])])
-        gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
+        gateway = self._command_gateway(session)
 
         row = await gateway.update(
             descriptor=self._descriptor(),
@@ -215,11 +256,12 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
             "tags": [],
         }
         session = _SessionSpy([_MappingsResult([response_row])])
-        gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
+        gateway = self._command_gateway(session)
+        descriptor = self._descriptor()
 
         rows = await gateway.update_where(
-            descriptor=self._descriptor(),
-            filters=(FilterSpec(field="last_name", op="eq", value=None),),
+            descriptor=descriptor,
+            filters=(self._filter(descriptor, field="last_name", op="eq", value=None),),
             patch={"last_name": "Roe"},
         )
 
@@ -240,11 +282,19 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
             "tags": [],
         }
         session = _SessionSpy([_MappingsResult([response_row])])
-        gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
+        gateway = self._command_gateway(session)
+        descriptor = self._descriptor()
 
         rows = await gateway.claim(
-            descriptor=self._descriptor(),
-            filters=(FilterSpec(field="first_name", op="in", value=["Jane"]),),
+            descriptor=descriptor,
+            filters=(
+                self._filter(
+                    descriptor,
+                    field="first_name",
+                    op="in",
+                    value=["Jane"],
+                ),
+            ),
             patch={"last_name": "Claimed"},
             sorting=(SortSpec(field="created_at", direction="asc"),),
             limit=5,
@@ -270,11 +320,19 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
             "tags": ["vip"],
         }
         session = _SessionSpy([_MappingsResult([response_row])])
-        gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
+        gateway = self._query_gateway(session)
+        descriptor = self._descriptor()
 
         rows = await gateway.list(
-            descriptor=self._descriptor(),
-            filters=(FilterSpec(field="last_name", op="contains", value="Do"),),
+            descriptor=descriptor,
+            filters=(
+                self._filter(
+                    descriptor,
+                    field="last_name",
+                    op="contains",
+                    value="Do",
+                ),
+            ),
             sorting=(SortSpec(field="created_at", direction="desc"),),
             page=PageSpec(limit=25, offset=10),
         )
@@ -298,24 +356,32 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
             "tags": [],
         }
         session = _SessionSpy([_MappingsResult([response_row])])
-        gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
+        gateway = self._query_gateway(session)
+        descriptor = self._descriptor()
 
         rows = await gateway.list(
-            descriptor=self._descriptor(),
+            descriptor=descriptor,
             filters=(
-                FilterGroupSpec(
+                self._group(
                     logic="and",
                     items=(
-                        FilterSpec(field="last_name", op="eq", value="Doe"),
-                        FilterGroupSpec(
+                        self._filter(
+                            descriptor,
+                            field="last_name",
+                            op="eq",
+                            value="Doe",
+                        ),
+                        self._group(
                             logic="or",
                             items=(
-                                FilterSpec(
+                                self._filter(
+                                    descriptor,
                                     field="first_name",
                                     op="contains",
                                     value="Ja",
                                 ),
-                                FilterSpec(
+                                self._filter(
+                                    descriptor,
                                     field="last_name",
                                     op="contains",
                                     value="Do",
@@ -350,13 +416,24 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
             "tags": [],
         }
         session = _SessionSpy([_MappingsResult([response_row])])
-        gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
+        gateway = self._query_gateway(session)
+        descriptor = self._descriptor()
 
         rows = await gateway.list(
-            descriptor=self._descriptor(),
+            descriptor=descriptor,
             filters=(
-                FilterSpec(field="last_name", op="starts_with", value="Do_%"),
-                FilterSpec(field="first_name", op="ends_with", value="ne%"),
+                self._filter(
+                    descriptor,
+                    field="last_name",
+                    op="starts_with",
+                    value="Do_%",
+                ),
+                self._filter(
+                    descriptor,
+                    field="first_name",
+                    op="ends_with",
+                    value="ne%",
+                ),
             ),
         )
 
@@ -378,12 +455,14 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
             "tags": ["vip"],
         }
         session = _SessionSpy([_MappingsResult([response_row])])
-        gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
+        gateway = self._query_gateway(session)
+        descriptor = self._descriptor()
 
         rows = await gateway.list(
-            descriptor=self._descriptor(),
+            descriptor=descriptor,
             filters=(
-                FilterSpec(
+                self._filter(
+                    descriptor,
                     field="tags",
                     op="contains_any",
                     value=["vip", "newsletter"],
@@ -408,23 +487,26 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
             "tags": ["vip", "newsletter"],
         }
         session = _SessionSpy([_MappingsResult([response_row])])
-        gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
+        gateway = self._query_gateway(session)
+        descriptor = self._descriptor()
 
         rows = await gateway.list(
-            descriptor=self._descriptor(),
+            descriptor=descriptor,
             filters=(
-                FilterSpec(
+                self._filter(
+                    descriptor,
                     field="tags",
                     op="contains_all",
                     value=["vip", "newsletter"],
                 ),
-                FilterSpec(
+                self._filter(
+                    descriptor,
                     field="tags",
                     op="not_contains_any",
                     value=["inactive"],
                 ),
-                FilterSpec(field="tags", op="is_empty", value=None),
-                FilterSpec(field="tags", op="is_not_empty", value=None),
+                self._filter(descriptor, field="tags", op="is_empty", value=None),
+                self._filter(descriptor, field="tags", op="is_not_empty", value=None),
             ),
         )
 
@@ -454,7 +536,7 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
                 _MappingsResult([response_row]),
             ]
         )
-        gateway = PostgresRuntimeGateway(session)  # type: ignore[arg-type]
+        gateway = self._query_gateway(session)
         descriptor = self._descriptor()
 
         page = await gateway.search(
@@ -505,7 +587,7 @@ class PostgresRuntimeGatewayTests(unittest.IsolatedAsyncioTestCase):
             async def execute(self, statement, params=None):
                 raise SQLAlchemyError("boom")
 
-        gateway = PostgresRuntimeGateway(FailingSession())  # type: ignore[arg-type]
+        gateway = self._command_gateway(FailingSession())
 
         with self.assertRaises(RuntimeDataPersistenceError):
             await gateway.insert(

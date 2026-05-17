@@ -8,7 +8,7 @@ from src.modules.runtime_data.application.models import (
     TypedFilterGroupSpec,
     TypedFilterSpec,
 )
-from src.modules.runtime_data.domain import RuntimeDataFilterError
+from src.modules.runtime_data.domain.error import RuntimeDataFilterError
 from src.modules.runtime_data.infrastructure.persistence.postgres.compiler.compiled_query import (
     CompiledQuery,
 )

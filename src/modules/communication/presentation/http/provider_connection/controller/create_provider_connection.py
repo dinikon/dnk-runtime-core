@@ -23,7 +23,7 @@ from src.modules.communication.presentation.http.provider_connection.requests im
 from src.modules.communication.presentation.http.provider_connection.responses import (
     ProviderConnectionResponseSchema,
 )
-from src.modules.runtime_data import (
+from src.modules.runtime_data.domain.error import (
     RuntimeDataFilterError,
     RuntimeDataPersistenceError,
     RuntimeDataPolicyError,

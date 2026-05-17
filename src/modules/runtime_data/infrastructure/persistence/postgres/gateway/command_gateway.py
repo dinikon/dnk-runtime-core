@@ -6,15 +6,15 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.runtime_data.application.models import (
-    FilterExpression,
     SortSpec,
+    TypedFilterExpression,
 )
 from src.modules.runtime_data.application.ports import (
     RuntimeCommandGateway,
     RuntimeQueryGateway,
 )
 from src.modules.runtime_data.application.type_policy import RuntimeFieldTypePolicy
-from src.modules.runtime_data.domain import (
+from src.modules.runtime_data.domain.error import (
     RuntimeDataPolicyError,
     RuntimeDataValidationError,
 )
@@ -29,7 +29,7 @@ from src.modules.runtime_data.infrastructure.persistence.postgres.execution impo
     PostgresSqlExecutor,
 )
 from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.base import (
-    PostgresRuntimeGatewayBase,
+    PostgresRuntimePersistenceBase,
 )
 from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.query_gateway import (
     PostgresRuntimeQueryGateway,
@@ -40,7 +40,10 @@ from src.modules.schema_registry.runtime import (
 )
 
 
-class PostgresRuntimeCommandGateway(PostgresRuntimeGatewayBase, RuntimeCommandGateway):
+class PostgresRuntimeCommandGateway(
+    PostgresRuntimePersistenceBase,
+    RuntimeCommandGateway,
+):
     """PostgreSQL command gateway for runtime records."""
 
     def __init__(
@@ -66,6 +69,7 @@ class PostgresRuntimeCommandGateway(PostgresRuntimeGatewayBase, RuntimeCommandGa
 
     async def insert(
         self,
+        *,
         descriptor: RuntimeObjectDescriptor,
         payload: Mapping[str, Any],
     ) -> Mapping[str, Any]:
@@ -188,7 +192,7 @@ class PostgresRuntimeCommandGateway(PostgresRuntimeGatewayBase, RuntimeCommandGa
         self,
         *,
         descriptor: RuntimeObjectDescriptor,
-        filters: Sequence[FilterExpression],
+        filters: Sequence[TypedFilterExpression],
         patch: Mapping[str, Any],
     ) -> list[Mapping[str, Any]]:
         self._ensure_descriptor(descriptor)
@@ -203,11 +207,7 @@ class PostgresRuntimeCommandGateway(PostgresRuntimeGatewayBase, RuntimeCommandGa
         if not set_clauses:
             return []
 
-        typed_filters = self._typed_filter_expressions(
-            descriptor=descriptor,
-            filters=filters,
-        )
-        where = self._query_compiler.compile_where(filters=typed_filters)
+        where = self._query_compiler.compile_where(filters=filters)
         params.update(where.params)
         bind_fields.update(where.bind_fields)
         columns = self._query_compiler.compile_projection(
@@ -231,7 +231,7 @@ class PostgresRuntimeCommandGateway(PostgresRuntimeGatewayBase, RuntimeCommandGa
         self,
         *,
         descriptor: RuntimeObjectDescriptor,
-        filters: Sequence[FilterExpression],
+        filters: Sequence[TypedFilterExpression],
         patch: Mapping[str, Any],
         sorting: Sequence[SortSpec] = (),
         limit: int = 1,
@@ -250,11 +250,7 @@ class PostgresRuntimeCommandGateway(PostgresRuntimeGatewayBase, RuntimeCommandGa
         if not set_clauses:
             return []
 
-        typed_filters = self._typed_filter_expressions(
-            descriptor=descriptor,
-            filters=filters,
-        )
-        where = self._query_compiler.compile_where(filters=typed_filters)
+        where = self._query_compiler.compile_where(filters=filters)
         params.update(where.params)
         bind_fields.update(where.bind_fields)
         params["claim_limit"] = limit

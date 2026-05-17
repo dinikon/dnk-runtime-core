@@ -10,7 +10,7 @@ from src.modules.inventory.domain.product.value_object import ProductIdVO
 from src.modules.inventory.presentation.depends.application import (
     DeleteProductUseCaseDep,
 )
-from src.modules.runtime_data import (
+from src.modules.runtime_data.domain.error import (
     RuntimeDataFilterError,
     RuntimeDataPersistenceError,
     RuntimeDataPolicyError,

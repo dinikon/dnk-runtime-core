@@ -9,7 +9,7 @@ from src.modules.crm.presentation.http.company.responses import (
     CompanyResponseSchema,
     ListCompaniesResponseSchema,
 )
-from src.modules.runtime_data import (
+from src.modules.runtime_data.domain.error import (
     RuntimeDataFilterError,
     RuntimeDataPersistenceError,
     RuntimeDataPolicyError,

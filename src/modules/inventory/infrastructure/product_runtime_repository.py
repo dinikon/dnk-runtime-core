@@ -20,10 +20,13 @@ from src.modules.inventory.domain.product.value_object import (
     ProductNameVO,
     SkuVO,
 )
-from src.modules.runtime_data import FilterSpec, PageSpec, SortSpec
+from src.modules.runtime_data.application.models import PageSpec, SortSpec
 from src.modules.runtime_data.application.ports import (
     RuntimeCommandGateway,
     RuntimeQueryGateway,
+)
+from src.modules.runtime_data.application.query.typed_filter_builder import (
+    RuntimeTypedFilterBuilder,
 )
 from src.modules.schema_registry.runtime import RuntimeObjectResolverProtocol
 from src.modules.shared import EntityIdVO
@@ -47,6 +50,7 @@ class ProductRuntimeRepository(
         self._runtime_object_resolver = runtime_object_resolver
         self._runtime_command_gateway = runtime_command_gateway
         self._runtime_query_gateway = runtime_query_gateway
+        self._filter_builder = RuntimeTypedFilterBuilder()
 
     async def load(
         self,
@@ -148,7 +152,14 @@ class ProductRuntimeRepository(
         filters = (
             ()
             if category_id is None
-            else (FilterSpec(field="category_id", op="eq", value=category_id.uuid),)
+            else (
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="category_id",
+                    op="eq",
+                    value=category_id.uuid,
+                ),
+            )
         )
         rows = await self._runtime_query_gateway.list(
             descriptor=descriptor,

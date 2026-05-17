@@ -15,7 +15,7 @@ from src.modules.crm.presentation.http.contact.controller.describe_contact_field
     describe_contact_fields,
     router,
 )
-from src.modules.runtime_data.application.query.capabilities import (
+from src.modules.runtime_data.application.query.capabilities.field_query_capability import (
     FieldFilterCapability,
     FieldSortCapability,
 )

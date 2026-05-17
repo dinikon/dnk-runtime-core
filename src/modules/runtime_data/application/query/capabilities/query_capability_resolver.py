@@ -8,7 +8,9 @@ from src.modules.runtime_data.application.query.capabilities.field_query_capabil
     FieldQueryCapability,
     FieldSortCapability,
 )
-from src.modules.runtime_data.application.query.filter_dsl import FilterOperatorRegistry
+from src.modules.runtime_data.application.query.filter_dsl.operator_registry import (
+    FilterOperatorRegistry,
+)
 from src.modules.schema_registry.runtime import (
     RuntimeFieldDescriptor,
     RuntimeObjectDescriptor,

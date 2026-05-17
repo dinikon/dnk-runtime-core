@@ -16,7 +16,7 @@ from src.modules.inventory.presentation.http.category.responses import (
     CategoryResponseSchema,
     ListCategoriesResponseSchema,
 )
-from src.modules.runtime_data import (
+from src.modules.runtime_data.domain.error import (
     RuntimeDataFilterError,
     RuntimeDataPersistenceError,
     RuntimeDataPolicyError,

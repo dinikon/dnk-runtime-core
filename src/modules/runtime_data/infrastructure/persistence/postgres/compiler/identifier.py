@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from src.modules.runtime_data.domain import RuntimeDataPolicyError
+from src.modules.runtime_data.domain.error import RuntimeDataPolicyError
 from src.modules.schema_registry.runtime import RuntimeObjectDescriptor
 
 _IDENTIFIER_RE = re.compile(r"^[a-z][a-z0-9_]*$")

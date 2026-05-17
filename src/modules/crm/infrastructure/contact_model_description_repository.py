@@ -9,11 +9,13 @@ from src.modules.crm.application.contact.dto.contact_fields_description_dto impo
 from src.modules.crm.application.contact.query.describe_contact_fields_repository import (
     ContactFieldsDescriptionRepositoryProtocol,
 )
-from src.modules.runtime_data.application.query.capabilities import (
+from src.modules.runtime_data.application.query.capabilities.field_query_capability import (
     FieldQueryCapability,
-    QueryCapabilityResolver,
     disabled_filter_capability,
     disabled_sort_capability,
+)
+from src.modules.runtime_data.application.query.capabilities.query_capability_resolver import (
+    QueryCapabilityResolver,
 )
 from src.modules.schema_registry.application.use_case.describe_runtime_object_use_case import (
     DescribeRuntimeObjectUseCaseProtocol,

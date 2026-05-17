@@ -9,9 +9,9 @@ from src.modules.crm.application.contact.dto import ContactDTO, ContactListResul
 from src.modules.crm.application.contact.query.list_contacts_query import (
     ListContactsQuery,
 )
-from src.modules.runtime_data.application.query import (
+from src.modules.runtime_data.application.query.query import RuntimeSearchRecordsQuery
+from src.modules.runtime_data.application.query.runtime_object_query_service import (
     RuntimeObjectQueryService,
-    RuntimeSearchRecordsQuery,
 )
 
 

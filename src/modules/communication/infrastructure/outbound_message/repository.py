@@ -54,12 +54,19 @@ from src.modules.communication.infrastructure.runtime_object_names import (
     _TEMPLATE,
     _TEMPLATE_VERSION,
 )
-from src.modules.runtime_data import FilterExpression, FilterGroupSpec, FilterSpec
-from src.modules.runtime_data import PageSpec, SortSpec
+from src.modules.runtime_data.application.models import (
+    PageSpec,
+    SortSpec,
+    TypedFilterExpression,
+)
 from src.modules.runtime_data.application.ports import (
     RuntimeCommandGateway,
     RuntimeQueryGateway,
 )
+from src.modules.runtime_data.application.query.typed_filter_builder import (
+    RuntimeTypedFilterBuilder,
+)
+from src.modules.schema_registry.runtime import RuntimeObjectDescriptor
 from src.modules.schema_registry.runtime import RuntimeObjectResolverProtocol
 from src.modules.shared import EntityIdVO
 
@@ -80,6 +87,7 @@ class OutboundMessageRuntimeRepository:
         self._runtime_object_resolver = runtime_object_resolver
         self._runtime_command_gateway = runtime_command_gateway
         self._runtime_query_gateway = runtime_query_gateway
+        self._filter_builder = RuntimeTypedFilterBuilder()
 
     async def get_existing_send_by_idempotency(
         self,
@@ -89,18 +97,32 @@ class OutboundMessageRuntimeRepository:
     ) -> tuple[CommunicationRequest, OutboundMessage] | None:
         """Возвращает существующий send request по idempotency key."""
         tenant_vo = _entity_id(tenant_id)
+        request_descriptor = await self._resolve_descriptor(tenant_vo, _REQUEST)
         requests = await self._list(
-            tenant_id=tenant_vo,
-            object_name=_REQUEST,
-            filters=(FilterSpec("idempotency_key", "eq", idempotency_key),),
+            descriptor=request_descriptor,
+            filters=(
+                self._filter_builder.condition(
+                    descriptor=request_descriptor,
+                    field="idempotency_key",
+                    op="eq",
+                    value=idempotency_key,
+                ),
+            ),
             limit=1,
         )
         if not requests:
             return None
+        outbound_descriptor = await self._resolve_descriptor(tenant_vo, _OUTBOUND)
         outbounds = await self._list(
-            tenant_id=tenant_vo,
-            object_name=_OUTBOUND,
-            filters=(FilterSpec("communication_request_id", "eq", requests[0]["id"]),),
+            descriptor=outbound_descriptor,
+            filters=(
+                self._filter_builder.condition(
+                    descriptor=outbound_descriptor,
+                    field="communication_request_id",
+                    op="eq",
+                    value=requests[0]["id"],
+                ),
+            ),
             limit=1,
         )
         if not outbounds:
@@ -140,10 +162,17 @@ class OutboundMessageRuntimeRepository:
             if type(template_code) is MessageTemplateCodeVO
             else MessageTemplateCodeVO(str(template_code))
         )
+        descriptor = await self._resolve_descriptor(tenant_vo, _TEMPLATE)
         rows = await self._list(
-            tenant_id=tenant_vo,
-            object_name=_TEMPLATE,
-            filters=(FilterSpec("template_code", "eq", code_vo.value),),
+            descriptor=descriptor,
+            filters=(
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="template_code",
+                    op="eq",
+                    value=code_vo.value,
+                ),
+            ),
             limit=1,
         )
         if not rows:
@@ -156,12 +185,23 @@ class OutboundMessageRuntimeRepository:
         template_id: MessageTemplateIdVO,
     ) -> TemplateVersionEntity | None:
         """Возвращает active template version для template."""
+        tenant_vo = _entity_id(tenant_id)
+        descriptor = await self._resolve_descriptor(tenant_vo, _TEMPLATE_VERSION)
         rows = await self._list(
-            tenant_id=_entity_id(tenant_id),
-            object_name=_TEMPLATE_VERSION,
+            descriptor=descriptor,
             filters=(
-                FilterSpec("template_id", "eq", _message_template_id(template_id).uuid),
-                FilterSpec("status", "eq", TemplateVersionStatusVO.ACTIVE.value),
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="template_id",
+                    op="eq",
+                    value=_message_template_id(template_id).uuid,
+                ),
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="status",
+                    op="eq",
+                    value=TemplateVersionStatusVO.ACTIVE.value,
+                ),
             ),
             limit=1,
         )
@@ -179,13 +219,28 @@ class OutboundMessageRuntimeRepository:
         """Ищет active provider connection по connector и channel."""
         tenant_vo = _entity_id(tenant_id)
         connector_vo = _provider_connector_id(provider_connector_id)
+        descriptor = await self._resolve_descriptor(tenant_vo, _CONNECTION)
         rows = await self._list(
-            tenant_id=tenant_vo,
-            object_name=_CONNECTION,
+            descriptor=descriptor,
             filters=(
-                FilterSpec("provider_connector_id", "eq", connector_vo.uuid),
-                FilterSpec("channel_code", "eq", channel_code),
-                FilterSpec("status", "eq", ProviderConnectionStatusVO.ACTIVE.value),
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="provider_connector_id",
+                    op="eq",
+                    value=connector_vo.uuid,
+                ),
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="channel_code",
+                    op="eq",
+                    value=channel_code,
+                ),
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="status",
+                    op="eq",
+                    value=ProviderConnectionStatusVO.ACTIVE.value,
+                ),
             ),
             sorting=(SortSpec("created_at"),),
             limit=1,
@@ -283,21 +338,33 @@ class OutboundMessageRuntimeRepository:
         tenant_vo = _entity_id(tenant_id)
         claimed = []
         now = _utc_now()
+        descriptor = await self._resolve_descriptor(tenant_vo, _OUTBOUND)
         for _ in range(limit):
             token = uuid4()
             rows = await self._claim_outbounds(
-                tenant_id=tenant_vo,
+                descriptor=descriptor,
                 filters=(
-                    FilterSpec(
-                        "internal_status",
-                        "eq",
-                        OutboundMessageStatus.QUEUED.value,
+                    self._filter_builder.condition(
+                        descriptor=descriptor,
+                        field="internal_status",
+                        op="eq",
+                        value=OutboundMessageStatus.QUEUED.value,
                     ),
-                    FilterGroupSpec(
-                        "or",
-                        (
-                            FilterSpec("next_attempt_at", "eq", None),
-                            FilterSpec("next_attempt_at", "lte", now),
+                    self._filter_builder.group(
+                        logic="or",
+                        items=(
+                            self._filter_builder.condition(
+                                descriptor=descriptor,
+                                field="next_attempt_at",
+                                op="eq",
+                                value=None,
+                            ),
+                            self._filter_builder.condition(
+                                descriptor=descriptor,
+                                field="next_attempt_at",
+                                op="lte",
+                                value=now,
+                            ),
                         ),
                     ),
                 ),
@@ -324,23 +391,48 @@ class OutboundMessageRuntimeRepository:
     ) -> list[OutboundMessage]:
         """Возвращает queued outbound messages, которые нужно опубликовать."""
         tenant_vo = _entity_id(tenant_id)
+        descriptor = await self._resolve_descriptor(tenant_vo, _OUTBOUND)
         rows = await self._list(
-            tenant_id=tenant_vo,
-            object_name=_OUTBOUND,
+            descriptor=descriptor,
             filters=(
-                FilterSpec("internal_status", "eq", OutboundMessageStatus.QUEUED.value),
-                FilterGroupSpec(
-                    "or",
-                    (
-                        FilterSpec("next_attempt_at", "eq", None),
-                        FilterSpec("next_attempt_at", "lte", now),
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="internal_status",
+                    op="eq",
+                    value=OutboundMessageStatus.QUEUED.value,
+                ),
+                self._filter_builder.group(
+                    logic="or",
+                    items=(
+                        self._filter_builder.condition(
+                            descriptor=descriptor,
+                            field="next_attempt_at",
+                            op="eq",
+                            value=None,
+                        ),
+                        self._filter_builder.condition(
+                            descriptor=descriptor,
+                            field="next_attempt_at",
+                            op="lte",
+                            value=now,
+                        ),
                     ),
                 ),
-                FilterGroupSpec(
-                    "or",
-                    (
-                        FilterSpec("queue_published_at", "eq", None),
-                        FilterSpec("queue_published_at", "lte", republish_before),
+                self._filter_builder.group(
+                    logic="or",
+                    items=(
+                        self._filter_builder.condition(
+                            descriptor=descriptor,
+                            field="queue_published_at",
+                            op="eq",
+                            value=None,
+                        ),
+                        self._filter_builder.condition(
+                            descriptor=descriptor,
+                            field="queue_published_at",
+                            op="lte",
+                            value=republish_before,
+                        ),
                     ),
                 ),
             ),
@@ -399,16 +491,37 @@ class OutboundMessageRuntimeRepository:
     ) -> OutboundMessage | None:
         """Атомарно захватывает один queued outbound message по id."""
         tenant_vo = _entity_id(tenant_id)
+        descriptor = await self._resolve_descriptor(tenant_vo, _OUTBOUND)
         rows = await self._claim_outbounds(
-            tenant_id=tenant_vo,
+            descriptor=descriptor,
             filters=(
-                FilterSpec("id", "eq", _outbound_message_id(outbound_message_id).uuid),
-                FilterSpec("internal_status", "eq", OutboundMessageStatus.QUEUED.value),
-                FilterGroupSpec(
-                    "or",
-                    (
-                        FilterSpec("next_attempt_at", "eq", None),
-                        FilterSpec("next_attempt_at", "lte", now),
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="id",
+                    op="eq",
+                    value=_outbound_message_id(outbound_message_id).uuid,
+                ),
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="internal_status",
+                    op="eq",
+                    value=OutboundMessageStatus.QUEUED.value,
+                ),
+                self._filter_builder.group(
+                    logic="or",
+                    items=(
+                        self._filter_builder.condition(
+                            descriptor=descriptor,
+                            field="next_attempt_at",
+                            op="eq",
+                            value=None,
+                        ),
+                        self._filter_builder.condition(
+                            descriptor=descriptor,
+                            field="next_attempt_at",
+                            op="lte",
+                            value=now,
+                        ),
                     ),
                 ),
             ),
@@ -550,11 +663,22 @@ class OutboundMessageRuntimeRepository:
             "next_attempt_at": None,
             **_status_timestamp_patch(outbound, internal_status, finished_at),
         }
+        outbound_descriptor = await self._resolve_descriptor(tenant_vo, _OUTBOUND)
         updated = await self._runtime_command_gateway.update_where(
-            descriptor=await self._resolve_descriptor(tenant_vo, _OUTBOUND),
+            descriptor=outbound_descriptor,
             filters=(
-                FilterSpec("id", "eq", outbound_id.uuid),
-                FilterSpec("processing_token", "eq", token.uuid),
+                self._filter_builder.condition(
+                    descriptor=outbound_descriptor,
+                    field="id",
+                    op="eq",
+                    value=outbound_id.uuid,
+                ),
+                self._filter_builder.condition(
+                    descriptor=outbound_descriptor,
+                    field="processing_token",
+                    op="eq",
+                    value=token.uuid,
+                ),
             ),
             patch=patch,
         )
@@ -612,11 +736,22 @@ class OutboundMessageRuntimeRepository:
             "queue_published_at": None if retryable else outbound.queue_published_at,
             "failed_at": None if retryable else (outbound.failed_at or finished_at),
         }
+        outbound_descriptor = await self._resolve_descriptor(tenant_vo, _OUTBOUND)
         updated = await self._runtime_command_gateway.update_where(
-            descriptor=await self._resolve_descriptor(tenant_vo, _OUTBOUND),
+            descriptor=outbound_descriptor,
             filters=(
-                FilterSpec("id", "eq", outbound_id.uuid),
-                FilterSpec("processing_token", "eq", token.uuid),
+                self._filter_builder.condition(
+                    descriptor=outbound_descriptor,
+                    field="id",
+                    op="eq",
+                    value=outbound_id.uuid,
+                ),
+                self._filter_builder.condition(
+                    descriptor=outbound_descriptor,
+                    field="processing_token",
+                    op="eq",
+                    value=token.uuid,
+                ),
             ),
             patch=outbound_patch,
         )
@@ -645,17 +780,31 @@ class OutboundMessageRuntimeRepository:
     ) -> int:
         """Помечает истекшие SENDING messages как UNKNOWN."""
         tenant_vo = _entity_id(tenant_id)
+        descriptor = await self._resolve_descriptor(tenant_vo, _OUTBOUND)
         rows = await self._claim_outbounds(
-            tenant_id=tenant_vo,
+            descriptor=descriptor,
             filters=(
-                FilterSpec(
-                    "internal_status", "eq", OutboundMessageStatus.SENDING.value
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="internal_status",
+                    op="eq",
+                    value=OutboundMessageStatus.SENDING.value,
                 ),
-                FilterGroupSpec(
-                    "or",
-                    (
-                        FilterSpec("processing_deadline_at", "lte", now),
-                        FilterSpec("processing_started_at", "lte", older_than),
+                self._filter_builder.group(
+                    logic="or",
+                    items=(
+                        self._filter_builder.condition(
+                            descriptor=descriptor,
+                            field="processing_deadline_at",
+                            op="lte",
+                            value=now,
+                        ),
+                        self._filter_builder.condition(
+                            descriptor=descriptor,
+                            field="processing_started_at",
+                            op="lte",
+                            value=older_than,
+                        ),
                     ),
                 ),
             ),
@@ -704,9 +853,9 @@ class OutboundMessageRuntimeRepository:
     ):
         """Возвращает страницу outbound message DTO."""
         tenant_vo = _entity_id(tenant_id)
+        descriptor = await self._resolve_descriptor(tenant_vo, _OUTBOUND)
         rows = await self._list(
-            tenant_id=tenant_vo,
-            object_name=_OUTBOUND,
+            descriptor=descriptor,
             sorting=(SortSpec("created_at", "desc"),),
             limit=limit,
             offset=offset,
@@ -742,16 +891,15 @@ class OutboundMessageRuntimeRepository:
     async def _list(
         self,
         *,
-        tenant_id: EntityIdVO,
-        object_name: str,
-        filters: Sequence[FilterExpression] = (),
+        descriptor: RuntimeObjectDescriptor,
+        filters: Sequence[TypedFilterExpression] = (),
         sorting: Sequence[SortSpec] = (),
         limit: int | None = None,
         offset: int = 0,
     ) -> list[Mapping[str, Any]]:
         """Возвращает runtime rows с фильтрами, сортировкой и page spec."""
         return await self._runtime_query_gateway.list(
-            descriptor=await self._resolve_descriptor(tenant_id, object_name),
+            descriptor=descriptor,
             filters=filters,
             sorting=sorting,
             page=PageSpec(limit=limit, offset=offset) if limit is not None else None,
@@ -760,14 +908,14 @@ class OutboundMessageRuntimeRepository:
     async def _claim_outbounds(
         self,
         *,
-        tenant_id: EntityIdVO,
-        filters: Sequence[FilterExpression],
+        descriptor: RuntimeObjectDescriptor,
+        filters: Sequence[TypedFilterExpression],
         patch: Mapping[str, Any],
         limit: int,
     ) -> list[Mapping[str, Any]]:
         """Атомарно claim-ит outbound rows."""
         return await self._runtime_command_gateway.claim(
-            descriptor=await self._resolve_descriptor(tenant_id, _OUTBOUND),
+            descriptor=descriptor,
             filters=filters,
             patch=patch,
             sorting=(SortSpec("priority"), SortSpec("created_at")),

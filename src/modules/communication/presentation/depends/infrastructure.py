@@ -43,7 +43,13 @@ from src.modules.communication.infrastructure.provider_senders import (
 from src.modules.communication.infrastructure.rabbitmq import (
     RabbitMQOutboundMessagePublisher,
 )
-from src.modules.runtime_data import PostgresRuntimeGateway, RuntimeFieldTypePolicy
+from src.modules.runtime_data.application.type_policy import RuntimeFieldTypePolicy
+from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.command_gateway import (
+    PostgresRuntimeCommandGateway,
+)
+from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.query_gateway import (
+    PostgresRuntimeQueryGateway,
+)
 from src.modules.schema_registry.presentation.depends.application import (
     RuntimeObjectResolverDep,
 )
@@ -60,31 +66,50 @@ RuntimeFieldTypePolicyDep = Annotated[
 ]
 
 
-def get_runtime_gateway(
+def get_runtime_query_gateway(
     uow: UoWDep,
     type_policy: RuntimeFieldTypePolicyDep,
-) -> PostgresRuntimeGateway:
-    return PostgresRuntimeGateway(
+) -> PostgresRuntimeQueryGateway:
+    return PostgresRuntimeQueryGateway(
         uow.session,
         type_policy=type_policy,
     )
 
 
-RuntimeGatewayDep = Annotated[
-    PostgresRuntimeGateway,
-    Depends(get_runtime_gateway),
+RuntimeQueryGatewayDep = Annotated[
+    PostgresRuntimeQueryGateway,
+    Depends(get_runtime_query_gateway),
+]
+
+
+def get_runtime_command_gateway(
+    uow: UoWDep,
+    type_policy: RuntimeFieldTypePolicyDep,
+    runtime_query_gateway: RuntimeQueryGatewayDep,
+) -> PostgresRuntimeCommandGateway:
+    return PostgresRuntimeCommandGateway(
+        uow.session,
+        type_policy=type_policy,
+        query_gateway=runtime_query_gateway,
+    )
+
+
+RuntimeCommandGatewayDep = Annotated[
+    PostgresRuntimeCommandGateway,
+    Depends(get_runtime_command_gateway),
 ]
 
 
 def get_delivery_repository(
     runtime_object_resolver: RuntimeObjectResolverDep,
-    runtime_gateway: RuntimeGatewayDep,
+    runtime_command_gateway: RuntimeCommandGatewayDep,
+    runtime_query_gateway: RuntimeQueryGatewayDep,
 ) -> DeliveryRuntimeRepository:
     """Создает runtime repository delivery aggregate."""
     return DeliveryRuntimeRepository(
         runtime_object_resolver=runtime_object_resolver,
-        runtime_command_gateway=runtime_gateway,
-        runtime_query_gateway=runtime_gateway,
+        runtime_command_gateway=runtime_command_gateway,
+        runtime_query_gateway=runtime_query_gateway,
     )
 
 
@@ -96,13 +121,14 @@ DeliveryRuntimeRepositoryDep = Annotated[
 
 def get_outbound_message_repository(
     runtime_object_resolver: RuntimeObjectResolverDep,
-    runtime_gateway: RuntimeGatewayDep,
+    runtime_command_gateway: RuntimeCommandGatewayDep,
+    runtime_query_gateway: RuntimeQueryGatewayDep,
 ) -> OutboundMessageRuntimeRepository:
     """Создает runtime repository outbound message aggregate."""
     return OutboundMessageRuntimeRepository(
         runtime_object_resolver=runtime_object_resolver,
-        runtime_command_gateway=runtime_gateway,
-        runtime_query_gateway=runtime_gateway,
+        runtime_command_gateway=runtime_command_gateway,
+        runtime_query_gateway=runtime_query_gateway,
     )
 
 
@@ -114,12 +140,13 @@ OutboundMessageRuntimeRepositoryDep = Annotated[
 
 def get_message_template_repository(
     runtime_object_resolver: RuntimeObjectResolverDep,
-    runtime_gateway: RuntimeGatewayDep,
+    runtime_command_gateway: RuntimeCommandGatewayDep,
+    runtime_query_gateway: RuntimeQueryGatewayDep,
 ) -> MessageTemplateRuntimeRepository:
     return MessageTemplateRuntimeRepository(
         runtime_object_resolver=runtime_object_resolver,
-        runtime_command_gateway=runtime_gateway,
-        runtime_query_gateway=runtime_gateway,
+        runtime_command_gateway=runtime_command_gateway,
+        runtime_query_gateway=runtime_query_gateway,
     )
 
 
@@ -131,11 +158,11 @@ MessageTemplateRuntimeRepositoryDep = Annotated[
 
 def get_message_template_query_repository(
     runtime_object_resolver: RuntimeObjectResolverDep,
-    runtime_gateway: RuntimeGatewayDep,
+    runtime_query_gateway: RuntimeQueryGatewayDep,
 ) -> MessageTemplateQueryRuntimeRepository:
     return MessageTemplateQueryRuntimeRepository(
         runtime_object_resolver=runtime_object_resolver,
-        runtime_query_gateway=runtime_gateway,
+        runtime_query_gateway=runtime_query_gateway,
     )
 
 
@@ -147,12 +174,13 @@ MessageTemplateQueryRuntimeRepositoryDep = Annotated[
 
 def get_provider_connection_repository(
     runtime_object_resolver: RuntimeObjectResolverDep,
-    runtime_gateway: RuntimeGatewayDep,
+    runtime_command_gateway: RuntimeCommandGatewayDep,
+    runtime_query_gateway: RuntimeQueryGatewayDep,
 ) -> ProviderConnectionRuntimeRepository:
     return ProviderConnectionRuntimeRepository(
         runtime_object_resolver=runtime_object_resolver,
-        runtime_command_gateway=runtime_gateway,
-        runtime_query_gateway=runtime_gateway,
+        runtime_command_gateway=runtime_command_gateway,
+        runtime_query_gateway=runtime_query_gateway,
     )
 
 
@@ -164,13 +192,14 @@ ProviderConnectionRuntimeRepositoryDep = Annotated[
 
 def get_provider_connector_repository(
     runtime_object_resolver: RuntimeObjectResolverDep,
-    runtime_gateway: RuntimeGatewayDep,
+    runtime_command_gateway: RuntimeCommandGatewayDep,
+    runtime_query_gateway: RuntimeQueryGatewayDep,
 ) -> ProviderConnectorRuntimeRepository:
     """Создает runtime repository provider connector aggregate."""
     return ProviderConnectorRuntimeRepository(
         runtime_object_resolver=runtime_object_resolver,
-        runtime_command_gateway=runtime_gateway,
-        runtime_query_gateway=runtime_gateway,
+        runtime_command_gateway=runtime_command_gateway,
+        runtime_query_gateway=runtime_query_gateway,
     )
 
 
@@ -304,8 +333,9 @@ __all__ = [
     "ProviderSenderRegistryDep",
     "ProviderStatusMappingServiceDep",
     "ProviderYamlLoaderDep",
+    "RuntimeCommandGatewayDep",
     "RuntimeFieldTypePolicyDep",
-    "RuntimeGatewayDep",
+    "RuntimeQueryGatewayDep",
     "SecretCodecDep",
     "TemplateRenderServiceDep",
     "get_delivery_repository",
@@ -313,6 +343,7 @@ __all__ = [
     "get_outbound_message_repository",
     "get_outbound_message_publisher",
     "get_provider_sender_registry",
+    "get_runtime_command_gateway",
     "get_runtime_field_type_policy",
-    "get_runtime_gateway",
+    "get_runtime_query_gateway",
 ]

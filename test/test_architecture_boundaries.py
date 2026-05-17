@@ -121,6 +121,63 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                         msg=f"{path} still uses legacy path {module_name}",
                     )
 
+    def test_runtime_data_root_import_surface_is_not_used_in_source(self) -> None:
+        forbidden_modules = {
+            "src.modules.runtime_data",
+            "src.modules.runtime_data.application",
+            "src.modules.runtime_data.infrastructure",
+            "src.modules.runtime_data.infrastructure.postgres",
+            "src.modules.runtime_data.infrastructure.persistence.postgres",
+            "src.modules.runtime_data.infrastructure.persistence.postgres.gateway",
+        }
+        for path in iter_python_files("src"):
+            if path == PROJECT_ROOT / "src/modules/runtime_data/__init__.py":
+                continue
+            for module_name in iter_imports(path):
+                self.assertNotIn(
+                    module_name,
+                    forbidden_modules,
+                    msg=f"{path} imports runtime_data compatibility surface {module_name}",
+                )
+
+    def test_runtime_data_legacy_filter_specs_are_removed(self) -> None:
+        forbidden_names = {
+            "FilterSpec",
+            "FilterGroupSpec",
+            "FilterExpression",
+            "PostgresRuntimeGateway",
+        }
+        for path in iter_python_files("src"):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom):
+                    imported_names = {alias.name for alias in node.names}
+                    self.assertFalse(
+                        imported_names & forbidden_names,
+                        msg=f"{path} imports removed runtime_data names {imported_names & forbidden_names}",
+                    )
+                elif isinstance(node, ast.ClassDef):
+                    self.assertNotIn(
+                        node.name,
+                        forbidden_names,
+                        msg=f"{path} defines removed runtime_data class {node.name}",
+                    )
+
+    def test_runtime_data_postgres_compatibility_shim_is_removed(self) -> None:
+        self.assertFalse(
+            (
+                PROJECT_ROOT / "src/modules/runtime_data/infrastructure/postgres.py"
+            ).exists(),
+            msg="runtime_data PostgreSQL compatibility shim still exists.",
+        )
+        self.assertFalse(
+            (
+                PROJECT_ROOT
+                / "src/modules/runtime_data/infrastructure/persistence/postgres/gateway/runtime_gateway.py"
+            ).exists(),
+            msg="PostgresRuntimeGateway facade still exists.",
+        )
+
     def test_identity_use_case_callers_do_not_use_execute_style(self) -> None:
         forbidden_patterns = ("use_case.execute(", "_use_case.execute(")
         paths = [

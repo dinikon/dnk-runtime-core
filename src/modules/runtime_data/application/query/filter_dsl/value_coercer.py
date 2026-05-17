@@ -7,7 +7,7 @@ from src.modules.runtime_data.application.query.filter_dsl.errors import (
     filter_dsl_error,
 )
 from src.modules.runtime_data.application.type_policy import RuntimeFieldTypePolicy
-from src.modules.runtime_data.domain import RuntimeDataValidationError
+from src.modules.runtime_data.domain.error import RuntimeDataValidationError
 from src.modules.schema_registry.runtime import RuntimeFieldDescriptor
 
 

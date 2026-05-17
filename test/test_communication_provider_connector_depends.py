@@ -31,7 +31,8 @@ class ProviderConnectorDependsTests(unittest.TestCase):
     def test_provider_connector_dependencies_are_wired(self) -> None:
         repository = get_provider_connector_repository(
             runtime_object_resolver=object(),
-            runtime_gateway=object(),
+            runtime_command_gateway=object(),
+            runtime_query_gateway=object(),
         )
         service = get_provider_connector_service(
             repository=repository,

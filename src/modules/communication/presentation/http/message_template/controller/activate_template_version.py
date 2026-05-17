@@ -20,7 +20,7 @@ from src.modules.communication.presentation.http.common import require_tenant_id
 from src.modules.communication.presentation.http.message_template.responses import (
     TemplateVersionResponseSchema,
 )
-from src.modules.runtime_data import (
+from src.modules.runtime_data.domain.error import (
     RuntimeDataFilterError,
     RuntimeDataPersistenceError,
     RuntimeDataPolicyError,

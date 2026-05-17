@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any
 
-from src.modules.runtime_data import FilterExpression, SortSpec
 from src.modules.schema_registry.domain.object.value_object import RuntimeObjectIdVO
 from src.modules.shared import EntityIdVO
 
@@ -13,8 +14,8 @@ class ListCustomRecordsQuery:
 
     tenant_id: EntityIdVO
     object_id: RuntimeObjectIdVO
-    filters: tuple[FilterExpression, ...]
-    sorting: tuple[SortSpec, ...]
+    filter_dsl: Mapping[str, Any] | None
+    sort_dsl: Sequence[Mapping[str, Any]]
     limit: int
     offset: int
 

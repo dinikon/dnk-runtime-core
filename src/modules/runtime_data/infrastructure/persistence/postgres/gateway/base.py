@@ -1,24 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.runtime_data.application.models import (
-    FilterExpression,
-    FilterGroupSpec,
-    FilterSpec,
-    TypedFilterExpression,
-    TypedFilterGroupSpec,
-    TypedFilterSpec,
-)
-from src.modules.runtime_data.application.query.filter_dsl import FilterValueCoercer
 from src.modules.runtime_data.application.type_policy import RuntimeFieldTypePolicy
-from src.modules.runtime_data.domain import (
-    RuntimeDataPolicyError,
-    RuntimeDataValidationError,
-)
+from src.modules.runtime_data.domain.error import RuntimeDataPolicyError
 from src.modules.runtime_data.infrastructure.persistence.postgres.compiler import (
     PostgresRuntimeQueryCompiler,
 )
@@ -40,7 +28,7 @@ _DEFAULT_RUNTIME_ERROR_MESSAGE = (
 )
 
 
-class PostgresRuntimeGatewayBase:
+class PostgresRuntimePersistenceBase:
     """Shared PostgreSQL runtime gateway infrastructure."""
 
     def _init_runtime_gateway_base(
@@ -53,7 +41,6 @@ class PostgresRuntimeGatewayBase:
     ) -> None:
         self._session = session
         self._type_policy = type_policy or RuntimeFieldTypePolicy()
-        self._value_coercer = FilterValueCoercer(self._type_policy)
         self._query_compiler = query_compiler or PostgresRuntimeQueryCompiler()
         self._executor = executor or PostgresSqlExecutor(
             session,
@@ -71,55 +58,6 @@ class PostgresRuntimeGatewayBase:
             sql,
             params,
             bind_fields=bind_fields,
-        )
-
-    def _typed_filter_expressions(
-        self,
-        *,
-        descriptor: RuntimeObjectDescriptor,
-        filters: Sequence[FilterExpression],
-    ) -> tuple[TypedFilterExpression, ...]:
-        return tuple(
-            self._typed_filter_expression(descriptor=descriptor, filter_spec=item)
-            for item in filters
-        )
-
-    def _typed_filter_expression(
-        self,
-        *,
-        descriptor: RuntimeObjectDescriptor,
-        filter_spec: FilterExpression,
-    ) -> TypedFilterExpression:
-        if isinstance(filter_spec, FilterGroupSpec):
-            return TypedFilterGroupSpec(
-                logic=filter_spec.logic,
-                items=tuple(
-                    self._typed_filter_expression(
-                        descriptor=descriptor,
-                        filter_spec=item,
-                    )
-                    for item in filter_spec.items
-                ),
-            )
-
-        if isinstance(filter_spec, FilterSpec):
-            field = descriptor.field_by_name(filter_spec.field)
-            if field is None:
-                raise RuntimeDataValidationError(
-                    f"Unknown filter field '{filter_spec.field}'."
-                )
-            return TypedFilterSpec(
-                field=field,
-                op=filter_spec.op,
-                value=self._value_coercer.coerce(
-                    field=field,
-                    operator=filter_spec.op,
-                    value=filter_spec.value,
-                ),
-            )
-
-        raise RuntimeDataValidationError(
-            f"Unsupported filter expression '{type(filter_spec).__name__}'."
         )
 
     def _build_set_clauses(
@@ -158,4 +96,4 @@ class PostgresRuntimeGatewayBase:
         self._required_field(descriptor, descriptor.pk)
 
 
-__all__ = ["PostgresRuntimeGatewayBase"]
+__all__ = ["PostgresRuntimePersistenceBase"]

@@ -8,7 +8,13 @@ from src.modules.custom_object.application.record.repository import (
     CustomRecordRepositoryProtocol,
 )
 from src.modules.custom_object.infrastructure import CustomRecordRuntimeRepository
-from src.modules.runtime_data import PostgresRuntimeGateway, RuntimeFieldTypePolicy
+from src.modules.runtime_data.application.type_policy import RuntimeFieldTypePolicy
+from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.command_gateway import (
+    PostgresRuntimeCommandGateway,
+)
+from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.query_gateway import (
+    PostgresRuntimeQueryGateway,
+)
 from src.modules.schema_registry.presentation.depends.application import (
     RuntimeObjectResolverDep,
 )
@@ -26,32 +32,52 @@ RuntimeFieldTypePolicyDep = Annotated[
 ]
 
 
-def get_runtime_gateway(
+def get_runtime_query_gateway(
     uow: UoWDep,
     type_policy: RuntimeFieldTypePolicyDep,
-) -> PostgresRuntimeGateway:
-    """Создает PostgreSQL runtime gateway на базе текущей UoW-сессии."""
-    return PostgresRuntimeGateway(
+) -> PostgresRuntimeQueryGateway:
+    """Создает PostgreSQL runtime query gateway на базе текущей UoW-сессии."""
+    return PostgresRuntimeQueryGateway(
         uow.session,
         type_policy=type_policy,
     )
 
 
-RuntimeGatewayDep = Annotated[
-    PostgresRuntimeGateway,
-    Depends(get_runtime_gateway),
+RuntimeQueryGatewayDep = Annotated[
+    PostgresRuntimeQueryGateway,
+    Depends(get_runtime_query_gateway),
+]
+
+
+def get_runtime_command_gateway(
+    uow: UoWDep,
+    type_policy: RuntimeFieldTypePolicyDep,
+    runtime_query_gateway: RuntimeQueryGatewayDep,
+) -> PostgresRuntimeCommandGateway:
+    """Создает PostgreSQL runtime command gateway на базе текущей UoW-сессии."""
+    return PostgresRuntimeCommandGateway(
+        uow.session,
+        type_policy=type_policy,
+        query_gateway=runtime_query_gateway,
+    )
+
+
+RuntimeCommandGatewayDep = Annotated[
+    PostgresRuntimeCommandGateway,
+    Depends(get_runtime_command_gateway),
 ]
 
 
 def get_custom_record_repository(
     runtime_object_resolver: RuntimeObjectResolverDep,
-    runtime_gateway: RuntimeGatewayDep,
+    runtime_command_gateway: RuntimeCommandGatewayDep,
+    runtime_query_gateway: RuntimeQueryGatewayDep,
 ) -> CustomRecordRepositoryProtocol:
     """Создает custom-object record repository поверх runtime gateway."""
     return CustomRecordRuntimeRepository(
         runtime_object_resolver=runtime_object_resolver,
-        command_gateway=runtime_gateway,
-        query_gateway=runtime_gateway,
+        command_gateway=runtime_command_gateway,
+        query_gateway=runtime_query_gateway,
     )
 
 
@@ -63,9 +89,11 @@ CustomRecordRepositoryDep = Annotated[
 
 __all__ = [
     "CustomRecordRepositoryDep",
+    "RuntimeCommandGatewayDep",
     "RuntimeFieldTypePolicyDep",
-    "RuntimeGatewayDep",
+    "RuntimeQueryGatewayDep",
     "get_custom_record_repository",
+    "get_runtime_command_gateway",
     "get_runtime_field_type_policy",
-    "get_runtime_gateway",
+    "get_runtime_query_gateway",
 ]

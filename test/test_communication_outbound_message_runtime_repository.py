@@ -22,7 +22,55 @@ from src.modules.communication.infrastructure.runtime_object_names import (
     _OUTBOUND,
     _REQUEST,
 )
+from src.modules.schema_registry.runtime import (
+    RuntimeFieldDescriptor,
+    RuntimeObjectDescriptor,
+)
 from src.modules.shared import EntityIdVO
+
+
+def _descriptor_name(descriptor) -> str:
+    return getattr(descriptor, "object_name", descriptor)
+
+
+def _field(name: str, type_code: str = "text") -> RuntimeFieldDescriptor:
+    return RuntimeFieldDescriptor(
+        name=name,
+        type_code=type_code,
+        is_nullable=True,
+        default_value=None,
+        options={},
+        settings={},
+    )
+
+
+def _descriptor(object_name: str) -> RuntimeObjectDescriptor:
+    return RuntimeObjectDescriptor(
+        schema_name="dnk_test",
+        object_name=object_name,
+        table_name=object_name,
+        pk="id",
+        title_field="id",
+        fields=(
+            _field("id", "uuid"),
+            _field("created_at", "datetime"),
+            _field("updated_at", "datetime"),
+            _field("communication_request_id", "uuid"),
+            _field("idempotency_key"),
+            _field("internal_status"),
+            _field("next_attempt_at", "datetime"),
+            _field("queue_published_at", "datetime"),
+            _field("processing_deadline_at", "datetime"),
+            _field("processing_started_at", "datetime"),
+            _field("processing_token", "uuid"),
+            _field("template_code"),
+            _field("template_id", "uuid"),
+            _field("status"),
+            _field("provider_connector_id", "uuid"),
+            _field("channel_code"),
+        ),
+        relations=(),
+    )
 
 
 class _ResolverStub:
@@ -31,7 +79,7 @@ class _ResolverStub:
 
     async def resolve(self, *, tenant_id, object_name):
         self.calls.append((tenant_id, object_name))
-        return object_name
+        return _descriptor(object_name)
 
 
 class _QueryGatewayStub:
@@ -42,21 +90,22 @@ class _QueryGatewayStub:
         self.list_calls = []
 
     async def get_by_id(self, *, descriptor, object_id, fetch_plan=None):
-        self.get_calls.append((descriptor, object_id))
-        return self.by_id_rows.get((descriptor, object_id))
+        descriptor_name = _descriptor_name(descriptor)
+        self.get_calls.append((descriptor_name, object_id))
+        return self.by_id_rows.get((descriptor_name, object_id))
 
     async def list(
         self, *, descriptor, filters=(), sorting=(), page=None, fetch_plan=None
     ):
         self.list_calls.append(
             {
-                "descriptor": descriptor,
+                "descriptor": _descriptor_name(descriptor),
                 "filters": filters,
                 "sorting": sorting,
                 "page": page,
             }
         )
-        return self.list_rows_by_descriptor.get(descriptor, [])
+        return self.list_rows_by_descriptor.get(_descriptor_name(descriptor), [])
 
 
 class _CommandGatewayStub:
@@ -67,10 +116,11 @@ class _CommandGatewayStub:
         self.update_where_calls = []
 
     async def insert(self, *, descriptor, payload):
-        self.inserts.append((descriptor, payload))
+        descriptor_name = _descriptor_name(descriptor)
+        self.inserts.append((descriptor_name, payload))
         now = datetime(2026, 5, 14, 12, 0, tzinfo=UTC)
         defaults = {"created_at": now, "updated_at": now}
-        if descriptor == _OUTBOUND:
+        if descriptor_name == _OUTBOUND:
             defaults |= {
                 "external_message_id": None,
                 "external_status": None,
@@ -89,17 +139,17 @@ class _CommandGatewayStub:
         return defaults | dict(payload)
 
     async def update(self, *, descriptor, object_id, patch):
-        self.updates.append((descriptor, object_id, patch))
+        self.updates.append((_descriptor_name(descriptor), object_id, patch))
         return {"id": object_id, **patch}
 
     async def update_where(self, *, descriptor, filters, patch):
-        self.update_where_calls.append((descriptor, filters, patch))
+        self.update_where_calls.append((_descriptor_name(descriptor), filters, patch))
         return []
 
     async def claim(self, *, descriptor, filters, patch, sorting=(), limit=1):
         self.claims.append(
             {
-                "descriptor": descriptor,
+                "descriptor": _descriptor_name(descriptor),
                 "filters": filters,
                 "patch": patch,
                 "sorting": sorting,

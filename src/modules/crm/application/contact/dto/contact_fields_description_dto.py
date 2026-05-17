@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from uuid import UUID
 
-from src.modules.runtime_data.application.query.capabilities import (
+from src.modules.runtime_data.application.query.capabilities.field_query_capability import (
     FieldFilterCapability,
     FieldSortCapability,
     disabled_filter_capability,

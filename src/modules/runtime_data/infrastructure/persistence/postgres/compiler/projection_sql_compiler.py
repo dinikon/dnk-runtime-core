@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from src.modules.runtime_data.application.models import FetchPlan
-from src.modules.runtime_data.domain import RuntimeDataValidationError
+from src.modules.runtime_data.domain.error import RuntimeDataValidationError
 from src.modules.runtime_data.infrastructure.persistence.postgres.compiler.identifier import (
     quote_identifier,
 )

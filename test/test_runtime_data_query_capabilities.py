@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import unittest
 
-from src.modules.runtime_data.application.query.capabilities import (
+from src.modules.runtime_data.application.query.capabilities.query_capability_resolver import (
     QueryCapabilityResolver,
 )
-from src.modules.runtime_data.application.query.filter_dsl import (
+from src.modules.runtime_data.application.query.filter_dsl.operator_registry import (
     FilterOperatorRegistry,
 )
 from src.modules.schema_registry.runtime import (

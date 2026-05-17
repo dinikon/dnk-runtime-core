@@ -6,8 +6,8 @@ from src.modules.runtime_data.application.models import (
     SortSpec,
 )
 from src.modules.runtime_data.application.ports import RuntimeQueryGateway
-from src.modules.runtime_data.application.query.filter_dsl import (
-    FilterDslParser,
+from src.modules.runtime_data.application.query.filter_dsl.parser import FilterDslParser
+from src.modules.runtime_data.application.query.filter_dsl.semantic_validator import (
     FilterSemanticValidator,
 )
 from src.modules.runtime_data.application.query.query import RuntimeSearchRecordsQuery
@@ -16,11 +16,11 @@ from src.modules.runtime_data.application.query.result import (
     RuntimeRecordDTO,
     RuntimeSearchRecordsResult,
 )
-from src.modules.runtime_data.application.query.sort_dsl import (
-    SortDslParser,
+from src.modules.runtime_data.application.query.sort_dsl.parser import SortDslParser
+from src.modules.runtime_data.application.query.sort_dsl.validator import (
     SortSemanticValidator,
 )
-from src.modules.runtime_data.domain import RuntimeDataValidationError
+from src.modules.runtime_data.domain.error import RuntimeDataValidationError
 from src.modules.schema_registry.runtime import (
     RuntimeObjectDescriptor,
     RuntimeObjectResolverProtocol,

@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.runtime_data.domain import RuntimeDataPersistenceError
+from src.modules.runtime_data.domain.error import RuntimeDataPersistenceError
 from src.modules.runtime_data.infrastructure.persistence.postgres.execution.statement_factory import (
     PostgresStatementFactory,
 )

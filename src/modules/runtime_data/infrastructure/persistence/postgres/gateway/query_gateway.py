@@ -7,10 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.runtime_data.application.models import (
     FetchPlan,
-    FilterExpression,
     PageSpec,
     RuntimeRowsPage,
     SortSpec,
+    TypedFilterExpression,
 )
 from src.modules.runtime_data.application.ports import (
     RuntimeQueryGateway,
@@ -29,7 +29,7 @@ from src.modules.runtime_data.infrastructure.persistence.postgres.execution impo
     PostgresSqlExecutor,
 )
 from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.base import (
-    PostgresRuntimeGatewayBase,
+    PostgresRuntimePersistenceBase,
 )
 from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.relation_loader import (
     PostgresRuntimeRelationLoader,
@@ -37,7 +37,7 @@ from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.relati
 from src.modules.schema_registry.runtime import RuntimeObjectDescriptor
 
 
-class PostgresRuntimeQueryGateway(PostgresRuntimeGatewayBase, RuntimeQueryGateway):
+class PostgresRuntimeQueryGateway(PostgresRuntimePersistenceBase, RuntimeQueryGateway):
     """PostgreSQL query gateway for runtime records."""
 
     def __init__(
@@ -100,19 +100,15 @@ class PostgresRuntimeQueryGateway(PostgresRuntimeGatewayBase, RuntimeQueryGatewa
         self,
         *,
         descriptor: RuntimeObjectDescriptor,
-        filters: Sequence[FilterExpression] = (),
+        filters: Sequence[TypedFilterExpression] = (),
         sorting: Sequence[SortSpec] = (),
         page: PageSpec | None = None,
         fetch_plan: FetchPlan | None = None,
-    ) -> List[Mapping[str, Any]]:
+    ) -> list[Mapping[str, Any]]:
         self._ensure_descriptor(descriptor)
-        typed_filters = self._typed_filter_expressions(
-            descriptor=descriptor,
-            filters=filters,
-        )
         compiled = self._query_compiler.compile_list(
             descriptor=descriptor,
-            filters=typed_filters,
+            filters=filters,
             sorting=sorting,
             page=page,
             fetch_plan=fetch_plan,

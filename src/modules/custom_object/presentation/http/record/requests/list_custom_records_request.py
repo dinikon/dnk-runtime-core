@@ -11,7 +11,7 @@ class ListCustomRecordsRequestSchema(BaseModel):
 
     object_id: UUID
     filter: dict[str, Any] | None = None
-    sort: dict[str, str] | None = None
+    sort: list[dict[str, Any]] = Field(default_factory=list)
     limit: int = Field(default=50, ge=1, le=100)
     offset: int = Field(default=0, ge=0)
 

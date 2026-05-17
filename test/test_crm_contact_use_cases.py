@@ -31,7 +31,10 @@ from src.modules.crm.application.contact.use_case.update_contact import (
 from src.modules.crm.domain.contact.entity import ContactEntity
 from src.modules.crm.domain.contact.error import ContactNotFoundError
 from src.modules.crm.domain.contact.value_object import ContactIdVO
-from src.modules.runtime_data import RuntimeRecordDTO, RuntimeSearchRecordsResult
+from src.modules.runtime_data.application.query.result import (
+    RuntimeRecordDTO,
+    RuntimeSearchRecordsResult,
+)
 from src.modules.shared import EntityIdVO
 
 

@@ -2,11 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, status
 
-from src.modules.custom_object.application.record import (
-    ListCustomRecordsQuery,
-    parse_filter_payload,
-    parse_sort_payload,
-)
+from src.modules.custom_object.application.record import ListCustomRecordsQuery
 from src.modules.custom_object.domain import (
     CustomObjectNotFoundError,
     CustomObjectRecordNotFoundError,
@@ -22,7 +18,7 @@ from src.modules.custom_object.presentation.http.record.responses import (
     CustomRecordResponseSchema,
     ListCustomRecordsResponseSchema,
 )
-from src.modules.runtime_data import (
+from src.modules.runtime_data.domain.error import (
     RuntimeDataFilterError,
     RuntimeDataPersistenceError,
     RuntimeDataPolicyError,
@@ -64,8 +60,8 @@ async def list_custom_records(
             ListCustomRecordsQuery(
                 tenant_id=EntityIdVO.from_value(principal.tenant_id),
                 object_id=RuntimeObjectIdVO.from_value(payload.object_id),
-                filters=parse_filter_payload(payload.filter),
-                sorting=parse_sort_payload(payload.sort),
+                filter_dsl=payload.filter,
+                sort_dsl=payload.sort,
                 limit=payload.limit,
                 offset=payload.offset,
             )

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import unittest
 
-from src.modules.runtime_data import RuntimeDataFilterError
-from src.modules.runtime_data.application.query.filter_dsl import (
+from src.modules.runtime_data.domain.error import RuntimeDataFilterError
+from src.modules.runtime_data.application.query.filter_dsl.ast import (
     FilterConditionNode,
-    FilterDslParser,
     FilterGroupNode,
 )
+from src.modules.runtime_data.application.query.filter_dsl.parser import FilterDslParser
 
 
 class FilterDslParserPublicContractTests(unittest.TestCase):

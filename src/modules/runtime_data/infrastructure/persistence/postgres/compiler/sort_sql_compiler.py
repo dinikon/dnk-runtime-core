@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from src.modules.runtime_data.application.models import SortSpec
-from src.modules.runtime_data.domain import RuntimeDataFilterError
+from src.modules.runtime_data.domain.error import RuntimeDataFilterError
 from src.modules.runtime_data.infrastructure.persistence.postgres.compiler.identifier import (
     quote_identifier,
 )

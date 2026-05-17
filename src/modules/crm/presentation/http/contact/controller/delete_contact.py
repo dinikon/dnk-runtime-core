@@ -10,7 +10,7 @@ from src.modules.crm.application.contact.command.delete_contact_command import (
 from src.modules.crm.domain.contact.error import ContactNotFoundError
 from src.modules.crm.domain.contact.value_object import ContactIdVO
 from src.modules.crm.presentation.depends.application import DeleteContactUseCaseDep
-from src.modules.runtime_data import (
+from src.modules.runtime_data.domain.error import (
     RuntimeDataFilterError,
     RuntimeDataPersistenceError,
     RuntimeDataPolicyError,

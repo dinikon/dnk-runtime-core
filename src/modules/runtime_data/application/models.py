@@ -34,26 +34,6 @@ MAX_SEARCH_LIMIT = 500
 
 
 @dataclass(frozen=True, slots=True)
-class FilterSpec:
-    """Описание одного runtime-фильтра для списка объектов."""
-
-    field: str
-    op: FilterOperator
-    value: Any
-
-
-@dataclass(frozen=True, slots=True)
-class FilterGroupSpec:
-    """Группа runtime-фильтров с явным AND/OR оператором."""
-
-    logic: FilterLogic
-    items: tuple["FilterExpression", ...]
-
-
-FilterExpression: TypeAlias = FilterSpec | FilterGroupSpec
-
-
-@dataclass(frozen=True, slots=True)
 class TypedFilterSpec:
     """Semantically validated runtime filter with resolved field descriptor."""
 

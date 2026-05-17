@@ -4,18 +4,20 @@ import unittest
 from datetime import datetime
 from uuid import uuid4
 
-from src.modules.runtime_data import (
+from src.modules.runtime_data.application.models import (
     PageSpec,
-    PostgresRuntimeGateway,
-    RuntimeQueryPlan,
     SortSpec,
     TypedFilterGroupSpec,
     TypedFilterSpec,
 )
-from src.modules.runtime_data.domain import RuntimeDataPolicyError
+from src.modules.runtime_data.application.query.query_plan import RuntimeQueryPlan
+from src.modules.runtime_data.domain.error import RuntimeDataPolicyError
 from src.modules.runtime_data.infrastructure.persistence.postgres.compiler import (
     CompiledQuery,
     PostgresRuntimeQueryCompiler,
+)
+from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.query_gateway import (
+    PostgresRuntimeQueryGateway,
 )
 from src.modules.schema_registry.runtime import (
     RuntimeFieldDescriptor,
@@ -314,8 +316,8 @@ class PostgresRuntimeQueryCompilerTests(unittest.TestCase):
             )
 
 
-class PostgresRuntimeGatewayCompilerFlowTests(unittest.IsolatedAsyncioTestCase):
-    async def test_gateway_uses_compiler_for_search(self) -> None:
+class PostgresRuntimeQueryGatewayCompilerFlowTests(unittest.IsolatedAsyncioTestCase):
+    async def test_query_gateway_uses_compiler_for_search(self) -> None:
         contact_id = uuid4()
         query_plan = _query_plan()
 
@@ -350,7 +352,7 @@ class PostgresRuntimeGatewayCompilerFlowTests(unittest.IsolatedAsyncioTestCase):
             ]
         )
         compiler = QueryCompilerSpy()
-        gateway = PostgresRuntimeGateway(
+        gateway = PostgresRuntimeQueryGateway(
             session,  # type: ignore[arg-type]
             query_compiler=compiler,  # type: ignore[arg-type]
         )
@@ -371,6 +373,6 @@ class PostgresRuntimeGatewayCompilerFlowTests(unittest.IsolatedAsyncioTestCase):
 
 
 __all__ = [
-    "PostgresRuntimeGatewayCompilerFlowTests",
+    "PostgresRuntimeQueryGatewayCompilerFlowTests",
     "PostgresRuntimeQueryCompilerTests",
 ]

@@ -9,7 +9,7 @@ from src.modules.runtime_data.application.models import (
     TypedFilterExpression,
 )
 from src.modules.runtime_data.application.query.query_plan import RuntimeQueryPlan
-from src.modules.runtime_data.domain import RuntimeDataValidationError
+from src.modules.runtime_data.domain.error import RuntimeDataValidationError
 from src.modules.runtime_data.infrastructure.persistence.postgres.compiler.compiled_query import (
     CompiledQuery,
 )

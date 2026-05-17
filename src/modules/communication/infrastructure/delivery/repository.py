@@ -37,11 +37,19 @@ from src.modules.communication.infrastructure.runtime_object_names import (
     _EVENT,
     _OUTBOUND,
 )
-from src.modules.runtime_data import FilterExpression, FilterSpec, PageSpec, SortSpec
+from src.modules.runtime_data.application.models import (
+    PageSpec,
+    SortSpec,
+    TypedFilterExpression,
+)
 from src.modules.runtime_data.application.ports import (
     RuntimeCommandGateway,
     RuntimeQueryGateway,
 )
+from src.modules.runtime_data.application.query.typed_filter_builder import (
+    RuntimeTypedFilterBuilder,
+)
+from src.modules.schema_registry.runtime import RuntimeObjectDescriptor
 from src.modules.schema_registry.runtime import RuntimeObjectResolverProtocol
 from src.modules.shared import EntityIdVO
 
@@ -63,6 +71,7 @@ class DeliveryRuntimeRepository(DeliveryRepositoryProtocol):
         self._runtime_object_resolver = runtime_object_resolver
         self._runtime_command_gateway = runtime_command_gateway
         self._runtime_query_gateway = runtime_query_gateway
+        self._filter_builder = RuntimeTypedFilterBuilder()
 
     async def get_delivery_attempt(
         self,
@@ -87,11 +96,19 @@ class DeliveryRuntimeRepository(DeliveryRepositoryProtocol):
         outbound_message_id: OutboundMessageIdVO,
     ) -> int:
         """Возвращает следующий attempt_no для outbound message."""
+        descriptor = await self._resolve_descriptor(
+            tenant_id,
+            self._ATTEMPT_OBJECT_NAME,
+        )
         rows = await self._list(
-            tenant_id=tenant_id,
-            object_name=self._ATTEMPT_OBJECT_NAME,
+            descriptor=descriptor,
             filters=(
-                FilterSpec("outbound_message_id", "eq", outbound_message_id.uuid),
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="outbound_message_id",
+                    op="eq",
+                    value=outbound_message_id.uuid,
+                ),
             ),
             sorting=(SortSpec("attempt_no", "desc"),),
             limit=1,
@@ -197,12 +214,22 @@ class DeliveryRuntimeRepository(DeliveryRepositoryProtocol):
         provider_code: ProviderConnectorCodeVO,
     ) -> ProviderConnector | None:
         """Возвращает активный provider connector по коду."""
+        descriptor = await self._resolve_descriptor(tenant_id, _CONNECTOR)
         rows = await self._list(
-            tenant_id=tenant_id,
-            object_name=_CONNECTOR,
+            descriptor=descriptor,
             filters=(
-                FilterSpec("provider_code", "eq", provider_code.value),
-                FilterSpec("status", "eq", ConnectorStatus.ACTIVE.value),
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="provider_code",
+                    op="eq",
+                    value=provider_code.value,
+                ),
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="status",
+                    op="eq",
+                    value=ConnectorStatus.ACTIVE.value,
+                ),
             ),
             sorting=(SortSpec("created_at", "desc"),),
             limit=1,
@@ -218,10 +245,17 @@ class DeliveryRuntimeRepository(DeliveryRepositoryProtocol):
         external_message_id: str,
     ) -> OutboundMessage | None:
         """Ищет outbound message по external provider id."""
+        descriptor = await self._resolve_descriptor(tenant_id, _OUTBOUND)
         rows = await self._list(
-            tenant_id=tenant_id,
-            object_name=_OUTBOUND,
-            filters=(FilterSpec("external_message_id", "eq", external_message_id),),
+            descriptor=descriptor,
+            filters=(
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="external_message_id",
+                    op="eq",
+                    value=external_message_id,
+                ),
+            ),
             sorting=(SortSpec("created_at", "desc"),),
             limit=1,
         )
@@ -260,16 +294,15 @@ class DeliveryRuntimeRepository(DeliveryRepositoryProtocol):
     async def _list(
         self,
         *,
-        tenant_id: EntityIdVO,
-        object_name: str,
-        filters: Sequence[FilterExpression] = (),
+        descriptor: RuntimeObjectDescriptor,
+        filters: Sequence[TypedFilterExpression] = (),
         sorting: Sequence[SortSpec] = (),
         limit: int | None = None,
         offset: int = 0,
     ) -> list[Mapping[str, Any]]:
         """Возвращает runtime rows с фильтрами, сортировкой и page spec."""
         return await self._runtime_query_gateway.list(
-            descriptor=await self._resolve_descriptor(tenant_id, object_name),
+            descriptor=descriptor,
             filters=filters,
             sorting=sorting,
             page=PageSpec(limit=limit, offset=offset) if limit is not None else None,

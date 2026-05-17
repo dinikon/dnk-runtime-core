@@ -17,7 +17,7 @@ from src.modules.inventory.presentation.http.product.requests import (
 from src.modules.inventory.presentation.http.product.responses import (
     ProductResponseSchema,
 )
-from src.modules.runtime_data import (
+from src.modules.runtime_data.domain.error import (
     RuntimeDataFilterError,
     RuntimeDataPersistenceError,
     RuntimeDataPolicyError,

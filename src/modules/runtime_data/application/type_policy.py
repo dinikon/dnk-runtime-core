@@ -7,7 +7,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
 
-from src.modules.runtime_data.domain import (
+from src.modules.runtime_data.domain.error import (
     RuntimeDataPolicyError,
     RuntimeDataValidationError,
 )
