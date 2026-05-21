@@ -24,13 +24,16 @@ _LAZY_EXPORTS: dict[str, str] = {
     "RequestHostDep": "src.modules.shared.depends.request_host",
     "TokenManagerDep": "src.modules.shared.depends.token_manager",
     "UoWDep": "src.modules.shared.depends.uow",
+    "UuidDep": "src.modules.shared.depends.uuid",
     "get_authorization_service": "src.modules.shared.depends.authorization",
     "get_clock": "src.modules.shared.depends.clock",
     "get_email_service": "src.modules.shared.depends.email_service",
     "get_request_host": "src.modules.shared.depends.request_host",
     "get_token_manager": "src.modules.shared.depends.token_manager",
     "get_uow": "src.modules.shared.depends.uow",
+    "get_uuid_generator": "src.modules.shared.depends.uuid",
     "default_email_service": "src.modules.shared.depends.email_service",
+    "default_uuid_generator": "src.modules.shared.depends.uuid",
 }
 _LAZY_EXPORTS.update(
     {
@@ -47,12 +50,15 @@ __all__ = [
     "TokenManagerDep",
     "UoWDep",
     "default_email_service",
+    "default_uuid_generator",
     "get_authorization_service",
     "get_clock",
     "get_email_service",
     "get_request_host",
     "get_token_manager",
     "get_uow",
+    "get_uuid_generator",
+    "UuidDep",
     *_AUTH_EXPORTS,
 ]
 

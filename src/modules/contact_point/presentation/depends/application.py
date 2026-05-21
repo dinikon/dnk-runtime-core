@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Annotated
 
-import uuid6
 from fastapi import Depends
 
 from src.modules.contact_point.application.use_case import (
@@ -12,8 +10,6 @@ from src.modules.contact_point.application.use_case import (
     DetachContactPointUseCase,
     DetachContactPointUseCaseProtocol,
 )
-from src.modules.contact_point.domain.binding import ContactPointBindingIdVO
-from src.modules.contact_point.domain.contact_point import ContactPointIdVO
 from src.modules.contact_point.presentation.depends.infrastructure import (
     ContactPointHashServiceDep,
     ContactPointNormalizerDep,
@@ -21,15 +17,7 @@ from src.modules.contact_point.presentation.depends.infrastructure import (
     ContactPointRuntimeRepositoryDep,
     OwnerResolverDep,
 )
-from src.modules.shared.depends import ClockDep
-
-
-def get_contact_point_id_provider() -> Callable[[], ContactPointIdVO]:
-    return lambda: ContactPointIdVO.from_value(uuid6.uuid7())
-
-
-def get_contact_point_binding_id_provider() -> Callable[[], ContactPointBindingIdVO]:
-    return lambda: ContactPointBindingIdVO.from_value(uuid6.uuid7())
+from src.modules.shared.depends import ClockDep, UuidDep
 
 
 def get_attach_contact_point_use_case(
@@ -39,6 +27,7 @@ def get_attach_contact_point_use_case(
     normalizer: ContactPointNormalizerDep,
     hash_service: ContactPointHashServiceDep,
     clock: ClockDep,
+    uuid_generator: UuidDep,
 ) -> AttachContactPointUseCaseProtocol:
     return AttachContactPointUseCase(
         contact_points=repository,
@@ -47,8 +36,7 @@ def get_attach_contact_point_use_case(
         feature_gate=feature_gate,
         normalizer=normalizer,
         hash_service=hash_service,
-        contact_point_id_provider=get_contact_point_id_provider(),
-        binding_id_provider=get_contact_point_binding_id_provider(),
+        uuid_generator=uuid_generator,
         clock=clock,
     )
 
@@ -79,7 +67,5 @@ __all__ = [
     "AttachContactPointUseCaseDep",
     "DetachContactPointUseCaseDep",
     "get_attach_contact_point_use_case",
-    "get_contact_point_binding_id_provider",
-    "get_contact_point_id_provider",
     "get_detach_contact_point_use_case",
 ]

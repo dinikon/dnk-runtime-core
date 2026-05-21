@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import unittest
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from src.modules.contact_point.application import (
     AttachContactPointCommand,
@@ -37,6 +37,17 @@ class _Clock:
 
     def now(self) -> datetime:
         return self._now
+
+
+class _UuidGenerator:
+    def __init__(self, values: list[UUID]) -> None:
+        self.values = list(values)
+        self.generated: list[UUID] = []
+
+    def new_uuid(self) -> UUID:
+        value = self.values.pop(0)
+        self.generated.append(value)
+        return value
 
 
 class _OwnerResolver:
@@ -219,15 +230,15 @@ class ContactPointServicesTests(unittest.TestCase):
 
 
 class ContactPointUseCaseTests(unittest.IsolatedAsyncioTestCase):
+
     def _attach_use_case(
         self,
         repository: _Repository,
         owner_resolver: _OwnerResolver | None = None,
         feature_gate: _FeatureGate | None = None,
         now: datetime | None = None,
+        uuid_generator: _UuidGenerator | None = None,
     ) -> AttachContactPointUseCase:
-        contact_point_id = ContactPointIdVO.from_value(uuid4())
-        binding_id = ContactPointBindingIdVO.from_value(uuid4())
         return AttachContactPointUseCase(
             contact_points=repository,
             bindings=repository,
@@ -235,15 +246,21 @@ class ContactPointUseCaseTests(unittest.IsolatedAsyncioTestCase):
             feature_gate=feature_gate or _FeatureGate(),
             normalizer=ContactPointNormalizeService(),
             hash_service=ContactPointHashService(),
-            contact_point_id_provider=lambda: contact_point_id,
-            binding_id_provider=lambda: binding_id,
+            uuid_generator=uuid_generator
+            or _UuidGenerator([uuid4(), uuid4(), uuid4(), uuid4()]),
             clock=_Clock(now or datetime(2026, 5, 21, 10, 0, tzinfo=UTC)),
         )
 
     async def test_attach_creates_contact_point_and_binding(self) -> None:
         tenant_id, owner_object_id, owner_record_id = _ids()
         repository = _Repository()
-        use_case = self._attach_use_case(repository)
+        contact_point_uuid = uuid4()
+        binding_uuid = uuid4()
+        uuid_generator = _UuidGenerator([contact_point_uuid, binding_uuid])
+        use_case = self._attach_use_case(
+            repository,
+            uuid_generator=uuid_generator,
+        )
 
         result = await use_case(
             AttachContactPointCommand(
@@ -259,6 +276,9 @@ class ContactPointUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result.contact_point_created)
         self.assertTrue(result.binding_created)
         self.assertFalse(result.already_attached)
+        self.assertEqual(result.contact_point_id, contact_point_uuid)
+        self.assertEqual(result.binding_id, binding_uuid)
+        self.assertEqual(uuid_generator.generated, [contact_point_uuid, binding_uuid])
         self.assertEqual(repository.contact_point_saves, 1)
         self.assertEqual(repository.binding_saves, 1)
         contact_point = next(iter(repository.contact_points.values()))

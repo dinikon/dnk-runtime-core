@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Protocol
 
 from src.modules.contact_point.application.command import AttachContactPointCommand
@@ -24,6 +23,7 @@ from src.modules.contact_point.domain.contact_point import (
     ContactPointRepositoryProtocol,
 )
 from src.modules.shared.kernel.time.ports import ClockPort
+from src.modules.shared.kernel.uuid import UuidPort
 
 
 class AttachContactPointUseCaseProtocol(Protocol):
@@ -34,6 +34,7 @@ class AttachContactPointUseCaseProtocol(Protocol):
 
 
 class AttachContactPointUseCase:
+
     def __init__(
         self,
         *,
@@ -43,8 +44,7 @@ class AttachContactPointUseCase:
         feature_gate: ContactPointObjectFeatureGatePort,
         normalizer: ContactPointNormalizerPort,
         hash_service: ContactPointHashPort,
-        contact_point_id_provider: Callable[[], ContactPointIdVO],
-        binding_id_provider: Callable[[], ContactPointBindingIdVO],
+        uuid_generator: UuidPort,
         clock: ClockPort,
     ) -> None:
         self._contact_points = contact_points
@@ -53,8 +53,7 @@ class AttachContactPointUseCase:
         self._feature_gate = feature_gate
         self._normalizer = normalizer
         self._hash_service = hash_service
-        self._contact_point_id_provider = contact_point_id_provider
-        self._binding_id_provider = binding_id_provider
+        self._uuid_generator = uuid_generator
         self._clock = clock
 
     async def __call__(
@@ -95,7 +94,7 @@ class AttachContactPointUseCase:
         now = self._clock.now()
         if contact_point is None:
             contact_point = ContactPointEntity.create(
-                id_=self._contact_point_id_provider(),
+                id_=ContactPointIdVO.from_value(self._uuid_generator.new_uuid()),
                 now=now,
                 contact_point_type=command.contact_point_type,
                 raw_value=command.raw_value,
@@ -157,7 +156,7 @@ class AttachContactPointUseCase:
             )
 
         binding = ContactPointBindingEntity.create(
-            id_=self._binding_id_provider(),
+            id_=ContactPointBindingIdVO.from_value(self._uuid_generator.new_uuid()),
             now=now,
             contact_point_id=contact_point.id,
             contact_point_type=command.contact_point_type,
