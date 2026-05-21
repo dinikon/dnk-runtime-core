@@ -7,6 +7,11 @@ from src.modules.contact_point.application import (
     DetachContactPointResultDTO,
     DetachContactPointUseCase,
     DetachContactPointUseCaseProtocol,
+    ListOwnerContactPointsQuery,
+    ListOwnerContactPointsUseCase,
+    ListOwnerContactPointsUseCaseProtocol,
+    OwnerContactPointDTO,
+    OwnerContactPointListDTO,
 )
 from src.modules.contact_point.domain import (
     ContactPointBindingEntity,
@@ -38,4 +43,9 @@ __all__ = [
     "DetachContactPointUseCase",
     "DetachContactPointUseCaseProtocol",
     "InvalidContactPointValueError",
+    "ListOwnerContactPointsQuery",
+    "ListOwnerContactPointsUseCase",
+    "ListOwnerContactPointsUseCaseProtocol",
+    "OwnerContactPointDTO",
+    "OwnerContactPointListDTO",
 ]

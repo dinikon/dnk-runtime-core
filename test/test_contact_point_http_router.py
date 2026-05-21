@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 import unittest
 from uuid import uuid4
@@ -9,6 +10,8 @@ from fastapi import HTTPException
 from src.modules.contact_point.application import (
     AttachContactPointResultDTO,
     DetachContactPointResultDTO,
+    OwnerContactPointDTO,
+    OwnerContactPointListDTO,
 )
 from src.modules.contact_point.domain import (
     ContactPointBindingNotFoundError,
@@ -22,9 +25,13 @@ from src.modules.contact_point.presentation.http.controllers.attach_contact_poin
 from src.modules.contact_point.presentation.http.controllers.detach_contact_point import (
     detach_contact_point,
 )
+from src.modules.contact_point.presentation.http.controllers.list_owner_contact_points import (
+    list_owner_contact_points,
+)
 from src.modules.contact_point.presentation.http.requests import (
     AttachContactPointRequestSchema,
     DetachContactPointRequestSchema,
+    ListOwnerContactPointsRequestSchema,
 )
 from src.modules.contact_point.presentation.http.router import router
 from src.modules.runtime_data.domain.error import RuntimeDataPersistenceError
@@ -62,6 +69,7 @@ class ContactPointHttpRouterTests(unittest.TestCase):
 
         self.assertIn(("POST", "/contact-points/attach"), routes)
         self.assertIn(("POST", "/contact-points/detach"), routes)
+        self.assertIn(("POST", "/contact-points/list-by-record"), routes)
 
 
 class ContactPointControllerTests(unittest.IsolatedAsyncioTestCase):
@@ -129,6 +137,47 @@ class ContactPointControllerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(use_case.command.tenant_id.uuid, tenant_id)
         self.assertEqual(use_case.command.binding_id.uuid, binding_id)
 
+    async def test_list_by_record_success_uses_body_and_returns_response(self) -> None:
+        tenant_id = uuid4()
+        owner_object_id = uuid4()
+        owner_record_id = uuid4()
+        binding_id = uuid4()
+        contact_point_id = uuid4()
+        now = datetime(2026, 5, 21, 10, 0, tzinfo=UTC)
+        use_case = _UseCase(
+            OwnerContactPointListDTO(
+                items=(
+                    OwnerContactPointDTO(
+                        binding_id=binding_id,
+                        contact_point_id=contact_point_id,
+                        contact_point_type=ContactPointTypeVO.EMAIL,
+                        raw_value="User@Example.COM",
+                        normalized_value="user@example.com",
+                        is_primary=True,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                ),
+                count=1,
+            )
+        )
+
+        response = await list_owner_contact_points(
+            payload=ListOwnerContactPointsRequestSchema(
+                owner_object_id=owner_object_id,
+                owner_record_id=owner_record_id,
+            ),
+            context=_context(tenant_id),
+            use_case=use_case,
+        )
+
+        self.assertEqual(response.count, 1)
+        self.assertEqual(response.items[0].binding_id, binding_id)
+        self.assertEqual(response.items[0].normalized_value, "user@example.com")
+        self.assertEqual(use_case.command.tenant_id.uuid, tenant_id)
+        self.assertEqual(use_case.command.owner_object_id.uuid, owner_object_id)
+        self.assertEqual(use_case.command.owner_record_id.uuid, owner_record_id)
+
     async def test_controllers_return_401_without_tenant_context(self) -> None:
         with self.assertRaises(HTTPException) as attach_ctx:
             await attach_contact_point(
@@ -152,6 +201,18 @@ class ContactPointControllerTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(detach_ctx.exception.status_code, 401)
+
+        with self.assertRaises(HTTPException) as list_ctx:
+            await list_owner_contact_points(
+                payload=ListOwnerContactPointsRequestSchema(
+                    owner_object_id=uuid4(),
+                    owner_record_id=uuid4(),
+                ),
+                context=SimpleNamespace(principal=None),
+                use_case=_UseCase(),
+            )
+
+        self.assertEqual(list_ctx.exception.status_code, 401)
 
     async def test_attach_maps_404_409_and_422_errors(self) -> None:
         payload = AttachContactPointRequestSchema(
@@ -206,6 +267,36 @@ class ContactPointControllerTests(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(HTTPException) as invalid:
             await detach_contact_point(
+                payload=payload,
+                context=_context(),
+                use_case=_UseCase(exc=InvalidContactPointValueError("EMAIL", "bad")),
+            )
+        self.assertEqual(invalid.exception.status_code, 422)
+
+    async def test_list_by_record_maps_404_409_and_422_errors(self) -> None:
+        payload = ListOwnerContactPointsRequestSchema(
+            owner_object_id=uuid4(),
+            owner_record_id=uuid4(),
+        )
+
+        with self.assertRaises(HTTPException) as not_found:
+            await list_owner_contact_points(
+                payload=payload,
+                context=_context(),
+                use_case=_UseCase(exc=ContactPointOwnerNotFoundError("o", "r")),
+            )
+        self.assertEqual(not_found.exception.status_code, 404)
+
+        with self.assertRaises(HTTPException) as conflict:
+            await list_owner_contact_points(
+                payload=payload,
+                context=_context(),
+                use_case=_UseCase(exc=RuntimeDataPersistenceError("db")),
+            )
+        self.assertEqual(conflict.exception.status_code, 409)
+
+        with self.assertRaises(HTTPException) as invalid:
+            await list_owner_contact_points(
                 payload=payload,
                 context=_context(),
                 use_case=_UseCase(exc=InvalidContactPointValueError("EMAIL", "bad")),
