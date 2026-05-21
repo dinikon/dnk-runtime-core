@@ -72,9 +72,9 @@ class ContactPointSchemaSeedTests(unittest.IsolatedAsyncioTestCase):
                 "contact_point_type",
                 "owner_object_id",
                 "owner_record_id",
-                "owner_type",
-                "role",
                 "is_primary",
+                "is_active",
+                "detached_at",
             ],
         )
         self.assertEqual(
@@ -90,9 +90,9 @@ class ContactPointSchemaSeedTests(unittest.IsolatedAsyncioTestCase):
                 "contact_point_type": ("text", False, None),
                 "owner_object_id": ("uuid", False, None),
                 "owner_record_id": ("uuid", False, None),
-                "owner_type": ("text", False, None),
-                "role": ("text", False, None),
                 "is_primary": ("bool", False, "false"),
+                "is_active": ("bool", False, "true"),
+                "detached_at": ("datetime", True, None),
             },
         )
 
@@ -138,17 +138,15 @@ class ContactPointSchemaSeedTests(unittest.IsolatedAsyncioTestCase):
                     False,
                 ),
                 "idx_cpb_contact_point_id": (("contact_point_id",), False),
-                "idx_cpb_owner_type_role": (
-                    ("owner_object_id", "owner_record_id", "owner_type", "role"),
+                "idx_cpb_owner_type": (
+                    ("owner_object_id", "owner_record_id", "contact_point_type"),
                     False,
                 ),
-                "uniq_cpb_point_owner_role": (
+                "uniq_cpb_point_owner": (
                     (
                         "contact_point_id",
                         "owner_object_id",
                         "owner_record_id",
-                        "owner_type",
-                        "role",
                     ),
                     True,
                 ),

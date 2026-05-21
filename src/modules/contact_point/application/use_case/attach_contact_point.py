@@ -1,0 +1,183 @@
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Protocol
+
+from src.modules.contact_point.application.command import AttachContactPointCommand
+from src.modules.contact_point.application.dto import AttachContactPointResultDTO
+from src.modules.contact_point.application.ports import (
+    ContactPointHashPort,
+    ContactPointNormalizerPort,
+    ContactPointObjectFeatureGatePort,
+    OwnerResolverPort,
+)
+from src.modules.contact_point.domain.binding import (
+    ContactPointBindingEntity,
+    ContactPointBindingIdVO,
+    ContactPointBindingRepositoryProtocol,
+    ContactPointOwnerNotFoundError,
+    OwnerContactPointBinding,
+)
+from src.modules.contact_point.domain.contact_point import (
+    ContactPointEntity,
+    ContactPointIdVO,
+    ContactPointRepositoryProtocol,
+)
+from src.modules.shared.kernel.time.ports import ClockPort
+
+
+class AttachContactPointUseCaseProtocol(Protocol):
+    async def __call__(
+        self,
+        command: AttachContactPointCommand,
+    ) -> AttachContactPointResultDTO: ...
+
+
+class AttachContactPointUseCase:
+    def __init__(
+        self,
+        *,
+        contact_points: ContactPointRepositoryProtocol,
+        bindings: ContactPointBindingRepositoryProtocol,
+        owner_resolver: OwnerResolverPort,
+        feature_gate: ContactPointObjectFeatureGatePort,
+        normalizer: ContactPointNormalizerPort,
+        hash_service: ContactPointHashPort,
+        contact_point_id_provider: Callable[[], ContactPointIdVO],
+        binding_id_provider: Callable[[], ContactPointBindingIdVO],
+        clock: ClockPort,
+    ) -> None:
+        self._contact_points = contact_points
+        self._bindings = bindings
+        self._owner_resolver = owner_resolver
+        self._feature_gate = feature_gate
+        self._normalizer = normalizer
+        self._hash_service = hash_service
+        self._contact_point_id_provider = contact_point_id_provider
+        self._binding_id_provider = binding_id_provider
+        self._clock = clock
+
+    async def __call__(
+        self,
+        command: AttachContactPointCommand,
+    ) -> AttachContactPointResultDTO:
+        owner = OwnerContactPointBinding(
+            owner_object_id=command.owner_object_id,
+            owner_record_id=command.owner_record_id,
+        )
+        owner_exists = await self._owner_resolver.exists(
+            tenant_id=command.tenant_id,
+            owner=owner,
+        )
+        if not owner_exists:
+            raise ContactPointOwnerNotFoundError(
+                str(command.owner_object_id),
+                str(command.owner_record_id),
+            )
+
+        await self._feature_gate.assert_contact_point_enabled(
+            tenant_id=command.tenant_id,
+            owner_object_id=command.owner_object_id,
+        )
+
+        normalized_value = self._normalizer.normalize(
+            contact_point_type=command.contact_point_type,
+            raw_value=command.raw_value,
+        )
+        hash_value = self._hash_service.hash(normalized_value)
+
+        contact_point = await self._contact_points.get_by_type_and_hash(
+            tenant_id=command.tenant_id,
+            contact_point_type=command.contact_point_type,
+            hash_value=hash_value,
+        )
+        contact_point_created = False
+        now = self._clock.now()
+        if contact_point is None:
+            contact_point = ContactPointEntity.create(
+                id_=self._contact_point_id_provider(),
+                now=now,
+                contact_point_type=command.contact_point_type,
+                raw_value=command.raw_value,
+                display_value=normalized_value,
+                normalized_value=normalized_value,
+                hash_value=hash_value,
+            )
+            contact_point = await self._contact_points.save_contact_point(
+                tenant_id=command.tenant_id,
+                contact_point=contact_point,
+            )
+            contact_point_created = True
+
+        binding = await self._bindings.find_by_owner_and_contact_point(
+            tenant_id=command.tenant_id,
+            owner=owner,
+            contact_point_id=contact_point.id,
+        )
+        if binding is not None and binding.is_active:
+            if command.is_primary and not binding.is_primary:
+                await self._bindings.unset_primary_for_owner_and_type(
+                    tenant_id=command.tenant_id,
+                    owner=owner,
+                    contact_point_type=command.contact_point_type,
+                    exclude_binding_id=binding.id,
+                )
+                binding.mark_primary(now=now)
+                binding = await self._bindings.save_binding(
+                    tenant_id=command.tenant_id,
+                    binding=binding,
+                )
+            return AttachContactPointResultDTO(
+                contact_point_id=contact_point.id.uuid,
+                binding_id=binding.id.uuid,
+                contact_point_created=contact_point_created,
+                binding_created=False,
+                already_attached=True,
+            )
+
+        if command.is_primary:
+            await self._bindings.unset_primary_for_owner_and_type(
+                tenant_id=command.tenant_id,
+                owner=owner,
+                contact_point_type=command.contact_point_type,
+            )
+
+        if binding is not None:
+            binding.reactivate(now=now, is_primary=command.is_primary)
+            binding = await self._bindings.save_binding(
+                tenant_id=command.tenant_id,
+                binding=binding,
+            )
+            return AttachContactPointResultDTO(
+                contact_point_id=contact_point.id.uuid,
+                binding_id=binding.id.uuid,
+                contact_point_created=contact_point_created,
+                binding_created=False,
+                already_attached=False,
+            )
+
+        binding = ContactPointBindingEntity.create(
+            id_=self._binding_id_provider(),
+            now=now,
+            contact_point_id=contact_point.id,
+            contact_point_type=command.contact_point_type,
+            owner=owner,
+            is_primary=command.is_primary,
+        )
+        binding = await self._bindings.save_binding(
+            tenant_id=command.tenant_id,
+            binding=binding,
+        )
+        return AttachContactPointResultDTO(
+            contact_point_id=contact_point.id.uuid,
+            binding_id=binding.id.uuid,
+            contact_point_created=contact_point_created,
+            binding_created=True,
+            already_attached=False,
+        )
+
+
+__all__ = [
+    "AttachContactPointUseCase",
+    "AttachContactPointUseCaseProtocol",
+]
