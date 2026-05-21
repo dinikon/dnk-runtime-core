@@ -221,11 +221,16 @@ class ContactPointServicesTests(unittest.TestCase):
         )
         phone = normalizer.normalize(
             contact_point_type=ContactPointTypeVO.PHONE,
-            raw_value="(067) 111-22-33",
+            raw_value="+380671112233",
+        )
+        international_phone = normalizer.normalize(
+            contact_point_type=ContactPointTypeVO.PHONE,
+            raw_value="+1 (415) 555-2671",
         )
 
         self.assertEqual(email, "user@example.com")
         self.assertEqual(phone, "+380671112233")
+        self.assertEqual(international_phone, "+14155552671")
         self.assertEqual(
             ContactPointHashService().hash(email),
             hashlib.sha256(b"user@example.com").hexdigest(),
@@ -244,6 +249,17 @@ class ContactPointServicesTests(unittest.TestCase):
                 contact_point_type=ContactPointTypeVO.PHONE,
                 raw_value="123",
             )
+        for raw_value in (
+            "0671112233",
+            "+999123456789",
+            "+1 (415) 555-2671 ext. 123",
+        ):
+            with self.subTest(raw_value=raw_value):
+                with self.assertRaises(InvalidContactPointValueError):
+                    normalizer.normalize(
+                        contact_point_type=ContactPointTypeVO.PHONE,
+                        raw_value=raw_value,
+                    )
 
 
 class ContactPointUseCaseTests(unittest.IsolatedAsyncioTestCase):

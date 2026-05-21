@@ -1160,15 +1160,15 @@ class ContactPointNormalizeService:
         return value.strip().lower()
 
     def _normalize_phone(self, value: str) -> str:
-        digits = "".join(ch for ch in value if ch.isdigit())
+      value = value.strip()
+      if not value.startswith("+"):
+        raise InvalidContactPointValueError("PHONE", value)
 
-        if digits.startswith("0"):
-            digits = f"38{digits}"
+      parsed = phonenumbers.parse(value, None)
+      if parsed.extension or not phonenumbers.is_valid_number(parsed):
+        raise InvalidContactPointValueError("PHONE", value)
 
-        if not digits.startswith("380"):
-            raise InvalidPhoneError(value)
-
-        return f"+{digits}"
+      return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
 ```
 
 ---
