@@ -67,7 +67,8 @@ hash_value: sha256("+380671112233")
 2. Значение нормализовалось успешно.
 3. В справочнике еще нет ContactPoint с таким type + hash_value.
 4. Owner существует.
-5. Такой binding еще не существует.
+5. У owner object включена schema_registry.object_feature фича CONTACT_POINT.
+6. Такой binding еще не существует.
 ```
 
 Пример:
@@ -191,18 +192,19 @@ class AttachContactPointResult:
 
 ```text
 1. Проверить, что owner существует.
-2. Проверить raw_value.
-3. Нормализовать значение.
-4. Посчитать hash_value.
-5. Найти ContactPoint по type + hash_value.
-6. Если ContactPoint не найден — создать ContactPoint.
-7. Проверить, есть ли Binding для этого owner + contact_point_id.
-8. Если Binding уже есть — вернуть existing binding.
-9. Если Binding нет — создать ContactPointBinding.
-10. Если is_primary=True:
+2. Проверить, что для owner object включена object feature CONTACT_POINT.
+3. Проверить raw_value.
+4. Нормализовать значение.
+5. Посчитать hash_value.
+6. Найти ContactPoint по type + hash_value.
+7. Если ContactPoint не найден — создать ContactPoint.
+8. Проверить, есть ли Binding для этого owner + contact_point_id.
+9. Если Binding уже есть — вернуть existing binding.
+10. Если Binding нет — создать ContactPointBinding.
+11. Если is_primary=True:
     - снять primary с других contact points этого owner и этого type;
     - поставить новый binding primary.
-11. Сохранить все в одной транзакции.
+12. Сохранить все в одной транзакции.
 ```
 
 ---
@@ -217,6 +219,7 @@ class AttachContactPointUseCase:
             normalizer: ContactPointNormalizeService,
             hash_service: ContactPointHashService,
             owner_resolver: OwnerResolverPort,
+            object_feature_gate: ContactPointObjectFeatureGatePort,
             clock: ClockPort,
             id_generator: IdGeneratorPort,
     ) -> None:
@@ -224,6 +227,7 @@ class AttachContactPointUseCase:
         self._normalizer = normalizer
         self._hash_service = hash_service
         self._owner_resolver = owner_resolver
+        self._object_feature_gate = object_feature_gate
         self._clock = clock
         self._id_generator = id_generator
 
@@ -242,6 +246,11 @@ class AttachContactPointUseCase:
 
         if not owner_exists:
             raise OwnerNotFoundError(owner)
+
+        await self._object_feature_gate.assert_contact_point_enabled(
+            tenant_id=command.tenant_id,
+            owner_object_id=command.owner_object_id,
+        )
 
         normalized_value = self._normalizer.normalize(
             contact_point_type=command.contact_point_type,
@@ -377,6 +386,31 @@ Contact #100 может иметь:
 Но не два primary `PHONE`.
 
 Делать проверку через join с `ContactPoint`.
+
+---
+
+## Инвариант 4
+
+```text
+ContactPointBinding можно создать только для owner object, у которого включена object feature CONTACT_POINT.
+```
+
+Это уже заложено в системе через `schema_registry.object_feature`: feature code должен быть строго
+`CONTACT_POINT`, а проверка должна использовать существующий application-level сценарий
+`AssertObjectFeatureEnabledUseCase`.
+
+Правило применяется только к созданию новой связи:
+
+```text
+AttachContactPointUseCase
+  -> owner exists
+  -> assert CONTACT_POINT feature enabled for owner_object_id
+  -> create/reuse ContactPoint
+  -> create/reuse ContactPointBinding
+```
+
+`DetachContactPointUseCase` не должен блокироваться выключенной feature: если feature выключили после создания связей,
+пользователь или cleanup job все равно должны иметь возможность удалить старый binding.
 
 ---
 
@@ -778,6 +812,37 @@ RuntimeDataOwnerResolver
 
 ---
 
+## ContactPointObjectFeatureGatePort
+
+Нужен, чтобы ContactPoint module не зависел напрямую от реализации `schema_registry.object_feature`, но обязательно
+использовал уже существующее правило включения feature у runtime object.
+
+```python
+class ContactPointObjectFeatureGatePort(Protocol):
+    async def assert_contact_point_enabled(
+            self,
+            tenant_id: EntityIdVO,
+            owner_object_id: EntityIdVO,
+    ) -> None:
+        ...
+```
+
+Инфраструктурная реализация должна адаптировать этот порт к
+`schema_registry.application.object_feature.use_case.AssertObjectFeatureEnabledUseCase`:
+
+```python
+await assert_object_feature_enabled(
+    tenant_id=tenant_id,
+    object_id=RuntimeObjectIdVO.from_value(owner_object_id),
+    feature_code="CONTACT_POINT",
+)
+```
+
+Если config не найден или feature выключена, exception из `schema_registry.object_feature` должен остановить attach до
+создания `ContactPointBinding`. Это бизнес-ошибка уровня `422`/domain validation на HTTP-слое.
+
+---
+
 ## ContactPointUsageHistoryPort
 
 Нужен, чтобы понять, можно ли удалить ContactPoint.
@@ -874,6 +939,9 @@ src/
           error.py
 
       application/
+        ports/
+          contact_point_object_feature_gate.py
+
         dto/
           attach_contact_point.py
           detach_contact_point.py
@@ -898,6 +966,9 @@ src/
         owner_resolver/
           runtime_data_owner_resolver.py
           crm_owner_resolver.py
+
+        object_feature_gate/
+          schema_registry_object_feature_gate.py
 
       presentation/
         http/
@@ -1130,6 +1201,17 @@ AttachContactPointUseCase
 DetachContactPointUseCase
 ```
 
+В `AttachContactPointUseCase` обязательно встроить проверку:
+
+```text
+ContactPointObjectFeatureGatePort.assert_contact_point_enabled(
+  tenant_id,
+  owner_object_id,
+)
+```
+
+Проверка должна выполняться до создания `ContactPointBinding`.
+
 ---
 
 ## Шаг 5
@@ -1178,10 +1260,12 @@ BroadcastRecipient.contact_point_id
 ```text
 AttachContactPointUseCase
   если ContactPoint не существует:
+      проверить, что у owner object включена CONTACT_POINT feature
       создать ContactPoint
       создать Binding
 
   если ContactPoint существует, но Binding нет:
+      проверить, что у owner object включена CONTACT_POINT feature
       создать только Binding
 
   если ContactPoint существует и Binding существует:
