@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import unittest
 from uuid import uuid4
+from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
 
+from src.modules.crm.application.contact.dto import ContactDTO, ContactListResultDTO
 from src.modules.crm.domain.contact.error import ContactNotFoundError
 from src.modules.crm.presentation.http.contact.controller.create_contact import (
     create_contact,
@@ -17,15 +19,18 @@ from src.modules.crm.presentation.http.contact.controller.get_contact import (
 )
 from src.modules.crm.presentation.http.contact.controller.list_contacts import (
     list_contacts,
+    search_contacts,
 )
 from src.modules.crm.presentation.http.contact.controller.update_contact import (
     update_contact,
 )
 from src.modules.crm.presentation.http.contact.requests import (
+    ContactSearchRequestSchema,
     CreateContactRequestSchema,
     UpdateContactRequestSchema,
 )
-from src.modules.runtime_data import (
+from src.modules.runtime_data.domain.error import (
+    RuntimeDataFilterError,
     RuntimeDataPersistenceError,
     RuntimeDataValidationError,
 )
@@ -118,6 +123,77 @@ class ContactControllerErrorTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(caught.exception.status_code, status.HTTP_409_CONFLICT)
+
+    async def test_search_contacts_passes_raw_dsl_and_returns_total(self) -> None:
+        context = _context()
+        contact_id = uuid4()
+        now = datetime.now(UTC)
+        recorded_query = None
+
+        class UseCaseStub:
+            async def __call__(self, query):
+                nonlocal recorded_query
+                recorded_query = query
+                return ContactListResultDTO(
+                    items=(
+                        ContactDTO(
+                            id=contact_id,
+                            created_at=now,
+                            updated_at=now,
+                            last_name="Doe",
+                            first_name="Jane",
+                            middle_name=None,
+                            status="lead",
+                            tags=["vip"],
+                        ),
+                    ),
+                    total=7,
+                    limit=query.limit,
+                    offset=query.offset,
+                )
+
+        payload = ContactSearchRequestSchema(
+            filter={"field": "status", "op": "eq", "value": "lead"},
+            sort=[{"field": "created_at", "direction": "desc"}],
+            pagination={"limit": 10, "offset": 5},
+        )
+
+        response = await search_contacts(
+            payload=payload,
+            context=context,
+            use_case=UseCaseStub(),
+        )
+
+        self.assertEqual(recorded_query.filter_dsl, payload.filter)
+        self.assertEqual(recorded_query.sort_dsl, payload.sort)
+        self.assertEqual(response.pagination.total, 7)
+        self.assertEqual(response.data[0].id, contact_id)
+
+    async def test_search_contacts_runtime_filter_error_returns_422(self) -> None:
+        with self.assertRaises(HTTPException) as caught:
+            await search_contacts(
+                payload=ContactSearchRequestSchema(
+                    filter={"field": "status", "op": "contains", "value": "lead"},
+                    sort=[],
+                    pagination={"limit": 10, "offset": 0},
+                ),
+                context=_context(),
+                use_case=_FailingUseCase(
+                    RuntimeDataFilterError(
+                        code="UNSUPPORTED_OPERATOR_FOR_FIELD_TYPE",
+                        message="bad operator",
+                        details={
+                            "field": "status",
+                            "operator": "contains",
+                        },
+                    )
+                ),
+            )
+
+        self.assertEqual(
+            caught.exception.status_code,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
 
     async def test_delete_contact_not_found_error_returns_404(self) -> None:
         with self.assertRaises(HTTPException) as caught:

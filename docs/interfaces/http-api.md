@@ -11,14 +11,20 @@ All public HTTP routes are mounted under `/api`.
 
 ## CRM
 
-| Method   | Path                             | Module | Request                        | Response                     | Auth                          | Main errors         |
-|----------|----------------------------------|--------|--------------------------------|------------------------------|-------------------------------|---------------------|
-| `POST`   | `/api/crm/contacts`              | `crm`  | `CreateContactRequestSchema`   | `ContactResponseSchema`      | authenticated request context | `401`, `422`        |
-| `POST`   | `/api/crm/contacts/fields`       | `crm`  | none                           | `ContactFieldsResponseSchema`| authenticated request context | `401`, `409`, `422` |
-| `GET`    | `/api/crm/contacts`              | `crm`  | query params `limit`, `offset` | `ListContactsResponseSchema` | authenticated request context | `401`, `422`        |
-| `GET`    | `/api/crm/contacts/{contact_id}` | `crm`  | path `contact_id`              | `ContactResponseSchema`      | authenticated request context | `401`, `404`, `422` |
-| `PUT`    | `/api/crm/contacts/{contact_id}` | `crm`  | `UpdateContactRequestSchema`   | `ContactResponseSchema`      | authenticated request context | `401`, `404`, `422` |
-| `DELETE` | `/api/crm/contacts/{contact_id}` | `crm`  | path `contact_id`              | empty `204`                  | authenticated request context | `401`, `404`, `422` |
+| Method   | Path                              | Module | Request                        | Response                      | Auth                          | Main errors         |
+|----------|-----------------------------------|--------|--------------------------------|-------------------------------|-------------------------------|---------------------|
+| `POST`   | `/api/crm/contacts`               | `crm`  | `CreateContactRequestSchema`   | `ContactResponseSchema`       | authenticated request context | `401`, `422`        |
+| `POST`   | `/api/crm/contacts/fields`        | `crm`  | none                           | `ContactFieldsResponseSchema` | authenticated request context | `401`, `409`, `422` |
+| `GET`    | `/api/crm/contacts`               | `crm`  | query params `limit`, `offset` | `ListContactsResponseSchema`  | authenticated request context | `401`, `422`        |
+| `GET`    | `/api/crm/contacts/{contact_id}`  | `crm`  | path `contact_id`              | `ContactResponseSchema`       | authenticated request context | `401`, `404`, `422` |
+| `PUT`    | `/api/crm/contacts/{contact_id}`  | `crm`  | `UpdateContactRequestSchema`   | `ContactResponseSchema`       | authenticated request context | `401`, `404`, `422` |
+| `DELETE` | `/api/crm/contacts/{contact_id}`  | `crm`  | path `contact_id`              | empty `204`                   | authenticated request context | `401`, `404`, `422` |
+| `POST`   | `/api/crm/companies`              | `crm`  | `CreateCompanyRequestSchema`   | `CompanyResponseSchema`       | authenticated request context | `401`, `422`        |
+| `POST`   | `/api/crm/companies/fields`       | `crm`  | none                           | `CompanyFieldsResponseSchema` | authenticated request context | `401`, `409`, `422` |
+| `GET`    | `/api/crm/companies`              | `crm`  | query params `limit`, `offset` | `ListCompaniesResponseSchema` | authenticated request context | `401`, `422`        |
+| `GET`    | `/api/crm/companies/{company_id}` | `crm`  | path `company_id`              | `CompanyResponseSchema`       | authenticated request context | `401`, `404`, `422` |
+| `PUT`    | `/api/crm/companies/{company_id}` | `crm`  | `UpdateCompanyRequestSchema`   | `CompanyResponseSchema`       | authenticated request context | `401`, `404`, `422` |
+| `DELETE` | `/api/crm/companies/{company_id}` | `crm`  | path `company_id`              | empty `204`                   | authenticated request context | `401`, `404`, `422` |
 
 ## Inventory
 
@@ -58,14 +64,19 @@ All public HTTP routes are mounted under `/api`.
 
 Schema config read routes use `POST` bodies instead of `GET`.
 
-| Method   | Path                                | Module            | Request / Params                  | Response                          | Auth                          | Main errors                |
-|----------|-------------------------------------|-------------------|-----------------------------------|-----------------------------------|-------------------------------|----------------------------|
-| `POST`   | `/api/config/objects/list`          | `schema_registry` | none                              | `ListCustomObjectsResponseSchema` | authenticated request context | `401`, `409`, `422`        |
-| `POST`   | `/api/config/objects/create`        | `schema_registry` | `CreateCustomObjectRequestSchema` | `CustomObjectResponseSchema`      | authenticated request context | `401`, `409`, `422`        |
-| `DELETE` | `/api/config/objects/delete`        | `schema_registry` | body `object_id`                  | empty `204`                       | authenticated request context | `401`, `404`, `409`, `422` |
-| `POST`   | `/api/config/objects/schema`        | `schema_registry` | body `object_id`                  | `CustomObjectResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
-| `POST`   | `/api/config/objects/fields/create` | `schema_registry` | `CreateCustomFieldRequestSchema`  | `CustomObjectResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
-| `DELETE` | `/api/config/objects/fields/delete` | `schema_registry` | body `object_id`, `field_id`      | `CustomObjectResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
+| Method   | Path                                   | Module            | Request / Params                           | Response                                 | Auth                          | Main errors                |
+|----------|----------------------------------------|-------------------|--------------------------------------------|------------------------------------------|-------------------------------|----------------------------|
+| `POST`   | `/api/config/objects/list`             | `schema_registry` | none                                       | `ListCustomObjectsResponseSchema`        | authenticated request context | `401`, `409`, `422`        |
+| `POST`   | `/api/config/objects/create`           | `schema_registry` | `CreateCustomObjectRequestSchema`          | `CustomObjectResponseSchema`             | authenticated request context | `401`, `409`, `422`        |
+| `DELETE` | `/api/config/objects/delete`           | `schema_registry` | body `object_id`                           | empty `204`                              | authenticated request context | `401`, `404`, `409`, `422` |
+| `POST`   | `/api/config/objects/schema`           | `schema_registry` | body `object_id`                           | `CustomObjectResponseSchema`             | authenticated request context | `401`, `404`, `409`, `422` |
+| `POST`   | `/api/config/objects/fields/create`    | `schema_registry` | `CreateCustomFieldRequestSchema`           | `CustomObjectResponseSchema`             | authenticated request context | `401`, `404`, `409`, `422` |
+| `DELETE` | `/api/config/objects/fields/delete`    | `schema_registry` | body `object_id`, `field_id`               | `CustomObjectResponseSchema`             | authenticated request context | `401`, `404`, `409`, `422` |
+| `POST`   | `/api/config/objects/features/enable`  | `schema_registry` | body `object_id`, `feature_code`, `config` | `ObjectFeatureConfigResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
+| `POST`   | `/api/config/objects/features/disable` | `schema_registry` | body `object_id`, `feature_code`           | `ObjectFeatureConfigResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
+| `POST`   | `/api/config/objects/features/update`  | `schema_registry` | body `object_id`, `feature_code`, `config` | `ObjectFeatureConfigResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
+| `POST`   | `/api/config/objects/features/schema`  | `schema_registry` | body `object_id`, `feature_code`           | `ObjectFeatureConfigResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
+| `POST`   | `/api/config/objects/features/list`    | `schema_registry` | body `object_id`                           | `ListObjectFeatureConfigsResponseSchema` | authenticated request context | `401`, `409`, `422`        |
 
 Config rules:
 
@@ -74,6 +85,7 @@ Config rules:
 - `custom` objects can be created, deleted and extended with `custom` fields.
 - `custom` object names are saved and returned with the `c_` prefix; create requests may omit it.
 - `system` fields are hidden in config responses; `standard` fields are visible but not deletable.
+- Object feature config supports canonical feature code `CONTACT_POINT`; presentation calls application use cases only.
 
 ## Custom Object
 

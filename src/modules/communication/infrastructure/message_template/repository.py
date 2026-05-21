@@ -27,10 +27,13 @@ from src.modules.communication.infrastructure.runtime_object_names import (
     _TEMPLATE,
     _TEMPLATE_VERSION,
 )
-from src.modules.runtime_data import FilterSpec, PageSpec, SortSpec
+from src.modules.runtime_data.application.models import PageSpec, SortSpec
 from src.modules.runtime_data.application.ports import (
     RuntimeCommandGateway,
     RuntimeQueryGateway,
+)
+from src.modules.runtime_data.application.query.typed_filter_builder import (
+    RuntimeTypedFilterBuilder,
 )
 from src.modules.schema_registry.runtime import RuntimeObjectResolverProtocol
 from src.modules.shared import EntityIdVO
@@ -53,6 +56,7 @@ class MessageTemplateRuntimeRepository(
         self._runtime_object_resolver = runtime_object_resolver
         self._runtime_command_gateway = runtime_command_gateway
         self._runtime_query_gateway = runtime_query_gateway
+        self._filter_builder = RuntimeTypedFilterBuilder()
 
     async def load_template(
         self,
@@ -80,7 +84,14 @@ class MessageTemplateRuntimeRepository(
         descriptor = await self._resolve_descriptor(tenant_id, _TEMPLATE)
         rows = await self._runtime_query_gateway.list(
             descriptor=descriptor,
-            filters=(FilterSpec("template_code", "eq", template_code.value),),
+            filters=(
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="template_code",
+                    op="eq",
+                    value=template_code.value,
+                ),
+            ),
             page=PageSpec(limit=1, offset=0),
         )
         if not rows:
@@ -151,7 +162,14 @@ class MessageTemplateRuntimeRepository(
         descriptor = await self._resolve_descriptor(tenant_id, _TEMPLATE_VERSION)
         rows = await self._runtime_query_gateway.list(
             descriptor=descriptor,
-            filters=(FilterSpec("template_id", "eq", template_id.uuid),),
+            filters=(
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="template_id",
+                    op="eq",
+                    value=template_id.uuid,
+                ),
+            ),
             sorting=(SortSpec("version", "asc"),),
         )
         return [template_version_entity(row) for row in rows]

@@ -90,7 +90,7 @@ class CustomObjectControllerTests(unittest.IsolatedAsyncioTestCase):
                         {"field": "status", "op": "eq", "value": "new"},
                     ]
                 },
-                sort={"created_at": "DESC"},
+                sort=[{"field": "created_at", "direction": "DESC"}],
                 limit=10,
                 offset=5,
             ),
@@ -103,8 +103,8 @@ class CustomObjectControllerTests(unittest.IsolatedAsyncioTestCase):
             EntityIdVO.from_value(context.principal.tenant_id),
         )
         self.assertEqual(recorded_query.object_id.uuid, object_id)
-        self.assertEqual(recorded_query.filters[0].logic, "or")
-        self.assertEqual(recorded_query.sorting[0].direction, "desc")
+        self.assertEqual(recorded_query.filter_dsl["or"][0]["field"], "name")
+        self.assertEqual(recorded_query.sort_dsl[0]["direction"], "DESC")
         self.assertEqual(response.limit, 10)
         self.assertEqual(response.offset, 5)
         self.assertEqual(response.count, 1)

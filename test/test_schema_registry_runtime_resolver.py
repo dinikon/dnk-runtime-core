@@ -77,6 +77,26 @@ class SchemaRegistryRuntimeObjectResolverTests(unittest.IsolatedAsyncioTestCase)
             description="Contact last name.",
             is_nullable=False,
         )
+        object_entity.add_field(
+            field_id=RuntimeFieldIdVO.from_value(uuid4()),
+            now=now,
+            field_name="tags",
+            field_type=field_types.from_seed_type("multiselect"),
+            label="Tags",
+            description="Contact tags.",
+            is_nullable=True,
+            options={"vip": "VIP"},
+        )
+        object_entity.add_field(
+            field_id=RuntimeFieldIdVO.from_value(uuid4()),
+            now=now,
+            field_name="payload",
+            field_type=field_types.from_seed_type("json"),
+            label="Payload",
+            description="Internal payload.",
+            is_nullable=True,
+            settings={"is_filterable": "true", "is_sortable": "false"},
+        )
 
         class DataSourceServiceStub:
             async def get_required_by_tenant(self, *, tenant_id):
@@ -107,11 +127,22 @@ class SchemaRegistryRuntimeObjectResolverTests(unittest.IsolatedAsyncioTestCase)
         self.assertEqual(descriptor.pk, "id")
         self.assertEqual(descriptor.title_field, "id")
         self.assertEqual(
-            [field.name for field in descriptor.fields], ["id", "last_name"]
+            [field.name for field in descriptor.fields],
+            ["id", "last_name", "tags", "payload"],
         )
         self.assertEqual(
-            [field.kind for field in descriptor.fields], ["system", "standard"]
+            [field.kind for field in descriptor.fields],
+            ["system", "standard", "standard", "standard"],
         )
+        fields_by_name = descriptor.fields_by_name
+        self.assertTrue(fields_by_name["id"].is_filterable)
+        self.assertTrue(fields_by_name["id"].is_sortable)
+        self.assertTrue(fields_by_name["last_name"].is_filterable)
+        self.assertTrue(fields_by_name["last_name"].is_sortable)
+        self.assertTrue(fields_by_name["tags"].is_filterable)
+        self.assertFalse(fields_by_name["tags"].is_sortable)
+        self.assertTrue(fields_by_name["payload"].is_filterable)
+        self.assertFalse(fields_by_name["payload"].is_sortable)
 
     async def test_resolve_includes_relation_descriptors_from_metadata(self) -> None:
         now = UtcClock().now()

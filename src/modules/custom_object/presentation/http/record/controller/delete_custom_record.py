@@ -14,7 +14,7 @@ from src.modules.custom_object.presentation.depends.application import (
 from src.modules.custom_object.presentation.http.record.requests import (
     CustomRecordByIdRequestSchema,
 )
-from src.modules.runtime_data import (
+from src.modules.runtime_data.domain.error import (
     RuntimeDataFilterError,
     RuntimeDataPersistenceError,
     RuntimeDataPolicyError,

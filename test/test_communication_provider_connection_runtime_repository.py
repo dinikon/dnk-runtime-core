@@ -17,7 +17,45 @@ from src.modules.communication.infrastructure.runtime_object_names import (
     _CONNECTION,
     _CONNECTOR,
 )
+from src.modules.schema_registry.runtime import (
+    RuntimeFieldDescriptor,
+    RuntimeObjectDescriptor,
+)
 from src.modules.shared import EntityIdVO
+
+
+def _descriptor_name(descriptor) -> str:
+    return getattr(descriptor, "object_name", descriptor)
+
+
+def _field(name: str, type_code: str = "text") -> RuntimeFieldDescriptor:
+    return RuntimeFieldDescriptor(
+        name=name,
+        type_code=type_code,
+        is_nullable=True,
+        default_value=None,
+        options={},
+        settings={},
+    )
+
+
+def _descriptor(object_name: str) -> RuntimeObjectDescriptor:
+    return RuntimeObjectDescriptor(
+        schema_name="dnk_test",
+        object_name=object_name,
+        table_name=object_name,
+        pk="id",
+        title_field="id",
+        fields=(
+            _field("id", "uuid"),
+            _field("created_at", "datetime"),
+            _field("updated_at", "datetime"),
+            _field("provider_connector_id", "uuid"),
+            _field("channel_code"),
+            _field("status"),
+        ),
+        relations=(),
+    )
 
 
 class _ResolverStub:
@@ -26,7 +64,7 @@ class _ResolverStub:
 
     async def resolve(self, *, tenant_id, object_name):
         self.calls.append((tenant_id, object_name))
-        return object_name
+        return _descriptor(object_name)
 
 
 class _QueryGatewayStub:
@@ -37,15 +75,16 @@ class _QueryGatewayStub:
         self.list_calls = []
 
     async def get_by_id(self, *, descriptor, object_id, fetch_plan=None):
-        self.get_calls.append((descriptor, object_id))
-        return self.by_id_rows.get((descriptor, object_id))
+        descriptor_name = _descriptor_name(descriptor)
+        self.get_calls.append((descriptor_name, object_id))
+        return self.by_id_rows.get((descriptor_name, object_id))
 
     async def list(
         self, *, descriptor, filters=(), sorting=(), page=None, fetch_plan=None
     ):
         self.list_calls.append(
             {
-                "descriptor": descriptor,
+                "descriptor": _descriptor_name(descriptor),
                 "filters": filters,
                 "sorting": sorting,
                 "page": page,
@@ -232,11 +271,11 @@ class ProviderConnectionRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase)
 
         filters = query.list_calls[0]["filters"]
         self.assertEqual(result.provider_connector_id, provider_connector_id)
-        self.assertEqual(filters[0].field, "provider_connector_id")
+        self.assertEqual(filters[0].field.name, "provider_connector_id")
         self.assertEqual(filters[0].value, provider_connector_id.uuid)
-        self.assertEqual(filters[1].field, "channel_code")
+        self.assertEqual(filters[1].field.name, "channel_code")
         self.assertEqual(filters[1].value, "SMS")
-        self.assertEqual(filters[2].field, "status")
+        self.assertEqual(filters[2].field.name, "status")
         self.assertEqual(filters[2].value, "ACTIVE")
         self.assertEqual(query.list_calls[0]["page"].limit, 1)
 

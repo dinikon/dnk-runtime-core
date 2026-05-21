@@ -91,6 +91,23 @@ class SqlAlchemyTenantRepositoryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(result)
 
+    async def test_list_ids_returns_all_tenant_ids_in_query_order(self) -> None:
+        first_tenant_id = uuid4()
+        second_tenant_id = uuid4()
+        repository = SqlAlchemyTenantRepository(
+            _AsyncSessionStub(scalars_results=[[first_tenant_id, second_tenant_id]])
+        )
+
+        result = await repository.list_ids()
+
+        self.assertEqual(
+            result,
+            [
+                TenantIdVO.from_value(first_tenant_id),
+                TenantIdVO.from_value(second_tenant_id),
+            ],
+        )
+
 
 class SqlAlchemyTenantDomainRepositoryTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:

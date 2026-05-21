@@ -43,11 +43,13 @@ class OutboundMessageDependsTests(unittest.TestCase):
     def test_outbound_message_dependencies_are_wired(self) -> None:
         repository = get_outbound_message_repository(
             runtime_object_resolver=object(),
-            runtime_gateway=object(),
+            runtime_command_gateway=object(),
+            runtime_query_gateway=object(),
         )
         delivery_repository = get_delivery_repository(
             runtime_object_resolver=object(),
-            runtime_gateway=object(),
+            runtime_command_gateway=object(),
+            runtime_query_gateway=object(),
         )
         delivery_service = get_delivery_service(
             repository=delivery_repository,

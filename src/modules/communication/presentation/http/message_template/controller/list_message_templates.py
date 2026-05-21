@@ -13,7 +13,7 @@ from src.modules.communication.presentation.http.message_template.responses impo
     ListMessageTemplatesResponseSchema,
     MessageTemplateResponseSchema,
 )
-from src.modules.runtime_data import (
+from src.modules.runtime_data.domain.error import (
     RuntimeDataFilterError,
     RuntimeDataPersistenceError,
     RuntimeDataPolicyError,

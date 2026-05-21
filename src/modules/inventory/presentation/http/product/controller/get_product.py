@@ -13,7 +13,7 @@ from src.modules.inventory.presentation.depends.application import GetProductUse
 from src.modules.inventory.presentation.http.product.responses import (
     ProductResponseSchema,
 )
-from src.modules.runtime_data import (
+from src.modules.runtime_data.domain.error import (
     RuntimeDataFilterError,
     RuntimeDataPersistenceError,
     RuntimeDataPolicyError,

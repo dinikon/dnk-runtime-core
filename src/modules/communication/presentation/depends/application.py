@@ -56,8 +56,9 @@ from src.modules.communication.presentation.depends.infrastructure import (
     TemplateRenderServiceDep,
     get_outbound_message_publisher,
     get_provider_sender_registry,
+    get_runtime_command_gateway,
     get_runtime_field_type_policy,
-    get_runtime_gateway,
+    get_runtime_query_gateway,
 )
 from src.modules.shared.depends.clock import ClockDep
 
@@ -374,6 +375,7 @@ __all__ = [
     "get_outbound_processing_repository",
     "get_outbound_message_publisher",
     "get_provider_sender_registry",
+    "get_runtime_command_gateway",
     "get_runtime_field_type_policy",
-    "get_runtime_gateway",
+    "get_runtime_query_gateway",
 ]

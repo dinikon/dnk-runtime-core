@@ -3,16 +3,8 @@ import type {LucideIcon} from "lucide-vue-next";
 import type {SidebarProps} from "@/components/ui/sidebar";
 
 import {
-  BookOpen,
-  CheckSquare,
   Command,
   ContactRound,
-  Database,
-  FileText,
-  Settings,
-  Store,
-  Target,
-  Workflow
 } from "lucide-vue-next";
 import {RouterLink, useRoute} from "vue-router";
 
@@ -39,24 +31,12 @@ const props = withDefaults(defineProps<SidebarProps>(), {
 
 const route = useRoute();
 
-const workspaceItems: NavigationItem[] = [
-  {label: "Objects", icon: Database, to: "/"},
-  {label: "Contacts", icon: ContactRound},
-  {label: "Tasks", icon: CheckSquare},
-  {label: "Notes", icon: FileText},
-  {label: "Opportunities", icon: Target},
-  {label: "Workflows", icon: Workflow}
-];
-
-const otherItems: NavigationItem[] = [
-  {label: "Settings", icon: Settings, to: "/settings/profile"},
-  {label: "Documentation", icon: BookOpen},
-  {label: "App store", icon: Store}
+const crmItems: NavigationItem[] = [
+  {label: "Contacts", icon: ContactRound, to: "/crm/contacts"}
 ];
 
 const navigationGroups = [
-  {label: "Workspace", items: workspaceItems},
-  {label: "Other", items: otherItems}
+  {label: "CRM", items: crmItems}
 ];
 
 function isActive(to?: string): boolean {

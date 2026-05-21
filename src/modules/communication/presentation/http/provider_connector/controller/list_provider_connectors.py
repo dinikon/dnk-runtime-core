@@ -14,7 +14,7 @@ from src.modules.communication.presentation.http.provider_connector.responses im
     ProviderConnectorResponseSchema,
     ProviderMessageTypeResponseSchema,
 )
-from src.modules.runtime_data import (
+from src.modules.runtime_data.domain.error import (
     RuntimeDataFilterError,
     RuntimeDataPersistenceError,
     RuntimeDataPolicyError,

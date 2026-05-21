@@ -21,8 +21,11 @@ from src.modules.communication.infrastructure.runtime_object_names import (
     _TEMPLATE,
     _TEMPLATE_VERSION,
 )
-from src.modules.runtime_data import FilterSpec, PageSpec, SortSpec
+from src.modules.runtime_data.application.models import PageSpec, SortSpec
 from src.modules.runtime_data.application.ports import RuntimeQueryGateway
+from src.modules.runtime_data.application.query.typed_filter_builder import (
+    RuntimeTypedFilterBuilder,
+)
 from src.modules.schema_registry.runtime import RuntimeObjectResolverProtocol
 from src.modules.shared import EntityIdVO
 
@@ -39,6 +42,7 @@ class MessageTemplateQueryRuntimeRepository(MessageTemplateQueryRepositoryProtoc
         """Инициализирует query repository resolver-ом и runtime query gateway."""
         self._runtime_object_resolver = runtime_object_resolver
         self._runtime_query_gateway = runtime_query_gateway
+        self._filter_builder = RuntimeTypedFilterBuilder()
 
     async def list_templates(
         self,
@@ -77,8 +81,18 @@ class MessageTemplateQueryRuntimeRepository(MessageTemplateQueryRepositoryProtoc
         rows = await self._runtime_query_gateway.list(
             descriptor=descriptor,
             filters=(
-                FilterSpec("template_id", "eq", template_id.uuid),
-                FilterSpec("status", "eq", TemplateVersionStatusVO.ACTIVE.value),
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="template_id",
+                    op="eq",
+                    value=template_id.uuid,
+                ),
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="status",
+                    op="eq",
+                    value=TemplateVersionStatusVO.ACTIVE.value,
+                ),
             ),
             page=PageSpec(limit=1, offset=0),
         )

@@ -13,7 +13,7 @@ from src.modules.crm.domain.contact.entity import ContactEntity
 from src.modules.crm.domain.contact.error import ContactNotFoundError
 from src.modules.crm.domain.contact.repository import ContactCommandRepositoryProtocol
 from src.modules.crm.domain.contact.value_object import ContactIdVO, ContactNameVO
-from src.modules.runtime_data import PageSpec, SortSpec
+from src.modules.runtime_data.application.models import PageSpec, SortSpec
 from src.modules.runtime_data.application.ports import (
     RuntimeCommandGateway,
     RuntimeQueryGateway,
@@ -143,7 +143,7 @@ class ContactRuntimeRepository(
         tenant_id: EntityIdVO,
         limit: int,
         offset: int,
-    ) -> list[ContactDTO]:
+    ) -> List[ContactDTO]:
         """Возвращает страницу ContactDTO, сортируя runtime-строки стабильно."""
         descriptor = await self._resolve_descriptor(tenant_id)
         rows = await self._runtime_query_gateway.list(

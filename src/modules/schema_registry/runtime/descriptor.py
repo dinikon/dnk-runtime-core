@@ -16,6 +16,8 @@ class RuntimeFieldDescriptor:
     options: Mapping[str, str]
     settings: Mapping[str, str]
     kind: str = "standard"
+    is_filterable: bool = True
+    is_sortable: bool = True
 
 
 @dataclass(frozen=True, slots=True)

@@ -70,7 +70,7 @@ This page maps current tests to the behaviors they protect.
 ## CRM
 
 - `test_crm_*`
-    - CRM endpoints and domain/use case behavior around contacts
+    - CRM endpoints and domain/use case behavior around contacts and companies
 
 ## Inventory
 

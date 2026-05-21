@@ -4,8 +4,9 @@ from src.modules.crm.application.contact.command.create_contact_command import (
     CreateContactCommand,
 )
 from src.modules.crm.application.contact.dto.contact_dto import ContactDTO
-from src.modules.crm.domain.contact.service import ContactService
 from src.modules.crm.domain.contact.entity import ContactEntity
+from src.modules.crm.domain.contact.repository import ContactCommandRepositoryProtocol
+from src.modules.shared.kernel.time.ports import ClockPort
 
 
 class CreateContactUseCaseProtocol(Protocol):
@@ -17,23 +18,33 @@ class CreateContactUseCaseProtocol(Protocol):
 
 
 class CreateContactUseCase:
-    """Use case создания CRM-контакта через доменный сервис."""
+    """Use case создания CRM-контакта."""
 
-    def __init__(self, service: ContactService) -> None:
-        """Инициализирует use case доменным сервисом контактов."""
-        self._service = service
+    def __init__(
+        self,
+        *,
+        command_repository: ContactCommandRepositoryProtocol,
+        clock: ClockPort,
+    ) -> None:
+        """Инициализирует use case командным репозиторием и clock-портом."""
+        self._command_repository = command_repository
+        self._clock = clock
 
     async def __call__(self, command: CreateContactCommand) -> ContactDTO:
         """Выполняет команду создания контакта и мапит entity в DTO."""
-
-        contact = await self._service.create_contact(
-            tenant_id=command.tenant_id,
-            contact_id=command.contact_id,
-            last_name=command.last_name,
+        now = self._clock.now()
+        contact = ContactEntity.create(
+            id_=command.contact_id,
+            now=now,
             first_name=command.first_name,
+            last_name=command.last_name,
             middle_name=command.middle_name,
             status=command.status,
             tags=command.tags,
+        )
+        contact = await self._command_repository.save(
+            tenant_id=command.tenant_id,
+            contact=contact,
         )
         return self._to_dto(contact)
 

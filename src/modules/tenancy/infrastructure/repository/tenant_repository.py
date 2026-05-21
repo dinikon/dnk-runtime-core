@@ -50,6 +50,15 @@ class SqlAlchemyTenantRepository(TenantRepositoryProtocol):
             return None
         return tenant_model_to_entity(model)
 
+    async def list_ids(self) -> list[TenantIdVO]:
+        """Возвращает id всех tenants в стабильном порядке создания."""
+        tenant_ids = (
+            await self._session.scalars(
+                select(TenantModel.id).order_by(TenantModel.created_at, TenantModel.id)
+            )
+        ).all()
+        return [TenantIdVO.from_value(tenant_id) for tenant_id in tenant_ids]
+
     async def exists_by_external_id(self, external_id: str) -> bool:
         """Проверяет существование tenant по external_id."""
         tenant_id: UUID | None = (

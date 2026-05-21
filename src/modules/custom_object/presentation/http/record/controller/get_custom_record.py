@@ -17,7 +17,7 @@ from src.modules.custom_object.presentation.http.record.requests import (
 from src.modules.custom_object.presentation.http.record.responses import (
     CustomRecordResponseSchema,
 )
-from src.modules.runtime_data import (
+from src.modules.runtime_data.domain.error import (
     RuntimeDataFilterError,
     RuntimeDataPersistenceError,
     RuntimeDataPolicyError,

@@ -18,10 +18,18 @@ from src.modules.custom_object.domain import (
     CustomObjectRecordNotFoundError,
     CustomObjectValidationError,
 )
-from src.modules.runtime_data import PageSpec
+from src.modules.runtime_data.application.models import PageSpec
 from src.modules.runtime_data.application.ports import (
     RuntimeCommandGateway,
     RuntimeQueryGateway,
+)
+from src.modules.runtime_data.application.query.filter_dsl.parser import FilterDslParser
+from src.modules.runtime_data.application.query.filter_dsl.semantic_validator import (
+    FilterSemanticValidator,
+)
+from src.modules.runtime_data.application.query.sort_dsl.parser import SortDslParser
+from src.modules.runtime_data.application.query.sort_dsl.validator import (
+    SortSemanticValidator,
 )
 from src.modules.schema_registry.domain.object.value_object import RuntimeObjectIdVO
 from src.modules.schema_registry.runtime import (
@@ -45,6 +53,10 @@ class CustomRecordRuntimeRepository(CustomRecordRepositoryProtocol):
         self._runtime_object_resolver = runtime_object_resolver
         self._command_gateway = command_gateway
         self._query_gateway = query_gateway
+        self._filter_parser = FilterDslParser()
+        self._filter_validator = FilterSemanticValidator()
+        self._sort_parser = SortDslParser()
+        self._sort_validator = SortSemanticValidator()
 
     async def create(self, command: CreateCustomRecordCommand) -> CustomRecordDTO:
         """Создает runtime-запись кастомного объекта."""
@@ -87,10 +99,20 @@ class CustomRecordRuntimeRepository(CustomRecordRepositoryProtocol):
             tenant_id=query.tenant_id,
             object_id=query.object_id,
         )
+        filter_ast = self._filter_parser.parse(query.filter_dsl)
+        sort_ast = self._sort_parser.parse(query.sort_dsl)
+        filters = self._filter_validator.validate(
+            descriptor=descriptor,
+            filter_ast=filter_ast,
+        )
+        sorting = self._sort_validator.validate(
+            descriptor=descriptor,
+            sort_ast=sort_ast,
+        )
         rows = await self._query_gateway.list(
             descriptor=descriptor,
-            filters=query.filters,
-            sorting=query.sorting,
+            filters=filters,
+            sorting=sorting,
             page=PageSpec(limit=query.limit, offset=query.offset),
         )
         return [

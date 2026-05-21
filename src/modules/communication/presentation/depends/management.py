@@ -35,7 +35,13 @@ from src.modules.communication.infrastructure.provider_senders import (
 from src.modules.communication.infrastructure.rabbitmq import (
     RabbitMQOutboundMessagePublisher,
 )
-from src.modules.runtime_data import PostgresRuntimeGateway, RuntimeFieldTypePolicy
+from src.modules.runtime_data.application.type_policy import RuntimeFieldTypePolicy
+from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.command_gateway import (
+    PostgresRuntimeCommandGateway,
+)
+from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.query_gateway import (
+    PostgresRuntimeQueryGateway,
+)
 from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
 from src.modules.schema_registry.domain.datasource.service import DataSourceService
 from src.modules.schema_registry.domain.datasource.value_object import DataSourceIdVO
@@ -151,17 +157,22 @@ def build_outbound_message_repository(
         field_id_provider=lambda: RuntimeFieldIdVO.from_value(uuid6.uuid7()),
         field_type_catalog=field_type_catalog,
     )
-    runtime_gateway = PostgresRuntimeGateway(
+    runtime_query_gateway = PostgresRuntimeQueryGateway(
         session,
         type_policy=RuntimeFieldTypePolicy(),
+    )
+    runtime_command_gateway = PostgresRuntimeCommandGateway(
+        session,
+        type_policy=RuntimeFieldTypePolicy(),
+        query_gateway=runtime_query_gateway,
     )
     return OutboundMessageRuntimeRepository(
         runtime_object_resolver=SchemaRegistryRuntimeObjectResolver(
             data_source_service=data_source_service,
             object_service=object_service,
         ),
-        runtime_command_gateway=runtime_gateway,
-        runtime_query_gateway=runtime_gateway,
+        runtime_command_gateway=runtime_command_gateway,
+        runtime_query_gateway=runtime_query_gateway,
     )
 
 
@@ -181,17 +192,22 @@ def build_delivery_repository(session: AsyncSession) -> DeliveryRuntimeRepositor
         field_id_provider=lambda: RuntimeFieldIdVO.from_value(uuid6.uuid7()),
         field_type_catalog=field_type_catalog,
     )
-    runtime_gateway = PostgresRuntimeGateway(
+    runtime_query_gateway = PostgresRuntimeQueryGateway(
         session,
         type_policy=RuntimeFieldTypePolicy(),
+    )
+    runtime_command_gateway = PostgresRuntimeCommandGateway(
+        session,
+        type_policy=RuntimeFieldTypePolicy(),
+        query_gateway=runtime_query_gateway,
     )
     return DeliveryRuntimeRepository(
         runtime_object_resolver=SchemaRegistryRuntimeObjectResolver(
             data_source_service=data_source_service,
             object_service=object_service,
         ),
-        runtime_command_gateway=runtime_gateway,
-        runtime_query_gateway=runtime_gateway,
+        runtime_command_gateway=runtime_command_gateway,
+        runtime_query_gateway=runtime_query_gateway,
     )
 
 

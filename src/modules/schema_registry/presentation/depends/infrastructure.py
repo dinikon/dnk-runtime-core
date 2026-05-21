@@ -30,6 +30,12 @@ from src.modules.schema_registry.domain.object.repository import (
 )
 from src.modules.schema_registry.domain.object.service import ObjectService
 from src.modules.schema_registry.domain.object.value_object import RuntimeObjectIdVO
+from src.modules.schema_registry.domain.object_feature.repository import (
+    ObjectFeatureConfigRepositoryProtocol,
+)
+from src.modules.schema_registry.domain.object_feature.value_object import (
+    ObjectFeatureConfigIdVO,
+)
 from src.modules.schema_registry.domain.relation.repository import (
     RelationRepositoryProtocol,
 )
@@ -48,6 +54,9 @@ from src.modules.schema_registry.infrastructure.repository.data_source_repositor
 )
 from src.modules.schema_registry.infrastructure.repository.object_repository import (
     SqlAlchemyObjectRepository,
+)
+from src.modules.schema_registry.infrastructure.repository.object_feature_config_repository import (
+    SqlAlchemyObjectFeatureConfigRepository,
 )
 from src.modules.schema_registry.infrastructure.repository.relation_repository import (
     SqlAlchemyRelationRepository,
@@ -118,6 +127,19 @@ ObjectRepositoryDep = Annotated[
 ]
 
 
+def get_object_feature_config_repository(
+    uow: UoWDep,
+) -> ObjectFeatureConfigRepositoryProtocol:
+    """Создает SQLAlchemy object feature config repository для текущей UoW."""
+    return SqlAlchemyObjectFeatureConfigRepository(uow.session)
+
+
+ObjectFeatureConfigRepositoryDep = Annotated[
+    ObjectFeatureConfigRepositoryProtocol,
+    Depends(get_object_feature_config_repository),
+]
+
+
 def get_relation_repository(uow: UoWDep) -> RelationRepositoryProtocol:
     """Создает SQLAlchemy relation repository для текущей UoW."""
     return SqlAlchemyRelationRepository(uow.session)
@@ -137,6 +159,11 @@ def get_data_source_id_provider() -> Callable[[], DataSourceIdVO]:
 def get_runtime_object_id_provider() -> Callable[[], RuntimeObjectIdVO]:
     """Возвращает provider UUIDv7 RuntimeObjectIdVO для object metadata."""
     return lambda: RuntimeObjectIdVO.from_value(uuid6.uuid7())
+
+
+def get_object_feature_config_id_provider() -> Callable[[], ObjectFeatureConfigIdVO]:
+    """Возвращает provider UUIDv7 ObjectFeatureConfigIdVO для feature config."""
+    return lambda: ObjectFeatureConfigIdVO.from_value(uuid6.uuid7())
 
 
 def get_runtime_field_id_provider() -> Callable[[], RuntimeFieldIdVO]:
@@ -231,6 +258,7 @@ RelationServiceDep = Annotated[
 __all__ = [
     "DataSourceRepositoryDep",
     "DataSourceServiceDep",
+    "ObjectFeatureConfigRepositoryDep",
     "ObjectRepositoryDep",
     "ObjectServiceDep",
     "RelationRepositoryDep",
@@ -243,6 +271,8 @@ __all__ = [
     "get_data_source_repository",
     "get_data_source_service",
     "get_data_source_id_provider",
+    "get_object_feature_config_id_provider",
+    "get_object_feature_config_repository",
     "get_object_repository",
     "get_object_service",
     "get_relation_repository",

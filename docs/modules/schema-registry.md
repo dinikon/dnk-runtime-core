@@ -1,703 +1,455 @@
-# Модуль `schema_registry`
+# Schema Registry Module
 
-`schema_registry` управляет runtime-схемами tenant-данных: загружает seed-описание, создает физическую PostgreSQL
-schema, сравнивает фактическую структуру с желаемой, хранит metadata-граф объектов/полей/связей и отдает runtime
-descriptors для модулей, которые читают и пишут tenant data.
+## Purpose
 
-Модуль является владельцем metadata и DDL для runtime objects. CRUD самих записей находится в `runtime_data`,
-`crm`, `inventory`, `custom_object` и других потребителях.
+`schema_registry` владеет описанием runtime-схем tenant-данных: загружает seed-манифест, валидирует его в
+`ValidatedSchemaSpec`, строит и применяет PostgreSQL DDL, хранит metadata-граф datasource/object/field/relation и
+отдает runtime descriptors потребителям runtime data.
 
-## Основные обязанности
+Модуль управляет структурой runtime objects, но не выполняет CRUD runtime-записей. Чтение и запись строк находятся в
+`runtime_data`, `custom_object`, `crm`, `inventory`, `communication` и других потребителях descriptors.
 
-- bootstrap новой tenant-схемы из seed-модуля через `CreateSchemaUseCase`;
-- diff существующей tenant-схемы против seed через `DiffSchemaUseCase`;
-- PostgreSQL inspection/execution для tenant schemas;
-- хранение metadata snapshot: datasource, objects, fields, relations;
+## Current Scope
+
+Текущая реализация покрывает несколько связанных subdomain внутри одного bounded context:
+
+- bootstrap новой tenant PostgreSQL schema из Python seed-модуля через `CreateSchemaUseCase`;
+- diff существующей tenant schema против seed/spec через `DiffSchemaUseCase`;
+- metadata storage для `data_sources`, `objects`, `fields`, `relations`;
 - config API для custom objects, custom fields и custom relations;
-- runtime resolver, который превращает metadata в `RuntimeObjectDescriptor`;
-- adapter для `tenancy` через `SchemaRegistryTenantSchemaBootstrapAdapter`.
-
-## Три слоя runtime-схемы
-
-### 1. Seed и validated spec
-
-Seed - это Python-модуль, экспортирующий `SCHEMA_SEED`.
-
-Основные raw-типы:
-
-- `SchemaSeed` - top-level manifest с `version`, `code`, `label`, `objects`;
-- `ObjectSeed` - runtime object: singular/plural names, labels, fields, indexes, relations, kind;
-- `FieldSeed` - runtime field: name, type, label, nullability, default, options, settings, kind;
-- `IndexSeed` - physical index по списку полей;
-- `RelationSeed` - связь между runtime objects.
-
-`SchemaSeedService` загружает raw seed через `SeedReaderPort`, нормализует его и возвращает `ValidatedSchemaSpec`.
-Планирование relations требует именно validated spec: raw seed с relations не должен напрямую идти в
-`PostgresSchemaPlanService`.
-
-Default seed:
-
-- `src.modules.schema_registry.seed.schema_seed`
-
-Он содержит CRM, inventory, company/contact M2M и communication runtime objects.
-
-### 2. Metadata snapshot
-
-Metadata хранится в системных таблицах приложения и является registry-представлением tenant runtime schema.
-
-Текущий metadata graph:
-
-- `data_sources` / `DataSourceEntity`
-    - tenant-scoped datasource;
-    - хранит `tenant_id`, `schema_name`, datasource id;
-- `objects` / `ObjectEntity`
-    - runtime object metadata;
-    - хранит `tenant_id`, `data_source_id`, `kind`, singular/plural names, labels, description;
-- `fields` / `FieldEntity`
-    - runtime field metadata внутри object;
-    - хранит field name, type, kind, label, nullable, default, options, settings;
-- `relations` / `RelationEntity`
-    - relation metadata между runtime objects;
-    - хранит source/target objects, physical owner side, FK field, referenced field, API names, M2M table/columns,
-      `on_delete`, `is_required`, `is_unique`, `kind`, `settings`.
-
-`SchemaRegistryMetadataReadService` собирает snapshot и проверяет связность: tenant/data_source должны совпадать у
-objects/relations, relation object ids должны ссылаться на известные objects, relation field ids - на известные fields.
-
-`SchemaRegistryMetadataWriteService` записывает metadata после create/diff и синхронизирует objects/relations с
-validated spec.
-
-### 3. Physical tenant schema
-
-Физический слой - PostgreSQL schema tenant-а, например `dnk_<tenant_id_hex>`.
-
-В ней находятся:
-
-- runtime tables;
-- columns;
-- primary keys;
-- indexes;
-- foreign keys;
-- M2M join tables.
-
-Runtime rows не несут `tenant_id`: isolation достигается выбором tenant schema после host/domain/auth resolution.
-Внутри application/domain tenant scope передается как `EntityIdVO`, а HTTP/CLI boundary работает с UUID.
-
-## Seed contract
-
-### Object naming и `kind`
-
-`ObjectSeed` задает `singular_name` и `plural_name`.
-
-- `plural_name` используется как физическое имя таблицы.
-- `singular_name` используется как runtime object/model name.
-- Имена объектов должны быть уникальны отдельно по singular и plural.
-- `ObjectKind.CUSTOM` автоматически нормализуется в namespace `c_`.
-- `ObjectKind.STANDARD`, `ObjectKind.SYSTEM`, `ObjectKind.VIEW` не имеют права использовать `c_` prefix.
-- `c_` зарезервирован под пользовательские objects и physical custom tables.
-
-Object kinds:
-
-| Kind       | Поведение                                                                                                  |
-|------------|------------------------------------------------------------------------------------------------------------|
-| `system`   | Системный объект. Read-only для config API. Не должен использоваться как custom relation side.             |
-| `standard` | Seed-defined объект. Видим в config API, не удаляется, может расширяться custom fields и custom relations. |
-| `custom`   | Пользовательский объект. Может создаваться/удаляться через config API, расширяться fields/relations.       |
-| `view`     | Metadata-only/read-only режим для будущих view-объектов. Не используется как physical side relation.       |
-
-### Field types
-
-Поддержанные seed field types:
-
-| Seed type     | SQL preset                    |
-|---------------|-------------------------------|
-| `uuid`        | `uuid`                        |
-| `text`        | `text`                        |
-| `int`         | `integer`                     |
-| `decimal`     | `numeric(14,2)`               |
-| `bool`        | `boolean`                     |
-| `date`        | `date`                        |
-| `datetime`    | `timestamp without time zone` |
-| `json`        | `jsonb`                       |
-| `select`      | `text`                        |
-| `multiselect` | `jsonb`                       |
-| `reference`   | `uuid`                        |
-
-Rules:
-
-- тип нормализуется через `FieldTypeCatalog.from_seed_type`;
-- `options` разрешены только для `select` и `multiselect`;
-- `default` trim-ится, пустая строка становится `None`;
-- PostgreSQL default канонизируется перед diff-сравнением;
-- изменение типа существующего поля запрещено в MVP;
-- `FieldKind.SYSTEM` не patch-ится как обычное runtime field и не показывается в config API responses.
-
-Field kinds:
-
-| Kind       | Поведение                                                                                                                |
-|------------|--------------------------------------------------------------------------------------------------------------------------|
-| `system`   | Системное поле, например `id`, `created_at`, `updated_at`. Хранится в metadata и descriptors, скрыто в config responses. |
-| `standard` | Seed-defined поле. Видимо в config responses, не удаляется через config API.                                             |
-| `custom`   | Пользовательское поле. Может создаваться и hard-delete-иться через config API.                                           |
-
-### Indexes
-
-`IndexSeed` содержит `name`, `fields`, `is_unique`.
-
-Rules:
-
-- имя индекса валидируется как PostgreSQL identifier;
-- имена индексов должны быть глобально уникальны в tenant schema;
-- поля индекса должны существовать в object;
-- duplicate fields внутри одного index запрещены;
-- relation planning может добавить generated indexes, если нужного индекса еще нет.
-
-### PostgreSQL identifier rules
-
-Внешние identifiers валидируются `SchemaNamingStrategy.validate_identifier`.
-
-Rules:
-
-- значение обязательно и trim-ится;
-- максимальная длина - 63 символа;
-- формат - `^[a-z][a-z0-9_]*$`;
-- generated identifiers при overflow получают deterministic hash suffix.
-
-Generated names:
-
-| Артефакт                | Pattern                                               |
-|-------------------------|-------------------------------------------------------|
-| Primary key             | `pk_{table_name}`                                     |
-| FK constraint           | `fk_{source_table}_{source_column}_{target_table}`    |
-| FK index                | `idx_{table}_{column}`                                |
-| One-to-one unique index | `uq_{table}_{column}`                                 |
-| M2M unique pair index   | `uq_{relation_table}_{source_column}_{target_column}` |
-
-### Defaults canonicalization
-
-`PostgresFieldCanonicalizer` приводит seed defaults и PostgreSQL catalog defaults к стабильной строке.
-
-Важные правила:
-
-- `now()` и `current_timestamp` для timestamp становятся `CURRENT_TIMESTAMP`;
-- строки SQL-quote-ятся стабильно;
-- UUID functions `gen_random_uuid()` и `uuid_generate_v4()` сохраняются как functions;
-- date/timestamp literals получают явный cast;
-- boolean `1`/`'1'` становится `true`, `0`/`'0'` становится `false`;
-- integer/numeric приводятся к canonical numeric string;
-- jsonb сериализуется с sorted keys и compact separators.
-
-Unsupported default для типа приводит к `SeedValidationError` при seed load или `UnsupportedSchemaChangeError` при
-inspection/diff.
-
-## Relations
-
-Relations являются отдельной metadata-моделью, а не только полями типа `reference`.
-
-`RelationEntity` хранит:
-
-- `name`, `label`, `relation_type`;
-- `source_object_id`, `target_object_id`;
-- `owning_object_id`, `fk_field_id`;
-- `referenced_object_id`, `referenced_field_id`;
-- `source_relation_name`, `target_relation_name`;
-- `relation_table_name`, `source_join_column_name`, `target_join_column_name`;
-- `on_delete`, `is_required`, `is_unique`, `kind`, `settings`.
-
-`source_relation_name` и `target_relation_name` - API names на соответствующих сторонах descriptor-а. Они уникальны
-внутри стороны object-а.
-
-### Relation types
-
-| Type           | Physical shape                                                                              | Collection side        |
-|----------------|---------------------------------------------------------------------------------------------|------------------------|
-| `many_to_one`  | FK column на source/owning object, FK на target/referenced object, обычный FK index         | target side            |
-| `one_to_one`   | FK column на source/owning object, FK на target/referenced object, unique index на FK field | нет collection side    |
-| `one_to_many`  | FK column на target/owning object, FK на source/referenced object, обычный FK index         | source side            |
-| `many_to_many` | отдельная join table с двумя FK, unique pair index и индексами по каждой join column        | обе стороны collection |
-
-### FK-based relations
-
-FK-based types: `many_to_one`, `one_to_one`, `one_to_many`.
-
-Rules:
-
-- `fk_field` обязателен и должен иметь seed type `reference`;
-- `referenced_field` обязателен, default - `id`;
-- referenced field должен быть `id` с `is_nullable=False` или иметь unique index;
-- `many_to_one` и `one_to_one`: owning object должен быть source, referenced object - target;
-- `one_to_many`: owning object должен быть target, referenced object - source;
-- `ObjectKind.VIEW` нельзя использовать как physical owning/referenced side;
-- `one_to_one` добавляет/требует unique index на FK field;
-- `many_to_one` и `one_to_many` добавляют/требуют обычный FK index;
-- `on_delete` нормализуется в `restrict`, `cascade`, `set_null`, `no_action`.
-
-Default API names:
-
-- `many_to_one` / `one_to_one`:
-    - source side: target singular;
-    - target side: source plural;
-- `one_to_many`:
-    - source side: target plural;
-    - target side: source singular.
-
-### Many-to-many relations
-
-`many_to_many` хранится через отдельную physical join table.
-
-Rules:
-
-- self `many_to_many` запрещен в MVP;
-- source и target objects не должны быть `view`;
-- `relation_table_name` можно передать явно, иначе default - `{source_plural}_{target_plural}`;
-- `source_join_column_name` default - `{source_singular}_id`;
-- `target_join_column_name` default - `{target_singular}_id`;
-- join column names должны отличаться;
-- relation table name не должен конфликтовать с object table name или другой relation table;
-- join table получает `id uuid not null default gen_random_uuid()`;
-- join table получает `created_at timestamp not null default CURRENT_TIMESTAMP`;
-- обе join columns имеют SQL type `uuid`, `not null`;
-- создается primary key по `id`;
-- создается unique index по pair `(source_join_column, target_join_column)`;
-- создаются обычные indexes по каждой join column;
-- создаются два FK на source/target object `id`;
-- `on_delete` применяется к обоим FK.
-
-Default API names:
-
-- source side: target plural;
-- target side: source plural.
-
-### Relation diff preservation
-
-Seed diff не должен автоматически удалять custom relation artifacts, которые уже есть в metadata.
-
-`DiffSchemaUseCase._build_preserved_artifacts` собирает из metadata:
-
-- M2M relation tables;
-- M2M unique/FK indexes;
-- M2M FK constraints;
-- FK-based relation index;
-- FK-based FK constraint.
-
-Эти artifacts передаются в `PostgresSchemaPlanService` как `PreservedSchemaArtifacts`, чтобы diff не удалял их как
-"лишние" только потому, что они отсутствуют в seed.
-
-Relation metadata reconcile:
-
-- seed relations синхронизируются по стабильному `name`;
-- matching relation сохраняет id и `created_at`;
-- изменение physical shape existing seed relation запрещено;
-- relations, которых нет в seed, сохраняются только если все их referenced objects/fields еще существуют;
-- если relation ссылается на удаленный object/field, она не сохраняется при reconcile.
-
-## Create и diff flows
-
-### `CreateSchemaUseCase`
-
-Flow:
-
-1. загрузить и валидировать seed;
-2. проверить, что physical schema отсутствует;
-3. построить create plan;
-4. применить PostgreSQL DDL;
-5. записать datasource/object/field/relation metadata.
-
-Create plan порядок:
-
-1. `CreateSchemaOperation`;
-2. `CreateTableOperation` для всех object tables и M2M tables;
-3. `AddColumnOperation`;
-4. `AddPrimaryKeyOperation`;
-5. `CreateIndexOperation`;
-6. `AddForeignKeyOperation`.
-
-### `DiffSchemaUseCase`
-
-Flow:
-
-1. загрузить и валидировать seed;
-2. прочитать metadata snapshot;
-3. проинспектировать physical PostgreSQL schema;
-4. собрать preserved artifacts из metadata relations;
-5. построить diff plan;
-6. применить DDL;
-7. reconcile metadata из validated spec;
-8. вернуть `DiffSchemaResultDTO` со статистикой операций.
-
-Diff result содержит:
-
-- `tenant_id`;
-- `schema_name`;
-- `seed_path`;
-- `total_operations`;
-- `destructive_operations`;
-- `non_destructive_operations`;
-- `has_changes`;
-- `has_destructive_changes`.
-
-## Migration/diff rules
-
-`PostgresSchemaPlanService` сравнивает desired physical snapshot с actual PostgreSQL snapshot.
-
-Destructive operations:
-
-- `DropTableOperation`;
-- `DropColumnOperation`;
-- `DropIndexOperation`;
-- `DropForeignKeyOperation`;
-- `DropPrimaryKeyOperation`.
-
-Ordering rules:
-
-- сначала удаляются FK, которые могут блокировать изменения;
-- затем удаляются indexes;
-- затем primary key changes;
-- затем лишние columns/tables;
-- затем создаются missing tables/columns/PK;
-- nullable/default alters идут до создания indexes/FK;
-- indexes создаются до FK, чтобы referenced unique constraints существовали до FK creation.
-
-Safe/unsafe rules:
-
-- custom physical tables с `c_` prefix не удаляются seed diff-ом, если их нет в seed;
-- tables из `PreservedSchemaArtifacts` не удаляются;
-- retained column type mismatch запрещен;
-- retained column default changes разрешены через `AlterColumnDefaultOperation`;
-- retained column `not null -> nullable` разрешен;
-- retained column `nullable -> not null` запрещен;
-- добавление required column в существующую table без default запрещено;
-- required columns для новой table разрешены;
-- retained primary key shape change запрещен, кроме удаления PK при отсутствии desired PK и если table не preserved;
-- unsupported PostgreSQL column types при inspection приводят к `UnsupportedSchemaChangeError`;
-- backend должен быть PostgreSQL, иначе PostgreSQL adapters поднимают `UnsupportedSchemaBackendError`.
-
-## Config API
-
-Все config routes монтируются под `/api/config` и используют authenticated request context. Tenant id берется из
-principal, а не из request body.
-
-Read routes используют `POST` bodies вместо `GET`.
-
-### Object routes
-
-| Method   | Path                         | Request                           | Response                            |
-|----------|------------------------------|-----------------------------------|-------------------------------------|
-| `POST`   | `/api/config/objects/list`   | none                              | `ListCustomObjectsResponseSchema`   |
-| `POST`   | `/api/config/objects/create` | `CreateCustomObjectRequestSchema` | `CustomObjectResponseSchema`, `201` |
-| `DELETE` | `/api/config/objects/delete` | body `object_id`                  | empty `204`                         |
-| `POST`   | `/api/config/objects/schema` | body `object_id`                  | `CustomObjectResponseSchema`        |
-
-`CreateCustomObjectRequestSchema`:
-
-- `singular_name`;
-- `plural_name`;
-- `singular_label`;
-- `plural_label`;
-- `description`;
-- `fields`.
-
-Create object rules:
-
-- создается только `ObjectKind.CUSTOM`;
-- `singular_name` и `plural_name` автоматически получают `c_` prefix;
-- singular/plural names должны быть свободны в tenant metadata;
-- physical table создается сразу;
-- системные поля создаются автоматически:
-    - `id uuid not null default gen_random_uuid()`;
-    - `created_at datetime not null default CURRENT_TIMESTAMP`;
-    - `updated_at datetime not null default CURRENT_TIMESTAMP`;
-- для custom object initial fields разрешены required fields без default, потому что table еще новая;
-- создается unique index по `id` через `c_<plural>_id_uq` или hash-shortened fallback.
-
-Delete object rules:
-
-- удалить можно только `ObjectKind.CUSTOM`;
-- удаление hard-delete-ит physical table;
-- metadata objects пересобираются через reconcile без удаленного object;
-- `standard`, `system`, `view` objects не удаляются.
-
-Config response object:
-
-- `id`, timestamps;
-- `singular_name`, `plural_name`;
-- labels, description;
-- `kind`;
-- `fields`.
-
-Системные поля в object config responses не возвращаются.
-
-### Field routes
-
-| Method   | Path                                | Request                 | Response                     |
-|----------|-------------------------------------|-------------------------|------------------------------|
-| `POST`   | `/api/config/objects/fields/create` | `object_id`, `field`    | `CustomObjectResponseSchema` |
-| `DELETE` | `/api/config/objects/fields/delete` | `object_id`, `field_id` | `CustomObjectResponseSchema` |
-
-`CustomFieldRequestSchema`:
-
-- `field_name`;
-- `type`;
-- `label`;
-- `description`;
-- `is_nullable`;
-- `default_value`;
-- `options`;
-- `settings`.
-
-Create field rules:
-
-- object должен быть `standard` или `custom`;
-- `system`/`view` objects не расширяются custom fields;
-- добавляется `FieldKind.CUSTOM`;
-- physical column создается сразу;
-- добавление required field без default в существующий object запрещено как unsafe;
-- type должен быть поддержан `FieldTypeCatalog`;
-- `options` разрешены только для `select`/`multiselect`;
-- duplicate field name внутри object запрещен.
-
-Delete field rules:
-
-- удалить можно только `FieldKind.CUSTOM`;
-- physical column удаляется hard-delete-ом;
-- metadata field удаляется из object;
-- `system` и `standard` fields не удаляются.
-
-### Relation routes
-
-| Method   | Path                                   | Request                       | Response                        |
-|----------|----------------------------------------|-------------------------------|---------------------------------|
-| `POST`   | `/api/config/objects/relations/create` | `CreateRelationRequestSchema` | `RelationResponseSchema`, `201` |
-| `DELETE` | `/api/config/objects/relations/delete` | body `relation_id`            | empty `204`                     |
-| `POST`   | `/api/config/objects/relations/list`   | body `object_id`              | `ListRelationsResponseSchema`   |
-| `POST`   | `/api/config/objects/relations/schema` | body `object_id`              | `ListRelationsResponseSchema`   |
-
-`RelationRequestSchema`:
-
-- `name`;
-- `relation_type`;
-- `source_object_id`;
-- `target_object_id`;
-- optional `label`;
-- optional `owning_object_id`;
-- optional `fk_field_name`;
-- optional `referenced_object_id`;
-- `referenced_field_name`, default `id`;
-- optional `source_relation_name`;
-- optional `target_relation_name`;
-- optional `relation_table_name`;
-- optional `source_join_column_name`;
-- optional `target_join_column_name`;
-- `on_delete`, default `restrict`;
-- `is_required`, default `false`;
-- `settings`.
-
-Create relation rules:
-
-- relation name - PostgreSQL identifier and unique within tenant;
-- source/target objects must exist and belong to tenant;
-- source/target/owning/referenced objects must be `standard` or `custom`;
-- `system`/`view` objects нельзя использовать для custom relation;
-- created relation всегда получает `kind="custom"`;
-- API names должны быть уникальны на соответствующей стороне object-а;
-- `on_delete` поддерживает `restrict`, `cascade`, `set_null`, `no_action` и варианты с пробелом.
-
-Config-created FK relation rules:
-
-- `referenced_field_name` в MVP может ссылаться только на primary `id`;
-- если FK field отсутствует, он создается как `custom` field типа `reference`;
-- если создается required FK field на non-empty table, операция запрещается;
-- если FK field уже существует, он должен быть `reference`, не `system`, и не должен быть bound к другой relation;
-- создается FK index или unique index для `one_to_one`;
-- создается FK constraint;
-- если был создан новый FK field, object metadata сохраняется вместе с новым field.
-
-Config-created M2M rules:
-
-- self M2M запрещен;
-- relation table name не должен совпадать с object table и существующей relation table;
-- создаются join table, columns, PK, unique pair index, two FK indexes, two FK constraints;
-- duplicate pair предотвращается physical unique index-ом.
-
-Delete relation rules:
-
-- удалить можно только `kind="custom"`;
-- system/standard seed relations не удаляются через config API;
-- для M2M relation table должна быть пустой, иначе удаление запрещено;
-- для FK-based relation FK column должна не иметь non-null values, иначе удаление запрещено;
-- удаляются FK constraint и index;
-- если FK field был `custom`, удаляется physical column и field metadata;
-- после physical DDL удаляется relation metadata.
-
-### Error mapping
-
-HTTP controllers используют стандартную FastAPI error body с `detail`.
-
-Основные статусы:
-
-- `401` - нет authenticated principal или tenant id;
-- `404` - object/field/relation не найден;
-- `409` - physical schema/backend/metadata inconsistency/runtime descriptor conflicts;
-- `422` - domain/schema validation errors и invalid operation errors.
-
-## Runtime resolver
-
-`SchemaRegistryRuntimeObjectResolver` строит immutable runtime descriptors из metadata.
-
-Public methods:
-
-- `resolve(tenant_id, object_name)` - ищет object по singular name;
-- `resolve_by_id(tenant_id, object_id)` - ищет object по id.
-
-Resolver rules:
-
-- object tenant id должен совпадать с requested tenant;
-- object data_source id должен совпадать с datasource tenant;
-- descriptor обязан иметь field `id`;
-- если object не найден или tenant mismatch - `RuntimeObjectNotFoundError`;
-- если metadata datasource mismatch - `SchemaRegistryMetadataInconsistentError`;
-- если нет `id` field - `RuntimeObjectDescriptorError`;
-- если `relation_service` не передан, `relations=()`.
-
-`RuntimeObjectDescriptor`:
-
-- `schema_name`;
-- `object_name` - singular name;
-- `table_name` - plural/physical table name;
-- `pk` - всегда `id`;
-- `title_field` - сейчас `id`;
-- `fields`;
-- `relations`;
-- `kind`.
-
-`RuntimeFieldDescriptor`:
-
-- `name`;
-- `type_code`;
-- `is_nullable`;
-- `default_value`;
-- `options`;
-- `settings`;
-- `kind`.
-
-`RuntimeRelationDescriptor`:
-
-- relation identity/name/type;
-- source/target objects as plural names;
-- source/target API names;
-- owning/referenced object names;
-- FK field and referenced field;
-- M2M table/join columns;
-- `on_delete`;
-- `is_required`;
-- `is_collection`;
-- `is_virtual`;
-- `is_unique`;
-- `kind`;
-- `settings`.
-
-`is_collection`:
-
-- `many_to_many` - `true` на обеих сторонах;
-- `one_to_many` - `true` на source side;
-- `many_to_one` - `true` на target side;
-- `one_to_one` - `false` на обеих сторонах.
-
-`is_virtual`:
-
-- `many_to_many` - всегда `true`;
-- FK-based relation - `true`, если текущий object не является `owning_object`;
-- FK-based relation - `false`, если текущий object физически хранит FK column.
-
-## Management CLI и bootstrap
-
-Management command:
+- object feature config API для включения, выключения, обновления и чтения feature metadata runtime-объектов;
+- runtime descriptor resolver для gateway/use case потребителей;
+- adapter для `tenancy` onboarding через `SchemaRegistryTenantSchemaBootstrapAdapter`;
+- management CLI `dnk-manage schema-registry diff`.
+
+В текущей реализации не найдено:
+
+- CRUD runtime-записей внутри `schema_registry`;
+- background jobs, scheduled jobs, message consumers, outbox/inbox;
+- эвристический rename объектов/полей/relations при diff.
+
+## Public Functionality
+
+- создать физическую PostgreSQL schema tenant и записать initial metadata из default или custom seed;
+- применить diff seed/spec к уже существующей tenant schema;
+- получить runtime object description по singular name;
+- resolve runtime object descriptor по singular name или object id;
+- создать, описать, перечислить и удалить custom object;
+- добавить и удалить custom field у `standard` или `custom` object;
+- создать, удалить и перечислить custom relations для object;
+- включить, выключить, обновить, получить и перечислить object feature configs для runtime object;
+- проинспектировать PostgreSQL schema и применить migration plan;
+- запустить schema diff из management CLI.
+
+## Main Flows / Use Cases
+
+| Use Case                           | Input                              | Output                        | Description                                                                                                                                                   |
+|------------------------------------|------------------------------------|-------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `CreateSchemaUseCase`              | `CreateSchemaCommand`              | `None`                        | Загружает seed, проверяет отсутствие physical schema, строит create plan, применяет DDL и записывает datasource/object/field/relation metadata.               |
+| `DiffSchemaUseCase`                | `DiffSchemaCommand`                | `DiffSchemaResultDTO`         | Загружает seed, читает metadata snapshot, инспектирует physical schema, строит diff plan с preserved relation artifacts, применяет DDL и reconciles metadata. |
+| `DescribeRuntimeObjectUseCase`     | `tenant_id`, `object_name`         | `RuntimeObjectDescriptionDTO` | Проверяет datasource/object consistency и возвращает описание fields; при наличии relation service добавляет relation descriptions через resolver.            |
+| `ListCustomObjectsUseCase`         | `ListCustomObjectsQuery`           | `list[CustomObjectDTO]`       | Возвращает runtime objects tenant для config API через `SchemaConfigRepositoryProtocol`.                                                                      |
+| `CreateCustomObjectUseCase`        | `CreateCustomObjectCommand`        | `CustomObjectDTO`             | Создает custom object metadata, system fields и physical table через config repository.                                                                       |
+| `DescribeCustomObjectUseCase`      | `CustomObjectByIdQuery`            | `CustomObjectDTO`             | Возвращает config-схему runtime object по id.                                                                                                                 |
+| `DeleteCustomObjectUseCase`        | `DeleteCustomObjectCommand`        | `None`                        | Hard-delete custom object table и metadata.                                                                                                                   |
+| `AddCustomFieldUseCase`            | `AddCustomFieldCommand`            | `CustomObjectDTO`             | Добавляет custom field metadata и physical column.                                                                                                            |
+| `DeleteCustomFieldUseCase`         | `DeleteCustomFieldCommand`         | `CustomObjectDTO`             | Удаляет custom field metadata и physical column.                                                                                                              |
+| `CreateRelationUseCase`            | `CreateRelationCommand`            | `RelationDTO`                 | Создает custom FK-based или M2M relation, сначала применяя targeted DDL.                                                                                      |
+| `DeleteRelationUseCase`            | `DeleteRelationCommand`            | `None`                        | Удаляет custom relation и physical artifacts после safety checks по данным.                                                                                   |
+| `ListObjectRelationsUseCase`       | `ListObjectRelationsQuery`         | `list[RelationDTO]`           | Возвращает relations, где object является source или target.                                                                                                  |
+| `EnableObjectFeatureUseCase`       | `EnableObjectFeatureCommand`       | `ObjectFeatureConfigDTO`      | Создает или обновляет custom feature config runtime object, затем переводит его в `enabled`.                                                                  |
+| `DisableObjectFeatureUseCase`      | `DisableObjectFeatureCommand`      | `ObjectFeatureConfigDTO`      | Переводит custom feature config runtime object в `disabled`.                                                                                                  |
+| `UpdateObjectFeatureConfigUseCase` | `UpdateObjectFeatureConfigCommand` | `ObjectFeatureConfigDTO`      | Заменяет JSON config существующей custom feature metadata.                                                                                                    |
+| `GetObjectFeatureConfigUseCase`    | `GetObjectFeatureQuery`            | `ObjectFeatureConfigDTO`      | Возвращает feature config по tenant/object/feature.                                                                                                           |
+| `ListObjectFeaturesUseCase`        | `ListObjectFeaturesQuery`          | `ObjectFeatureConfigListDTO`  | Возвращает все feature configs runtime object tenant.                                                                                                         |
+
+## Domain Model
+
+### `DataSourceEntity`
+
+- ID: `DataSourceIdVO`.
+- Tenant scope: хранит `tenant_id: EntityIdVO`.
+- Fields: `id`, `created_at`, `updated_at`, `tenant_id`, `data_source_type`, `schema_name`, optional
+  `connection_dsn`.
+- Value Objects: `DataSourceIdVO`, `SchemaNameVO`, `DataSourceTypeVO`, `ConnectionDsnVO`.
+- Factory methods: `DataSourceEntity.create(...)` выставляет timestamps и default `POSTGRES`.
+- Update methods: в entity не найдено.
+- Domain errors: `DataSourceAlreadyExistsError`, `DataSourceNotFoundError`.
+- Invariants: `SchemaNameVO` требует lowercase PostgreSQL identifier до 63 символов.
+
+### `ObjectEntity`
+
+- ID: `RuntimeObjectIdVO`.
+- Tenant scope: хранит `tenant_id: EntityIdVO` и `data_source_id: DataSourceIdVO`.
+- Fields: timestamps, `kind`, `object_name`, `object_label`, `description`, `fields`.
+- Value Objects: `ObjectNameVO`, `ObjectLabelVO`, `ObjectKind`, `RuntimeObjectIdVO`.
+- Factory methods: `ObjectEntity.create(...)`, `add_field(...)`, `add_fields_from_seed(...)`.
+- Update methods: `rename(...)`, `rename_field(...)`, `remove_field(...)`, `replace_field_settings(...)`,
+  `merge_field_settings(...)`, `replace_field_options(...)`.
+- Domain errors: `FieldAlreadyExistsError`, `FieldNotFoundError`, `ObjectNameAlreadyExistsError`,
+  `InvalidObjectOperationError`.
+- Invariants: singular/plural names are PostgreSQL identifiers; plural name must end with `s`; field names are unique
+  inside object; only `custom` objects can be deleted; `standard` and `custom` can accept custom fields.
+
+### `FieldEntity`
+
+- ID: `RuntimeFieldIdVO`.
+- Tenant scope: indirect через owning `ObjectEntity.object_id`.
+- Fields: timestamps, `object_id`, `kind`, `field_name`, `field_type`, `label`, `description`, `is_nullable`,
+  `default_value`, `options`, `settings`.
+- Value Objects: `FieldNameVO`, `FieldLabelVO`, `FieldTypeVO`, `FieldKind`, `RuntimeFieldIdVO`.
+- Factory methods: `FieldEntity.create(...)`.
+- Update methods: `rename(...)`, `replace_settings(...)`, `merge_settings(...)`, `replace_options(...)`,
+  `clear_options(...)`, `update_from_spec(...)`.
+- Domain errors: `InvalidFieldOperationError`, `FieldAlreadyExistsError`, `FieldNotFoundError`.
+- Invariants: `options` разрешены только для `select`/`multiselect`; изменение типа существующего поля запрещено через
+  `change_type(...)`; удалить можно только `FieldKind.CUSTOM`; system fields не patch-ятся как обычные runtime fields.
+
+### `RelationEntity`
+
+- ID: `RuntimeRelationIdVO`.
+- Tenant scope: хранит `tenant_id: EntityIdVO` и `data_source_id: DataSourceIdVO`.
+- Fields: source/target object ids, owning/referenced sides, optional FK field ids, relation API names, optional M2M
+  table/join column names, `on_delete`, `is_required`, `is_unique`, `kind`, `settings`.
+- Value Objects: `RuntimeRelationIdVO`, `RuntimeObjectIdVO`, `RuntimeFieldIdVO`, `RelationTypeEnum`.
+- Factory methods: `RelationEntity.create(...)`.
+- Update methods: в entity не найдено.
+- Domain errors: `RelationNotFoundError`, `InvalidRelationOperationError`, `UnsupportedSchemaChangeError`.
+- Invariants: `RelationService` preserves existing relation ids by name during reconcile, forbids changing physical
+  shape of existing seed relation, and preserves non-seed relations only while referenced objects/fields still exist.
+
+### Seed And Runtime Descriptor Models
+
+- Raw seed dataclasses: `SchemaSeed`, `ObjectSeed`, `FieldSeed`, `IndexSeed`, `RelationSeed`.
+- Validated spec dataclasses: `ValidatedSchemaSpec`, `ValidatedObjectSpec`, `ValidatedFieldSpec`,
+  `ValidatedIndexSpec`, `ValidatedRelationSpec`.
+- Runtime descriptors: `RuntimeObjectDescriptor`, `RuntimeFieldDescriptor`, `RuntimeRelationDescriptor`.
+- Supported seed field types: `uuid`, `text`, `int`, `decimal`, `bool`, `date`, `datetime`, `json`, `select`,
+  `multiselect`, `reference`.
+- Supported relation types: `many_to_one`, `one_to_one`, `one_to_many`, `many_to_many`.
+
+## Application Layer
+
+### Commands
+
+Все command/input dataclasses оформлены как `@dataclass(frozen=True, slots=True)`:
+
+- `CreateSchemaCommand`: `tenant_id`, `schema_name`, `seed_path`;
+- `DiffSchemaCommand`: `tenant_id`, `seed_path`;
+- `CreateCustomObjectCommand`: tenant id, singular/plural names, labels, description, initial `CustomFieldInput`;
+- `DeleteCustomObjectCommand`: `tenant_id`, `object_id`;
+- `AddCustomFieldCommand`: `tenant_id`, `object_id`, `CustomFieldInput`;
+- `DeleteCustomFieldCommand`: `tenant_id`, `object_id`, `field_id`;
+- `CreateRelationCommand`: `tenant_id`, `RelationInput`;
+- `DeleteRelationCommand`: `tenant_id`, `relation_id`.
+- `EnableObjectFeatureCommand`, `DisableObjectFeatureCommand`, `UpdateObjectFeatureConfigCommand`: tenant/object id,
+  `FeatureCodeVO`, optional JSON config.
+
+### Queries
+
+- `ListCustomObjectsQuery`: `tenant_id`.
+- `CustomObjectByIdQuery`: `tenant_id`, `object_id`.
+- `ListObjectRelationsQuery`: `tenant_id`, `object_id`.
+- `GetObjectFeatureQuery`: `tenant_id`, `object_id`, `feature_code`.
+- `ListObjectFeaturesQuery`: `tenant_id`, `object_id`.
+
+### DTOs
+
+- `DiffSchemaResultDTO`: статистика diff plan и destructive/non-destructive операций.
+- `RuntimeObjectDescriptionDTO`, `RuntimeFieldDescriptionDTO`, `RuntimeRelationDescriptionDTO`: application DTO для
+  model/schema descriptions.
+- `CustomObjectDTO`, `CustomFieldDTO`: config API object/field result.
+- `RelationDTO`: config API relation result with object/field ids, physical names and settings.
+- `ObjectFeatureConfigDTO`, `ObjectFeatureConfigListDTO`: object feature config result DTOs.
+
+### Services
+
+- `SchemaSeedService` читает seed через `SeedReaderPort`, нормализует names/kinds/defaults/options/indexes/relations и
+  возвращает `ValidatedSchemaSpec`.
+- `PostgresSchemaService` координирует `TenantSchemaInspectorPort` и `TenantSchemaExecutorPort`.
+- `SchemaRegistryMetadataReadService` собирает `SchemaRegistryMetadataSnapshot` и проверяет tenant/data_source/object/
+  field consistency.
+- `SchemaRegistryMetadataWriteService` создает, заменяет или reconciles datasource/object/field/relation metadata.
+- `PostgresSchemaPlanService` строит create/diff `MigrationPlan`.
+- `PostgresFieldCanonicalizer` мапит field types в SQL presets и канонизирует seed/PostgreSQL defaults.
+
+### Runtime Resolver
+
+- `SchemaRegistryRuntimeObjectResolver.resolve(tenant_id, object_name)` ищет object по singular name.
+- `resolve_by_id(tenant_id, object_id)` ищет object по id.
+- Resolver проверяет tenant/data_source consistency, требует наличие field `id`, строит immutable
+  `RuntimeObjectDescriptor` и возвращает `relations=()` без `RelationService`.
+- Field capabilities берутся из defaults by type и могут переопределяться через `settings` keys `is_filterable`,
+  `filterable`, `is_sortable`, `sortable`.
+- Relation descriptors вычисляют `is_collection`: `many_to_many` на обеих сторонах, `one_to_many` на source side,
+  `many_to_one` на target side, `one_to_one` never collection.
+- Relation descriptors вычисляют `is_virtual`: `many_to_many` всегда virtual; FK-based relation virtual, если текущий
+  object не является owning object.
+
+### Seed And Migration Rules
+
+- `ObjectKind.CUSTOM` нормализуется в `c_` namespace; non-custom objects не могут использовать `c_` prefix.
+- `FieldTypeCatalog` поддерживает seed types `uuid`, `text`, `int`, `decimal`, `bool`, `date`, `datetime`, `json`,
+  `select`, `multiselect`, `reference`.
+- `PostgresFieldCanonicalizer` maps seed types to SQL presets: `reference` and `uuid` to `uuid`, `decimal` to
+  `numeric(14,2)`, `datetime` to `timestamp without time zone`, `json`/`multiselect` to `jsonb`.
+- Defaults canonicalization нормализует `now()`/`current_timestamp` в `CURRENT_TIMESTAMP`, SQL strings, UUID functions,
+  booleans, numbers and jsonb literals.
+- `SchemaNamingStrategy` validates PostgreSQL identifiers with `^[a-z][a-z0-9_]*$`, max length 63, and shortens
+  generated identifiers with deterministic hash suffix.
+- Create plan order: create schema, create tables, add columns, add primary keys, create indexes, add foreign keys.
+- Diff plan protects custom `c_` tables and preserved relation artifacts; retained column type changes and unsafe
+  `nullable -> not null` changes are rejected.
+- FK-based relations require `reference` FK field and referenced field `id` or another unique field in seed planning.
+- `many_to_many` relations create join table with `id`, `created_at`, two UUID join columns, primary key, unique pair
+  index, FK indexes and two FK constraints.
+
+### Repository Protocols
+
+- `DataSourceRepositoryProtocol`: `get_by_tenant_id`, `add`, `update`.
+- `ObjectRepositoryProtocol`: read by singular/plural/id, `save`, `list_by_tenant_id`, `replace_all_for_tenant`,
+  `reconcile_for_tenant`.
+- `RelationRepositoryProtocol`: read by id/name/object/tenant, `add`, `delete`, `replace_all_for_tenant`,
+  `clear_for_tenant`, `reconcile_for_tenant`.
+- `SchemaConfigRepositoryProtocol`: config object list/describe/create/delete.
+- `SchemaConfigFieldRepositoryProtocol`: config field add/delete.
+- `SchemaConfigRelationRepositoryProtocol`: config relation create/delete/list.
+- `ObjectFeatureConfigRepositoryProtocol`: get/save/list object feature configs.
+- `SeedReaderPort`, `TenantSchemaInspectorPort`, `TenantSchemaExecutorPort`.
+
+## Infrastructure / Persistence
+
+### `SqlAlchemyDataSourceRepository`
+
+- File: `src/modules/schema_registry/infrastructure/repository/data_source_repository.py`.
+- Implements: `DataSourceRepositoryProtocol`.
+- Storage: SQLAlchemy ORM table `data_sources`.
+- Runtime object: не используется.
+- Tenant handling: repository не хранит tenant; методы принимают `EntityIdVO`.
+- Mapping: `_to_model` и `_map_model` явно конвертируют `UUID` в `DataSourceIdVO`/`EntityIdVO`.
+- Errors: not-found возвращается как `None`; domain errors поднимает service layer.
+
+### `SqlAlchemyObjectRepository`
+
+- File: `src/modules/schema_registry/infrastructure/repository/object_repository.py`.
+- Implements: `ObjectRepositoryProtocol`.
+- Storage: SQLAlchemy ORM tables `objects` и `fields`.
+- Runtime object: не используется.
+- Tenant handling: repository не хранит tenant; tenant передается в query/reconcile methods.
+- Mapping: `_map_model` строит `ObjectEntity`, `_map_field_model` строит `FieldEntity`; `save` заменяет field rows для
+  одного object.
+- Errors: not-found возвращается как `None`.
+
+### `SqlAlchemyRelationRepository`
+
+- File: `src/modules/schema_registry/infrastructure/repository/relation_repository.py`.
+- Implements: `RelationRepositoryProtocol`.
+- Storage: SQLAlchemy ORM table `relations`.
+- Runtime object: не используется.
+- Tenant handling: repository не хранит tenant; list/delete/reconcile фильтруются по `tenant_id`.
+- Mapping: `_to_model` и `_map_model` конвертируют relation ids, object ids, field ids и `RelationTypeEnum`.
+- Errors: not-found возвращается как `None`.
+
+### `SchemaConfigRepository`
+
+- File: `src/modules/schema_registry/infrastructure/config/schema_config_repository.py`.
+- Implements: `SchemaConfigRepositoryProtocol`, `SchemaConfigFieldRepositoryProtocol`,
+  `SchemaConfigRelationRepositoryProtocol`.
+- Storage: metadata через object/relation repositories; physical DDL через `TenantSchemaExecutorPort`; safety checks
+  through `TenantSchemaInspectorPort`.
+- Runtime object: создает physical tables/columns/indexes/FK для custom config, но не работает с runtime rows.
+- Tenant handling: каждый command/query содержит `tenant_id`; datasource schema name читается через `DataSourceService`.
+- Mapping: `_to_object_dto`, `_to_field_dto`, `_to_relation_dto`; system fields скрываются из object config responses.
+- Errors: `ObjectNotFoundError`, `FieldNotFoundError`, `RelationNotFoundError`, `Invalid*OperationError`,
+  `UnsupportedSchemaChangeError`, `ObjectNameAlreadyExistsError`.
+- Key behavior:
+  - custom object names нормализуются в `c_` namespace;
+  - new custom object получает system fields `id`, `created_at`, `updated_at`;
+  - required field without default запрещен для existing object;
+  - delete relation запрещен, если M2M table has rows или FK column has non-null values;
+  - config-created FK relations в MVP могут ссылаться только на referenced field `id`.
+
+### `SqlAlchemyObjectFeatureConfigRepository`
+
+- File: `src/modules/schema_registry/infrastructure/repository/object_feature_config_repository.py`.
+- Implements: `ObjectFeatureConfigRepositoryProtocol`.
+- Storage: SQLAlchemy ORM table `object_feature_config`.
+- Runtime object: хранит metadata feature configs для runtime object, но не работает с runtime rows.
+- Tenant handling: каждый метод получает `tenant_id`.
+- Mapping: `_to_model`, `_update_model`, `_map_model` являются private methods внутри repository.
+- Errors: not-found возвращается как `None`; application use cases поднимают `ObjectFeatureConfigNotFoundError`.
+
+### `PythonModuleSeedReader`
+
+- File: `src/modules/schema_registry/infrastructure/seed/python_module_seed_reader.py`.
+- Implements: `SeedReaderPort`.
+- Storage: импортирует Python module path и читает `SCHEMA_SEED`.
+- Errors: `SeedValidationError`, если path пустой, module не найден, `SCHEMA_SEED` отсутствует или имеет неверный тип.
+
+### PostgreSQL Adapters
+
+- `PostgresTenantSchemaInspector` читает physical schema через `information_schema` и `pg_catalog`, включая tables,
+  columns, primary keys, non-primary indexes, foreign keys, `table_has_rows`, `column_has_non_null_values`.
+- `PostgresTenantSchemaExecutor` последовательно рендерит и выполняет DDL operations из `MigrationPlan`.
+- Оба adapters требуют SQLAlchemy bind с dialect `postgresql`; иначе поднимают `UnsupportedSchemaBackendError`.
+
+### `SchemaRegistryTenantSchemaBootstrapAdapter`
+
+- File: `src/modules/schema_registry/infrastructure/tenancy_schema_bootstrap_adapter.py`.
+- Implements: tenancy-owned `TenantSchemaBootstrapPort`.
+- Behavior: переводит `TenantSchemaBootstrapContext` в `CreateSchemaCommand` и вызывает `CreateSchemaUseCase.execute`.
+
+## Presentation / HTTP API
+
+Base prefix:
+
+```text
+/api
+```
+
+`src/modules/router.py` подключает `schema_registry` router under `/api`; сам router не добавляет отдельный module
+prefix. Все HTTP endpoints требуют `AuthenticatedRequestContextDep`; `tenant_id` берется из principal, не из payload.
+
+| Method   | Path                                   | Controller               | Use Case                      | Request                            | Response                            |
+|----------|----------------------------------------|--------------------------|-------------------------------|------------------------------------|-------------------------------------|
+| `POST`   | `/api/config/objects/list`             | `list_custom_objects`    | `ListCustomObjectsUseCase`    | none                               | `ListCustomObjectsResponseSchema`   |
+| `POST`   | `/api/config/objects/create`           | `create_custom_object`   | `CreateCustomObjectUseCase`   | `CreateCustomObjectRequestSchema`  | `CustomObjectResponseSchema`, `201` |
+| `DELETE` | `/api/config/objects/delete`           | `delete_custom_object`   | `DeleteCustomObjectUseCase`   | `ObjectIdRequestSchema`            | empty `204`                         |
+| `POST`   | `/api/config/objects/schema`           | `describe_custom_object` | `DescribeCustomObjectUseCase` | `ObjectIdRequestSchema`            | `CustomObjectResponseSchema`        |
+| `POST`   | `/api/config/objects/fields/create`    | `create_custom_field`    | `AddCustomFieldUseCase`       | `CreateCustomFieldRequestSchema`   | `CustomObjectResponseSchema`        |
+| `DELETE` | `/api/config/objects/fields/delete`    | `delete_custom_field`    | `DeleteCustomFieldUseCase`    | `DeleteCustomFieldRequestSchema`   | `CustomObjectResponseSchema`        |
+| `POST`   | `/api/config/objects/relations/create` | `create_relation`        | `CreateRelationUseCase`       | `CreateRelationRequestSchema`      | `RelationResponseSchema`, `201`     |
+| `DELETE` | `/api/config/objects/relations/delete` | `delete_relation`        | `DeleteRelationUseCase`       | `DeleteRelationRequestSchema`      | empty `204`                         |
+| `POST`   | `/api/config/objects/relations/list`   | `list_relations`         | `ListObjectRelationsUseCase`  | `ListObjectRelationsRequestSchema` | `ListRelationsResponseSchema`       |
+| `POST`   | `/api/config/objects/relations/schema` | `relation_schema`        | `ListObjectRelationsUseCase`  | `ListObjectRelationsRequestSchema` | `ListRelationsResponseSchema`       |
+
+HTTP error mapping:
+
+- `401`: missing principal or tenant id.
+- `404`: `ObjectNotFoundError`, `FieldNotFoundError`, `RelationNotFoundError` in endpoints that catch them.
+- `409`: `PhysicalSchemaNotFoundError`, `RuntimeObjectDescriptorError`, `SchemaRegistryMetadataInconsistentError`,
+  `UnsupportedSchemaBackendError`.
+- `422`: remaining `SchemaRegistryError` and shared `DomainError`.
+
+## Dependency Injection
+
+- Infrastructure dependencies:
+  - `presentation/depends/infrastructure.py` creates `PythonModuleSeedReader`, PostgreSQL inspector/executor,
+    SQLAlchemy repositories, id providers, `FieldTypeCatalog`, `PostgresFieldCanonicalizer`, domain services.
+  - Repositories/adapters share current `UoWDep.session`.
+- Application dependencies:
+  - `presentation/depends/application.py` creates seed/schema/metadata services, `CreateSchemaUseCase`,
+    `DiffSchemaUseCase`, `DescribeRuntimeObjectUseCase`, `SchemaRegistryRuntimeObjectResolver`.
+- Config dependencies:
+  - `presentation/depends/config.py` creates one `SchemaConfigRepository` and exposes it under object/field/relation
+    Protocol aliases, then wires config use cases.
+- Management dependencies:
+  - `presentation/depends/management.py` builds `DiffSchemaUseCase` outside FastAPI from explicit `UnitOfWorkProtocol`
+    and `ClockPort`.
+- Shared dependencies:
+  - `UoWDep`, `ClockDep`, `AuthenticatedRequestContextDep`, `EntityIdVO`, `UnitOfWork`, `UtcClock`.
+
+## Dependencies On Other Modules
+
+| Module          | Layer                                                    | Used For                                                                                                       |
+|-----------------|----------------------------------------------------------|----------------------------------------------------------------------------------------------------------------|
+| `shared`        | all layers                                               | `EntityIdVO`, `DomainError`, clock ports, UoW/session, DB base/types, authentication dependency.               |
+| `tenancy`       | infrastructure/presentation DI                           | `TenantSchemaBootstrapPort` and `TenantSchemaBootstrapContext` adapter for tenant onboarding.                  |
+| `runtime_data`  | consumer dependency, not imported by module code for DDL | Consumers use `RuntimeObjectDescriptor`; schema_registry itself does not do runtime row CRUD.                  |
+| `custom_object` | consumer dependency                                      | Record APIs use `RuntimeObjectIdVO` and descriptors; metadata/DDL remains in schema_registry config API.       |
+| `crm`           | consumer dependency                                      | CRM model description/runtime repositories resolve descriptors and rely on default seed objects.               |
+| `inventory`     | consumer dependency                                      | Inventory runtime repositories and field descriptions use schema_registry descriptors and seed objects.        |
+| `communication` | consumer dependency                                      | Communication runtime repositories/management wiring use schema_registry descriptors and default seed objects. |
+| `config`        | management/bootstrap                                     | `dnk_config.DEFAULT_SEED_MODULE` and `SCHEMA_PREFIX`.                                                          |
+
+## Events / Background Processing
+
+В текущей реализации не найдено event handlers, message consumers, scheduled jobs, queues, outbox или inbox.
+
+Найден management command:
 
 ```bash
 dnk-manage schema-registry diff <tenant_id> [--seed-path ...]
+dnk-manage schema-registry diff --all [--seed-path ...]
 ```
 
-Default `seed_path` берется из runtime schema config:
+Command зарегистрирован в `src/management/commands/schema_registry.py`. Default `seed_path` берется из
+`dnk_config.DEFAULT_SEED_MODULE`, который указывает на `src.modules.schema_registry.seed.schema_seed`.
+Режим `--all` проходит по всем tenants без status-фильтрации, использует savepoint на tenant и откатывает весь batch,
+если хотя бы один tenant завершился ожидаемой `SchemaRegistryError`.
 
-```text
-src.modules.schema_registry.seed.schema_seed
-```
+## Tests Covering This Module
 
-CLI печатает summary `DiffSchemaResultDTO` и возвращает non-zero exit code для ожидаемых `SchemaRegistryError`.
+Тесты находятся в каталоге `test/`. Каталог `tests/` в текущем workspace не найден.
 
-Tenant bootstrap:
+- Domain:
+  - `test/test_schema_registry_object_label.py`;
+  - `test/test_schema_registry_field_type_service.py`;
+  - relation/seed/domain validation scenarios in `test/test_schema_registry_seed_service.py`.
+- Application:
+  - `test/test_schema_registry_use_case.py`;
+  - `test/test_schema_registry_diff_use_case.py`;
+  - `test/test_schema_registry_describe_runtime_object_use_case.py`;
+  - `test/test_schema_registry_metadata_read_service.py`;
+  - `test/test_schema_registry_metadata_write_service.py`;
+  - `test/test_schema_registry_planning.py`.
+- Infrastructure:
+  - `test/test_schema_registry_repositories.py`;
+  - `test/test_schema_registry_postgres_executor.py`;
+  - `test/test_schema_config_repository.py`;
+  - `test/test_schema_registry_depends.py`.
+- Presentation:
+  - `test/test_schema_config_http_router.py`;
+  - `test/test_management_schema_registry_command.py`.
+- Integration / boundary:
+  - `test/test_tenant_schema_bootstrap_boundary.py`;
+  - `test/test_architecture_boundaries.py`;
+  - `test/test_inventory_schema_seed.py`;
+  - runtime descriptor usage is also covered by CRM, inventory, custom_object, communication and runtime_data tests.
 
-- `tenancy` не импортирует application layer `schema_registry` напрямую;
-- интеграция идет через tenancy-owned `TenantSchemaBootstrapPort`;
-- adapter в `schema_registry` транслирует tenant onboarding context в `CreateSchemaCommand`.
+Important gaps:
 
-Nested bootstrap и diff должны работать в одной активной `UoW / AsyncSession`.
+- `test/test_schema_config_http_router.py` currently checks object/field config routes but does not assert relation
+  config routes.
+- HTTP controller error mapping is tested indirectly in consumers more than directly for every schema_registry config
+  route.
 
-## PostgreSQL adapters
+## Known Gaps / Technical Debt
 
-`PostgresTenantSchemaInspector` читает фактическую схему через `information_schema` и `pg_catalog`:
+- Текущее отклонение от prompt path convention: canonical file is `docs/modules/schema-registry.md`; requested
+  underscore path is not used because existing docs link to the hyphen path.
+- Тестовый каталог называется `test/`, not `tests/`.
+- `SchemaConfigRepository` combines object/field/relation metadata operations and targeted PostgreSQL DDL in one large
+  infrastructure adapter.
+- `CreateSchemaUseCase` and `DiffSchemaUseCase` expose `execute(...)`, while `docs/develop-style.md` prefers async
+  `__call__(...)` for use cases.
+- Several HTTP controllers repeat error-mapping blocks; some object/field controllers include duplicated
+  `SchemaRegistryError` entries in `except` tuples.
+- `SchemaConfigRepository` type hints use a few broad/internal types, for example untyped `data_source_id` and
+  `command` parameters in private relation helpers.
+- `ObjectORM` has unique constraint only for `(tenant_id, plural_name)`; singular uniqueness is enforced by service/
+  repository logic, not by DB constraint.
 
-- schema exists;
-- base tables;
-- columns и canonical SQL type/default;
-- primary keys;
-- non-primary indexes;
-- foreign keys и `on_delete`;
-- table has rows;
-- column has non-null values.
+## Related Documentation
 
-`PostgresTenantSchemaExecutor` исполняет `MigrationPlan` последовательно:
-
-- create/drop schema/table/column;
-- alter default/nullability;
-- add/drop primary key;
-- create/drop index;
-- add/drop foreign key.
-
-Оба adapters требуют PostgreSQL dialect.
-
-## Правила совместимости и ограничения
-
-- PostgreSQL-only backend для physical schema operations.
-- Rename objects/fields/relations не infer-ится эвристически: смена natural key считается remove/add.
-- Изменение field type существующего поля запрещено.
-- Изменение physical shape существующей seed relation через diff запрещено.
-- `settings` хранятся как свободный metadata dict, но physical DDL зависит только от явных полей spec/relation.
-- `one_to_many` и `many_to_many` поддержаны в seed planning, metadata и runtime descriptors.
-- Config-created relations поддерживают FK-based и M2M сценарии, но referenced field для FK relation ограничен `id` в
-  MVP.
-- `custom_object` module не проксирует schema/DDL операции: metadata и DDL остаются в `/api/config/...`.
-
-## Тестовое покрытие
-
-Основные тестовые группы:
-
-- `test_schema_registry_seed_service.py` - seed validation/normalization;
-- `test_schema_registry_planning.py` - create/diff planning, FK/M2M/index/default/nullability rules;
-- `test_schema_registry_metadata_read_service.py` - metadata consistency;
-- `test_schema_registry_metadata_write_service.py` - metadata create/reconcile;
-- `test_schema_registry_runtime_resolver.py` - runtime descriptors и relation descriptors;
-- `test_schema_registry_repositories.py` - persistence repositories, включая relations;
-- `test_schema_config_http_router.py` - config routes registration;
-- `test_schema_config_repository.py` - config-time object/field behavior;
-- `test_schema_registry_postgres_executor.py` - PostgreSQL DDL rendering/execution;
-- `test_management_schema_registry_command.py` - CLI behavior;
-- `test_inventory_schema_seed.py` - default seed objects, indexes, FKs, M2M.
-
-## Связанные документы
-
+- [Develop Style](../develop-style.md)
+- [Inventory Module](./inventory.md)
+- [Runtime Schema](../data/runtime-schema.md)
+- [HTTP API](../interfaces/http-api.md)
 - [Management CLI](../interfaces/management-cli.md)
-- [Runtime schema](../data/runtime-schema.md)
 - [Persistence and Unit of Work](../architecture/persistence-and-uow.md)
-- [Test map](../quality/test-map.md)
+- [Test Map](../quality/test-map.md)
 
-## Source of truth
+## Source Of Truth
 
-- `src/modules/schema_registry/application/service/schema_seed_service.py`
-- `src/modules/schema_registry/application/use_case/create_schema_use_case.py`
-- `src/modules/schema_registry/application/use_case/diff_schema_use_case.py`
-- `src/modules/schema_registry/application/migration/postgres_schema_plan_service.py`
-- `src/modules/schema_registry/infrastructure/config/schema_config_repository.py`
-- `src/modules/schema_registry/runtime/resolver.py`
-- `src/modules/schema_registry/domain/relation/entity.py`
+- `src/modules/schema_registry/domain/`
+- `src/modules/schema_registry/application/`
+- `src/modules/schema_registry/infrastructure/`
+- `src/modules/schema_registry/presentation/`
+- `src/modules/schema_registry/runtime/`
 - `src/modules/schema_registry/seed/schema_seed.py`
+- `src/management/commands/schema_registry.py`
+- `test/test_schema_registry_*.py`
+- `test/test_schema_config_*.py`
+- `test/test_management_schema_registry_command.py`
+- `test/test_tenant_schema_bootstrap_boundary.py`

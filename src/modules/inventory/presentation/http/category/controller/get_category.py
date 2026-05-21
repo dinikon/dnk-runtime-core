@@ -13,7 +13,7 @@ from src.modules.inventory.presentation.depends.application import GetCategoryUs
 from src.modules.inventory.presentation.http.category.responses import (
     CategoryResponseSchema,
 )
-from src.modules.runtime_data import (
+from src.modules.runtime_data.domain.error import (
     RuntimeDataFilterError,
     RuntimeDataPersistenceError,
     RuntimeDataPolicyError,

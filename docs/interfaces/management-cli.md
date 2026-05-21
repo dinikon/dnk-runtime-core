@@ -13,7 +13,7 @@ Parser bootstrap happens in `src/management/cli.py`.
 ```text
 dnk-manage
 ├── schema-registry
-│   └── diff <tenant_id> [--seed-path ...]
+│   └── diff [<tenant_id> | --all] [--seed-path ...]
 └── communication
     ├── process-queued --tenant-id <uuid> [--limit ...]
     ├── publish-queued --tenant-id <uuid> [--limit ...]
@@ -29,7 +29,8 @@ Runs `DiffSchemaUseCase` for a tenant runtime schema.
 
 Arguments:
 
-- `tenant_id`: UUID of the tenant
+- `tenant_id`: UUID of the tenant; mutually exclusive with `--all`
+- `--all`: runs diff for every tenant without status filtering
 - `--seed-path`: optional Python module path that exports `SCHEMA_SEED`
 
 Default seed path:
@@ -40,13 +41,18 @@ Default seed path:
 
 On success:
 
-- prints one summary line:
+- for a single tenant, prints one summary line:
     - `OK tenant_id=... schema_name=... seed_path=... operations=... destructive=... non_destructive=...`
+- for `--all`, prints one `OK ...` line per successful tenant and a final summary:
+  - `SUMMARY tenants=... succeeded=... failed=... operations=... destructive=... non_destructive=... rolled_back=false`
 - exits with code `0`
 
 On expected `SchemaRegistryError`:
 
-- prints short error text to `stderr`
+- for a single tenant, prints short error text to `stderr`
+- for `--all`, prints `ERROR tenant_id=... error=...` per failed tenant, continues the remaining tenants, rolls back the
+  whole batch and prints:
+  - `SUMMARY tenants=... succeeded=... failed=... operations=... destructive=... non_destructive=... rolled_back=true`
 - exits with code `2`
 
 Unexpected exceptions are not swallowed, so traceback remains visible for debugging.
@@ -91,6 +97,8 @@ processing lease, sends it through the configured provider sender and persists t
 - CLI handler opens one `UnitOfWork`
 - management builder assembles use case from the active `uow.session`
 - commit/rollback is managed by `UnitOfWork.__aexit__`
+- `schema-registry diff --all` uses one outer `UnitOfWork` and per-tenant savepoints; any expected tenant failure rolls
+  back the whole outer transaction after all tenants are attempted
 - communication worker-by-id opens short `UnitOfWork` scopes around claim/build and result persistence
 
 ## Related

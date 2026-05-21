@@ -7,11 +7,16 @@ from src.modules.crm.application.contact.query.list_contacts_query import (
 )
 from src.modules.crm.domain.contact.error import ContactNotFoundError
 from src.modules.crm.presentation.depends.application import ListContactsUseCaseDep
+from src.modules.crm.presentation.http.contact.requests import (
+    ContactSearchRequestSchema,
+)
 from src.modules.crm.presentation.http.contact.responses import (
     ContactResponseSchema,
+    ContactSearchPaginationResponseSchema,
+    ContactSearchResponseSchema,
     ListContactsResponseSchema,
 )
-from src.modules.runtime_data import (
+from src.modules.runtime_data.domain.error import (
     RuntimeDataFilterError,
     RuntimeDataPersistenceError,
     RuntimeDataPolicyError,
@@ -54,6 +59,10 @@ async def list_contacts(
                 tenant_id=EntityIdVO.from_value(principal.tenant_id),
                 limit=limit,
                 offset=offset,
+                sort_dsl=(
+                    {"field": "created_at", "direction": "asc"},
+                    {"field": "id", "direction": "asc"},
+                ),
             )
         )
     except ContactNotFoundError as exc:
@@ -84,22 +93,88 @@ async def list_contacts(
         ) from exc
 
     return ListContactsResponseSchema(
-        items=[
-            ContactResponseSchema(
-                id=contact.id,
-                created_at=contact.created_at,
-                updated_at=contact.updated_at,
-                last_name=contact.last_name,
-                first_name=contact.first_name,
-                middle_name=contact.middle_name,
-                status=contact.status,
-                tags=contact.tags,
-            )
-            for contact in result
-        ],
+        items=[_contact_response(contact) for contact in result.items],
         limit=limit,
         offset=offset,
-        count=len(result),
+        count=len(result.items),
+    )
+
+
+@router.post(
+    "/search",
+    response_model=ContactSearchResponseSchema,
+)
+async def search_contacts(
+    payload: ContactSearchRequestSchema,
+    context: AuthenticatedRequestContextDep,
+    use_case: ListContactsUseCaseDep,
+) -> ContactSearchResponseSchema:
+    """HTTP endpoint поиска контактов текущего tenant по runtime-owned DSL."""
+
+    principal = context.principal
+    if principal is None or principal.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized.",
+        )
+
+    try:
+        result = await use_case(
+            ListContactsQuery(
+                tenant_id=EntityIdVO.from_value(principal.tenant_id),
+                filter_dsl=payload.filter,
+                sort_dsl=payload.sort,
+                limit=payload.pagination.limit,
+                offset=payload.pagination.offset,
+            )
+        )
+    except ContactNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except (
+        RuntimeDataPersistenceError,
+        RuntimeDataPolicyError,
+        RuntimeObjectDescriptorError,
+        RuntimeObjectNotFoundError,
+        SchemaRegistryMetadataInconsistentError,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except (RuntimeDataValidationError, RuntimeDataFilterError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    except DomainError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+
+    return ContactSearchResponseSchema(
+        data=[_contact_response(contact) for contact in result.items],
+        pagination=ContactSearchPaginationResponseSchema(
+            limit=result.limit,
+            offset=result.offset,
+            total=result.total,
+        ),
+    )
+
+
+def _contact_response(contact) -> ContactResponseSchema:
+    return ContactResponseSchema(
+        id=contact.id,
+        created_at=contact.created_at,
+        updated_at=contact.updated_at,
+        last_name=contact.last_name,
+        first_name=contact.first_name,
+        middle_name=contact.middle_name,
+        status=contact.status,
+        tags=contact.tags,
     )
 
 

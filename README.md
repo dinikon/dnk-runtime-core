@@ -22,6 +22,7 @@ It also exposes an inventory surface for products and product categories.
 - Run tests: `./.venv/bin/python -m unittest discover -s test -p 'test_*.py' -v`
 - Run schema diff command:
     - `dnk-manage schema-registry diff <tenant_id>`
+  - `dnk-manage schema-registry diff --all`
     - `dnk-manage schema-registry diff <tenant_id> --seed-path src.modules.schema_registry.seed.schema_seed`
 
 ## Documentation
