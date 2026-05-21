@@ -42,7 +42,6 @@ def _descriptor(object_name: str) -> RuntimeObjectDescriptor:
         _field("updated_at", "datetime"),
         _field("contact_point_type"),
         _field("raw_value"),
-        _field("display_value"),
         _field("normalized_value"),
         _field("normalized_hash"),
         _field("contact_point_id", "uuid"),
@@ -156,7 +155,6 @@ class ContactPointRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
                 "updated_at": now,
                 "contact_point_type": "EMAIL",
                 "raw_value": "User@Example.COM",
-                "display_value": "user@example.com",
                 "normalized_value": "user@example.com",
                 "normalized_hash": "abc123",
             }
@@ -194,7 +192,6 @@ class ContactPointRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
                 now=now,
                 contact_point_type=ContactPointTypeVO.EMAIL,
                 raw_value="User@Example.COM",
-                display_value="user@example.com",
                 normalized_value="user@example.com",
                 hash_value="abc123",
             ),
@@ -204,6 +201,7 @@ class ContactPointRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(command.inserts[0][0], _CONTACT_POINT)
         self.assertEqual(payload["id"], contact_point_id.uuid)
         self.assertEqual(payload["normalized_hash"], "abc123")
+        self.assertNotIn("display_value", payload)
         self.assertNotIn("hash_value", payload)
         self.assertNotIn("tenant_id", payload)
 

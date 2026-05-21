@@ -860,13 +860,6 @@ SCHEMA_SEED = SchemaSeed(
                     is_nullable=False,
                 ),
                 FieldSeed(
-                    name="display_value",
-                    type="text",
-                    label="Display Value",
-                    description="Human-readable contact point value.",
-                    is_nullable=False,
-                ),
-                FieldSeed(
                     name="normalized_value",
                     type="text",
                     label="Normalized Value",

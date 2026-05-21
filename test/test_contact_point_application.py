@@ -206,7 +206,6 @@ def _contact_point(
         now=now,
         contact_point_type=contact_point_type,
         raw_value=value,
-        display_value=value,
         normalized_value=value,
         hash_value=hashlib.sha256(value.encode("utf-8")).hexdigest(),
     )

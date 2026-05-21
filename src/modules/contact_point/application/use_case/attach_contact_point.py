@@ -98,7 +98,6 @@ class AttachContactPointUseCase:
                 now=now,
                 contact_point_type=command.contact_point_type,
                 raw_value=command.raw_value,
-                display_value=normalized_value,
                 normalized_value=normalized_value,
                 hash_value=hash_value,
             )

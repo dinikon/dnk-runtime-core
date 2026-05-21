@@ -25,7 +25,6 @@ def contact_point_entity(row: Mapping[str, Any]) -> ContactPointEntity:
         updated_at=as_datetime(row.get("updated_at")),
         contact_point_type=ContactPointTypeVO(as_str(row.get("contact_point_type"))),
         raw_value=as_str(row.get("raw_value")),
-        display_value=as_str(row.get("display_value")),
         normalized_value=as_str(row.get("normalized_value")),
         hash_value=as_str(row.get("normalized_hash")),
     )

@@ -128,7 +128,6 @@ class ContactPointRuntimeRepository(
         payload = {
             "contact_point_type": contact_point.contact_point_type.value,
             "raw_value": contact_point.raw_value,
-            "display_value": contact_point.display_value,
             "normalized_value": contact_point.normalized_value,
             "normalized_hash": contact_point.hash_value,
         }

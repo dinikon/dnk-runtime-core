@@ -18,7 +18,6 @@ class ContactPointEntity:
     contact_point_type: ContactPointTypeVO
 
     raw_value: str
-    display_value: str
     normalized_value: str
 
     hash_value: str
@@ -31,7 +30,6 @@ class ContactPointEntity:
         now: datetime,
         contact_point_type: ContactPointTypeVO,
         raw_value: str,
-        display_value: str,
         normalized_value: str,
         hash_value: str,
     ) -> "ContactPointEntity":
@@ -41,7 +39,6 @@ class ContactPointEntity:
             updated_at=now,
             contact_point_type=contact_point_type,
             raw_value=raw_value,
-            display_value=display_value,
             normalized_value=normalized_value,
             hash_value=hash_value,
         )
