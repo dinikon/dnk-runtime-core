@@ -247,6 +247,106 @@ class ContactPointRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
             ["owner_object_id", "owner_record_id", "contact_point_id"],
         )
 
+    async def test_find_active_primary_filters_by_owner_type_active_and_primary(
+        self,
+    ) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        owner = OwnerContactPointBinding(
+            owner_object_id=EntityIdVO.from_value(uuid4()),
+            owner_record_id=EntityIdVO.from_value(uuid4()),
+        )
+        contact_point_id = ContactPointIdVO.from_value(uuid4())
+        binding_id = uuid4()
+        now = datetime(2026, 5, 21, 10, 0, tzinfo=UTC)
+        query = _QueryGatewayStub()
+        query.rows[_CONTACT_POINT_BINDING] = [
+            {
+                "id": binding_id,
+                "created_at": now,
+                "updated_at": now,
+                "contact_point_id": contact_point_id.uuid,
+                "contact_point_type": "EMAIL",
+                "owner_object_id": owner.owner_object_id.uuid,
+                "owner_record_id": owner.owner_record_id.uuid,
+                "is_primary": True,
+                "is_active": True,
+                "detached_at": None,
+            }
+        ]
+        repository = _repository(query, _CommandGatewayStub())
+
+        binding = await repository.find_active_primary_by_owner_and_type(
+            tenant_id=tenant_id,
+            owner=owner,
+            contact_point_type=ContactPointTypeVO.EMAIL,
+        )
+
+        assert binding is not None
+        self.assertTrue(binding.is_primary)
+        call = query.list_calls[0]
+        self.assertEqual(
+            [item.field.name for item in call["filters"]],
+            [
+                "owner_object_id",
+                "owner_record_id",
+                "contact_point_type",
+                "is_active",
+                "is_primary",
+            ],
+        )
+        self.assertEqual(
+            [item.value for item in call["filters"]],
+            [
+                owner.owner_object_id.uuid,
+                owner.owner_record_id.uuid,
+                "EMAIL",
+                True,
+                True,
+            ],
+        )
+
+    async def test_find_first_active_by_owner_type_keeps_deterministic_sorting(
+        self,
+    ) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        owner = OwnerContactPointBinding(
+            owner_object_id=EntityIdVO.from_value(uuid4()),
+            owner_record_id=EntityIdVO.from_value(uuid4()),
+        )
+        now = datetime(2026, 5, 21, 10, 0, tzinfo=UTC)
+        query = _QueryGatewayStub()
+        query.rows[_CONTACT_POINT_BINDING] = [
+            {
+                "id": uuid4(),
+                "created_at": now,
+                "updated_at": now,
+                "contact_point_id": uuid4(),
+                "contact_point_type": "PHONE",
+                "owner_object_id": owner.owner_object_id.uuid,
+                "owner_record_id": owner.owner_record_id.uuid,
+                "is_primary": False,
+                "is_active": True,
+                "detached_at": None,
+            }
+        ]
+        repository = _repository(query, _CommandGatewayStub())
+
+        await repository.find_first_active_by_owner_and_type(
+            tenant_id=tenant_id,
+            owner=owner,
+            contact_point_type=ContactPointTypeVO.PHONE,
+        )
+
+        call = query.list_calls[0]
+        self.assertEqual(
+            [item.field.name for item in call["filters"]],
+            ["owner_object_id", "owner_record_id", "contact_point_type", "is_active"],
+        )
+        self.assertEqual(
+            [(item.field, item.direction) for item in call["sorting"]],
+            [("created_at", "asc"), ("id", "asc")],
+        )
+
     async def test_save_binding_payload_has_soft_detach_fields_without_removed_fields(
         self,
     ) -> None:

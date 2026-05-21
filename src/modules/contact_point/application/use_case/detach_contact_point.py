@@ -54,14 +54,18 @@ class DetachContactPointUseCase:
             )
 
         now = self._clock.now()
-        was_primary = binding.is_primary
         binding.detach(now=now)
         binding = await self._bindings.save_binding(
             tenant_id=command.tenant_id,
             binding=binding,
         )
 
-        if was_primary:
+        active_primary = await self._bindings.find_active_primary_by_owner_and_type(
+            tenant_id=command.tenant_id,
+            owner=binding.owner,
+            contact_point_type=binding.contact_point_type,
+        )
+        if active_primary is None:
             promoted = await self._bindings.find_first_active_by_owner_and_type(
                 tenant_id=command.tenant_id,
                 owner=binding.owner,

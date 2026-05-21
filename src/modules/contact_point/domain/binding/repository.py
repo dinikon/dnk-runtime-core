@@ -42,6 +42,14 @@ class ContactPointBindingRepositoryProtocol(Protocol):
         contact_point_type: ContactPointTypeVO,
     ) -> ContactPointBindingEntity | None: ...
 
+    async def find_active_primary_by_owner_and_type(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        owner: OwnerContactPointBinding,
+        contact_point_type: ContactPointTypeVO,
+    ) -> ContactPointBindingEntity | None: ...
+
     async def unset_primary_for_owner_and_type(
         self,
         *,

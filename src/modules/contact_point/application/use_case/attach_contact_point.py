@@ -113,8 +113,14 @@ class AttachContactPointUseCase:
             owner=owner,
             contact_point_id=contact_point.id,
         )
+        active_primary = await self._bindings.find_active_primary_by_owner_and_type(
+            tenant_id=command.tenant_id,
+            owner=owner,
+            contact_point_type=command.contact_point_type,
+        )
         if binding is not None and binding.is_active:
-            if command.is_primary and not binding.is_primary:
+            should_be_primary = command.is_primary or active_primary is None
+            if should_be_primary and not binding.is_primary:
                 await self._bindings.unset_primary_for_owner_and_type(
                     tenant_id=command.tenant_id,
                     owner=owner,
@@ -126,6 +132,13 @@ class AttachContactPointUseCase:
                     tenant_id=command.tenant_id,
                     binding=binding,
                 )
+            elif command.is_primary and binding.is_primary:
+                await self._bindings.unset_primary_for_owner_and_type(
+                    tenant_id=command.tenant_id,
+                    owner=owner,
+                    contact_point_type=command.contact_point_type,
+                    exclude_binding_id=binding.id,
+                )
             return AttachContactPointResultDTO(
                 contact_point_id=contact_point.id.uuid,
                 binding_id=binding.id.uuid,
@@ -134,7 +147,8 @@ class AttachContactPointUseCase:
                 already_attached=True,
             )
 
-        if command.is_primary:
+        should_be_primary = command.is_primary or active_primary is None
+        if should_be_primary:
             await self._bindings.unset_primary_for_owner_and_type(
                 tenant_id=command.tenant_id,
                 owner=owner,
@@ -142,7 +156,7 @@ class AttachContactPointUseCase:
             )
 
         if binding is not None:
-            binding.reactivate(now=now, is_primary=command.is_primary)
+            binding.reactivate(now=now, is_primary=should_be_primary)
             binding = await self._bindings.save_binding(
                 tenant_id=command.tenant_id,
                 binding=binding,
@@ -161,7 +175,7 @@ class AttachContactPointUseCase:
             contact_point_id=contact_point.id,
             contact_point_type=command.contact_point_type,
             owner=owner,
-            is_primary=command.is_primary,
+            is_primary=should_be_primary,
         )
         binding = await self._bindings.save_binding(
             tenant_id=command.tenant_id,

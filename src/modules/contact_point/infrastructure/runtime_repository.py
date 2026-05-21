@@ -193,6 +193,34 @@ class ContactPointRuntimeRepository(
         )
         return None if not rows else contact_point_binding_entity(rows[0])
 
+    async def find_active_primary_by_owner_and_type(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        owner: OwnerContactPointBinding,
+        contact_point_type: ContactPointTypeVO,
+    ) -> ContactPointBindingEntity | None:
+        descriptor = await self._resolve_descriptor(tenant_id, _CONTACT_POINT_BINDING)
+        rows = await self._list(
+            descriptor=descriptor,
+            filters=(
+                *self._active_owner_type_filters(
+                    descriptor=descriptor,
+                    owner=owner,
+                    contact_point_type=contact_point_type,
+                ),
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="is_primary",
+                    op="eq",
+                    value=True,
+                ),
+            ),
+            sorting=(SortSpec("created_at"), SortSpec("id")),
+            limit=1,
+        )
+        return None if not rows else contact_point_binding_entity(rows[0])
+
     async def unset_primary_for_owner_and_type(
         self,
         *,
