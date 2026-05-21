@@ -3,9 +3,31 @@
 Сейчас у тебя уже есть минимальная модель:
 
 * `ContactPointTypeVO` поддерживает `PHONE` и `EMAIL`.
-* `ContactPointEntity` хранит `type`, `raw_value`, `normalized_value`, `hash_value`.
+* `ContactPointEntity` хранит `contact_point_type`, `raw_value`, `normalized_value`, `hash_value`.
 * `OwnerContactPointBinding` хранит ссылку на owner через `owner_object_id` и `owner_record_id`.
-* `ContactPointBindingEntity` связывает `contact_point_id` с `owner` и хранит `is_primary`.
+* `ContactPointBindingEntity` связывает `contact_point_id` с `owner` и хранит `is_primary`, `created_at`,
+  `updated_at`, `is_active`, `detached_at`.
+
+Фактический каркас уже заложен так:
+
+```text
+src/modules/contact_point/
+  domain/
+    contact_point/
+    binding/
+  application/
+    command/
+    dto/
+    query/
+    use_case/
+  infrastructure/
+  presentation/
+    depends/
+    http/
+      controllers/
+      requests/
+      responses/
+```
 
 Это хорошая база. Дальше нужно реализовать два use case:
 
@@ -13,6 +35,16 @@
 AttachContactPointUseCase
 DetachContactPointUseCase
 ```
+
+Отдельное правило по tenant scope:
+
+```text
+tenant_id не является полем внутренних ContactPoint таблиц.
+```
+
+`contact_point` и `contact_point_binding` живут в tenant-specific runtime schema. Поэтому `tenant_id` можно передавать
+только как application context в use case / resolver / object_feature gate, но нельзя добавлять в domain entities,
+runtime rows, payload persistence или DB constraints этого модуля.
 
 ---
 
@@ -65,7 +97,7 @@ hash_value: sha256("+380671112233")
 ```text
 1. Пользователь добавил phone/email к Contact / Company / Lead / custom object.
 2. Значение нормализовалось успешно.
-3. В справочнике еще нет ContactPoint с таким type + hash_value.
+3. В справочнике еще нет ContactPoint с таким contact_point_type + hash_value.
 4. Owner существует.
 5. У owner object включена schema_registry.object_feature фича CONTACT_POINT.
 6. Такой binding еще не существует.
@@ -162,6 +194,7 @@ already_attached = true
 ```python
 @dataclass(frozen=True, slots=True)
 class AttachContactPointCommand:
+  tenant_id: EntityIdVO
     owner_object_id: EntityIdVO
     owner_record_id: EntityIdVO
 
@@ -171,13 +204,17 @@ class AttachContactPointCommand:
     is_primary: bool = False
 ```
 
+`tenant_id` здесь — только application context для resolver-ов и проверки `schema_registry.object_feature`.
+Его нельзя сохранять в `ContactPointEntity`, `ContactPointBindingEntity` и внутренние runtime-таблицы
+`contact_point` / `contact_point_binding`.
+
 ---
 
 # 8. AttachContactPointUseCase: результат
 
 ```python
 @dataclass(frozen=True, slots=True)
-class AttachContactPointResult:
+class AttachContactPointResultDTO:
     contact_point_id: ContactPointIdVO
     binding_id: ContactPointBindingIdVO
 
@@ -196,7 +233,7 @@ class AttachContactPointResult:
 3. Проверить raw_value.
 4. Нормализовать значение.
 5. Посчитать hash_value.
-6. Найти ContactPoint по type + hash_value.
+6. Найти ContactPoint по contact_point_type + hash_value.
 7. Если ContactPoint не найден — создать ContactPoint.
 8. Проверить, есть ли Binding для этого owner + contact_point_id.
 9. Если Binding уже есть — вернуть existing binding.
@@ -231,10 +268,10 @@ class AttachContactPointUseCase:
         self._clock = clock
         self._id_generator = id_generator
 
-    async def execute(
+    async def __call__(
             self,
             command: AttachContactPointCommand,
-    ) -> AttachContactPointResult:
+    ) -> AttachContactPointResultDTO:
         now = self._clock.now()
 
         owner = OwnerContactPointBinding(
@@ -272,7 +309,7 @@ class AttachContactPointUseCase:
                     id=ContactPointIdVO(self._id_generator.new_id()),
                     created_at=now,
                     updated_at=now,
-                    type=command.contact_point_type,
+                  contact_point_type=command.contact_point_type,
                     raw_value=command.raw_value,
                     normalized_value=normalized_value,
                     hash_value=hash_value,
@@ -290,7 +327,7 @@ class AttachContactPointUseCase:
                 if command.is_primary and not binding.is_primary:
                     await self._uow.bindings.unset_primary_for_owner_and_type(
                         owner=owner,
-                        contact_point_type=contact_point.type,
+                      contact_point_type=contact_point.contact_point_type,
                     )
 
                     binding.is_primary = True
@@ -298,7 +335,7 @@ class AttachContactPointUseCase:
 
                 await self._uow.commit()
 
-                return AttachContactPointResult(
+                return AttachContactPointResultDTO(
                     contact_point_id=contact_point.id,
                     binding_id=binding.id,
                     contact_point_created=contact_point_created,
@@ -309,7 +346,7 @@ class AttachContactPointUseCase:
             if command.is_primary:
                 await self._uow.bindings.unset_primary_for_owner_and_type(
                     owner=owner,
-                    contact_point_type=contact_point.type,
+                  contact_point_type=contact_point.contact_point_type,
                 )
 
             binding = ContactPointBindingEntity(
@@ -322,7 +359,7 @@ class AttachContactPointUseCase:
             await self._uow.bindings.add(binding)
             await self._uow.commit()
 
-        return AttachContactPointResult(
+        return AttachContactPointResultDTO(
             contact_point_id=contact_point.id,
             binding_id=binding.id,
             contact_point_created=contact_point_created,
@@ -338,16 +375,17 @@ class AttachContactPointUseCase:
 ## Инвариант 1
 
 ```text
-Один normalized ContactPoint на tenant + type + hash_value.
+Один normalized ContactPoint внутри tenant schema по contact_point_type + hash_value.
 ```
 
 На уровне БД:
 
 ```sql
-UNIQUE (contact_point_type, hash_value)
+UNIQUE (contact_point_type, normalized_hash)
 ```
 
-Таблицы лежат в tenant schema, то `tenant_id` можно не хранить в самой entity.
+В entity поле называется `hash_value`, а в runtime seed уже используется колонка `normalized_hash`.
+Таблицы лежат в tenant schema, поэтому `tenant_id` не храним ни в entity, ни в runtime row, ни в unique indexes.
 
 ---
 
@@ -448,7 +486,7 @@ class DetachContactPointCommand:
 
 ```python
 @dataclass(frozen=True, slots=True)
-class DetachContactPointResult:
+class DetachContactPointResultDTO:
     binding_id: ContactPointBindingIdVO
     contact_point_id: ContactPointIdVO
 
@@ -494,10 +532,10 @@ class DetachContactPointUseCase:
         self._uow = uow
         self._contact_point_lifecycle_policy = contact_point_lifecycle_policy
 
-    async def execute(
+    async def __call__(
             self,
             command: DetachContactPointCommand,
-    ) -> DetachContactPointResult:
+    ) -> DetachContactPointResultDTO:
         async with self._uow:
             binding = await self._uow.bindings.get_by_id(command.binding_id)
 
@@ -525,7 +563,7 @@ class DetachContactPointUseCase:
             if was_primary:
                 next_binding = await self._uow.bindings.find_next_binding_for_owner_and_type(
                     owner=owner,
-                    contact_point_type=contact_point.type,
+                  contact_point_type=contact_point.contact_point_type,
                 )
 
                 if next_binding is not None:
@@ -544,7 +582,7 @@ class DetachContactPointUseCase:
 
             await self._uow.commit()
 
-        return DetachContactPointResult(
+        return DetachContactPointResultDTO(
             binding_id=command.binding_id,
             contact_point_id=contact_point.id,
             binding_deleted=True,
@@ -790,6 +828,12 @@ class ContactPointBindingRepositoryProtocol(Protocol):
 
 # 25. Application ports
 
+В текущем каркасе нет `application/ports/`, поэтому ports лучше собрать в одном файле:
+
+```text
+contact_point/application/ports.py
+```
+
 ## OwnerResolverPort
 
 Нужен, чтобы ContactPoint module не зависел напрямую от CRM/runtime_data.
@@ -837,6 +881,9 @@ await assert_object_feature_enabled(
     feature_code="CONTACT_POINT",
 )
 ```
+
+`tenant_id` в этом порту также является только контекстом вызова внешнего `schema_registry` use case.
+ContactPoint module не переносит его в свои runtime records.
 
 Если config не найден или feature выключена, exception из `schema_registry.object_feature` должен остановить attach до
 создания `ContactPointBinding`. Это бизнес-ошибка уровня `422`/domain validation на HTTP-слое.
@@ -906,7 +953,7 @@ class ContactPointLifecyclePolicy:
 
 # 27. Структура файлов
 
-С учетом твоего текущего каркаса:
+Структура плана должна ложиться на уже заложенный каркас, без лишних промежуточных директорий.
 
 ```text
 src/
@@ -916,91 +963,92 @@ src/
         contact_point/
           entity.py
           repository.py
+          error.py
 
           value_object/
             contact_point_id.py
             contact_point_type.py
 
-          service/
-            contact_point_normalize_service.py
-            contact_point_hash_service.py
-            contact_point_lifecycle_policy.py
-
-          error.py
-
         binding/
           entity.py
           repository.py
+          error.py
 
           value_object/
             contact_point_binding_id.py
             owner_binding.py
 
-          error.py
-
       application/
-        ports/
-          contact_point_object_feature_gate.py
+        __init__.py
+        ports.py
+
+        command/
+          attach_contact_point_command.py
+          detach_contact_point_command.py
 
         dto/
-          attach_contact_point.py
-          detach_contact_point.py
-        
-        command/
-          attach_contact_point.py
+          attach_contact_point_result_dto.py
+          detach_contact_point_result_dto.py
 
-        use_cases/
+        query/
+          list_owner_contact_points_query.py
+
+        use_case/
           attach_contact_point.py
           detach_contact_point.py
           cleanup_orphan_contact_point.py
 
       infrastructure/
-        repository/
-          contact_point_repository.py
-          contact_point_binding_repository.py
-
-        normalizer/
-          phone_normalizer.py
-          email_normalizer.py
-
-        owner_resolver/
-          runtime_data_owner_resolver.py
-          crm_owner_resolver.py
-
-        object_feature_gate/
-          schema_registry_object_feature_gate.py
+        __init__.py
+        contact_point_runtime_repository.py
+        contact_point_unit_of_work.py
+        runtime_owner_resolver.py
+        schema_registry_object_feature_gate.py
+        contact_point_normalize_service.py
+        contact_point_hash_service.py
+        contact_point_lifecycle_policy.py
 
       presentation/
+        __init__.py
+        depends/
+          __init__.py
+          application.py
+          infrastructure.py
+
         http/
-          contact_point/
-            requests/
-            responses/
-            controllers/
+          __init__.py
+          router.py
 
-      depends/
-        application.py
-        infrastructure.py
+          controllers/
+            attach_contact_point.py
+            detach_contact_point.py
+
+          requests/
+            attach_contact_point_request.py
+            detach_contact_point_request.py
+
+          responses/
+            attach_contact_point_response.py
+            detach_contact_point_response.py
 ```
 
-Я бы переименовал файл:
+Что важно:
 
 ```text
-ovner_binding.py
+1. Уже существующий каталог называется application/use_case, не application/use_cases.
+2. Уже существующий HTTP-каталог называется presentation/http/controllers, не controller и не http/contact_point.
+3. Уже существующий файл owner_binding.py уже имеет правильное имя; старый typo-вариант ovner_binding.py не нужен.
+4. Для MVP infrastructure оставляем плоским слоем. Поддиректории repository/, normalizer/, owner_resolver/ можно
+   выделить позже, если слой начнет разрастаться.
 ```
-
-в:
-
-```text
-owner_binding.py
-```
-
-Сейчас в имени есть опечатка.
 
 ---
 
 # 28. DTO-файлы
 
-## `application/dto/attach_contact_point.py`
+Команды и DTO не смешиваем: команды живут в `application/command`, результаты - в `application/dto`.
+
+## `application/command/attach_contact_point_command.py`
 
 ```python
 from dataclasses import dataclass
@@ -1013,17 +1061,33 @@ from src.modules.shared import EntityIdVO
 
 @dataclass(frozen=True, slots=True)
 class AttachContactPointCommand:
+  tenant_id: EntityIdVO
     owner_object_id: EntityIdVO
     owner_record_id: EntityIdVO
     contact_point_type: ContactPointTypeVO
     raw_value: str
     is_primary: bool = False
+```
+
+---
+
+## `application/dto/attach_contact_point_result_dto.py`
+
+```python
+from dataclasses import dataclass
+
+from src.modules.contact_point.domain.binding.value_object.contact_point_binding_id import (
+  ContactPointBindingIdVO,
+)
+from src.modules.contact_point.domain.contact_point.value_object.contact_point_id import (
+  ContactPointIdVO,
+)
 
 
 @dataclass(frozen=True, slots=True)
-class AttachContactPointResult:
-    contact_point_id: EntityIdVO
-    binding_id: EntityIdVO
+class AttachContactPointResultDTO:
+  contact_point_id: ContactPointIdVO
+  binding_id: ContactPointBindingIdVO
     contact_point_created: bool
     binding_created: bool
     already_attached: bool
@@ -1031,7 +1095,7 @@ class AttachContactPointResult:
 
 ---
 
-## `application/dto/detach_contact_point.py`
+## `application/command/detach_contact_point_command.py`
 
 ```python
 from dataclasses import dataclass
@@ -1039,18 +1103,30 @@ from dataclasses import dataclass
 from src.modules.contact_point.domain.binding.value_object.contact_point_binding_id import (
     ContactPointBindingIdVO,
 )
-from src.modules.contact_point.domain.contact_point.value_object.contact_point_id import (
-    ContactPointIdVO,
-)
 
 
 @dataclass(frozen=True, slots=True)
 class DetachContactPointCommand:
     binding_id: ContactPointBindingIdVO
+```
+
+---
+
+## `application/dto/detach_contact_point_result_dto.py`
+
+```python
+from dataclasses import dataclass
+
+from src.modules.contact_point.domain.binding.value_object.contact_point_binding_id import (
+  ContactPointBindingIdVO,
+)
+from src.modules.contact_point.domain.contact_point.value_object.contact_point_id import (
+  ContactPointIdVO,
+)
 
 
 @dataclass(frozen=True, slots=True)
-class DetachContactPointResult:
+class DetachContactPointResultDTO:
     binding_id: ContactPointBindingIdVO
     contact_point_id: ContactPointIdVO
 
@@ -1063,7 +1139,7 @@ class DetachContactPointResult:
 
 # 29. Нормализация и hash
 
-## `contact_point_normalize_service.py`
+## `infrastructure/contact_point_normalize_service.py`
 
 ```python
 class ContactPointNormalizeService:
@@ -1097,7 +1173,7 @@ class ContactPointNormalizeService:
 
 ---
 
-## `contact_point_hash_service.py`
+## `infrastructure/contact_point_hash_service.py`
 
 ```python
 import hashlib
@@ -1152,19 +1228,20 @@ class ContactPointUnitOfWorkProtocol(Protocol):
 
 ## Шаг 1
 
-Доработать entities:
+Проверить и при необходимости довести уже существующие entities:
 
 ```text
-ContactPointEntity
-ContactPointBindingEntity
-OwnerContactPointBinding
+domain/contact_point/entity.py
+domain/binding/entity.py
+domain/binding/value_object/owner_binding.py
 ```
 
-Минимально:
+Минимальный набор уже заложен в каркасе:
 
 ```text
-created_at / updated_at в binding
-is_active / detached_at — желательно
+ContactPointEntity: id, created_at, updated_at, contact_point_type, raw_value, normalized_value, hash_value
+ContactPointBindingEntity: id, created_at, updated_at, contact_point_id, owner, is_primary, detached_at, is_active
+OwnerContactPointBinding: owner_object_id, owner_record_id
 ```
 
 ---
@@ -1174,8 +1251,8 @@ is_active / detached_at — желательно
 Добавить repository protocols:
 
 ```text
-ContactPointRepositoryProtocol
-ContactPointBindingRepositoryProtocol
+domain/contact_point/repository.py
+domain/binding/repository.py
 ```
 
 ---
@@ -1185,9 +1262,9 @@ ContactPointBindingRepositoryProtocol
 Добавить services:
 
 ```text
-ContactPointNormalizeService
-ContactPointHashService
-ContactPointLifecyclePolicy
+infrastructure/contact_point_normalize_service.py
+infrastructure/contact_point_hash_service.py
+infrastructure/contact_point_lifecycle_policy.py
 ```
 
 ---
@@ -1197,8 +1274,8 @@ ContactPointLifecyclePolicy
 Реализовать:
 
 ```text
-AttachContactPointUseCase
-DetachContactPointUseCase
+application/use_case/attach_contact_point.py
+application/use_case/detach_contact_point.py
 ```
 
 В `AttachContactPointUseCase` обязательно встроить проверку:
@@ -1210,7 +1287,8 @@ ContactPointObjectFeatureGatePort.assert_contact_point_enabled(
 )
 ```
 
-Проверка должна выполняться до создания `ContactPointBinding`.
+Проверка должна выполняться до создания `ContactPointBinding`. `tenant_id` используется только для этой проверки и
+resolver-ов, но не сохраняется во внутренних таблицах ContactPoint.
 
 ---
 
@@ -1219,7 +1297,7 @@ ContactPointObjectFeatureGatePort.assert_contact_point_enabled(
 Добавить DB constraints:
 
 ```sql
-UNIQUE (contact_point_type, hash_value)
+UNIQUE (contact_point_type, normalized_hash)
 
 UNIQUE (
     owner_object_id,
@@ -1228,18 +1306,8 @@ UNIQUE (
 )
 ```
 
-Если таблицы общие для всех tenant:
-
-```sql
-UNIQUE (tenant_id, contact_point_type, hash_value)
-
-UNIQUE (
-    tenant_id,
-    owner_object_id,
-    owner_record_id,
-    contact_point_id
-)
-```
+Внутренние таблицы ContactPoint не получают `tenant_id`: tenant isolation идет через tenant-specific runtime schema и
+descriptor resolver.
 
 ---
 
