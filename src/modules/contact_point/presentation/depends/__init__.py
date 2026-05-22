@@ -1,6 +1,7 @@
 from src.modules.contact_point.presentation.depends.application import (
     AttachContactPointUseCaseDep,
     DetachContactPointUseCaseDep,
+    ListOwnerContactPointsUseCaseDep,
 )
 from src.modules.contact_point.presentation.depends.infrastructure import (
     ContactPointHashServiceDep,
@@ -17,5 +18,6 @@ __all__ = [
     "ContactPointObjectFeatureGateDep",
     "ContactPointRuntimeRepositoryDep",
     "DetachContactPointUseCaseDep",
+    "ListOwnerContactPointsUseCaseDep",
     "OwnerResolverDep",
 ]

@@ -9,6 +9,8 @@ from src.modules.contact_point.application.use_case import (
     AttachContactPointUseCaseProtocol,
     DetachContactPointUseCase,
     DetachContactPointUseCaseProtocol,
+    ListOwnerContactPointsUseCase,
+    ListOwnerContactPointsUseCaseProtocol,
 )
 from src.modules.contact_point.presentation.depends.infrastructure import (
     ContactPointHashServiceDep,
@@ -63,9 +65,29 @@ DetachContactPointUseCaseDep = Annotated[
 ]
 
 
+def get_list_owner_contact_points_use_case(
+    repository: ContactPointRuntimeRepositoryDep,
+    owner_resolver: OwnerResolverDep,
+    feature_gate: ContactPointObjectFeatureGateDep,
+) -> ListOwnerContactPointsUseCaseProtocol:
+    return ListOwnerContactPointsUseCase(
+        query_repository=repository,
+        owner_resolver=owner_resolver,
+        feature_gate=feature_gate,
+    )
+
+
+ListOwnerContactPointsUseCaseDep = Annotated[
+    ListOwnerContactPointsUseCaseProtocol,
+    Depends(get_list_owner_contact_points_use_case),
+]
+
+
 __all__ = [
     "AttachContactPointUseCaseDep",
     "DetachContactPointUseCaseDep",
+    "ListOwnerContactPointsUseCaseDep",
     "get_attach_contact_point_use_case",
     "get_detach_contact_point_use_case",
+    "get_list_owner_contact_points_use_case",
 ]

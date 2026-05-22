@@ -1,546 +1,408 @@
 # Communication Module
 
-## Назначение
-
-`communication` отвечает за tenant-scoped отправку и сопровождение сообщений через внешних провайдеров. Модуль хранит
-каталог provider connectors, tenant-specific provider connections, шаблоны сообщений, concrete outbound messages,
-попытки отправки, delivery events и обработку provider webhooks.
-
-Модуль нужен как общий слой коммуникаций для других фич проекта: бизнес-модуль формирует команду отправки, а
-`communication` выбирает активный шаблон и provider connection, ставит сообщение в очередь, рендерит payload, отправляет
-его через provider sender и обновляет delivery state.
-
-## Основные Возможности
-
-- импорт YAML provider connector spec в runtime schema tenant
-- хранение provider message types, schemas и transport-specific send spec
-- создание и чтение provider connections без отдачи secrets наружу
-- создание message templates, версионирование payload и активация версии
-- постановка outbound communication на отправку с idempotency support
-- чтение outbound messages и их provider/debug snapshots
-- обработка очереди через RabbitMQ worker или management CLI
-- запись delivery attempts и provider delivery events
-- обработка provider webhooks и обновление internal status
-
-## Архитектура
-
-Модуль следует общей слоистой архитектуре проекта и использует runtime objects вместо собственных SQLAlchemy моделей.
-
-- `domain`
-  - агрегаты, value objects, enum/status types, доменные ошибки, domain services и repository protocols
-  - не зависит от FastAPI, SQLAlchemy, RabbitMQ и concrete runtime gateways
-- `application`
-  - commands, queries, DTO, use cases и application-level ports
-  - содержит helper services для YAML parsing, JSON Schema validation, Jinja rendering, JSONPath extraction, status
-    mapping, provider payload building и secret encoding
-- `infrastructure`
-  - runtime repositories поверх `runtime_data`, row mappers, provider senders, `httpx` client и RabbitMQ
-    publisher/worker
-  - реализует application/domain ports
-- `presentation`
-  - FastAPI routers/controllers, dependency builders и management builders
-  - конвертирует HTTP/CLI input в commands/queries и мапит доменные/runtime ошибки в HTTP status codes
-
-Основной поток данных:
-
-```text
-HTTP/CLI/worker
-  -> presentation controller/builder
-  -> application use case
-  -> domain service/entity
-  -> application/domain port
-  -> infrastructure runtime repository/provider sender/RabbitMQ adapter
-```
-
-## Компоненты Домена
-
-### Provider Connector
-
-Provider connector описывает интеграцию с конкретным провайдером. Источник правды для connector-а - YAML spec,
-импортируемый через `RegisterProviderConnectorUseCase`.
-
-Состав:
-
-- `ProviderConnector`
-  - `provider_connector_id`
-  - `provider_code`
-  - `provider_name`
-  - `version`
-  - `connector_type`
-  - `yaml_spec`
-  - `yaml_checksum`
-  - `status`
-  - `created_at`, `updated_at`
-- `ProviderMessageType`
-  - message type внутри provider connector
-  - содержит `message_type_code`, `channel_code`, `field_schema`, `ui_schema`, `is_active`
-
-Поддерживаемые domain enum:
-
-- `ConnectorType`
-  - `YAML_HTTP`
-  - `YAML_SMTP`
-  - `CUSTOM_ADAPTER`
-- `ConnectorStatus`
-  - `ACTIVE`
-  - `DISABLED`
-  - `DEPRECATED`
-
-Важные правила:
-
-- YAML loader сейчас поддерживает только `YAML_HTTP` и `YAML_SMTP`.
-- `CUSTOM_ADAPTER` есть в enum, но не поддержан текущим YAML loader.
-- root-level `send` в YAML запрещён; `send` должен быть описан внутри каждого `message_types[]`.
-- `ProviderYamlLoader` валидирует required fields, JSON Schemas и transport-specific send spec.
-- checksum считается по canonical JSON версии YAML spec.
-- repository делает upsert connector-а по `provider_code + version`.
-- message types upsert-ятся по `provider_connector_id + message_type_code`.
-
-Минимальная структура YAML spec:
-
-```yaml
-provider_code: resend
-provider_name: Resend
-version: "1.0"
-connector_type: YAML_HTTP
-channels:
-  - EMAIL
-config_schema:
-  type: object
-secrets_schema:
-  type: object
-message_types:
-  - code: email
-    channel: EMAIL
-    name: Email
-    field_schema:
-      type: object
-    ui_schema: {}
-    send:
-      transport: http
-      method: POST
-      url: "https://api.example.com/messages"
-      body: {}
-      response_mapping:
-        external_message_id: "$.id"
-        external_status: "$.status"
-status_mapping:
-  sent: SENT
-webhook:
-  external_message_id_path: "$.id"
-  external_status_path: "$.status"
-  event_time_path: "$.created_at"
-```
-
-### Provider Connection
-
-Provider connection - tenant-specific подключение к provider connector. Оно хранит runtime config, ссылку на secret и
-encoded secrets, но HTTP response никогда не возвращает сами secrets.
-
-Состав:
-
-- `ProviderConnectionEntity`
-  - `provider_connection_id`
-  - `tenant_id`
-  - `provider_connector_id`
-  - `connection_code`
-  - `connection_name`
-  - `channel_code`
-  - `config`
-  - `secret_ref`
-  - `secrets_b64`
-  - `status`
-  - `created_at`, `updated_at`
-
-Правила:
-
-- при создании проверяется существование provider connector
-- `channel_code` должен входить в `yaml_spec.channels`
-- `config` валидируется по `config_schema`
-- `secrets` валидируются по `secrets_schema`
-- secrets кодируются через `SecretCodec` как base64 JSON
-- наружу отдаются только `secret_ref` и `has_secrets`
-- active lookup для send-сценария ищет connection по `provider_connector_id + channel_code + ACTIVE`
-
-Статусы:
-
-- `ACTIVE`
-- `DISABLED`
-
-### Message Template
-
-Message template описывает tenant-local шаблон сообщения, привязанный к provider connector и provider message type.
-Header шаблона отделён от версий payload.
-
-Состав:
-
-- `MessageTemplateEntity`
-  - `template_id`
-  - `tenant_id`
-  - `template_code`
-  - `name`
-  - `description`
-  - `provider_connector_id`
-  - `provider_message_type_id`
-  - `channel_code`
-  - `message_class`
-  - `status`
-  - `created_at`, `updated_at`
-- `TemplateVersionEntity`
-  - `template_version_id`
-  - `template_id`
-  - `version`
-  - `template_payload`
-  - `variables_schema`
-  - `status`
-  - `created_at`
-  - `activated_at`
-
-Правила:
-
-- при создании template проверяется существование connector и message type
-- `provider_message_type_id` должен принадлежать выбранному `provider_connector_id`
-- `channel_code` template должен совпадать с channel message type
-- новая template version создаётся в `DRAFT`
-- `template_payload` валидируется по `ProviderMessageType.field_schema`
-- `variables_schema` валидируется как JSON Schema
-- активация версии переводит выбранную version в `ACTIVE`, прежние active versions в `DEPRECATED`, а template в `ACTIVE`
-
-Статусы template:
-
-- `DRAFT`
-- `ACTIVE`
-- `ARCHIVED`
-
-Статусы version:
-
-- `DRAFT`
-- `ACTIVE`
-- `DEPRECATED`
-
-Классы сообщений:
-
-- `MARKETING`
-- `TRANSACTIONAL`
-- `SERVICE`
-- `OTP`
-- `INFO`
-
-Каналы:
-
-- `SMS`
-- `VIBER`
-- `EMAIL`
-- `CUSTOM`
-
-### Outbound Message
-
-Outbound часть разделяет входящий communication request и concrete provider message.
-
-Состав:
-
-- `CommunicationRequest`
-  - входящая команда отправки
-  - хранит initiator, idempotency key, template, recipient, variables, schedule, priority и request status
-- `OutboundMessage`
-  - concrete provider message
-  - хранит provider connection, rendered payload, provider request payload, external provider ids/statuses, internal
-    status, processing lease, retry timestamps и queue publishing metadata
-
-Правила send-сценария:
-
-- `SendCommunicationUseCase` требует `template_id` или `template_code`
-- если указан `idempotency_key`, use case сначала ищет существующий send request
-- channel команды должен совпадать с channel template
-- у template должна быть active version
-- `variables` валидируются по `active_version.variables_schema`
-- для template channel должен существовать active provider connection
-- создаются `CommunicationRequest` со статусом `QUEUED` и `OutboundMessage` со статусом `QUEUED`
-- HTTP controller коммитит создание и только после commit публикует job в RabbitMQ, если queue включена
-
-Request statuses:
-
-- `ACCEPTED`
-- `REJECTED`
-- `QUEUED`
-- `PROCESSING`
-- `COMPLETED`
-- `FAILED`
-- `CANCELED`
-
-Outbound statuses:
-
-- `QUEUED`
-- `SENDING`
-- `SENT`
-- `DELIVERED`
-- `OPENED`
-- `CLICKED`
-- `FAILED`
-- `EXPIRED`
-- `UNDELIVERED`
-- `CANCELED`
-- `UNKNOWN`
-
-Processing модель:
-
-- `PublishQueuedOutboundMessagesUseCase` публикует publishable `QUEUED` messages в broker
-- worker получает job и запускает `ProcessOutboundMessageByIdUseCase`
-- by-id processor атомарно claim-ит message через `processing_token` и `processing_deadline_at`
-- template payload рендерится через Jinja2 `StrictUndefined`
-- provider sender строит persisted-safe request snapshot и выполняет send
-- success очищает processing lease, сохраняет rendered/provider payloads, external status и internal status
-- failure без retry переводит message/request в failed state
-- retryable failure возвращает message в `QUEUED`, выставляет `next_attempt_at` и сбрасывает `queue_published_at`
-- `RecoverStuckOutboundMessagesUseCase` помечает истёкшие `SENDING` messages как `UNKNOWN` с ошибкой
-  `PROCESSING_LEASE_EXPIRED`
-
-### Delivery
-
-Delivery часть хранит provider attempts и delivery events.
-
-Состав:
-
-- `DeliveryAttempt`
-  - одна попытка provider send
-  - хранит request/response snapshots, HTTP status, external message id, error и timestamps
-- `DeliveryEvent`
-  - событие доставки от provider webhook
-  - хранит raw payload, external/internal statuses, event type, event time и ссылки на outbound/connection
-
-Attempt statuses:
-
-- `STARTED`
-- `SUCCESS`
-- `RETRYABLE_FAILED`
-- `NON_RETRYABLE_FAILED`
-- `TIMEOUT`
-
-Delivery event types:
-
-- `SENT`
-- `DELIVERED`
-- `FAILED`
-- `EXPIRED`
-- `OPENED`
-- `CLICKED`
-- `WEBHOOK_RECEIVED`
-
-Webhook правила:
-
-- webhook route принимает `tenant_id` и `provider_code` в публичном path
-- connector ищется по `provider_code + ACTIVE`
-- `external_message_id`, `external_status` и event time извлекаются JSONPath выражениями из `yaml_spec.webhook`
-- outbound ищется по `external_message_id`
-- если outbound не найден, webhook считается accepted, но `matched=false`
-- если outbound найден, создаётся `DeliveryEvent` и обновляется status outbound message
-- provider status мапится через `yaml_spec.status_mapping`; неизвестные значения дают `UNKNOWN`
+## Purpose
+
+`communication` - tenant-scoped runtime-data module для отправки и сопровождения сообщений через внешних провайдеров.
+Модуль хранит provider connectors, tenant provider connections, message templates, outbound messages, delivery attempts,
+delivery events и webhook payloads.
+
+Основной сценарий: другой модуль вызывает send-команду, `communication` находит активный шаблон и активное provider
+connection, создает `CommunicationRequest` и `OutboundMessage`, публикует job в очередь при включенном RabbitMQ,
+рендерит
+provider payload, отправляет его через sender adapter и обновляет delivery state.
+
+## Current Scope
+
+Текущая реализация покрывает несколько subdomain внутри одного bounded context:
+
+- provider connector catalog на базе YAML specs;
+- provider connection management с tenant-local config и encoded secrets;
+- message template lifecycle с версиями payload;
+- outbound send request и concrete provider message state;
+- provider delivery attempts и delivery events;
+- RabbitMQ/CLI processing для queued outbound messages;
+- provider webhook intake и status mapping.
+
+Модуль использует runtime objects из `schema_registry` и `runtime_data`. Собственных SQLAlchemy ORM моделей для
+communication runtime objects нет.
+
+В текущей реализации не найдено:
+
+- describe-fields / metadata HTTP endpoints для communication objects;
+- отдельный read/list HTTP API для delivery attempts и delivery events;
+- scheduled jobs;
+- outbox/inbox event model;
+- прямая интеграция с `contact_point` use cases, хотя `contact_id` хранится в request/outbound rows.
+
+## Public Functionality
+
+- Импорт YAML provider connector spec: `POST /api/communication/providers/connectors/import-yaml`.
+- Чтение provider connector catalog: `GET /api/communication/providers/connectors`.
+- Создание provider connection: `POST /api/communication/providers/connections`.
+- Чтение provider connections: `GET /api/communication/providers/connections`.
+- Создание message template: `POST /api/communication/templates`.
+- Создание template version: `POST /api/communication/templates/{template_id}/versions`.
+- Активация template version: `POST /api/communication/templates/{template_id}/versions/{version_id}/activate`.
+- Чтение templates: `GET /api/communication/templates`.
+- Постановка communication на отправку: `POST /api/communication/send`.
+- Чтение outbound messages: `GET /api/communication/messages` и
+  `GET /api/communication/messages/{outbound_message_id}`.
+- Прием provider webhooks: `POST /api/communication/webhooks/{tenant_id}/{provider_code}`.
+- Management CLI: `communication process-queued`, `communication publish-queued`, `communication recover-stuck`,
+  `communication worker`.
+
+## Main Flows / Use Cases
+
+| Use Case                               | Input                                  | Output                            | Description                                                                                                                       |
+|----------------------------------------|----------------------------------------|-----------------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
+| `RegisterProviderConnectorUseCase`     | `RegisterProviderConnectorCommand`     | `ProviderConnectorDTO`            | Парсит YAML через `ProviderYamlLoader`, считает checksum и регистрирует connector/message types через `ProviderConnectorService`. |
+| `ListProviderConnectorsUseCase`        | `EntityIdVO` tenant id                 | `ProviderConnectorCatalogDTO`     | Возвращает connectors и message types из query repository.                                                                        |
+| `CreateProviderConnectionUseCase`      | `CreateProviderConnectionCommand`      | `ProviderConnectionDTO`           | Кодирует secrets через `SecretCodec`, валидирует config/secrets по connector schemas и сохраняет connection.                      |
+| `ListProviderConnectionsUseCase`       | `EntityIdVO` tenant id                 | `list[ProviderConnectionDTO]`     | Возвращает provider connections без раскрытия secrets.                                                                            |
+| `CreateMessageTemplateUseCase`         | `CreateMessageTemplateCommand`         | `MessageTemplateDTO`              | Создает DRAFT template, проверяет connector/message type binding и channel match.                                                 |
+| `CreateTemplateVersionUseCase`         | `CreateTemplateVersionCommand`         | `TemplateVersionDTO`              | Создает DRAFT version, валидирует `template_payload` и `variables_schema`.                                                        |
+| `ActivateTemplateVersionUseCase`       | `ActivateTemplateVersionCommand`       | `TemplateVersionDTO`              | Активирует выбранную версию, переводит прежние active versions в `DEPRECATED`, template - в `ACTIVE`.                             |
+| `ListMessageTemplatesUseCase`          | `EntityIdVO` tenant id                 | `list[MessageTemplateDTO]`        | Возвращает templates с metadata активной версии.                                                                                  |
+| `SendCommunicationUseCase`             | `SendCommunicationCommand`             | `SendCommunicationResultDTO`      | Проверяет idempotency, template/channel/active version/variables/active connection и создает queued request/outbound.             |
+| `GetOutboundMessageUseCase`            | `GetOutboundMessageQuery`              | `OutboundMessageDTO`              | Возвращает outbound message или поднимает `OutboundMessageNotFoundError`.                                                         |
+| `ListOutboundMessagesUseCase`          | `ListOutboundMessagesQuery`            | `list[OutboundMessageDTO]`        | Возвращает outbound messages с `limit`/`offset`.                                                                                  |
+| `ProcessOutboundMessageUseCase`        | `ProcessQueuedMessagesCommand`         | `ProcessQueuedResultDTO`          | Batch-claim queued messages и отправляет каждое через provider sender.                                                            |
+| `ProcessOutboundMessageByIdUseCase`    | `ProcessOutboundMessageByIdCommand`    | `ProcessOutboundMessageResultDTO` | Обрабатывает один outbound id с processing lease token и короткими transaction scopes.                                            |
+| `PublishQueuedOutboundMessagesUseCase` | `PublishQueuedOutboundMessagesCommand` | `PublishQueuedResultDTO`          | Публикует publishable queued outbounds в RabbitMQ и помечает `queue_published_at`.                                                |
+| `RecoverStuckOutboundMessagesUseCase`  | `RecoverStuckOutboundMessagesCommand`  | `RecoverStuckResultDTO`           | Помечает истекшие `SENDING` messages как `UNKNOWN` через queue repository.                                                        |
+| `HandleProviderWebhookUseCase`         | `HandleProviderWebhookCommand`         | `WebhookResultDTO`                | Ищет active connector, извлекает webhook fields JSONPath-ами, матчится по external id и обновляет outbound status.                |
+
+## Domain Model
+
+### ProviderConnector
+
+- ID: `ProviderConnectorIdVO`.
+- Tenant scope: tenant id не хранится в entity, передается во все repository/service операции.
+- Fields: `provider_connector_id`, `provider_code`, `provider_name`, `version`, `connector_type`, `yaml_spec`,
+  `yaml_checksum`, `status`, `created_at`, `updated_at`.
+- Value Objects: `ProviderConnectorCodeVO`, `ProviderConnectorNameVO`, `ProviderConnectorVersionVO`,
+  `ProviderConnectorIdVO`.
+- Factory methods: `ProviderConnector.create`.
+- Update methods: в entity не найдено.
+- Domain errors: `InvalidProviderConnectorTypeError`, `InvalidProviderConnectorStatusError`.
+- Invariants: `connector_type` должен быть одним из `YAML_HTTP`, `YAML_SMTP`, `CUSTOM_ADAPTER`; `status` должен быть
+  одним из `ACTIVE`, `DISABLED`, `DEPRECATED`; code/name/version нормализуются через VO.
+
+### ProviderMessageType
+
+- ID: `ProviderMessageTypeIdVO`.
+- Tenant scope: tenant id передается в repository операции.
+- Fields: `provider_message_type_id`, `provider_connector_id`, `message_type_code`, `channel_code`, `name`,
+  `field_schema`, `ui_schema`, `is_active`.
+- Value Objects: `ProviderMessageTypeCodeVO`, `ProviderMessageTypeNameVO`, `ProviderChannelCodeVO`.
+- Factory methods: `ProviderMessageType.create`.
+- Update methods: в entity не найдено.
+- Domain errors: invalid message type code/name/channel VO errors.
+- Invariants: message type связан с provider connector, `message_type_code`, `channel_code`, `name` не должны быть
+  пустыми после нормализации.
+
+### ProviderConnectionEntity
+
+- ID: `ProviderConnectionIdVO`.
+- Tenant scope: хранит `tenant_id: EntityIdVO`.
+- Fields: `provider_connection_id`, `created_at`, `updated_at`, `tenant_id`, `provider_connector_id`,
+  `connection_code`, `connection_name`, `channel_code`, `config`, `secret_ref`, `secrets_b64`, `status`.
+- Value Objects: `ProviderConnectionCodeVO`, `ProviderConnectionNameVO`, `ProviderConnectionStatusVO`,
+  `ProviderConnectorIdVO`.
+- Factory methods: `ProviderConnectionEntity.create`.
+- Update methods: в entity не найдено.
+- Domain errors: `ProviderConnectionNotFoundError`, `InvalidProviderConnectionCodeError`,
+  `InvalidProviderConnectionNameError`, `ProviderSecretsValidationError`, `ProviderConnectorNotFoundError`,
+  `CommunicationValidationError`.
+- Invariants: connection создается как `ACTIVE`; connector должен существовать; `channel_code` должен входить в
+  `yaml_spec.channels`; `config` и `secrets` валидируются по JSON Schema из connector spec.
+
+### MessageTemplateEntity
+
+- ID: `MessageTemplateIdVO`.
+- Tenant scope: хранит `tenant_id: EntityIdVO`.
+- Fields: `template_id`, `created_at`, `updated_at`, `tenant_id`, `template_code`, `name`, `description`,
+  `provider_connector_id`, `provider_message_type_id`, `channel_code`, `message_class`, `status`.
+- Value Objects: `MessageTemplateCodeVO`, `MessageTemplateNameVO`, `ChannelCodeVO`, `MessageClassVO`,
+  `TemplateStatusVO`, `ProviderConnectorIdVO`, `ProviderMessageTypeIdVO`.
+- Factory methods: `MessageTemplateEntity.create`.
+- Update methods: `ensure_message_type_binding`, `mark_active`.
+- Domain errors: `MessageTemplateNotFoundError`, `InvalidMessageTemplateCodeError`, `InvalidMessageTemplateNameError`,
+  `ProviderConnectorNotFoundError`, `ProviderMessageTypeNotFoundError`, `CommunicationValidationError`.
+- Invariants: новая template создается в `DRAFT`; provider message type должен принадлежать выбранному connector;
+  channel template должен совпадать с channel message type.
+
+### TemplateVersionEntity
+
+- ID: `TemplateVersionIdVO`.
+- Tenant scope: tenant id находится на parent template и передается в repository операции.
+- Fields: `template_version_id`, `created_at`, `activated_at`, `template_id`, `version`, `template_payload`,
+  `variables_schema`, `status`.
+- Value Objects: `TemplateVersionTimestampVO`, `TemplateVersionStatusVO`.
+- Factory methods: `TemplateVersionEntity.create`.
+- Update methods: `ensure_belongs_to`, `activate`, `deprecate`.
+- Domain errors: `TemplateVersionNotFoundError`, `InvalidTemplateVersionTimestampError`.
+- Invariants: новая version создается в `DRAFT`; active version получает `activated_at`; неактивные версии не меняются
+  при `deprecate`.
+
+### CommunicationRequest
+
+- ID: `CommunicationRequestIdVO`.
+- Tenant scope: хранит `tenant_id: EntityIdVO`.
+- Fields: `communication_request_id`, `tenant_id`, `initiator_type`, `initiator_ref_id`, `correlation_id`,
+  `idempotency_key`, `message_class`, `channel_code`, `template_id`, `template_version_id`, `contact_id`,
+  `recipient_address`, `recipient_snapshot`, `variables`, `scheduled_at`, `priority`, `status`, timestamps.
+- Value Objects: `InitiatorTypeVO`, `IdempotencyKeyVO`, `MessageClassVO`, `ChannelCodeVO`, `RecipientAddressVO`,
+  `OutboundPriorityVO`.
+- Factory methods: `CommunicationRequest.create`.
+- Update methods: в entity не найдено.
+- Domain errors: invalid initiator/recipient/priority/idempotency errors, `CommunicationValidationError`.
+- Invariants: request create нормализует class/channel/recipient/priority; default status в domain factory - `QUEUED`.
+
+### OutboundMessage
+
+- ID: `OutboundMessageIdVO`.
+- Tenant scope: хранит `tenant_id: EntityIdVO`.
+- Fields: `outbound_message_id`, `tenant_id`, `communication_request_id`, `provider_connection_id`, `channel_code`,
+  `message_class`, `priority`, `contact_id`, `recipient_address`, `rendered_payload`, `provider_request_payload`,
+  `external_message_id`, `external_status`, `internal_status`, errors, delivery timestamps, processing lease fields,
+  queue publishing fields, timestamps.
+- Value Objects: `OutboundMessageIdVO`, `CommunicationRequestIdVO`, `ProviderConnectionIdVO`, `ChannelCodeVO`,
+  `MessageClassVO`, `OutboundPriorityVO`, `RecipientAddressVO`.
+- Factory methods: `OutboundMessage.create_queued`.
+- Update methods: `mark_published`.
+- Domain errors: `OutboundMessageNotFoundError`, `ProviderPayloadValidationError`.
+- Invariants: queued outbound создается с empty provider snapshots, `internal_status=QUEUED`, `queued_at=now`,
+  `queue_publish_count=0`; `mark_published` обновляет `queue_published_at` и увеличивает publish count.
+
+### DeliveryAttempt
+
+- ID: `DeliveryAttemptIdVO`.
+- Tenant scope: tenant id передается в repository/service операции.
+- Fields: `delivery_attempt_id`, `outbound_message_id`, `provider_connection_id`, `attempt_no`, `status`,
+  `request_payload`, `response_payload`, `http_status_code`, `external_message_id`, `error_code`, `error_message`,
+  `started_at`, `finished_at`.
+- Value Objects: `DeliveryAttemptIdVO`, `OutboundMessageIdVO`, `ProviderConnectionIdVO`, `ExternalMessageId`.
+- Factory methods: `DeliveryAttempt.start`.
+- Update methods: `complete_success`, `fail`.
+- Domain errors: `DeliveryAttemptNotFoundError`, `InvalidExternalMessageIdError`.
+- Invariants: started attempt получает `STARTED`; success переводит в `SUCCESS`; failure выбирает
+  `RETRYABLE_FAILED` или `NON_RETRYABLE_FAILED`.
+
+### DeliveryEvent
+
+- ID: `DeliveryEventIdVO`.
+- Tenant scope: хранит `tenant_id: EntityIdVO`.
+- Fields: `delivery_event_id`, `tenant_id`, `outbound_message_id`, `provider_connection_id`, `external_message_id`,
+  `external_status`, `internal_status`, `event_type`, `event_at`, `raw_payload`, `created_at`.
+- Value Objects: `DeliveryEventIdVO`, `OutboundMessageIdVO`, `ProviderConnectionIdVO`, `ExternalMessageId`.
+- Factory methods: `DeliveryEvent.create_from_webhook`.
+- Update methods: в entity не найдено.
+- Domain errors: `WebhookPayloadValidationError`, `InvalidExternalMessageIdError`.
+- Invariants: unknown event type мапится в `WEBHOOK_RECEIVED`.
 
 ## Application Layer
 
+### Commands
+
+- `RegisterProviderConnectorCommand`.
+- `CreateProviderConnectionCommand`.
+- `CreateMessageTemplateCommand`.
+- `CreateTemplateVersionCommand`.
+- `ActivateTemplateVersionCommand`.
+- `SendCommunicationCommand`.
+- `ProcessQueuedMessagesCommand`.
+- `ProcessOutboundMessageByIdCommand`.
+- `PublishQueuedOutboundMessagesCommand`.
+- `RecoverStuckOutboundMessagesCommand`.
+- `HandleProviderWebhookCommand`.
+
+Все найденные command classes оформлены как frozen/slotted dataclasses.
+
+### Queries
+
+- `GetOutboundMessageQuery`.
+- `ListOutboundMessagesQuery`.
+
+Для provider connectors, provider connections и message templates отдельные query command classes не найдены: list use
+cases принимают tenant id напрямую, а `application/**/query/repository.py` содержит repository protocols.
+
+### DTOs
+
+- Provider connector: `ProviderConnectorDTO`, `ProviderMessageTypeDTO`, `ProviderConnectorCatalogDTO`.
+- Provider connection: `ProviderConnectionDTO`.
+- Message template: `MessageTemplateDTO`, `TemplateVersionDTO`.
+- Outbound message: `SendCommunicationResultDTO`, `OutboundMessageDTO`, `ProcessQueuedResultDTO`,
+  `ProcessOutboundMessageResultDTO`.
+- Queue: `PublishQueuedResultDTO`, `RecoverStuckResultDTO`, `OutboundMessageJob`.
+- Delivery: `WebhookResultDTO`.
+
+DTOs оформлены как frozen/slotted dataclasses.
+
 ### Use Cases
 
-Provider connector:
+- Provider connector: `RegisterProviderConnectorUseCase`, `ListProviderConnectorsUseCase`.
+- Provider connection: `CreateProviderConnectionUseCase`, `ListProviderConnectionsUseCase`.
+- Message template: `CreateMessageTemplateUseCase`, `CreateTemplateVersionUseCase`, `ActivateTemplateVersionUseCase`,
+  `ListMessageTemplatesUseCase`.
+- Outbound message: `SendCommunicationUseCase`, `GetOutboundMessageUseCase`, `ListOutboundMessagesUseCase`,
+  `ProcessOutboundMessageUseCase`, `ProcessOutboundMessageByIdUseCase`.
+- Queue: `PublishQueuedOutboundMessagesUseCase`, `RecoverStuckOutboundMessagesUseCase`.
+- Delivery: `HandleProviderWebhookUseCase`.
 
-- `RegisterProviderConnectorUseCase`
-- `ListProviderConnectorsUseCase`
+### Application Services
 
-Provider connection:
+- `ProviderYamlLoader`: парсит YAML через `yaml.safe_load`, валидирует required root fields, `channels`,
+  `message_types`, JSON Schemas, transport-specific send spec и считает canonical JSON checksum.
+- `JsonSchemaValidationService`: валидирует config, secrets, template payload и variables через Draft 2020-12.
+- `TemplateRenderService`: рекурсивно рендерит string leaves через Jinja2 `NativeEnvironment` и `StrictUndefined`.
+- `ProviderPayloadBuildService`: строит provider HTTP method/url/headers/body из send spec.
+- `ProviderStatusMappingService`: мапит external status в `OutboundMessageStatus`, fallback - `UNKNOWN`.
+- `JsonPathService`: извлекает первое значение по JSONPath.
+- `SecretCodec`: кодирует/декодирует secrets как base64 JSON.
 
-- `CreateProviderConnectionUseCase`
-- `ListProviderConnectionsUseCase`
+### Repository Protocols
 
-Message template:
+- `ProviderConnectorRepositoryProtocol`.
+- `ProviderConnectorQueryRepositoryProtocol`.
+- `ProviderConnectionRepositoryProtocol`.
+- `ProviderConnectionProviderLookupProtocol`.
+- `ProviderConnectionQueryRepositoryProtocol`.
+- `MessageTemplateRepositoryProtocol`.
+- `MessageTemplateProviderLookupProtocol`.
+- `MessageTemplateQueryRepositoryProtocol`.
+- `OutboundMessageRepositoryProtocol`.
+- `OutboundMessageQueryRepositoryProtocol`.
+- `OutboundProcessingRepositoryProtocol`.
+- `OutboundProcessingByIdRepositoryProtocol`.
+- `OutboundProcessingRepositoryContextFactoryProtocol`.
+- `OutboundQueueRepositoryProtocol`.
+- `OutboundMessagePublisherProtocol`.
+- `DeliveryAttemptRepositoryProtocol`.
+- `DeliveryEventRepositoryProtocol`.
+- `DeliveryWebhookLookupProtocol`.
+- `DeliveryRepositoryProtocol`.
+- `DeliveryAttemptServiceProtocol`.
+- `ProviderSenderProtocol`.
+- `ProviderSenderRegistryProtocol`.
+- `HttpClientProtocol`.
 
-- `CreateMessageTemplateUseCase`
-- `CreateTemplateVersionUseCase`
-- `ActivateTemplateVersionUseCase`
-- `ListMessageTemplatesUseCase`
+## Infrastructure / Persistence
 
-Outbound message:
+Communication persistence реализован через runtime objects. Репозитории получают tenant scope параметром `tenant_id`,
+резолвят descriptor через `SchemaRegistryRuntimeObjectResolver`/`RuntimeObjectResolverDep` и работают через
+`PostgresRuntimeCommandGateway` и `PostgresRuntimeQueryGateway`.
 
-- `SendCommunicationUseCase`
-- `GetOutboundMessageUseCase`
-- `ListOutboundMessagesUseCase`
-- `ProcessOutboundMessageUseCase`
-- `ProcessOutboundMessageByIdUseCase`
-- `PublishQueuedOutboundMessagesUseCase`
-- `RecoverStuckOutboundMessagesUseCase`
+Runtime object names заданы в `src/modules/communication/infrastructure/runtime_object_names.py`.
 
-Delivery:
+| Runtime object                        | Назначение                                                                    |
+|---------------------------------------|-------------------------------------------------------------------------------|
+| `communication_provider_connector`    | YAML provider connector definitions.                                          |
+| `communication_provider_message_type` | Message type schemas внутри connector.                                        |
+| `communication_provider_connection`   | Tenant provider config, `secret_ref`, `secrets_b64`.                          |
+| `communication_message_template`      | Template headers.                                                             |
+| `communication_template_version`      | Versioned template payloads и variables schemas.                              |
+| `communication_request`               | Inbound send commands.                                                        |
+| `communication_outbound_message`      | Concrete provider messages, delivery state, processing lease, queue metadata. |
+| `communication_delivery_attempt`      | Provider send attempts.                                                       |
+| `communication_delivery_event`        | Provider webhook/delivery events.                                             |
 
-- `HandleProviderWebhookUseCase`
+### ProviderConnectorRuntimeRepository
 
-### Helper Services
+- File: `src/modules/communication/infrastructure/provider_connector/repository.py`.
+- Implements: `ProviderConnectorRepositoryProtocol`, `ProviderConnectorQueryRepositoryProtocol`.
+- Storage: `runtime_data`.
+- Runtime objects: `communication_provider_connector`, `communication_provider_message_type`.
+- Tenant handling: tenant id передается в каждый метод.
+- Mapping: `provider_connector/row_mapper.py` мапит runtime rows в domain entities и DTOs.
+- Errors: runtime gateway/resolver errors пробрасываются в presentation error mapping.
 
-- `ProviderYamlLoader`
-  - парсит YAML, проверяет contract и считает checksum
-- `JsonSchemaValidationService`
-  - валидирует config, secrets, template payload и variables по JSON Schema Draft 2020-12
-- `TemplateRenderService`
-  - рекурсивно рендерит string leaves template payload через Jinja2 `StrictUndefined`
-- `ProviderPayloadBuildService`
-  - рендерит provider HTTP request method/url/headers/body из YAML send spec
-- `ProviderStatusMappingService`
-  - мапит external provider status в internal outbound status с fallback `UNKNOWN`
-- `JsonPathService`
-  - извлекает одно значение из provider response/webhook payload
-- `SecretCodec`
-  - кодирует/декодирует provider connection secrets как base64 JSON
+### ProviderConnectionRuntimeRepository
 
-## Порты Расширения
+- File: `src/modules/communication/infrastructure/provider_connection/repository.py`.
+- Implements: `ProviderConnectionRepositoryProtocol`, `ProviderConnectionProviderLookupProtocol`,
+  `ProviderConnectionQueryRepositoryProtocol`; также структурно используется как active connection lookup для send.
+- Storage: `runtime_data`.
+- Runtime object: `communication_provider_connection`; connector lookup читает `communication_provider_connector`.
+- Tenant handling: tenant id передается в каждый метод.
+- Mapping: `provider_connection/row_mapper.py`.
+- Errors: not found возвращается как `None` на load/find methods; runtime errors пробрасываются выше.
 
-Domain repository ports:
+### MessageTemplateRuntimeRepository
 
-- `ProviderConnectorRepositoryProtocol`
-  - upsert provider connector и message types
-- `ProviderConnectionRepositoryProtocol`
-  - load/save/find active provider connection
-- `ProviderConnectionProviderLookupProtocol`
-  - lookup connector для правил connection
-- `MessageTemplateRepositoryProtocol`
-  - load/save template и template versions
-- `MessageTemplateProviderLookupProtocol`
-  - lookup connector/message type для правил template
-- `OutboundMessageRepositoryProtocol`
-  - idempotency lookup и создание send request/outbound message
-- `DeliveryRepositoryProtocol`
-  - attempts, events, webhook lookup и outbound status update
-- `DeliveryAttemptServiceProtocol`
-  - service port для processing adapter
+- File: `src/modules/communication/infrastructure/message_template/repository.py`.
+- Implements: `MessageTemplateRepositoryProtocol`, `MessageTemplateProviderLookupProtocol`.
+- Storage: `runtime_data`.
+- Runtime objects: `communication_message_template`, `communication_template_version`,
+  `communication_provider_connector`, `communication_provider_message_type`.
+- Tenant handling: tenant id передается в каждый метод.
+- Mapping: `message_template/row_mapper.py`.
+- Errors: not found возвращается как `None`; consistency/runtime errors пробрасываются выше.
 
-Application/query/processing ports:
+### MessageTemplateQueryRuntimeRepository
 
-- `ProviderConnectorQueryRepositoryProtocol`
-- `ProviderConnectionQueryRepositoryProtocol`
-- `MessageTemplateQueryRepositoryProtocol`
-- `OutboundMessageQueryRepositoryProtocol`
-- `OutboundProcessingRepositoryProtocol`
-- `OutboundProcessingByIdRepositoryProtocol`
-- `OutboundProcessingRepositoryContextFactoryProtocol`
-- `OutboundQueueRepositoryProtocol`
+- File: `src/modules/communication/infrastructure/message_template/query_repository.py`.
+- Implements: `MessageTemplateQueryRepositoryProtocol`.
+- Storage: `runtime_data`.
+- Runtime objects: `communication_message_template`, `communication_template_version`.
+- Tenant handling: tenant id передается в query method.
+- Mapping: query rows собираются в `MessageTemplateDTO` с active version metadata.
+- Errors: runtime errors пробрасываются выше.
 
-Provider integration ports:
+### OutboundMessageRuntimeRepository
 
-- `ProviderSenderProtocol`
-  - `transport`
-  - `build(context) -> ProviderPreparedSend`
-  - `send(context, prepared) -> ProviderSendResult`
-- `ProviderSenderRegistryProtocol`
-  - resolve sender by transport name
-- `HttpClientProtocol`
-  - outbound HTTP call abstraction
-- `OutboundMessagePublisherProtocol`
-  - публикация outbound job в broker
+- File: `src/modules/communication/infrastructure/outbound_message/repository.py`.
+- Implements: send repository, template lookup, outbound query, queue and processing repository protocols.
+- Storage: `runtime_data`.
+- Runtime objects: `communication_request`, `communication_outbound_message`, template/connection/connector/message type
+  objects для processing context.
+- Tenant handling: tenant id передается в каждый метод.
+- Mapping: `outbound_message/row_mapper.py`.
+- Errors: not found возвращается как `None` в lookup methods; processing methods используют status/lease fields.
 
-## Infrastructure Layer
+### DeliveryRuntimeRepository
 
-### Runtime Repositories
+- File: `src/modules/communication/infrastructure/delivery/repository.py`.
+- Implements: `DeliveryRepositoryProtocol`.
+- Storage: `runtime_data`.
+- Runtime objects: `communication_delivery_attempt`, `communication_delivery_event`, plus outbound/connector lookup.
+- Tenant handling: tenant id передается в каждый метод.
+- Mapping: `delivery/row_mapper.py`.
+- Errors: not found возвращается как `None` в read methods; runtime errors пробрасываются выше.
 
-Communication persistence реализован через runtime objects из `schema_registry` и gateways из `runtime_data`.
-Репозитории резолвят runtime descriptor по `tenant_id + object_name`, затем работают через `RuntimeCommandGateway` и
-`RuntimeQueryGateway`.
+### OutboundProcessingRuntimeRepository
 
-Runtime repositories:
-
-- `ProviderConnectorRuntimeRepository`
-  - implements connector command/query ports
-- `ProviderConnectionRuntimeRepository`
-  - implements connection command/query ports и connector lookup
-- `MessageTemplateRuntimeRepository`
-  - implements template command repository и provider lookup
-- `MessageTemplateQueryRuntimeRepository`
-  - читает templates вместе с active version metadata
-- `OutboundMessageRuntimeRepository`
-  - implements send, query, queue, processing и template/connection lookup operations
-- `DeliveryRuntimeRepository`
-  - implements delivery attempts, events и webhook lookup
-- `OutboundProcessingRuntimeRepository`
-  - adapter, объединяющий outbound repository и delivery attempt service
-
-Row mappers живут рядом с repositories и отвечают за конвертацию runtime row в domain entity или DTO. Domain/application
-код не должен работать с raw runtime rows напрямую.
-
-### Runtime Objects
-
-Runtime object names заданы в `src/modules/communication/infrastructure/runtime_object_names.py` и seed-ятся через
-`src/modules/schema_registry/seed/schema_seed.py`.
-
-| Runtime object                        | Назначение                                            |
-|---------------------------------------|-------------------------------------------------------|
-| `communication_provider_connector`    | YAML provider connector definitions                   |
-| `communication_provider_message_type` | message type schemas provider connector-а             |
-| `communication_provider_connection`   | tenant provider config, secret refs и encoded secrets |
-| `communication_message_template`      | template headers                                      |
-| `communication_template_version`      | versioned template payloads и variables schemas       |
-| `communication_request`               | входящие send commands                                |
-| `communication_outbound_message`      | concrete provider messages и processing state         |
-| `communication_delivery_attempt`      | provider send attempts                                |
-| `communication_delivery_event`        | provider webhook/delivery events                      |
-
-Важные индексы/инварианты runtime schema:
-
-- connector unique по `provider_code + version`
-- message type unique по `provider_connector_id + message_type_code`
-- provider connection unique по `connection_code`
-- template unique по `template_code`
-- template version unique по `template_id + version`
-- communication request unique по `idempotency_key`
-- outbound messages индексируются по request, connection, external message id, internal status, processing lease,
-  next attempt и queue published timestamp
-- delivery attempt unique по `outbound_message_id + attempt_no`
-- delivery event индексируется по outbound, external message id, internal status и event type
+- File: `src/modules/communication/infrastructure/delivery/processing_repository.py`.
+- Implements: `OutboundProcessingByIdRepositoryProtocol`.
+- Storage: adapter over `OutboundMessageRuntimeRepository` and `DeliveryService`.
+- Runtime object: напрямую делегирует outbound/delivery repositories.
+- Tenant handling: tenant id передается в каждый метод.
+- Mapping: делегируется underlying repositories.
+- Errors: пробрасывает ошибки underlying repositories/services.
 
 ### Provider Senders
 
-Provider sender - transport adapter, который строит provider request и нормализует provider response.
-
-Текущие senders:
-
-- `YamlHttpProviderSender`
-  - transport: `http`
-  - рендерит method/url/headers/body из YAML
-  - поддерживает bearer/basic auth из secrets
-  - вызывает provider через `HttpxProviderHttpClient`
-  - извлекает external id/status через `response_mapping`
-  - редактирует secret values в persisted request snapshot
-- `YamlSmtpProviderSender`
-  - transport: `smtp`
-  - рендерит SMTP send spec
-  - использует shared `SmtpEmailTransport`
-  - синтезирует successful provider response с `SENT`
-
-Provider render context:
-
-- `recipient.address`
-- `recipient.snapshot`
-- `template`
-- `variables`
-- `config`
-- `secrets`
-- `message.outbound_message_id`
-- `message.communication_request_id`
-- `message.initiator_ref_id`
-- `connection.connection_code`
-- `connection.channel_code`
-- `provider_message_type.code`
+- `ProviderSenderRegistry`: выбирает sender по `transport`, unknown transport -> `CommunicationValidationError`.
+- `YamlHttpProviderSender`: transport `http`; строит request через `ProviderPayloadBuildService`, поддерживает
+  bearer/basic
+  auth из decoded secrets, вызывает `HttpxProviderHttpClient`, извлекает external id/status через JSONPath и редактирует
+  secrets в persisted request snapshot.
+- `YamlSmtpProviderSender`: transport `smtp`; строит SMTP payload, использует
+  `src.modules.shared.infrastructure.email.smtp_email_transport.SmtpEmailTransport`, возвращает successful synthetic
+  response со статусом `SENT`.
+- `HttpxProviderHttpClient`: HTTP client adapter for provider requests.
 
 ### RabbitMQ
 
-RabbitMQ интеграция находится в `src/modules/communication/infrastructure/rabbitmq.py`.
+RabbitMQ integration находится в `src/modules/communication/infrastructure/rabbitmq.py`.
 
-Компоненты:
-
-- `RabbitMQOutboundMessagePublisher`
-  - реализует `OutboundMessagePublisherProtocol`
-  - публикует `OutboundMessageJob`
-- `build_communication_exchange`
-- `build_communication_queue`
-- `build_communication_dlx`
-- `build_communication_dlq`
-- `ensure_communication_topology`
-- `build_communication_faststream_app`
-- `handle_outbound_message_job`
+- `RabbitMQOutboundMessagePublisher` реализует publish порт и отправляет `OutboundMessageJob`.
+- `build_communication_exchange`, `build_communication_queue`, `build_communication_dlx`, `build_communication_dlq`
+  строят durable exchange/queue/DLX/DLQ.
+- `ensure_communication_topology` объявляет и биндует topology.
+- `build_communication_faststream_app` создает FastStream worker с manual ack.
+- `handle_outbound_message_job` парсит payload, запускает `ProcessOutboundMessageByIdUseCase`, invalid payload
+  reject-ит без requeue, processing exception nack-ит с requeue.
 
 Job payload:
 
@@ -553,48 +415,110 @@ Job payload:
 }
 ```
 
-Если `COMMUNICATION_QUEUE.enabled=false`, HTTP `/send` создаёт queued message, но publisher dependency возвращает
-`None`, и processing нужно запускать CLI командой `communication process-queued` или включить queue.
+### Schema Seed Facts
 
-## Presentation Layer
+`src/modules/schema_registry/seed/schema_seed.py` содержит `COMMUNICATION_OBJECTS` для всех runtime objects модуля.
 
-Все HTTP routes монтируются через `src/modules/router.py` под `/api`, а communication router добавляет
-`/communication`.
+Важные indexes/relations:
 
-### HTTP API
+- `communication_provider_connectors_code_version_uq`: unique по `provider_code`, `version`.
+- `communication_provider_message_types_connector_code_uq`: unique по `provider_connector_id`, `message_type_code`.
+- `communication_provider_message_types_connector`: many-to-one к connector, `on_delete="cascade"`.
+- `communication_provider_connections_code_uq`: unique по `connection_code`.
+- `communication_provider_connections_connector`: many-to-one к connector, `on_delete="restrict"`.
+- `communication_message_templates_code_uq`: unique по `template_code`.
+- `communication_message_templates_connector`: many-to-one к connector, `on_delete="restrict"`.
+- `communication_message_templates_message_type`: many-to-one к message type, `on_delete="restrict"`.
+- `communication_template_versions_template_version_uq`: unique по `template_id`, `version`.
+- `communication_template_versions_template`: many-to-one к template, `on_delete="cascade"`.
+- `communication_requests_idempotency_uq`: unique по `idempotency_key`.
+- `communication_requests_template` и `communication_requests_template_version`: `on_delete="restrict"`.
+- `communication_outbound_messages_request`: many-to-one к request, `on_delete="cascade"`.
+- `communication_outbound_messages_connection`: many-to-one к provider connection, `on_delete="restrict"`.
+- Outbound indexes: request, connection, channel, external message id, internal status, processing token,
+  processing deadline, next attempt, queue published timestamp.
+- `communication_delivery_attempts_outbound_attempt_uq`: unique по `outbound_message_id`, `attempt_no`.
+- `communication_delivery_attempts_outbound`: many-to-one к outbound, `on_delete="cascade"`.
+- `communication_delivery_attempts_connection`: many-to-one к provider connection, `on_delete="restrict"`.
+- `communication_delivery_events_outbound` и `communication_delivery_events_connection`: `on_delete="set_null"`.
 
-Authenticated routes берут `tenant_id` из `AuthenticatedRequestContextDep` через `require_tenant_id`.
-Webhook route использует `OptionalRequestContextDep`, потому что провайдеры вызывают его без console session context.
+## Presentation / HTTP API
 
-| Method | Path                                                                        | Назначение                                 |
-|--------|-----------------------------------------------------------------------------|--------------------------------------------|
-| `POST` | `/api/communication/providers/connectors/import-yaml`                       | импорт YAML provider connector             |
-| `GET`  | `/api/communication/providers/connectors`                                   | список provider connectors и message types |
-| `POST` | `/api/communication/providers/connections`                                  | создание provider connection               |
-| `GET`  | `/api/communication/providers/connections`                                  | список provider connections                |
-| `POST` | `/api/communication/templates`                                              | создание message template                  |
-| `POST` | `/api/communication/templates/{template_id}/versions`                       | создание template version                  |
-| `POST` | `/api/communication/templates/{template_id}/versions/{version_id}/activate` | активация template version                 |
-| `GET`  | `/api/communication/templates`                                              | список templates с active version metadata |
-| `POST` | `/api/communication/send`                                                   | постановка communication на отправку       |
-| `GET`  | `/api/communication/messages`                                               | список outbound messages                   |
-| `GET`  | `/api/communication/messages/{outbound_message_id}`                         | получение outbound message                 |
-| `POST` | `/api/communication/webhooks/{tenant_id}/{provider_code}`                   | provider delivery webhook                  |
+Base prefix:
 
-Типичные error mappings:
+```text
+/api/communication
+```
 
-- `401`
-  - отсутствует authenticated tenant context для защищённых routes
-- `404`
-  - domain not found ошибки
-- `409`
-  - runtime persistence/policy/descriptor state ошибки
-- `422`
-  - domain validation, runtime validation/filter и shared domain ошибки
+Communication router монтируется в `src/modules/router.py` под `/api`; internal routers добавляют `/communication`.
+Protected routes используют `AuthenticatedRequestContextDep` и `require_tenant_id`. Webhook route использует
+`OptionalRequestContextDep` и получает tenant id из path.
 
-### Management CLI
+| Method | Path                                                                        | Controller                       | Use Case                           | Request                                 | Response                                |
+|--------|-----------------------------------------------------------------------------|----------------------------------|------------------------------------|-----------------------------------------|-----------------------------------------|
+| `POST` | `/api/communication/providers/connectors/import-yaml`                       | `import_provider_connector_yaml` | `RegisterProviderConnectorUseCase` | `ImportYamlRequestSchema`               | `ProviderConnectorResponseSchema`       |
+| `GET`  | `/api/communication/providers/connectors`                                   | `list_provider_connectors`       | `ListProviderConnectorsUseCase`    | none                                    | `ListProviderConnectorsResponseSchema`  |
+| `POST` | `/api/communication/providers/connections`                                  | `create_provider_connection`     | `CreateProviderConnectionUseCase`  | `CreateProviderConnectionRequestSchema` | `ProviderConnectionResponseSchema`      |
+| `GET`  | `/api/communication/providers/connections`                                  | `list_provider_connections`      | `ListProviderConnectionsUseCase`   | none                                    | `ListProviderConnectionsResponseSchema` |
+| `POST` | `/api/communication/templates`                                              | `create_message_template`        | `CreateMessageTemplateUseCase`     | `CreateMessageTemplateRequestSchema`    | `MessageTemplateResponseSchema`         |
+| `POST` | `/api/communication/templates/{template_id}/versions`                       | `create_template_version`        | `CreateTemplateVersionUseCase`     | `CreateTemplateVersionRequestSchema`    | `TemplateVersionResponseSchema`         |
+| `POST` | `/api/communication/templates/{template_id}/versions/{version_id}/activate` | `activate_template_version`      | `ActivateTemplateVersionUseCase`   | path params                             | `TemplateVersionResponseSchema`         |
+| `GET`  | `/api/communication/templates`                                              | `list_message_templates`         | `ListMessageTemplatesUseCase`      | none                                    | `ListMessageTemplatesResponseSchema`    |
+| `POST` | `/api/communication/send`                                                   | `send_communication`             | `SendCommunicationUseCase`         | `SendCommunicationRequestSchema`        | `SendCommunicationResponseSchema`       |
+| `GET`  | `/api/communication/messages`                                               | `list_messages`                  | `ListOutboundMessagesUseCase`      | query `limit`, `offset`                 | `ListOutboundMessagesResponseSchema`    |
+| `GET`  | `/api/communication/messages/{outbound_message_id}`                         | `get_message`                    | `GetOutboundMessageUseCase`        | path param                              | `OutboundMessageResponseSchema`         |
+| `POST` | `/api/communication/webhooks/{tenant_id}/{provider_code}`                   | `handle_provider_webhook`        | `HandleProviderWebhookUseCase`     | raw JSON object                         | `WebhookResponseSchema`                 |
 
-CLI команды регистрируются в `src/management/commands/communication.py`.
+HTTP status facts:
+
+- Create endpoints return `201` where specified by controllers.
+- `/api/communication/send` returns `202` after creating queued request/outbound.
+- Webhook endpoint returns `202`.
+- Missing tenant context on protected routes maps to `401`.
+- `CommunicationNotFoundError` maps to `404`.
+- `RuntimeDataPersistenceError`, `RuntimeDataPolicyError`, `RuntimeObjectDescriptorError`, `RuntimeObjectNotFoundError`,
+  `SchemaRegistryMetadataInconsistentError`, `CommunicationRuntimeStateError` map to `409`.
+- `CommunicationValidationError`, `RuntimeDataValidationError`, `RuntimeDataFilterError`, generic `DomainError` map to
+  `422`.
+- Outbound controllers use shared `map_outbound_http_error`.
+
+`send_communication` commits UoW after use case success and only then attempts to publish RabbitMQ job. If publisher is
+disabled or result is not `QUEUED`, no publish happens. Publish failure is logged, UoW is rolled back for publish
+marker,
+but already committed send row remains queued for later publishing.
+
+## Dependency Injection
+
+- Infrastructure dependencies in `src/modules/communication/presentation/depends/infrastructure.py` build:
+  `RuntimeFieldTypePolicy`, `PostgresRuntimeQueryGateway`, `PostgresRuntimeCommandGateway`, runtime repositories,
+  helper services, `HttpxProviderHttpClient`, `ProviderSenderRegistry` and optional `RabbitMQOutboundMessagePublisher`.
+- Application dependencies in `src/modules/communication/presentation/depends/application.py` build domain services and
+  HTTP use cases from repositories/services/clock.
+- Management dependencies in `src/modules/communication/presentation/depends/management.py` build processing, publish,
+  recover and by-id worker use cases outside FastAPI DI using `AsyncSession`/`UnitOfWorkProtocol`.
+- Shared dependencies: `UoWDep`, `ClockDep`, authenticated/optional request context dependencies.
+
+## Dependencies On Other Modules
+
+| Module            | Layer                                          | Used For                                                                                                  |
+|-------------------|------------------------------------------------|-----------------------------------------------------------------------------------------------------------|
+| `shared`          | domain/application/presentation/infrastructure | `EntityIdVO`, `DomainError`, clock port, UoW, request context, SMTP transport.                            |
+| `runtime_data`    | infrastructure/presentation                    | Runtime command/query gateways, type policy, runtime validation/filter/persistence errors.                |
+| `schema_registry` | infrastructure/presentation/management         | Runtime object resolver, object descriptors, schema seed, SQLAlchemy repositories in management builders. |
+| `config`          | presentation/infrastructure/management         | `dnk_config.COMMUNICATION_QUEUE`, RabbitMQ settings.                                                      |
+| `contact_point`   | none direct                                    | Direct use cases/repositories не используются; только `contact_id` value хранится в communication rows.   |
+
+External library dependencies found in module code: FastAPI, `uuid6`, PyYAML, `jsonschema`, Jinja2, JSONPath parser,
+httpx client adapter, FastStream/RabbitMQ, SQLAlchemy session factory for management builders.
+
+## Events / Background Processing
+
+Found:
+
+- RabbitMQ publishing through `RabbitMQOutboundMessagePublisher`.
+- FastStream subscriber through `build_communication_faststream_app`.
+- Manual ack/nack/reject behavior in `handle_outbound_message_job`.
+- Management CLI commands:
 
 ```text
 dnk-manage communication process-queued --tenant-id <uuid> [--limit 100]
@@ -603,151 +527,91 @@ dnk-manage communication recover-stuck --tenant-id <uuid> [--older-than-seconds 
 dnk-manage communication worker
 ```
 
-Назначение:
+Processing facts:
 
-- `process-queued`
-  - локально claim-ит и обрабатывает queued outbound messages без RabbitMQ
-- `publish-queued`
-  - публикует queued outbound messages в RabbitMQ
-- `recover-stuck`
-  - переводит истёкшие `SENDING` messages в recoverable failed/unknown state
-- `worker`
-  - запускает FastStream worker, который обрабатывает RabbitMQ jobs по одному outbound id
+- `process-queued` batch-claims queued outbound messages and sends them without RabbitMQ.
+- `publish-queued` scans publishable queued outbounds, publishes jobs and marks `queue_published_at`.
+- `recover-stuck` recovers expired `SENDING` messages.
+- `worker` runs FastStream RabbitMQ app and processes one outbound id per job.
+- `ProcessOutboundMessageByIdUseCase` uses processing token and processing deadline; HTTP 429 and HTTP 5xx can be
+  retried
+  according to connector `retry_policy`.
 
-## Как Работать С Модулем
+Not found:
 
-Типичный setup provider-а:
-
-1. Импортировать YAML connector через `POST /api/communication/providers/connectors/import-yaml`.
-2. Получить connector/message type ids через `GET /api/communication/providers/connectors`.
-3. Создать provider connection через `POST /api/communication/providers/connections`.
-4. Создать template через `POST /api/communication/templates`.
-5. Создать template version через `POST /api/communication/templates/{template_id}/versions`.
-6. Активировать version через `POST /api/communication/templates/{template_id}/versions/{version_id}/activate`.
-
-Типичная отправка:
-
-1. Бизнес-фича вызывает `POST /api/communication/send` или напрямую `SendCommunicationUseCase`.
-2. В command передаются `template_id` или `template_code`, `channel_code`, `message_class`, recipient и variables.
-3. Use case валидирует active template version, variables и active provider connection.
-4. Создаются `communication_request` и `communication_outbound_message`.
-5. При включённой queue HTTP controller публикует RabbitMQ job после commit.
-6. Worker claim-ит message, рендерит template, вызывает provider sender и сохраняет result.
-7. Provider webhook дополняет delivery state, если provider присылает delivery events.
-
-Для синхронной/ручной обработки без RabbitMQ можно использовать:
-
-```text
-dnk-manage communication process-queued --tenant-id <uuid>
-```
-
-Для production-like queue flow:
-
-```text
-dnk-manage communication publish-queued --tenant-id <uuid>
-dnk-manage communication worker
-```
-
-## Как Строить Новые Фичи
-
-Новые бизнес-сценарии:
-
-- добавляйте command/query DTO в `application/<area>/command` или `application/<area>/query`
-- добавляйте use case в `application/<area>/use_case`
-- правила состояния держите в domain entity/service
-- persistence оформляйте через repository protocol, а concrete adapter - в `infrastructure`
-- HTTP controller должен быть тонким: input mapping, вызов use case, error mapping, response mapping
-
-Новые provider transports:
-
-- добавьте или расширьте YAML validation в `ProviderYamlLoader`
-- реализуйте `ProviderSenderProtocol`
-- определите `transport` string
-- реализуйте `build()` так, чтобы `request_payload` был безопасен для сохранения без secrets
-- реализуйте `send()` и возвращайте normalized `ProviderSendResult`
-- зарегистрируйте sender в `get_provider_sender_registry` и management `build_provider_sender_registry`
-- добавьте tests для loader, sender build/send и processing use case
-
-Новые runtime fields/tables:
-
-- измените seed в `src/modules/schema_registry/seed/schema_seed.py`
-- обновите runtime object names при появлении новой table
-- обновите runtime repository payloads, filters и row mappers
-- проверьте config/diff поведение schema registry
-- добавьте tests repository mapping и use case behavior
-
-Интеграция из других модулей:
-
-- предпочтительно использовать application use case, а не infrastructure repository напрямую
-- tenant scope передавайте как `EntityIdVO`
-- ids внутри domain/application используйте concrete `EntityIdVO` subclasses
-- UUID оставляйте на HTTP, CLI, queue и runtime-data boundaries
-- не обходите `SendCommunicationUseCase`, если нужна idempotency, template validation и active connection lookup
-
-## Operational Notes
-
-- `CUSTOM_ADAPTER` пока не является рабочим YAML connector type.
-- JSON Schema validation использует Draft 2020-12.
-- Jinja rendering использует `StrictUndefined`: отсутствующая variable приводит к validation error.
-- Provider statuses без mapping или с неизвестным target status становятся `UNKNOWN`.
-- Secrets хранятся как base64 JSON в `secrets_b64`; это encoding, не криптографическое шифрование.
-- HTTP responses по provider connections возвращают `has_secrets`, но не сами secrets.
-- Provider request snapshots должны быть redacted перед сохранением.
-- Webhook path содержит `tenant_id`, потому что provider webhook не имеет authenticated console context.
-- Queue publish выполняется после commit send operation; если publish не удался, queued row остаётся и может быть
-  опубликован republisher-ом.
-- Processing by id использует короткие transaction scopes: отдельно claim/build, отдельно persistence result.
-
-## Dependencies On Other Modules
-
-- `shared`
-  - `EntityIdVO`, `RequestContext`, authenticated/optional context dependencies, `UnitOfWork`, `ClockPort`, `UtcClock`
-- `schema_registry`
-  - runtime object descriptors и seed runtime objects
-- `runtime_data`
-  - runtime command/query gateways, filters, sorting, pagination и atomic claim operations
-- `shared.infrastructure.email`
-  - SMTP transport для `YamlSmtpProviderSender`
-- `config`
-  - `COMMUNICATION_QUEUE` settings для RabbitMQ publisher/worker
+- Domain event bus handlers.
+- Outbox/inbox tables or ports.
+- Scheduler/cron definitions inside this module.
 
 ## Tests Covering This Module
 
-- `test/test_communication_services.py`
-  - YAML validation, rendering, JSONPath/status mapping, secret codec
-- `test/test_communication_provider_connector_domain.py`
-- `test/test_communication_provider_connector_application.py`
-- `test/test_communication_provider_connector_runtime_repository.py`
-- `test/test_communication_provider_connector_depends.py`
-- `test/test_communication_provider_connection_domain.py`
-- `test/test_communication_provider_connection_application.py`
-- `test/test_communication_provider_connection_runtime_repository.py`
-- `test/test_communication_provider_connection_depends.py`
-- `test/test_communication_message_template_domain.py`
-- `test/test_communication_outbound_message_domain.py`
-- `test/test_communication_outbound_message_runtime_repository.py`
-- `test/test_communication_outbound_message_depends.py`
-- `test/test_communication_delivery_domain.py`
-- `test/test_communication_delivery_runtime_repository.py`
-- `test/test_communication_use_cases.py`
-- `test/test_communication_http_router.py`
-- `test/test_communication_management_command.py`
-- `test/test_communication_queue.py`
-- `test/test_architecture_boundaries.py`
+- Domain:
+  - `test/test_communication_provider_connector_domain.py`
+  - `test/test_communication_provider_connection_domain.py`
+  - `test/test_communication_message_template_domain.py`
+  - `test/test_communication_outbound_message_domain.py`
+  - `test/test_communication_delivery_domain.py`
+- Application/services:
+  - `test/test_communication_services.py`
+  - `test/test_communication_provider_connector_application.py`
+  - `test/test_communication_provider_connection_application.py`
+  - `test/test_communication_use_cases.py`
+- Infrastructure:
+  - `test/test_communication_provider_connector_runtime_repository.py`
+  - `test/test_communication_provider_connection_runtime_repository.py`
+  - `test/test_communication_outbound_message_runtime_repository.py`
+  - `test/test_communication_delivery_runtime_repository.py`
+  - `test/test_communication_queue.py`
+- Presentation/DI:
+  - `test/test_communication_http_router.py`
+  - `test/test_communication_provider_connector_depends.py`
+  - `test/test_communication_provider_connection_depends.py`
+  - `test/test_communication_outbound_message_depends.py`
+  - `test/test_communication_management_command.py`
+- Integration/boundary:
+  - `test/test_architecture_boundaries.py`
 
-## Related
+Verification command:
 
+```bash
+uv run python -m unittest test.test_communication_services test.test_communication_provider_connector_domain test.test_communication_provider_connector_application test.test_communication_provider_connector_runtime_repository test.test_communication_provider_connector_depends test.test_communication_provider_connection_domain test.test_communication_provider_connection_application test.test_communication_provider_connection_runtime_repository test.test_communication_provider_connection_depends test.test_communication_message_template_domain test.test_communication_outbound_message_domain test.test_communication_outbound_message_runtime_repository test.test_communication_outbound_message_depends test.test_communication_delivery_domain test.test_communication_delivery_runtime_repository test.test_communication_use_cases test.test_communication_http_router test.test_communication_management_command test.test_communication_queue -v
+```
+
+Эта команда проверена после обновления документации: `91 tests OK`.
+
+## Known Gaps / Technical Debt
+
+- `CUSTOM_ADAPTER` есть в `ConnectorType`, но `ProviderYamlLoader` принимает только `YAML_HTTP` и `YAML_SMTP`.
+- `secrets_b64` - base64 JSON encoding, а не encrypted secret storage.
+- Webhook endpoint получает `tenant_id` из path и использует optional request context; отдельная signature/auth
+  validation
+  в controller/use case не найдена.
+- List responses возвращают `items`/catalog без total/count pagination metadata; `list_messages` принимает
+  `limit`/`offset`, но response не содержит total.
+- Delivery attempts/events не имеют отдельного public read/list HTTP API.
+- `CreateProviderConnectionUseCaseProtocol` типизирован как возвращающий `ProviderConnectionEntity`, тогда как concrete
+  use case возвращает `ProviderConnectionDTO`.
+- В `ProcessOutboundMessageUseCase` batch processing ловит broad `Exception` для каждого message, считает failure и
+  продолжает обработку следующего message.
+- `contact_id` хранится в `CommunicationRequest` и `OutboundMessage`, но direct lookup/validation через `contact_point`
+  или `crm` module не найден.
+- Есть raw `dict[str, Any]` payloads в domain/application DTOs для schemas, rendered payloads, provider request/response
+  payloads и webhook raw payloads; это отражает текущий transport/runtime contract.
+
+## Related Documentation
+
+- [Develop Style](../develop-style.md)
+- [Inventory Module](./inventory.md)
 - [HTTP API](../interfaces/http-api.md)
 - [Management CLI](../interfaces/management-cli.md)
-- [Configuration](../interfaces/configuration.md)
-- [Runtime schema](../data/runtime-schema.md)
-- [Test map](../quality/test-map.md)
 
 ## Source Of Truth
 
-- `src/modules/communication/domain/`
-- `src/modules/communication/application/`
-- `src/modules/communication/infrastructure/`
-- `src/modules/communication/presentation/`
-- `src/modules/schema_registry/seed/schema_seed.py`
+- `src/modules/communication/domain/...`
+- `src/modules/communication/application/...`
+- `src/modules/communication/infrastructure/...`
+- `src/modules/communication/presentation/...`
 - `src/management/commands/communication.py`
+- `src/modules/schema_registry/seed/schema_seed.py`
+- `test/test_communication_*.py`
+- `test/test_architecture_boundaries.py`
