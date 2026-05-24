@@ -22,6 +22,17 @@ This documentation describes the current implementation of `dnk-runtime-core` as
 - [Schema Registry](modules/schema-registry.md)
 - [Shared](modules/shared.md)
 
+## Roadmap-границы модулей
+
+Эти документы описывают планируемые границы bounded contexts. Это не документация текущей реализации, пока не добавлены
+соответствующие пакеты `src/modules/*`.
+
+- [Segmentation](modules/segmentation.md)
+- [Broadcast](modules/broadcast.md)
+- [Workflow](modules/workflow.md)
+- [Campaigns](modules/campaigns.md)
+- [External Events](modules/external-events.md)
+
 ## Interfaces
 
 - [HTTP API](interfaces/http-api.md)
