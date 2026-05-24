@@ -35,7 +35,7 @@ from src.modules.communication.presentation.http.outbound_message.responses impo
     SendCommunicationResponseSchema,
 )
 from src.modules.shared import EntityIdVO
-from src.modules.shared.depends import AuthenticatedRequestContextDep, UoWDep
+from src.modules.shared.presentation import AuthenticatedRequestContextDep, UoWDep
 
 log = logging.getLogger(__name__)
 

@@ -14,7 +14,7 @@ from src.modules.schema_registry.domain.object_feature.error import (
 from src.modules.schema_registry.domain.object_feature.repository import (
     ObjectFeatureConfigRepositoryProtocol,
 )
-from src.modules.shared.kernel.time.ports import ClockPort
+from src.modules.shared.domain.time import ClockPort
 
 
 class UpdateObjectFeatureConfigUseCaseProtocol(Protocol):

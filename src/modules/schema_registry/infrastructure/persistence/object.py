@@ -5,7 +5,7 @@ import uuid6
 from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.modules.shared.db import Base, StringUUID
+from src.modules.shared.infrastructure.persistence import Base, StringUUID
 
 
 class ObjectORM(Base):

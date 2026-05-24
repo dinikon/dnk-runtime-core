@@ -1,4 +1,5 @@
-from .currency import CurrencyCodeNotSupportedError, CurrencyCodeVO
+from .currency import CurrencyCodeVO
+from .currency_code_not_supported_error import CurrencyCodeNotSupportedError
 from .entity_id import EntityIdVO
 
 __all__ = [

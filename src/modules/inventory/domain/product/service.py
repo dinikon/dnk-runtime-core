@@ -10,7 +10,7 @@ from src.modules.inventory.domain.product.repository import (
 )
 from src.modules.inventory.domain.product.value_object import ProductIdVO
 from src.modules.shared import EntityIdVO
-from src.modules.shared.kernel.time.ports import ClockPort
+from src.modules.shared.domain.time import ClockPort
 
 
 class ProductService:

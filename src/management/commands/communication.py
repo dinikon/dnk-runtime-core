@@ -23,8 +23,8 @@ from src.modules.communication.presentation.depends.management import (
     build_publish_queued_outbound_messages_use_case,
     build_recover_stuck_outbound_messages_use_case,
 )
-from src.modules.shared.db.helper import db_helper
-from src.modules.shared.db.uow import UnitOfWork
+from src.modules.shared.infrastructure.persistence.database_helper import db_helper
+from src.modules.shared.infrastructure.persistence import UnitOfWork
 
 
 async def handle_process_queued(args: argparse.Namespace) -> int:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.modules.shared.http.host import normalize_host
+from src.modules.shared.presentation.http.host import normalize_host
 from src.modules.tenancy.application.tenant_domain.dto import TenantRequestContextDTO
 from src.modules.tenancy.application.tenant_domain.query import (
     ResolveTenantRequestContextByHostQuery,

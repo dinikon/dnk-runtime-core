@@ -4,8 +4,10 @@ from uuid import UUID
 
 import uuid6
 
+from src.modules.shared.application.uuid import UuidPort
 
-class Uuid7Generator:
+
+class Uuid7Generator(UuidPort):
     """UUID generator implementation based on UUIDv7."""
 
     def new_uuid(self) -> UUID:

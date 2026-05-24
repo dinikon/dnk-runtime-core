@@ -31,7 +31,7 @@ from src.modules.identity.domain import (
 )
 from src.modules.shared import EntityIdVO
 from src.modules.shared.domain.errors import DomainError
-from src.modules.shared.kernel.email import (
+from src.modules.shared.domain.email import (
     EmailDeliveryError,
     SystemEmailKind,
 )

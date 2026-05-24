@@ -60,7 +60,7 @@ from src.modules.communication.presentation.depends.infrastructure import (
     get_runtime_field_type_policy,
     get_runtime_query_gateway,
 )
-from src.modules.shared.depends.clock import ClockDep
+from src.modules.shared.presentation.time.depends import ClockDep
 
 
 def get_provider_connector_service(

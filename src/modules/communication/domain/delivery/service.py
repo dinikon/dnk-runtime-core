@@ -23,7 +23,7 @@ from src.modules.communication.domain.provider_connection import (
     ProviderConnectionIdVO,
 )
 from src.modules.shared import EntityIdVO
-from src.modules.shared.kernel.time.ports import ClockPort
+from src.modules.shared.domain.time import ClockPort
 
 
 class DeliveryService:

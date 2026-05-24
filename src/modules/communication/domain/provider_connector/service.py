@@ -17,7 +17,7 @@ from src.modules.communication.domain.provider_connector.value_object import (
     ProviderMessageTypeNameVO,
 )
 from src.modules.shared import EntityIdVO
-from src.modules.shared.kernel.time.ports import ClockPort
+from src.modules.shared.domain.time import ClockPort
 
 
 class ProviderConnectorService:

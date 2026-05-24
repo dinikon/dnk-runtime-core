@@ -17,7 +17,7 @@ from src.modules.communication.application.services import TemplateRenderService
 from src.modules.communication.domain.error import CommunicationValidationError
 from src.modules.communication.domain.outbound_message import OutboundMessageIdVO
 from src.modules.shared import EntityIdVO
-from src.modules.shared.kernel.time.ports import ClockPort
+from src.modules.shared.domain.time import ClockPort
 
 
 class ProcessOutboundMessageUseCase:

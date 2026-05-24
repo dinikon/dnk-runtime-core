@@ -26,7 +26,9 @@ from src.modules.communication.domain.outbound_message import (
 from src.modules.communication.domain.provider_connection import (
     ProviderSecretsValidationError,
 )
-from src.modules.shared.infrastructure.email.models import RenderedEmailMessage
+from src.modules.shared.infrastructure.email.rendered_email_message import (
+    RenderedEmailMessage,
+)
 from src.modules.shared.infrastructure.email.smtp_email_transport import (
     SmtpEmailTransport,
 )

@@ -6,8 +6,8 @@ from typing import Annotated
 import uuid6
 from fastapi import Depends
 
-from src.modules.shared.depends.clock import ClockDep
-from src.modules.shared.depends.uow import UoWDep
+from src.modules.shared.presentation.time.depends import ClockDep
+from src.modules.shared.presentation.persistence.depends import UoWDep
 from src.modules.schema_registry.application.migration.postgres_field_canonicalizer import (
     PostgresFieldCanonicalizer,
 )

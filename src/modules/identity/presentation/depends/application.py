@@ -24,7 +24,7 @@ from src.modules.identity.presentation.depends.infrastructure import (
     TenantContextReaderDep,
     UsersRepositoryDep,
 )
-from src.modules.shared.depends.uow import UoWDep
+from src.modules.shared.presentation.persistence.depends import UoWDep
 
 
 def get_user_service(users_repository: UsersRepositoryDep) -> UserServiceProtocol:

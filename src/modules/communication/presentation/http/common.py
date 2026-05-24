@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import HTTPException, status
 
-from src.modules.shared.kernel.request_context import RequestContext
+from src.modules.shared.domain.identity_context import RequestContext
 
 
 def require_tenant_id(context: RequestContext) -> UUID:

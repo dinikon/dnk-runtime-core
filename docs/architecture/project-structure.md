@@ -74,6 +74,12 @@ Modules may further split these layers by subdomain when the module owns more
 than one closely related concept. For example, `tenancy` now separates
 `tenant` and `tenant_domain` inside both `domain/` and `application/`.
 
+`shared` uses the same four layer roots, but each layer is split by feature
+aggregate: `events`, `persistence`, `identity_context`, `value_object`,
+`errors`, `email`, `tokens`, `time`, `uuid`, `access` and `http`. Shared layer
+roots contain only `__init__.py`; class/protocol/model files live under those
+aggregate folders.
+
 `identity` similarly separates `user` and `auth`: `domain/user/` owns user and
 email state, while `domain/auth/` owns OTP/session errors and
 `application/auth/` contains console auth command/dto/service/use case files.

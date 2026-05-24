@@ -8,7 +8,7 @@ from src.modules.contact_point.domain.binding import (
     ContactPointBindingNotFoundError,
     ContactPointBindingRepositoryProtocol,
 )
-from src.modules.shared.kernel.time.ports import ClockPort
+from src.modules.shared.domain.time import ClockPort
 
 
 class DetachContactPointUseCaseProtocol(Protocol):

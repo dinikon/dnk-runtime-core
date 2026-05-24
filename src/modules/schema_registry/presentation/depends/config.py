@@ -43,7 +43,7 @@ from src.modules.schema_registry.presentation.depends.infrastructure import (
     get_runtime_object_id_provider,
     get_runtime_relation_id_provider,
 )
-from src.modules.shared.depends import ClockDep
+from src.modules.shared.presentation import ClockDep
 
 
 def get_schema_config_repository(

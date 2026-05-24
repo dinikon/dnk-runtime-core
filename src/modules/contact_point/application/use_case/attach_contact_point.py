@@ -22,8 +22,8 @@ from src.modules.contact_point.domain.contact_point import (
     ContactPointIdVO,
     ContactPointRepositoryProtocol,
 )
-from src.modules.shared.kernel.time.ports import ClockPort
-from src.modules.shared.kernel.uuid import UuidPort
+from src.modules.shared.domain.time import ClockPort
+from src.modules.shared.application.uuid import UuidPort
 
 
 class AttachContactPointUseCaseProtocol(Protocol):

@@ -4,7 +4,7 @@ from datetime import datetime
 from uuid import UUID
 
 from src.modules.identity.application.ports import OtpChallenge, OtpChallengeStorePort
-from src.modules.shared.kernel.tokens import TokenManager
+from src.modules.shared.application.tokens import TokenManager
 
 
 class TokenManagerBackedOtpChallengeStore(OtpChallengeStorePort):

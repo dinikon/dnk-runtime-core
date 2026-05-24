@@ -17,7 +17,7 @@ from src.modules.communication.presentation.http.outbound_message.responses impo
     OutboundMessageResponseSchema,
 )
 from src.modules.shared import EntityIdVO
-from src.modules.shared.depends import AuthenticatedRequestContextDep
+from src.modules.shared.presentation import AuthenticatedRequestContextDep
 
 router = APIRouter(prefix="/communication", tags=["communication"])
 

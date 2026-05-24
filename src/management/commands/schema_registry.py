@@ -13,8 +13,8 @@ from src.modules.schema_registry.presentation.depends.management import (
     build_diff_schema_use_case,
 )
 from src.modules.shared import EntityIdVO
-from src.modules.shared.db.helper import db_helper
-from src.modules.shared.db.uow import UnitOfWork
+from src.modules.shared.infrastructure.persistence.database_helper import db_helper
+from src.modules.shared.infrastructure.persistence import UnitOfWork
 from src.modules.shared.infrastructure.time import UtcClock
 from src.modules.tenancy.infrastructure.repository import SqlAlchemyTenantRepository
 

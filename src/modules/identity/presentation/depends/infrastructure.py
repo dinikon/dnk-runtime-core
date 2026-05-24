@@ -23,14 +23,17 @@ from src.modules.identity.infrastructure.adapter import (
     TokenManagerBackedOtpChallengeStore,
     TokenManagerBackedSessionStore,
 )
-from src.modules.shared.depends.email_service import EmailServiceDep, get_email_service
+from src.modules.shared.presentation.email.depends import (
+    EmailServiceDep,
+    get_email_service,
+)
 from src.modules.identity.infrastructure.repository import SqlAlchemyUserRepository
-from src.modules.shared.depends.token_manager import (
+from src.modules.shared.presentation.tokens.depends import (
     TokenManagerDep,
     default_token_manager,
     get_token_manager,
 )
-from src.modules.shared.depends.uow import UoWDep
+from src.modules.shared.presentation.persistence.depends import UoWDep
 from src.modules.tenancy.presentation.depends.application import (
     TenantRequestContextByHostUseCaseDep,
 )

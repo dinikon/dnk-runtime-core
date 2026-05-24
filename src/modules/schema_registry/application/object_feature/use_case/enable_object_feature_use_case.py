@@ -19,7 +19,7 @@ from src.modules.schema_registry.domain.object_feature.value_object import (
     ObjectFeatureConfigIdVO,
     ObjectFeatureKind,
 )
-from src.modules.shared.kernel.time.ports import ClockPort
+from src.modules.shared.domain.time import ClockPort
 
 
 class EnableObjectFeatureUseCaseProtocol(Protocol):

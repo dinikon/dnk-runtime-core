@@ -6,9 +6,13 @@ from email.message import EmailMessage
 from email.utils import formataddr
 
 from src.config.infrastructure.email_config import EmailSettings
-from src.modules.shared.infrastructure.email.models import RenderedEmailMessage
-from src.modules.shared.infrastructure.email.ports import EmailTransportPort
-from src.modules.shared.kernel.email.errors import EmailDeliveryError
+from src.modules.shared.domain.email.email_delivery_error import EmailDeliveryError
+from src.modules.shared.infrastructure.email.email_transport_port import (
+    EmailTransportPort,
+)
+from src.modules.shared.infrastructure.email.rendered_email_message import (
+    RenderedEmailMessage,
+)
 
 
 class SmtpEmailTransport(EmailTransportPort):

@@ -10,7 +10,7 @@ from src.modules.identity.application.ports import (
     SessionStorePort,
     TenantContextReaderPort,
 )
-from src.modules.shared.http.host import normalize_host
+from src.modules.shared.presentation.http.host import normalize_host
 
 
 class LogoutCurrentSessionUseCase:

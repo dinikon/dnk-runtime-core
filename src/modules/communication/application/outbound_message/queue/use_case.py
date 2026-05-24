@@ -18,7 +18,7 @@ from src.modules.communication.application.outbound_message.queue.ports import (
 )
 from src.modules.communication.domain.outbound_message import OutboundMessageIdVO
 from src.modules.shared import EntityIdVO
-from src.modules.shared.kernel.time.ports import ClockPort
+from src.modules.shared.domain.time import ClockPort
 
 
 class PublishQueuedOutboundMessagesUseCase:

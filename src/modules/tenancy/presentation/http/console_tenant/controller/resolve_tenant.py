@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from src.modules.shared.depends.request_host import RequestHostDep
+from src.modules.shared.presentation.http.depends import RequestHostDep
 from src.modules.tenancy.application.tenant_domain.query import (
     ResolveTenantByHostQuery,
 )

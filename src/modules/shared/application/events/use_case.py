@@ -2,13 +2,19 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from src.modules.shared.application.events.command import PublishOutboxEventsCommand
-from src.modules.shared.application.events.dto import PublishOutboxResultDTO
-from src.modules.shared.kernel.events.ports import (
+from src.modules.shared.application.events.event_publisher_port import (
     EventPublisherPort,
+)
+from src.modules.shared.application.events.outbox_repository_protocol import (
     OutboxRepositoryProtocol,
 )
-from src.modules.shared.kernel.time import ClockPort
+from src.modules.shared.application.events.publish_outbox_events_command import (
+    PublishOutboxEventsCommand,
+)
+from src.modules.shared.application.events.publish_outbox_result_dto import (
+    PublishOutboxResultDTO,
+)
+from src.modules.shared.domain.time import ClockPort
 
 
 class PublishOutboxEventsUseCase:

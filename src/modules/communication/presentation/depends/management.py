@@ -55,7 +55,7 @@ from src.modules.schema_registry.infrastructure.repository.object_repository imp
     SqlAlchemyObjectRepository,
 )
 from src.modules.schema_registry.runtime import SchemaRegistryRuntimeObjectResolver
-from src.modules.shared.db.uow import UnitOfWorkProtocol
+from src.modules.shared.application.persistence import UnitOfWorkProtocol
 from src.modules.shared.infrastructure.time.utc_clock import UtcClock
 import uuid6
 

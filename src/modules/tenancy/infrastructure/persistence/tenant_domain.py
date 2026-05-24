@@ -6,8 +6,8 @@ import uuid6
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.modules.shared.db.base import Base, PortableJSON
-from src.modules.shared.db.types import StringUUID
+from src.modules.shared.infrastructure.persistence import Base, PortableJSON
+from src.modules.shared.infrastructure.persistence import StringUUID
 
 
 class TenantDomainModel(Base):
