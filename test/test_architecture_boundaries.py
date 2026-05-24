@@ -261,6 +261,35 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                     msg=f"{path} imports forbidden infrastructure module {module_name}",
                 )
 
+    def test_business_modules_do_not_import_shared_event_bus_rabbitmq_adapter(
+        self,
+    ) -> None:
+        forbidden_shared_adapter = "src.modules.shared.infrastructure.events.rabbitmq"
+        allowed_faststream_paths = {
+            (
+                PROJECT_ROOT / "src/modules/communication/infrastructure/rabbitmq.py"
+            ).resolve(),
+            (
+                PROJECT_ROOT / "src/modules/shared/infrastructure/events/rabbitmq.py"
+            ).resolve(),
+        }
+        for path in iter_python_files("src/modules"):
+            resolved_path = path.resolve()
+            is_shared_path = "/src/modules/shared/" in path.as_posix()
+            for module_name in iter_imports(path):
+                if not is_shared_path:
+                    self.assertNotEqual(
+                        module_name,
+                        forbidden_shared_adapter,
+                        msg=f"{path} imports shared event bus RabbitMQ adapter directly",
+                    )
+                if module_name == "faststream.rabbit":
+                    self.assertIn(
+                        resolved_path,
+                        allowed_faststream_paths,
+                        msg=f"{path} imports faststream.rabbit outside approved adapters",
+                    )
+
     def test_communication_http_root_router_is_composition_only(self) -> None:
         path = PROJECT_ROOT / "src/modules/communication/presentation/http/router.py"
         content = path.read_text(encoding="utf-8")

@@ -66,6 +66,13 @@ This page maps current tests to the behaviors they protect.
   - SMTP transport message building
   - SMTP vs SMTP SSL transport choice
   - `resend` placeholder behavior
+- `test/test_shared_events.py`
+    - integration event serialization
+    - outbox publish success, retry and max-attempt failure behavior
+    - inbox idempotency for duplicate delivery
+    - shared RabbitMQ event publisher topology and message metadata
+- `test/test_event_bus_management_command.py`
+    - shared event management command parsing and handler behavior
 
 ## CRM
 
