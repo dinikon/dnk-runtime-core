@@ -84,6 +84,21 @@ Project configuration is assembled by `DnkConfig`, which combines multiple setti
     - `COMMUNICATION_QUEUE.processing_lease_seconds`
     - `COMMUNICATION_QUEUE.republish_after_seconds`
 
+## Event Bus Config
+
+- Group: `config/infrastructure/event_bus_config.py`
+- Responsibilities:
+    - RabbitMQ URL for shared integration event publication
+    - durable topic exchange name
+    - default outbox publisher batch size
+    - publish retry backoff and maximum attempts
+- Critical values:
+    - `EVENT_BUS.rabbitmq_url`
+    - `EVENT_BUS.exchange_name`
+    - `EVENT_BUS.publish_limit`
+    - `EVENT_BUS.retry_base_seconds`
+    - `EVENT_BUS.max_attempts`
+
 ## Control Plane Config
 
 - Group: `config/deploy/control_plane.py`
@@ -115,4 +130,5 @@ Project configuration is assembled by `DnkConfig`, which combines multiple setti
 - `src/config/feature/runtime_schema/__init__.py`
 - `src/config/infrastructure/__init__.py`
 - `src/config/infrastructure/email_config.py`
+- `src/config/infrastructure/event_bus_config.py`
 - `src/config/infrastructure/redis_config.py`

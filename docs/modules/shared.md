@@ -12,9 +12,11 @@ hosts infrastructure, kernel concepts and utility abstractions.
 - `depends`
   - request-scoped FastAPI dependencies such as UoW, authentication, authorization and email service resolution
 - `kernel`
-  - request context, principal, access, time and public email service contracts
+    - request context, principal, access, time, integration events and public email service contracts
 - `infrastructure`
-  - concrete implementations for access, time, token backends, rendered email builders and transports
+    - concrete implementations for access, time, token backends, event outbox/inbox, RabbitMQ event publication,
+      rendered
+      email builders and transports
 - `http`
     - shared HTTP helpers such as host extraction
 - `domain`
@@ -39,6 +41,24 @@ hosts infrastructure, kernel concepts and utility abstractions.
     - time abstraction used by domain/application services
 - `EmailServicePort` / `SystemEmailKind`
   - typed shared contract for system email delivery used by business modules
+- `IntegrationEvent`
+    - shared integration event contract persisted through PostgreSQL outbox and published asynchronously to RabbitMQ
+- `EventPublisherPort` / `EventConsumerPort`
+    - ports that keep business modules independent from concrete RabbitMQ adapters
+
+## Event Bus, Outbox And Inbox
+
+Shared integration events use at-least-once delivery:
+
+- application use cases store `IntegrationEvent` through `SqlAlchemyOutboxRepository` in the active `UnitOfWork`
+- `dnk-manage events publish-outbox` claims due `pending` outbox rows, publishes them to RabbitMQ and marks them
+  `published`
+- failed publish attempts return to `pending` with retry backoff until `max_attempts`, then become `failed`
+- consumers use `SqlAlchemyInboxRepository` before invoking handlers, keyed by `(tenant_id, source, message_id)`, so a
+  repeated broker delivery does not rerun business logic
+
+Concrete module event schemas, campaign goal matching and workflow events are intentionally outside the shared
+foundation.
 
 ## Why It Matters
 
@@ -55,6 +75,7 @@ hosts infrastructure, kernel concepts and utility abstractions.
 - shared email service tests
 - DB and type tests
 - architecture boundary tests that protect module layering
+- shared event tests for serialization, publish retry, RabbitMQ publication and inbox idempotency
 
 ## Related
 
@@ -67,4 +88,8 @@ hosts infrastructure, kernel concepts and utility abstractions.
 - `src/modules/shared/db/`
 - `src/modules/shared/depends/`
 - `src/modules/shared/kernel/`
+- `src/modules/shared/application/events/`
+- `src/modules/shared/infrastructure/events/`
+- `src/modules/shared/infrastructure/outbox/`
+- `src/modules/shared/infrastructure/inbox/`
 - `src/modules/shared/__init__.py`

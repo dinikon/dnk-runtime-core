@@ -14,6 +14,8 @@ Parser bootstrap happens in `src/management/cli.py`.
 dnk-manage
 ├── schema-registry
 │   └── diff [<tenant_id> | --all] [--seed-path ...]
+├── events
+│   └── publish-outbox [--limit ...] [--max-attempts ...]
 └── communication
     ├── process-queued --tenant-id <uuid> [--limit ...]
     ├── publish-queued --tenant-id <uuid> [--limit ...]
@@ -68,6 +70,19 @@ Arguments:
 
 On expected `CommunicationError`, prints the error to `stderr` and exits with code `2`.
 
+### `dnk-manage events publish-outbox`
+
+Publishes due shared integration events from PostgreSQL outbox to RabbitMQ.
+
+Arguments:
+
+- `--limit`: maximum due outbox events to publish, defaults to `EVENT_BUS.publish_limit`
+- `--max-attempts`: maximum publish attempts before an event is marked `failed`, defaults to `EVENT_BUS.max_attempts`
+
+On success prints:
+
+- `OK scanned=... published=... failed=...`
+
 ### `dnk-manage communication publish-queued`
 
 Publishes queued outbound communication messages to RabbitMQ for worker processing.
@@ -97,6 +112,7 @@ processing lease, sends it through the configured provider sender and persists t
 - CLI handler opens one `UnitOfWork`
 - management builder assembles use case from the active `uow.session`
 - commit/rollback is managed by `UnitOfWork.__aexit__`
+- `events publish-outbox` publishes already-committed outbox rows and stores publish status in a new `UnitOfWork`
 - `schema-registry diff --all` uses one outer `UnitOfWork` and per-tenant savepoints; any expected tenant failure rolls
   back the whole outer transaction after all tenants are attempted
 - communication worker-by-id opens short `UnitOfWork` scopes around claim/build and result persistence
@@ -104,6 +120,7 @@ processing lease, sends it through the configured provider sender and persists t
 ## Related
 
 - [Schema Registry module](../modules/schema-registry.md)
+- [Shared module](../modules/shared.md)
 - [Communication module](../modules/communication.md)
 - [Request lifecycle](../architecture/request-lifecycle.md)
 - [Persistence and Unit of Work](../architecture/persistence-and-uow.md)
@@ -111,5 +128,6 @@ processing lease, sends it through the configured provider sender and persists t
 ## Source Of Truth
 
 - `src/management/cli.py`
+- `src/management/commands/events.py`
 - `src/management/commands/schema_registry.py`
 - `src/modules/schema_registry/presentation/depends/management.py`

@@ -21,6 +21,7 @@ from src.config.infrastructure.communication_queue_config import (
     CommunicationQueueConfig,
 )
 from src.config.infrastructure.email_config import EmailConfig
+from src.config.infrastructure.event_bus_config import EventBusConfig
 from src.config.infrastructure.redis_config import RedisConfig
 
 # from .deploy import DeploymentConfig
@@ -97,6 +98,7 @@ class DnkConfig(
     DatabaseConfig,
     EmailConfig,
     CommunicationQueueConfig,
+    EventBusConfig,
     # Redis config
     RedisConfig,
     # Auth config
