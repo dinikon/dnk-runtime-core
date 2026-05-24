@@ -11,7 +11,7 @@ from src.modules.identity.application.ports import (
 from src.modules.identity.domain.user import UserRepositoryProtocol
 from src.modules.identity.domain.user.value_object import UserIdVO
 from src.modules.shared import EntityIdVO
-from src.modules.shared.http.host import normalize_host
+from src.modules.shared.presentation.http.host import normalize_host
 from src.modules.tenancy.domain.tenant_domain import (
     TenantHostNotFoundError,
     TenantLoginUnavailableError,

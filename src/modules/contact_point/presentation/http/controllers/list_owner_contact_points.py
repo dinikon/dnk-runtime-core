@@ -34,7 +34,7 @@ from src.modules.schema_registry.domain.object_feature import (
     ObjectFeatureNotEnabledError,
 )
 from src.modules.shared import EntityIdVO
-from src.modules.shared.depends import AuthenticatedRequestContextDep
+from src.modules.shared.presentation import AuthenticatedRequestContextDep
 from src.modules.shared.domain.errors import DomainError
 
 router = APIRouter(prefix="/contact-points", tags=["contact-points"])

@@ -6,7 +6,7 @@ from src.modules.crm.application.contact.command.create_contact_command import (
 from src.modules.crm.application.contact.dto.contact_dto import ContactDTO
 from src.modules.crm.domain.contact.entity import ContactEntity
 from src.modules.crm.domain.contact.repository import ContactCommandRepositoryProtocol
-from src.modules.shared.kernel.time.ports import ClockPort
+from src.modules.shared.domain.time import ClockPort
 
 
 class CreateContactUseCaseProtocol(Protocol):

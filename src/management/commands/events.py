@@ -3,29 +3,23 @@ from __future__ import annotations
 import argparse
 
 from src.config import dnk_config
-from src.modules.shared.application.events import (
-    PublishOutboxEventsCommand,
-    PublishOutboxEventsUseCase,
+from src.modules.shared.application.events import PublishOutboxEventsCommand
+from src.modules.shared.infrastructure.persistence.database_helper import db_helper
+from src.modules.shared.infrastructure.persistence import UnitOfWork
+from src.modules.shared.presentation.events import (
+    build_integration_event_publisher,
+    build_publish_outbox_events_use_case,
 )
-from src.modules.shared.db.helper import db_helper
-from src.modules.shared.db.uow import UnitOfWork
-from src.modules.shared.infrastructure.events import RabbitMQIntegrationEventPublisher
-from src.modules.shared.infrastructure.outbox import SqlAlchemyOutboxRepository
-from src.modules.shared.infrastructure.time import UtcClock
 
 
 async def handle_publish_outbox(args: argparse.Namespace) -> int:
     """Publishes due shared integration outbox events to RabbitMQ."""
     settings = dnk_config.EVENT_BUS
-    async with RabbitMQIntegrationEventPublisher.from_settings(
-        settings,
-        manage_broker_lifecycle=True,
-    ) as publisher:
+    async with build_integration_event_publisher(settings) as publisher:
         async with UnitOfWork(db_helper.session_factory) as uow:
-            use_case = PublishOutboxEventsUseCase(
-                repository=SqlAlchemyOutboxRepository(uow.session),
+            use_case = build_publish_outbox_events_use_case(
+                session=uow.session,
                 publisher=publisher,
-                clock=UtcClock(),
                 retry_base_seconds=settings.retry_base_seconds,
             )
             result = await use_case(

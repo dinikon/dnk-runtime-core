@@ -4,9 +4,12 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 import src.app_factory as app_factory
-import src.modules.shared.db.helper as db_helper_module
+import src.modules.shared.infrastructure.persistence.database_helper as db_helper_module
 from src.dnk_app import DnkApp
-from src.modules.shared.db.helper import DatabaseHelper, DatabaseStartupError
+from src.modules.shared.infrastructure.persistence.database_helper import (
+    DatabaseHelper,
+    DatabaseStartupError,
+)
 
 
 class DatabaseStartupTests(unittest.IsolatedAsyncioTestCase):
@@ -17,7 +20,7 @@ class DatabaseStartupTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(helper, "create_all", create_all_mock),
             patch(
-                "src.modules.shared.db.helper.asyncio.sleep",
+                "src.modules.shared.infrastructure.persistence.database_helper.asyncio.sleep",
                 new_callable=AsyncMock,
             ) as sleep_mock,
             patch.object(db_helper_module.dnk_config, "DB_STARTUP_MAX_ATTEMPTS", 5),
@@ -41,7 +44,7 @@ class DatabaseStartupTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(helper, "create_all", create_all_mock),
             patch(
-                "src.modules.shared.db.helper.asyncio.sleep",
+                "src.modules.shared.infrastructure.persistence.database_helper.asyncio.sleep",
                 new_callable=AsyncMock,
             ) as sleep_mock,
             patch.object(db_helper_module.dnk_config, "DB_STARTUP_MAX_ATTEMPTS", 5),
@@ -65,7 +68,7 @@ class DatabaseStartupTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(helper, "create_all", create_all_mock),
             patch(
-                "src.modules.shared.db.helper.asyncio.sleep",
+                "src.modules.shared.infrastructure.persistence.database_helper.asyncio.sleep",
                 new_callable=AsyncMock,
             ) as sleep_mock,
             patch.object(db_helper_module.dnk_config, "DB_STARTUP_MAX_ATTEMPTS", 3),
@@ -98,7 +101,7 @@ class DatabaseStartupTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(helper, "create_all", create_all_mock),
             patch(
-                "src.modules.shared.db.helper.asyncio.sleep",
+                "src.modules.shared.infrastructure.persistence.database_helper.asyncio.sleep",
                 new_callable=AsyncMock,
             ) as sleep_mock,
             patch.object(db_helper_module.dnk_config, "DB_STARTUP_MAX_ATTEMPTS", 5),

@@ -8,7 +8,7 @@ from src.modules.inventory.domain.category.repository import (
 )
 from src.modules.inventory.domain.category.value_object import CategoryIdVO
 from src.modules.shared import EntityIdVO
-from src.modules.shared.kernel.time.ports import ClockPort
+from src.modules.shared.domain.time import ClockPort
 
 
 class CategoryService:

@@ -35,7 +35,9 @@ from src.modules.schema_registry.domain.error import (
 )
 from src.modules.schema_registry.domain.object.value_object import RuntimeObjectIdVO
 from src.modules.shared import EntityIdVO
-from src.modules.shared.depends.authentication import AuthenticatedRequestContextDep
+from src.modules.shared.presentation.identity_context.depends import (
+    AuthenticatedRequestContextDep,
+)
 from src.modules.shared.domain.errors import DomainError
 
 router = APIRouter(prefix="/custom-objects", tags=["custom-objects"])

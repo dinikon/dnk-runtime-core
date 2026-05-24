@@ -7,7 +7,7 @@ from fastapi import Depends
 from src.modules.identity.application.user import UserService
 from src.modules.identity.infrastructure.repository import SqlAlchemyUserRepository
 
-from src.modules.shared.depends.uow import UoWDep
+from src.modules.shared.presentation.persistence.depends import UoWDep
 from src.modules.tenancy.application.ports.identity import (
     IdentityProvisioningServiceProtocol,
 )

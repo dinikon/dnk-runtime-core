@@ -50,27 +50,27 @@ class EventBusManagementCommandTests(unittest.IsolatedAsyncioTestCase):
                 return None
 
         class UseCaseStub:
-            def __init__(self, *_args, **_kwargs) -> None:
-                pass
-
             async def __call__(self, command):
                 nonlocal recorded_command
                 recorded_command = command
                 return PublishOutboxResultDTO(scanned=4, published=3, failed=1)
 
+        def build_use_case_stub(**_kwargs):
+            return UseCaseStub()
+
         args = argparse.Namespace(limit=10, max_attempts=5)
 
         with (
             patch.object(
-                events_command.RabbitMQIntegrationEventPublisher,
-                "from_settings",
+                events_command,
+                "build_integration_event_publisher",
                 return_value=PublisherStub(),
             ),
             patch.object(events_command, "UnitOfWork", UnitOfWorkStub),
             patch.object(
                 events_command,
-                "PublishOutboxEventsUseCase",
-                UseCaseStub,
+                "build_publish_outbox_events_use_case",
+                build_use_case_stub,
             ),
             redirect_stdout(stdout),
         ):

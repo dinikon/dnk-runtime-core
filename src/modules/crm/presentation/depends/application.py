@@ -29,7 +29,7 @@ from src.modules.crm.presentation.depends.infrastructure import (
     ContactQueryRepositoryDep,
     RuntimeObjectQueryServiceDep,
 )
-from src.modules.shared.depends import ClockDep
+from src.modules.shared.presentation import ClockDep
 
 
 def get_create_contact_use_case(

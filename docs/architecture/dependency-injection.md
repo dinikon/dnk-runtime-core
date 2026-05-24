@@ -6,7 +6,7 @@ The project uses explicit composition functions instead of a large global contai
 
 - HTTP composition lives in `presentation/depends/` inside each module.
 - Management composition uses dedicated builders, for example `schema_registry/presentation/depends/management.py`.
-- Shared request-scoped objects such as `UnitOfWork` are exposed through `src/modules/shared/depends/`.
+- Shared request-scoped objects such as `UnitOfWork` are exposed through `src/modules/shared/presentation/`.
 
 ## HTTP Composition
 
@@ -50,7 +50,7 @@ The project uses explicit composition functions instead of a large global contai
 
 ## Source Of Truth
 
-- `src/modules/shared/depends/uow.py`
+- `src/modules/shared/presentation/persistence/depends.py`
 - `src/modules/tenancy/presentation/depends/application.py`
 - `src/modules/tenancy/application/tenant/use_case/`
 - `src/modules/tenancy/application/tenant_domain/use_case/`

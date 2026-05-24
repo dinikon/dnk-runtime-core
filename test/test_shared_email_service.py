@@ -8,13 +8,15 @@ from src.config.infrastructure.email_config import (
     EmailSettings,
     EmailSmtpSettings,
 )
-from src.modules.shared.depends.email_service import build_email_service
+from src.modules.shared.presentation.email.depends import build_email_service
 from src.modules.shared.infrastructure.email import (
     SmtpEmailTransport,
     SystemEmailService,
 )
-from src.modules.shared.infrastructure.email.models import RenderedEmailMessage
-from src.modules.shared.kernel.email import (
+from src.modules.shared.infrastructure.email.rendered_email_message import (
+    RenderedEmailMessage,
+)
+from src.modules.shared.domain.email import (
     EmailProviderNotImplementedError,
     SendOtpCodeVariables,
     SystemEmailKind,

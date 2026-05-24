@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from src.modules.shared.kernel.access.ports import AuthorizationServiceProtocol
+from src.modules.shared.application.access import AuthorizationServiceProtocol
 
 
 class AllowAllAuthorizationService(AuthorizationServiceProtocol):

@@ -22,7 +22,7 @@ from src.modules.schema_registry.presentation.depends.application import (
     AssertObjectFeatureEnabledUseCaseDep,
     RuntimeObjectResolverDep,
 )
-from src.modules.shared.depends.uow import UoWDep
+from src.modules.shared.presentation.persistence.depends import UoWDep
 
 
 def get_runtime_field_type_policy() -> RuntimeFieldTypePolicy:

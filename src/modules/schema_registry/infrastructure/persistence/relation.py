@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.modules.shared.db import Base, PortableJSON, StringUUID
+from src.modules.shared.infrastructure.persistence import Base, PortableJSON, StringUUID
 
 
 class RelationORM(Base):

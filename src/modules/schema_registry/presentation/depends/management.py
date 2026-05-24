@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from src.modules.shared.kernel.time.ports import ClockPort
-from src.modules.shared.db.uow import UnitOfWorkProtocol
+from src.modules.shared.domain.time import ClockPort
+from src.modules.shared.application.persistence import UnitOfWorkProtocol
 from src.modules.schema_registry.application.use_case.diff_schema_use_case import (
     DiffSchemaUseCase,
 )

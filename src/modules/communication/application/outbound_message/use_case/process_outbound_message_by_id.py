@@ -30,7 +30,7 @@ from src.modules.communication.domain.outbound_message import (
     OutboundMessageStatus,
 )
 from src.modules.shared import EntityIdVO
-from src.modules.shared.kernel.time.ports import ClockPort
+from src.modules.shared.domain.time import ClockPort
 
 
 class ProcessOutboundMessageByIdUseCase:

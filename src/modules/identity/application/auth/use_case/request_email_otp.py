@@ -18,13 +18,13 @@ from src.modules.identity.domain.user import (
     UserRepositoryProtocol,
 )
 from src.modules.shared import EntityIdVO
-from src.modules.shared.kernel.email import (
+from src.modules.shared.application.email import EmailServicePort
+from src.modules.shared.domain.email import (
     EmailDeliveryError,
-    EmailServicePort,
     SendOtpCodeVariables,
     SystemEmailKind,
 )
-from src.modules.shared.http.host import normalize_host
+from src.modules.shared.presentation.http.host import normalize_host
 
 log = logging.getLogger(__name__)
 

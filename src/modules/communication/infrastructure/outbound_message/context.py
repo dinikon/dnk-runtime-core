@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from src.modules.communication.application.outbound_message.processing import (
     OutboundProcessingByIdRepositoryProtocol,
 )
-from src.modules.shared.db.uow import UnitOfWork
+from src.modules.shared.infrastructure.persistence import UnitOfWork
 
 
 class OutboundProcessingRepositoryContext:

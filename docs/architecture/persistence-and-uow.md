@@ -9,11 +9,12 @@
 - metadata `create_all()`
 - engine disposal on shutdown
 
-It is initialized in `src/modules/shared/db/helper.py` and attached to app state in `src/app_factory.py`.
+It is initialized in `src/modules/shared/infrastructure/persistence/database_helper.py` and attached to app state in
+`src/app_factory.py`.
 
 ## Unit Of Work
 
-`UnitOfWork` in `src/modules/shared/db/uow.py` is request-scoped and session-scoped.
+`UnitOfWork` in `src/modules/shared/infrastructure/persistence/unit_of_work.py` is request-scoped and session-scoped.
 
 Behavior:
 
@@ -24,7 +25,7 @@ Behavior:
 
 ## HTTP Usage
 
-- `src/modules/shared/depends/uow.py` creates one `UnitOfWork` per HTTP request.
+- `src/modules/shared/presentation/persistence/depends.py` creates one `UnitOfWork` per HTTP request.
 - Controllers and dependency builders consume repositories assembled from `uow.session`.
 
 ## Management Usage
@@ -54,6 +55,6 @@ Examples:
 
 ## Source Of Truth
 
-- `src/modules/shared/db/helper.py`
-- `src/modules/shared/db/uow.py`
-- `src/modules/shared/depends/uow.py`
+- `src/modules/shared/infrastructure/persistence/database_helper.py`
+- `src/modules/shared/infrastructure/persistence/unit_of_work.py`
+- `src/modules/shared/presentation/persistence/depends.py`

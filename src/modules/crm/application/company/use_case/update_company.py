@@ -5,7 +5,7 @@ from src.modules.crm.application.company.dto import CompanyDTO
 from src.modules.crm.domain.company.entity import CompanyEntity
 from src.modules.crm.domain.company.error import CompanyNotFoundError
 from src.modules.crm.domain.company.repository import CompanyCommandRepositoryProtocol
-from src.modules.shared.kernel.time.ports import ClockPort
+from src.modules.shared.domain.time import ClockPort
 
 
 class UpdateCompanyUseCaseProtocol(Protocol):

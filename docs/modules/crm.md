@@ -291,8 +291,8 @@ HTTP error mapping:
     `RuntimeObjectQueryServiceDep`;
   - describe-fields use cases inject fields description repositories.
 - Shared dependencies:
-  - `UoWDep` from `shared.depends.uow`;
-  - `ClockDep` from `shared.depends`;
+    - `UoWDep` from `shared.presentation.persistence`;
+    - `ClockDep` from `shared.presentation.time`;
   - `AuthenticatedRequestContextDep` in controllers.
 - Schema registry dependencies:
   - `RuntimeObjectResolverDep`;

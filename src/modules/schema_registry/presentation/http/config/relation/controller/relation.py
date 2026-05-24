@@ -40,7 +40,9 @@ from src.modules.schema_registry.presentation.http.config.relation.responses imp
     RelationResponseSchema,
 )
 from src.modules.shared import EntityIdVO
-from src.modules.shared.depends.authentication import AuthenticatedRequestContextDep
+from src.modules.shared.presentation.identity_context.depends import (
+    AuthenticatedRequestContextDep,
+)
 from src.modules.shared.domain.errors import DomainError
 
 router = APIRouter(prefix="/config/objects/relations", tags=["config"])

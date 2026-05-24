@@ -12,7 +12,7 @@ from src.modules.shared.application.events import (
     PublishOutboxEventsUseCase,
 )
 from src.modules.shared.infrastructure.events import RabbitMQIntegrationEventPublisher
-from src.modules.shared.kernel.events import IntegrationEvent, OutboxEvent
+from src.modules.shared.domain.events import IntegrationEvent, OutboxEvent
 
 
 class _ClockStub:

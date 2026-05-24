@@ -3,24 +3,33 @@
 ## Purpose
 
 `shared` contains cross-cutting building blocks used by the business modules. It is not a business module by itself; it
-hosts infrastructure, kernel concepts and utility abstractions.
+hosts shared contracts, small domain primitives, infrastructure adapters and presentation wiring.
+
+## Layout Rule
+
+`shared` follows the same strict four-layer layout as business modules:
+
+- `domain/<feature_aggregate>/`
+- `application/<feature_aggregate>/`
+- `infrastructure/<feature_aggregate>/`
+- `presentation/<feature_aggregate>/`
+
+Layer roots contain only `__init__.py`. Every class, protocol, dataclass or enum lives inside a feature aggregate such
+as `events`, `persistence`, `identity_context`, `email`, `tokens`, `time`, `uuid`, `access`, `errors`,
+`value_object` or `http`. Old internal paths such as `shared/kernel`, `shared/db`, `shared/depends` and
+`shared/http` are removed.
 
 ## What Is Inside
 
-- `db`
-    - SQLAlchemy base, helper, unit of work, custom DB types and mixins
-- `depends`
-  - request-scoped FastAPI dependencies such as UoW, authentication, authorization and email service resolution
-- `kernel`
-    - request context, principal, access, time, integration events and public email service contracts
-- `infrastructure`
-    - concrete implementations for access, time, token backends, event outbox/inbox, RabbitMQ event publication,
-      rendered
-      email builders and transports
-- `http`
-    - shared HTTP helpers such as host extraction
 - `domain`
-    - shared value objects and base domain errors
+    - shared value objects, request identity context, event records/statuses, email/tokens primitives and base errors
+- `application`
+    - ports, protocols, token manager and event use cases
+- `infrastructure`
+    - SQLAlchemy base/helper/UoW/types/mixins, token backends, clocks, UUID generators, email transports, outbox/inbox
+      repositories and RabbitMQ event publisher
+- `presentation`
+    - FastAPI dependency wiring, HTTP host helpers and management wiring builders
 
 ## Most Used Shared Primitives
 
@@ -85,11 +94,9 @@ foundation.
 
 ## Source Of Truth
 
-- `src/modules/shared/db/`
-- `src/modules/shared/depends/`
-- `src/modules/shared/kernel/`
+- `src/modules/shared/domain/`
 - `src/modules/shared/application/events/`
 - `src/modules/shared/infrastructure/events/`
-- `src/modules/shared/infrastructure/outbox/`
-- `src/modules/shared/infrastructure/inbox/`
+- `src/modules/shared/infrastructure/persistence/`
+- `src/modules/shared/presentation/`
 - `src/modules/shared/__init__.py`

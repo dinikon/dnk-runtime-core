@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from src.modules.shared.domain.time import ClockPort
 
-class UtcClock:
+
+class UtcClock(ClockPort):
     """Clock implementation, возвращающий текущее время в UTC."""
 
     def now(self) -> datetime:

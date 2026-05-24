@@ -19,7 +19,7 @@ from src.modules.identity.presentation.http.console_auth.requests import (
 from src.modules.identity.presentation.http.console_auth.responses import (
     ConfirmEmailOtpResponseSchema,
 )
-from src.modules.shared.depends.request_host import RequestHostDep
+from src.modules.shared.presentation.http.depends import RequestHostDep
 from src.modules.tenancy.domain.tenant_domain import (
     TenantHostNotFoundError,
     TenantLoginUnavailableError,

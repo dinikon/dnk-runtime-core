@@ -1,13 +1,19 @@
 from __future__ import annotations
 
-from src.modules.shared.application.events.command import HandleIntegrationEventCommand
-from src.modules.shared.application.events.dto import HandleIntegrationEventResultDTO
-from src.modules.shared.kernel.events.integration_event import IntegrationEvent
-from src.modules.shared.kernel.events.ports import (
+from src.modules.shared.application.events.event_consumer_port import (
     EventConsumerPort,
+)
+from src.modules.shared.application.events.handle_integration_event_command import (
+    HandleIntegrationEventCommand,
+)
+from src.modules.shared.application.events.handle_integration_event_result_dto import (
+    HandleIntegrationEventResultDTO,
+)
+from src.modules.shared.application.events.inbox_repository_protocol import (
     InboxRepositoryProtocol,
 )
-from src.modules.shared.kernel.time import ClockPort
+from src.modules.shared.domain.events.integration_event import IntegrationEvent
+from src.modules.shared.domain.time import ClockPort
 
 
 class IdempotentEventConsumer:

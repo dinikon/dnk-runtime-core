@@ -24,8 +24,8 @@ from src.modules.identity.domain.user import (
     UserRepositoryProtocol,
 )
 from src.modules.shared import EntityIdVO
-from src.modules.shared.db.uow import UnitOfWorkProtocol
-from src.modules.shared.http.host import normalize_host
+from src.modules.shared.application.persistence import UnitOfWorkProtocol
+from src.modules.shared.presentation.http.host import normalize_host
 
 
 class ConfirmEmailOtpUseCase:

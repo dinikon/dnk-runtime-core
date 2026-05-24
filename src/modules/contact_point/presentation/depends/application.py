@@ -19,7 +19,7 @@ from src.modules.contact_point.presentation.depends.infrastructure import (
     ContactPointRuntimeRepositoryDep,
     OwnerResolverDep,
 )
-from src.modules.shared.depends import ClockDep, UuidDep
+from src.modules.shared.presentation import ClockDep, UuidDep
 
 
 def get_attach_contact_point_use_case(

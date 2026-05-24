@@ -30,7 +30,7 @@ from src.modules.inventory.presentation.depends.infrastructure import (
     ProductFieldsDescriptionRepositoryDep,
     ProductQueryRepositoryDep,
 )
-from src.modules.shared.depends import ClockDep
+from src.modules.shared.presentation import ClockDep
 
 
 def get_category_service(

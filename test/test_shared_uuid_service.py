@@ -4,8 +4,8 @@ import unittest
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
-from src.modules.shared.depends import UuidDep, get_uuid_generator
-from src.modules.shared.depends.uuid import default_uuid_generator
+from src.modules.shared.presentation import UuidDep, get_uuid_generator
+from src.modules.shared.presentation.uuid.depends import default_uuid_generator
 from src.modules.shared.infrastructure.uuid import Uuid7Generator
 
 

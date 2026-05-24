@@ -2,15 +2,9 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from ..errors import DomainError
-
-
-class CurrencyCodeNotSupportedError(DomainError):
-    """Ошибка неподдержанного кода валюты."""
-
-    def __init__(self, value: str) -> None:
-        """Формирует сообщение с неподдержанным кодом валюты."""
-        super().__init__(f"currency code '{value}' is not supported")
+from src.modules.shared.domain.value_object.currency_code_not_supported_error import (
+    CurrencyCodeNotSupportedError,
+)
 
 
 class CurrencyCodeVO(StrEnum):

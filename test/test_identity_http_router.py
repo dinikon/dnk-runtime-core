@@ -33,11 +33,11 @@ from src.modules.identity.presentation.depends.infrastructure import (
     get_users_repository,
 )
 from src.modules.identity.presentation.http.router import router
-from src.modules.shared.depends.email_service import get_email_service
-from src.modules.shared.depends.request_host import get_request_host
+from src.modules.shared.presentation.email.depends import get_email_service
+from src.modules.shared.presentation.http.depends import get_request_host
 from src.modules.shared import EntityIdVO
 from src.modules.shared.domain.errors import DomainError
-from src.modules.shared.kernel.email import EmailDeliveryError
+from src.modules.shared.domain.email import EmailDeliveryError
 from src.modules.tenancy.domain.tenant_domain import (
     TenantHostNotFoundError,
     TenantLoginUnavailableError,

@@ -6,7 +6,7 @@ from src.modules.communication.infrastructure.rabbitmq import (
     RabbitMQOutboundMessagePublisher,
 )
 from src.modules.router import router as api_router
-from src.modules.shared.db.helper import db_helper
+from src.modules.shared.infrastructure.persistence.database_helper import db_helper
 
 
 @asynccontextmanager

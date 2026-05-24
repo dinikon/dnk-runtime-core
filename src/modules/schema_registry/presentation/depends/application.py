@@ -59,7 +59,7 @@ from src.modules.schema_registry.presentation.depends.infrastructure import (
     TenantSchemaInspectorDep,
     get_object_feature_config_id_provider,
 )
-from src.modules.shared.depends import ClockDep
+from src.modules.shared.presentation import ClockDep
 
 
 def get_schema_seed_service(

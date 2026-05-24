@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.modules.shared.http.host import normalize_host
+from src.modules.shared.presentation.http.host import normalize_host
 from src.modules.tenancy.domain.tenant import (
     Tenant,
     TenantExternalIdAlreadyExistsError,
