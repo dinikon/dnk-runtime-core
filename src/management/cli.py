@@ -27,6 +27,9 @@ def build_parser() -> argparse.ArgumentParser:
     from src.management.commands.events import (
         register as register_events,
     )
+    from src.management.commands.jobs import (
+        register as register_jobs,
+    )
     from src.management.commands.schema_registry import (
         register as register_schema_registry,
     )
@@ -38,6 +41,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="commands")
     register_communication(subparsers)
     register_events(subparsers)
+    register_jobs(subparsers)
     register_schema_registry(subparsers)
     return parser
 

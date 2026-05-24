@@ -16,6 +16,9 @@ dnk-manage
 │   └── diff [<tenant_id> | --all] [--seed-path ...]
 ├── events
 │   └── publish-outbox [--limit ...] [--max-attempts ...]
+├── jobs
+│   ├── process-due [--limit ...] [--max-attempts ...] [--lock-ttl-seconds ...]
+│   └── recover-stuck [--limit ...] [--max-attempts ...]
 └── communication
     ├── process-queued --tenant-id <uuid> [--limit ...]
     ├── publish-queued --tenant-id <uuid> [--limit ...]
@@ -83,6 +86,33 @@ On success prints:
 
 - `OK scanned=... published=... failed=...`
 
+### `dnk-manage jobs process-due`
+
+Claims due shared scheduled jobs from PostgreSQL and dispatches them by `job_type`.
+
+Arguments:
+
+- `--limit`: maximum due jobs to claim, defaults to `SCHEDULED_JOBS.process_limit`
+- `--max-attempts`: maximum attempts before a job is marked `failed`, defaults to `SCHEDULED_JOBS.max_attempts`
+- `--lock-ttl-seconds`: worker lock TTL for claimed jobs, defaults to `SCHEDULED_JOBS.lock_ttl_seconds`
+
+On success prints:
+
+- `OK scanned=... processed=... done=... failed=... retried=...`
+
+### `dnk-manage jobs recover-stuck`
+
+Recovers `running` scheduled jobs whose lock expired.
+
+Arguments:
+
+- `--limit`: maximum stuck jobs to inspect, defaults to `SCHEDULED_JOBS.recover_limit`
+- `--max-attempts`: maximum attempts before a stuck job is marked `failed`, defaults to `SCHEDULED_JOBS.max_attempts`
+
+On success prints:
+
+- `OK scanned=... recovered=... failed=...`
+
 ### `dnk-manage communication publish-queued`
 
 Publishes queued outbound communication messages to RabbitMQ for worker processing.
@@ -113,6 +143,8 @@ processing lease, sends it through the configured provider sender and persists t
 - management builder assembles use case from the active `uow.session`
 - commit/rollback is managed by `UnitOfWork.__aexit__`
 - `events publish-outbox` publishes already-committed outbox rows and stores publish status in a new `UnitOfWork`
+- `jobs process-due` and `jobs recover-stuck` use one `UnitOfWork` and compose shared jobs use cases through
+  `shared.presentation.jobs`
 - `schema-registry diff --all` uses one outer `UnitOfWork` and per-tenant savepoints; any expected tenant failure rolls
   back the whole outer transaction after all tenants are attempted
 - communication worker-by-id opens short `UnitOfWork` scopes around claim/build and result persistence
@@ -129,5 +161,6 @@ processing lease, sends it through the configured provider sender and persists t
 
 - `src/management/cli.py`
 - `src/management/commands/events.py`
+- `src/management/commands/jobs.py`
 - `src/management/commands/schema_registry.py`
 - `src/modules/schema_registry/presentation/depends/management.py`

@@ -15,19 +15,20 @@ hosts shared contracts, small domain primitives, infrastructure adapters and pre
 - `presentation/<feature_aggregate>/`
 
 Layer roots contain only `__init__.py`. Every class, protocol, dataclass or enum lives inside a feature aggregate such
-as `events`, `persistence`, `identity_context`, `email`, `tokens`, `time`, `uuid`, `access`, `errors`,
+as `events`, `jobs`, `persistence`, `identity_context`, `email`, `tokens`, `time`, `uuid`, `access`, `errors`,
 `value_object` or `http`. Old internal paths such as `shared/kernel`, `shared/db`, `shared/depends` and
 `shared/http` are removed.
 
 ## What Is Inside
 
 - `domain`
-    - shared value objects, request identity context, event records/statuses, email/tokens primitives and base errors
+    - shared value objects, request identity context, event/job records and statuses, email/tokens primitives and base
+      errors
 - `application`
-    - ports, protocols, token manager and event use cases
+    - ports, protocols, token manager, event use cases and scheduled job use cases
 - `infrastructure`
-    - SQLAlchemy base/helper/UoW/types/mixins, token backends, clocks, UUID generators, email transports, outbox/inbox
-      repositories and RabbitMQ event publisher
+    - SQLAlchemy base/helper/UoW/types/mixins, token backends, clocks, UUID generators, email transports, outbox/inbox,
+      scheduled job repository and RabbitMQ event publisher
 - `presentation`
     - FastAPI dependency wiring, HTTP host helpers and management wiring builders
 
@@ -54,6 +55,10 @@ as `events`, `persistence`, `identity_context`, `email`, `tokens`, `time`, `uuid
     - shared integration event contract persisted through PostgreSQL outbox and published asynchronously to RabbitMQ
 - `EventPublisherPort` / `EventConsumerPort`
     - ports that keep business modules independent from concrete RabbitMQ adapters
+- `ScheduledJob`
+    - shared scheduled work contract persisted through PostgreSQL and processed by at-least-once workers
+- `ScheduledJobHandlerPort`
+    - handler contract implemented by future workflow, broadcast or polling modules
 
 ## Event Bus, Outbox And Inbox
 
@@ -68,6 +73,21 @@ Shared integration events use at-least-once delivery:
 
 Concrete module event schemas, campaign goal matching and workflow events are intentionally outside the shared
 foundation.
+
+## Scheduled Jobs
+
+Shared scheduled jobs provide at-least-once execution for deferred, timer and polling work:
+
+- application use cases schedule `ScheduledJob` rows through the shared repository in the active `UnitOfWork`
+- `dnk-manage jobs process-due` claims due `scheduled` rows using `FOR UPDATE SKIP LOCKED`, marks them `running` and
+  dispatches them by `job_type`
+- successful handlers mark jobs `done`
+- failed handlers return jobs to `scheduled` with retry backoff until `max_attempts`, then jobs become `failed`
+- `dnk-manage jobs recover-stuck` returns expired `running` jobs to `scheduled` or marks exhausted jobs `failed`
+- `cancel` moves only non-terminal jobs to `canceled`
+
+No concrete workflow, campaign, broadcast or external polling handlers live in this foundation. Business modules should
+depend on the application ports and presentation wiring, not on `shared.infrastructure.jobs`.
 
 ## Why It Matters
 
@@ -85,6 +105,8 @@ foundation.
 - DB and type tests
 - architecture boundary tests that protect module layering
 - shared event tests for serialization, publish retry, RabbitMQ publication and inbox idempotency
+- shared scheduled job tests for scheduling, claiming, retry, stuck recovery, CLI wiring and optional PostgreSQL
+  concurrent claims
 
 ## Related
 
@@ -96,7 +118,9 @@ foundation.
 
 - `src/modules/shared/domain/`
 - `src/modules/shared/application/events/`
+- `src/modules/shared/application/jobs/`
 - `src/modules/shared/infrastructure/events/`
+- `src/modules/shared/infrastructure/jobs/`
 - `src/modules/shared/infrastructure/persistence/`
 - `src/modules/shared/presentation/`
 - `src/modules/shared/__init__.py`

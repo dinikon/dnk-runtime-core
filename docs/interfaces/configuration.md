@@ -99,6 +99,21 @@ Project configuration is assembled by `DnkConfig`, which combines multiple setti
     - `EVENT_BUS.retry_base_seconds`
     - `EVENT_BUS.max_attempts`
 
+## Scheduled Jobs Config
+
+- Group: `config/infrastructure/scheduled_jobs_config.py`
+- Responsibilities:
+    - default due scheduled jobs batch size
+    - default stuck scheduled jobs recovery batch size
+    - worker lock TTL
+    - scheduled job retry backoff and maximum attempts
+- Critical values:
+    - `SCHEDULED_JOBS.process_limit`
+    - `SCHEDULED_JOBS.recover_limit`
+    - `SCHEDULED_JOBS.lock_ttl_seconds`
+    - `SCHEDULED_JOBS.retry_base_seconds`
+    - `SCHEDULED_JOBS.max_attempts`
+
 ## Control Plane Config
 
 - Group: `config/deploy/control_plane.py`
@@ -132,3 +147,4 @@ Project configuration is assembled by `DnkConfig`, which combines multiple setti
 - `src/config/infrastructure/email_config.py`
 - `src/config/infrastructure/event_bus_config.py`
 - `src/config/infrastructure/redis_config.py`
+- `src/config/infrastructure/scheduled_jobs_config.py`

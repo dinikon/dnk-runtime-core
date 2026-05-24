@@ -337,6 +337,7 @@ class ArchitectureBoundariesTests(unittest.TestCase):
             "events",
             "http",
             "identity_context",
+            "jobs",
             "persistence",
             "time",
             "tokens",
@@ -415,6 +416,40 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                 content,
                 msg=f"{path} should not assemble shared event infrastructure directly",
             )
+
+    def test_jobs_management_command_uses_shared_presentation_wiring(self) -> None:
+        path = PROJECT_ROOT / "src/management/commands/jobs.py"
+        content = path.read_text(encoding="utf-8")
+        self.assertIn("src.modules.shared.presentation.jobs", content)
+        forbidden_patterns = (
+            "src.modules.shared.infrastructure.jobs",
+            "SqlAlchemyScheduledJobRepository",
+            "ScheduledJobModel",
+            "UtcClock",
+        )
+        for pattern in forbidden_patterns:
+            self.assertNotIn(
+                pattern,
+                content,
+                msg=f"{path} should not assemble shared jobs infrastructure directly",
+            )
+
+    def test_business_modules_do_not_import_shared_jobs_infrastructure(self) -> None:
+        forbidden_prefix = "src.modules.shared.infrastructure.jobs"
+        allowed_paths = {
+            (PROJECT_ROOT / "src/modules/persistence.py").resolve(),
+        }
+        for path in iter_python_files("src/modules"):
+            if path.resolve() in allowed_paths:
+                continue
+            is_shared_path = "/src/modules/shared/" in path.as_posix()
+            for module_name in iter_imports(path):
+                if is_shared_path:
+                    continue
+                self.assertFalse(
+                    module_name.startswith(forbidden_prefix),
+                    msg=f"{path} imports shared jobs infrastructure directly",
+                )
 
     def test_communication_http_root_router_is_composition_only(self) -> None:
         path = PROJECT_ROOT / "src/modules/communication/presentation/http/router.py"
@@ -655,6 +690,8 @@ class ArchitectureBoundariesTests(unittest.TestCase):
             ):
                 continue
             if "/src/modules/shared/domain/events/" in path.as_posix():
+                continue
+            if "/src/modules/shared/domain/jobs/" in path.as_posix():
                 continue
             content = path.read_text(encoding="utf-8")
             filtered = content

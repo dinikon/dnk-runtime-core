@@ -73,6 +73,13 @@ This page maps current tests to the behaviors they protect.
     - shared RabbitMQ event publisher topology and message metadata
 - `test/test_event_bus_management_command.py`
     - shared event management command parsing and handler behavior
+- `test/test_scheduled_jobs.py`
+    - scheduled job serialization and scheduling behavior
+    - due processing success, retry, exhausted attempts and missing handler retry path
+    - SQLAlchemy repository claim, token-guarded completion/failure, cancel and stuck recovery behavior
+    - optional PostgreSQL concurrent claim behavior when `DNK_TEST_DATABASE_URL` is set
+- `test/test_jobs_management_command.py`
+    - scheduled jobs management command parsing and handler behavior
 
 ## CRM
 
