@@ -25,10 +25,13 @@
 - создает, реактивирует или идемпотентно возвращает binding;
 - поддерживает один primary binding на owner + contact point type;
 - soft-detach-ит binding и при необходимости назначает следующий active binding primary.
+- читает одну contact point по id;
+- листит contact points с фильтром по type и pagination;
+- листит active contact points владельца с metadata binding;
+- листит bindings с диагностическими фильтрами по type/contact point/owner/active state.
 
 В текущей реализации не найдено:
 
-- read/list HTTP endpoints для contact points или bindings;
 - describe fields / metadata endpoints;
 - hard delete или cleanup orphan contact points;
 - отдельные background jobs, event handlers, consumers, management commands, CLI commands, outbox/inbox или queues.
@@ -43,6 +46,9 @@
 - сделать binding primary явно или автоматически, если у owner/type нет active primary;
 - soft-detach binding по `binding_id`;
 - вернуть признак orphan contact point после detach без удаления самого contact point.
+- получить contact point без internal `normalized_hash`;
+- получить active contact points владельца вместе с `binding_id`, `is_primary`, `is_active`, `detached_at`;
+- получить список bindings, включая inactive bindings при `is_active` filter.
 
 ## Main Flows / Use Cases
 
@@ -112,8 +118,14 @@
 
 ### Queries
 
-Query classes в текущей реализации не найдены. В `src/modules/contact_point/application/query/` есть только пустой
-`__init__.py`.
+Все query classes оформлены как `@dataclass(frozen=True, slots=True)`:
+
+- `GetContactPointQuery`: `tenant_id`, `contact_point_id`.
+- `ListContactPointsQuery`: `tenant_id`, optional `contact_point_type`, `limit`, `offset`.
+- `ListOwnerContactPointsQuery`: `tenant_id`, `owner_object_id`, `owner_record_id`, optional
+  `contact_point_type`, `limit`, `offset`.
+- `ListContactPointBindingsQuery`: `tenant_id`, optional `contact_point_type`, `contact_point_id`,
+  `owner_object_id`, `owner_record_id`, `is_active`, `limit`, `offset`.
 
 ### DTOs
 
@@ -123,6 +135,12 @@ Query classes в текущей реализации не найдены. В `sr
   `already_attached`.
 - `DetachContactPointResultDTO`: `contact_point_id`, `binding_id`, `binding_deleted`, `contact_point_deleted`,
   `contact_point_left_orphan`.
+- `ContactPointDTO`: `id`, `created_at`, `updated_at`, `contact_point_type`, `raw_value`, `normalized_value`.
+- `ContactPointListDTO`: `items`, `count`, `limit`, `offset`.
+- `OwnerContactPointDTO`: contact point fields plus `binding_id`, `is_primary`, `is_active`, `detached_at`.
+- `OwnerContactPointListDTO`: `items`, `count`, optional `limit`, `offset`.
+- `ContactPointBindingDTO`: binding fields plus `contact_point_type`.
+- `ContactPointBindingListDTO`: `items`, `count`, `limit`, `offset`.
 
 DTO возвращают UUID на application boundary. HTTP Pydantic schemas остаются в presentation layer.
 
@@ -139,6 +157,10 @@ DTO возвращают UUID на application boundary. HTTP Pydantic schemas �
   `OwnerResolverPort`, `ContactPointObjectFeatureGatePort`, `ContactPointNormalizerPort`, `ContactPointHashPort`,
   `UuidPort` и `ClockPort`.
 - `DetachContactPointUseCase` использует `ContactPointBindingRepositoryProtocol` и `ClockPort`.
+- `GetContactPointUseCase` читает одну contact point и мапит отсутствующую запись в `ContactPointNotFoundError`.
+- `ListContactPointsUseCase` делегирует query repository.
+- `ListOwnerContactPointsUseCase` проверяет owner existence и feature gate, затем возвращает active bindings.
+- `ListContactPointBindingsUseCase` делегирует query repository и может вернуть active/inactive bindings.
 
 `AttachContactPointUseCase` сначала проверяет owner existence, затем feature gate, затем нормализует значение и ищет
 contact point по type/hash. Если contact point не найден, он создается с новым UUID. Binding ищется по owner +
@@ -165,6 +187,11 @@ active primary, первый active binding по сортировке `created_a
     - `unset_primary_for_owner_and_type`;
     - `has_active_bindings_for_contact_point`;
     - `save_binding`.
+- `OwnerContactPointQueryRepositoryProtocol`:
+    - `get_contact_point`;
+    - `list_contact_points`;
+    - `list_owner_contact_points`;
+    - `list_contact_point_bindings`.
 
 ## Infrastructure / Persistence
 
@@ -260,13 +287,21 @@ Base prefix:
 `src/modules/router.py` подключает `contact_point_router` под общим prefix `/api`. Controllers задают prefix
 `/contact-points`.
 
-| Method | Path                         | Controller             | Use Case                    | Request                           | Response                           |
-|--------|------------------------------|------------------------|-----------------------------|-----------------------------------|------------------------------------|
-| `POST` | `/api/contact-points/attach` | `attach_contact_point` | `AttachContactPointUseCase` | `AttachContactPointRequestSchema` | `AttachContactPointResponseSchema` |
-| `POST` | `/api/contact-points/detach` | `detach_contact_point` | `DetachContactPointUseCase` | `DetachContactPointRequestSchema` | `DetachContactPointResponseSchema` |
+| Method | Path                                                             | Controller                          | Use Case                          | Request                                                        | Response                                 |
+|--------|------------------------------------------------------------------|-------------------------------------|-----------------------------------|----------------------------------------------------------------|------------------------------------------|
+| `POST` | `/api/contact-points/attach`                                     | `attach_contact_point`              | `AttachContactPointUseCase`       | `AttachContactPointRequestSchema`                              | `AttachContactPointResponseSchema`       |
+| `POST` | `/api/contact-points/detach`                                     | `detach_contact_point`              | `DetachContactPointUseCase`       | `DetachContactPointRequestSchema`                              | `DetachContactPointResponseSchema`       |
+| `POST` | `/api/contact-points/list-by-record`                             | `list_owner_contact_points`         | `ListOwnerContactPointsUseCase`   | `ListOwnerContactPointsRequestSchema`                          | `ListOwnerContactPointsResponseSchema`   |
+| `GET`  | `/api/contact-points/{id}`                                       | `get_contact_point`                 | `GetContactPointUseCase`          | path `id`                                                      | `ContactPointResponseSchema`             |
+| `GET`  | `/api/contact-points`                                            | `list_contact_points`               | `ListContactPointsUseCase`        | query `contact_point_type`, `limit`, `offset`                  | `ListContactPointsResponseSchema`        |
+| `GET`  | `/api/contact-points/owners/{owner_object_id}/{owner_record_id}` | `list_owner_contact_points_by_path` | `ListOwnerContactPointsUseCase`   | path owner ids + query `contact_point_type`, `limit`, `offset` | `ListOwnerContactPointsResponseSchema`   |
+| `GET`  | `/api/contact-points/bindings`                                   | `list_contact_point_bindings`       | `ListContactPointBindingsUseCase` | query filters + `limit`, `offset`                              | `ListContactPointBindingsResponseSchema` |
 
 All routes require `AuthenticatedRequestContextDep`. Controllers read `principal.tenant_id`, convert it to
 `EntityIdVO`, and do not accept `tenant_id` from HTTP payloads.
+
+`GET /api/contact-points` and owner/binding list endpoints use `limit` validation `1..100` and `offset >= 0`.
+`GET /api/contact-points/{id}` intentionally does not expose `normalized_hash`.
 
 HTTP error mapping:
 
@@ -291,7 +326,8 @@ HTTP error mapping:
 - Application dependencies:
     - `get_attach_contact_point_use_case` injects the same runtime repository as contact point and binding repository,
       plus owner resolver, feature gate, normalizer, hash service, `UuidDep` and `ClockDep`;
-    - `get_detach_contact_point_use_case` injects runtime repository as binding repository and `ClockDep`.
+  - `get_detach_contact_point_use_case` injects runtime repository as binding repository and `ClockDep`;
+  - query use case dependencies inject the same runtime repository as `OwnerContactPointQueryRepositoryProtocol`.
 - Shared dependencies:
     - `UoWDep`;
     - `ClockDep`;
@@ -329,8 +365,8 @@ consumers внутри `src/modules/contact_point`.
     - `test/test_contact_point_runtime_repository.py` covers runtime repository filters, sorting and payload mapping;
     - direct tests for `RuntimeOwnerResolver` and `SchemaRegistryContactPointObjectFeatureGate` were not found.
 - Presentation:
-    - `test/test_contact_point_http_router.py` covers router endpoint registration, controller command mapping,
-      tenant context handling and HTTP error mapping.
+    - `test/test_contact_point_http_router.py` covers router endpoint registration, controller command/query mapping,
+      tenant context handling, route ordering and HTTP error mapping.
 - Integration / architecture / schema-related:
     - `test/test_contact_point_schema_seed.py` covers runtime seed objects, fields, indexes and relation;
     - `test/test_schema_registry_object_feature_*` covers object feature behavior for `CONTACT_POINT`;
@@ -345,8 +381,7 @@ uv run python -m unittest test.test_contact_point_application test.test_contact_
 ## Known Gaps / Technical Debt
 
 - `application` layer is flatter than the aggregate-oriented structure recommended by `docs/develop-style.md`.
-- `application/query` has no query contracts.
-- Read/list/describe-fields HTTP API for contact points or bindings is not implemented.
+- describe-fields HTTP API for contact points or bindings is not implemented.
 - `DetachContactPointUseCase` returns orphan status but does not hard-delete or cleanup orphan contact points;
   `contact_point_deleted` is always `False` in current code.
 - Direct tests for `RuntimeOwnerResolver` and `SchemaRegistryContactPointObjectFeatureGate` were not found.

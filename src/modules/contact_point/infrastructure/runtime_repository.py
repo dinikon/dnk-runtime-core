@@ -18,10 +18,17 @@ from src.modules.contact_point.domain.contact_point import (
     ContactPointTypeVO,
 )
 from src.modules.contact_point.application.dto import (
+    ContactPointBindingDTO,
+    ContactPointBindingListDTO,
+    ContactPointDTO,
+    ContactPointListDTO,
     OwnerContactPointDTO,
     OwnerContactPointListDTO,
 )
 from src.modules.contact_point.application.query import (
+    GetContactPointQuery,
+    ListContactPointBindingsQuery,
+    ListContactPointsQuery,
     ListOwnerContactPointsQuery,
     OwnerContactPointQueryRepositoryProtocol,
 )
@@ -315,6 +322,10 @@ class ContactPointRuntimeRepository(
                     op="eq",
                     value=True,
                 ),
+                *self._contact_point_type_filter(
+                    descriptor=binding_descriptor,
+                    contact_point_type=query.contact_point_type,
+                ),
             ),
             sorting=(
                 SortSpec("contact_point_type"),
@@ -322,9 +333,16 @@ class ContactPointRuntimeRepository(
                 SortSpec("created_at"),
                 SortSpec("id"),
             ),
+            limit=query.limit,
+            offset=query.offset,
         )
         if not binding_rows:
-            return OwnerContactPointListDTO(items=(), count=0)
+            return OwnerContactPointListDTO(
+                items=(),
+                count=0,
+                limit=query.limit,
+                offset=query.offset,
+            )
 
         bindings = tuple(contact_point_binding_entity(row) for row in binding_rows)
         contact_point_ids = tuple(
@@ -362,6 +380,8 @@ class ContactPointRuntimeRepository(
                     raw_value=contact_point.raw_value,
                     normalized_value=contact_point.normalized_value,
                     is_primary=binding.is_primary,
+                    is_active=binding.is_active,
+                    detached_at=binding.detached_at,
                     created_at=binding.created_at,
                     updated_at=binding.updated_at,
                 )
@@ -370,6 +390,112 @@ class ContactPointRuntimeRepository(
         return OwnerContactPointListDTO(
             items=tuple(items),
             count=len(items),
+            limit=query.limit,
+            offset=query.offset,
+        )
+
+    async def get_contact_point(
+        self,
+        query: GetContactPointQuery,
+    ) -> ContactPointDTO | None:
+        contact_point = await self.load_contact_point(
+            tenant_id=query.tenant_id,
+            contact_point_id=query.contact_point_id,
+        )
+        return None if contact_point is None else self._contact_point_dto(contact_point)
+
+    async def list_contact_points(
+        self,
+        query: ListContactPointsQuery,
+    ) -> ContactPointListDTO:
+        descriptor = await self._resolve_descriptor(query.tenant_id, _CONTACT_POINT)
+        rows = await self._list(
+            descriptor=descriptor,
+            filters=self._contact_point_type_filter(
+                descriptor=descriptor,
+                contact_point_type=query.contact_point_type,
+            ),
+            sorting=(SortSpec("created_at"), SortSpec("id")),
+            limit=query.limit,
+            offset=query.offset,
+        )
+        items = tuple(
+            self._contact_point_dto(contact_point_entity(row)) for row in rows
+        )
+        return ContactPointListDTO(
+            items=items,
+            count=len(items),
+            limit=query.limit,
+            offset=query.offset,
+        )
+
+    async def list_contact_point_bindings(
+        self,
+        query: ListContactPointBindingsQuery,
+    ) -> ContactPointBindingListDTO:
+        descriptor = await self._resolve_descriptor(
+            query.tenant_id,
+            _CONTACT_POINT_BINDING,
+        )
+        filters: list[TypedFilterExpression] = [
+            *self._contact_point_type_filter(
+                descriptor=descriptor,
+                contact_point_type=query.contact_point_type,
+            )
+        ]
+        if query.contact_point_id is not None:
+            filters.append(
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="contact_point_id",
+                    op="eq",
+                    value=query.contact_point_id.uuid,
+                )
+            )
+        if query.owner_object_id is not None:
+            filters.append(
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="owner_object_id",
+                    op="eq",
+                    value=query.owner_object_id.uuid,
+                )
+            )
+        if query.owner_record_id is not None:
+            filters.append(
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="owner_record_id",
+                    op="eq",
+                    value=query.owner_record_id.uuid,
+                )
+            )
+        if query.is_active is not None:
+            filters.append(
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="is_active",
+                    op="eq",
+                    value=query.is_active,
+                )
+            )
+
+        rows = await self._list(
+            descriptor=descriptor,
+            filters=tuple(filters),
+            sorting=(SortSpec("created_at"), SortSpec("id")),
+            limit=query.limit,
+            offset=query.offset,
+        )
+        items = tuple(
+            self._contact_point_binding_dto(contact_point_binding_entity(row))
+            for row in rows
+        )
+        return ContactPointBindingListDTO(
+            items=items,
+            count=len(items),
+            limit=query.limit,
+            offset=query.offset,
         )
 
     async def save_binding(
@@ -453,6 +579,53 @@ class ContactPointRuntimeRepository(
             ),
         )
 
+    def _contact_point_type_filter(
+        self,
+        *,
+        descriptor: RuntimeObjectDescriptor,
+        contact_point_type: ContactPointTypeVO | None,
+    ) -> tuple[TypedFilterExpression, ...]:
+        if contact_point_type is None:
+            return ()
+        return (
+            self._filter_builder.condition(
+                descriptor=descriptor,
+                field="contact_point_type",
+                op="eq",
+                value=contact_point_type.value,
+            ),
+        )
+
+    def _contact_point_dto(
+        self,
+        contact_point: ContactPointEntity,
+    ) -> ContactPointDTO:
+        return ContactPointDTO(
+            id=contact_point.id.uuid,
+            created_at=contact_point.created_at,
+            updated_at=contact_point.updated_at,
+            contact_point_type=contact_point.contact_point_type,
+            raw_value=contact_point.raw_value,
+            normalized_value=contact_point.normalized_value,
+        )
+
+    def _contact_point_binding_dto(
+        self,
+        binding: ContactPointBindingEntity,
+    ) -> ContactPointBindingDTO:
+        return ContactPointBindingDTO(
+            id=binding.id.uuid,
+            contact_point_id=binding.contact_point_id.uuid,
+            contact_point_type=binding.contact_point_type,
+            owner_object_id=binding.owner.owner_object_id.uuid,
+            owner_record_id=binding.owner.owner_record_id.uuid,
+            is_primary=binding.is_primary,
+            is_active=binding.is_active,
+            detached_at=binding.detached_at,
+            created_at=binding.created_at,
+            updated_at=binding.updated_at,
+        )
+
     async def _list(
         self,
         *,
@@ -460,12 +633,13 @@ class ContactPointRuntimeRepository(
         filters: Sequence[TypedFilterExpression] = (),
         sorting: Sequence[SortSpec] = (),
         limit: int | None = None,
+        offset: int = 0,
     ) -> list[Mapping[str, Any]]:
         return await self._runtime_query_gateway.list(
             descriptor=descriptor,
             filters=filters,
             sorting=sorting,
-            page=PageSpec(limit=limit, offset=0) if limit is not None else None,
+            page=PageSpec(limit=limit, offset=offset) if limit is not None else None,
         )
 
     async def _resolve_descriptor(

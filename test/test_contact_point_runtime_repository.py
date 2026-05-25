@@ -4,7 +4,12 @@ import unittest
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from src.modules.contact_point.application import ListOwnerContactPointsQuery
+from src.modules.contact_point.application import (
+    GetContactPointQuery,
+    ListContactPointBindingsQuery,
+    ListContactPointsQuery,
+    ListOwnerContactPointsQuery,
+)
 from src.modules.contact_point.domain import (
     ContactPointBindingEntity,
     ContactPointBindingIdVO,
@@ -206,6 +211,79 @@ class ContactPointRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("display_value", payload)
         self.assertNotIn("hash_value", payload)
         self.assertNotIn("tenant_id", payload)
+
+    async def test_get_contact_point_maps_dto_without_normalized_hash(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        contact_point_id = ContactPointIdVO.from_value(uuid4())
+        now = datetime(2026, 5, 21, 10, 0, tzinfo=UTC)
+        query = _QueryGatewayStub()
+        query.by_id[(_CONTACT_POINT, contact_point_id.uuid)] = {
+            "id": contact_point_id.uuid,
+            "created_at": now,
+            "updated_at": now,
+            "contact_point_type": "EMAIL",
+            "raw_value": "User@Example.COM",
+            "normalized_value": "user@example.com",
+            "normalized_hash": "abc123",
+        }
+        repository = _repository(query, _CommandGatewayStub())
+
+        result = await repository.get_contact_point(
+            GetContactPointQuery(
+                tenant_id=tenant_id,
+                contact_point_id=contact_point_id,
+            )
+        )
+
+        assert result is not None
+        self.assertEqual(result.id, contact_point_id.uuid)
+        self.assertFalse(hasattr(result, "normalized_hash"))
+        self.assertFalse(hasattr(result, "hash_value"))
+
+    async def test_list_contact_points_filters_type_and_uses_page(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        contact_point_id = uuid4()
+        now = datetime(2026, 5, 21, 10, 0, tzinfo=UTC)
+        query = _QueryGatewayStub()
+        query.rows[_CONTACT_POINT] = [
+            {
+                "id": contact_point_id,
+                "created_at": now,
+                "updated_at": now,
+                "contact_point_type": "PHONE",
+                "raw_value": "+380671112233",
+                "normalized_value": "+380671112233",
+                "normalized_hash": "abc123",
+            }
+        ]
+        repository = _repository(query, _CommandGatewayStub())
+
+        result = await repository.list_contact_points(
+            ListContactPointsQuery(
+                tenant_id=tenant_id,
+                contact_point_type=ContactPointTypeVO.PHONE,
+                limit=25,
+                offset=5,
+            )
+        )
+
+        self.assertEqual(result.count, 1)
+        self.assertEqual(result.limit, 25)
+        self.assertEqual(result.offset, 5)
+        self.assertEqual(result.items[0].id, contact_point_id)
+        call = query.list_calls[0]
+        self.assertEqual(call["descriptor"], _CONTACT_POINT)
+        self.assertEqual(
+            [item.field.name for item in call["filters"]],
+            ["contact_point_type"],
+        )
+        self.assertEqual([item.value for item in call["filters"]], ["PHONE"])
+        self.assertEqual(
+            [(item.field, item.direction) for item in call["sorting"]],
+            [("created_at", "asc"), ("id", "asc")],
+        )
+        self.assertEqual(call["page"].limit, 25)
+        self.assertEqual(call["page"].offset, 5)
 
     async def test_binding_lookup_considers_inactive_rows(self) -> None:
         tenant_id = EntityIdVO.from_value(uuid4())
@@ -429,6 +507,134 @@ class ContactPointRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(contact_point_call["filters"][0].op, "in")
         self.assertEqual(contact_point_call["filters"][0].value, [contact_point_id])
+
+    async def test_list_owner_contact_points_supports_type_filter_and_page(
+        self,
+    ) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        owner = OwnerContactPointBinding(
+            owner_object_id=EntityIdVO.from_value(uuid4()),
+            owner_record_id=EntityIdVO.from_value(uuid4()),
+        )
+        contact_point_id = uuid4()
+        binding_id = uuid4()
+        now = datetime(2026, 5, 21, 10, 0, tzinfo=UTC)
+        query = _QueryGatewayStub()
+        query.rows[_CONTACT_POINT_BINDING] = [
+            {
+                "id": binding_id,
+                "created_at": now,
+                "updated_at": now,
+                "contact_point_id": contact_point_id,
+                "contact_point_type": "EMAIL",
+                "owner_object_id": owner.owner_object_id.uuid,
+                "owner_record_id": owner.owner_record_id.uuid,
+                "is_primary": True,
+                "is_active": True,
+                "detached_at": None,
+            }
+        ]
+        query.rows[_CONTACT_POINT] = [
+            {
+                "id": contact_point_id,
+                "created_at": now,
+                "updated_at": now,
+                "contact_point_type": "EMAIL",
+                "raw_value": "User@Example.COM",
+                "normalized_value": "user@example.com",
+                "normalized_hash": "abc123",
+            }
+        ]
+        repository = _repository(query, _CommandGatewayStub())
+
+        result = await repository.list_owner_contact_points(
+            ListOwnerContactPointsQuery(
+                tenant_id=tenant_id,
+                owner_object_id=owner.owner_object_id,
+                owner_record_id=owner.owner_record_id,
+                contact_point_type=ContactPointTypeVO.EMAIL,
+                limit=10,
+                offset=2,
+            )
+        )
+
+        self.assertEqual(result.count, 1)
+        self.assertEqual(result.limit, 10)
+        self.assertEqual(result.offset, 2)
+        self.assertTrue(result.items[0].is_active)
+        self.assertIsNone(result.items[0].detached_at)
+        binding_call = query.list_calls[0]
+        self.assertEqual(
+            [item.field.name for item in binding_call["filters"]],
+            [
+                "owner_object_id",
+                "owner_record_id",
+                "is_active",
+                "contact_point_type",
+            ],
+        )
+        self.assertEqual(binding_call["page"].limit, 10)
+        self.assertEqual(binding_call["page"].offset, 2)
+
+    async def test_list_contact_point_bindings_filters_and_maps_dto(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        owner = OwnerContactPointBinding(
+            owner_object_id=EntityIdVO.from_value(uuid4()),
+            owner_record_id=EntityIdVO.from_value(uuid4()),
+        )
+        contact_point_id = ContactPointIdVO.from_value(uuid4())
+        binding_id = uuid4()
+        now = datetime(2026, 5, 21, 10, 0, tzinfo=UTC)
+        query = _QueryGatewayStub()
+        query.rows[_CONTACT_POINT_BINDING] = [
+            {
+                "id": binding_id,
+                "created_at": now,
+                "updated_at": now,
+                "contact_point_id": contact_point_id.uuid,
+                "contact_point_type": "EMAIL",
+                "owner_object_id": owner.owner_object_id.uuid,
+                "owner_record_id": owner.owner_record_id.uuid,
+                "is_primary": True,
+                "is_active": False,
+                "detached_at": now,
+            }
+        ]
+        repository = _repository(query, _CommandGatewayStub())
+
+        result = await repository.list_contact_point_bindings(
+            ListContactPointBindingsQuery(
+                tenant_id=tenant_id,
+                contact_point_type=ContactPointTypeVO.EMAIL,
+                contact_point_id=contact_point_id,
+                owner_object_id=owner.owner_object_id,
+                owner_record_id=owner.owner_record_id,
+                is_active=False,
+                limit=20,
+                offset=3,
+            )
+        )
+
+        self.assertEqual(result.count, 1)
+        self.assertEqual(result.items[0].id, binding_id)
+        self.assertEqual(result.items[0].contact_point_id, contact_point_id.uuid)
+        self.assertEqual(result.items[0].owner_object_id, owner.owner_object_id.uuid)
+        self.assertFalse(result.items[0].is_active)
+        self.assertEqual(result.items[0].detached_at, now)
+        call = query.list_calls[0]
+        self.assertEqual(call["descriptor"], _CONTACT_POINT_BINDING)
+        self.assertEqual(
+            [item.field.name for item in call["filters"]],
+            [
+                "contact_point_type",
+                "contact_point_id",
+                "owner_object_id",
+                "owner_record_id",
+                "is_active",
+            ],
+        )
+        self.assertEqual(call["page"].limit, 20)
+        self.assertEqual(call["page"].offset, 3)
 
     async def test_list_owner_contact_points_raises_for_missing_contact_point(
         self,

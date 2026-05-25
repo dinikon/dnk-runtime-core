@@ -8,8 +8,18 @@ from uuid import UUID, uuid4
 from src.modules.contact_point.application import (
     AttachContactPointCommand,
     AttachContactPointUseCase,
+    ContactPointBindingDTO,
+    ContactPointBindingListDTO,
+    ContactPointDTO,
+    ContactPointListDTO,
     DetachContactPointCommand,
     DetachContactPointUseCase,
+    GetContactPointQuery,
+    GetContactPointUseCase,
+    ListContactPointBindingsQuery,
+    ListContactPointBindingsUseCase,
+    ListContactPointsQuery,
+    ListContactPointsUseCase,
     ListOwnerContactPointsQuery,
     ListOwnerContactPointsUseCase,
     OwnerContactPointDTO,
@@ -20,6 +30,7 @@ from src.modules.contact_point.domain import (
     ContactPointBindingIdVO,
     ContactPointEntity,
     ContactPointIdVO,
+    ContactPointNotFoundError,
     ContactPointOwnerNotFoundError,
     ContactPointTypeVO,
     InvalidContactPointValueError,
@@ -189,6 +200,47 @@ class _Repository:
         self.bindings[binding.id] = binding
         return binding
 
+    async def get_contact_point(self, query):
+        contact_point = self.contact_points.get(query.contact_point_id)
+        if contact_point is None:
+            return None
+        return ContactPointDTO(
+            id=contact_point.id.uuid,
+            created_at=contact_point.created_at,
+            updated_at=contact_point.updated_at,
+            contact_point_type=contact_point.contact_point_type,
+            raw_value=contact_point.raw_value,
+            normalized_value=contact_point.normalized_value,
+        )
+
+    async def list_contact_points(self, query):
+        self.list_queries.append(query)
+        contact_points = [
+            contact_point
+            for contact_point in self.contact_points.values()
+            if query.contact_point_type is None
+            or contact_point.contact_point_type == query.contact_point_type
+        ]
+        contact_points.sort(key=lambda item: (item.created_at, str(item.id)))
+        page = contact_points[query.offset : query.offset + query.limit]
+        items = tuple(
+            ContactPointDTO(
+                id=contact_point.id.uuid,
+                created_at=contact_point.created_at,
+                updated_at=contact_point.updated_at,
+                contact_point_type=contact_point.contact_point_type,
+                raw_value=contact_point.raw_value,
+                normalized_value=contact_point.normalized_value,
+            )
+            for contact_point in page
+        )
+        return ContactPointListDTO(
+            items=items,
+            count=len(items),
+            limit=query.limit,
+            offset=query.offset,
+        )
+
     async def list_owner_contact_points(self, query):
         self.list_queries.append(query)
         owner = OwnerContactPointBinding(
@@ -200,6 +252,12 @@ class _Repository:
             for binding in self.bindings.values()
             if binding.owner == owner and binding.is_active
         ]
+        if query.contact_point_type is not None:
+            bindings = [
+                binding
+                for binding in bindings
+                if binding.contact_point_type == query.contact_point_type
+            ]
         bindings.sort(
             key=lambda item: (
                 item.contact_point_type.value,
@@ -208,6 +266,8 @@ class _Repository:
                 str(item.id),
             )
         )
+        if query.limit is not None:
+            bindings = bindings[query.offset : query.offset + query.limit]
         items = []
         for binding in bindings:
             contact_point = self.contact_points[binding.contact_point_id]
@@ -219,11 +279,73 @@ class _Repository:
                     raw_value=contact_point.raw_value,
                     normalized_value=contact_point.normalized_value,
                     is_primary=binding.is_primary,
+                    is_active=binding.is_active,
+                    detached_at=binding.detached_at,
                     created_at=binding.created_at,
                     updated_at=binding.updated_at,
                 )
             )
-        return OwnerContactPointListDTO(items=tuple(items), count=len(items))
+        return OwnerContactPointListDTO(
+            items=tuple(items),
+            count=len(items),
+            limit=query.limit,
+            offset=query.offset,
+        )
+
+    async def list_contact_point_bindings(self, query):
+        self.list_queries.append(query)
+        bindings = list(self.bindings.values())
+        if query.contact_point_type is not None:
+            bindings = [
+                binding
+                for binding in bindings
+                if binding.contact_point_type == query.contact_point_type
+            ]
+        if query.contact_point_id is not None:
+            bindings = [
+                binding
+                for binding in bindings
+                if binding.contact_point_id == query.contact_point_id
+            ]
+        if query.owner_object_id is not None:
+            bindings = [
+                binding
+                for binding in bindings
+                if binding.owner.owner_object_id == query.owner_object_id
+            ]
+        if query.owner_record_id is not None:
+            bindings = [
+                binding
+                for binding in bindings
+                if binding.owner.owner_record_id == query.owner_record_id
+            ]
+        if query.is_active is not None:
+            bindings = [
+                binding for binding in bindings if binding.is_active == query.is_active
+            ]
+        bindings.sort(key=lambda item: (item.created_at, str(item.id)))
+        page = bindings[query.offset : query.offset + query.limit]
+        items = tuple(
+            ContactPointBindingDTO(
+                id=binding.id.uuid,
+                contact_point_id=binding.contact_point_id.uuid,
+                contact_point_type=binding.contact_point_type,
+                owner_object_id=binding.owner.owner_object_id.uuid,
+                owner_record_id=binding.owner.owner_record_id.uuid,
+                is_primary=binding.is_primary,
+                is_active=binding.is_active,
+                detached_at=binding.detached_at,
+                created_at=binding.created_at,
+                updated_at=binding.updated_at,
+            )
+            for binding in page
+        )
+        return ContactPointBindingListDTO(
+            items=items,
+            count=len(items),
+            limit=query.limit,
+            offset=query.offset,
+        )
 
 
 def _ids():
@@ -326,6 +448,22 @@ class ContactPointUseCaseTests(unittest.IsolatedAsyncioTestCase):
         )
 
     @staticmethod
+    def _get_use_case(repository: _Repository) -> GetContactPointUseCase:
+        return GetContactPointUseCase(query_repository=repository)
+
+    @staticmethod
+    def _list_contact_points_use_case(
+        repository: _Repository,
+    ) -> ListContactPointsUseCase:
+        return ListContactPointsUseCase(query_repository=repository)
+
+    @staticmethod
+    def _list_bindings_use_case(
+        repository: _Repository,
+    ) -> ListContactPointBindingsUseCase:
+        return ListContactPointBindingsUseCase(query_repository=repository)
+
+    @staticmethod
     def _list_use_case(
         repository: _Repository,
         owner_resolver: _OwnerResolver | None = None,
@@ -373,6 +511,77 @@ class ContactPointUseCaseTests(unittest.IsolatedAsyncioTestCase):
         binding = next(iter(repository.bindings.values()))
         self.assertTrue(binding.is_primary)
         self.assertTrue(binding.is_active)
+
+    async def test_get_contact_point_returns_dto_without_hash(self) -> None:
+        tenant_id, _, _ = _ids()
+        repository = _Repository()
+        contact_point = _contact_point(
+            contact_point_id=ContactPointIdVO.from_value(uuid4()),
+            value="user@example.com",
+        )
+        repository.contact_points[contact_point.id] = contact_point
+        use_case = self._get_use_case(repository)
+
+        result = await use_case(
+            GetContactPointQuery(
+                tenant_id=tenant_id,
+                contact_point_id=contact_point.id,
+            )
+        )
+
+        self.assertEqual(result.id, contact_point.id.uuid)
+        self.assertEqual(result.raw_value, "user@example.com")
+        self.assertFalse(hasattr(result, "hash_value"))
+        self.assertFalse(hasattr(result, "normalized_hash"))
+
+    async def test_get_contact_point_raises_when_missing(self) -> None:
+        tenant_id, _, _ = _ids()
+        use_case = self._get_use_case(_Repository())
+
+        with self.assertRaises(ContactPointNotFoundError):
+            await use_case(
+                GetContactPointQuery(
+                    tenant_id=tenant_id,
+                    contact_point_id=ContactPointIdVO.from_value(uuid4()),
+                )
+            )
+
+    async def test_list_contact_points_forwards_type_filter_and_pagination(
+        self,
+    ) -> None:
+        tenant_id, _, _ = _ids()
+        repository = _Repository()
+        now = datetime(2026, 5, 21, 10, 0, tzinfo=UTC)
+        email = _contact_point(
+            contact_point_id=ContactPointIdVO.from_value(uuid4()),
+            value="user@example.com",
+            now=now,
+        )
+        phone = _contact_point(
+            contact_point_id=ContactPointIdVO.from_value(uuid4()),
+            contact_point_type=ContactPointTypeVO.PHONE,
+            value="+380671112233",
+            now=now,
+        )
+        repository.contact_points[email.id] = email
+        repository.contact_points[phone.id] = phone
+        use_case = self._list_contact_points_use_case(repository)
+
+        result = await use_case(
+            ListContactPointsQuery(
+                tenant_id=tenant_id,
+                contact_point_type=ContactPointTypeVO.PHONE,
+                limit=10,
+                offset=0,
+            )
+        )
+
+        self.assertEqual(result.count, 1)
+        self.assertEqual(result.items[0].id, phone.id.uuid)
+        self.assertEqual(
+            repository.list_queries[0].contact_point_type, ContactPointTypeVO.PHONE
+        )
+        self.assertEqual(repository.list_queries[0].limit, 10)
 
     async def test_list_owner_contact_points_returns_active_items_in_order(
         self,
@@ -461,8 +670,66 @@ class ContactPointUseCaseTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(result.items[0].binding_id, primary_binding.id.uuid)
         self.assertTrue(result.items[0].is_primary)
+        self.assertTrue(result.items[0].is_active)
+        self.assertIsNone(result.items[0].detached_at)
         self.assertEqual(result.items[0].raw_value, "primary@example.com")
         self.assertEqual(result.items[0].created_at, primary_binding.created_at)
+
+    async def test_list_owner_contact_points_supports_type_filter(self) -> None:
+        tenant_id, owner_object_id, owner_record_id = _ids()
+        now = datetime(2026, 5, 21, 10, 0, tzinfo=UTC)
+        owner = OwnerContactPointBinding(owner_object_id, owner_record_id)
+        repository = _Repository()
+        email = _contact_point(
+            contact_point_id=ContactPointIdVO.from_value(uuid4()),
+            value="user@example.com",
+            now=now,
+        )
+        phone = _contact_point(
+            contact_point_id=ContactPointIdVO.from_value(uuid4()),
+            contact_point_type=ContactPointTypeVO.PHONE,
+            value="+380671112233",
+            now=now,
+        )
+        repository.contact_points[email.id] = email
+        repository.contact_points[phone.id] = phone
+        repository.bindings[ContactPointBindingIdVO.from_value(uuid4())] = (
+            ContactPointBindingEntity.create(
+                id_=ContactPointBindingIdVO.from_value(uuid4()),
+                now=now,
+                contact_point_id=email.id,
+                contact_point_type=ContactPointTypeVO.EMAIL,
+                owner=owner,
+                is_primary=True,
+            )
+        )
+        phone_binding = ContactPointBindingEntity.create(
+            id_=ContactPointBindingIdVO.from_value(uuid4()),
+            now=now,
+            contact_point_id=phone.id,
+            contact_point_type=ContactPointTypeVO.PHONE,
+            owner=owner,
+            is_primary=True,
+        )
+        repository.bindings[phone_binding.id] = phone_binding
+        use_case = self._list_use_case(repository)
+
+        result = await use_case(
+            ListOwnerContactPointsQuery(
+                tenant_id=tenant_id,
+                owner_object_id=owner_object_id,
+                owner_record_id=owner_record_id,
+                contact_point_type=ContactPointTypeVO.PHONE,
+                limit=50,
+                offset=0,
+            )
+        )
+
+        self.assertEqual(result.count, 1)
+        self.assertEqual(result.items[0].contact_point_id, phone.id.uuid)
+        self.assertEqual(
+            repository.list_queries[0].contact_point_type, ContactPointTypeVO.PHONE
+        )
 
     async def test_list_owner_contact_points_returns_empty_list(self) -> None:
         tenant_id, owner_object_id, owner_record_id = _ids()
@@ -479,6 +746,51 @@ class ContactPointUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.items, ())
         self.assertEqual(result.count, 0)
+
+    async def test_list_contact_point_bindings_supports_filters(self) -> None:
+        tenant_id, owner_object_id, owner_record_id = _ids()
+        other_owner = EntityIdVO.from_value(uuid4())
+        now = datetime(2026, 5, 21, 10, 0, tzinfo=UTC)
+        owner = OwnerContactPointBinding(owner_object_id, owner_record_id)
+        repository = _Repository()
+        active_binding = ContactPointBindingEntity.create(
+            id_=ContactPointBindingIdVO.from_value(uuid4()),
+            now=now,
+            contact_point_id=ContactPointIdVO.from_value(uuid4()),
+            contact_point_type=ContactPointTypeVO.EMAIL,
+            owner=owner,
+            is_primary=True,
+        )
+        inactive_binding = ContactPointBindingEntity.create(
+            id_=ContactPointBindingIdVO.from_value(uuid4()),
+            now=now,
+            contact_point_id=ContactPointIdVO.from_value(uuid4()),
+            contact_point_type=ContactPointTypeVO.PHONE,
+            owner=OwnerContactPointBinding(other_owner, owner_record_id),
+            is_primary=False,
+        )
+        inactive_binding.detach(now=now)
+        repository.bindings[active_binding.id] = active_binding
+        repository.bindings[inactive_binding.id] = inactive_binding
+        use_case = self._list_bindings_use_case(repository)
+
+        result = await use_case(
+            ListContactPointBindingsQuery(
+                tenant_id=tenant_id,
+                contact_point_type=ContactPointTypeVO.EMAIL,
+                owner_object_id=owner_object_id,
+                owner_record_id=owner_record_id,
+                is_active=True,
+                limit=20,
+                offset=0,
+            )
+        )
+
+        self.assertEqual(result.count, 1)
+        self.assertEqual(result.items[0].id, active_binding.id.uuid)
+        self.assertTrue(result.items[0].is_active)
+        self.assertEqual(repository.list_queries[0].owner_object_id, owner_object_id)
+        self.assertEqual(repository.list_queries[0].is_active, True)
 
     async def test_list_owner_contact_points_fails_before_query_when_guard_invalid(
         self,
