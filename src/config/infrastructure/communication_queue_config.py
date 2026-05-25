@@ -9,10 +9,6 @@ class CommunicationQueueSettings(BaseModel):
         default=False,
         description="Enable RabbitMQ-backed communication delivery queue.",
     )
-    rabbitmq_url: str = Field(
-        default="amqp://guest:guest@localhost:5672/",
-        description="RabbitMQ AMQP URL for communication workers.",
-    )
     queue_name: str = Field(
         default="communication.outbound.send",
         description="RabbitMQ queue name for outbound communication jobs.",

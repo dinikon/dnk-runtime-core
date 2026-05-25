@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import unittest
-from uuid import uuid4
+from uuid import UUID, uuid4
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
@@ -61,6 +61,108 @@ class _FailingUseCase:
 
 
 class ContactControllerErrorTests(unittest.IsolatedAsyncioTestCase):
+
+    async def test_create_contact_passes_actor_id_from_principal(self) -> None:
+        context = _context()
+        contact_id = uuid4()
+        now = datetime.now(UTC)
+
+        class UseCaseSpy:
+            command = None
+
+            async def __call__(self, command):
+                self.command = command
+                return ContactDTO(
+                    id=contact_id,
+                    created_at=now,
+                    updated_at=now,
+                    last_name="Doe",
+                    first_name="Jane",
+                    middle_name=None,
+                    status="lead",
+                    tags=["vip"],
+                )
+
+        use_case = UseCaseSpy()
+
+        await create_contact(
+            payload=CreateContactRequestSchema(
+                first_name="Jane",
+                last_name="Doe",
+                status="lead",
+                tags=["vip"],
+            ),
+            context=context,
+            use_case=use_case,
+        )
+
+        self.assertIsNotNone(use_case.command)
+        self.assertEqual(
+            use_case.command.actor_id,
+            UUID(context.principal.user_id),
+        )
+
+    async def test_update_contact_passes_actor_id_from_principal(self) -> None:
+        context = _context()
+        contact_id = uuid4()
+        now = datetime.now(UTC)
+
+        class UseCaseSpy:
+            command = None
+
+            async def __call__(self, command):
+                self.command = command
+                return ContactDTO(
+                    id=contact_id,
+                    created_at=now,
+                    updated_at=now,
+                    last_name="Doe",
+                    first_name="Jane",
+                    middle_name=None,
+                    status="lead",
+                    tags=[],
+                )
+
+        use_case = UseCaseSpy()
+
+        await update_contact(
+            contact_id=contact_id,
+            payload=UpdateContactRequestSchema(first_name="Jane"),
+            context=context,
+            use_case=use_case,
+        )
+
+        self.assertIsNotNone(use_case.command)
+        self.assertEqual(
+            use_case.command.actor_id,
+            UUID(context.principal.user_id),
+        )
+
+    async def test_delete_contact_passes_actor_id_from_principal(self) -> None:
+        context = _context()
+        contact_id = uuid4()
+
+        class UseCaseSpy:
+            command = None
+
+            async def __call__(self, command):
+                self.command = command
+
+        use_case = UseCaseSpy()
+
+        response = await delete_contact(
+            contact_id=contact_id,
+            context=context,
+            use_case=use_case,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertIsNotNone(use_case.command)
+        self.assertEqual(
+            use_case.command.actor_id,
+            UUID(context.principal.user_id),
+        )
+
     async def test_create_contact_validation_error_returns_422(self) -> None:
         with self.assertRaises(HTTPException) as caught:
             await create_contact(

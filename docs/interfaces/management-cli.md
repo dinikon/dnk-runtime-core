@@ -76,6 +76,9 @@ On expected `CommunicationError`, prints the error to `stderr` and exits with co
 ### `dnk-manage events publish-outbox`
 
 Publishes due shared integration events from PostgreSQL outbox to RabbitMQ.
+Communication delivery status facts such as `communication.outbound_message.sent.v1`,
+`communication.outbound_message.failed.v1`, `communication.outbound_message.delivered.v1` and
+`communication.delivery_status.changed.v1` use this path after they are written to the shared outbox.
 
 Arguments:
 
@@ -116,6 +119,7 @@ On success prints:
 ### `dnk-manage communication publish-queued`
 
 Publishes queued outbound communication messages to RabbitMQ for worker processing.
+This is an operational delivery queue path, separate from `events publish-outbox`.
 
 Arguments:
 

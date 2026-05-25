@@ -32,8 +32,8 @@ from src.modules.communication.infrastructure.provider_senders import (
     YamlHttpProviderSender,
     YamlSmtpProviderSender,
 )
-from src.modules.communication.infrastructure.rabbitmq import (
-    RabbitMQOutboundMessagePublisher,
+from src.modules.communication.application.outbound_message.ports import (
+    OutboundMessagePublisherProtocol,
 )
 from src.modules.runtime_data.application.type_policy import RuntimeFieldTypePolicy
 from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.command_gateway import (
@@ -57,6 +57,7 @@ from src.modules.schema_registry.infrastructure.repository.object_repository imp
 from src.modules.schema_registry.runtime import SchemaRegistryRuntimeObjectResolver
 from src.modules.shared.application.persistence import UnitOfWorkProtocol
 from src.modules.shared.infrastructure.time.utc_clock import UtcClock
+from src.modules.shared.presentation.events import build_outbox_repository
 import uuid6
 
 
@@ -116,7 +117,7 @@ def build_process_outbound_message_by_id_use_case(
 def build_publish_queued_outbound_messages_use_case(
     *,
     uow: UnitOfWorkProtocol,
-    publisher: RabbitMQOutboundMessagePublisher,
+    publisher: OutboundMessagePublisherProtocol,
     republish_after_seconds: int,
 ) -> PublishQueuedOutboundMessagesUseCase:
     clock = UtcClock()
@@ -208,6 +209,7 @@ def build_delivery_repository(session: AsyncSession) -> DeliveryRuntimeRepositor
         ),
         runtime_command_gateway=runtime_command_gateway,
         runtime_query_gateway=runtime_query_gateway,
+        outbox_repository=build_outbox_repository(session),
     )
 
 
@@ -223,6 +225,7 @@ def build_outbound_processing_repository(
             repository=delivery_repository,
             clock=clock,
         ),
+        outbox_repository=build_outbox_repository(session),
     )
 
 

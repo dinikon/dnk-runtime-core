@@ -28,7 +28,7 @@ as `events`, `jobs`, `persistence`, `identity_context`, `email`, `tokens`, `time
     - ports, protocols, token manager, event use cases and scheduled job use cases
 - `infrastructure`
     - SQLAlchemy base/helper/UoW/types/mixins, token backends, clocks, UUID generators, email transports, outbox/inbox,
-      scheduled job repository and RabbitMQ event publisher
+      scheduled job repository, shared RabbitMQ messaging publisher and RabbitMQ event publisher
 - `presentation`
     - FastAPI dependency wiring, HTTP host helpers and management wiring builders
 
@@ -55,6 +55,8 @@ as `events`, `jobs`, `persistence`, `identity_context`, `email`, `tokens`, `time
     - shared integration event contract persisted through PostgreSQL outbox and published asynchronously to RabbitMQ
 - `EventPublisherPort` / `EventConsumerPort`
     - ports that keep business modules independent from concrete RabbitMQ adapters
+- `BrokerMessage` / `MessagePublisherPort`
+    - low-level messaging contract used by infrastructure adapters; business modules should still expose semantic ports
 - `ScheduledJob`
     - shared scheduled work contract persisted through PostgreSQL and processed by at-least-once workers
 - `ScheduledJobHandlerPort`
@@ -73,6 +75,17 @@ Shared integration events use at-least-once delivery:
 
 Concrete module event schemas, campaign goal matching and workflow events are intentionally outside the shared
 foundation.
+
+## Messaging
+
+Shared messaging provides broker-neutral primitives below module-specific ports:
+
+- `BrokerMessage` stores JSON-compatible body and broker metadata such as headers, message id and correlation id
+- `MessagePublisherPort` publishes a broker message to an exchange and routing key
+- `RabbitMQMessagePublisher` owns shared RabbitMQ lifecycle and publish mechanics
+
+`shared.events` and `communication` use this foundation through their own adapters. Queue names, exchanges, routing keys
+and payload semantics remain owned by each module.
 
 ## Scheduled Jobs
 

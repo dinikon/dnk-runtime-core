@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
 from typing import Annotated
 
 from fastapi import Depends, Request
@@ -40,9 +39,6 @@ from src.modules.communication.infrastructure.provider_senders import (
     YamlHttpProviderSender,
     YamlSmtpProviderSender,
 )
-from src.modules.communication.infrastructure.rabbitmq import (
-    RabbitMQOutboundMessagePublisher,
-)
 from src.modules.runtime_data.application.type_policy import RuntimeFieldTypePolicy
 from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.command_gateway import (
     PostgresRuntimeCommandGateway,
@@ -53,6 +49,7 @@ from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.query_
 from src.modules.schema_registry.presentation.depends.application import (
     RuntimeObjectResolverDep,
 )
+from src.modules.shared.presentation.events import build_outbox_repository
 from src.modules.shared.presentation.persistence.depends import UoWDep
 
 
@@ -104,12 +101,14 @@ def get_delivery_repository(
     runtime_object_resolver: RuntimeObjectResolverDep,
     runtime_command_gateway: RuntimeCommandGatewayDep,
     runtime_query_gateway: RuntimeQueryGatewayDep,
+    uow: UoWDep,
 ) -> DeliveryRuntimeRepository:
     """Создает runtime repository delivery aggregate."""
     return DeliveryRuntimeRepository(
         runtime_object_resolver=runtime_object_resolver,
         runtime_command_gateway=runtime_command_gateway,
         runtime_query_gateway=runtime_query_gateway,
+        outbox_repository=build_outbox_repository(uow.session),
     )
 
 
@@ -295,21 +294,11 @@ ProviderSenderRegistryDep = Annotated[
 
 async def get_outbound_message_publisher(
     request: Request,
-) -> AsyncGenerator[OutboundMessagePublisherProtocol | None, None]:
+) -> OutboundMessagePublisherProtocol | None:
     if not dnk_config.COMMUNICATION_QUEUE.enabled:
-        yield None
-        return
+        return None
 
-    publisher = getattr(request.app.state, "communication_outbound_publisher", None)
-    if publisher is not None:
-        yield publisher
-        return
-
-    async with RabbitMQOutboundMessagePublisher.from_settings(
-        dnk_config.COMMUNICATION_QUEUE,
-        manage_broker_lifecycle=True,
-    ) as fallback_publisher:
-        yield fallback_publisher
+    return getattr(request.app.state, "communication_outbound_publisher", None)
 
 
 OutboundMessagePublisherDep = Annotated[

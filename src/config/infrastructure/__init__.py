@@ -11,6 +11,11 @@ from pydantic import (
 )
 from pydantic_settings import BaseSettings
 
+from src.config.infrastructure.rabbitmq_config import (
+    RabbitMQConfig,
+    RabbitMQSettings,
+)
+
 
 class DatabaseConfig(BaseSettings):
     DB_HOST: str = Field(
@@ -133,3 +138,10 @@ class DatabaseConfig(BaseSettings):
             "connect_args": connect_args,
             "pool_use_lifo": self.SQLALCHEMY_POOL_USE_LIFO,
         }
+
+
+__all__ = [
+    "DatabaseConfig",
+    "RabbitMQConfig",
+    "RabbitMQSettings",
+]

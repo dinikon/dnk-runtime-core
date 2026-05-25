@@ -6,7 +6,7 @@ from uuid import UUID
 
 
 class OutboundMessagePublisherProtocol(Protocol):
-    """Port публикации outbound-message work в broker."""
+    """Port enqueueing outbound-message delivery work into an operational queue."""
 
     async def publish(
         self,
@@ -16,7 +16,7 @@ class OutboundMessagePublisherProtocol(Protocol):
         source: str,
         published_at: datetime,
     ) -> None:
-        """Публикует communication outbound message job."""
+        """Enqueues one communication outbound message job."""
         ...
 
 

@@ -4,8 +4,10 @@ from src.modules.crm.application.contact.command.create_contact_command import (
     CreateContactCommand,
 )
 from src.modules.crm.application.contact.dto.contact_dto import ContactDTO
+from src.modules.crm.application.contact.integration_events import contact_created_event
 from src.modules.crm.domain.contact.entity import ContactEntity
 from src.modules.crm.domain.contact.repository import ContactCommandRepositoryProtocol
+from src.modules.shared.application.events import OutboxRepositoryProtocol
 from src.modules.shared.domain.time import ClockPort
 
 
@@ -24,10 +26,12 @@ class CreateContactUseCase:
         self,
         *,
         command_repository: ContactCommandRepositoryProtocol,
+        outbox_repository: OutboxRepositoryProtocol,
         clock: ClockPort,
     ) -> None:
         """Инициализирует use case командным репозиторием и clock-портом."""
         self._command_repository = command_repository
+        self._outbox_repository = outbox_repository
         self._clock = clock
 
     async def __call__(self, command: CreateContactCommand) -> ContactDTO:
@@ -46,6 +50,15 @@ class CreateContactUseCase:
             tenant_id=command.tenant_id,
             contact=contact,
         )
+        await self._outbox_repository.add(
+            contact_created_event(
+                tenant_id=command.tenant_id.uuid,
+                contact_id=contact.id.uuid,
+                occurred_at=now,
+                actor_id=command.actor_id,
+                payload=_contact_data(contact),
+            )
+        )
         return self._to_dto(contact)
 
     @staticmethod
@@ -61,3 +74,13 @@ class CreateContactUseCase:
             status=contact.status,
             tags=list(contact.tags),
         )
+
+
+def _contact_data(contact: ContactEntity) -> dict:
+    return {
+        "first_name": contact.contact_name.first_name,
+        "last_name": contact.contact_name.last_name,
+        "middle_name": contact.contact_name.middle_name,
+        "status": contact.status,
+        "tags": list(contact.tags),
+    }

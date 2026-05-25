@@ -7,14 +7,7 @@ from uuid import UUID
 
 from faststream import FastStream
 from faststream.middlewares.acknowledgement.config import AckPolicy
-from faststream.rabbit import (
-    Channel,
-    ExchangeType,
-    RabbitBroker,
-    RabbitExchange,
-    RabbitMessage,
-    RabbitQueue,
-)
+from faststream.rabbit import RabbitMessage
 
 from src.config.infrastructure.communication_queue_config import (
     CommunicationQueueSettings,
@@ -25,120 +18,111 @@ from src.modules.communication.application.outbound_message.command import (
 from src.modules.communication.application.outbound_message.queue.dto import (
     OutboundMessageJob,
 )
+from src.modules.communication.application.outbound_message.ports import (
+    OutboundMessagePublisherProtocol,
+)
 from src.modules.communication.application.outbound_message.use_case import (
     ProcessOutboundMessageByIdUseCase,
 )
 from src.modules.communication.domain.outbound_message import OutboundMessageIdVO
 from src.modules.shared import EntityIdVO
+from src.modules.shared.application.messaging import (
+    BrokerExchange,
+    BrokerMessage,
+    BrokerPublisherPort,
+    BrokerQueue,
+    BrokerQueueArguments,
+    BrokerTopologyPort,
+)
+from src.modules.shared.infrastructure.messaging import (
+    RabbitMQBrokerProvider,
+    RabbitMQTopologyManager,
+    to_rabbit_exchange,
+    to_rabbit_queue,
+)
 
 
 def build_communication_exchange(
     settings: CommunicationQueueSettings,
-) -> RabbitExchange:
-    return RabbitExchange(
-        settings.exchange_name,
-        type=ExchangeType.DIRECT,
+) -> BrokerExchange:
+    return BrokerExchange(
+        name=settings.exchange_name,
+        type="direct",
         durable=True,
     )
 
 
 def build_communication_dlx(
     settings: CommunicationQueueSettings,
-) -> RabbitExchange:
-    return RabbitExchange(
-        settings.dlx_exchange_name,
-        type=ExchangeType.DIRECT,
+) -> BrokerExchange:
+    return BrokerExchange(
+        name=settings.dlx_exchange_name,
+        type="direct",
         durable=True,
     )
 
 
 def build_communication_queue(
     settings: CommunicationQueueSettings,
-) -> RabbitQueue:
-    return RabbitQueue(
-        settings.queue_name,
+) -> BrokerQueue:
+    return BrokerQueue(
+        name=settings.queue_name,
         durable=True,
         routing_key=settings.routing_key,
-        arguments={
-            "x-dead-letter-exchange": settings.dlx_exchange_name,
-            "x-dead-letter-routing-key": settings.dlq_routing_key,
-        },
+        arguments=BrokerQueueArguments(
+            dead_letter_exchange=settings.dlx_exchange_name,
+            dead_letter_routing_key=settings.dlq_routing_key,
+        ),
     )
 
 
 def build_communication_dlq(
     settings: CommunicationQueueSettings,
-) -> RabbitQueue:
-    return RabbitQueue(
-        settings.dlq_name,
+) -> BrokerQueue:
+    return BrokerQueue(
+        name=settings.dlq_name,
         durable=True,
         routing_key=settings.dlq_routing_key,
     )
 
 
 async def ensure_communication_topology(
-    broker: RabbitBroker,
+    topology: BrokerTopologyPort,
     settings: CommunicationQueueSettings,
 ) -> None:
-    exchange = await broker.declare_exchange(build_communication_exchange(settings))
-    queue = await broker.declare_queue(build_communication_queue(settings))
-    await queue.bind(exchange, routing_key=settings.routing_key)
+    exchange = build_communication_exchange(settings)
+    queue = build_communication_queue(settings)
+    dlx = build_communication_dlx(settings)
+    dlq = build_communication_dlq(settings)
 
-    dlx = await broker.declare_exchange(build_communication_dlx(settings))
-    dlq = await broker.declare_queue(build_communication_dlq(settings))
-    await dlq.bind(dlx, routing_key=settings.dlq_routing_key)
+    await topology.declare_exchange(exchange)
+    await topology.declare_queue(queue)
+    await topology.bind_queue(
+        queue=queue,
+        exchange=exchange,
+        routing_key=settings.routing_key,
+    )
+
+    await topology.declare_exchange(dlx)
+    await topology.declare_queue(dlq)
+    await topology.bind_queue(
+        queue=dlq,
+        exchange=dlx,
+        routing_key=settings.dlq_routing_key,
+    )
 
 
-class RabbitMQOutboundMessagePublisher:
-    """Publishes outbound-message jobs to RabbitMQ."""
+class RabbitMQOutboundMessagePublisher(OutboundMessagePublisherProtocol):
+    """Enqueues outbound-message delivery jobs to the communication queue."""
 
     def __init__(
         self,
         *,
-        broker: RabbitBroker,
+        broker_publisher: BrokerPublisherPort,
         settings: CommunicationQueueSettings,
-        manage_broker_lifecycle: bool = False,
     ) -> None:
-        self._broker = broker
+        self._broker_publisher = broker_publisher
         self._settings = settings
-        self._manage_broker_lifecycle = manage_broker_lifecycle
-        self._started = False
-
-    @classmethod
-    def from_settings(
-        cls,
-        settings: CommunicationQueueSettings,
-        *,
-        manage_broker_lifecycle: bool = False,
-    ) -> "RabbitMQOutboundMessagePublisher":
-        broker = RabbitBroker(
-            settings.rabbitmq_url,
-            default_channel=Channel(publisher_confirms=True),
-        )
-        return cls(
-            broker=broker,
-            settings=settings,
-            manage_broker_lifecycle=manage_broker_lifecycle,
-        )
-
-    async def start(self) -> None:
-        if self._started:
-            return
-        await self._broker.start()
-        await ensure_communication_topology(self._broker, self._settings)
-        self._started = True
-
-    async def close(self) -> None:
-        if self._started and self._manage_broker_lifecycle:
-            await self._broker.close()
-        self._started = False
-
-    async def __aenter__(self) -> "RabbitMQOutboundMessagePublisher":
-        await self.start()
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb) -> None:
-        await self.close()
 
     async def publish(
         self,
@@ -148,23 +132,26 @@ class RabbitMQOutboundMessagePublisher:
         source: str,
         published_at: datetime,
     ) -> None:
-        if not self._started:
-            await self.start()
         job = OutboundMessageJob(
             tenant_id=tenant_id,
             outbound_message_id=outbound_message_id,
             published_at=published_at,
             source=source,
         )
-        await self._broker.publish(
-            job.to_payload(),
+        await self._broker_publisher.publish(
             exchange=build_communication_exchange(self._settings),
             routing_key=self._settings.routing_key,
-            mandatory=True,
-            persist=True,
-            message_id=str(outbound_message_id),
-            timestamp=published_at,
-            message_type="communication.outbound.send",
+            message=BrokerMessage(
+                payload=job.to_payload(),
+                headers={
+                    "tenant_id": str(tenant_id),
+                    "outbound_message_id": str(outbound_message_id),
+                    "source": source,
+                },
+                message_id=str(outbound_message_id),
+                message_type="communication.outbound.send",
+                timestamp=published_at,
+            ),
         )
 
 
@@ -197,23 +184,21 @@ async def handle_outbound_message_job(
 
 def build_communication_faststream_app(
     *,
+    broker_provider: RabbitMQBrokerProvider,
     settings: CommunicationQueueSettings,
     processor: ProcessOutboundMessageByIdUseCase,
 ) -> FastStream:
-    broker = RabbitBroker(
-        settings.rabbitmq_url,
-        default_channel=Channel(
-            prefetch_count=settings.prefetch,
-            publisher_confirms=True,
-        ),
-    )
+    broker = broker_provider.broker
     app = FastStream(broker)
-    queue = build_communication_queue(settings)
-    exchange = build_communication_exchange(settings)
+    queue = to_rabbit_queue(build_communication_queue(settings))
+    exchange = to_rabbit_exchange(build_communication_exchange(settings))
 
     @app.after_startup
     async def setup_topology() -> None:
-        await ensure_communication_topology(broker, settings)
+        await ensure_communication_topology(
+            RabbitMQTopologyManager(broker_provider),
+            settings,
+        )
 
     @broker.subscriber(
         queue,

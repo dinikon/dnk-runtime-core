@@ -20,6 +20,14 @@ It also exposes an inventory surface for products and product categories.
 - Install dependencies: `uv sync`
 - Run app: `uv run fastapi dev src/app.py`
 - Run tests: `./.venv/bin/python -m unittest discover -s test -p 'test_*.py' -v`
+- Docker:
+    - `cp temaplate.env .env`
+    - `docker compose up --build`
+    - API docs: `http://localhost:8000/docs`
+    - RabbitMQ management UI: `http://localhost:15672`
+  - Debug integration events: `docker compose logs -f events-console-worker`
+- Optional Docker communication worker:
+    - `docker compose --profile communication up --build`
 - Run schema diff command:
     - `dnk-manage schema-registry diff <tenant_id>`
   - `dnk-manage schema-registry diff --all`

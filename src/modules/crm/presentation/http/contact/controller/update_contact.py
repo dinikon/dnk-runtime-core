@@ -59,6 +59,7 @@ async def update_contact(
         middle_name=payload.middle_name,
         status=payload.status,
         tags=None if payload.tags is None else tuple(payload.tags),
+        actor_id=UUID(principal.user_id),
     )
 
     try:
