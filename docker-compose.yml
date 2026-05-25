@@ -63,6 +63,22 @@ services:
       rabbitmq:
         condition: service_healthy
 
+  events-console-worker:
+    <<: *backend-common
+    container_name: dnk-events-console-worker
+    restart: unless-stopped
+    command:
+      - dnk-manage
+      - events
+      - console-worker
+      - --queue-name
+      - ${EVENTS_CONSOLE_QUEUE_NAME:-crm.contact.events}
+      - --routing-key
+      - ${EVENTS_CONSOLE_ROUTING_KEY:-crm.contact.#}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
   communication-worker:
     <<: *backend-common
     container_name: dnk-communication-worker

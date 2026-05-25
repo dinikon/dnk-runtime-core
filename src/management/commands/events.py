@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import logging
 import signal
 
 from src.config import dnk_config
@@ -16,7 +17,12 @@ from src.modules.shared.presentation.events import (
     build_publish_outbox_events_use_case,
     build_rabbitmq_event_publisher_for_cli,
 )
-from src.modules.shared.infrastructure.events import ensure_event_bus_topology
+from src.modules.shared.infrastructure.events import (
+    DEFAULT_CONSOLE_WORKER_QUEUE_NAME,
+    DEFAULT_CONSOLE_WORKER_ROUTING_KEY,
+    build_integration_event_console_worker_app,
+    ensure_event_bus_topology,
+)
 from src.modules.shared.infrastructure.messaging import (
     RabbitMQBrokerProvider,
     RabbitMQTopologyManager,
@@ -62,7 +68,17 @@ async def handle_publish_outbox(args: argparse.Namespace) -> int:
 
 async def handle_publisher_worker(_args: argparse.Namespace) -> int:
     """Runs the long-running integration outbox publisher worker."""
+    _configure_worker_logging()
     settings = dnk_config.EVENT_BUS
+    logging.getLogger(__name__).info(
+        "Starting dnk-events-publisher exchange=%s publish_limit=%s "
+        "max_attempts=%s idle_sleep_seconds=%.3f error_sleep_seconds=%.3f",
+        settings.exchange_name,
+        settings.publish_limit,
+        settings.max_attempts,
+        settings.publisher_idle_sleep_seconds,
+        settings.publisher_error_sleep_seconds,
+    )
     provider = RabbitMQBrokerProvider(dnk_config.RABBITMQ)
     try:
         await provider.start()
@@ -86,6 +102,30 @@ async def handle_publisher_worker(_args: argparse.Namespace) -> int:
     finally:
         await provider.close()
     return 0
+
+
+async def handle_console_worker(args: argparse.Namespace) -> int:
+    """Runs the debug RabbitMQ integration event console worker."""
+    provider = RabbitMQBrokerProvider(dnk_config.RABBITMQ)
+    app = build_integration_event_console_worker_app(
+        broker_provider=provider,
+        settings=dnk_config.EVENT_BUS,
+        queue_name=args.queue_name,
+        routing_key=args.routing_key,
+    )
+    try:
+        await app.run()
+    finally:
+        await provider.close()
+    return 0
+
+
+def _configure_worker_logging() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        force=True,
+    )
 
 
 def _install_worker_signal_handlers(worker: OutboxPublisherWorker) -> None:
@@ -135,9 +175,26 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     )
     publisher_worker_parser.set_defaults(handler=handle_publisher_worker)
 
+    console_worker_parser = events_subparsers.add_parser(
+        "console-worker",
+        help="Print integration events from a durable RabbitMQ debug queue.",
+    )
+    console_worker_parser.add_argument(
+        "--queue-name",
+        default=DEFAULT_CONSOLE_WORKER_QUEUE_NAME,
+        help="Durable queue name to declare and consume.",
+    )
+    console_worker_parser.add_argument(
+        "--routing-key",
+        default=DEFAULT_CONSOLE_WORKER_ROUTING_KEY,
+        help="Topic routing key binding for the integration event exchange.",
+    )
+    console_worker_parser.set_defaults(handler=handle_console_worker)
+
 
 __all__ = [
     "handle_events_root",
+    "handle_console_worker",
     "handle_publish_outbox",
     "handle_publisher_worker",
     "register",

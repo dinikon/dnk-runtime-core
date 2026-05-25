@@ -11,6 +11,7 @@ from src.modules.shared.application.events.publish_outbox_result_dto import (
 logger = logging.getLogger(__name__)
 
 PublishOnce = Callable[[], Awaitable[PublishOutboxResultDTO]]
+IDLE_LOG_PERIOD_SECONDS = 10.0
 
 
 class OutboxPublisherWorker:
@@ -31,22 +32,34 @@ class OutboxPublisherWorker:
 
     async def run_forever(self) -> None:
         logger.info("Integration outbox publisher worker started")
+        idle_iterations = 0
+        idle_log_every = max(
+            1,
+            round(IDLE_LOG_PERIOD_SECONDS / self._idle_sleep_seconds),
+        )
 
         while not self._stop_event.is_set():
             try:
                 result = await self._publish_once()
 
                 if result.scanned == 0:
+                    idle_iterations += 1
+                    if idle_iterations == 1 or idle_iterations % idle_log_every == 0:
+                        logger.info(
+                            "Integration outbox publisher worker is idle; "
+                            "sleeping %.3fs",
+                            self._idle_sleep_seconds,
+                        )
                     await asyncio.sleep(self._idle_sleep_seconds)
                     continue
 
+                idle_iterations = 0
                 logger.info(
-                    "Integration outbox batch published",
-                    extra={
-                        "scanned": result.scanned,
-                        "published": result.published,
-                        "failed": result.failed,
-                    },
+                    "Integration outbox batch published scanned=%s published=%s "
+                    "failed=%s",
+                    result.scanned,
+                    result.published,
+                    result.failed,
                 )
 
             except asyncio.CancelledError:

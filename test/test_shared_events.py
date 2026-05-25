@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import unittest
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
@@ -14,8 +15,12 @@ from src.modules.shared.application.events import (
     PublishOutboxResultDTO,
     PublishOutboxEventsUseCase,
 )
-from src.modules.shared.infrastructure.events import RabbitMQIntegrationEventPublisher
-from src.modules.shared.infrastructure.events import ensure_event_bus_topology
+from src.modules.shared.infrastructure.events import (
+    RabbitMQIntegrationEventPublisher,
+    ensure_event_bus_topology,
+    ensure_integration_event_console_topology,
+    handle_integration_event_console_message,
+)
 from src.modules.shared.domain.events import IntegrationEvent, OutboxEvent
 
 
@@ -129,6 +134,34 @@ class _TopologyStub:
 
     async def bind_queue(self, **_kwargs) -> None:
         raise AssertionError("event bus topology does not bind queues")
+
+
+class _ConsoleTopologyStub:
+    def __init__(self) -> None:
+        self.exchanges = []
+        self.queues = []
+        self.bindings = []
+
+    async def declare_exchange(self, exchange) -> None:
+        self.exchanges.append(exchange)
+
+    async def declare_queue(self, queue) -> None:
+        self.queues.append(queue)
+
+    async def bind_queue(self, **kwargs) -> None:
+        self.bindings.append(kwargs)
+
+
+class _RabbitMessageStub:
+    def __init__(self) -> None:
+        self.acked = False
+        self.rejected_requeue = None
+
+    async def ack(self) -> None:
+        self.acked = True
+
+    async def reject(self, *, requeue: bool = False) -> None:
+        self.rejected_requeue = requeue
 
 
 class SharedEventsTests(unittest.IsolatedAsyncioTestCase):
@@ -308,6 +341,62 @@ class SharedEventsTests(unittest.IsolatedAsyncioTestCase):
             str(self.event.event_id),
         )
 
+    async def test_console_worker_topology_declares_queue_and_binding(self) -> None:
+        settings = EventBusSettings()
+        topology = _ConsoleTopologyStub()
+
+        await ensure_integration_event_console_topology(
+            topology=topology,
+            settings=settings,
+            queue_name="crm.contact.events",
+            routing_key="crm.contact.#",
+        )
+
+        self.assertEqual(len(topology.exchanges), 1)
+        self.assertEqual(topology.exchanges[0].name, settings.exchange_name)
+        self.assertEqual(topology.exchanges[0].type, "topic")
+        self.assertEqual(len(topology.queues), 1)
+        self.assertEqual(topology.queues[0].name, "crm.contact.events")
+        self.assertEqual(topology.queues[0].routing_key, "crm.contact.#")
+        self.assertEqual(len(topology.bindings), 1)
+        self.assertIs(topology.bindings[0]["queue"], topology.queues[0])
+        self.assertIs(topology.bindings[0]["exchange"], topology.exchanges[0])
+        self.assertEqual(topology.bindings[0]["routing_key"], "crm.contact.#")
+
+    async def test_console_worker_handler_prints_and_acks_valid_event(self) -> None:
+        output = io.StringIO()
+        message = _RabbitMessageStub()
+
+        await handle_integration_event_console_message(
+            payload=self.event.to_payload(),
+            message=message,
+            output=output,
+        )
+
+        console_output = output.getvalue()
+        self.assertIn("Integration event received", console_output)
+        self.assertIn(f"event_id={self.event.event_id}", console_output)
+        self.assertIn(f"event_type={self.event.event_type}", console_output)
+        self.assertIn("raw_payload=", console_output)
+        self.assertTrue(message.acked)
+        self.assertIsNone(message.rejected_requeue)
+
+    async def test_console_worker_handler_rejects_invalid_event(self) -> None:
+        output = io.StringIO()
+        message = _RabbitMessageStub()
+
+        await handle_integration_event_console_message(
+            payload={"event_type": "broken"},
+            message=message,
+            output=output,
+        )
+
+        console_output = output.getvalue()
+        self.assertIn("Invalid integration event received", console_output)
+        self.assertIn("raw_payload=", console_output)
+        self.assertFalse(message.acked)
+        self.assertFalse(message.rejected_requeue)
+
     async def test_outbox_publisher_worker_sleeps_when_no_events(self) -> None:
         sleeps = []
 
@@ -324,13 +413,67 @@ class SharedEventsTests(unittest.IsolatedAsyncioTestCase):
             sleeps.append(seconds)
             worker.stop()
 
-        with patch(
-            "src.modules.shared.application.events.outbox_publisher_worker.asyncio.sleep",
-            sleep_stub,
+        with (
+            patch(
+                "src.modules.shared.application.events.outbox_publisher_worker.asyncio.sleep",
+                sleep_stub,
+            ),
+            patch(
+                "src.modules.shared.application.events.outbox_publisher_worker.logger.info"
+            ) as logger_info,
         ):
             await worker.run_forever()
 
         self.assertEqual(sleeps, [0.5])
+        self.assertTrue(
+            any(
+                call.args[0].startswith("Integration outbox publisher worker is idle")
+                for call in logger_info.call_args_list
+            )
+        )
+
+    async def test_outbox_publisher_worker_logs_published_batch(self) -> None:
+        results = [
+            PublishOutboxResultDTO(scanned=3, published=2, failed=1),
+            PublishOutboxResultDTO(scanned=0, published=0, failed=0),
+        ]
+
+        async def publish_once() -> PublishOutboxResultDTO:
+            return results.pop(0)
+
+        worker = OutboxPublisherWorker(
+            publish_once=publish_once,
+            idle_sleep_seconds=0.5,
+            error_sleep_seconds=5.0,
+        )
+
+        async def sleep_stub(_seconds: float) -> None:
+            worker.stop()
+
+        with (
+            patch(
+                "src.modules.shared.application.events.outbox_publisher_worker.asyncio.sleep",
+                sleep_stub,
+            ),
+            patch(
+                "src.modules.shared.application.events.outbox_publisher_worker.logger.info"
+            ) as logger_info,
+        ):
+            await worker.run_forever()
+
+        self.assertTrue(
+            any(
+                call.args
+                == (
+                    "Integration outbox batch published scanned=%s published=%s "
+                    "failed=%s",
+                    3,
+                    2,
+                    1,
+                )
+                for call in logger_info.call_args_list
+            )
+        )
 
     async def test_outbox_publisher_worker_sleeps_after_unexpected_error(
         self,

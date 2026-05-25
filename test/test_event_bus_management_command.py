@@ -33,6 +33,29 @@ class EventBusManagementCommandTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIs(args.handler, events_command.handle_publisher_worker)
 
+    def test_parser_registers_console_worker_command(self) -> None:
+        args = build_parser().parse_args(["events", "console-worker"])
+
+        self.assertEqual(args.queue_name, "crm.contact.events")
+        self.assertEqual(args.routing_key, "crm.contact.#")
+        self.assertIs(args.handler, events_command.handle_console_worker)
+
+    def test_parser_registers_console_worker_custom_topology(self) -> None:
+        args = build_parser().parse_args(
+            [
+                "events",
+                "console-worker",
+                "--queue-name",
+                "analytics.events",
+                "--routing-key",
+                "analytics.#",
+            ]
+        )
+
+        self.assertEqual(args.queue_name, "analytics.events")
+        self.assertEqual(args.routing_key, "analytics.#")
+        self.assertIs(args.handler, events_command.handle_console_worker)
+
     async def test_handle_publish_outbox_prints_summary(self) -> None:
         stdout = io.StringIO()
         recorded_command = None
@@ -179,6 +202,7 @@ class EventBusManagementCommandTests(unittest.IsolatedAsyncioTestCase):
                 build_publish_once_stub,
             ),
             patch.object(events_command, "OutboxPublisherWorker", WorkerStub),
+            patch.object(events_command, "_configure_worker_logging"),
             patch.object(events_command, "_install_worker_signal_handlers"),
         ):
             exit_code = await events_command.handle_publisher_worker(args)
@@ -208,6 +232,71 @@ class EventBusManagementCommandTests(unittest.IsolatedAsyncioTestCase):
             events_command.dnk_config.EVENT_BUS.publisher_error_sleep_seconds,
         )
         self.assertTrue(recorded["worker_ran"])
+
+    async def test_handle_console_worker_runs_app_and_closes_provider(self) -> None:
+        recorded = {}
+
+        class ProviderStub:
+            def __init__(self, settings) -> None:
+                recorded["rabbitmq_settings"] = settings
+                self.closed = False
+
+            async def close(self) -> None:
+                self.closed = True
+
+        class AppStub:
+            async def run(self) -> None:
+                recorded["app_ran"] = True
+
+        def provider_factory(settings):
+            provider = ProviderStub(settings)
+            recorded["provider"] = provider
+            return provider
+
+        def build_app_stub(**kwargs):
+            recorded["build_app_kwargs"] = kwargs
+            return AppStub()
+
+        args = argparse.Namespace(
+            queue_name="crm.contact.events",
+            routing_key="crm.contact.#",
+        )
+
+        with (
+            patch.object(
+                events_command,
+                "RabbitMQBrokerProvider",
+                provider_factory,
+            ),
+            patch.object(
+                events_command,
+                "build_integration_event_console_worker_app",
+                build_app_stub,
+            ),
+        ):
+            exit_code = await events_command.handle_console_worker(args)
+
+        provider = recorded["provider"]
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(recorded["app_ran"])
+        self.assertTrue(provider.closed)
+        self.assertIs(
+            recorded["rabbitmq_settings"],
+            events_command.dnk_config.RABBITMQ,
+        )
+        self.assertIs(recorded["build_app_kwargs"]["broker_provider"], provider)
+        self.assertIs(
+            recorded["build_app_kwargs"]["settings"],
+            events_command.dnk_config.EVENT_BUS,
+        )
+        self.assertEqual(
+            recorded["build_app_kwargs"]["queue_name"],
+            "crm.contact.events",
+        )
+        self.assertEqual(
+            recorded["build_app_kwargs"]["routing_key"],
+            "crm.contact.#",
+        )
 
 
 __all__ = ["EventBusManagementCommandTests"]

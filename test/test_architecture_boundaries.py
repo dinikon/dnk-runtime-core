@@ -278,6 +278,10 @@ class ArchitectureBoundariesTests(unittest.TestCase):
             ).resolve(),
             (
                 PROJECT_ROOT
+                / "src/modules/shared/infrastructure/events/rabbitmq_integration_event_console_worker.py"
+            ).resolve(),
+            (
+                PROJECT_ROOT
                 / "src/modules/shared/infrastructure/messaging/rabbitmq/broker_provider.py"
             ).resolve(),
             (

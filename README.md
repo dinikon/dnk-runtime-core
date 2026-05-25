@@ -25,6 +25,7 @@ It also exposes an inventory surface for products and product categories.
     - `docker compose up --build`
     - API docs: `http://localhost:8000/docs`
     - RabbitMQ management UI: `http://localhost:15672`
+  - Debug integration events: `docker compose logs -f events-console-worker`
 - Optional Docker communication worker:
     - `docker compose --profile communication up --build`
 - Run schema diff command:
