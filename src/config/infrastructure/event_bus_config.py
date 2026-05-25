@@ -7,10 +7,6 @@ from pydantic_settings import BaseSettings
 class EventBusSettings(BaseModel):
     """Shared integration event bus settings."""
 
-    rabbitmq_url: str = Field(
-        default="amqp://guest:guest@localhost:5672/",
-        description="RabbitMQ AMQP URL for integration event publication.",
-    )
     exchange_name: str = Field(
         default="dnk.integration.events",
         description="Durable topic exchange for integration events.",

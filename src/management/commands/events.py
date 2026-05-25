@@ -7,15 +7,26 @@ from src.modules.shared.application.events import PublishOutboxEventsCommand
 from src.modules.shared.infrastructure.persistence.database_helper import db_helper
 from src.modules.shared.infrastructure.persistence import UnitOfWork
 from src.modules.shared.presentation.events import (
-    build_integration_event_publisher,
     build_publish_outbox_events_use_case,
+    build_rabbitmq_event_publisher_for_cli,
 )
+from src.modules.shared.infrastructure.events import ensure_event_bus_topology
+from src.modules.shared.infrastructure.messaging import RabbitMQTopologyManager
 
 
 async def handle_publish_outbox(args: argparse.Namespace) -> int:
     """Publishes due shared integration outbox events to RabbitMQ."""
     settings = dnk_config.EVENT_BUS
-    async with build_integration_event_publisher(settings) as publisher:
+    provider, publisher = build_rabbitmq_event_publisher_for_cli(
+        rabbitmq_settings=dnk_config.RABBITMQ,
+        event_bus_settings=settings,
+    )
+    try:
+        await provider.start()
+        await ensure_event_bus_topology(
+            RabbitMQTopologyManager(provider),
+            settings,
+        )
         async with UnitOfWork(db_helper.session_factory) as uow:
             use_case = build_publish_outbox_events_use_case(
                 session=uow.session,
@@ -28,6 +39,8 @@ async def handle_publish_outbox(args: argparse.Namespace) -> int:
                     max_attempts=args.max_attempts,
                 )
             )
+    finally:
+        await provider.close()
 
     print(
         "OK "

@@ -278,7 +278,11 @@ class ArchitectureBoundariesTests(unittest.TestCase):
             ).resolve(),
             (
                 PROJECT_ROOT
-                / "src/modules/shared/infrastructure/messaging/rabbitmq/rabbitmq_message_publisher.py"
+                / "src/modules/shared/infrastructure/messaging/rabbitmq/broker_provider.py"
+            ).resolve(),
+            (
+                PROJECT_ROOT
+                / "src/modules/shared/infrastructure/messaging/rabbitmq/mapper.py"
             ).resolve(),
         }
         for path in iter_python_files("src/modules"):
@@ -405,12 +409,13 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                 msg=f"{path} defines multiple primary classes: {classes}",
             )
 
-    def test_events_management_command_uses_shared_presentation_wiring(self) -> None:
+    def test_events_management_command_uses_shared_rabbitmq_foundation(self) -> None:
         path = PROJECT_ROOT / "src/management/commands/events.py"
         content = path.read_text(encoding="utf-8")
         self.assertIn("src.modules.shared.presentation.events", content)
+        self.assertIn("RabbitMQTopologyManager", content)
+        self.assertIn("ensure_event_bus_topology", content)
         forbidden_patterns = (
-            "src.modules.shared.infrastructure.events",
             "RabbitMQIntegrationEventPublisher",
             "SqlAlchemyOutboxRepository",
             "UtcClock",
@@ -421,6 +426,44 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                 content,
                 msg=f"{path} should not assemble shared event infrastructure directly",
             )
+
+    def test_rabbitbroker_is_created_only_in_shared_rabbitmq_provider(self) -> None:
+        allowed_path = (
+            PROJECT_ROOT
+            / "src/modules/shared/infrastructure/messaging/rabbitmq/broker_provider.py"
+        ).resolve()
+        for path in iter_python_files("src"):
+            content = path.read_text(encoding="utf-8")
+            if "RabbitBroker(" not in content:
+                continue
+            self.assertEqual(
+                path.resolve(),
+                allowed_path,
+                msg=f"{path} creates RabbitBroker outside shared provider",
+            )
+
+    def test_application_layers_do_not_import_rabbitmq_or_config(self) -> None:
+        checked_roots = (
+            "src/modules/shared/application/messaging",
+            "src/modules/shared/application/events",
+            "src/modules/communication/application",
+        )
+        forbidden_prefixes = (
+            "faststream",
+            "faststream.rabbit",
+            "src.config",
+            "src.modules.shared.infrastructure.messaging",
+        )
+        for root in checked_roots:
+            for path in iter_python_files(root):
+                for module_name in iter_imports(path):
+                    self.assertFalse(
+                        any(
+                            module_name.startswith(prefix)
+                            for prefix in forbidden_prefixes
+                        ),
+                        msg=f"{path} imports forbidden application dependency {module_name}",
+                    )
 
     def test_jobs_management_command_uses_shared_presentation_wiring(self) -> None:
         path = PROJECT_ROOT / "src/management/commands/jobs.py"

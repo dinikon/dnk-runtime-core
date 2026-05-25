@@ -4,6 +4,7 @@ from src.modules.shared.presentation.events.management import (
     build_integration_event_publisher,
     build_outbox_repository,
     build_publish_outbox_events_use_case,
+    build_rabbitmq_event_publisher_for_cli,
 )
 
 __all__ = [
@@ -12,4 +13,5 @@ __all__ = [
     "build_integration_event_publisher",
     "build_outbox_repository",
     "build_publish_outbox_events_use_case",
+    "build_rabbitmq_event_publisher_for_cli",
 ]

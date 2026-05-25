@@ -32,8 +32,8 @@ from src.modules.communication.infrastructure.provider_senders import (
     YamlHttpProviderSender,
     YamlSmtpProviderSender,
 )
-from src.modules.communication.infrastructure.rabbitmq import (
-    RabbitMQOutboundMessagePublisher,
+from src.modules.communication.application.outbound_message.ports import (
+    OutboundMessagePublisherProtocol,
 )
 from src.modules.runtime_data.application.type_policy import RuntimeFieldTypePolicy
 from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.command_gateway import (
@@ -117,7 +117,7 @@ def build_process_outbound_message_by_id_use_case(
 def build_publish_queued_outbound_messages_use_case(
     *,
     uow: UnitOfWorkProtocol,
-    publisher: RabbitMQOutboundMessagePublisher,
+    publisher: OutboundMessagePublisherProtocol,
     republish_after_seconds: int,
 ) -> PublishQueuedOutboundMessagesUseCase:
     clock = UtcClock()

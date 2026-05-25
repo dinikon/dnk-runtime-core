@@ -3,16 +3,23 @@ from __future__ import annotations
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config.infrastructure.event_bus_config import EventBusSettings
+from src.config.infrastructure.rabbitmq_config import RabbitMQSettings
 from src.modules.shared.application.events import (
     EventConsumerPort,
+    EventPublisherPort,
     IdempotentEventConsumer,
     PublishOutboxEventsUseCase,
 )
+from src.modules.shared.application.messaging import BrokerPublisherPort
 from src.modules.shared.domain.time import ClockPort
 from src.modules.shared.infrastructure.events import (
     RabbitMQIntegrationEventPublisher,
     SqlAlchemyInboxRepository,
     SqlAlchemyOutboxRepository,
+)
+from src.modules.shared.infrastructure.messaging import (
+    RabbitMQBrokerProvider,
+    RabbitMQBrokerPublisher,
 )
 from src.modules.shared.infrastructure.time import UtcClock
 
@@ -28,19 +35,35 @@ def build_inbox_repository(session: AsyncSession) -> SqlAlchemyInboxRepository:
 
 
 def build_integration_event_publisher(
+    *,
+    broker_publisher: BrokerPublisherPort,
     settings: EventBusSettings,
-) -> RabbitMQIntegrationEventPublisher:
+) -> EventPublisherPort:
     """Builds a RabbitMQ-backed shared integration event publisher."""
-    return RabbitMQIntegrationEventPublisher.from_settings(
-        settings,
-        manage_broker_lifecycle=True,
+    return RabbitMQIntegrationEventPublisher(
+        broker_publisher=broker_publisher,
+        settings=settings,
     )
+
+
+def build_rabbitmq_event_publisher_for_cli(
+    *,
+    rabbitmq_settings: RabbitMQSettings,
+    event_bus_settings: EventBusSettings,
+) -> tuple[RabbitMQBrokerProvider, EventPublisherPort]:
+    provider = RabbitMQBrokerProvider(rabbitmq_settings)
+    publisher = RabbitMQBrokerPublisher(provider)
+    event_publisher = RabbitMQIntegrationEventPublisher(
+        broker_publisher=publisher,
+        settings=event_bus_settings,
+    )
+    return provider, event_publisher
 
 
 def build_publish_outbox_events_use_case(
     *,
     session: AsyncSession,
-    publisher: RabbitMQIntegrationEventPublisher,
+    publisher: EventPublisherPort,
     retry_base_seconds: int,
     clock: ClockPort | None = None,
 ) -> PublishOutboxEventsUseCase:
@@ -73,4 +96,5 @@ __all__ = [
     "build_integration_event_publisher",
     "build_outbox_repository",
     "build_publish_outbox_events_use_case",
+    "build_rabbitmq_event_publisher_for_cli",
 ]

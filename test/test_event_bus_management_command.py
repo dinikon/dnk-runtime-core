@@ -32,12 +32,19 @@ class EventBusManagementCommandTests(unittest.IsolatedAsyncioTestCase):
         stdout = io.StringIO()
         recorded_command = None
 
-        class PublisherStub:
-            async def __aenter__(self):
-                return self
+        class ProviderStub:
+            def __init__(self) -> None:
+                self.started = False
+                self.closed = False
 
-            async def __aexit__(self, exc_type, exc, tb) -> None:
-                return None
+            async def start(self) -> None:
+                self.started = True
+
+            async def close(self) -> None:
+                self.closed = True
+
+        class PublisherStub:
+            pass
 
         class UnitOfWorkStub:
             def __init__(self, _session_factory):
@@ -58,13 +65,20 @@ class EventBusManagementCommandTests(unittest.IsolatedAsyncioTestCase):
         def build_use_case_stub(**_kwargs):
             return UseCaseStub()
 
+        async def ensure_topology_stub(*_args, **_kwargs):
+            return None
+
         args = argparse.Namespace(limit=10, max_attempts=5)
+        provider = ProviderStub()
 
         with (
             patch.object(
                 events_command,
-                "build_integration_event_publisher",
-                return_value=PublisherStub(),
+                "build_rabbitmq_event_publisher_for_cli",
+                return_value=(provider, PublisherStub()),
+            ),
+            patch.object(
+                events_command, "ensure_event_bus_topology", ensure_topology_stub
             ),
             patch.object(events_command, "UnitOfWork", UnitOfWorkStub),
             patch.object(
@@ -77,6 +91,8 @@ class EventBusManagementCommandTests(unittest.IsolatedAsyncioTestCase):
             exit_code = await events_command.handle_publish_outbox(args)
 
         self.assertEqual(exit_code, 0)
+        self.assertTrue(provider.started)
+        self.assertTrue(provider.closed)
         self.assertEqual(recorded_command.limit, 10)
         self.assertEqual(recorded_command.max_attempts, 5)
         self.assertIn("OK scanned=4 published=3 failed=1", stdout.getvalue())

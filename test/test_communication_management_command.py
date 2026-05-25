@@ -149,6 +149,25 @@ class CommunicationManagementCommandTests(unittest.IsolatedAsyncioTestCase):
         stdout = io.StringIO()
         recorded_limit = None
 
+        class ProviderStub:
+            def __init__(self, *_args, **_kwargs):
+                self.started = False
+                self.closed = False
+
+            async def start(self):
+                self.started = True
+
+            async def close(self):
+                self.closed = True
+
+        class BrokerPublisherStub:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+        class TopologyStub:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
         class PublisherStub:
             def __init__(self, *_args, **_kwargs):
                 pass
@@ -179,12 +198,36 @@ class CommunicationManagementCommandTests(unittest.IsolatedAsyncioTestCase):
                 return None
 
         args = argparse.Namespace(limit=10, tenant_id=self.TENANT_ID)
+        provider = ProviderStub()
+
+        async def ensure_topology_stub(*_args, **_kwargs):
+            return None
 
         with (
             patch.object(
-                communication_command.RabbitMQOutboundMessagePublisher,
-                "from_settings",
-                return_value=PublisherStub(),
+                communication_command,
+                "RabbitMQBrokerProvider",
+                return_value=provider,
+            ),
+            patch.object(
+                communication_command,
+                "RabbitMQBrokerPublisher",
+                BrokerPublisherStub,
+            ),
+            patch.object(
+                communication_command,
+                "RabbitMQTopologyManager",
+                TopologyStub,
+            ),
+            patch.object(
+                communication_command,
+                "ensure_communication_topology",
+                ensure_topology_stub,
+            ),
+            patch.object(
+                communication_command,
+                "RabbitMQOutboundMessagePublisher",
+                PublisherStub,
             ),
             patch.object(
                 communication_command,
@@ -197,6 +240,8 @@ class CommunicationManagementCommandTests(unittest.IsolatedAsyncioTestCase):
             exit_code = await communication_command.handle_publish_queued(args)
 
         self.assertEqual(exit_code, 0)
+        self.assertTrue(provider.started)
+        self.assertTrue(provider.closed)
         self.assertEqual(recorded_limit, 10)
         self.assertIn("OK scanned=3 published=2 failed=1", stdout.getvalue())
 

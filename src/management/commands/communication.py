@@ -16,6 +16,7 @@ from src.modules.communication.domain.error import CommunicationError
 from src.modules.communication.infrastructure.rabbitmq import (
     RabbitMQOutboundMessagePublisher,
     build_communication_faststream_app,
+    ensure_communication_topology,
 )
 from src.modules.communication.presentation.depends.management import (
     build_process_outbound_message_by_id_use_case,
@@ -25,6 +26,11 @@ from src.modules.communication.presentation.depends.management import (
 )
 from src.modules.shared.infrastructure.persistence.database_helper import db_helper
 from src.modules.shared.infrastructure.persistence import UnitOfWork
+from src.modules.shared.infrastructure.messaging import (
+    RabbitMQBrokerProvider,
+    RabbitMQBrokerPublisher,
+    RabbitMQTopologyManager,
+)
 
 
 async def handle_process_queued(args: argparse.Namespace) -> int:
@@ -54,27 +60,34 @@ async def handle_process_queued(args: argparse.Namespace) -> int:
 async def handle_publish_queued(args: argparse.Namespace) -> int:
     """Publishes queued outbound communication messages to RabbitMQ."""
     settings = dnk_config.COMMUNICATION_QUEUE
+    provider = RabbitMQBrokerProvider(dnk_config.RABBITMQ)
+    broker_publisher = RabbitMQBrokerPublisher(provider)
+    topology = RabbitMQTopologyManager(provider)
     try:
-        async with RabbitMQOutboundMessagePublisher.from_settings(
-            settings,
-            manage_broker_lifecycle=True,
-        ) as publisher:
-            async with UnitOfWork(db_helper.session_factory) as uow:
-                use_case = build_publish_queued_outbound_messages_use_case(
-                    uow=uow,
-                    publisher=publisher,
-                    republish_after_seconds=settings.republish_after_seconds,
+        await provider.start()
+        await ensure_communication_topology(topology, settings)
+        publisher = RabbitMQOutboundMessagePublisher(
+            broker_publisher=broker_publisher,
+            settings=settings,
+        )
+        async with UnitOfWork(db_helper.session_factory) as uow:
+            use_case = build_publish_queued_outbound_messages_use_case(
+                uow=uow,
+                publisher=publisher,
+                republish_after_seconds=settings.republish_after_seconds,
+            )
+            result = await use_case(
+                PublishQueuedOutboundMessagesCommand(
+                    tenant_id=UUID(args.tenant_id),
+                    limit=args.limit,
+                    source="republisher",
                 )
-                result = await use_case(
-                    PublishQueuedOutboundMessagesCommand(
-                        tenant_id=UUID(args.tenant_id),
-                        limit=args.limit,
-                        source="republisher",
-                    )
-                )
+            )
     except CommunicationError as exc:
         print(str(exc), file=sys.stderr)
         return 2
+    finally:
+        await provider.close()
 
     print(
         "OK "
@@ -108,15 +121,20 @@ async def handle_recover_stuck(args: argparse.Namespace) -> int:
 async def handle_worker(_args: argparse.Namespace) -> int:
     """Runs the FastStream RabbitMQ communication worker."""
     settings = dnk_config.COMMUNICATION_QUEUE
+    provider = RabbitMQBrokerProvider(dnk_config.RABBITMQ)
     processor = build_process_outbound_message_by_id_use_case(
         session_factory=db_helper.session_factory,
         processing_lease_seconds=settings.processing_lease_seconds,
     )
     app = build_communication_faststream_app(
+        broker_provider=provider,
         settings=settings,
         processor=processor,
     )
-    await app.run()
+    try:
+        await app.run()
+    finally:
+        await provider.close()
     return 0
 
 

@@ -15,44 +15,30 @@ from src.modules.communication.infrastructure.rabbitmq import (
 )
 from src.modules.communication.domain.outbound_message import OutboundMessageIdVO
 from src.modules.shared import EntityIdVO
-from src.modules.shared.infrastructure.messaging import RabbitMQMessagePublisher
 
 
-class _DeclaredQueueStub:
+class _BrokerPublisherStub:
     def __init__(self) -> None:
-        self.binds = []
+        self.published = []
 
-    async def bind(self, exchange, *, routing_key: str) -> None:
-        self.binds.append((exchange, routing_key))
+    async def publish(self, **kwargs):
+        self.published.append(kwargs)
 
 
-class _RabbitBrokerStub:
+class _TopologyStub:
     def __init__(self) -> None:
-        self.started = False
-        self.closed = False
         self.exchanges = []
         self.queues = []
-        self.published = []
-        self.declared_queues = []
+        self.binds = []
 
-    async def start(self) -> None:
-        self.started = True
-
-    async def close(self) -> None:
-        self.closed = True
-
-    async def declare_exchange(self, exchange):
+    async def declare_exchange(self, exchange) -> None:
         self.exchanges.append(exchange)
-        return exchange
 
-    async def declare_queue(self, queue):
+    async def declare_queue(self, queue) -> None:
         self.queues.append(queue)
-        declared = _DeclaredQueueStub()
-        self.declared_queues.append(declared)
-        return declared
 
-    async def publish(self, message, **kwargs):
-        self.published.append((message, kwargs))
+    async def bind_queue(self, *, queue, exchange, routing_key: str) -> None:
+        self.binds.append((queue, exchange, routing_key))
 
 
 class _MessageStub:
@@ -78,46 +64,42 @@ class CommunicationQueueTests(unittest.IsolatedAsyncioTestCase):
     async def test_rabbitmq_publisher_declares_topology_and_publishes_persistent_job(
         self,
     ) -> None:
-        broker = _RabbitBrokerStub()
         settings = CommunicationQueueSettings()
-        message_publisher = RabbitMQMessagePublisher(
-            broker=broker,
-            manage_broker_lifecycle=True,
-        )
-
-        async def setup_topology() -> None:
-            await ensure_communication_topology(broker, settings)
-
+        broker_publisher = _BrokerPublisherStub()
+        topology = _TopologyStub()
         publisher = RabbitMQOutboundMessagePublisher(
-            message_publisher=message_publisher,
+            broker_publisher=broker_publisher,
             settings=settings,
-            setup_topology=setup_topology,
         )
         tenant_id = uuid4()
         outbound_message_id = uuid4()
         published_at = datetime(2026, 5, 11, 12, 0, tzinfo=UTC)
 
-        async with publisher:
-            await publisher.publish(
-                tenant_id=tenant_id,
-                outbound_message_id=outbound_message_id,
-                source="republisher",
-                published_at=published_at,
-            )
+        await ensure_communication_topology(topology, settings)
+        await publisher.publish(
+            tenant_id=tenant_id,
+            outbound_message_id=outbound_message_id,
+            source="republisher",
+            published_at=published_at,
+        )
 
-        self.assertTrue(broker.started)
-        self.assertTrue(broker.closed)
-        self.assertEqual(len(broker.exchanges), 2)
-        self.assertEqual(len(broker.queues), 2)
-        payload, kwargs = broker.published[0]
-        self.assertEqual(payload["tenant_id"], str(tenant_id))
-        self.assertEqual(payload["outbound_message_id"], str(outbound_message_id))
-        self.assertEqual(payload["source"], "republisher")
-        self.assertEqual(kwargs["exchange"], settings.exchange_name)
-        self.assertTrue(kwargs["persist"])
-        self.assertTrue(kwargs["mandatory"])
-        self.assertEqual(kwargs["message_id"], str(outbound_message_id))
-        self.assertEqual(kwargs["message_type"], "communication.outbound.send")
+        self.assertEqual(len(topology.exchanges), 2)
+        self.assertEqual(len(topology.queues), 2)
+        self.assertEqual(len(topology.binds), 2)
+        published = broker_publisher.published[0]
+        message = published["message"]
+        self.assertEqual(published["exchange"].name, settings.exchange_name)
+        self.assertEqual(published["exchange"].type, "direct")
+        self.assertEqual(published["routing_key"], settings.routing_key)
+        self.assertEqual(message.payload["tenant_id"], str(tenant_id))
+        self.assertEqual(
+            message.payload["outbound_message_id"],
+            str(outbound_message_id),
+        )
+        self.assertEqual(message.payload["source"], "republisher")
+        self.assertTrue(message.persistent)
+        self.assertEqual(message.message_id, str(outbound_message_id))
+        self.assertEqual(message.message_type, "communication.outbound.send")
 
     async def test_consumer_acknowledges_valid_job_after_processor_success(
         self,

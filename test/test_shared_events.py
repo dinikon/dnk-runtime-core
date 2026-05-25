@@ -13,7 +13,6 @@ from src.modules.shared.application.events import (
 )
 from src.modules.shared.infrastructure.events import RabbitMQIntegrationEventPublisher
 from src.modules.shared.infrastructure.events import ensure_event_bus_topology
-from src.modules.shared.infrastructure.messaging import RabbitMQMessagePublisher
 from src.modules.shared.domain.events import IntegrationEvent, OutboxEvent
 
 
@@ -107,25 +106,26 @@ class _HandlerStub:
         self.events.append(event)
 
 
-class _RabbitBrokerStub:
+class _BrokerPublisherStub:
     def __init__(self) -> None:
-        self.started = False
-        self.closed = False
-        self.exchanges = []
         self.published = []
 
-    async def start(self) -> None:
-        self.started = True
+    async def publish(self, **kwargs) -> None:
+        self.published.append(kwargs)
 
-    async def close(self) -> None:
-        self.closed = True
 
-    async def declare_exchange(self, exchange):
+class _TopologyStub:
+    def __init__(self) -> None:
+        self.exchanges = []
+
+    async def declare_exchange(self, exchange) -> None:
         self.exchanges.append(exchange)
-        return exchange
 
-    async def publish(self, message, **kwargs) -> None:
-        self.published.append((message, kwargs))
+    async def declare_queue(self, queue) -> None:
+        raise AssertionError("event bus topology does not declare queues")
+
+    async def bind_queue(self, **_kwargs) -> None:
+        raise AssertionError("event bus topology does not bind queues")
 
 
 class SharedEventsTests(unittest.IsolatedAsyncioTestCase):
@@ -279,36 +279,31 @@ class SharedEventsTests(unittest.IsolatedAsyncioTestCase):
     async def test_rabbitmq_publisher_declares_exchange_and_publishes_event(
         self,
     ) -> None:
-        broker = _RabbitBrokerStub()
         settings = EventBusSettings()
-        message_publisher = RabbitMQMessagePublisher(
-            broker=broker,
-            manage_broker_lifecycle=True,
-        )
-
-        async def setup_topology() -> None:
-            await ensure_event_bus_topology(broker, settings)
-
+        broker_publisher = _BrokerPublisherStub()
+        topology = _TopologyStub()
         publisher = RabbitMQIntegrationEventPublisher(
-            message_publisher=message_publisher,
-            exchange_name=settings.exchange_name,
-            setup_topology=setup_topology,
+            broker_publisher=broker_publisher,
+            settings=settings,
         )
 
-        async with publisher:
-            await publisher.publish(self.event)
+        await ensure_event_bus_topology(topology, settings)
+        await publisher.publish(self.event)
 
-        self.assertTrue(broker.started)
-        self.assertTrue(broker.closed)
-        self.assertEqual(len(broker.exchanges), 1)
-        payload, kwargs = broker.published[0]
-        self.assertEqual(payload, self.event.to_payload())
-        self.assertEqual(kwargs["exchange"], settings.exchange_name)
-        self.assertEqual(kwargs["routing_key"], self.event.event_type)
-        self.assertEqual(kwargs["message_id"], str(self.event.event_id))
-        self.assertEqual(kwargs["message_type"], self.event.event_type)
-        self.assertTrue(kwargs["mandatory"])
-        self.assertTrue(kwargs["persist"])
+        self.assertEqual(len(topology.exchanges), 1)
+        self.assertEqual(topology.exchanges[0].name, settings.exchange_name)
+        published = broker_publisher.published[0]
+        self.assertEqual(published["exchange"].name, settings.exchange_name)
+        self.assertEqual(published["exchange"].type, "topic")
+        self.assertEqual(published["routing_key"], self.event.event_type)
+        self.assertEqual(published["message"].payload, self.event.to_payload())
+        self.assertEqual(published["message"].message_id, str(self.event.event_id))
+        self.assertEqual(published["message"].message_type, self.event.event_type)
+        self.assertEqual(published["message"].timestamp, self.event.occurred_at)
+        self.assertEqual(
+            published["message"].headers["event_id"],
+            str(self.event.event_id),
+        )
 
 
 __all__ = ["SharedEventsTests"]

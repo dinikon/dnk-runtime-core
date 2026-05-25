@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
 from typing import Annotated
 
 from fastapi import Depends, Request
@@ -39,9 +38,6 @@ from src.modules.communication.infrastructure.provider_senders import (
     ProviderSenderRegistry,
     YamlHttpProviderSender,
     YamlSmtpProviderSender,
-)
-from src.modules.communication.infrastructure.rabbitmq import (
-    RabbitMQOutboundMessagePublisher,
 )
 from src.modules.runtime_data.application.type_policy import RuntimeFieldTypePolicy
 from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.command_gateway import (
@@ -298,21 +294,11 @@ ProviderSenderRegistryDep = Annotated[
 
 async def get_outbound_message_publisher(
     request: Request,
-) -> AsyncGenerator[OutboundMessagePublisherProtocol | None, None]:
+) -> OutboundMessagePublisherProtocol | None:
     if not dnk_config.COMMUNICATION_QUEUE.enabled:
-        yield None
-        return
+        return None
 
-    publisher = getattr(request.app.state, "communication_outbound_publisher", None)
-    if publisher is not None:
-        yield publisher
-        return
-
-    async with RabbitMQOutboundMessagePublisher.from_settings(
-        dnk_config.COMMUNICATION_QUEUE,
-        manage_broker_lifecycle=True,
-    ) as fallback_publisher:
-        yield fallback_publisher
+    return getattr(request.app.state, "communication_outbound_publisher", None)
 
 
 OutboundMessagePublisherDep = Annotated[
