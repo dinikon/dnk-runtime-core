@@ -525,6 +525,14 @@ class ContactPointControllerTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(not_found.exception.status_code, 404)
 
+        with self.assertRaises(HTTPException) as missing_contact_point:
+            await list_owner_contact_points(
+                payload=payload,
+                context=_context(),
+                use_case=_UseCase(exc=ContactPointNotFoundError("c")),
+            )
+        self.assertEqual(missing_contact_point.exception.status_code, 404)
+
         with self.assertRaises(HTTPException) as conflict:
             await list_owner_contact_points(
                 payload=payload,
@@ -552,6 +560,15 @@ class ContactPointControllerTests(unittest.IsolatedAsyncioTestCase):
                 use_case=_UseCase(exc=ContactPointOwnerNotFoundError("o", "r")),
             )
         self.assertEqual(not_found.exception.status_code, 404)
+
+        with self.assertRaises(HTTPException) as missing_contact_point:
+            await list_owner_contact_points_by_path(
+                owner_object_id=uuid4(),
+                owner_record_id=uuid4(),
+                context=_context(),
+                use_case=_UseCase(exc=ContactPointNotFoundError("c")),
+            )
+        self.assertEqual(missing_contact_point.exception.status_code, 404)
 
         with self.assertRaises(HTTPException) as conflict:
             await list_owner_contact_points_by_path(

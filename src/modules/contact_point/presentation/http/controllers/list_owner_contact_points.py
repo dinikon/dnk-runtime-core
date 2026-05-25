@@ -68,13 +68,16 @@ async def list_owner_contact_points(
                 owner_record_id=EntityIdVO.from_value(payload.owner_record_id),
             )
         )
-    except (ContactPointOwnerNotFoundError, RuntimeObjectNotFoundError) as exc:
+    except (
+        ContactPointOwnerNotFoundError,
+        ContactPointNotFoundError,
+        RuntimeObjectNotFoundError,
+    ) as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
         ) from exc
     except (
-        ContactPointNotFoundError,
         RuntimeDataPersistenceError,
         RuntimeDataPolicyError,
         RuntimeObjectDescriptorError,
@@ -155,13 +158,16 @@ async def list_owner_contact_points_by_path(
                 offset=offset,
             )
         )
-    except (ContactPointOwnerNotFoundError, RuntimeObjectNotFoundError) as exc:
+    except (
+        ContactPointOwnerNotFoundError,
+        ContactPointNotFoundError,
+        RuntimeObjectNotFoundError,
+    ) as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
         ) from exc
     except (
-        ContactPointNotFoundError,
         RuntimeDataPersistenceError,
         RuntimeDataPolicyError,
         RuntimeObjectDescriptorError,
