@@ -7,13 +7,11 @@ from src.modules.shared import EntityIdVO
 
 
 @dataclass(frozen=True, slots=True)
-class ListOwnerContactPointsQuery:
+class ListContactPointsQuery:
     tenant_id: EntityIdVO
-    owner_object_id: EntityIdVO
-    owner_record_id: EntityIdVO
     contact_point_type: ContactPointTypeVO | None = None
-    limit: int | None = None
+    limit: int = 50
     offset: int = 0
 
 
-__all__ = ["ListOwnerContactPointsQuery"]
+__all__ = ["ListContactPointsQuery"]

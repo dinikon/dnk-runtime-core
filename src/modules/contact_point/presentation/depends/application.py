@@ -9,6 +9,12 @@ from src.modules.contact_point.application.use_case import (
     AttachContactPointUseCaseProtocol,
     DetachContactPointUseCase,
     DetachContactPointUseCaseProtocol,
+    GetContactPointUseCase,
+    GetContactPointUseCaseProtocol,
+    ListContactPointBindingsUseCase,
+    ListContactPointBindingsUseCaseProtocol,
+    ListContactPointsUseCase,
+    ListContactPointsUseCaseProtocol,
     ListOwnerContactPointsUseCase,
     ListOwnerContactPointsUseCaseProtocol,
 )
@@ -83,11 +89,53 @@ ListOwnerContactPointsUseCaseDep = Annotated[
 ]
 
 
+def get_get_contact_point_use_case(
+    repository: ContactPointRuntimeRepositoryDep,
+) -> GetContactPointUseCaseProtocol:
+    return GetContactPointUseCase(query_repository=repository)
+
+
+GetContactPointUseCaseDep = Annotated[
+    GetContactPointUseCaseProtocol,
+    Depends(get_get_contact_point_use_case),
+]
+
+
+def get_list_contact_points_use_case(
+    repository: ContactPointRuntimeRepositoryDep,
+) -> ListContactPointsUseCaseProtocol:
+    return ListContactPointsUseCase(query_repository=repository)
+
+
+ListContactPointsUseCaseDep = Annotated[
+    ListContactPointsUseCaseProtocol,
+    Depends(get_list_contact_points_use_case),
+]
+
+
+def get_list_contact_point_bindings_use_case(
+    repository: ContactPointRuntimeRepositoryDep,
+) -> ListContactPointBindingsUseCaseProtocol:
+    return ListContactPointBindingsUseCase(query_repository=repository)
+
+
+ListContactPointBindingsUseCaseDep = Annotated[
+    ListContactPointBindingsUseCaseProtocol,
+    Depends(get_list_contact_point_bindings_use_case),
+]
+
+
 __all__ = [
     "AttachContactPointUseCaseDep",
     "DetachContactPointUseCaseDep",
+    "GetContactPointUseCaseDep",
+    "ListContactPointBindingsUseCaseDep",
+    "ListContactPointsUseCaseDep",
     "ListOwnerContactPointsUseCaseDep",
     "get_attach_contact_point_use_case",
     "get_detach_contact_point_use_case",
+    "get_get_contact_point_use_case",
+    "get_list_contact_point_bindings_use_case",
+    "get_list_contact_points_use_case",
     "get_list_owner_contact_points_use_case",
 ]

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
@@ -8,12 +10,12 @@ from src.modules.contact_point.domain.contact_point.value_object import (
 
 
 @dataclass(frozen=True, slots=True)
-class OwnerContactPointDTO:
-    binding_id: UUID
+class ContactPointBindingDTO:
+    id: UUID
     contact_point_id: UUID
     contact_point_type: ContactPointTypeVO
-    raw_value: str
-    normalized_value: str
+    owner_object_id: UUID
+    owner_record_id: UUID
     is_primary: bool
     is_active: bool
     detached_at: datetime | None
@@ -22,14 +24,14 @@ class OwnerContactPointDTO:
 
 
 @dataclass(frozen=True, slots=True)
-class OwnerContactPointListDTO:
-    items: tuple[OwnerContactPointDTO, ...]
+class ContactPointBindingListDTO:
+    items: tuple[ContactPointBindingDTO, ...]
     count: int
-    limit: int | None = None
-    offset: int | None = None
+    limit: int
+    offset: int
 
 
 __all__ = [
-    "OwnerContactPointDTO",
-    "OwnerContactPointListDTO",
+    "ContactPointBindingDTO",
+    "ContactPointBindingListDTO",
 ]
