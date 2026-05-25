@@ -10,6 +10,9 @@ from src.modules.communication.application.outbound_message.processing import (
     OutboundProcessingByIdRepositoryProtocol,
     ProcessingContext,
 )
+from src.modules.communication.application.outbound_message.integration_events import (
+    build_outbound_result_events,
+)
 from src.modules.communication.domain.delivery import (
     DeliveryAttempt,
     DeliveryAttemptIdVO,
@@ -18,6 +21,7 @@ from src.modules.communication.domain.delivery import (
 from src.modules.communication.domain.outbound_message import (
     OutboundMessage,
     OutboundMessageIdVO,
+    OutboundMessageStatus,
 )
 from src.modules.communication.domain.provider_connection import (
     ProviderConnectionIdVO,
@@ -26,6 +30,7 @@ from src.modules.communication.infrastructure.outbound_message import (
     OutboundMessageRuntimeRepository,
 )
 from src.modules.shared import EntityIdVO
+from src.modules.shared.application.events import OutboxRepositoryProtocol
 
 
 class OutboundProcessingRuntimeRepository(OutboundProcessingByIdRepositoryProtocol):
@@ -36,10 +41,12 @@ class OutboundProcessingRuntimeRepository(OutboundProcessingByIdRepositoryProtoc
         *,
         outbound_repository: OutboundMessageRuntimeRepository,
         delivery_service: DeliveryAttemptServiceProtocol,
+        outbox_repository: OutboxRepositoryProtocol | None = None,
     ) -> None:
         """Инициализирует adapter outbound repository и delivery service."""
         self._outbound_repository = outbound_repository
         self._delivery_service = delivery_service
+        self._outbox_repository = outbox_repository
 
     async def claim_queued_messages(
         self,
@@ -114,35 +121,82 @@ class OutboundProcessingRuntimeRepository(OutboundProcessingByIdRepositoryProtoc
         applied = await self._outbound_repository.complete_outbound_processing(
             **kwargs,
         )
-        if not applied or kwargs.get("delivery_attempt_id") is None:
+        if not applied:
             return applied
-        await self._delivery_service.complete_attempt(
+        if kwargs.get("delivery_attempt_id") is not None:
+            await self._delivery_service.complete_attempt(
+                tenant_id=kwargs["tenant_id"],
+                delivery_attempt_id=_delivery_attempt_id(kwargs["delivery_attempt_id"]),
+                response_payload=kwargs["response_payload"],
+                http_status_code=kwargs["http_status_code"],
+                external_message_id=kwargs["external_message_id"],
+                finished_at=kwargs["finished_at"],
+            )
+        await self._add_outbound_result_events(
             tenant_id=kwargs["tenant_id"],
-            delivery_attempt_id=_delivery_attempt_id(kwargs["delivery_attempt_id"]),
-            response_payload=kwargs["response_payload"],
-            http_status_code=kwargs["http_status_code"],
-            external_message_id=kwargs["external_message_id"],
-            finished_at=kwargs["finished_at"],
+            outbound_message_id=kwargs["outbound_message_id"],
+            internal_status=kwargs["internal_status"],
+            external_status=kwargs.get("external_status"),
+            external_message_id=kwargs.get("external_message_id"),
+            occurred_at=kwargs["finished_at"],
         )
         return applied
 
     async def fail_outbound_processing(self, **kwargs: Any) -> bool:
         """Фиксирует outbound failure и завершает delivery attempt."""
         applied = await self._outbound_repository.fail_outbound_processing(**kwargs)
-        if not applied or kwargs.get("delivery_attempt_id") is None:
+        if not applied:
             return applied
-        await self._delivery_service.fail_attempt(
-            tenant_id=kwargs["tenant_id"],
-            delivery_attempt_id=_delivery_attempt_id(kwargs["delivery_attempt_id"]),
-            retryable=kwargs.get("retry_at") is not None,
-            error_code=kwargs["error_code"],
-            error_message=kwargs["error_message"],
-            finished_at=kwargs["finished_at"],
-            response_payload=kwargs.get("response_payload"),
-            http_status_code=kwargs.get("http_status_code"),
-            external_message_id=kwargs.get("external_message_id"),
-        )
+        retryable = kwargs.get("retry_at") is not None
+        if kwargs.get("delivery_attempt_id") is not None:
+            await self._delivery_service.fail_attempt(
+                tenant_id=kwargs["tenant_id"],
+                delivery_attempt_id=_delivery_attempt_id(kwargs["delivery_attempt_id"]),
+                retryable=retryable,
+                error_code=kwargs["error_code"],
+                error_message=kwargs["error_message"],
+                finished_at=kwargs["finished_at"],
+                response_payload=kwargs.get("response_payload"),
+                http_status_code=kwargs.get("http_status_code"),
+                external_message_id=kwargs.get("external_message_id"),
+            )
+        if not retryable:
+            await self._add_outbound_result_events(
+                tenant_id=kwargs["tenant_id"],
+                outbound_message_id=kwargs["outbound_message_id"],
+                internal_status=OutboundMessageStatus.FAILED.value,
+                external_status=kwargs.get("external_status"),
+                external_message_id=kwargs.get("external_message_id"),
+                occurred_at=kwargs["finished_at"],
+            )
         return applied
+
+    async def _add_outbound_result_events(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        outbound_message_id: OutboundMessageIdVO,
+        internal_status: str,
+        external_status: str | None,
+        external_message_id: str | None,
+        occurred_at: datetime,
+    ) -> None:
+        if self._outbox_repository is None:
+            return
+        outbound = await self._outbound_repository.get_outbound_by_id(
+            tenant_id,
+            outbound_message_id,
+        )
+        if outbound is None:
+            return
+        for event in build_outbound_result_events(
+            outbound=outbound,
+            internal_status=internal_status,
+            external_status=external_status,
+            external_message_id=external_message_id,
+            occurred_at=occurred_at,
+        ):
+            await self._outbox_repository.add(event)
 
 
 def _delivery_attempt_id(value: Any) -> DeliveryAttemptIdVO:

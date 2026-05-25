@@ -21,6 +21,7 @@ provider payload, отправляет его через sender adapter и об�
 - outbound send request и concrete provider message state;
 - provider delivery attempts и delivery events;
 - RabbitMQ/CLI processing для queued outbound messages;
+- integration outbox facts for outbound/delivery status changes;
 - provider webhook intake и status mapping.
 
 Модуль использует runtime objects из `schema_registry` и `runtime_data`. Собственных SQLAlchemy ORM моделей для
@@ -31,7 +32,6 @@ communication runtime objects нет.
 - describe-fields / metadata HTTP endpoints для communication objects;
 - отдельный read/list HTTP API для delivery attempts и delivery events;
 - scheduled jobs;
-- outbox/inbox event model;
 - прямая интеграция с `contact_point` use cases, хотя `contact_id` хранится в request/outbound rows.
 
 ## Public Functionality
@@ -396,7 +396,8 @@ Runtime object names заданы в `src/modules/communication/infrastructure/r
 
 RabbitMQ integration находится в `src/modules/communication/infrastructure/rabbitmq.py`.
 
-- `RabbitMQOutboundMessagePublisher` реализует publish порт и отправляет `OutboundMessageJob`.
+- `RabbitMQOutboundMessagePublisher` реализует communication queue port и отправляет `OutboundMessageJob` через общий
+  `shared.infrastructure.messaging.RabbitMQMessagePublisher`.
 - `build_communication_exchange`, `build_communication_queue`, `build_communication_dlx`, `build_communication_dlq`
   строят durable exchange/queue/DLX/DLQ.
 - `ensure_communication_topology` объявляет и биндует topology.
@@ -414,6 +415,21 @@ Job payload:
   "source": "send_communication"
 }
 ```
+
+### Integration Events
+
+Communication не использует `shared.events` как transport для отправки сообщений. Доставка идет через
+`communication.outbound.send`, а `shared.events` получает только факты после изменения состояния.
+
+Текущий набор outgoing integration events:
+
+- `communication.outbound_message.sent.v1`
+- `communication.outbound_message.failed.v1`
+- `communication.outbound_message.delivered.v1`
+- `communication.delivery_status.changed.v1`
+
+Events пишутся в shared outbox в той же transaction, где фиксируется provider processing или webhook status update.
+Публикация наружу выполняется общей командой `dnk-manage events publish-outbox`.
 
 ### Schema Seed Facts
 
@@ -491,7 +507,8 @@ but already committed send row remains queued for later publishing.
 
 - Infrastructure dependencies in `src/modules/communication/presentation/depends/infrastructure.py` build:
   `RuntimeFieldTypePolicy`, `PostgresRuntimeQueryGateway`, `PostgresRuntimeCommandGateway`, runtime repositories,
-  helper services, `HttpxProviderHttpClient`, `ProviderSenderRegistry` and optional `RabbitMQOutboundMessagePublisher`.
+  helper services, `HttpxProviderHttpClient`, `ProviderSenderRegistry`, shared outbox repositories and optional
+  `RabbitMQOutboundMessagePublisher`.
 - Application dependencies in `src/modules/communication/presentation/depends/application.py` build domain services and
   HTTP use cases from repositories/services/clock.
 - Management dependencies in `src/modules/communication/presentation/depends/management.py` build processing, publish,
@@ -502,7 +519,7 @@ but already committed send row remains queued for later publishing.
 
 | Module            | Layer                                          | Used For                                                                                                  |
 |-------------------|------------------------------------------------|-----------------------------------------------------------------------------------------------------------|
-| `shared`          | domain/application/presentation/infrastructure | `EntityIdVO`, `DomainError`, clock port, UoW, request context, SMTP transport.                            |
+| `shared`          | domain/application/presentation/infrastructure | `EntityIdVO`, `DomainError`, clock port, UoW, request context, SMTP transport, messaging publisher, integration outbox. |
 | `runtime_data`    | infrastructure/presentation                    | Runtime command/query gateways, type policy, runtime validation/filter/persistence errors.                |
 | `schema_registry` | infrastructure/presentation/management         | Runtime object resolver, object descriptors, schema seed, SQLAlchemy repositories in management builders. |
 | `config`          | presentation/infrastructure/management         | `dnk_config.COMMUNICATION_QUEUE`, RabbitMQ settings.                                                      |
@@ -516,6 +533,7 @@ httpx client adapter, FastStream/RabbitMQ, SQLAlchemy session factory for manage
 Found:
 
 - RabbitMQ publishing through `RabbitMQOutboundMessagePublisher`.
+- Shared integration outbox writes for outbound sent/failed/delivered and delivery status changed facts.
 - FastStream subscriber through `build_communication_faststream_app`.
 - Manual ack/nack/reject behavior in `handle_outbound_message_job`.
 - Management CLI commands:
@@ -540,7 +558,7 @@ Processing facts:
 Not found:
 
 - Domain event bus handlers.
-- Outbox/inbox tables or ports.
+- Dedicated event consumer worker in this module.
 - Scheduler/cron definitions inside this module.
 
 ## Tests Covering This Module

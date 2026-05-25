@@ -11,6 +11,9 @@ from src.modules.communication.domain.delivery import (
     DeliveryEvent,
     DeliveryRepositoryProtocol,
 )
+from src.modules.communication.application.outbound_message.integration_events import (
+    build_delivery_status_events,
+)
 from src.modules.communication.domain.outbound_message import (
     OutboundMessage,
     OutboundMessageIdVO,
@@ -52,6 +55,7 @@ from src.modules.runtime_data.application.query.typed_filter_builder import (
 from src.modules.schema_registry.runtime import RuntimeObjectDescriptor
 from src.modules.schema_registry.runtime import RuntimeObjectResolverProtocol
 from src.modules.shared import EntityIdVO
+from src.modules.shared.application.events import OutboxRepositoryProtocol
 
 
 class DeliveryRuntimeRepository(DeliveryRepositoryProtocol):
@@ -66,11 +70,13 @@ class DeliveryRuntimeRepository(DeliveryRepositoryProtocol):
         runtime_object_resolver: RuntimeObjectResolverProtocol,
         runtime_command_gateway: RuntimeCommandGateway,
         runtime_query_gateway: RuntimeQueryGateway,
+        outbox_repository: OutboxRepositoryProtocol | None = None,
     ) -> None:
         """Инициализирует repository resolver-ом descriptor и runtime gateways."""
         self._runtime_object_resolver = runtime_object_resolver
         self._runtime_command_gateway = runtime_command_gateway
         self._runtime_query_gateway = runtime_query_gateway
+        self._outbox_repository = outbox_repository
         self._filter_builder = RuntimeTypedFilterBuilder()
 
     async def get_delivery_attempt(
@@ -206,6 +212,16 @@ class DeliveryRuntimeRepository(DeliveryRepositoryProtocol):
                 **_status_timestamp_patch(outbound, internal_status, now),
             },
         )
+        if self._outbox_repository is None:
+            return
+        for event in build_delivery_status_events(
+            outbound=outbound,
+            internal_status=internal_status,
+            external_status=external_status,
+            external_message_id=outbound.external_message_id,
+            occurred_at=now,
+        ):
+            await self._outbox_repository.add(event)
 
     async def get_active_connector_by_code(
         self,

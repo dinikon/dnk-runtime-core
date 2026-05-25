@@ -57,6 +57,7 @@ from src.modules.schema_registry.infrastructure.repository.object_repository imp
 from src.modules.schema_registry.runtime import SchemaRegistryRuntimeObjectResolver
 from src.modules.shared.application.persistence import UnitOfWorkProtocol
 from src.modules.shared.infrastructure.time.utc_clock import UtcClock
+from src.modules.shared.presentation.events import build_outbox_repository
 import uuid6
 
 
@@ -208,6 +209,7 @@ def build_delivery_repository(session: AsyncSession) -> DeliveryRuntimeRepositor
         ),
         runtime_command_gateway=runtime_command_gateway,
         runtime_query_gateway=runtime_query_gateway,
+        outbox_repository=build_outbox_repository(session),
     )
 
 
@@ -223,6 +225,7 @@ def build_outbound_processing_repository(
             repository=delivery_repository,
             clock=clock,
         ),
+        outbox_repository=build_outbox_repository(session),
     )
 
 

@@ -60,6 +60,8 @@ from src.modules.communication.presentation.depends.infrastructure import (
     get_runtime_field_type_policy,
     get_runtime_query_gateway,
 )
+from src.modules.shared.presentation import UoWDep
+from src.modules.shared.presentation.events import build_outbox_repository
 from src.modules.shared.presentation.time.depends import ClockDep
 
 
@@ -246,11 +248,13 @@ DeliveryServiceDep = Annotated[
 def get_outbound_processing_repository(
     outbound_repository: OutboundMessageRuntimeRepositoryDep,
     delivery_service: DeliveryServiceDep,
+    uow: UoWDep,
 ) -> OutboundProcessingRuntimeRepository:
     """Создает processing adapter для outbound и delivery attempts."""
     return OutboundProcessingRuntimeRepository(
         outbound_repository=outbound_repository,
         delivery_service=delivery_service,
+        outbox_repository=build_outbox_repository(uow.session),
     )
 
 

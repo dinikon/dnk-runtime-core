@@ -12,6 +12,8 @@ from src.modules.shared.application.events import (
     PublishOutboxEventsUseCase,
 )
 from src.modules.shared.infrastructure.events import RabbitMQIntegrationEventPublisher
+from src.modules.shared.infrastructure.events import ensure_event_bus_topology
+from src.modules.shared.infrastructure.messaging import RabbitMQMessagePublisher
 from src.modules.shared.domain.events import IntegrationEvent, OutboxEvent
 
 
@@ -279,10 +281,18 @@ class SharedEventsTests(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         broker = _RabbitBrokerStub()
         settings = EventBusSettings()
-        publisher = RabbitMQIntegrationEventPublisher(
+        message_publisher = RabbitMQMessagePublisher(
             broker=broker,
-            settings=settings,
             manage_broker_lifecycle=True,
+        )
+
+        async def setup_topology() -> None:
+            await ensure_event_bus_topology(broker, settings)
+
+        publisher = RabbitMQIntegrationEventPublisher(
+            message_publisher=message_publisher,
+            exchange_name=settings.exchange_name,
+            setup_topology=setup_topology,
         )
 
         async with publisher:
@@ -293,6 +303,7 @@ class SharedEventsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(broker.exchanges), 1)
         payload, kwargs = broker.published[0]
         self.assertEqual(payload, self.event.to_payload())
+        self.assertEqual(kwargs["exchange"], settings.exchange_name)
         self.assertEqual(kwargs["routing_key"], self.event.event_type)
         self.assertEqual(kwargs["message_id"], str(self.event.event_id))
         self.assertEqual(kwargs["message_type"], self.event.event_type)

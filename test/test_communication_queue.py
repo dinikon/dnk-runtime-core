@@ -10,10 +10,12 @@ from src.config.infrastructure.communication_queue_config import (
 )
 from src.modules.communication.infrastructure.rabbitmq import (
     RabbitMQOutboundMessagePublisher,
+    ensure_communication_topology,
     handle_outbound_message_job,
 )
 from src.modules.communication.domain.outbound_message import OutboundMessageIdVO
 from src.modules.shared import EntityIdVO
+from src.modules.shared.infrastructure.messaging import RabbitMQMessagePublisher
 
 
 class _DeclaredQueueStub:
@@ -78,10 +80,18 @@ class CommunicationQueueTests(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         broker = _RabbitBrokerStub()
         settings = CommunicationQueueSettings()
-        publisher = RabbitMQOutboundMessagePublisher(
+        message_publisher = RabbitMQMessagePublisher(
             broker=broker,
-            settings=settings,
             manage_broker_lifecycle=True,
+        )
+
+        async def setup_topology() -> None:
+            await ensure_communication_topology(broker, settings)
+
+        publisher = RabbitMQOutboundMessagePublisher(
+            message_publisher=message_publisher,
+            settings=settings,
+            setup_topology=setup_topology,
         )
         tenant_id = uuid4()
         outbound_message_id = uuid4()
@@ -103,9 +113,11 @@ class CommunicationQueueTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["tenant_id"], str(tenant_id))
         self.assertEqual(payload["outbound_message_id"], str(outbound_message_id))
         self.assertEqual(payload["source"], "republisher")
+        self.assertEqual(kwargs["exchange"], settings.exchange_name)
         self.assertTrue(kwargs["persist"])
         self.assertTrue(kwargs["mandatory"])
         self.assertEqual(kwargs["message_id"], str(outbound_message_id))
+        self.assertEqual(kwargs["message_type"], "communication.outbound.send")
 
     async def test_consumer_acknowledges_valid_job_after_processor_success(
         self,

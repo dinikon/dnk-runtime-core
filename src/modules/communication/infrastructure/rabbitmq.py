@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
@@ -30,6 +31,8 @@ from src.modules.communication.application.outbound_message.use_case import (
 )
 from src.modules.communication.domain.outbound_message import OutboundMessageIdVO
 from src.modules.shared import EntityIdVO
+from src.modules.shared.application.messaging import BrokerMessage, MessagePublisherPort
+from src.modules.shared.infrastructure.messaging import RabbitMQMessagePublisher
 
 
 def build_communication_exchange(
@@ -90,18 +93,32 @@ async def ensure_communication_topology(
 
 
 class RabbitMQOutboundMessagePublisher:
-    """Publishes outbound-message jobs to RabbitMQ."""
+    """Enqueues outbound-message delivery jobs to the communication queue."""
 
     def __init__(
         self,
         *,
-        broker: RabbitBroker,
+        message_publisher: MessagePublisherPort | None = None,
         settings: CommunicationQueueSettings,
+        setup_topology: Callable[[], Awaitable[None]] | None = None,
+        broker: RabbitBroker | None = None,
         manage_broker_lifecycle: bool = False,
     ) -> None:
-        self._broker = broker
+        if message_publisher is None:
+            if broker is None:
+                raise TypeError("Either message_publisher or broker is required.")
+            message_publisher = RabbitMQMessagePublisher(
+                broker=broker,
+                manage_broker_lifecycle=manage_broker_lifecycle,
+            )
+            if setup_topology is None:
+
+                async def setup_topology() -> None:
+                    await ensure_communication_topology(broker, settings)
+
+        self._message_publisher = message_publisher
         self._settings = settings
-        self._manage_broker_lifecycle = manage_broker_lifecycle
+        self._setup_topology = setup_topology
         self._started = False
 
     @classmethod
@@ -111,26 +128,34 @@ class RabbitMQOutboundMessagePublisher:
         *,
         manage_broker_lifecycle: bool = False,
     ) -> "RabbitMQOutboundMessagePublisher":
-        broker = RabbitBroker(
+        message_publisher = RabbitMQMessagePublisher.from_url(
             settings.rabbitmq_url,
-            default_channel=Channel(publisher_confirms=True),
-        )
-        return cls(
-            broker=broker,
-            settings=settings,
             manage_broker_lifecycle=manage_broker_lifecycle,
+        )
+
+        async def setup_topology() -> None:
+            await ensure_communication_topology(message_publisher.broker, settings)
+
+        return cls(
+            message_publisher=message_publisher,
+            settings=settings,
+            setup_topology=setup_topology,
         )
 
     async def start(self) -> None:
         if self._started:
             return
-        await self._broker.start()
-        await ensure_communication_topology(self._broker, self._settings)
+        start = getattr(self._message_publisher, "start", None)
+        if start is not None:
+            await start()
+        if self._setup_topology is not None:
+            await self._setup_topology()
         self._started = True
 
     async def close(self) -> None:
-        if self._started and self._manage_broker_lifecycle:
-            await self._broker.close()
+        close = getattr(self._message_publisher, "close", None)
+        if self._started and close is not None:
+            await close()
         self._started = False
 
     async def __aenter__(self) -> "RabbitMQOutboundMessagePublisher":
@@ -156,13 +181,16 @@ class RabbitMQOutboundMessagePublisher:
             published_at=published_at,
             source=source,
         )
-        await self._broker.publish(
-            job.to_payload(),
-            exchange=build_communication_exchange(self._settings),
+        await self._message_publisher.publish(
+            exchange=self._settings.exchange_name,
             routing_key=self._settings.routing_key,
+            message=BrokerMessage(
+                body=job.to_payload(),
+                headers={"message_kind": "communication.outbound.send"},
+                message_id=str(outbound_message_id),
+            ),
             mandatory=True,
             persist=True,
-            message_id=str(outbound_message_id),
             timestamp=published_at,
             message_type="communication.outbound.send",
         )

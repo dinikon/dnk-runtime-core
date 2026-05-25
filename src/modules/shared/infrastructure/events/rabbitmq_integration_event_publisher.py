@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+
 from faststream.rabbit import (
-    Channel,
     ExchangeType,
     RabbitBroker,
     RabbitExchange,
 )
 
 from src.config.infrastructure.event_bus_config import EventBusSettings
+from src.modules.shared.application.messaging import BrokerMessage, MessagePublisherPort
 from src.modules.shared.domain.events.integration_event import IntegrationEvent
+from src.modules.shared.infrastructure.messaging import RabbitMQMessagePublisher
 
 
 def build_event_bus_exchange(settings: EventBusSettings) -> RabbitExchange:
@@ -34,13 +37,33 @@ class RabbitMQIntegrationEventPublisher:
     def __init__(
         self,
         *,
-        broker: RabbitBroker,
-        settings: EventBusSettings,
+        message_publisher: MessagePublisherPort | None = None,
+        exchange_name: str | None = None,
+        setup_topology: Callable[[], Awaitable[None]] | None = None,
+        broker: RabbitBroker | None = None,
+        settings: EventBusSettings | None = None,
         manage_broker_lifecycle: bool = False,
     ) -> None:
-        self._broker = broker
-        self._settings = settings
-        self._manage_broker_lifecycle = manage_broker_lifecycle
+        if message_publisher is None:
+            if broker is None or settings is None:
+                raise TypeError(
+                    "Either message_publisher/exchange_name or broker/settings is required."
+                )
+            message_publisher = RabbitMQMessagePublisher(
+                broker=broker,
+                manage_broker_lifecycle=manage_broker_lifecycle,
+            )
+            exchange_name = settings.exchange_name
+            if setup_topology is None:
+
+                async def setup_topology() -> None:
+                    await ensure_event_bus_topology(broker, settings)
+
+        if exchange_name is None:
+            raise TypeError("exchange_name is required.")
+        self._message_publisher = message_publisher
+        self._exchange_name = exchange_name
+        self._setup_topology = setup_topology
         self._started = False
 
     @classmethod
@@ -50,26 +73,34 @@ class RabbitMQIntegrationEventPublisher:
         *,
         manage_broker_lifecycle: bool = False,
     ) -> "RabbitMQIntegrationEventPublisher":
-        broker = RabbitBroker(
+        message_publisher = RabbitMQMessagePublisher.from_url(
             settings.rabbitmq_url,
-            default_channel=Channel(publisher_confirms=True),
-        )
-        return cls(
-            broker=broker,
-            settings=settings,
             manage_broker_lifecycle=manage_broker_lifecycle,
+        )
+
+        async def setup_topology() -> None:
+            await ensure_event_bus_topology(message_publisher.broker, settings)
+
+        return cls(
+            message_publisher=message_publisher,
+            exchange_name=settings.exchange_name,
+            setup_topology=setup_topology,
         )
 
     async def start(self) -> None:
         if self._started:
             return
-        await self._broker.start()
-        await ensure_event_bus_topology(self._broker, self._settings)
+        start = getattr(self._message_publisher, "start", None)
+        if start is not None:
+            await start()
+        if self._setup_topology is not None:
+            await self._setup_topology()
         self._started = True
 
     async def close(self) -> None:
-        if self._started and self._manage_broker_lifecycle:
-            await self._broker.close()
+        close = getattr(self._message_publisher, "close", None)
+        if self._started and close is not None:
+            await close()
         self._started = False
 
     async def __aenter__(self) -> "RabbitMQIntegrationEventPublisher":
@@ -83,13 +114,15 @@ class RabbitMQIntegrationEventPublisher:
         """Publishes one integration event with event type as routing key."""
         if not self._started:
             await self.start()
-        await self._broker.publish(
-            event.to_payload(),
-            exchange=build_event_bus_exchange(self._settings),
+        await self._message_publisher.publish(
+            exchange=self._exchange_name,
             routing_key=event.event_type,
+            message=BrokerMessage(
+                body=event.to_payload(),
+                message_id=str(event.event_id),
+            ),
             mandatory=True,
             persist=True,
-            message_id=str(event.event_id),
             timestamp=event.occurred_at,
             message_type=event.event_type,
         )

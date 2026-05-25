@@ -53,6 +53,7 @@ from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.query_
 from src.modules.schema_registry.presentation.depends.application import (
     RuntimeObjectResolverDep,
 )
+from src.modules.shared.presentation.events import build_outbox_repository
 from src.modules.shared.presentation.persistence.depends import UoWDep
 
 
@@ -104,12 +105,14 @@ def get_delivery_repository(
     runtime_object_resolver: RuntimeObjectResolverDep,
     runtime_command_gateway: RuntimeCommandGatewayDep,
     runtime_query_gateway: RuntimeQueryGatewayDep,
+    uow: UoWDep,
 ) -> DeliveryRuntimeRepository:
     """Создает runtime repository delivery aggregate."""
     return DeliveryRuntimeRepository(
         runtime_object_resolver=runtime_object_resolver,
         runtime_command_gateway=runtime_command_gateway,
         runtime_query_gateway=runtime_query_gateway,
+        outbox_repository=build_outbox_repository(uow.session),
     )
 
 

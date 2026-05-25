@@ -276,6 +276,10 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                 PROJECT_ROOT
                 / "src/modules/shared/infrastructure/events/rabbitmq_integration_event_publisher.py"
             ).resolve(),
+            (
+                PROJECT_ROOT
+                / "src/modules/shared/infrastructure/messaging/rabbitmq/rabbitmq_message_publisher.py"
+            ).resolve(),
         }
         for path in iter_python_files("src/modules"):
             resolved_path = path.resolve()
@@ -338,6 +342,7 @@ class ArchitectureBoundariesTests(unittest.TestCase):
             "http",
             "identity_context",
             "jobs",
+            "messaging",
             "persistence",
             "time",
             "tokens",

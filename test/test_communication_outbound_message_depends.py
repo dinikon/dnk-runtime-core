@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 from src.modules.communication.application.outbound_message import (
     GetOutboundMessageUseCase,
@@ -50,6 +51,7 @@ class OutboundMessageDependsTests(unittest.TestCase):
             runtime_object_resolver=object(),
             runtime_command_gateway=object(),
             runtime_query_gateway=object(),
+            uow=SimpleNamespace(session=object()),
         )
         delivery_service = get_delivery_service(
             repository=delivery_repository,
@@ -58,6 +60,7 @@ class OutboundMessageDependsTests(unittest.TestCase):
         processing_repository = get_outbound_processing_repository(
             outbound_repository=repository,
             delivery_service=delivery_service,
+            uow=SimpleNamespace(session=object()),
         )
         service = get_outbound_message_service(
             repository=repository,
