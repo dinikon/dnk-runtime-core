@@ -1,16 +1,18 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+
+from src.modules.shared.application.messaging.broker_queue_arguments import (
+    BrokerQueueArguments,
+)
 
 
 @dataclass(frozen=True, slots=True)
 class BrokerQueue:
     name: str
     durable: bool = True
-    routing_key: str | None = None
-    arguments: Mapping[str, Any] = field(default_factory=dict)
+    routing_key: str = ""
+    arguments: BrokerQueueArguments = field(default_factory=BrokerQueueArguments)
 
 
 __all__ = ["BrokerQueue"]

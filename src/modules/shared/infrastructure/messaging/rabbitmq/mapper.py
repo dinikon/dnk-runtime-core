@@ -1,5 +1,3 @@
-from typing import cast
-
 from faststream.rabbit import ExchangeType, RabbitExchange, RabbitQueue
 from faststream.rabbit.schemas.queue import ClassicQueueArgs
 
@@ -24,8 +22,24 @@ def to_rabbit_queue(queue: BrokerQueue) -> RabbitQueue:
         queue.name,
         durable=queue.durable,
         routing_key=queue.routing_key,
-        arguments=cast(ClassicQueueArgs, dict(queue.arguments)) or None,
+        arguments=_to_classic_queue_args(queue),
     )
+
+
+def _to_classic_queue_args(queue: BrokerQueue) -> ClassicQueueArgs | None:
+    queue_arguments = queue.arguments
+    args: ClassicQueueArgs = {}
+
+    if queue_arguments.dead_letter_exchange is not None:
+        args["x-dead-letter-exchange"] = queue_arguments.dead_letter_exchange
+    if queue_arguments.dead_letter_routing_key is not None:
+        args["x-dead-letter-routing-key"] = queue_arguments.dead_letter_routing_key
+    if queue_arguments.message_ttl_ms is not None:
+        args["x-message-ttl"] = queue_arguments.message_ttl_ms
+    if queue_arguments.max_length is not None:
+        args["x-max-length"] = queue_arguments.max_length
+
+    return args or None
 
 
 __all__ = [

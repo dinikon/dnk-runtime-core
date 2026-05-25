@@ -2,16 +2,20 @@ from __future__ import annotations
 
 import unittest
 from datetime import UTC, datetime
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from src.modules.shared.application.messaging import (
     BrokerExchange,
     BrokerMessage,
     BrokerQueue,
+    BrokerQueueArguments,
 )
 from src.modules.shared.infrastructure.messaging import (
     RabbitMQBrokerPublisher,
     RabbitMQTopologyManager,
 )
+from src.modules.shared.infrastructure.messaging.rabbitmq import mapper
 
 
 class _DeclaredQueueStub:
@@ -70,7 +74,9 @@ class SharedMessagingTests(unittest.IsolatedAsyncioTestCase):
         queue = BrokerQueue(
             name="example.queue",
             routing_key="example.*",
-            arguments={"x-dead-letter-exchange": "example.dlx"},
+            arguments=BrokerQueueArguments(
+                dead_letter_exchange="example.dlx",
+            ),
         )
 
         self.assertEqual(exchange.type, "topic")
@@ -78,7 +84,53 @@ class SharedMessagingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(queue.routing_key, "example.*")
         self.assertEqual(
             queue.arguments,
-            {"x-dead-letter-exchange": "example.dlx"},
+            BrokerQueueArguments(dead_letter_exchange="example.dlx"),
+        )
+
+    def test_broker_queue_defaults_are_typed(self) -> None:
+        queue = BrokerQueue(name="example.queue")
+
+        self.assertEqual(queue.routing_key, "")
+        self.assertEqual(queue.arguments, BrokerQueueArguments())
+
+    def test_rabbitmq_queue_mapper_uses_explicit_classic_arguments(self) -> None:
+        queue = BrokerQueue(
+            name="example.queue",
+            routing_key="example.key",
+            arguments=BrokerQueueArguments(
+                dead_letter_exchange="example.dlx",
+                dead_letter_routing_key="example.dlq",
+                message_ttl_ms=1000,
+                max_length=50,
+            ),
+        )
+
+        with patch.object(mapper, "RabbitQueue") as rabbit_queue_cls:
+            rabbit_queue_cls.return_value = SimpleNamespace()
+            mapper.to_rabbit_queue(queue)
+
+        rabbit_queue_cls.assert_called_once_with(
+            "example.queue",
+            durable=True,
+            routing_key="example.key",
+            arguments={
+                "x-dead-letter-exchange": "example.dlx",
+                "x-dead-letter-routing-key": "example.dlq",
+                "x-message-ttl": 1000,
+                "x-max-length": 50,
+            },
+        )
+
+    def test_rabbitmq_queue_mapper_omits_empty_arguments(self) -> None:
+        with patch.object(mapper, "RabbitQueue") as rabbit_queue_cls:
+            rabbit_queue_cls.return_value = SimpleNamespace()
+            mapper.to_rabbit_queue(BrokerQueue(name="example.queue"))
+
+        rabbit_queue_cls.assert_called_once_with(
+            "example.queue",
+            durable=True,
+            routing_key="",
+            arguments=None,
         )
 
     async def test_rabbitmq_broker_publisher_publishes_payload_and_metadata(

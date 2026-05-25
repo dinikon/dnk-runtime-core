@@ -31,6 +31,7 @@ from src.modules.shared.application.messaging import (
     BrokerMessage,
     BrokerPublisherPort,
     BrokerQueue,
+    BrokerQueueArguments,
     BrokerTopologyPort,
 )
 from src.modules.shared.infrastructure.messaging import (
@@ -68,10 +69,10 @@ def build_communication_queue(
         name=settings.queue_name,
         durable=True,
         routing_key=settings.routing_key,
-        arguments={
-            "x-dead-letter-exchange": settings.dlx_exchange_name,
-            "x-dead-letter-routing-key": settings.dlq_routing_key,
-        },
+        arguments=BrokerQueueArguments(
+            dead_letter_exchange=settings.dlx_exchange_name,
+            dead_letter_routing_key=settings.dlq_routing_key,
+        ),
     )
 
 
