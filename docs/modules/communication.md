@@ -32,7 +32,7 @@ communication runtime objects нет.
 - describe-fields / metadata HTTP endpoints для communication objects;
 - отдельный read/list HTTP API для delivery attempts и delivery events;
 - scheduled jobs;
-- прямая интеграция с `contact_point` use cases, хотя `contact_id` хранится в request/outbound rows.
+- audience/contact selection; `communication` принимает уже подготовленный `recipient_address`.
 
 ## Public Functionality
 
@@ -44,7 +44,7 @@ communication runtime objects нет.
 - Создание template version: `POST /api/communication/templates/{template_id}/versions`.
 - Активация template version: `POST /api/communication/templates/{template_id}/versions/{version_id}/activate`.
 - Чтение templates: `GET /api/communication/templates`.
-- Постановка communication на отправку: `POST /api/communication/send`.
+- Постановка communication на отправку подготовленному получателю: `POST /api/communication/send`.
 - Чтение outbound messages: `GET /api/communication/messages` и
   `GET /api/communication/messages/{outbound_message_id}`.
 - Прием provider webhooks: `POST /api/communication/webhooks/{tenant_id}/{provider_code}`.
@@ -53,24 +53,24 @@ communication runtime objects нет.
 
 ## Main Flows / Use Cases
 
-| Use Case                               | Input                                  | Output                            | Description                                                                                                                       |
-|----------------------------------------|----------------------------------------|-----------------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
-| `RegisterProviderConnectorUseCase`     | `RegisterProviderConnectorCommand`     | `ProviderConnectorDTO`            | Парсит YAML через `ProviderYamlLoader`, считает checksum и регистрирует connector/message types через `ProviderConnectorService`. |
-| `ListProviderConnectorsUseCase`        | `EntityIdVO` tenant id                 | `ProviderConnectorCatalogDTO`     | Возвращает connectors и message types из query repository.                                                                        |
-| `CreateProviderConnectionUseCase`      | `CreateProviderConnectionCommand`      | `ProviderConnectionDTO`           | Кодирует secrets через `SecretCodec`, валидирует config/secrets по connector schemas и сохраняет connection.                      |
-| `ListProviderConnectionsUseCase`       | `EntityIdVO` tenant id                 | `list[ProviderConnectionDTO]`     | Возвращает provider connections без раскрытия secrets.                                                                            |
-| `CreateMessageTemplateUseCase`         | `CreateMessageTemplateCommand`         | `MessageTemplateDTO`              | Создает DRAFT template, проверяет connector/message type binding и channel match.                                                 |
-| `CreateTemplateVersionUseCase`         | `CreateTemplateVersionCommand`         | `TemplateVersionDTO`              | Создает DRAFT version, валидирует `template_payload` и `variables_schema`.                                                        |
-| `ActivateTemplateVersionUseCase`       | `ActivateTemplateVersionCommand`       | `TemplateVersionDTO`              | Активирует выбранную версию, переводит прежние active versions в `DEPRECATED`, template - в `ACTIVE`.                             |
-| `ListMessageTemplatesUseCase`          | `EntityIdVO` tenant id                 | `list[MessageTemplateDTO]`        | Возвращает templates с metadata активной версии.                                                                                  |
-| `SendCommunicationUseCase`             | `SendCommunicationCommand`             | `SendCommunicationResultDTO`      | Проверяет idempotency, template/channel/active version/variables/active connection и создает queued request/outbound.             |
-| `GetOutboundMessageUseCase`            | `GetOutboundMessageQuery`              | `OutboundMessageDTO`              | Возвращает outbound message или поднимает `OutboundMessageNotFoundError`.                                                         |
-| `ListOutboundMessagesUseCase`          | `ListOutboundMessagesQuery`            | `list[OutboundMessageDTO]`        | Возвращает outbound messages с `limit`/`offset`.                                                                                  |
-| `ProcessOutboundMessageUseCase`        | `ProcessQueuedMessagesCommand`         | `ProcessQueuedResultDTO`          | Batch-claim queued messages и отправляет каждое через provider sender.                                                            |
-| `ProcessOutboundMessageByIdUseCase`    | `ProcessOutboundMessageByIdCommand`    | `ProcessOutboundMessageResultDTO` | Обрабатывает один outbound id с processing lease token и короткими transaction scopes.                                            |
-| `PublishQueuedOutboundMessagesUseCase` | `PublishQueuedOutboundMessagesCommand` | `PublishQueuedResultDTO`          | Публикует publishable queued outbounds в RabbitMQ и помечает `queue_published_at`.                                                |
-| `RecoverStuckOutboundMessagesUseCase`  | `RecoverStuckOutboundMessagesCommand`  | `RecoverStuckResultDTO`           | Помечает истекшие `SENDING` messages как `UNKNOWN` через queue repository.                                                        |
-| `HandleProviderWebhookUseCase`         | `HandleProviderWebhookCommand`         | `WebhookResultDTO`                | Ищет active connector, извлекает webhook fields JSONPath-ами, матчится по external id и обновляет outbound status.                |
+| Use Case                               | Input                                  | Output                            | Description                                                                                                                                                     |
+|----------------------------------------|----------------------------------------|-----------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `RegisterProviderConnectorUseCase`     | `RegisterProviderConnectorCommand`     | `ProviderConnectorDTO`            | Парсит YAML через `ProviderYamlLoader`, считает checksum и регистрирует connector/message types через `ProviderConnectorService`.                               |
+| `ListProviderConnectorsUseCase`        | `EntityIdVO` tenant id                 | `ProviderConnectorCatalogDTO`     | Возвращает connectors и message types из query repository.                                                                                                      |
+| `CreateProviderConnectionUseCase`      | `CreateProviderConnectionCommand`      | `ProviderConnectionDTO`           | Кодирует secrets через `SecretCodec`, валидирует config/secrets по connector schemas и сохраняет connection.                                                    |
+| `ListProviderConnectionsUseCase`       | `EntityIdVO` tenant id                 | `list[ProviderConnectionDTO]`     | Возвращает provider connections без раскрытия secrets.                                                                                                          |
+| `CreateMessageTemplateUseCase`         | `CreateMessageTemplateCommand`         | `MessageTemplateDTO`              | Создает DRAFT template, проверяет connector/message type binding и channel match.                                                                               |
+| `CreateTemplateVersionUseCase`         | `CreateTemplateVersionCommand`         | `TemplateVersionDTO`              | Создает DRAFT version, валидирует `template_payload` и `variables_schema`.                                                                                      |
+| `ActivateTemplateVersionUseCase`       | `ActivateTemplateVersionCommand`       | `TemplateVersionDTO`              | Активирует выбранную версию, переводит прежние active versions в `DEPRECATED`, template - в `ACTIVE`.                                                           |
+| `ListMessageTemplatesUseCase`          | `EntityIdVO` tenant id                 | `list[MessageTemplateDTO]`        | Возвращает templates с metadata активной версии.                                                                                                                |
+| `SendCommunicationUseCase`             | `SendCommunicationCommand`             | `SendCommunicationResultDTO`      | Проверяет idempotency, template/channel/active version/variables/active connection и создает queued request/outbound для уже подготовленного recipient address. |
+| `GetOutboundMessageUseCase`            | `GetOutboundMessageQuery`              | `OutboundMessageDTO`              | Возвращает outbound message или поднимает `OutboundMessageNotFoundError`.                                                                                       |
+| `ListOutboundMessagesUseCase`          | `ListOutboundMessagesQuery`            | `list[OutboundMessageDTO]`        | Возвращает outbound messages с `limit`/`offset`.                                                                                                                |
+| `ProcessOutboundMessageUseCase`        | `ProcessQueuedMessagesCommand`         | `ProcessQueuedResultDTO`          | Batch-claim queued messages и отправляет каждое через provider sender.                                                                                          |
+| `ProcessOutboundMessageByIdUseCase`    | `ProcessOutboundMessageByIdCommand`    | `ProcessOutboundMessageResultDTO` | Обрабатывает один outbound id с processing lease token и короткими transaction scopes.                                                                          |
+| `PublishQueuedOutboundMessagesUseCase` | `PublishQueuedOutboundMessagesCommand` | `PublishQueuedResultDTO`          | Публикует publishable queued outbounds в RabbitMQ и помечает `queue_published_at`.                                                                              |
+| `RecoverStuckOutboundMessagesUseCase`  | `RecoverStuckOutboundMessagesCommand`  | `RecoverStuckResultDTO`           | Помечает истекшие `SENDING` messages как `UNKNOWN` через queue repository.                                                                                      |
+| `HandleProviderWebhookUseCase`         | `HandleProviderWebhookCommand`         | `WebhookResultDTO`                | Ищет active connector, извлекает webhook fields JSONPath-ами, матчится по external id и обновляет outbound status.                                              |
 
 ## Domain Model
 

@@ -32,6 +32,9 @@ from src.modules.contact_point.application.query import (
     ListOwnerContactPointsQuery,
     OwnerContactPointQueryRepositoryProtocol,
 )
+from src.modules.contact_point.application.selection import (
+    ContactPointSelectionRepositoryProtocol,
+)
 from src.modules.contact_point.infrastructure.row_mapper import (
     as_uuid,
     contact_point_binding_entity,
@@ -64,6 +67,7 @@ class ContactPointRuntimeRepository(
     ContactPointRepositoryProtocol,
     ContactPointBindingRepositoryProtocol,
     OwnerContactPointQueryRepositoryProtocol,
+    ContactPointSelectionRepositoryProtocol,
 ):
     def __init__(
         self,
@@ -336,63 +340,133 @@ class ContactPointRuntimeRepository(
             limit=query.limit,
             offset=query.offset,
         )
-        if not binding_rows:
-            return OwnerContactPointListDTO(
-                items=(),
-                count=0,
-                limit=query.limit,
-                offset=query.offset,
-            )
-
-        bindings = tuple(contact_point_binding_entity(row) for row in binding_rows)
-        contact_point_ids = tuple(
-            dict.fromkeys(binding.contact_point_id.uuid for binding in bindings)
+        items = await self._owner_contact_point_dtos(
+            tenant_id=query.tenant_id,
+            binding_rows=binding_rows,
         )
-        contact_descriptor = await self._resolve_descriptor(
-            query.tenant_id, _CONTACT_POINT
-        )
-        contact_point_rows = await self._list(
-            descriptor=contact_descriptor,
-            filters=(
-                self._filter_builder.condition(
-                    descriptor=contact_descriptor,
-                    field="id",
-                    op="in",
-                    value=list(contact_point_ids),
-                ),
-            ),
-        )
-        contact_points = {
-            as_uuid(row.get("id")): contact_point_entity(row)
-            for row in contact_point_rows
-        }
-
-        items: list[OwnerContactPointDTO] = []
-        for binding in bindings:
-            contact_point = contact_points.get(binding.contact_point_id.uuid)
-            if contact_point is None:
-                raise ContactPointNotFoundError(str(binding.contact_point_id))
-            items.append(
-                OwnerContactPointDTO(
-                    binding_id=binding.id.uuid,
-                    contact_point_id=contact_point.id.uuid,
-                    contact_point_type=contact_point.contact_point_type,
-                    raw_value=contact_point.raw_value,
-                    normalized_value=contact_point.normalized_value,
-                    is_primary=binding.is_primary,
-                    is_active=binding.is_active,
-                    detached_at=binding.detached_at,
-                    created_at=binding.created_at,
-                    updated_at=binding.updated_at,
-                )
-            )
 
         return OwnerContactPointListDTO(
-            items=tuple(items),
+            items=items,
             count=len(items),
             limit=query.limit,
             offset=query.offset,
         )
+
+    async def find_active_primary_owner_contact_point(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        owner: OwnerContactPointBinding,
+        contact_point_type: ContactPointTypeVO,
+    ) -> OwnerContactPointDTO | None:
+        descriptor = await self._resolve_descriptor(tenant_id, _CONTACT_POINT_BINDING)
+        rows = await self._list(
+            descriptor=descriptor,
+            filters=(
+                *self._active_owner_type_filters(
+                    descriptor=descriptor,
+                    owner=owner,
+                    contact_point_type=contact_point_type,
+                ),
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="is_primary",
+                    op="eq",
+                    value=True,
+                ),
+            ),
+            sorting=(SortSpec("created_at"), SortSpec("id")),
+            limit=1,
+        )
+        items = await self._owner_contact_point_dtos(
+            tenant_id=tenant_id,
+            binding_rows=rows,
+        )
+        return None if not items else items[0]
+
+    async def find_last_active_owner_contact_point(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        owner: OwnerContactPointBinding,
+        contact_point_type: ContactPointTypeVO,
+    ) -> OwnerContactPointDTO | None:
+        descriptor = await self._resolve_descriptor(tenant_id, _CONTACT_POINT_BINDING)
+        rows = await self._list(
+            descriptor=descriptor,
+            filters=self._active_owner_type_filters(
+                descriptor=descriptor,
+                owner=owner,
+                contact_point_type=contact_point_type,
+            ),
+            sorting=(SortSpec("created_at", "desc"), SortSpec("id", "desc")),
+            limit=1,
+        )
+        items = await self._owner_contact_point_dtos(
+            tenant_id=tenant_id,
+            binding_rows=rows,
+        )
+        return None if not items else items[0]
+
+    async def list_active_owner_contact_points(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        owner: OwnerContactPointBinding,
+        contact_point_type: ContactPointTypeVO,
+    ) -> tuple[OwnerContactPointDTO, ...]:
+        descriptor = await self._resolve_descriptor(tenant_id, _CONTACT_POINT_BINDING)
+        rows = await self._list(
+            descriptor=descriptor,
+            filters=self._active_owner_type_filters(
+                descriptor=descriptor,
+                owner=owner,
+                contact_point_type=contact_point_type,
+            ),
+            sorting=(
+                SortSpec("is_primary", "desc"),
+                SortSpec("created_at", "desc"),
+                SortSpec("id", "desc"),
+            ),
+        )
+        return await self._owner_contact_point_dtos(
+            tenant_id=tenant_id,
+            binding_rows=rows,
+        )
+
+    async def find_active_owner_contact_point(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        owner: OwnerContactPointBinding,
+        contact_point_id: ContactPointIdVO,
+    ) -> OwnerContactPointDTO | None:
+        descriptor = await self._resolve_descriptor(tenant_id, _CONTACT_POINT_BINDING)
+        rows = await self._list(
+            descriptor=descriptor,
+            filters=(
+                *self._owner_filters(descriptor, owner),
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="contact_point_id",
+                    op="eq",
+                    value=contact_point_id.uuid,
+                ),
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="is_active",
+                    op="eq",
+                    value=True,
+                ),
+            ),
+            sorting=(SortSpec("created_at", "desc"), SortSpec("id", "desc")),
+            limit=1,
+        )
+        items = await self._owner_contact_point_dtos(
+            tenant_id=tenant_id,
+            binding_rows=rows,
+        )
+        return None if not items else items[0]
 
     async def get_contact_point(
         self,
@@ -625,6 +699,58 @@ class ContactPointRuntimeRepository(
             created_at=binding.created_at,
             updated_at=binding.updated_at,
         )
+
+    async def _owner_contact_point_dtos(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        binding_rows: Sequence[Mapping[str, Any]],
+    ) -> tuple[OwnerContactPointDTO, ...]:
+        if not binding_rows:
+            return ()
+
+        bindings = tuple(contact_point_binding_entity(row) for row in binding_rows)
+        contact_point_ids = tuple(
+            dict.fromkeys(binding.contact_point_id.uuid for binding in bindings)
+        )
+        contact_descriptor = await self._resolve_descriptor(tenant_id, _CONTACT_POINT)
+        contact_point_rows = await self._list(
+            descriptor=contact_descriptor,
+            filters=(
+                self._filter_builder.condition(
+                    descriptor=contact_descriptor,
+                    field="id",
+                    op="in",
+                    value=list(contact_point_ids),
+                ),
+            ),
+        )
+        contact_points = {
+            as_uuid(row.get("id")): contact_point_entity(row)
+            for row in contact_point_rows
+        }
+
+        items: list[OwnerContactPointDTO] = []
+        for binding in bindings:
+            contact_point = contact_points.get(binding.contact_point_id.uuid)
+            if contact_point is None:
+                raise ContactPointNotFoundError(str(binding.contact_point_id))
+            items.append(
+                OwnerContactPointDTO(
+                    binding_id=binding.id.uuid,
+                    contact_point_id=contact_point.id.uuid,
+                    contact_point_type=contact_point.contact_point_type,
+                    raw_value=contact_point.raw_value,
+                    normalized_value=contact_point.normalized_value,
+                    is_primary=binding.is_primary,
+                    is_active=binding.is_active,
+                    detached_at=binding.detached_at,
+                    created_at=binding.created_at,
+                    updated_at=binding.updated_at,
+                )
+            )
+
+        return tuple(items)
 
     async def _list(
         self,

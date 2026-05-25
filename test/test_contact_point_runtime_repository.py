@@ -149,6 +149,51 @@ def _repository(query: _QueryGatewayStub, command: _CommandGatewayStub):
     )
 
 
+def _contact_point_row(
+    *,
+    contact_point_id,
+    contact_point_type: str = "EMAIL",
+    raw_value: str = "User@Example.COM",
+    normalized_value: str = "user@example.com",
+    now: datetime | None = None,
+):
+    now = now or datetime(2026, 5, 21, 10, 0, tzinfo=UTC)
+    return {
+        "id": contact_point_id,
+        "created_at": now,
+        "updated_at": now,
+        "contact_point_type": contact_point_type,
+        "raw_value": raw_value,
+        "normalized_value": normalized_value,
+        "normalized_hash": "abc123",
+    }
+
+
+def _binding_row(
+    *,
+    binding_id,
+    contact_point_id,
+    owner: OwnerContactPointBinding,
+    contact_point_type: str = "EMAIL",
+    is_primary: bool = False,
+    is_active: bool = True,
+    now: datetime | None = None,
+):
+    now = now or datetime(2026, 5, 21, 10, 0, tzinfo=UTC)
+    return {
+        "id": binding_id,
+        "created_at": now,
+        "updated_at": now,
+        "contact_point_id": contact_point_id,
+        "contact_point_type": contact_point_type,
+        "owner_object_id": owner.owner_object_id.uuid,
+        "owner_record_id": owner.owner_record_id.uuid,
+        "is_primary": is_primary,
+        "is_active": is_active,
+        "detached_at": None,
+    }
+
+
 class ContactPointRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
     async def test_lookup_uses_normalized_hash_and_maps_to_hash_value(self) -> None:
         tenant_id = EntityIdVO.from_value(uuid4())
@@ -635,6 +680,151 @@ class ContactPointRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(call["page"].limit, 20)
         self.assertEqual(call["page"].offset, 3)
+
+    async def test_selection_primary_filters_owner_type_active_and_primary(
+        self,
+    ) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        owner = OwnerContactPointBinding(
+            owner_object_id=EntityIdVO.from_value(uuid4()),
+            owner_record_id=EntityIdVO.from_value(uuid4()),
+        )
+        contact_point_id = uuid4()
+        binding_id = uuid4()
+        query = _QueryGatewayStub()
+        query.rows[_CONTACT_POINT_BINDING] = [
+            _binding_row(
+                binding_id=binding_id,
+                contact_point_id=contact_point_id,
+                owner=owner,
+                is_primary=True,
+            )
+        ]
+        query.rows[_CONTACT_POINT] = [
+            _contact_point_row(contact_point_id=contact_point_id)
+        ]
+        repository = _repository(query, _CommandGatewayStub())
+
+        result = await repository.find_active_primary_owner_contact_point(
+            tenant_id=tenant_id,
+            owner=owner,
+            contact_point_type=ContactPointTypeVO.EMAIL,
+        )
+
+        assert result is not None
+        self.assertEqual(result.binding_id, binding_id)
+        self.assertEqual(result.contact_point_id, contact_point_id)
+        binding_call = query.list_calls[0]
+        self.assertEqual(
+            [item.field.name for item in binding_call["filters"]],
+            [
+                "owner_object_id",
+                "owner_record_id",
+                "contact_point_type",
+                "is_active",
+                "is_primary",
+            ],
+        )
+        self.assertEqual(
+            [(item.field, item.direction) for item in binding_call["sorting"]],
+            [("created_at", "asc"), ("id", "asc")],
+        )
+        self.assertEqual(binding_call["page"].limit, 1)
+
+    async def test_selection_last_active_and_all_active_use_deterministic_sorting(
+        self,
+    ) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        owner = OwnerContactPointBinding(
+            owner_object_id=EntityIdVO.from_value(uuid4()),
+            owner_record_id=EntityIdVO.from_value(uuid4()),
+        )
+        contact_point_id = uuid4()
+        query = _QueryGatewayStub()
+        query.rows[_CONTACT_POINT_BINDING] = [
+            _binding_row(
+                binding_id=uuid4(),
+                contact_point_id=contact_point_id,
+                owner=owner,
+            )
+        ]
+        query.rows[_CONTACT_POINT] = [
+            _contact_point_row(contact_point_id=contact_point_id)
+        ]
+        repository = _repository(query, _CommandGatewayStub())
+
+        await repository.find_last_active_owner_contact_point(
+            tenant_id=tenant_id,
+            owner=owner,
+            contact_point_type=ContactPointTypeVO.EMAIL,
+        )
+        await repository.list_active_owner_contact_points(
+            tenant_id=tenant_id,
+            owner=owner,
+            contact_point_type=ContactPointTypeVO.EMAIL,
+        )
+
+        last_call = query.list_calls[0]
+        self.assertEqual(
+            [(item.field, item.direction) for item in last_call["sorting"]],
+            [("created_at", "desc"), ("id", "desc")],
+        )
+        self.assertEqual(last_call["page"].limit, 1)
+
+        all_call = query.list_calls[2]
+        self.assertEqual(
+            [(item.field, item.direction) for item in all_call["sorting"]],
+            [
+                ("is_primary", "desc"),
+                ("created_at", "desc"),
+                ("id", "desc"),
+            ],
+        )
+        self.assertIsNone(all_call["page"])
+
+    async def test_selection_explicit_filters_owner_contact_point_and_active(
+        self,
+    ) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        owner = OwnerContactPointBinding(
+            owner_object_id=EntityIdVO.from_value(uuid4()),
+            owner_record_id=EntityIdVO.from_value(uuid4()),
+        )
+        contact_point_id = ContactPointIdVO.from_value(uuid4())
+        query = _QueryGatewayStub()
+        query.rows[_CONTACT_POINT_BINDING] = [
+            _binding_row(
+                binding_id=uuid4(),
+                contact_point_id=contact_point_id.uuid,
+                owner=owner,
+            )
+        ]
+        query.rows[_CONTACT_POINT] = [
+            _contact_point_row(contact_point_id=contact_point_id.uuid)
+        ]
+        repository = _repository(query, _CommandGatewayStub())
+
+        result = await repository.find_active_owner_contact_point(
+            tenant_id=tenant_id,
+            owner=owner,
+            contact_point_id=contact_point_id,
+        )
+
+        assert result is not None
+        call = query.list_calls[0]
+        self.assertEqual(
+            [item.field.name for item in call["filters"]],
+            ["owner_object_id", "owner_record_id", "contact_point_id", "is_active"],
+        )
+        self.assertEqual(
+            [item.value for item in call["filters"]],
+            [
+                owner.owner_object_id.uuid,
+                owner.owner_record_id.uuid,
+                contact_point_id.uuid,
+                True,
+            ],
+        )
 
     async def test_list_owner_contact_points_raises_for_missing_contact_point(
         self,

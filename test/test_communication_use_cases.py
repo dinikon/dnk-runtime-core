@@ -32,6 +32,10 @@ from src.modules.communication.domain.delivery import (
     DeliveryEventIdVO,
     DeliveryService,
 )
+from src.modules.communication.domain.message_template import (
+    MessageTemplateIdVO,
+    TemplateVersionIdVO,
+)
 from src.modules.communication.domain.outbound_message import (
     CommunicationRequestIdVO,
     OutboundMessageService,
@@ -39,7 +43,10 @@ from src.modules.communication.domain.outbound_message import (
     OutboundMessageStatus,
 )
 from src.modules.communication.domain.provider_connection import ProviderConnectionIdVO
-from src.modules.communication.domain.provider_connector import ProviderConnectorCodeVO
+from src.modules.communication.domain.provider_connector import (
+    ProviderConnectorCodeVO,
+    ProviderConnectorIdVO,
+)
 from src.modules.communication.infrastructure.provider_senders import (
     ProviderSenderRegistry,
     YamlHttpProviderSender,
@@ -454,6 +461,51 @@ class _IdempotencyRepositoryStub:
         raise AssertionError("idempotent send must not create a new request")
 
 
+class _SendRepositoryStub:
+    def __init__(self, *, channel_code: str = "SMS") -> None:
+        self.template = SimpleNamespace(
+            template_id=MessageTemplateIdVO.from_value(uuid4()),
+            channel_code=SimpleNamespace(value=channel_code),
+            provider_connector_id=ProviderConnectorIdVO.from_value(uuid4()),
+        )
+        self.version = SimpleNamespace(
+            template_version_id=TemplateVersionIdVO.from_value(uuid4()),
+            variables_schema={},
+        )
+        self.connection = SimpleNamespace(
+            provider_connection_id=ProviderConnectionIdVO.from_value(uuid4()),
+        )
+        self.created_kwargs = None
+
+    async def get_existing_send_by_idempotency(self, **_kwargs):
+        return None
+
+    async def get_template(self, **_kwargs):
+        return self.template
+
+    async def get_template_by_code(self, **_kwargs):
+        return self.template
+
+    async def get_active_template_version(self, *_args, **_kwargs):
+        return self.version
+
+    async def find_active_connection(self, **_kwargs):
+        return self.connection
+
+    async def create_send_request(self, **kwargs):
+        self.created_kwargs = kwargs
+        return (
+            SimpleNamespace(
+                communication_request_id=kwargs["communication_request_id"],
+                status="QUEUED",
+            ),
+            SimpleNamespace(
+                outbound_message_id=kwargs["outbound_message_id"],
+                internal_status="QUEUED",
+            ),
+        )
+
+
 class _WebhookRepositoryStub:
     def __init__(self, *, matched: bool) -> None:
         self.connector = SimpleNamespace(
@@ -844,6 +896,39 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             result.outbound_message_id,
             repository.outbound.outbound_message_id.uuid,
+        )
+
+    async def test_send_communication_uses_prepared_recipient_address(self) -> None:
+        repository = _SendRepositoryStub()
+        use_case = SendCommunicationUseCase(
+            repository=repository,
+            service=OutboundMessageService(repository=repository, clock=_ClockStub()),
+            template_lookup=repository,
+            schema_validator=SimpleNamespace(validate=lambda *_args: None),
+            provider_connection_lookup=repository,
+        )
+
+        result = await use_case(
+            SendCommunicationCommand(
+                tenant_id=uuid4(),
+                initiator_type="CRM",
+                message_class="TRANSACTIONAL",
+                channel_code="SMS",
+                recipient_address="+380671112233",
+                template_code="otp_sms",
+                recipient_snapshot={"manual": True},
+            )
+        )
+
+        self.assertFalse(result.idempotent)
+        assert repository.created_kwargs is not None
+        self.assertEqual(
+            repository.created_kwargs["recipient_address"],
+            "+380671112233",
+        )
+        self.assertEqual(
+            repository.created_kwargs["recipient_snapshot"],
+            {"manual": True},
         )
 
     async def test_webhook_updates_outbound_and_creates_delivery_event(self) -> None:
