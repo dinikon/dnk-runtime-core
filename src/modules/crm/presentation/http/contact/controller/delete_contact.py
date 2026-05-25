@@ -51,6 +51,7 @@ async def delete_contact(
             DeleteContactCommand(
                 tenant_id=EntityIdVO.from_value(principal.tenant_id),
                 contact_id=ContactIdVO.from_value(contact_id),
+                actor_id=UUID(principal.user_id),
             )
         )
     except ContactNotFoundError as exc:

@@ -45,6 +45,8 @@ from src.modules.schema_registry.presentation.depends.application import (
     DescribeRuntimeObjectUseCaseDep,
     RuntimeObjectResolverDep,
 )
+from src.modules.shared.application.events import OutboxRepositoryProtocol
+from src.modules.shared.presentation.events import build_outbox_repository
 from src.modules.shared.presentation.persistence.depends import UoWDep
 
 
@@ -93,6 +95,17 @@ def get_runtime_command_gateway(
 RuntimeCommandGatewayDep = Annotated[
     PostgresRuntimeCommandGateway,
     Depends(get_runtime_command_gateway),
+]
+
+
+def get_outbox_repository(uow: UoWDep) -> OutboxRepositoryProtocol:
+    """Создает shared integration outbox repository в текущей UoW session."""
+    return build_outbox_repository(uow.session)
+
+
+OutboxRepositoryDep = Annotated[
+    OutboxRepositoryProtocol,
+    Depends(get_outbox_repository),
 ]
 
 
@@ -241,6 +254,7 @@ __all__ = [
     "ContactCommandRepositoryDep",
     "ContactFieldsDescriptionRepositoryDep",
     "ContactQueryRepositoryDep",
+    "OutboxRepositoryDep",
     "QueryCapabilityResolverDep",
     "RuntimeCommandGatewayDep",
     "RuntimeFieldTypePolicyDep",
@@ -252,6 +266,7 @@ __all__ = [
     "get_contact_command_repository",
     "get_contact_fields_description_repository",
     "get_contact_query_repository",
+    "get_outbox_repository",
     "get_query_capability_resolver",
     "get_runtime_command_gateway",
     "get_runtime_field_type_policy",

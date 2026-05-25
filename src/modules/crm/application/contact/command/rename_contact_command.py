@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from uuid import UUID
 
 from src.modules.crm.domain.contact.value_object import ContactIdVO
 from src.modules.shared import EntityIdVO
@@ -15,3 +16,4 @@ class RenameContactCommand:
     middle_name: str | None = None
     status: str | None = None
     tags: tuple[str, ...] | None = None
+    actor_id: UUID | None = None

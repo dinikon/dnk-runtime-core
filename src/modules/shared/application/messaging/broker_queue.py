@@ -1,22 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
-
-@dataclass(frozen=True, slots=True)
-class BrokerQueueArguments:
-    dead_letter_exchange: str | None = None
-    dead_letter_routing_key: str | None = None
-    message_ttl_ms: int | None = None
-    max_length: int | None = None
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass(frozen=True, slots=True)
 class BrokerQueue:
     name: str
-    routing_key: str
     durable: bool = True
-    arguments: BrokerQueueArguments | None = None
+    routing_key: str | None = None
+    arguments: Mapping[str, Any] = field(default_factory=dict)
 
 
-__all__ = ["BrokerQueue", "BrokerQueueArguments"]
+__all__ = ["BrokerQueue"]

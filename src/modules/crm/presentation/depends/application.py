@@ -27,6 +27,7 @@ from src.modules.crm.presentation.depends.infrastructure import (
     ContactCommandRepositoryDep,
     ContactFieldsDescriptionRepositoryDep,
     ContactQueryRepositoryDep,
+    OutboxRepositoryDep,
     RuntimeObjectQueryServiceDep,
 )
 from src.modules.shared.presentation import ClockDep
@@ -34,11 +35,13 @@ from src.modules.shared.presentation import ClockDep
 
 def get_create_contact_use_case(
     command_repository: ContactCommandRepositoryDep,
+    outbox_repository: OutboxRepositoryDep,
     clock: ClockDep,
 ) -> CreateContactUseCase:
     """Создает use case создания контакта."""
     return CreateContactUseCase(
         command_repository=command_repository,
+        outbox_repository=outbox_repository,
         clock=clock,
     )
 
@@ -120,11 +123,13 @@ ListCompaniesUseCaseDep = Annotated[
 
 def get_update_contact_use_case(
     command_repository: ContactCommandRepositoryDep,
+    outbox_repository: OutboxRepositoryDep,
     clock: ClockDep,
 ) -> UpdateContactUseCase:
     """Создает use case обновления контакта."""
     return UpdateContactUseCase(
         command_repository=command_repository,
+        outbox_repository=outbox_repository,
         clock=clock,
     )
 
@@ -154,9 +159,15 @@ UpdateCompanyUseCaseDep = Annotated[
 
 def get_delete_contact_use_case(
     command_repository: ContactCommandRepositoryDep,
+    outbox_repository: OutboxRepositoryDep,
+    clock: ClockDep,
 ) -> DeleteContactUseCase:
     """Создает use case удаления контакта."""
-    return DeleteContactUseCase(command_repository)
+    return DeleteContactUseCase(
+        command_repository=command_repository,
+        outbox_repository=outbox_repository,
+        clock=clock,
+    )
 
 
 DeleteContactUseCaseDep = Annotated[

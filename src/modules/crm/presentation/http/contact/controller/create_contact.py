@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 import uuid6
 from fastapi import APIRouter, HTTPException, status
 
@@ -64,6 +66,7 @@ async def create_contact(
         middle_name=payload.middle_name,
         status=payload.status,
         tags=tuple(payload.tags),
+        actor_id=UUID(principal.user_id),
     )
 
     try:
