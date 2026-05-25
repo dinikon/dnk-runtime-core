@@ -23,6 +23,7 @@ from src.config.infrastructure.communication_queue_config import (
 from src.config.infrastructure.email_config import EmailConfig
 from src.config.infrastructure.event_bus_config import EventBusConfig
 from src.config.infrastructure.redis_config import RedisConfig
+from src.config.infrastructure.scheduled_jobs_config import ScheduledJobsConfig
 
 # from .deploy import DeploymentConfig
 # from .enterprise import EnterpriseFeatureConfig
@@ -99,6 +100,7 @@ class DnkConfig(
     EmailConfig,
     CommunicationQueueConfig,
     EventBusConfig,
+    ScheduledJobsConfig,
     # Redis config
     RedisConfig,
     # Auth config
