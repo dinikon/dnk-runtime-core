@@ -12,6 +12,7 @@ class BrokerMessage:
 
     payload: Mapping[str, Any]
     headers: Mapping[str, str] = field(default_factory=dict)
+
     message_id: str | None = None
     correlation_id: str | None = None
     message_type: str | None = None
