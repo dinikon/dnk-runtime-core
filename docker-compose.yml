@@ -1,27 +1,105 @@
+x-backend-common: &backend-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: dnk-runtime-core:local
+  env_file:
+    - .env
+  environment: &backend-environment
+    DB_HOST: postgres
+    DB_PORT: 5432
+    DB_USERNAME: ${DB_USERNAME:-postgres}
+    DB_PASSWORD: ${DB_PASSWORD:-postgres}
+    DB_DATABASE: ${DB_DATABASE:-dniko}
+    REDIS_HOST: redis
+    REDIS_PORT: 6379
+    RABBITMQ__ENABLED: "true"
+    RABBITMQ__URL: amqp://${RABBITMQ_USERNAME:-rabbitmq}:${RABBITMQ_PASSWORD:-rabbitmq}@rabbitmq:5672/
+    RABBITMQ__PREFETCH: ${RABBITMQ__PREFETCH:-20}
+    EVENT_BUS__PUBLISHER_WORKER_ENABLED: "true"
+
 services:
+  api:
+    <<: *backend-common
+    container_name: dnk-api
+    restart: unless-stopped
+    command:
+      - uvicorn
+      - src.app:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/docs', timeout=2).read()\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  events-publisher:
+    <<: *backend-common
+    container_name: dnk-events-publisher
+    restart: unless-stopped
+    command:
+      - dnk-manage
+      - events
+      - publisher-worker
+    depends_on:
+      api:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  communication-worker:
+    <<: *backend-common
+    container_name: dnk-communication-worker
+    restart: unless-stopped
+    profiles:
+      - communication
+    environment:
+      <<: *backend-environment
+      COMMUNICATION_QUEUE__ENABLED: "true"
+    command:
+      - dnk-manage
+      - communication
+      - worker
+    depends_on:
+      api:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
   postgres:
     image: postgres:16-alpine
     container_name: dnk-postgres
     restart: unless-stopped
-
-    # Берет переменные из .env в корне проекта
-    env_file:
-      - .env
-
     environment:
-      # Для Postgres используем отдельную переменную POSTGRES_DB.
-      POSTGRES_DB: ${POSTGRES_DB:-dnk_runtime_core}
+      POSTGRES_DB: ${DB_DATABASE:-dniko}
       POSTGRES_USER: ${DB_USERNAME:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-
     ports:
       - "${DB_PORT:-5432}:5432"
-
     volumes:
       - postgres_data:/var/lib/postgresql/data
-
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres} -d ${POSTGRES_DB:-dnk_runtime_core}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\"",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -30,10 +108,8 @@ services:
     image: redis:7-alpine
     container_name: dnk-redis
     restart: unless-stopped
-
-    env_file:
-      - .env
-
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     command: >
       sh -c '
         if [ -n "$$REDIS_PASSWORD" ]; then
@@ -42,45 +118,33 @@ services:
           redis-server --appendonly yes;
         fi
       '
-
     ports:
       - "${REDIS_PORT:-6379}:6379"
-
     volumes:
       - redis_data:/data
-
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "if [ -n \"$${REDIS_PASSWORD}\" ]; then redis-cli -a \"$${REDIS_PASSWORD}\" ping; else redis-cli ping; fi"
+          "if [ -n \"$${REDIS_PASSWORD}\" ]; then redis-cli -a \"$${REDIS_PASSWORD}\" ping; else redis-cli ping; fi",
         ]
       interval: 10s
       timeout: 5s
       retries: 5
+
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
     container_name: dnk-rabbitmq
     restart: unless-stopped
-
-    env_file:
-      - .env
-
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-rabbitmq}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-rabbitmq}
       RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/}
-
     ports:
-      # AMQP
       - "${RABBITMQ_PORT:-5672}:5672"
-
-      # Management UI
       - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
-
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
-
     healthcheck:
       test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
       interval: 10s

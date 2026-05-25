@@ -25,6 +25,9 @@ class RabbitMQConfigTests(unittest.TestCase):
             "RABBITMQ__PUBLISHER_CONFIRMS": "false",
             "RABBITMQ__PREFETCH": "7",
             "EVENT_BUS__EXCHANGE_NAME": "events.example",
+            "EVENT_BUS__PUBLISHER_WORKER_ENABLED": "true",
+            "EVENT_BUS__PUBLISHER_IDLE_SLEEP_SECONDS": "0.75",
+            "EVENT_BUS__PUBLISHER_ERROR_SLEEP_SECONDS": "3.5",
             "COMMUNICATION_QUEUE__QUEUE_NAME": "communication.example",
         }
 
@@ -36,6 +39,9 @@ class RabbitMQConfigTests(unittest.TestCase):
         self.assertFalse(config.RABBITMQ.publisher_confirms)
         self.assertEqual(config.RABBITMQ.prefetch, 7)
         self.assertEqual(config.EVENT_BUS.exchange_name, "events.example")
+        self.assertTrue(config.EVENT_BUS.publisher_worker_enabled)
+        self.assertEqual(config.EVENT_BUS.publisher_idle_sleep_seconds, 0.75)
+        self.assertEqual(config.EVENT_BUS.publisher_error_sleep_seconds, 3.5)
         self.assertEqual(
             config.COMMUNICATION_QUEUE.queue_name,
             "communication.example",

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, PositiveInt
+from pydantic import BaseModel, Field, PositiveFloat, PositiveInt
 from pydantic_settings import BaseSettings
 
 
@@ -22,6 +22,18 @@ class EventBusSettings(BaseModel):
     max_attempts: PositiveInt = Field(
         default=5,
         description="Maximum publish attempts before outbox event is failed.",
+    )
+    publisher_worker_enabled: bool = Field(
+        default=False,
+        description="Enables the long-running integration outbox publisher worker.",
+    )
+    publisher_idle_sleep_seconds: PositiveFloat = Field(
+        default=0.5,
+        description="Sleep interval when the publisher worker finds no due events.",
+    )
+    publisher_error_sleep_seconds: PositiveFloat = Field(
+        default=5.0,
+        description="Sleep interval after an unexpected publisher worker error.",
     )
 
 

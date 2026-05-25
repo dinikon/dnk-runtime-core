@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import unittest
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 from uuid import uuid4
 
 from src.config.infrastructure.event_bus_config import EventBusSettings
 from src.modules.shared.application.events import (
     HandleIntegrationEventCommand,
     IdempotentEventConsumer,
+    OutboxPublisherWorker,
     PublishOutboxEventsCommand,
+    PublishOutboxResultDTO,
     PublishOutboxEventsUseCase,
 )
 from src.modules.shared.infrastructure.events import RabbitMQIntegrationEventPublisher
@@ -304,6 +307,61 @@ class SharedEventsTests(unittest.IsolatedAsyncioTestCase):
             published["message"].headers["event_id"],
             str(self.event.event_id),
         )
+
+    async def test_outbox_publisher_worker_sleeps_when_no_events(self) -> None:
+        sleeps = []
+
+        async def publish_once() -> PublishOutboxResultDTO:
+            return PublishOutboxResultDTO(scanned=0, published=0, failed=0)
+
+        worker = OutboxPublisherWorker(
+            publish_once=publish_once,
+            idle_sleep_seconds=0.5,
+            error_sleep_seconds=5.0,
+        )
+
+        async def sleep_stub(seconds: float) -> None:
+            sleeps.append(seconds)
+            worker.stop()
+
+        with patch(
+            "src.modules.shared.application.events.outbox_publisher_worker.asyncio.sleep",
+            sleep_stub,
+        ):
+            await worker.run_forever()
+
+        self.assertEqual(sleeps, [0.5])
+
+    async def test_outbox_publisher_worker_sleeps_after_unexpected_error(
+        self,
+    ) -> None:
+        sleeps = []
+
+        async def publish_once() -> PublishOutboxResultDTO:
+            raise RuntimeError("db unavailable")
+
+        worker = OutboxPublisherWorker(
+            publish_once=publish_once,
+            idle_sleep_seconds=0.5,
+            error_sleep_seconds=5.0,
+        )
+
+        async def sleep_stub(seconds: float) -> None:
+            sleeps.append(seconds)
+            worker.stop()
+
+        with (
+            patch(
+                "src.modules.shared.application.events.outbox_publisher_worker.asyncio.sleep",
+                sleep_stub,
+            ),
+            patch(
+                "src.modules.shared.application.events.outbox_publisher_worker.logger.exception"
+            ),
+        ):
+            await worker.run_forever()
+
+        self.assertEqual(sleeps, [5.0])
 
 
 __all__ = ["SharedEventsTests"]

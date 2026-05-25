@@ -15,6 +15,10 @@ from src.modules.shared.application.events.inbox_repository_protocol import (
 from src.modules.shared.application.events.outbox_repository_protocol import (
     OutboxRepositoryProtocol,
 )
+from src.modules.shared.application.events.outbox_publisher_worker import (
+    OutboxPublisherWorker,
+    PublishOnce,
+)
 from src.modules.shared.application.events.publish_outbox_events_command import (
     PublishOutboxEventsCommand,
 )
@@ -31,6 +35,8 @@ __all__ = [
     "InboxRepositoryProtocol",
     "IdempotentEventConsumer",
     "OutboxRepositoryProtocol",
+    "OutboxPublisherWorker",
+    "PublishOnce",
     "PublishOutboxEventsCommand",
     "PublishOutboxEventsUseCase",
     "PublishOutboxResultDTO",
