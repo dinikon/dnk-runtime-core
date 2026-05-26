@@ -17,6 +17,7 @@ x-backend-common: &backend-common
     RABBITMQ__URL: amqp://${RABBITMQ_USERNAME:-rabbitmq}:${RABBITMQ_PASSWORD:-rabbitmq}@rabbitmq:5672/
     RABBITMQ__PREFETCH: ${RABBITMQ__PREFETCH:-20}
     EVENT_BUS__PUBLISHER_WORKER_ENABLED: "true"
+    COMMUNICATION_QUEUE__ENABLED: "true"
 
 services:
   api:
@@ -83,17 +84,12 @@ services:
     <<: *backend-common
     container_name: dnk-communication-worker
     restart: unless-stopped
-    profiles:
-      - communication
-    environment:
-      <<: *backend-environment
-      COMMUNICATION_QUEUE__ENABLED: "true"
     command:
       - dnk-manage
       - communication
       - worker
     depends_on:
-      api:
+      postgres:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy

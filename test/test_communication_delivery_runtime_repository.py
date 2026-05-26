@@ -141,6 +141,44 @@ class CommunicationDeliveryRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCa
         self.assertEqual(command.inserts[0][1]["id"], attempt_id.uuid)
         self.assertEqual(result.delivery_attempt_id, attempt_id)
 
+    async def test_save_delivery_attempt_update_does_not_patch_started_at(
+        self,
+    ) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        attempt_id = DeliveryAttemptIdVO.from_value(uuid4())
+        query = _QueryGatewayStub()
+        command = _CommandGatewayStub()
+        started_at = datetime(2026, 5, 14, 12, 0, tzinfo=UTC)
+        query.by_id_rows[(_ATTEMPT, attempt_id.uuid)] = {"id": attempt_id.uuid}
+        repository = DeliveryRuntimeRepository(
+            runtime_object_resolver=_ResolverStub(),
+            runtime_command_gateway=command,
+            runtime_query_gateway=query,
+        )
+
+        await repository.save_delivery_attempt(
+            tenant_id=tenant_id,
+            attempt=DeliveryAttempt(
+                delivery_attempt_id=attempt_id,
+                outbound_message_id=OutboundMessageIdVO.from_value(uuid4()),
+                provider_connection_id=ProviderConnectionIdVO.from_value(uuid4()),
+                attempt_no=1,
+                status="SUCCESS",
+                request_payload={"body": "hello"},
+                response_payload={"status": "sent"},
+                http_status_code=None,
+                external_message_id="external-1",
+                error_code=None,
+                error_message=None,
+                started_at=started_at,
+                finished_at=datetime(2026, 5, 14, 12, 1, tzinfo=UTC),
+            ),
+        )
+
+        self.assertEqual(command.updates[0][0], _ATTEMPT)
+        self.assertNotIn("started_at", command.updates[0][2])
+        self.assertEqual(command.updates[0][2]["status"], "SUCCESS")
+
     async def test_add_delivery_event_inserts_explicit_id(self) -> None:
         tenant_id = EntityIdVO.from_value(uuid4())
         event_id = DeliveryEventIdVO.from_value(uuid4())

@@ -143,10 +143,13 @@ class DeliveryRuntimeRepository(DeliveryRepositoryProtocol):
                 payload={"id": attempt.delivery_attempt_id.uuid, **payload},
             )
         else:
+            patch = {
+                key: value for key, value in payload.items() if key != "started_at"
+            }
             row = await self._runtime_command_gateway.update(
                 descriptor=descriptor,
                 object_id=attempt.delivery_attempt_id.uuid,
-                patch=payload,
+                patch=patch,
             )
             if row is None:
                 raise DeliveryAttemptNotFoundError("Delivery attempt was not found.")
