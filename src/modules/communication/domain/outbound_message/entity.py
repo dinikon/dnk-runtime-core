@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Self
 
+from src.modules.communication.domain.error import CommunicationValidationError
 from src.modules.communication.domain.message_template.value_object import (
     ChannelCodeVO,
     MessageClassVO,
@@ -21,6 +22,7 @@ from src.modules.communication.domain.outbound_message.value_object import (
     OutboundMessageIdVO,
     OutboundPriorityVO,
     RecipientAddressVO,
+    RecipientIdentifierTypeVO,
 )
 from src.modules.communication.domain.provider_connection.value_object import (
     ProviderConnectionIdVO,
@@ -35,14 +37,14 @@ class CommunicationRequest:
     communication_request_id: CommunicationRequestIdVO
     tenant_id: EntityIdVO
     initiator_type: str
-    initiator_ref_id: str | None
-    correlation_id: EntityIdVO | None
-    idempotency_key: str | None
+    initiator_ref_id: str
+    correlation_id: EntityIdVO
+    idempotency_key: str
     message_class: str
     channel_code: str
     template_id: MessageTemplateIdVO
     template_version_id: TemplateVersionIdVO
-    contact_id: EntityIdVO | None
+    recipient_identifier_type: str
     recipient_address: str
     recipient_snapshot: dict[str, Any]
     variables: dict[str, Any]
@@ -59,14 +61,14 @@ class CommunicationRequest:
         communication_request_id: CommunicationRequestIdVO,
         tenant_id: EntityIdVO,
         initiator_type: str,
-        initiator_ref_id: str | None,
-        correlation_id: EntityIdVO | None,
-        idempotency_key: str | None,
+        initiator_ref_id: str,
+        correlation_id: EntityIdVO,
+        idempotency_key: str,
         message_class: str,
         channel_code: str,
         template_id: MessageTemplateIdVO,
         template_version_id: TemplateVersionIdVO,
-        contact_id: EntityIdVO | None,
+        recipient_identifier_type: str,
         recipient_address: str,
         recipient_snapshot: dict[str, Any],
         variables: dict[str, Any],
@@ -80,18 +82,16 @@ class CommunicationRequest:
             communication_request_id=communication_request_id,
             tenant_id=tenant_id,
             initiator_type=InitiatorTypeVO(initiator_type).value,
-            initiator_ref_id=initiator_ref_id,
+            initiator_ref_id=_required_text(initiator_ref_id),
             correlation_id=correlation_id,
-            idempotency_key=(
-                None
-                if idempotency_key is None
-                else IdempotencyKeyVO(idempotency_key).value
-            ),
+            idempotency_key=IdempotencyKeyVO(idempotency_key).value,
             message_class=MessageClassVO(message_class).value,
             channel_code=ChannelCodeVO(channel_code).value,
             template_id=template_id,
             template_version_id=template_version_id,
-            contact_id=contact_id,
+            recipient_identifier_type=RecipientIdentifierTypeVO(
+                recipient_identifier_type
+            ).value,
             recipient_address=RecipientAddressVO(recipient_address).value,
             recipient_snapshot=dict(recipient_snapshot),
             variables=dict(variables),
@@ -114,8 +114,9 @@ class OutboundMessage:
     channel_code: str
     message_class: str
     priority: int
-    contact_id: EntityIdVO | None
+    recipient_identifier_type: str
     recipient_address: str
+    recipient_snapshot: dict[str, Any]
     rendered_payload: dict[str, Any]
     provider_request_payload: dict[str, Any]
     external_message_id: str | None
@@ -147,8 +148,9 @@ class OutboundMessage:
         channel_code: str,
         message_class: str,
         priority: int,
-        contact_id: EntityIdVO | None,
+        recipient_identifier_type: str,
         recipient_address: str,
+        recipient_snapshot: dict[str, Any],
         now: datetime,
     ) -> Self:
         """Создает queued outbound message с пустыми provider payload snapshots."""
@@ -160,8 +162,11 @@ class OutboundMessage:
             channel_code=ChannelCodeVO(channel_code).value,
             message_class=MessageClassVO(message_class).value,
             priority=OutboundPriorityVO(priority).value,
-            contact_id=contact_id,
+            recipient_identifier_type=RecipientIdentifierTypeVO(
+                recipient_identifier_type
+            ).value,
             recipient_address=RecipientAddressVO(recipient_address).value,
+            recipient_snapshot=dict(recipient_snapshot),
             rendered_payload={},
             provider_request_payload={},
             external_message_id=None,
@@ -194,3 +199,12 @@ __all__ = [
     "CommunicationRequest",
     "OutboundMessage",
 ]
+
+
+def _required_text(value: str) -> str:
+    if not isinstance(value, str):
+        raise CommunicationValidationError("Communication text value must be a string.")
+    normalized = value.strip()
+    if not normalized:
+        raise CommunicationValidationError("Communication text value must not be blank.")
+    return normalized

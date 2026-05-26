@@ -66,28 +66,15 @@ async def send_communication(
                 ),
                 outbound_message_id=OutboundMessageIdVO.from_value(uuid6.uuid7()),
                 initiator_type=payload.initiator_type,
-                message_class=payload.message_class,
-                channel_code=payload.channel_code,
-                recipient_address=payload.recipient_address,
-                template_code=payload.template_code,
-                template_id=(
-                    None
-                    if payload.template_id is None
-                    else MessageTemplateIdVO.from_value(payload.template_id)
-                ),
                 initiator_ref_id=payload.initiator_ref_id,
-                correlation_id=(
-                    None
-                    if payload.correlation_id is None
-                    else EntityIdVO.from_value(payload.correlation_id)
-                ),
+                correlation_id=EntityIdVO.from_value(payload.correlation_id),
                 idempotency_key=payload.idempotency_key,
-                contact_id=(
-                    None
-                    if payload.contact_id is None
-                    else EntityIdVO.from_value(payload.contact_id)
-                ),
+                channel_code=payload.channel_code,
+                template_id=MessageTemplateIdVO.from_value(payload.template_id),
+                recipient_identifier_type=payload.recipient_identifier_type,
+                recipient_address=payload.recipient_address,
                 recipient_snapshot=payload.recipient_snapshot,
+                message_class=payload.message_class,
                 variables=payload.variables,
                 scheduled_at=payload.scheduled_at,
                 priority=payload.priority,

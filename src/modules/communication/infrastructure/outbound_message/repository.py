@@ -15,9 +15,11 @@ from src.modules.communication.domain.message_template import (
 from src.modules.communication.domain.outbound_message import (
     CommunicationRequest,
     CommunicationRequestIdVO,
+    IdempotencyKeyVO,
     OutboundMessage,
     OutboundMessageIdVO,
     OutboundMessageStatus,
+    RecipientIdentifierTypeVO,
     RequestStatus,
 )
 from src.modules.communication.domain.provider_connection import (
@@ -97,6 +99,7 @@ class OutboundMessageRuntimeRepository:
     ) -> tuple[CommunicationRequest, OutboundMessage] | None:
         """Возвращает существующий send request по idempotency key."""
         tenant_vo = _entity_id(tenant_id)
+        idempotency_vo = IdempotencyKeyVO(idempotency_key)
         request_descriptor = await self._resolve_descriptor(tenant_vo, _REQUEST)
         requests = await self._list(
             descriptor=request_descriptor,
@@ -105,7 +108,7 @@ class OutboundMessageRuntimeRepository:
                     descriptor=request_descriptor,
                     field="idempotency_key",
                     op="eq",
-                    value=idempotency_key,
+                    value=idempotency_vo.value,
                 ),
             ),
             limit=1,
@@ -256,14 +259,14 @@ class OutboundMessageRuntimeRepository:
         communication_request_id: CommunicationRequestIdVO,
         outbound_message_id: OutboundMessageIdVO,
         initiator_type: str,
-        initiator_ref_id: str | None,
-        correlation_id: EntityIdVO | None,
-        idempotency_key: str | None,
+        initiator_ref_id: str,
+        correlation_id: EntityIdVO,
+        idempotency_key: str,
         message_class: str,
         channel_code: str,
         template_id: MessageTemplateIdVO,
         template_version_id,
-        contact_id: EntityIdVO | None,
+        recipient_identifier_type: str,
         recipient_address: str,
         recipient_snapshot: dict[str, Any],
         variables: dict[str, Any],
@@ -276,6 +279,8 @@ class OutboundMessageRuntimeRepository:
         tenant_vo = _entity_id(tenant_id)
         request_vo = _communication_request_id(communication_request_id)
         outbound_vo = _outbound_message_id(outbound_message_id)
+        idempotency_vo = IdempotencyKeyVO(idempotency_key)
+        recipient_type_vo = RecipientIdentifierTypeVO(recipient_identifier_type)
         request = await self._insert(
             tenant_id=tenant_vo,
             object_name=_REQUEST,
@@ -283,17 +288,13 @@ class OutboundMessageRuntimeRepository:
                 "id": request_vo.uuid,
                 "initiator_type": initiator_type,
                 "initiator_ref_id": initiator_ref_id,
-                "correlation_id": (
-                    None if correlation_id is None else _entity_id(correlation_id).uuid
-                ),
-                "idempotency_key": idempotency_key,
+                "correlation_id": _entity_id(correlation_id).uuid,
+                "idempotency_key": idempotency_vo.value,
                 "message_class": message_class,
                 "channel_code": channel_code,
                 "template_id": _message_template_id(template_id).uuid,
                 "template_version_id": _id_uuid(template_version_id),
-                "contact_id": (
-                    None if contact_id is None else _entity_id(contact_id).uuid
-                ),
+                "recipient_identifier_type": recipient_type_vo.value,
                 "recipient_address": recipient_address,
                 "recipient_snapshot": dict(recipient_snapshot),
                 "variables": dict(variables),
@@ -314,10 +315,9 @@ class OutboundMessageRuntimeRepository:
                 "channel_code": channel_code,
                 "message_class": message_class,
                 "priority": priority,
-                "contact_id": (
-                    None if contact_id is None else _entity_id(contact_id).uuid
-                ),
+                "recipient_identifier_type": recipient_type_vo.value,
                 "recipient_address": recipient_address,
+                "recipient_snapshot": dict(recipient_snapshot),
                 "rendered_payload": {},
                 "provider_request_payload": {},
                 "internal_status": OutboundMessageStatus.QUEUED.value,

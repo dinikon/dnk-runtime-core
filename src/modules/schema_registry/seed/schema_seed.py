@@ -346,7 +346,12 @@ COMMUNICATION_OBJECTS = (
                 "Template Version ID",
                 is_nullable=False,
             ),
-            FieldSeed("contact_id", "uuid", "Contact ID", is_nullable=True),
+            FieldSeed(
+                "recipient_identifier_type",
+                "text",
+                "Recipient Identifier Type",
+                is_nullable=True,
+            ),
             FieldSeed(
                 "recipient_address", "text", "Recipient Address", is_nullable=False
             ),
@@ -423,9 +428,21 @@ COMMUNICATION_OBJECTS = (
             FieldSeed("channel_code", "text", "Channel Code", is_nullable=False),
             FieldSeed("message_class", "text", "Message Class", is_nullable=False),
             FieldSeed("priority", "int", "Priority", is_nullable=False, default="100"),
-            FieldSeed("contact_id", "uuid", "Contact ID", is_nullable=True),
+            FieldSeed(
+                "recipient_identifier_type",
+                "text",
+                "Recipient Identifier Type",
+                is_nullable=True,
+            ),
             FieldSeed(
                 "recipient_address", "text", "Recipient Address", is_nullable=False
+            ),
+            FieldSeed(
+                "recipient_snapshot",
+                "json",
+                "Recipient Snapshot",
+                is_nullable=False,
+                default="'{}'",
             ),
             FieldSeed(
                 "rendered_payload",

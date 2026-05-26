@@ -18,11 +18,13 @@ from src.modules.communication.domain.outbound_message import (
     InvalidInitiatorTypeError,
     InvalidOutboundPriorityError,
     InvalidRecipientAddressError,
+    InvalidRecipientIdentifierTypeError,
     OutboundMessage,
     OutboundMessageIdVO,
     OutboundMessageService,
     OutboundPriorityVO,
     RecipientAddressVO,
+    RecipientIdentifierTypeVO,
 )
 from src.modules.communication.domain.provider_connection import (
     ProviderConnectionIdVO,
@@ -56,7 +58,7 @@ class _OutboundRepositoryStub:
                 channel_code=kwargs["channel_code"],
                 template_id=kwargs["template_id"],
                 template_version_id=kwargs["template_version_id"],
-                contact_id=kwargs["contact_id"],
+                recipient_identifier_type=kwargs["recipient_identifier_type"],
                 recipient_address=kwargs["recipient_address"],
                 recipient_snapshot=kwargs["recipient_snapshot"],
                 variables=kwargs["variables"],
@@ -72,8 +74,9 @@ class _OutboundRepositoryStub:
                 channel_code=kwargs["channel_code"],
                 message_class=kwargs["message_class"],
                 priority=kwargs["priority"],
-                contact_id=kwargs["contact_id"],
+                recipient_identifier_type=kwargs["recipient_identifier_type"],
                 recipient_address=kwargs["recipient_address"],
+                recipient_snapshot=kwargs["recipient_snapshot"],
                 now=kwargs["now"],
             ),
         )
@@ -82,6 +85,7 @@ class _OutboundRepositoryStub:
 class OutboundMessageDomainTests(unittest.IsolatedAsyncioTestCase):
     def test_value_objects_normalize_and_reject_invalid_values(self) -> None:
         self.assertEqual(InitiatorTypeVO(" CRM ").value, "CRM")
+        self.assertEqual(RecipientIdentifierTypeVO(" phone ").value, "PHONE")
         self.assertEqual(RecipientAddressVO(" 380671112233 ").value, "380671112233")
         self.assertEqual(IdempotencyKeyVO(" idem-1 ").value, "idem-1")
         self.assertEqual(OutboundPriorityVO(0).value, 0)
@@ -90,6 +94,8 @@ class OutboundMessageDomainTests(unittest.IsolatedAsyncioTestCase):
             InitiatorTypeVO(" ")
         with self.assertRaises(InvalidRecipientAddressError):
             RecipientAddressVO("")
+        with self.assertRaises(InvalidRecipientIdentifierTypeError):
+            RecipientIdentifierTypeVO("")
         with self.assertRaises(InvalidIdempotencyKeyError):
             IdempotencyKeyVO("")
         with self.assertRaises(InvalidOutboundPriorityError):
@@ -104,21 +110,23 @@ class OutboundMessageDomainTests(unittest.IsolatedAsyncioTestCase):
         version_id = TemplateVersionIdVO.from_value(uuid4())
         connection_id = ProviderConnectionIdVO.from_value(uuid4())
         variables = {"amount": 15000}
+        correlation_id = EntityIdVO.from_value(uuid4())
+        recipient_snapshot = {"source_kind": "RAW_VALUE"}
 
         request = CommunicationRequest.create(
             communication_request_id=request_id,
             tenant_id=tenant_id,
             initiator_type=" CRM ",
             initiator_ref_id="deal:1",
-            correlation_id=None,
+            correlation_id=correlation_id,
             idempotency_key=" idem-1 ",
             message_class="TRANSACTIONAL",
             channel_code="SMS",
             template_id=template_id,
             template_version_id=version_id,
-            contact_id=None,
+            recipient_identifier_type=" phone ",
             recipient_address=" 380671112233 ",
-            recipient_snapshot={},
+            recipient_snapshot=recipient_snapshot,
             variables=variables,
             scheduled_at=None,
             priority=10,
@@ -132,16 +140,21 @@ class OutboundMessageDomainTests(unittest.IsolatedAsyncioTestCase):
             channel_code="SMS",
             message_class="TRANSACTIONAL",
             priority=10,
-            contact_id=None,
+            recipient_identifier_type=" phone ",
             recipient_address=" 380671112233 ",
+            recipient_snapshot=recipient_snapshot,
             now=now,
         )
         variables["amount"] = 1
 
         self.assertEqual(request.initiator_type, "CRM")
+        self.assertEqual(request.recipient_identifier_type, "PHONE")
         self.assertEqual(request.idempotency_key, "idem-1")
         self.assertEqual(request.variables, {"amount": 15000})
+        self.assertEqual(request.recipient_snapshot, {"source_kind": "RAW_VALUE"})
         self.assertEqual(request.created_at, now)
+        self.assertEqual(outbound.recipient_identifier_type, "PHONE")
+        self.assertEqual(outbound.recipient_snapshot, {"source_kind": "RAW_VALUE"})
         self.assertEqual(outbound.internal_status, "QUEUED")
         self.assertEqual(outbound.queued_at, now)
 
@@ -154,14 +167,14 @@ class OutboundMessageDomainTests(unittest.IsolatedAsyncioTestCase):
             communication_request_id=CommunicationRequestIdVO.from_value(uuid4()),
             outbound_message_id=OutboundMessageIdVO.from_value(uuid4()),
             initiator_type=" CRM ",
-            initiator_ref_id=None,
-            correlation_id=None,
+            initiator_ref_id="send:1",
+            correlation_id=EntityIdVO.from_value(uuid4()),
             idempotency_key=" idem-1 ",
             message_class="TRANSACTIONAL",
             channel_code="SMS",
             template_id=MessageTemplateIdVO.from_value(uuid4()),
             template_version_id=TemplateVersionIdVO.from_value(uuid4()),
-            contact_id=None,
+            recipient_identifier_type=" phone ",
             recipient_address=" 380671112233 ",
             recipient_snapshot={},
             variables={"amount": 15000},
@@ -173,6 +186,7 @@ class OutboundMessageDomainTests(unittest.IsolatedAsyncioTestCase):
         assert repository.kwargs is not None
         self.assertEqual(repository.kwargs["initiator_type"], "CRM")
         self.assertEqual(repository.kwargs["recipient_address"], "380671112233")
+        self.assertEqual(repository.kwargs["recipient_identifier_type"], "PHONE")
         self.assertEqual(request.idempotency_key, "idem-1")
         self.assertEqual(outbound.priority, 10)
 

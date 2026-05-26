@@ -20,6 +20,7 @@ class ProviderSendContext:
     outbound_message_id: UUID
     communication_request_id: UUID
     initiator_ref_id: str | None
+    recipient_identifier_type: str
     recipient_address: str
     recipient_snapshot: dict[str, Any]
     variables: dict[str, Any]

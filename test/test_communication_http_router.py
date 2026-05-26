@@ -7,6 +7,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from src.modules.communication.application.outbound_message.dto import (
     SendCommunicationResultDTO,
@@ -34,6 +35,9 @@ from src.modules.communication.presentation.http.outbound_message.controller.lis
 )
 from src.modules.communication.presentation.http.outbound_message.controller.send_communication import (
     _publish_send_job_after_commit,
+)
+from src.modules.communication.presentation.http.outbound_message.requests import (
+    SendCommunicationRequestSchema,
 )
 from src.modules.communication.presentation.http.provider_connection.controller.create_provider_connection import (
     create_provider_connection,
@@ -88,6 +92,41 @@ class CommunicationHttpRouterTests(unittest.TestCase):
             ("POST", "/communication/webhooks/{tenant_id}/{provider_code}"),
             routes,
         )
+
+    def test_send_request_requires_generic_resolved_recipient_fields(self) -> None:
+        template_id = uuid4()
+        correlation_id = uuid4()
+
+        payload = SendCommunicationRequestSchema(
+            initiator_type="CRM",
+            initiator_ref_id="manual:1",
+            correlation_id=correlation_id,
+            idempotency_key="idem-1",
+            channel_code="SMS",
+            template_id=template_id,
+            recipient_identifier_type="PHONE",
+            recipient_address="+380501111111",
+            recipient_snapshot={"source_kind": "RAW_VALUE"},
+        )
+
+        self.assertEqual(payload.template_id, template_id)
+        self.assertEqual(payload.correlation_id, correlation_id)
+        self.assertEqual(payload.recipient_identifier_type, "PHONE")
+
+    def test_send_request_rejects_source_specific_contact_id(self) -> None:
+        with self.assertRaises(ValidationError):
+            SendCommunicationRequestSchema(
+                initiator_type="CRM",
+                initiator_ref_id="manual:1",
+                correlation_id=uuid4(),
+                idempotency_key="idem-1",
+                channel_code="SMS",
+                template_id=uuid4(),
+                recipient_identifier_type="PHONE",
+                recipient_address="+380501111111",
+                recipient_snapshot={"source_kind": "RAW_VALUE"},
+                contact_id=uuid4(),
+            )
 
 
 class _PublisherStub:

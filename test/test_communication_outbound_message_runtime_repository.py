@@ -68,6 +68,8 @@ def _descriptor(object_name: str) -> RuntimeObjectDescriptor:
             _field("status"),
             _field("provider_connector_id", "uuid"),
             _field("channel_code"),
+            _field("recipient_identifier_type"),
+            _field("recipient_snapshot", "json"),
         ),
         relations=(),
     )
@@ -174,8 +176,9 @@ def _outbound_row(
         "channel_code": "SMS",
         "message_class": "TRANSACTIONAL",
         "priority": 10,
-        "contact_id": None,
+        "recipient_identifier_type": "PHONE",
         "recipient_address": "380671112233",
+        "recipient_snapshot": {"source_kind": "RAW_VALUE"},
         "rendered_payload": {},
         "provider_request_payload": {},
         "external_message_id": None,
@@ -218,16 +221,16 @@ class OutboundMessageRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
             communication_request_id=request_id,
             outbound_message_id=outbound_id,
             initiator_type="CRM",
-            initiator_ref_id=None,
-            correlation_id=None,
+            initiator_ref_id="send:1",
+            correlation_id=EntityIdVO.from_value(uuid4()),
             idempotency_key="idem-1",
             message_class="TRANSACTIONAL",
             channel_code="SMS",
             template_id=template_id,
             template_version_id=version_id,
-            contact_id=None,
+            recipient_identifier_type="PHONE",
             recipient_address="380671112233",
-            recipient_snapshot={},
+            recipient_snapshot={"source_kind": "RAW_VALUE"},
             variables={"amount": 15000},
             scheduled_at=None,
             priority=10,
@@ -240,8 +243,18 @@ class OutboundMessageRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(command.inserts[0][0], _REQUEST)
         self.assertEqual(command.inserts[1][0], _OUTBOUND)
         self.assertEqual(request_payload["id"], request_id.uuid)
+        self.assertNotIn("contact_id", request_payload)
+        self.assertEqual(request_payload["recipient_identifier_type"], "PHONE")
+        self.assertEqual(
+            request_payload["recipient_snapshot"], {"source_kind": "RAW_VALUE"}
+        )
         self.assertEqual(outbound_payload["id"], outbound_id.uuid)
         self.assertEqual(outbound_payload["communication_request_id"], request_id.uuid)
+        self.assertNotIn("contact_id", outbound_payload)
+        self.assertEqual(outbound_payload["recipient_identifier_type"], "PHONE")
+        self.assertEqual(
+            outbound_payload["recipient_snapshot"], {"source_kind": "RAW_VALUE"}
+        )
         self.assertEqual(request.communication_request_id, request_id)
         self.assertEqual(outbound.outbound_message_id, outbound_id)
 
@@ -266,6 +279,8 @@ class OutboundMessageRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result[0].outbound_message_id, outbound_id)
         self.assertEqual(result[0].tenant_id, tenant_id.uuid)
+        self.assertEqual(result[0].recipient_identifier_type, "PHONE")
+        self.assertEqual(result[0].recipient_snapshot, {"source_kind": "RAW_VALUE"})
         self.assertEqual(query.list_calls[0]["descriptor"], _OUTBOUND)
         self.assertEqual(query.list_calls[0]["sorting"][0].field, "created_at")
         self.assertEqual(query.list_calls[0]["page"].limit, 25)

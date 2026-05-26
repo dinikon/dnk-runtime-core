@@ -32,7 +32,8 @@ communication runtime objects нет.
 - describe-fields / metadata HTTP endpoints для communication objects;
 - отдельный read/list HTTP API для delivery attempts и delivery events;
 - scheduled jobs;
-- audience/contact selection; `communication` принимает уже подготовленный `recipient_address`.
+- audience/contact/identity/device selection; `communication` принимает уже подготовленный low-level recipient:
+  `recipient_identifier_type`, `recipient_address` и immutable `recipient_snapshot`.
 
 ## Public Functionality
 
@@ -150,10 +151,11 @@ communication runtime objects нет.
 - ID: `CommunicationRequestIdVO`.
 - Tenant scope: хранит `tenant_id: EntityIdVO`.
 - Fields: `communication_request_id`, `tenant_id`, `initiator_type`, `initiator_ref_id`, `correlation_id`,
-  `idempotency_key`, `message_class`, `channel_code`, `template_id`, `template_version_id`, `contact_id`,
-  `recipient_address`, `recipient_snapshot`, `variables`, `scheduled_at`, `priority`, `status`, timestamps.
-- Value Objects: `InitiatorTypeVO`, `IdempotencyKeyVO`, `MessageClassVO`, `ChannelCodeVO`, `RecipientAddressVO`,
-  `OutboundPriorityVO`.
+  `idempotency_key`, `message_class`, `channel_code`, `template_id`, `template_version_id`,
+  `recipient_identifier_type`, `recipient_address`, `recipient_snapshot`, `variables`, `scheduled_at`, `priority`,
+  `status`, timestamps.
+- Value Objects: `InitiatorTypeVO`, `IdempotencyKeyVO`, `MessageClassVO`, `ChannelCodeVO`,
+  `RecipientIdentifierTypeVO`, `RecipientAddressVO`, `OutboundPriorityVO`.
 - Factory methods: `CommunicationRequest.create`.
 - Update methods: в entity не найдено.
 - Domain errors: invalid initiator/recipient/priority/idempotency errors, `CommunicationValidationError`.
@@ -164,11 +166,11 @@ communication runtime objects нет.
 - ID: `OutboundMessageIdVO`.
 - Tenant scope: хранит `tenant_id: EntityIdVO`.
 - Fields: `outbound_message_id`, `tenant_id`, `communication_request_id`, `provider_connection_id`, `channel_code`,
-  `message_class`, `priority`, `contact_id`, `recipient_address`, `rendered_payload`, `provider_request_payload`,
-  `external_message_id`, `external_status`, `internal_status`, errors, delivery timestamps, processing lease fields,
-  queue publishing fields, timestamps.
+  `message_class`, `priority`, `recipient_identifier_type`, `recipient_address`, `recipient_snapshot`,
+  `rendered_payload`, `provider_request_payload`, `external_message_id`, `external_status`, `internal_status`, errors,
+  delivery timestamps, processing lease fields, queue publishing fields, timestamps.
 - Value Objects: `OutboundMessageIdVO`, `CommunicationRequestIdVO`, `ProviderConnectionIdVO`, `ChannelCodeVO`,
-  `MessageClassVO`, `OutboundPriorityVO`, `RecipientAddressVO`.
+  `MessageClassVO`, `OutboundPriorityVO`, `RecipientIdentifierTypeVO`, `RecipientAddressVO`.
 - Factory methods: `OutboundMessage.create_queued`.
 - Update methods: `mark_published`.
 - Domain errors: `OutboundMessageNotFoundError`, `ProviderPayloadValidationError`.
@@ -517,13 +519,13 @@ but already committed send row remains queued for later publishing.
 
 ## Dependencies On Other Modules
 
-| Module            | Layer                                          | Used For                                                                                                  |
-|-------------------|------------------------------------------------|-----------------------------------------------------------------------------------------------------------|
+| Module            | Layer                                          | Used For                                                                                                                |
+|-------------------|------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
 | `shared`          | domain/application/presentation/infrastructure | `EntityIdVO`, `DomainError`, clock port, UoW, request context, SMTP transport, messaging publisher, integration outbox. |
-| `runtime_data`    | infrastructure/presentation                    | Runtime command/query gateways, type policy, runtime validation/filter/persistence errors.                |
-| `schema_registry` | infrastructure/presentation/management         | Runtime object resolver, object descriptors, schema seed, SQLAlchemy repositories in management builders. |
-| `config`          | presentation/infrastructure/management         | `dnk_config.COMMUNICATION_QUEUE`, RabbitMQ settings.                                                      |
-| `contact_point`   | none direct                                    | Direct use cases/repositories не используются; только `contact_id` value хранится в communication rows.   |
+| `runtime_data`    | infrastructure/presentation                    | Runtime command/query gateways, type policy, runtime validation/filter/persistence errors.                              |
+| `schema_registry` | infrastructure/presentation/management         | Runtime object resolver, object descriptors, schema seed, SQLAlchemy repositories in management builders.               |
+| `config`          | presentation/infrastructure/management         | `dnk_config.COMMUNICATION_QUEUE`, RabbitMQ settings.                                                                    |
+| `contact_point`   | none direct                                    | Direct use cases/repositories не используются; source refs допускаются только внутри `recipient_snapshot`.              |
 
 External library dependencies found in module code: FastAPI, `uuid6`, PyYAML, `jsonschema`, Jinja2, JSONPath parser,
 httpx client adapter, FastStream/RabbitMQ, SQLAlchemy session factory for management builders.
@@ -611,8 +613,8 @@ uv run python -m unittest test.test_communication_services test.test_communicati
   use case возвращает `ProviderConnectionDTO`.
 - В `ProcessOutboundMessageUseCase` batch processing ловит broad `Exception` для каждого message, считает failure и
   продолжает обработку следующего message.
-- `contact_id` хранится в `CommunicationRequest` и `OutboundMessage`, но direct lookup/validation через `contact_point`
-  или `crm` module не найден.
+- `communication` не хранит source-specific recipient columns вроде `contact_id`, `contact_point_id`, owner/context ids
+  или identity/device refs. Caller должен сохранить provenance только внутри JSON `recipient_snapshot`.
 - Есть raw `dict[str, Any]` payloads в domain/application DTOs для schemas, rendered payloads, provider request/response
   payloads и webhook raw payloads; это отражает текущий transport/runtime contract.
 

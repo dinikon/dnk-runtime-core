@@ -12,7 +12,6 @@ from src.modules.communication.application.outbound_message.dto import (
 from src.modules.communication.application.services import JsonSchemaValidationService
 from src.modules.communication.domain.error import CommunicationValidationError
 from src.modules.communication.domain.message_template import (
-    MessageTemplateCodeVO,
     MessageTemplateEntity,
     MessageTemplateIdVO,
     MessageTemplateNotFoundError,
@@ -20,6 +19,7 @@ from src.modules.communication.domain.message_template import (
 )
 from src.modules.communication.domain.outbound_message import (
     CommunicationRequestIdVO,
+    IdempotencyKeyVO,
     OutboundMessageIdVO,
     OutboundMessageRepositoryProtocol,
     OutboundMessageService,
@@ -44,15 +44,6 @@ class SendCommunicationTemplateLookupProtocol(Protocol):
         template_id: MessageTemplateIdVO,
     ) -> MessageTemplateEntity | None:
         """Возвращает message template по id."""
-        ...
-
-    async def get_template_by_code(
-        self,
-        *,
-        tenant_id: EntityIdVO,
-        template_code: MessageTemplateCodeVO,
-    ) -> MessageTemplateEntity | None:
-        """Возвращает message template по tenant-local code."""
         ...
 
     async def get_active_template_version(
@@ -103,36 +94,25 @@ class SendCommunicationUseCase:
     ) -> SendCommunicationResultDTO:
         """Создает send request и outbound message либо возвращает idempotent hit."""
         tenant_id = _entity_id(command.tenant_id)
-        if command.template_id is None and command.template_code is None:
-            raise CommunicationValidationError(
-                "Either template_id or template_code is required."
+        idempotency_key = IdempotencyKeyVO(command.idempotency_key).value
+        existing = await self._repository.get_existing_send_by_idempotency(
+            tenant_id=tenant_id,
+            idempotency_key=idempotency_key,
+        )
+        if existing is not None:
+            request, outbound = existing
+            return SendCommunicationResultDTO(
+                communication_request_id=request.communication_request_id.uuid,
+                outbound_message_id=outbound.outbound_message_id.uuid,
+                status=request.status,
+                internal_status=outbound.internal_status,
+                idempotent=True,
             )
-        if command.idempotency_key:
-            existing = await self._repository.get_existing_send_by_idempotency(
-                tenant_id=tenant_id,
-                idempotency_key=command.idempotency_key,
-            )
-            if existing is not None:
-                request, outbound = existing
-                return SendCommunicationResultDTO(
-                    communication_request_id=request.communication_request_id.uuid,
-                    outbound_message_id=outbound.outbound_message_id.uuid,
-                    status=request.status,
-                    internal_status=outbound.internal_status,
-                    idempotent=True,
-                )
 
-        if command.template_id is not None:
-            template = await self._template_lookup.get_template(
-                tenant_id=tenant_id,
-                template_id=_template_id(command.template_id),
-            )
-        else:
-            assert command.template_code is not None
-            template = await self._template_lookup.get_template_by_code(
-                tenant_id=tenant_id,
-                template_code=MessageTemplateCodeVO(command.template_code),
-            )
+        template = await self._template_lookup.get_template(
+            tenant_id=tenant_id,
+            template_id=_template_id(command.template_id),
+        )
         if template is None:
             raise MessageTemplateNotFoundError()
         if template.channel_code.value != command.channel_code:
@@ -170,19 +150,13 @@ class SendCommunicationUseCase:
             outbound_message_id=_outbound_message_id(command.outbound_message_id),
             initiator_type=command.initiator_type,
             initiator_ref_id=command.initiator_ref_id,
-            correlation_id=(
-                None
-                if command.correlation_id is None
-                else _entity_id(command.correlation_id)
-            ),
-            idempotency_key=command.idempotency_key,
-            message_class=command.message_class,
+            correlation_id=_entity_id(command.correlation_id),
+            idempotency_key=idempotency_key,
+            message_class=command.message_class or template.message_class.value,
             channel_code=command.channel_code,
             template_id=template.template_id,
             template_version_id=active_version.template_version_id,
-            contact_id=(
-                None if command.contact_id is None else _entity_id(command.contact_id)
-            ),
+            recipient_identifier_type=command.recipient_identifier_type,
             recipient_address=command.recipient_address,
             recipient_snapshot=command.recipient_snapshot,
             variables=command.variables,

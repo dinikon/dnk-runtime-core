@@ -31,6 +31,13 @@ class InvalidRecipientAddressError(CommunicationValidationError):
         super().__init__("Outbound recipient address is invalid.")
 
 
+class InvalidRecipientIdentifierTypeError(CommunicationValidationError):
+    """Raised when recipient identifier type is invalid."""
+
+    def __init__(self) -> None:
+        super().__init__("Recipient identifier type is invalid.")
+
+
 class InvalidOutboundPriorityError(CommunicationValidationError):
     """Raised when outbound priority is invalid."""
 
@@ -50,6 +57,7 @@ __all__ = [
     "InvalidInitiatorTypeError",
     "InvalidOutboundPriorityError",
     "InvalidRecipientAddressError",
+    "InvalidRecipientIdentifierTypeError",
     "OutboundMessageNotFoundError",
     "ProviderPayloadValidationError",
 ]

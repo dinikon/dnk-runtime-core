@@ -13,8 +13,9 @@ class OutboundMessageDTO:
     communication_request_id: UUID
     provider_connection_id: UUID
     channel_code: str
-    contact_id: UUID | None
+    recipient_identifier_type: str
     recipient_address: str
+    recipient_snapshot: dict[str, Any]
     rendered_payload: dict[str, Any]
     provider_request_payload: dict[str, Any]
     external_message_id: str | None

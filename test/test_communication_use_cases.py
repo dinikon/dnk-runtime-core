@@ -38,6 +38,7 @@ from src.modules.communication.domain.message_template import (
 )
 from src.modules.communication.domain.outbound_message import (
     CommunicationRequestIdVO,
+    InvalidIdempotencyKeyError,
     OutboundMessageService,
     OutboundMessageIdVO,
     OutboundMessageStatus,
@@ -126,6 +127,7 @@ class _ProcessRepositoryStub:
             outbound_message_id=uuid4(),
             communication_request_id=uuid4(),
             provider_connection_id=uuid4(),
+            recipient_identifier_type="PHONE",
             recipient_address="380671112233",
             rendered_payload={},
             provider_request_payload={},
@@ -328,6 +330,7 @@ class _SmtpProcessRepositoryStub(_ProcessRepositoryStub):
 
     def __init__(self) -> None:
         super().__init__()
+        self.outbound.recipient_identifier_type = "EMAIL"
         self.outbound.recipient_address = "john@example.com"
         self.request.variables = {"name": "John"}
         self.version.template_payload = {
@@ -466,6 +469,7 @@ class _SendRepositoryStub:
         self.template = SimpleNamespace(
             template_id=MessageTemplateIdVO.from_value(uuid4()),
             channel_code=SimpleNamespace(value=channel_code),
+            message_class=SimpleNamespace(value="TRANSACTIONAL"),
             provider_connector_id=ProviderConnectorIdVO.from_value(uuid4()),
         )
         self.version = SimpleNamespace(
@@ -883,11 +887,14 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
             SendCommunicationCommand(
                 tenant_id=uuid4(),
                 initiator_type="CRM",
-                message_class="TRANSACTIONAL",
-                channel_code="VIBER",
-                recipient_address="380671112233",
-                template_code="loan_approved_viber",
+                initiator_ref_id="deal:1",
+                correlation_id=uuid4(),
                 idempotency_key="idem-1",
+                channel_code="VIBER",
+                template_id=MessageTemplateIdVO.from_value(uuid4()),
+                recipient_identifier_type="PHONE",
+                recipient_address="380671112233",
+                recipient_snapshot={"source_kind": "RAW_VALUE"},
             )
         )
 
@@ -897,6 +904,34 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
             result.outbound_message_id,
             repository.outbound.outbound_message_id.uuid,
         )
+
+    async def test_send_communication_rejects_blank_idempotency_key_first(self) -> None:
+        repository = _SendRepositoryStub()
+        use_case = SendCommunicationUseCase(
+            repository=repository,
+            service=OutboundMessageService(repository=repository, clock=_ClockStub()),
+            template_lookup=repository,
+            schema_validator=SimpleNamespace(validate=lambda *_args: None),
+            provider_connection_lookup=repository,
+        )
+
+        with self.assertRaises(InvalidIdempotencyKeyError):
+            await use_case(
+                SendCommunicationCommand(
+                    tenant_id=uuid4(),
+                    initiator_type="CRM",
+                    initiator_ref_id="manual:1",
+                    correlation_id=uuid4(),
+                    idempotency_key=" ",
+                    channel_code="SMS",
+                    template_id=MessageTemplateIdVO.from_value(uuid4()),
+                    recipient_identifier_type="PHONE",
+                    recipient_address="+380671112233",
+                    recipient_snapshot={"manual": True},
+                )
+            )
+
+        self.assertIsNone(repository.created_kwargs)
 
     async def test_send_communication_uses_prepared_recipient_address(self) -> None:
         repository = _SendRepositoryStub()
@@ -912,10 +947,13 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
             SendCommunicationCommand(
                 tenant_id=uuid4(),
                 initiator_type="CRM",
-                message_class="TRANSACTIONAL",
+                initiator_ref_id="manual:1",
+                correlation_id=uuid4(),
+                idempotency_key="idem-send-1",
                 channel_code="SMS",
+                template_id=MessageTemplateIdVO.from_value(uuid4()),
+                recipient_identifier_type="PHONE",
                 recipient_address="+380671112233",
-                template_code="otp_sms",
                 recipient_snapshot={"manual": True},
             )
         )
@@ -929,6 +967,10 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             repository.created_kwargs["recipient_snapshot"],
             {"manual": True},
+        )
+        self.assertEqual(
+            repository.created_kwargs["recipient_identifier_type"],
+            "PHONE",
         )
 
     async def test_webhook_updates_outbound_and_creates_delivery_event(self) -> None:
