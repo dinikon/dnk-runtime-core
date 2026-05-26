@@ -264,6 +264,15 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                     msg=f"{path} imports forbidden infrastructure module {module_name}",
                 )
 
+    def test_communication_does_not_import_contact_point(self) -> None:
+        forbidden_prefix = "src.modules.contact_point"
+        for path in iter_python_files("src/modules/communication"):
+            for module_name in iter_imports(path):
+                self.assertFalse(
+                    module_name.startswith(forbidden_prefix),
+                    msg=f"{path} imports forbidden contact_point module {module_name}",
+                )
+
     def test_business_modules_do_not_import_shared_event_bus_rabbitmq_adapter(
         self,
     ) -> None:

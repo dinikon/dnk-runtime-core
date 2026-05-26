@@ -29,6 +29,7 @@
 - листит contact points с фильтром по type и pagination;
 - листит active contact points владельца с metadata binding;
 - листит bindings с диагностическими фильтрами по type/contact point/owner/active state.
+- выбирает active contact point владельца для delivery channel через application-level selection service.
 
 В текущей реализации не найдено:
 
@@ -49,13 +50,16 @@
 - получить contact point без internal `normalized_hash`;
 - получить active contact points владельца вместе с `binding_id`, `is_primary`, `is_active`, `detached_at`;
 - получить список bindings, включая inactive bindings при `is_active` filter.
+- выбрать recipient address для канала `SMS`, `VIBER` или `EMAIL` по strategy `primary`, `last_active`,
+  `all_active`, `explicit_contact_point`.
 
 ## Main Flows / Use Cases
 
-| Use Case                    | Input                       | Output                        | Description                                                                                                                                     |
-|-----------------------------|-----------------------------|-------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
-| `AttachContactPointUseCase` | `AttachContactPointCommand` | `AttachContactPointResultDTO` | Проверяет owner и feature gate, нормализует и хеширует значение, создает/переиспользует `ContactPointEntity`, создает/реактивирует binding.     |
-| `DetachContactPointUseCase` | `DetachContactPointCommand` | `DetachContactPointResultDTO` | Загружает binding, soft-deactivate через `detach`, назначает следующий active binding primary при отсутствии primary, contact point не удаляет. |
+| Use Case                       | Input                          | Output                                                      | Description                                                                                                                                     |
+|--------------------------------|--------------------------------|-------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
+| `AttachContactPointUseCase`    | `AttachContactPointCommand`    | `AttachContactPointResultDTO`                               | Проверяет owner и feature gate, нормализует и хеширует значение, создает/переиспользует `ContactPointEntity`, создает/реактивирует binding.     |
+| `DetachContactPointUseCase`    | `DetachContactPointCommand`    | `DetachContactPointResultDTO`                               | Загружает binding, soft-deactivate через `detach`, назначает следующий active binding primary при отсутствии primary, contact point не удаляет. |
+| `ContactPointSelectionService` | `ContactPointSelectionCommand` | `ContactPointSelectionDTO` / `ContactPointSelectionListDTO` | Мапит delivery channel в contact point type и выбирает active binding по strategy.                                                              |
 
 ## Domain Model
 
@@ -126,6 +130,8 @@
   `contact_point_type`, `limit`, `offset`.
 - `ListContactPointBindingsQuery`: `tenant_id`, optional `contact_point_type`, `contact_point_id`,
   `owner_object_id`, `owner_record_id`, `is_active`, `limit`, `offset`.
+- `ContactPointSelectionCommand`: `tenant_id`, `owner_object_id`, `owner_record_id`, `channel_code`,
+  `strategy`, optional `explicit_contact_point_id`.
 
 ### DTOs
 
@@ -141,6 +147,9 @@
 - `OwnerContactPointListDTO`: `items`, `count`, optional `limit`, `offset`.
 - `ContactPointBindingDTO`: binding fields plus `contact_point_type`.
 - `ContactPointBindingListDTO`: `items`, `count`, `limit`, `offset`.
+- `ContactPointSelectionDTO`: selected `contact_point_id`, `recipient_address`, `recipient_snapshot`,
+  `binding_id`, `contact_point_type`, `is_primary`.
+- `ContactPointSelectionListDTO`: `items`, `count`.
 
 DTO возвращают UUID на application boundary. HTTP Pydantic schemas остаются в presentation layer.
 
@@ -150,6 +159,10 @@ DTO возвращают UUID на application boundary. HTTP Pydantic schemas �
 - `ContactPointObjectFeatureGatePort`: проверяет включенность object feature `CONTACT_POINT`.
 - `ContactPointNormalizerPort`: нормализует raw contact point value.
 - `ContactPointHashPort`: считает hash нормализованного значения.
+- `ContactPointSelectionPort`: application-level порт выбора recipient address для orchestration modules вроде будущего
+  `broadcast`.
+- `ContactPointSelectionRepositoryProtocol`: selection reads для active primary, last active, all active и explicit
+  active owner binding.
 
 ### Use Cases
 
@@ -161,6 +174,8 @@ DTO возвращают UUID на application boundary. HTTP Pydantic schemas �
 - `ListContactPointsUseCase` делегирует query repository.
 - `ListOwnerContactPointsUseCase` проверяет owner existence и feature gate, затем возвращает active bindings.
 - `ListContactPointBindingsUseCase` делегирует query repository и может вернуть active/inactive bindings.
+- `ContactPointSelectionService` поддерживает mapping `SMS`/`VIBER` -> `PHONE`, `EMAIL` -> `EMAIL`; `PUSH`,
+  `CUSTOM` и unknown channels возвращают typed unsupported-channel error.
 
 `AttachContactPointUseCase` сначала проверяет owner existence, затем feature gate, затем нормализует значение и ищет
 contact point по type/hash. Если contact point не найден, он создается с новым UUID. Binding ищется по owner +

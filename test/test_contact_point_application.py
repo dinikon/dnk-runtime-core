@@ -12,6 +12,12 @@ from src.modules.contact_point.application import (
     ContactPointBindingListDTO,
     ContactPointDTO,
     ContactPointListDTO,
+    ContactPointSelectionCommand,
+    ContactPointSelectionNotFoundError,
+    ContactPointSelectionService,
+    ContactPointSelectionStrategy,
+    ExplicitContactPointNotAttachedError,
+    ExplicitContactPointTypeMismatchError,
     DetachContactPointCommand,
     DetachContactPointUseCase,
     GetContactPointQuery,
@@ -24,6 +30,8 @@ from src.modules.contact_point.application import (
     ListOwnerContactPointsUseCase,
     OwnerContactPointDTO,
     OwnerContactPointListDTO,
+    UnsupportedContactPointChannelError,
+    contact_point_type_for_channel,
 )
 from src.modules.contact_point.domain import (
     ContactPointBindingEntity,
@@ -347,6 +355,105 @@ class _Repository:
             offset=query.offset,
         )
 
+    async def find_active_primary_owner_contact_point(
+        self,
+        *,
+        tenant_id,
+        owner,
+        contact_point_type,
+    ):
+        candidates = [
+            binding
+            for binding in self.bindings.values()
+            if binding.owner == owner
+            and binding.contact_point_type == contact_point_type
+            and binding.is_active
+            and binding.is_primary
+        ]
+        candidates.sort(key=lambda item: (item.created_at, str(item.id)))
+        return self._owner_contact_point_dto(candidates[0]) if candidates else None
+
+    async def find_last_active_owner_contact_point(
+        self,
+        *,
+        tenant_id,
+        owner,
+        contact_point_type,
+    ):
+        candidates = [
+            binding
+            for binding in self.bindings.values()
+            if binding.owner == owner
+            and binding.contact_point_type == contact_point_type
+            and binding.is_active
+        ]
+        candidates.sort(
+            key=lambda item: (item.created_at, str(item.id)),
+            reverse=True,
+        )
+        return self._owner_contact_point_dto(candidates[0]) if candidates else None
+
+    async def list_active_owner_contact_points(
+        self,
+        *,
+        tenant_id,
+        owner,
+        contact_point_type,
+    ):
+        candidates = [
+            binding
+            for binding in self.bindings.values()
+            if binding.owner == owner
+            and binding.contact_point_type == contact_point_type
+            and binding.is_active
+        ]
+        candidates.sort(
+            key=lambda item: (
+                not item.is_primary,
+                -item.created_at.timestamp(),
+                str(item.id),
+            )
+        )
+        return tuple(self._owner_contact_point_dto(binding) for binding in candidates)
+
+    async def find_active_owner_contact_point(
+        self,
+        *,
+        tenant_id,
+        owner,
+        contact_point_id,
+    ):
+        candidates = [
+            binding
+            for binding in self.bindings.values()
+            if binding.owner == owner
+            and binding.contact_point_id == contact_point_id
+            and binding.is_active
+        ]
+        candidates.sort(
+            key=lambda item: (item.created_at, str(item.id)),
+            reverse=True,
+        )
+        return self._owner_contact_point_dto(candidates[0]) if candidates else None
+
+    def _owner_contact_point_dto(
+        self,
+        binding: ContactPointBindingEntity,
+    ) -> OwnerContactPointDTO:
+        contact_point = self.contact_points[binding.contact_point_id]
+        return OwnerContactPointDTO(
+            binding_id=binding.id.uuid,
+            contact_point_id=contact_point.id.uuid,
+            contact_point_type=contact_point.contact_point_type,
+            raw_value=contact_point.raw_value,
+            normalized_value=contact_point.normalized_value,
+            is_primary=binding.is_primary,
+            is_active=binding.is_active,
+            detached_at=binding.detached_at,
+            created_at=binding.created_at,
+            updated_at=binding.updated_at,
+        )
+
 
 def _ids():
     return (
@@ -372,6 +479,28 @@ def _contact_point(
         normalized_value=value,
         hash_value=hashlib.sha256(value.encode("utf-8")).hexdigest(),
     )
+
+
+def _binding(
+    *,
+    contact_point: ContactPointEntity,
+    owner: OwnerContactPointBinding,
+    is_primary: bool = False,
+    now: datetime | None = None,
+    active: bool = True,
+) -> ContactPointBindingEntity:
+    now = now or datetime(2026, 5, 21, 10, 0, tzinfo=UTC)
+    binding = ContactPointBindingEntity.create(
+        id_=ContactPointBindingIdVO.from_value(uuid4()),
+        now=now,
+        contact_point_id=contact_point.id,
+        contact_point_type=contact_point.contact_point_type,
+        owner=owner,
+        is_primary=is_primary,
+    )
+    if not active:
+        binding.detach(now=now)
+    return binding
 
 
 class ContactPointServicesTests(unittest.TestCase):
@@ -474,6 +603,10 @@ class ContactPointUseCaseTests(unittest.IsolatedAsyncioTestCase):
             owner_resolver=owner_resolver or _OwnerResolver(),
             feature_gate=feature_gate or _FeatureGate(),
         )
+
+    @staticmethod
+    def _selection_service(repository: _Repository) -> ContactPointSelectionService:
+        return ContactPointSelectionService(repository=repository)
 
     async def test_attach_creates_contact_point_and_binding(self) -> None:
         tenant_id, owner_object_id, owner_record_id = _ids()
@@ -791,6 +924,235 @@ class ContactPointUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result.items[0].is_active)
         self.assertEqual(repository.list_queries[0].owner_object_id, owner_object_id)
         self.assertEqual(repository.list_queries[0].is_active, True)
+
+    async def test_contact_point_selection_maps_supported_channels(self) -> None:
+        self.assertEqual(
+            contact_point_type_for_channel("SMS"), ContactPointTypeVO.PHONE
+        )
+        self.assertEqual(
+            contact_point_type_for_channel(" viber "),
+            ContactPointTypeVO.PHONE,
+        )
+        self.assertEqual(
+            contact_point_type_for_channel("EMAIL"),
+            ContactPointTypeVO.EMAIL,
+        )
+        for channel_code in ("PUSH", "CUSTOM", "WHATSAPP"):
+            with self.subTest(channel_code=channel_code):
+                with self.assertRaises(UnsupportedContactPointChannelError):
+                    contact_point_type_for_channel(channel_code)
+
+    async def test_contact_point_selection_primary_returns_active_primary(
+        self,
+    ) -> None:
+        tenant_id, owner_object_id, owner_record_id = _ids()
+        owner = OwnerContactPointBinding(owner_object_id, owner_record_id)
+        repository = _Repository()
+        primary = _contact_point(
+            contact_point_id=ContactPointIdVO.from_value(uuid4()),
+            contact_point_type=ContactPointTypeVO.PHONE,
+            value="+380671112233",
+        )
+        secondary = _contact_point(
+            contact_point_id=ContactPointIdVO.from_value(uuid4()),
+            contact_point_type=ContactPointTypeVO.PHONE,
+            value="+380671112244",
+        )
+        repository.contact_points[primary.id] = primary
+        repository.contact_points[secondary.id] = secondary
+        primary_binding = _binding(
+            contact_point=primary,
+            owner=owner,
+            is_primary=True,
+        )
+        repository.bindings[primary_binding.id] = primary_binding
+        repository.bindings[ContactPointBindingIdVO.from_value(uuid4())] = _binding(
+            contact_point=secondary, owner=owner
+        )
+        service = self._selection_service(repository)
+
+        result = await service.select_one(
+            ContactPointSelectionCommand(
+                tenant_id=tenant_id,
+                owner_object_id=owner_object_id,
+                owner_record_id=owner_record_id,
+                channel_code="SMS",
+            )
+        )
+
+        self.assertEqual(result.contact_point_id, primary.id.uuid)
+        self.assertEqual(result.recipient_address, "+380671112233")
+        self.assertEqual(
+            result.recipient_snapshot["contact_point_id"],
+            str(primary.id.uuid),
+        )
+        self.assertEqual(
+            result.recipient_snapshot["selection_strategy"],
+            ContactPointSelectionStrategy.PRIMARY.value,
+        )
+
+    async def test_contact_point_selection_primary_without_primary_raises(
+        self,
+    ) -> None:
+        tenant_id, owner_object_id, owner_record_id = _ids()
+        repository = _Repository()
+        service = self._selection_service(repository)
+
+        with self.assertRaises(ContactPointSelectionNotFoundError):
+            await service.select_one(
+                ContactPointSelectionCommand(
+                    tenant_id=tenant_id,
+                    owner_object_id=owner_object_id,
+                    owner_record_id=owner_record_id,
+                    channel_code="EMAIL",
+                )
+            )
+
+    async def test_contact_point_selection_last_active_uses_newest_binding(
+        self,
+    ) -> None:
+        tenant_id, owner_object_id, owner_record_id = _ids()
+        owner = OwnerContactPointBinding(owner_object_id, owner_record_id)
+        repository = _Repository()
+        old_point = _contact_point(
+            contact_point_id=ContactPointIdVO.from_value(uuid4()),
+            value="old@example.com",
+        )
+        new_point = _contact_point(
+            contact_point_id=ContactPointIdVO.from_value(uuid4()),
+            value="new@example.com",
+        )
+        repository.contact_points[old_point.id] = old_point
+        repository.contact_points[new_point.id] = new_point
+        repository.bindings[ContactPointBindingIdVO.from_value(uuid4())] = _binding(
+            contact_point=old_point,
+            owner=owner,
+            now=datetime(2026, 5, 21, 10, 0, tzinfo=UTC),
+        )
+        repository.bindings[ContactPointBindingIdVO.from_value(uuid4())] = _binding(
+            contact_point=new_point,
+            owner=owner,
+            now=datetime(2026, 5, 21, 11, 0, tzinfo=UTC),
+        )
+        service = self._selection_service(repository)
+
+        result = await service.select_one(
+            ContactPointSelectionCommand(
+                tenant_id=tenant_id,
+                owner_object_id=owner_object_id,
+                owner_record_id=owner_record_id,
+                channel_code="EMAIL",
+                strategy=ContactPointSelectionStrategy.LAST_ACTIVE,
+            )
+        )
+
+        self.assertEqual(result.contact_point_id, new_point.id.uuid)
+
+    async def test_contact_point_selection_all_active_returns_matching_type_only(
+        self,
+    ) -> None:
+        tenant_id, owner_object_id, owner_record_id = _ids()
+        owner = OwnerContactPointBinding(owner_object_id, owner_record_id)
+        repository = _Repository()
+        email = _contact_point(
+            contact_point_id=ContactPointIdVO.from_value(uuid4()),
+            value="user@example.com",
+        )
+        inactive_email = _contact_point(
+            contact_point_id=ContactPointIdVO.from_value(uuid4()),
+            value="inactive@example.com",
+        )
+        phone = _contact_point(
+            contact_point_id=ContactPointIdVO.from_value(uuid4()),
+            contact_point_type=ContactPointTypeVO.PHONE,
+            value="+380671112233",
+        )
+        for point in (email, inactive_email, phone):
+            repository.contact_points[point.id] = point
+        repository.bindings[ContactPointBindingIdVO.from_value(uuid4())] = _binding(
+            contact_point=email,
+            owner=owner,
+            is_primary=True,
+        )
+        repository.bindings[ContactPointBindingIdVO.from_value(uuid4())] = _binding(
+            contact_point=inactive_email,
+            owner=owner,
+            active=False,
+        )
+        repository.bindings[ContactPointBindingIdVO.from_value(uuid4())] = _binding(
+            contact_point=phone,
+            owner=owner,
+            is_primary=True,
+        )
+        service = self._selection_service(repository)
+
+        result = await service.select_many(
+            ContactPointSelectionCommand(
+                tenant_id=tenant_id,
+                owner_object_id=owner_object_id,
+                owner_record_id=owner_record_id,
+                channel_code="EMAIL",
+                strategy=ContactPointSelectionStrategy.ALL_ACTIVE,
+            )
+        )
+
+        self.assertEqual(result.count, 1)
+        self.assertEqual(result.items[0].contact_point_id, email.id.uuid)
+
+    async def test_contact_point_selection_explicit_validates_owner_and_type(
+        self,
+    ) -> None:
+        tenant_id, owner_object_id, owner_record_id = _ids()
+        owner = OwnerContactPointBinding(owner_object_id, owner_record_id)
+        repository = _Repository()
+        phone = _contact_point(
+            contact_point_id=ContactPointIdVO.from_value(uuid4()),
+            contact_point_type=ContactPointTypeVO.PHONE,
+            value="+380671112233",
+        )
+        repository.contact_points[phone.id] = phone
+        repository.bindings[ContactPointBindingIdVO.from_value(uuid4())] = _binding(
+            contact_point=phone,
+            owner=owner,
+        )
+        service = self._selection_service(repository)
+
+        result = await service.select_one(
+            ContactPointSelectionCommand(
+                tenant_id=tenant_id,
+                owner_object_id=owner_object_id,
+                owner_record_id=owner_record_id,
+                channel_code="SMS",
+                strategy=ContactPointSelectionStrategy.EXPLICIT_CONTACT_POINT,
+                explicit_contact_point_id=phone.id,
+            )
+        )
+
+        self.assertEqual(result.contact_point_id, phone.id.uuid)
+
+        with self.assertRaises(ExplicitContactPointNotAttachedError):
+            await service.select_one(
+                ContactPointSelectionCommand(
+                    tenant_id=tenant_id,
+                    owner_object_id=owner_object_id,
+                    owner_record_id=owner_record_id,
+                    channel_code="SMS",
+                    strategy=ContactPointSelectionStrategy.EXPLICIT_CONTACT_POINT,
+                    explicit_contact_point_id=ContactPointIdVO.from_value(uuid4()),
+                )
+            )
+
+        with self.assertRaises(ExplicitContactPointTypeMismatchError):
+            await service.select_one(
+                ContactPointSelectionCommand(
+                    tenant_id=tenant_id,
+                    owner_object_id=owner_object_id,
+                    owner_record_id=owner_record_id,
+                    channel_code="EMAIL",
+                    strategy=ContactPointSelectionStrategy.EXPLICIT_CONTACT_POINT,
+                    explicit_contact_point_id=phone.id,
+                )
+            )
 
     async def test_list_owner_contact_points_fails_before_query_when_guard_invalid(
         self,

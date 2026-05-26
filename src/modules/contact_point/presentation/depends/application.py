@@ -4,6 +4,10 @@ from typing import Annotated
 
 from fastapi import Depends
 
+from src.modules.contact_point.application.selection import (
+    ContactPointSelectionPort,
+    ContactPointSelectionService,
+)
 from src.modules.contact_point.application.use_case import (
     AttachContactPointUseCase,
     AttachContactPointUseCaseProtocol,
@@ -125,14 +129,28 @@ ListContactPointBindingsUseCaseDep = Annotated[
 ]
 
 
+def get_contact_point_selection_service(
+    repository: ContactPointRuntimeRepositoryDep,
+) -> ContactPointSelectionPort:
+    return ContactPointSelectionService(repository=repository)
+
+
+ContactPointSelectionDep = Annotated[
+    ContactPointSelectionPort,
+    Depends(get_contact_point_selection_service),
+]
+
+
 __all__ = [
     "AttachContactPointUseCaseDep",
+    "ContactPointSelectionDep",
     "DetachContactPointUseCaseDep",
     "GetContactPointUseCaseDep",
     "ListContactPointBindingsUseCaseDep",
     "ListContactPointsUseCaseDep",
     "ListOwnerContactPointsUseCaseDep",
     "get_attach_contact_point_use_case",
+    "get_contact_point_selection_service",
     "get_detach_contact_point_use_case",
     "get_get_contact_point_use_case",
     "get_list_contact_point_bindings_use_case",
