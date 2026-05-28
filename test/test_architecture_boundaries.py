@@ -576,6 +576,71 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                 msg=f"{path} should contain at most one Pydantic request schema",
             )
 
+    def test_segmentation_does_not_import_forbidden_modules(self) -> None:
+        forbidden_prefixes = (
+            "src.modules.broadcast",
+            "src.modules.campaigns",
+            "src.modules.communication",
+            "src.modules.contact_point",
+            "src.modules.crm",
+        )
+        for path in iter_python_files("src/modules/segmentation"):
+            for module_name in iter_imports(path):
+                self.assertFalse(
+                    any(
+                        module_name.startswith(prefix) for prefix in forbidden_prefixes
+                    ),
+                    msg=f"{path} imports forbidden module {module_name}",
+                )
+
+    def test_segmentation_does_not_reintroduce_generic_segment_packages(self) -> None:
+        forbidden_paths = (
+            "src/modules/segmentation/domain/segment",
+            "src/modules/segmentation/application/segment",
+            "src/modules/segmentation/presentation/http/segment",
+        )
+        for relative_path in forbidden_paths:
+            path = PROJECT_ROOT / relative_path
+            self.assertFalse(
+                path.exists(),
+                msg=f"{path} must not be introduced for aggregate-based segmentation.",
+            )
+
+    def test_segmentation_controller_files_have_one_top_level_function(self) -> None:
+        for path in iter_python_files("src/modules/segmentation/presentation/http"):
+            if "/controllers/" not in path.as_posix() or path.name == "__init__.py":
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            function_count = sum(
+                isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef))
+                for node in tree.body
+            )
+            self.assertLessEqual(
+                function_count,
+                1,
+                msg=f"{path} should contain at most one top-level function",
+            )
+
+    def test_segmentation_request_schema_files_have_one_pydantic_model(self) -> None:
+        for path in iter_python_files("src/modules/segmentation/presentation/http"):
+            if "/requests/" not in path.as_posix() or path.name == "__init__.py":
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            model_count = 0
+            for node in tree.body:
+                if not isinstance(node, ast.ClassDef):
+                    continue
+                for base in node.bases:
+                    if isinstance(base, ast.Name) and base.id == "BaseModel":
+                        model_count += 1
+                    elif isinstance(base, ast.Attribute) and base.attr == "BaseModel":
+                        model_count += 1
+            self.assertLessEqual(
+                model_count,
+                1,
+                msg=f"{path} should contain at most one Pydantic request schema",
+            )
+
     def test_communication_cleanup_removed_legacy_files(self) -> None:
         removed_files = (
             "src/modules/communication/application/dto.py",
