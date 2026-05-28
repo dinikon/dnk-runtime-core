@@ -22,10 +22,12 @@ from src.modules.segmentation.application.segment_version.evaluation.rule_execut
     SegmentVersionRuleExecutor,
 )
 from src.modules.segmentation.domain.segment_definition import (
+    SegmentDefinitionArchivedError,
     SegmentDefinitionCommandRepositoryProtocol,
     SegmentDefinitionNotFoundError,
     SegmentIdVO,
     SegmentKindVO,
+    SegmentStatusVO,
 )
 from src.modules.segmentation.domain.segment_version import (
     SegmentVersion,
@@ -99,6 +101,8 @@ class SegmentVersionEvaluationService:
         )
         if segment is None:
             raise SegmentDefinitionNotFoundError(str(segment_id.uuid))
+        if segment.status == SegmentStatusVO.ARCHIVED:
+            raise SegmentDefinitionArchivedError(str(segment_id.uuid))
         if segment.segment_kind == SegmentKindVO.STATIC and segment_version_id is None:
             return await self.evaluate_static_segment(
                 tenant_id=tenant_id,

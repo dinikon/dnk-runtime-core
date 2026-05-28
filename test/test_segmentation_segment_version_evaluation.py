@@ -28,6 +28,7 @@ from src.modules.segmentation.application.segment_version.evaluation import (
 )
 from src.modules.segmentation.domain.segment_definition import (
     SegmentDefinition,
+    SegmentDefinitionArchivedError,
     SegmentIdVO,
     SegmentKindVO,
     SegmentStatusVO,
@@ -114,12 +115,13 @@ def _segment(
     segment_id: SegmentIdVO,
     *,
     kind: SegmentKindVO = SegmentKindVO.DYNAMIC,
+    status: SegmentStatusVO = SegmentStatusVO.ACTIVE,
 ) -> SegmentDefinition:
     return SegmentDefinition(
         segment_id=segment_id,
         name="Segment",
         segment_kind=kind,
-        status=SegmentStatusVO.ACTIVE,
+        status=status,
     )
 
 
@@ -402,6 +404,27 @@ class SegmentVersionEvaluationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.contact_ids, (contact_b,))
         self.assertEqual(static_query.calls[0], (segment_id, 100))
+
+    async def test_service_rejects_archived_segment_version_preview(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        segment_id = SegmentIdVO.from_value(uuid4())
+        version = _version(segment_id, _config())
+        service = self._service(
+            segment_repository=_SegmentRepositoryStub(
+                _segment(
+                    segment_id,
+                    status=SegmentStatusVO.ARCHIVED,
+                )
+            ),
+            version_repository=_VersionRepositoryStub(version),
+        )
+
+        with self.assertRaises(SegmentDefinitionArchivedError):
+            await service.evaluate_version(
+                tenant_id=tenant_id,
+                segment_id=segment_id,
+                segment_version_id=version.segment_version_id,
+            )
 
     async def test_service_evaluates_static_and_dynamic_inherited_segments(
         self,

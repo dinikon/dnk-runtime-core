@@ -15,6 +15,9 @@ from src.modules.segmentation.application.segment_version import (
     SegmentVersionActiveVersionNotFoundError,
     SegmentVersionDslError,
 )
+from src.modules.segmentation.domain.segment_definition import (
+    SegmentDefinitionArchivedError,
+)
 from src.modules.segmentation.presentation.http.router import router
 from src.modules.segmentation.presentation.http.segment_definition.controllers.preview_segment_definition import (
     preview_segment_definition,
@@ -195,6 +198,18 @@ class SegmentationPreviewApiTests(unittest.IsolatedAsyncioTestCase):
                 use_case=_UseCaseStub(
                     exc=SegmentVersionActiveVersionNotFoundError(str(uuid4()))
                 ),
+            )
+
+        self.assertEqual(caught.exception.status_code, 409)
+
+    async def test_version_preview_maps_archived_segment_to_409(self) -> None:
+        with self.assertRaises(HTTPException) as caught:
+            await preview_segment_version(
+                segment_id=uuid4(),
+                segment_version_id=uuid4(),
+                payload=PreviewSegmentVersionRequestSchema(),
+                context=_context(uuid4()),
+                use_case=_UseCaseStub(exc=SegmentDefinitionArchivedError(str(uuid4()))),
             )
 
         self.assertEqual(caught.exception.status_code, 409)

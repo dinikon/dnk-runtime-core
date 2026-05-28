@@ -23,6 +23,7 @@ from src.modules.segmentation.application.segment_version import (
     SegmentVersionEvaluationUnsupportedRelationPathError,
 )
 from src.modules.segmentation.domain.segment_definition import (
+    SegmentDefinitionArchivedError,
     SegmentDefinitionNotFoundError,
     SegmentIdVO,
 )
@@ -86,6 +87,7 @@ async def preview_segment_version(
             detail=str(exc),
         ) from exc
     except (
+        SegmentDefinitionArchivedError,
         SegmentVersionActiveVersionNotFoundError,
         SegmentVersionEvaluationUnsupportedRelationPathError,
         RuntimeDataPersistenceError,
