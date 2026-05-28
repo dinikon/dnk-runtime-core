@@ -18,18 +18,17 @@ class SendCommunicationCommand:
 
     tenant_id: EntityIdVO
     initiator_type: str
-    message_class: str
+    initiator_ref_id: str
+    correlation_id: EntityIdVO
+    idempotency_key: str
     channel_code: str
+    template_id: MessageTemplateIdVO
+    recipient_identifier_type: str
     recipient_address: str
+    recipient_snapshot: dict[str, Any]
     communication_request_id: CommunicationRequestIdVO | None = None
     outbound_message_id: OutboundMessageIdVO | None = None
-    template_code: str | None = None
-    template_id: MessageTemplateIdVO | None = None
-    initiator_ref_id: str | None = None
-    correlation_id: EntityIdVO | None = None
-    idempotency_key: str | None = None
-    contact_id: EntityIdVO | None = None
-    recipient_snapshot: dict[str, Any] = field(default_factory=dict)
+    message_class: str | None = None
     variables: dict[str, Any] = field(default_factory=dict)
     scheduled_at: datetime | None = None
     priority: int = 100

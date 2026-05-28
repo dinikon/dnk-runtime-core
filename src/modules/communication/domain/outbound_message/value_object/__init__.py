@@ -16,6 +16,9 @@ from src.modules.communication.domain.outbound_message.value_object.outbound_pri
 from src.modules.communication.domain.outbound_message.value_object.recipient_address import (
     RecipientAddressVO,
 )
+from src.modules.communication.domain.outbound_message.value_object.recipient_identifier_type import (
+    RecipientIdentifierTypeVO,
+)
 
 __all__ = [
     "CommunicationRequestIdVO",
@@ -24,4 +27,5 @@ __all__ = [
     "OutboundMessageIdVO",
     "OutboundPriorityVO",
     "RecipientAddressVO",
+    "RecipientIdentifierTypeVO",
 ]

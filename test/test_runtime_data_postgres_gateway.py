@@ -19,7 +19,10 @@ from src.modules.runtime_data.application.query.query_plan import RuntimeQueryPl
 from src.modules.runtime_data.application.query.typed_filter_builder import (
     RuntimeTypedFilterBuilder,
 )
-from src.modules.runtime_data.domain.error import RuntimeDataPersistenceError
+from src.modules.runtime_data.domain.error import (
+    RuntimeDataPersistenceError,
+    RuntimeDataValidationError,
+)
 from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.command_gateway import (
     PostgresRuntimeCommandGateway,
 )
@@ -308,6 +311,28 @@ class PostgresRuntimePersistenceGatewayTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("LIMIT :claim_limit", sql)
         self.assertIn('WHERE "id" IN (SELECT "id" FROM claimed)', sql)
         self.assertEqual(params["claim_limit"], 5)
+
+    async def test_advisory_xact_lock_uses_hashtextextended(self) -> None:
+        session = _SessionSpy([_MappingsResult([])])
+        gateway = self._command_gateway(session)
+
+        await gateway.acquire_advisory_xact_lock("communication:key")
+
+        sql, params = session.calls[0]
+        self.assertIn("pg_advisory_xact_lock", sql)
+        self.assertIn("hashtextextended(:lock_key, 0)", sql)
+        self.assertEqual(params, {"lock_key": "communication:key"})
+        self.assertEqual(session.commit_calls, 0)
+        self.assertEqual(session.rollback_calls, 0)
+
+    async def test_advisory_xact_lock_rejects_blank_key(self) -> None:
+        session = _SessionSpy([])
+        gateway = self._command_gateway(session)
+
+        with self.assertRaises(RuntimeDataValidationError):
+            await gateway.acquire_advisory_xact_lock("")
+
+        self.assertEqual(session.calls, [])
 
     async def test_list_supports_filters_sorting_and_pagination(self) -> None:
         contact_id = uuid4()

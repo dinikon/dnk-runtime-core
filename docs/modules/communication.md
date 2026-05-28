@@ -32,7 +32,8 @@ communication runtime objects нет.
 - describe-fields / metadata HTTP endpoints для communication objects;
 - отдельный read/list HTTP API для delivery attempts и delivery events;
 - scheduled jobs;
-- audience/contact selection; `communication` принимает уже подготовленный `recipient_address`.
+- audience/contact/identity/device selection; `communication` принимает уже подготовленный low-level recipient:
+  `recipient_identifier_type`, `recipient_address` и immutable `recipient_snapshot`.
 
 ## Public Functionality
 
@@ -150,10 +151,11 @@ communication runtime objects нет.
 - ID: `CommunicationRequestIdVO`.
 - Tenant scope: хранит `tenant_id: EntityIdVO`.
 - Fields: `communication_request_id`, `tenant_id`, `initiator_type`, `initiator_ref_id`, `correlation_id`,
-  `idempotency_key`, `message_class`, `channel_code`, `template_id`, `template_version_id`, `contact_id`,
-  `recipient_address`, `recipient_snapshot`, `variables`, `scheduled_at`, `priority`, `status`, timestamps.
-- Value Objects: `InitiatorTypeVO`, `IdempotencyKeyVO`, `MessageClassVO`, `ChannelCodeVO`, `RecipientAddressVO`,
-  `OutboundPriorityVO`.
+  `idempotency_key`, `message_class`, `channel_code`, `template_id`, `template_version_id`,
+  `recipient_identifier_type`, `recipient_address`, `recipient_snapshot`, `variables`, `scheduled_at`, `priority`,
+  `status`, timestamps.
+- Value Objects: `InitiatorTypeVO`, `IdempotencyKeyVO`, `MessageClassVO`, `ChannelCodeVO`,
+  `RecipientIdentifierTypeVO`, `RecipientAddressVO`, `OutboundPriorityVO`.
 - Factory methods: `CommunicationRequest.create`.
 - Update methods: в entity не найдено.
 - Domain errors: invalid initiator/recipient/priority/idempotency errors, `CommunicationValidationError`.
@@ -164,11 +166,11 @@ communication runtime objects нет.
 - ID: `OutboundMessageIdVO`.
 - Tenant scope: хранит `tenant_id: EntityIdVO`.
 - Fields: `outbound_message_id`, `tenant_id`, `communication_request_id`, `provider_connection_id`, `channel_code`,
-  `message_class`, `priority`, `contact_id`, `recipient_address`, `rendered_payload`, `provider_request_payload`,
-  `external_message_id`, `external_status`, `internal_status`, errors, delivery timestamps, processing lease fields,
-  queue publishing fields, timestamps.
+  `message_class`, `priority`, `recipient_identifier_type`, `recipient_address`, `recipient_snapshot`,
+  `rendered_payload`, `provider_request_payload`, `external_message_id`, `external_status`, `internal_status`, errors,
+  delivery timestamps, processing lease fields, queue publishing fields, timestamps.
 - Value Objects: `OutboundMessageIdVO`, `CommunicationRequestIdVO`, `ProviderConnectionIdVO`, `ChannelCodeVO`,
-  `MessageClassVO`, `OutboundPriorityVO`, `RecipientAddressVO`.
+  `MessageClassVO`, `OutboundPriorityVO`, `RecipientIdentifierTypeVO`, `RecipientAddressVO`.
 - Factory methods: `OutboundMessage.create_queued`.
 - Update methods: `mark_published`.
 - Domain errors: `OutboundMessageNotFoundError`, `ProviderPayloadValidationError`.
@@ -368,6 +370,7 @@ Runtime object names заданы в `src/modules/communication/infrastructure/r
 - Runtime objects: `communication_delivery_attempt`, `communication_delivery_event`, plus outbound/connector lookup.
 - Tenant handling: tenant id передается в каждый метод.
 - Mapping: `delivery/row_mapper.py`.
+- Query API: list attempts/events supports `limit`, `offset` and indexed filters for outbound/status/event lookup.
 - Errors: not found возвращается как `None` в read methods; runtime errors пробрасываются выше.
 
 ### OutboundProcessingRuntimeRepository
@@ -467,8 +470,9 @@ Base prefix:
 ```
 
 Communication router монтируется в `src/modules/router.py` под `/api`; internal routers добавляют `/communication`.
-Protected routes используют `AuthenticatedRequestContextDep` и `require_tenant_id`. Webhook route использует
-`OptionalRequestContextDep` и получает tenant id из path.
+Protected routes используют `AuthenticatedRequestContextDep`; каждый controller явно читает
+`context.principal.tenant_id` и возвращает `401 Unauthorized`, если principal или tenant отсутствует.
+Webhook route использует `OptionalRequestContextDep` и получает tenant id из path.
 
 | Method | Path                                                                        | Controller                       | Use Case                           | Request                                 | Response                                |
 |--------|-----------------------------------------------------------------------------|----------------------------------|------------------------------------|-----------------------------------------|-----------------------------------------|
@@ -483,6 +487,10 @@ Protected routes используют `AuthenticatedRequestContextDep` и `requi
 | `POST` | `/api/communication/send`                                                   | `send_communication`             | `SendCommunicationUseCase`         | `SendCommunicationRequestSchema`        | `SendCommunicationResponseSchema`       |
 | `GET`  | `/api/communication/messages`                                               | `list_messages`                  | `ListOutboundMessagesUseCase`      | query `limit`, `offset`                 | `ListOutboundMessagesResponseSchema`    |
 | `GET`  | `/api/communication/messages/{outbound_message_id}`                         | `get_message`                    | `GetOutboundMessageUseCase`        | path param                              | `OutboundMessageResponseSchema`         |
+| `GET`  | `/api/communication/messages/{outbound_message_id}/attempts`                | `list_message_delivery_attempts` | `ListDeliveryAttemptsUseCase`      | path param, query `limit`, `offset`     | `ListDeliveryAttemptsResponseSchema`    |
+| `GET`  | `/api/communication/messages/{outbound_message_id}/events`                  | `list_message_delivery_events`   | `ListDeliveryEventsUseCase`        | path param, query `limit`, `offset`     | `ListDeliveryEventsResponseSchema`      |
+| `GET`  | `/api/communication/delivery-attempts`                                      | `list_delivery_attempts`         | `ListDeliveryAttemptsUseCase`      | query filters, `limit`, `offset`        | `ListDeliveryAttemptsResponseSchema`    |
+| `GET`  | `/api/communication/delivery-events`                                        | `list_delivery_events`           | `ListDeliveryEventsUseCase`        | query filters, `limit`, `offset`        | `ListDeliveryEventsResponseSchema`      |
 | `POST` | `/api/communication/webhooks/{tenant_id}/{provider_code}`                   | `handle_provider_webhook`        | `HandleProviderWebhookUseCase`     | raw JSON object                         | `WebhookResponseSchema`                 |
 
 HTTP status facts:
@@ -496,7 +504,12 @@ HTTP status facts:
   `SchemaRegistryMetadataInconsistentError`, `CommunicationRuntimeStateError` map to `409`.
 - `CommunicationValidationError`, `RuntimeDataValidationError`, `RuntimeDataFilterError`, generic `DomainError` map to
   `422`.
-- Outbound controllers use shared `map_outbound_http_error`.
+- Controllers handle domain/runtime errors explicitly and map DTOs into Pydantic response schemas in-place.
+
+Delivery read filters:
+
+- `delivery-attempts`: `outbound_message_id`, `status`, `limit`, `offset`.
+- `delivery-events`: `outbound_message_id`, `external_message_id`, `internal_status`, `event_type`, `limit`, `offset`.
 
 `send_communication` commits UoW after use case success and only then attempts to publish RabbitMQ job. If publisher is
 disabled or result is not `QUEUED`, no publish happens. Publish failure is logged, UoW is rolled back for publish
@@ -517,13 +530,13 @@ but already committed send row remains queued for later publishing.
 
 ## Dependencies On Other Modules
 
-| Module            | Layer                                          | Used For                                                                                                  |
-|-------------------|------------------------------------------------|-----------------------------------------------------------------------------------------------------------|
+| Module            | Layer                                          | Used For                                                                                                                |
+|-------------------|------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
 | `shared`          | domain/application/presentation/infrastructure | `EntityIdVO`, `DomainError`, clock port, UoW, request context, SMTP transport, messaging publisher, integration outbox. |
-| `runtime_data`    | infrastructure/presentation                    | Runtime command/query gateways, type policy, runtime validation/filter/persistence errors.                |
-| `schema_registry` | infrastructure/presentation/management         | Runtime object resolver, object descriptors, schema seed, SQLAlchemy repositories in management builders. |
-| `config`          | presentation/infrastructure/management         | `dnk_config.COMMUNICATION_QUEUE`, RabbitMQ settings.                                                      |
-| `contact_point`   | none direct                                    | Direct use cases/repositories не используются; только `contact_id` value хранится в communication rows.   |
+| `runtime_data`    | infrastructure/presentation                    | Runtime command/query gateways, type policy, runtime validation/filter/persistence errors.                              |
+| `schema_registry` | infrastructure/presentation/management         | Runtime object resolver, object descriptors, schema seed, SQLAlchemy repositories in management builders.               |
+| `config`          | presentation/infrastructure/management         | `dnk_config.COMMUNICATION_QUEUE`, RabbitMQ settings.                                                                    |
+| `contact_point`   | none direct                                    | Direct use cases/repositories не используются; source refs допускаются только внутри `recipient_snapshot`.              |
 
 External library dependencies found in module code: FastAPI, `uuid6`, PyYAML, `jsonschema`, Jinja2, JSONPath parser,
 httpx client adapter, FastStream/RabbitMQ, SQLAlchemy session factory for management builders.
@@ -611,8 +624,8 @@ uv run python -m unittest test.test_communication_services test.test_communicati
   use case возвращает `ProviderConnectionDTO`.
 - В `ProcessOutboundMessageUseCase` batch processing ловит broad `Exception` для каждого message, считает failure и
   продолжает обработку следующего message.
-- `contact_id` хранится в `CommunicationRequest` и `OutboundMessage`, но direct lookup/validation через `contact_point`
-  или `crm` module не найден.
+- `communication` не хранит source-specific recipient columns вроде `contact_id`, `contact_point_id`, owner/context ids
+  или identity/device refs. Caller должен сохранить provenance только внутри JSON `recipient_snapshot`.
 - Есть raw `dict[str, Any]` payloads в domain/application DTOs для schemas, rendered payloads, provider request/response
   payloads и webhook raw payloads; это отражает текущий transport/runtime contract.
 

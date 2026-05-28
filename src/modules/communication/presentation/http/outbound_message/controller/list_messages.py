@@ -1,22 +1,35 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
 
 from src.modules.communication.application.outbound_message import (
     ListOutboundMessagesQuery,
 )
+from src.modules.communication.domain.error import (
+    CommunicationNotFoundError,
+    CommunicationRuntimeStateError,
+    CommunicationValidationError,
+)
 from src.modules.communication.presentation.depends.application import (
     ListOutboundMessagesUseCaseDep,
-)
-from src.modules.communication.presentation.http.common import require_tenant_id
-from src.modules.communication.presentation.http.outbound_message.controller.error_mapper import (
-    map_outbound_http_error,
 )
 from src.modules.communication.presentation.http.outbound_message.responses import (
     ListOutboundMessagesResponseSchema,
     OutboundMessageResponseSchema,
 )
+from src.modules.runtime_data.domain.error import (
+    RuntimeDataFilterError,
+    RuntimeDataPersistenceError,
+    RuntimeDataPolicyError,
+    RuntimeDataValidationError,
+)
+from src.modules.schema_registry.domain.error import (
+    RuntimeObjectDescriptorError,
+    RuntimeObjectNotFoundError,
+    SchemaRegistryMetadataInconsistentError,
+)
 from src.modules.shared import EntityIdVO
+from src.modules.shared.domain.errors import DomainError
 from src.modules.shared.presentation import AuthenticatedRequestContextDep
 
 router = APIRouter(prefix="/communication", tags=["communication"])
@@ -30,7 +43,13 @@ async def list_messages(
     offset: int = 0,
 ) -> ListOutboundMessagesResponseSchema:
     """HTTP controller списка outbound messages."""
-    tenant_id = require_tenant_id(context)
+    principal = context.principal
+    if principal is None or principal.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized.",
+        )
+    tenant_id = principal.tenant_id
     try:
         items = await use_case(
             ListOutboundMessagesQuery(
@@ -39,8 +58,31 @@ async def list_messages(
                 offset=offset,
             )
         )
-    except Exception as exc:
-        raise map_outbound_http_error(exc) from exc
+    except CommunicationNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
+    except (
+        RuntimeDataPersistenceError,
+        RuntimeDataPolicyError,
+        RuntimeObjectDescriptorError,
+        RuntimeObjectNotFoundError,
+        SchemaRegistryMetadataInconsistentError,
+        CommunicationRuntimeStateError,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from exc
+    except (
+        CommunicationValidationError,
+        RuntimeDataValidationError,
+        RuntimeDataFilterError,
+        DomainError,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
     return ListOutboundMessagesResponseSchema(
         items=[
             OutboundMessageResponseSchema(
@@ -49,8 +91,9 @@ async def list_messages(
                 communication_request_id=item.communication_request_id,
                 provider_connection_id=item.provider_connection_id,
                 channel_code=item.channel_code,
-                contact_id=item.contact_id,
+                recipient_identifier_type=item.recipient_identifier_type,
                 recipient_address=item.recipient_address,
+                recipient_snapshot=dict(item.recipient_snapshot),
                 rendered_payload=dict(item.rendered_payload),
                 provider_request_payload=dict(item.provider_request_payload),
                 external_message_id=item.external_message_id,

@@ -211,6 +211,29 @@ class InventorySchemaSeedTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("id", {field.name for field in object_seed.fields})
             self.assertNotIn("tenant_id", {field.name for field in object_seed.fields})
 
+        forbidden_source_fields = {
+            "contact_id",
+            "contact_point_id",
+            "contact_point_binding_id",
+            "device_endpoint_id",
+            "device_endpoint_binding_id",
+            "external_identity_id",
+            "identity_subject_id",
+            "owner_object_id",
+            "owner_record_id",
+            "context_object_id",
+            "context_record_id",
+            "recipient_source_ref_id",
+        }
+        for object_name in ("communication_request", "communication_outbound_message"):
+            object_seed = seed.get_object(object_name)
+            assert object_seed is not None
+            field_names = {field.name for field in object_seed.fields}
+            self.assertIn("recipient_identifier_type", field_names)
+            self.assertIn("recipient_address", field_names)
+            self.assertIn("recipient_snapshot", field_names)
+            self.assertFalse(field_names & forbidden_source_fields)
+
     def test_create_plan_includes_communication_tables_indexes_and_fks(self) -> None:
         plan_service = PostgresSchemaPlanService(
             field_type_catalog=FieldTypeCatalog(),

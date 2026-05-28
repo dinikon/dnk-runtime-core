@@ -4,7 +4,13 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from src.modules.communication.application.delivery import HandleProviderWebhookUseCase
+from src.modules.communication.application.delivery import (
+    HandleProviderWebhookUseCase,
+    ListDeliveryAttemptsUseCase,
+    ListDeliveryAttemptsUseCaseProtocol,
+    ListDeliveryEventsUseCase,
+    ListDeliveryEventsUseCaseProtocol,
+)
 from src.modules.communication.application.message_template import (
     ActivateTemplateVersionUseCase,
     CreateTemplateVersionUseCase,
@@ -326,6 +332,30 @@ HandleProviderWebhookUseCaseDep = Annotated[
 ]
 
 
+def get_list_delivery_attempts_use_case(
+    repository: DeliveryRuntimeRepositoryDep,
+) -> ListDeliveryAttemptsUseCaseProtocol:
+    return ListDeliveryAttemptsUseCase(repository)
+
+
+ListDeliveryAttemptsUseCaseDep = Annotated[
+    ListDeliveryAttemptsUseCaseProtocol,
+    Depends(get_list_delivery_attempts_use_case),
+]
+
+
+def get_list_delivery_events_use_case(
+    repository: DeliveryRuntimeRepositoryDep,
+) -> ListDeliveryEventsUseCaseProtocol:
+    return ListDeliveryEventsUseCase(repository)
+
+
+ListDeliveryEventsUseCaseDep = Annotated[
+    ListDeliveryEventsUseCaseProtocol,
+    Depends(get_list_delivery_events_use_case),
+]
+
+
 def get_get_outbound_message_use_case(
     repository: OutboundMessageRuntimeRepositoryDep,
 ) -> GetOutboundMessageUseCase:
@@ -359,6 +389,8 @@ __all__ = [
     "DeliveryServiceDep",
     "GetOutboundMessageUseCaseDep",
     "HandleProviderWebhookUseCaseDep",
+    "ListDeliveryAttemptsUseCaseDep",
+    "ListDeliveryEventsUseCaseDep",
     "ListMessageTemplatesUseCaseDep",
     "ListOutboundMessagesUseCaseDep",
     "ListProviderConnectionsUseCaseDep",

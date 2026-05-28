@@ -67,6 +67,17 @@ class PostgresRuntimeCommandGateway(
             executor=self._executor,
         )
 
+    async def acquire_advisory_xact_lock(self, key: str) -> None:
+        """Acquire a PostgreSQL advisory lock scoped to the current transaction."""
+        if not isinstance(key, str) or not key:
+            raise RuntimeDataValidationError(
+                "Advisory lock key must be a non-empty string."
+            )
+        await self._execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))",
+            {"lock_key": key},
+        )
+
     async def insert(
         self,
         *,

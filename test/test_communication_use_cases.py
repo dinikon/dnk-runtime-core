@@ -25,8 +25,14 @@ from src.modules.communication.application.outbound_message import (
     SendCommunicationUseCase,
 )
 from src.modules.communication.application.delivery import (
+    DeliveryAttemptDTO,
+    DeliveryEventDTO,
     HandleProviderWebhookCommand,
     HandleProviderWebhookUseCase,
+    ListDeliveryAttemptsQuery,
+    ListDeliveryAttemptsUseCase,
+    ListDeliveryEventsQuery,
+    ListDeliveryEventsUseCase,
 )
 from src.modules.communication.domain.delivery import (
     DeliveryEventIdVO,
@@ -38,6 +44,8 @@ from src.modules.communication.domain.message_template import (
 )
 from src.modules.communication.domain.outbound_message import (
     CommunicationRequestIdVO,
+    InvalidIdempotencyKeyError,
+    InvalidInitiatorTypeError,
     OutboundMessageService,
     OutboundMessageIdVO,
     OutboundMessageStatus,
@@ -126,6 +134,7 @@ class _ProcessRepositoryStub:
             outbound_message_id=uuid4(),
             communication_request_id=uuid4(),
             provider_connection_id=uuid4(),
+            recipient_identifier_type="PHONE",
             recipient_address="380671112233",
             rendered_payload={},
             provider_request_payload={},
@@ -328,6 +337,7 @@ class _SmtpProcessRepositoryStub(_ProcessRepositoryStub):
 
     def __init__(self) -> None:
         super().__init__()
+        self.outbound.recipient_identifier_type = "EMAIL"
         self.outbound.recipient_address = "john@example.com"
         self.request.variables = {"name": "John"}
         self.version.template_payload = {
@@ -466,6 +476,7 @@ class _SendRepositoryStub:
         self.template = SimpleNamespace(
             template_id=MessageTemplateIdVO.from_value(uuid4()),
             channel_code=SimpleNamespace(value=channel_code),
+            message_class=SimpleNamespace(value="TRANSACTIONAL"),
             provider_connector_id=ProviderConnectorIdVO.from_value(uuid4()),
         )
         self.version = SimpleNamespace(
@@ -476,20 +487,28 @@ class _SendRepositoryStub:
             provider_connection_id=ProviderConnectionIdVO.from_value(uuid4()),
         )
         self.created_kwargs = None
+        self.get_existing_calls = []
+        self.template_calls = 0
+        self.version_calls = 0
+        self.connection_calls = 0
 
-    async def get_existing_send_by_idempotency(self, **_kwargs):
+    async def get_existing_send_by_idempotency(self, **kwargs):
+        self.get_existing_calls.append(kwargs)
         return None
 
     async def get_template(self, **_kwargs):
+        self.template_calls += 1
         return self.template
 
     async def get_template_by_code(self, **_kwargs):
         return self.template
 
     async def get_active_template_version(self, *_args, **_kwargs):
+        self.version_calls += 1
         return self.version
 
     async def find_active_connection(self, **_kwargs):
+        self.connection_calls += 1
         return self.connection
 
     async def create_send_request(self, **kwargs):
@@ -552,6 +571,53 @@ class _WebhookRepositoryStub:
     async def update_outbound_status_from_event(self, **kwargs):
         self.outbound.internal_status = kwargs["internal_status"]
         return self.outbound
+
+
+class _DeliveryQueryRepositoryStub:
+    def __init__(self) -> None:
+        self.attempt_calls = []
+        self.event_calls = []
+        self.now = datetime(2026, 5, 14, 12, 0, tzinfo=UTC)
+        self.outbound_id = OutboundMessageIdVO.from_value(uuid4())
+
+    async def list_delivery_attempts(self, **kwargs):
+        self.attempt_calls.append(kwargs)
+        return [
+            DeliveryAttemptDTO(
+                delivery_attempt_id=uuid4(),
+                tenant_id=kwargs["tenant_id"].uuid,
+                outbound_message_id=self.outbound_id.uuid,
+                provider_connection_id=uuid4(),
+                attempt_no=1,
+                status="SUCCESS",
+                request_payload={"body": "hello"},
+                response_payload={"status": "sent"},
+                http_status_code=200,
+                external_message_id="ext-1",
+                error_code=None,
+                error_message=None,
+                started_at=self.now,
+                finished_at=self.now,
+            )
+        ]
+
+    async def list_delivery_events(self, **kwargs):
+        self.event_calls.append(kwargs)
+        return [
+            DeliveryEventDTO(
+                delivery_event_id=uuid4(),
+                tenant_id=kwargs["tenant_id"].uuid,
+                outbound_message_id=self.outbound_id.uuid,
+                provider_connection_id=uuid4(),
+                external_message_id="ext-1",
+                external_status="Delivered",
+                internal_status="DELIVERED",
+                event_type="WEBHOOK_RECEIVED",
+                event_at=self.now,
+                raw_payload={"message_id": "ext-1"},
+                created_at=self.now,
+            )
+        ]
 
 
 class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
@@ -883,11 +949,14 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
             SendCommunicationCommand(
                 tenant_id=uuid4(),
                 initiator_type="CRM",
-                message_class="TRANSACTIONAL",
-                channel_code="VIBER",
-                recipient_address="380671112233",
-                template_code="loan_approved_viber",
+                initiator_ref_id="deal:1",
+                correlation_id=uuid4(),
                 idempotency_key="idem-1",
+                channel_code="VIBER",
+                template_id=MessageTemplateIdVO.from_value(uuid4()),
+                recipient_identifier_type="PHONE",
+                recipient_address="380671112233",
+                recipient_snapshot={"source_kind": "RAW_VALUE"},
             )
         )
 
@@ -897,6 +966,68 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
             result.outbound_message_id,
             repository.outbound.outbound_message_id.uuid,
         )
+
+    async def test_send_communication_rejects_blank_idempotency_key_first(self) -> None:
+        repository = _SendRepositoryStub()
+        use_case = SendCommunicationUseCase(
+            repository=repository,
+            service=OutboundMessageService(repository=repository, clock=_ClockStub()),
+            template_lookup=repository,
+            schema_validator=SimpleNamespace(validate=lambda *_args: None),
+            provider_connection_lookup=repository,
+        )
+
+        with self.assertRaises(InvalidIdempotencyKeyError):
+            await use_case(
+                SendCommunicationCommand(
+                    tenant_id=uuid4(),
+                    initiator_type="CRM",
+                    initiator_ref_id="manual:1",
+                    correlation_id=uuid4(),
+                    idempotency_key=" ",
+                    channel_code="SMS",
+                    template_id=MessageTemplateIdVO.from_value(uuid4()),
+                    recipient_identifier_type="PHONE",
+                    recipient_address="+380671112233",
+                    recipient_snapshot={"manual": True},
+                )
+            )
+
+        self.assertIsNone(repository.created_kwargs)
+
+    async def test_send_communication_rejects_invalid_initiator_after_idempotency_miss(
+        self,
+    ) -> None:
+        repository = _SendRepositoryStub()
+        use_case = SendCommunicationUseCase(
+            repository=repository,
+            service=OutboundMessageService(repository=repository, clock=_ClockStub()),
+            template_lookup=repository,
+            schema_validator=SimpleNamespace(validate=lambda *_args: None),
+            provider_connection_lookup=repository,
+        )
+
+        with self.assertRaises(InvalidInitiatorTypeError):
+            await use_case(
+                SendCommunicationCommand(
+                    tenant_id=uuid4(),
+                    initiator_type="manual",
+                    initiator_ref_id="manual:1",
+                    correlation_id=uuid4(),
+                    idempotency_key="idem-send-invalid-initiator",
+                    channel_code="SMS",
+                    template_id=MessageTemplateIdVO.from_value(uuid4()),
+                    recipient_identifier_type="PHONE",
+                    recipient_address="+380671112233",
+                    recipient_snapshot={"manual": True},
+                )
+            )
+
+        self.assertEqual(len(repository.get_existing_calls), 1)
+        self.assertEqual(repository.template_calls, 0)
+        self.assertEqual(repository.version_calls, 0)
+        self.assertEqual(repository.connection_calls, 0)
+        self.assertIsNone(repository.created_kwargs)
 
     async def test_send_communication_uses_prepared_recipient_address(self) -> None:
         repository = _SendRepositoryStub()
@@ -911,11 +1042,14 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         result = await use_case(
             SendCommunicationCommand(
                 tenant_id=uuid4(),
-                initiator_type="CRM",
-                message_class="TRANSACTIONAL",
+                initiator_type=" crm ",
+                initiator_ref_id="manual:1",
+                correlation_id=uuid4(),
+                idempotency_key="idem-send-1",
                 channel_code="SMS",
+                template_id=MessageTemplateIdVO.from_value(uuid4()),
+                recipient_identifier_type="PHONE",
                 recipient_address="+380671112233",
-                template_code="otp_sms",
                 recipient_snapshot={"manual": True},
             )
         )
@@ -930,6 +1064,65 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
             repository.created_kwargs["recipient_snapshot"],
             {"manual": True},
         )
+        self.assertEqual(
+            repository.created_kwargs["recipient_identifier_type"],
+            "PHONE",
+        )
+        self.assertEqual(repository.created_kwargs["initiator_type"], "CRM")
+
+    async def test_list_delivery_attempts_use_case_delegates_filters(self) -> None:
+        repository = _DeliveryQueryRepositoryStub()
+        use_case = ListDeliveryAttemptsUseCase(repository)
+        tenant_id = EntityIdVO.from_value(uuid4())
+
+        result = await use_case(
+            ListDeliveryAttemptsQuery(
+                tenant_id=tenant_id,
+                outbound_message_id=repository.outbound_id,
+                status="SUCCESS",
+                limit=25,
+                offset=50,
+            )
+        )
+
+        self.assertEqual(result[0].status, "SUCCESS")
+        self.assertEqual(repository.attempt_calls[0]["tenant_id"], tenant_id)
+        self.assertEqual(
+            repository.attempt_calls[0]["outbound_message_id"],
+            repository.outbound_id,
+        )
+        self.assertEqual(repository.attempt_calls[0]["status"], "SUCCESS")
+        self.assertEqual(repository.attempt_calls[0]["limit"], 25)
+        self.assertEqual(repository.attempt_calls[0]["offset"], 50)
+
+    async def test_list_delivery_events_use_case_delegates_filters(self) -> None:
+        repository = _DeliveryQueryRepositoryStub()
+        use_case = ListDeliveryEventsUseCase(repository)
+        tenant_id = EntityIdVO.from_value(uuid4())
+
+        result = await use_case(
+            ListDeliveryEventsQuery(
+                tenant_id=tenant_id,
+                outbound_message_id=repository.outbound_id,
+                external_message_id="ext-1",
+                internal_status="DELIVERED",
+                event_type="WEBHOOK_RECEIVED",
+                limit=10,
+                offset=20,
+            )
+        )
+
+        self.assertEqual(result[0].event_type, "WEBHOOK_RECEIVED")
+        self.assertEqual(repository.event_calls[0]["tenant_id"], tenant_id)
+        self.assertEqual(
+            repository.event_calls[0]["outbound_message_id"],
+            repository.outbound_id,
+        )
+        self.assertEqual(repository.event_calls[0]["external_message_id"], "ext-1")
+        self.assertEqual(repository.event_calls[0]["internal_status"], "DELIVERED")
+        self.assertEqual(repository.event_calls[0]["event_type"], "WEBHOOK_RECEIVED")
+        self.assertEqual(repository.event_calls[0]["limit"], 10)
+        self.assertEqual(repository.event_calls[0]["offset"], 20)
 
     async def test_webhook_updates_outbound_and_creates_delivery_event(self) -> None:
         repository = _WebhookRepositoryStub(matched=True)

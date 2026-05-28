@@ -292,6 +292,7 @@ def _render_context(
 ) -> dict[str, Any]:
     return {
         "recipient": {
+            "identifier_type": context.recipient_identifier_type,
             "address": context.recipient_address,
             "snapshot": context.recipient_snapshot,
         },

@@ -24,6 +24,7 @@ def build_provider_send_context(
         outbound_message_id=id_uuid(outbound.outbound_message_id),
         communication_request_id=id_uuid(request.communication_request_id),
         initiator_ref_id=request.initiator_ref_id,
+        recipient_identifier_type=outbound.recipient_identifier_type,
         recipient_address=outbound.recipient_address,
         recipient_snapshot=request.recipient_snapshot,
         variables=request.variables,

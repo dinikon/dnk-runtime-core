@@ -36,16 +36,16 @@ def communication_request_entity(
         ),
         tenant_id=tenant_id,
         initiator_type=as_str(row.get("initiator_type")),
-        initiator_ref_id=as_optional_str(row.get("initiator_ref_id")),
-        correlation_id=as_optional_entity_id(row.get("correlation_id")),
-        idempotency_key=as_optional_str(row.get("idempotency_key")),
+        initiator_ref_id=as_str(row.get("initiator_ref_id")),
+        correlation_id=as_entity_id(row.get("correlation_id")),
+        idempotency_key=as_str(row.get("idempotency_key")),
         message_class=as_str(row.get("message_class")),
         channel_code=as_str(row.get("channel_code")),
         template_id=MessageTemplateIdVO.from_value(as_uuid(row.get("template_id"))),
         template_version_id=TemplateVersionIdVO.from_value(
             as_uuid(row.get("template_version_id"))
         ),
-        contact_id=as_optional_entity_id(row.get("contact_id")),
+        recipient_identifier_type=as_str(row.get("recipient_identifier_type")),
         recipient_address=as_str(row.get("recipient_address")),
         recipient_snapshot=as_dict(row.get("recipient_snapshot")),
         variables=as_dict(row.get("variables")),
@@ -75,8 +75,9 @@ def outbound_message_entity(
         channel_code=as_str(row.get("channel_code")),
         message_class=as_str(row.get("message_class")),
         priority=int(row.get("priority")),
-        contact_id=as_optional_entity_id(row.get("contact_id")),
+        recipient_identifier_type=as_str(row.get("recipient_identifier_type")),
         recipient_address=as_str(row.get("recipient_address")),
+        recipient_snapshot=as_dict(row.get("recipient_snapshot")),
         rendered_payload=as_dict(row.get("rendered_payload")),
         provider_request_payload=as_dict(row.get("provider_request_payload")),
         external_message_id=as_optional_str(row.get("external_message_id")),
@@ -111,8 +112,9 @@ def outbound_message_dto(
         communication_request_id=as_uuid(row.get("communication_request_id")),
         provider_connection_id=as_uuid(row.get("provider_connection_id")),
         channel_code=as_str(row.get("channel_code")),
-        contact_id=as_optional_uuid(row.get("contact_id")),
+        recipient_identifier_type=as_str(row.get("recipient_identifier_type")),
         recipient_address=as_str(row.get("recipient_address")),
+        recipient_snapshot=as_dict(row.get("recipient_snapshot")),
         rendered_payload=as_dict(row.get("rendered_payload")),
         provider_request_payload=as_dict(row.get("provider_request_payload")),
         external_message_id=as_optional_str(row.get("external_message_id")),
@@ -195,6 +197,11 @@ def as_optional_entity_id(value: Any) -> EntityIdVO | None:
     """Достает optional EntityIdVO из runtime row."""
     if value is None:
         return None
+    return EntityIdVO.from_value(as_uuid(value))
+
+
+def as_entity_id(value: Any) -> EntityIdVO:
+    """Достает EntityIdVO из runtime row."""
     return EntityIdVO.from_value(as_uuid(value))
 
 

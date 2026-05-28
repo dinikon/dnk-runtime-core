@@ -17,7 +17,6 @@ from src.modules.communication.domain.message_template import (
 from src.modules.communication.presentation.depends.application import (
     CreateTemplateVersionUseCaseDep,
 )
-from src.modules.communication.presentation.http.common import require_tenant_id
 from src.modules.communication.presentation.http.message_template.requests import (
     CreateTemplateVersionRequestSchema,
 )
@@ -54,7 +53,13 @@ async def create_template_version(
     use_case: CreateTemplateVersionUseCaseDep,
 ) -> TemplateVersionResponseSchema:
     """HTTP endpoint создания версии message template."""
-    tenant_id = EntityIdVO.from_value(require_tenant_id(context))
+    principal = context.principal
+    if principal is None or principal.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized.",
+        )
+    tenant_id = EntityIdVO.from_value(principal.tenant_id)
     try:
         result = await use_case(
             CreateTemplateVersionCommand(

@@ -11,6 +11,7 @@ from src.modules.communication.domain.outbound_message.error import (
     InvalidInitiatorTypeError,
     InvalidOutboundPriorityError,
     InvalidRecipientAddressError,
+    InvalidRecipientIdentifierTypeError,
     OutboundMessageNotFoundError,
     ProviderPayloadValidationError,
 )
@@ -27,6 +28,7 @@ from src.modules.communication.domain.outbound_message.value_object import (
     OutboundMessageIdVO,
     OutboundPriorityVO,
     RecipientAddressVO,
+    RecipientIdentifierTypeVO,
 )
 
 __all__ = [
@@ -38,6 +40,7 @@ __all__ = [
     "InvalidInitiatorTypeError",
     "InvalidOutboundPriorityError",
     "InvalidRecipientAddressError",
+    "InvalidRecipientIdentifierTypeError",
     "OutboundMessage",
     "OutboundMessageIdVO",
     "OutboundMessageNotFoundError",
@@ -47,5 +50,6 @@ __all__ = [
     "OutboundPriorityVO",
     "ProviderPayloadValidationError",
     "RecipientAddressVO",
+    "RecipientIdentifierTypeVO",
     "RequestStatus",
 ]

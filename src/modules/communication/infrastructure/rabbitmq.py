@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import UTC, datetime
+import logging
 from typing import Any
 from uuid import UUID
 
@@ -40,6 +41,8 @@ from src.modules.shared.infrastructure.messaging import (
     to_rabbit_exchange,
     to_rabbit_queue,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def build_communication_exchange(
@@ -168,7 +171,7 @@ async def handle_outbound_message_job(
         return
 
     try:
-        await processor(
+        result = await processor(
             ProcessOutboundMessageByIdCommand(
                 tenant_id=EntityIdVO.from_value(job.tenant_id),
                 outbound_message_id=OutboundMessageIdVO.from_value(
@@ -177,8 +180,23 @@ async def handle_outbound_message_job(
             )
         )
     except Exception:
+        logger.exception(
+            "Communication outbound job failed; requeueing "
+            "tenant_id=%s outbound_message_id=%s",
+            job.tenant_id,
+            job.outbound_message_id,
+        )
         await message.nack(requeue=True)
         return
+    if getattr(result, "skipped", False):
+        logger.warning(
+            "Communication outbound job skipped tenant_id=%s outbound_message_id=%s "
+            "status=%s error=%s",
+            job.tenant_id,
+            job.outbound_message_id,
+            getattr(result, "status", None),
+            getattr(result, "error_message", None),
+        )
     await message.ack()
 
 

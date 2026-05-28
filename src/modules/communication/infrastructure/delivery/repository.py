@@ -11,6 +11,10 @@ from src.modules.communication.domain.delivery import (
     DeliveryEvent,
     DeliveryRepositoryProtocol,
 )
+from src.modules.communication.application.delivery.dto import (
+    DeliveryAttemptDTO,
+    DeliveryEventDTO,
+)
 from src.modules.communication.application.outbound_message.integration_events import (
     build_delivery_status_events,
 )
@@ -25,7 +29,9 @@ from src.modules.communication.domain.provider_connector import (
     ProviderConnectorCodeVO,
 )
 from src.modules.communication.infrastructure.delivery.row_mapper import (
+    delivery_attempt_dto,
     delivery_attempt_entity,
+    delivery_event_dto,
     delivery_event_entity,
 )
 from src.modules.communication.infrastructure.outbound_message.row_mapper import (
@@ -95,6 +101,112 @@ class DeliveryRuntimeRepository(DeliveryRepositoryProtocol):
             return None
         return delivery_attempt_entity(row)
 
+    async def list_delivery_attempts(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        limit: int,
+        offset: int,
+        outbound_message_id: OutboundMessageIdVO | None = None,
+        status: str | None = None,
+    ) -> list[DeliveryAttemptDTO]:
+        """Возвращает страницу delivery attempts."""
+        tenant_vo = _entity_id(tenant_id)
+        descriptor = await self._resolve_descriptor(
+            tenant_vo,
+            self._ATTEMPT_OBJECT_NAME,
+        )
+        filters: list[TypedFilterExpression] = []
+        if outbound_message_id is not None:
+            filters.append(
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="outbound_message_id",
+                    op="eq",
+                    value=_outbound_message_id(outbound_message_id).uuid,
+                )
+            )
+        if status is not None:
+            filters.append(
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="status",
+                    op="eq",
+                    value=status,
+                )
+            )
+        rows = await self._list(
+            descriptor=descriptor,
+            filters=tuple(filters),
+            sorting=(SortSpec("started_at", "desc"),),
+            limit=limit,
+            offset=offset,
+        )
+        return [delivery_attempt_dto(tenant_id=tenant_vo, row=row) for row in rows]
+
+    async def list_delivery_events(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        limit: int,
+        offset: int,
+        outbound_message_id: OutboundMessageIdVO | None = None,
+        external_message_id: str | None = None,
+        internal_status: str | None = None,
+        event_type: str | None = None,
+    ) -> list[DeliveryEventDTO]:
+        """Возвращает страницу delivery events."""
+        tenant_vo = _entity_id(tenant_id)
+        descriptor = await self._resolve_descriptor(
+            tenant_vo,
+            self._EVENT_OBJECT_NAME,
+        )
+        filters: list[TypedFilterExpression] = []
+        if outbound_message_id is not None:
+            filters.append(
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="outbound_message_id",
+                    op="eq",
+                    value=_outbound_message_id(outbound_message_id).uuid,
+                )
+            )
+        if external_message_id is not None:
+            filters.append(
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="external_message_id",
+                    op="eq",
+                    value=external_message_id,
+                )
+            )
+        if internal_status is not None:
+            filters.append(
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="internal_status",
+                    op="eq",
+                    value=internal_status,
+                )
+            )
+        if event_type is not None:
+            filters.append(
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="event_type",
+                    op="eq",
+                    value=event_type,
+                )
+            )
+        rows = await self._list(
+            descriptor=descriptor,
+            filters=tuple(filters),
+            sorting=(SortSpec("created_at", "desc"),),
+            limit=limit,
+            offset=offset,
+        )
+        return [delivery_event_dto(tenant_id=tenant_vo, row=row) for row in rows]
+
     async def next_attempt_no(
         self,
         *,
@@ -143,10 +255,13 @@ class DeliveryRuntimeRepository(DeliveryRepositoryProtocol):
                 payload={"id": attempt.delivery_attempt_id.uuid, **payload},
             )
         else:
+            patch = {
+                key: value for key, value in payload.items() if key != "started_at"
+            }
             row = await self._runtime_command_gateway.update(
                 descriptor=descriptor,
                 object_id=attempt.delivery_attempt_id.uuid,
-                patch=payload,
+                patch=patch,
             )
             if row is None:
                 raise DeliveryAttemptNotFoundError("Delivery attempt was not found.")
@@ -351,6 +466,18 @@ def _attempt_payload(attempt: DeliveryAttempt) -> dict[str, Any]:
         "started_at": attempt.started_at,
         "finished_at": attempt.finished_at,
     }
+
+
+def _entity_id(value: Any) -> EntityIdVO:
+    if type(value) is EntityIdVO:
+        return value
+    return EntityIdVO.from_value(value)
+
+
+def _outbound_message_id(value: Any) -> OutboundMessageIdVO:
+    if type(value) is OutboundMessageIdVO:
+        return value
+    return OutboundMessageIdVO.from_value(value)
 
 
 def _status_timestamp_patch(

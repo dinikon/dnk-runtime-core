@@ -122,6 +122,7 @@ async def handle_worker(_args: argparse.Namespace) -> int:
     """Runs the FastStream RabbitMQ communication worker."""
     settings = dnk_config.COMMUNICATION_QUEUE
     provider = RabbitMQBrokerProvider(dnk_config.RABBITMQ)
+    await db_helper.initialize_for_startup()
     processor = build_process_outbound_message_by_id_use_case(
         session_factory=db_helper.session_factory,
         processing_lease_seconds=settings.processing_lease_seconds,

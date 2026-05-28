@@ -18,7 +18,7 @@ class CreateProviderConnectionUseCaseProtocol(Protocol):
 
     async def __call__(
         self, command: CreateProviderConnectionCommand
-    ) -> ProviderConnectionEntity:
+    ) -> ProviderConnectionDTO:
         """Создает provider connection через domain layer."""
         ...
 
