@@ -1,6 +1,9 @@
 from src.modules.segmentation.domain.segment_definition.entity import SegmentDefinition
 from src.modules.segmentation.domain.segment_definition.error import (
+    InvalidSegmentDefinitionNameError,
+    SegmentDefinitionArchivedError,
     SegmentDefinitionError,
+    SegmentDefinitionKindChangeError,
     SegmentDefinitionNotFoundError,
 )
 from src.modules.segmentation.domain.segment_definition.repository import (
@@ -13,11 +16,14 @@ from src.modules.segmentation.domain.segment_definition.value_object import (
 )
 
 __all__ = [
+    "SegmentDefinition",
+    "SegmentDefinitionArchivedError",
     "SegmentDefinitionCommandRepositoryProtocol",
     "SegmentDefinitionError",
+    "SegmentDefinitionKindChangeError",
     "SegmentDefinitionNotFoundError",
-    "SegmentDefinition",
     "SegmentIdVO",
     "SegmentKindVO",
     "SegmentStatusVO",
+    "InvalidSegmentDefinitionNameError",
 ]

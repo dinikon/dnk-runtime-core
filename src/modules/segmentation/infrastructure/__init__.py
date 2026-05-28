@@ -7,9 +7,13 @@ from src.modules.segmentation.infrastructure.segment_definition_runtime_reposito
 from src.modules.segmentation.infrastructure.segment_static_member_runtime_repository import (
     SegmentStaticMemberRuntimeRepository,
 )
+from src.modules.segmentation.infrastructure.segment_version_runtime_repository import (
+    SegmentVersionRuntimeRepository,
+)
 
 __all__ = [
     "RuntimeContactLookupAdapter",
     "SegmentDefinitionRuntimeRepository",
     "SegmentStaticMemberRuntimeRepository",
+    "SegmentVersionRuntimeRepository",
 ]

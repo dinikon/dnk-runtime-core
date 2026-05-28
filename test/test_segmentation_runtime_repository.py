@@ -18,6 +18,7 @@ from src.modules.schema_registry.runtime import (
     RuntimeObjectDescriptor,
 )
 from src.modules.segmentation.domain.segment_definition import (
+    SegmentDefinition,
     SegmentIdVO,
     SegmentKindVO,
     SegmentStatusVO,
@@ -27,10 +28,16 @@ from src.modules.segmentation.domain.segment_static_member import (
     SegmentStaticMemberIdVO,
     SegmentStaticMemberSourceTypeVO,
 )
+from src.modules.segmentation.domain.segment_version import (
+    SegmentVersion,
+    SegmentVersionIdVO,
+    SegmentVersionStatusVO,
+)
 from src.modules.segmentation.infrastructure import (
     RuntimeContactLookupAdapter,
     SegmentDefinitionRuntimeRepository,
     SegmentStaticMemberRuntimeRepository,
+    SegmentVersionRuntimeRepository,
 )
 from src.modules.shared import EntityIdVO
 
@@ -59,10 +66,24 @@ def _descriptor(object_name: str) -> RuntimeObjectDescriptor:
         ),
         "segment_definition": (
             _field("id", "uuid"),
+            _field("created_at", "datetime"),
+            _field("updated_at", "datetime"),
             _field("name", "text"),
             _field("description", "text"),
             _field("segment_kind", "select"),
             _field("status", "select"),
+            _field("archived_at", "datetime"),
+        ),
+        "segment_version": (
+            _field("id", "uuid"),
+            _field("created_at", "datetime"),
+            _field("updated_at", "datetime"),
+            _field("segment_definition_id", "reference"),
+            _field("version_number", "int"),
+            _field("status", "select"),
+            _field("config", "json"),
+            _field("config_checksum", "text"),
+            _field("activated_at", "datetime"),
             _field("archived_at", "datetime"),
         ),
         "contact": (
@@ -103,6 +124,10 @@ class _CommandGatewayStub:
         self.events: list[str] = query_gateway.events
         self.locks: list[str] = []
         self.insert_payloads: list[Mapping[str, Any]] = []
+        self.update_payloads: list[tuple[Any, Mapping[str, Any]]] = []
+        self.update_where_payloads: list[
+            tuple[Sequence[TypedFilterExpression], Mapping[str, Any]]
+        ] = []
         self.deleted_ids: list[Any] = []
         self.fail_insert_with_row: Mapping[str, Any] | None = None
 
@@ -133,6 +158,24 @@ class _CommandGatewayStub:
         )
         return row
 
+    async def update(
+        self,
+        *,
+        descriptor: RuntimeObjectDescriptor,
+        object_id: Any,
+        patch: Mapping[str, Any],
+    ) -> Mapping[str, Any] | None:
+        self.update_payloads.append((object_id, dict(patch)))
+        rows = self.query_gateway.rows_by_object.get(descriptor.object_name, [])
+        for index, row in enumerate(rows):
+            if row.get("id") == object_id:
+                new_row = dict(row)
+                new_row.update(dict(patch))
+                new_row["updated_at"] = datetime(2026, 5, 28, 12, 1, tzinfo=UTC)
+                rows[index] = new_row
+                return new_row
+        return None
+
     async def delete(
         self,
         *,
@@ -146,6 +189,33 @@ class _CommandGatewayStub:
             row for row in rows if row.get("id") != object_id
         ]
         return len(self.query_gateway.rows_by_object[descriptor.object_name]) != before
+
+    async def update_where(
+        self,
+        *,
+        descriptor: RuntimeObjectDescriptor,
+        filters: Sequence[TypedFilterExpression],
+        patch: Mapping[str, Any],
+    ) -> list[Mapping[str, Any]]:
+        self.update_where_payloads.append((filters, dict(patch)))
+        rows = self.query_gateway.rows_by_object.get(descriptor.object_name, [])
+        updated: list[Mapping[str, Any]] = []
+        for index, row in enumerate(rows):
+            matches = True
+            for expression in filters:
+                if (
+                    isinstance(expression, TypedFilterSpec)
+                    and expression.op == "eq"
+                    and row.get(expression.field.name) != expression.value
+                ):
+                    matches = False
+            if matches:
+                new_row = dict(row)
+                new_row.update(dict(patch))
+                new_row["updated_at"] = datetime(2026, 5, 28, 12, 1, tzinfo=UTC)
+                rows[index] = new_row
+                updated.append(new_row)
+        return updated
 
 
 class _QueryGatewayStub:
@@ -364,6 +434,7 @@ class SegmentationRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
         ]
         repository = SegmentDefinitionRuntimeRepository(
             runtime_object_resolver=_ResolverStub(),
+            runtime_command_gateway=_CommandGatewayStub(query_gateway),
             runtime_query_gateway=query_gateway,
         )
 
@@ -371,6 +442,184 @@ class SegmentationRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(segment.segment_kind, SegmentKindVO.STATIC)
         self.assertEqual(segment.status, SegmentStatusVO.ACTIVE)
+
+    async def test_segment_definition_repository_save_inserts_and_gets_dto(
+        self,
+    ) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        segment_id = SegmentIdVO.from_value(uuid4())
+        query_gateway = _QueryGatewayStub()
+        command_gateway = _CommandGatewayStub(query_gateway)
+        repository = SegmentDefinitionRuntimeRepository(
+            runtime_object_resolver=_ResolverStub(),
+            runtime_command_gateway=command_gateway,
+            runtime_query_gateway=query_gateway,
+        )
+
+        saved = await repository.save(
+            tenant_id=tenant_id,
+            segment=SegmentDefinition(
+                segment_id=segment_id,
+                name="VIP",
+                segment_kind=SegmentKindVO.STATIC,
+                status=SegmentStatusVO.DRAFT,
+                description="Customers",
+            ),
+        )
+        dto = await repository.get(tenant_id=tenant_id, segment_id=segment_id)
+
+        self.assertEqual(saved.segment_id, segment_id)
+        self.assertEqual(command_gateway.insert_payloads[0]["name"], "VIP")
+        self.assertEqual(dto.description, "Customers")
+
+    async def test_segment_definition_repository_list_uses_page_and_sorting(
+        self,
+    ) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
+        query_gateway = _QueryGatewayStub()
+        query_gateway.rows_by_object["segment_definition"] = [
+            {
+                "id": uuid4(),
+                "created_at": now,
+                "updated_at": now,
+                "name": "VIP",
+                "description": None,
+                "segment_kind": "static",
+                "status": "draft",
+                "archived_at": None,
+            }
+        ]
+        repository = SegmentDefinitionRuntimeRepository(
+            runtime_object_resolver=_ResolverStub(),
+            runtime_command_gateway=_CommandGatewayStub(query_gateway),
+            runtime_query_gateway=query_gateway,
+        )
+
+        result = await repository.list(tenant_id=tenant_id, limit=10, offset=5)
+
+        self.assertEqual(len(result), 0)
+        self.assertEqual(query_gateway.last_page, PageSpec(limit=10, offset=5))
+        self.assertEqual(
+            query_gateway.last_sorting,
+            (
+                SortSpec(field="created_at", direction="asc"),
+                SortSpec(field="id", direction="asc"),
+            ),
+        )
+
+    async def test_segment_version_next_number_locks_before_lookup(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        segment_id = SegmentIdVO.from_value(uuid4())
+        now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
+        query_gateway = _QueryGatewayStub()
+        query_gateway.rows_by_object["segment_version"] = [
+            {
+                "id": uuid4(),
+                "created_at": now,
+                "updated_at": now,
+                "segment_definition_id": segment_id.uuid,
+                "version_number": 4,
+                "status": "active",
+                "config": {},
+                "config_checksum": "abc",
+                "activated_at": now,
+                "archived_at": None,
+            }
+        ]
+        command_gateway = _CommandGatewayStub(query_gateway)
+        repository = SegmentVersionRuntimeRepository(
+            runtime_object_resolver=_ResolverStub(),
+            runtime_command_gateway=command_gateway,
+            runtime_query_gateway=query_gateway,
+        )
+
+        next_number = await repository.get_next_version_number(
+            tenant_id=tenant_id,
+            segment_id=segment_id,
+        )
+
+        self.assertEqual(next_number, 5)
+        self.assertEqual(query_gateway.events[0].split(":")[0], "lock")
+        self.assertEqual(query_gateway.events[1], "list:segment_version")
+        self.assertIn(str(tenant_id.uuid), command_gateway.locks[0])
+        self.assertIn(str(segment_id.uuid), command_gateway.locks[0])
+
+    async def test_segment_version_save_get_and_list_map_dto(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        segment_id = SegmentIdVO.from_value(uuid4())
+        version_id = SegmentVersionIdVO.from_value(uuid4())
+        query_gateway = _QueryGatewayStub()
+        repository = SegmentVersionRuntimeRepository(
+            runtime_object_resolver=_ResolverStub(),
+            runtime_command_gateway=_CommandGatewayStub(query_gateway),
+            runtime_query_gateway=query_gateway,
+        )
+
+        await repository.save(
+            tenant_id=tenant_id,
+            version=SegmentVersion(
+                segment_version_id=version_id,
+                segment_id=segment_id,
+                version_number=1,
+                status=SegmentVersionStatusVO.DRAFT,
+                config={"a": 1},
+                config_checksum="abc",
+            ),
+        )
+        dto = await repository.get(
+            tenant_id=tenant_id,
+            segment_id=segment_id,
+            segment_version_id=version_id,
+        )
+        items = await repository.list(
+            tenant_id=tenant_id,
+            segment_id=segment_id,
+            limit=10,
+            offset=0,
+        )
+
+        self.assertEqual(dto.config, {"a": 1})
+        self.assertEqual(items[0].id, version_id.uuid)
+        self.assertEqual(
+            query_gateway.last_sorting,
+            (
+                SortSpec(field="version_number", direction="asc"),
+                SortSpec(field="id", direction="asc"),
+            ),
+        )
+
+    async def test_segment_version_archive_active_versions_updates_by_filter(
+        self,
+    ) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        segment_id = SegmentIdVO.from_value(uuid4())
+        now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
+        query_gateway = _QueryGatewayStub()
+        command_gateway = _CommandGatewayStub(query_gateway)
+        repository = SegmentVersionRuntimeRepository(
+            runtime_object_resolver=_ResolverStub(),
+            runtime_command_gateway=command_gateway,
+            runtime_query_gateway=query_gateway,
+        )
+
+        await repository.archive_active_versions(
+            tenant_id=tenant_id,
+            segment_id=segment_id,
+            now=now,
+        )
+
+        filters, patch = command_gateway.update_where_payloads[0]
+        self.assertEqual(patch["status"], SegmentVersionStatusVO.ARCHIVED.value)
+        self.assertEqual(patch["archived_at"], now)
+        self.assertTrue(
+            any(
+                isinstance(expression, TypedFilterSpec)
+                and expression.field.name == "segment_definition_id"
+                and expression.value == segment_id.uuid
+                for expression in filters
+            )
+        )
 
     async def test_contact_lookup_adapter_maps_batch_summaries(self) -> None:
         tenant_id = EntityIdVO.from_value(uuid4())

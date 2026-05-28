@@ -25,11 +25,24 @@ class SegmentationModuleSmokeTests(unittest.TestCase):
         self.assertIn("router.include_router(segmentation_router)", content)
 
     def test_dependency_placeholders_import_without_side_effects(self) -> None:
+        self.assertIn("CreateSegmentDefinitionUseCaseDep", application.__all__)
+        self.assertIn("UpdateSegmentDefinitionUseCaseDep", application.__all__)
+        self.assertIn("ArchiveSegmentDefinitionUseCaseDep", application.__all__)
+        self.assertIn("GetSegmentDefinitionUseCaseDep", application.__all__)
+        self.assertIn("ListSegmentDefinitionsUseCaseDep", application.__all__)
+        self.assertIn("CreateSegmentVersionUseCaseDep", application.__all__)
+        self.assertIn("ActivateSegmentVersionUseCaseDep", application.__all__)
+        self.assertIn("GetSegmentVersionUseCaseDep", application.__all__)
+        self.assertIn("ListSegmentVersionsUseCaseDep", application.__all__)
         self.assertIn("AddStaticMemberUseCaseDep", application.__all__)
         self.assertIn("ListStaticMembersUseCaseDep", application.__all__)
         self.assertIn("RemoveStaticMemberUseCaseDep", application.__all__)
         self.assertIn("ContactLookupDep", infrastructure.__all__)
+        self.assertIn("SegmentDefinitionCommandRepositoryDep", infrastructure.__all__)
+        self.assertIn("SegmentDefinitionQueryRepositoryDep", infrastructure.__all__)
         self.assertIn("SegmentStaticMemberCommandRepositoryDep", infrastructure.__all__)
+        self.assertIn("SegmentVersionCommandRepositoryDep", infrastructure.__all__)
+        self.assertIn("SegmentVersionQueryRepositoryDep", infrastructure.__all__)
 
     def test_domain_aggregations_are_split_by_runtime_object(self) -> None:
         expected = {

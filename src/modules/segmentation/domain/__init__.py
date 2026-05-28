@@ -1,16 +1,24 @@
 from src.modules.segmentation.domain.segment_definition import (
+    InvalidSegmentDefinitionNameError,
     SegmentDefinition,
+    SegmentDefinitionArchivedError,
     SegmentDefinitionCommandRepositoryProtocol,
     SegmentDefinitionError,
+    SegmentDefinitionKindChangeError,
     SegmentDefinitionNotFoundError,
     SegmentIdVO,
     SegmentKindVO,
     SegmentStatusVO,
 )
 from src.modules.segmentation.domain.segment_snapshot import (
+    InvalidSegmentSnapshotError,
     SegmentSnapshot,
+    SegmentSnapshotCommandRepositoryProtocol,
+    SegmentSnapshotError,
     SegmentSnapshotIdVO,
+    SegmentSnapshotImmutableError,
     SegmentSnapshotStatusVO,
+    SegmentSnapshotTransitionError,
 )
 from src.modules.segmentation.domain.segment_snapshot_member import (
     SegmentSnapshotMember,
@@ -27,23 +35,37 @@ from src.modules.segmentation.domain.segment_static_member import (
     SegmentStaticMemberSourceTypeVO,
 )
 from src.modules.segmentation.domain.segment_version import (
+    InvalidSegmentVersionError,
     SegmentVersion,
+    SegmentVersionCommandRepositoryProtocol,
+    SegmentVersionError,
     SegmentVersionIdVO,
+    SegmentVersionNotFoundError,
     SegmentVersionStatusVO,
+    SegmentVersionTransitionError,
 )
 
 __all__ = [
+    "InvalidSegmentDefinitionNameError",
+    "InvalidSegmentSnapshotError",
+    "InvalidSegmentVersionError",
     "SegmentDefinition",
+    "SegmentDefinitionArchivedError",
     "SegmentDefinitionCommandRepositoryProtocol",
     "SegmentDefinitionError",
+    "SegmentDefinitionKindChangeError",
     "SegmentDefinitionNotFoundError",
     "SegmentIdVO",
     "SegmentKindVO",
     "SegmentSnapshot",
+    "SegmentSnapshotCommandRepositoryProtocol",
+    "SegmentSnapshotError",
     "SegmentSnapshotIdVO",
+    "SegmentSnapshotImmutableError",
     "SegmentSnapshotMember",
     "SegmentSnapshotMemberIdVO",
     "SegmentSnapshotStatusVO",
+    "SegmentSnapshotTransitionError",
     "SegmentStaticMember",
     "SegmentStaticMemberArchivedSegmentError",
     "SegmentStaticMemberCommandRepositoryProtocol",
@@ -54,6 +76,10 @@ __all__ = [
     "SegmentStaticMemberSourceTypeVO",
     "SegmentStatusVO",
     "SegmentVersion",
+    "SegmentVersionCommandRepositoryProtocol",
+    "SegmentVersionError",
     "SegmentVersionIdVO",
+    "SegmentVersionNotFoundError",
     "SegmentVersionStatusVO",
+    "SegmentVersionTransitionError",
 ]

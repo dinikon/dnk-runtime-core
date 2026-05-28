@@ -1,3 +1,5 @@
-"""Segment definition DTO package."""
+from src.modules.segmentation.application.segment_definition.dto.segment_definition_dto import (
+    SegmentDefinitionDTO,
+)
 
-__all__: list[str] = []
+__all__ = ["SegmentDefinitionDTO"]

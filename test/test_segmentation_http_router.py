@@ -7,14 +7,28 @@ from uuid import uuid4
 
 from fastapi import HTTPException
 
+from src.modules.segmentation.application.segment_definition import (
+    SegmentDefinitionDTO,
+)
 from src.modules.segmentation.application.segment_static_member import (
     ContactSummaryDTO,
     StaticMemberDTO,
 )
+from src.modules.segmentation.application.segment_version import SegmentVersionDTO
 from src.modules.segmentation.domain.segment_static_member import (
     SegmentStaticMemberContactNotFoundError,
 )
 from src.modules.segmentation.presentation.http.router import router
+from src.modules.segmentation.presentation.http.segment_definition.controllers.create_segment_definition import (
+    create_segment_definition,
+)
+from src.modules.segmentation.presentation.http.segment_definition.controllers.update_segment_definition import (
+    update_segment_definition,
+)
+from src.modules.segmentation.presentation.http.segment_definition.requests import (
+    CreateSegmentDefinitionRequestSchema,
+    UpdateSegmentDefinitionRequestSchema,
+)
 from src.modules.segmentation.presentation.http.segment_static_member.controllers.add_static_member import (
     add_static_member,
 )
@@ -26,6 +40,15 @@ from src.modules.segmentation.presentation.http.segment_static_member.controller
 )
 from src.modules.segmentation.presentation.http.segment_static_member.requests import (
     AddStaticMemberRequestSchema,
+)
+from src.modules.segmentation.presentation.http.segment_version.controllers.activate_segment_version import (
+    activate_segment_version,
+)
+from src.modules.segmentation.presentation.http.segment_version.controllers.create_segment_version import (
+    create_segment_version,
+)
+from src.modules.segmentation.presentation.http.segment_version.requests import (
+    CreateSegmentVersionRequestSchema,
 )
 from src.modules.shared import EntityIdVO
 
@@ -61,6 +84,153 @@ class SegmentationHttpRouterTests(unittest.IsolatedAsyncioTestCase):
             ("DELETE", "/segments/{segment_id}/static-members/{contact_id}"),
             routes,
         )
+
+    def test_router_exposes_segment_definition_and_version_routes(self) -> None:
+        routes = {
+            (method, route.path)
+            for route in router.routes
+            for method in route.methods or set()
+        }
+
+        self.assertIn(("POST", "/segments"), routes)
+        self.assertIn(("GET", "/segments"), routes)
+        self.assertIn(("GET", "/segments/{segment_id}"), routes)
+        self.assertIn(("PATCH", "/segments/{segment_id}"), routes)
+        self.assertIn(("POST", "/segments/{segment_id}/archive"), routes)
+        self.assertIn(("POST", "/segments/{segment_id}/versions"), routes)
+        self.assertIn(("GET", "/segments/{segment_id}/versions"), routes)
+        self.assertIn(("GET", "/segments/{segment_id}/versions/{version_id}"), routes)
+        self.assertIn(
+            ("POST", "/segments/{segment_id}/versions/{version_id}/activate"),
+            routes,
+        )
+
+    async def test_create_segment_definition_maps_command_and_response(self) -> None:
+        tenant_id = uuid4()
+        segment_id = uuid4()
+        now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
+        use_case = _UseCaseStub(
+            SegmentDefinitionDTO(
+                id=segment_id,
+                name="VIP",
+                segment_kind="static",
+                status="draft",
+                description="Customers",
+                archived_at=None,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+        response = await create_segment_definition(
+            payload=CreateSegmentDefinitionRequestSchema(
+                name="VIP",
+                segment_kind="static",
+                description="Customers",
+            ),
+            context=_context(tenant_id),
+            use_case=use_case,
+        )
+
+        self.assertEqual(use_case.command.tenant_id, EntityIdVO.from_value(tenant_id))
+        self.assertEqual(use_case.command.name, "VIP")
+        self.assertEqual(use_case.command.segment_kind, "static")
+        self.assertEqual(response.id, segment_id)
+        self.assertEqual(response.description, "Customers")
+
+    async def test_update_segment_definition_marks_description_field_set(
+        self,
+    ) -> None:
+        tenant_id = uuid4()
+        segment_id = uuid4()
+        now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
+        use_case = _UseCaseStub(
+            SegmentDefinitionDTO(
+                id=segment_id,
+                name="VIP",
+                segment_kind="static",
+                status="draft",
+                description=None,
+                archived_at=None,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+        response = await update_segment_definition(
+            segment_id=segment_id,
+            payload=UpdateSegmentDefinitionRequestSchema(description=None),
+            context=_context(tenant_id),
+            use_case=use_case,
+        )
+
+        self.assertTrue(use_case.command.description_provided)
+        self.assertIsNone(use_case.command.description)
+        self.assertEqual(response.id, segment_id)
+
+    async def test_create_segment_version_maps_command_and_response(self) -> None:
+        tenant_id = uuid4()
+        segment_id = uuid4()
+        version_id = uuid4()
+        now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
+        use_case = _UseCaseStub(
+            SegmentVersionDTO(
+                id=version_id,
+                segment_id=segment_id,
+                version_number=1,
+                status="draft",
+                config={"a": 1},
+                config_checksum="abc",
+                activated_at=None,
+                archived_at=None,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+        response = await create_segment_version(
+            segment_id=segment_id,
+            payload=CreateSegmentVersionRequestSchema(config={"a": 1}),
+            context=_context(tenant_id),
+            use_case=use_case,
+        )
+
+        self.assertEqual(use_case.command.tenant_id, EntityIdVO.from_value(tenant_id))
+        self.assertEqual(use_case.command.segment_id.uuid, segment_id)
+        self.assertEqual(use_case.command.config, {"a": 1})
+        self.assertEqual(response.id, version_id)
+        self.assertEqual(response.config, {"a": 1})
+
+    async def test_activate_segment_version_maps_command_and_response(self) -> None:
+        tenant_id = uuid4()
+        segment_id = uuid4()
+        version_id = uuid4()
+        now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
+        use_case = _UseCaseStub(
+            SegmentVersionDTO(
+                id=version_id,
+                segment_id=segment_id,
+                version_number=1,
+                status="active",
+                config={},
+                config_checksum="abc",
+                activated_at=now,
+                archived_at=None,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+        response = await activate_segment_version(
+            segment_id=segment_id,
+            version_id=version_id,
+            context=_context(tenant_id),
+            use_case=use_case,
+        )
+
+        self.assertEqual(use_case.command.segment_id.uuid, segment_id)
+        self.assertEqual(use_case.command.segment_version_id.uuid, version_id)
+        self.assertEqual(response.status, "active")
 
     async def test_add_static_member_maps_command_and_response_explicitly(
         self,

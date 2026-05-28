@@ -18,6 +18,7 @@ from src.modules.segmentation.infrastructure import (
     RuntimeContactLookupAdapter,
     SegmentDefinitionRuntimeRepository,
     SegmentStaticMemberRuntimeRepository,
+    SegmentVersionRuntimeRepository,
 )
 from src.modules.shared.presentation.persistence.depends import UoWDep
 
@@ -68,15 +69,21 @@ RuntimeCommandGatewayDep = Annotated[
 
 def get_segment_definition_repository(
     runtime_object_resolver: RuntimeObjectResolverDep,
+    runtime_command_gateway: RuntimeCommandGatewayDep,
     runtime_query_gateway: RuntimeQueryGatewayDep,
 ) -> SegmentDefinitionRuntimeRepository:
     return SegmentDefinitionRuntimeRepository(
         runtime_object_resolver=runtime_object_resolver,
+        runtime_command_gateway=runtime_command_gateway,
         runtime_query_gateway=runtime_query_gateway,
     )
 
 
-SegmentDefinitionRuntimeRepositoryDep = Annotated[
+SegmentDefinitionCommandRepositoryDep = Annotated[
+    SegmentDefinitionRuntimeRepository,
+    Depends(get_segment_definition_repository),
+]
+SegmentDefinitionQueryRepositoryDep = Annotated[
     SegmentDefinitionRuntimeRepository,
     Depends(get_segment_definition_repository),
 ]
@@ -104,6 +111,28 @@ SegmentStaticMemberQueryRepositoryDep = Annotated[
 ]
 
 
+def get_segment_version_repository(
+    runtime_object_resolver: RuntimeObjectResolverDep,
+    runtime_command_gateway: RuntimeCommandGatewayDep,
+    runtime_query_gateway: RuntimeQueryGatewayDep,
+) -> SegmentVersionRuntimeRepository:
+    return SegmentVersionRuntimeRepository(
+        runtime_object_resolver=runtime_object_resolver,
+        runtime_command_gateway=runtime_command_gateway,
+        runtime_query_gateway=runtime_query_gateway,
+    )
+
+
+SegmentVersionCommandRepositoryDep = Annotated[
+    SegmentVersionRuntimeRepository,
+    Depends(get_segment_version_repository),
+]
+SegmentVersionQueryRepositoryDep = Annotated[
+    SegmentVersionRuntimeRepository,
+    Depends(get_segment_version_repository),
+]
+
+
 def get_contact_lookup(
     runtime_object_resolver: RuntimeObjectResolverDep,
     runtime_query_gateway: RuntimeQueryGatewayDep,
@@ -125,13 +154,17 @@ __all__ = [
     "RuntimeCommandGatewayDep",
     "RuntimeFieldTypePolicyDep",
     "RuntimeQueryGatewayDep",
-    "SegmentDefinitionRuntimeRepositoryDep",
+    "SegmentDefinitionCommandRepositoryDep",
+    "SegmentDefinitionQueryRepositoryDep",
     "SegmentStaticMemberCommandRepositoryDep",
     "SegmentStaticMemberQueryRepositoryDep",
+    "SegmentVersionCommandRepositoryDep",
+    "SegmentVersionQueryRepositoryDep",
     "get_contact_lookup",
     "get_runtime_command_gateway",
     "get_runtime_field_type_policy",
     "get_runtime_query_gateway",
     "get_segment_definition_repository",
     "get_segment_static_member_repository",
+    "get_segment_version_repository",
 ]

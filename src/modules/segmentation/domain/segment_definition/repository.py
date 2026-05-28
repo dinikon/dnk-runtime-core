@@ -17,5 +17,14 @@ class SegmentDefinitionCommandRepositoryProtocol(Protocol):
         """Loads a segment definition by id."""
         ...
 
+    async def save(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        segment: SegmentDefinition,
+    ) -> SegmentDefinition:
+        """Creates or updates a segment definition."""
+        ...
+
 
 __all__ = ["SegmentDefinitionCommandRepositoryProtocol"]
