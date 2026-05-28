@@ -25,8 +25,14 @@ from src.modules.communication.application.outbound_message import (
     SendCommunicationUseCase,
 )
 from src.modules.communication.application.delivery import (
+    DeliveryAttemptDTO,
+    DeliveryEventDTO,
     HandleProviderWebhookCommand,
     HandleProviderWebhookUseCase,
+    ListDeliveryAttemptsQuery,
+    ListDeliveryAttemptsUseCase,
+    ListDeliveryEventsQuery,
+    ListDeliveryEventsUseCase,
 )
 from src.modules.communication.domain.delivery import (
     DeliveryEventIdVO,
@@ -567,6 +573,53 @@ class _WebhookRepositoryStub:
         return self.outbound
 
 
+class _DeliveryQueryRepositoryStub:
+    def __init__(self) -> None:
+        self.attempt_calls = []
+        self.event_calls = []
+        self.now = datetime(2026, 5, 14, 12, 0, tzinfo=UTC)
+        self.outbound_id = OutboundMessageIdVO.from_value(uuid4())
+
+    async def list_delivery_attempts(self, **kwargs):
+        self.attempt_calls.append(kwargs)
+        return [
+            DeliveryAttemptDTO(
+                delivery_attempt_id=uuid4(),
+                tenant_id=kwargs["tenant_id"].uuid,
+                outbound_message_id=self.outbound_id.uuid,
+                provider_connection_id=uuid4(),
+                attempt_no=1,
+                status="SUCCESS",
+                request_payload={"body": "hello"},
+                response_payload={"status": "sent"},
+                http_status_code=200,
+                external_message_id="ext-1",
+                error_code=None,
+                error_message=None,
+                started_at=self.now,
+                finished_at=self.now,
+            )
+        ]
+
+    async def list_delivery_events(self, **kwargs):
+        self.event_calls.append(kwargs)
+        return [
+            DeliveryEventDTO(
+                delivery_event_id=uuid4(),
+                tenant_id=kwargs["tenant_id"].uuid,
+                outbound_message_id=self.outbound_id.uuid,
+                provider_connection_id=uuid4(),
+                external_message_id="ext-1",
+                external_status="Delivered",
+                internal_status="DELIVERED",
+                event_type="WEBHOOK_RECEIVED",
+                event_at=self.now,
+                raw_payload={"message_id": "ext-1"},
+                created_at=self.now,
+            )
+        ]
+
+
 class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
     async def test_process_queued_message_renders_payload_and_maps_status(self) -> None:
         repository = _ProcessRepositoryStub()
@@ -1016,6 +1069,60 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
             "PHONE",
         )
         self.assertEqual(repository.created_kwargs["initiator_type"], "CRM")
+
+    async def test_list_delivery_attempts_use_case_delegates_filters(self) -> None:
+        repository = _DeliveryQueryRepositoryStub()
+        use_case = ListDeliveryAttemptsUseCase(repository)
+        tenant_id = EntityIdVO.from_value(uuid4())
+
+        result = await use_case(
+            ListDeliveryAttemptsQuery(
+                tenant_id=tenant_id,
+                outbound_message_id=repository.outbound_id,
+                status="SUCCESS",
+                limit=25,
+                offset=50,
+            )
+        )
+
+        self.assertEqual(result[0].status, "SUCCESS")
+        self.assertEqual(repository.attempt_calls[0]["tenant_id"], tenant_id)
+        self.assertEqual(
+            repository.attempt_calls[0]["outbound_message_id"],
+            repository.outbound_id,
+        )
+        self.assertEqual(repository.attempt_calls[0]["status"], "SUCCESS")
+        self.assertEqual(repository.attempt_calls[0]["limit"], 25)
+        self.assertEqual(repository.attempt_calls[0]["offset"], 50)
+
+    async def test_list_delivery_events_use_case_delegates_filters(self) -> None:
+        repository = _DeliveryQueryRepositoryStub()
+        use_case = ListDeliveryEventsUseCase(repository)
+        tenant_id = EntityIdVO.from_value(uuid4())
+
+        result = await use_case(
+            ListDeliveryEventsQuery(
+                tenant_id=tenant_id,
+                outbound_message_id=repository.outbound_id,
+                external_message_id="ext-1",
+                internal_status="DELIVERED",
+                event_type="WEBHOOK_RECEIVED",
+                limit=10,
+                offset=20,
+            )
+        )
+
+        self.assertEqual(result[0].event_type, "WEBHOOK_RECEIVED")
+        self.assertEqual(repository.event_calls[0]["tenant_id"], tenant_id)
+        self.assertEqual(
+            repository.event_calls[0]["outbound_message_id"],
+            repository.outbound_id,
+        )
+        self.assertEqual(repository.event_calls[0]["external_message_id"], "ext-1")
+        self.assertEqual(repository.event_calls[0]["internal_status"], "DELIVERED")
+        self.assertEqual(repository.event_calls[0]["event_type"], "WEBHOOK_RECEIVED")
+        self.assertEqual(repository.event_calls[0]["limit"], 10)
+        self.assertEqual(repository.event_calls[0]["offset"], 20)
 
     async def test_webhook_updates_outbound_and_creates_delivery_event(self) -> None:
         repository = _WebhookRepositoryStub(matched=True)

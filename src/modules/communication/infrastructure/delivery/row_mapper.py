@@ -5,6 +5,10 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from src.modules.communication.application.delivery.dto import (
+    DeliveryAttemptDTO,
+    DeliveryEventDTO,
+)
 from src.modules.communication.domain.delivery import (
     DeliveryAttempt,
     DeliveryAttemptIdVO,
@@ -45,6 +49,34 @@ def delivery_attempt_entity(row: Mapping[str, Any]) -> DeliveryAttempt:
     )
 
 
+def delivery_attempt_dto(
+    *,
+    tenant_id: EntityIdVO,
+    row: Mapping[str, Any],
+) -> DeliveryAttemptDTO:
+    """Мапит runtime row в DeliveryAttemptDTO."""
+    return DeliveryAttemptDTO(
+        delivery_attempt_id=as_uuid(row.get("id")),
+        tenant_id=tenant_id.uuid,
+        outbound_message_id=as_uuid(row.get("outbound_message_id")),
+        provider_connection_id=as_uuid(row.get("provider_connection_id")),
+        attempt_no=int(row.get("attempt_no")),
+        status=as_str(row.get("status")),
+        request_payload=as_optional_dict(row.get("request_payload")),
+        response_payload=as_optional_dict(row.get("response_payload")),
+        http_status_code=(
+            None
+            if row.get("http_status_code") is None
+            else int(row.get("http_status_code"))
+        ),
+        external_message_id=as_optional_str(row.get("external_message_id")),
+        error_code=as_optional_str(row.get("error_code")),
+        error_message=as_optional_str(row.get("error_message")),
+        started_at=as_optional_datetime(row.get("started_at")),
+        finished_at=as_optional_datetime(row.get("finished_at")),
+    )
+
+
 def delivery_event_entity(
     *,
     tenant_id: EntityIdVO,
@@ -66,6 +98,27 @@ def delivery_event_entity(
             if provider_connection_id is None
             else ProviderConnectionIdVO.from_value(provider_connection_id)
         ),
+        external_message_id=as_optional_str(row.get("external_message_id")),
+        external_status=as_optional_str(row.get("external_status")),
+        internal_status=as_str(row.get("internal_status")),
+        event_type=as_str(row.get("event_type")),
+        event_at=as_optional_datetime(row.get("event_at")),
+        raw_payload=as_dict(row.get("raw_payload")),
+        created_at=as_datetime(row.get("created_at")),
+    )
+
+
+def delivery_event_dto(
+    *,
+    tenant_id: EntityIdVO,
+    row: Mapping[str, Any],
+) -> DeliveryEventDTO:
+    """Мапит runtime row в DeliveryEventDTO."""
+    return DeliveryEventDTO(
+        delivery_event_id=as_uuid(row.get("id")),
+        tenant_id=tenant_id.uuid,
+        outbound_message_id=as_optional_uuid(row.get("outbound_message_id")),
+        provider_connection_id=as_optional_uuid(row.get("provider_connection_id")),
         external_message_id=as_optional_str(row.get("external_message_id")),
         external_status=as_optional_str(row.get("external_status")),
         internal_status=as_str(row.get("internal_status")),
@@ -139,6 +192,8 @@ def as_optional_dict(value: Any) -> dict[str, Any] | None:
 
 
 __all__ = [
+    "delivery_attempt_dto",
     "delivery_attempt_entity",
+    "delivery_event_dto",
     "delivery_event_entity",
 ]

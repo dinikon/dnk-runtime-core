@@ -370,6 +370,7 @@ Runtime object names заданы в `src/modules/communication/infrastructure/r
 - Runtime objects: `communication_delivery_attempt`, `communication_delivery_event`, plus outbound/connector lookup.
 - Tenant handling: tenant id передается в каждый метод.
 - Mapping: `delivery/row_mapper.py`.
+- Query API: list attempts/events supports `limit`, `offset` and indexed filters for outbound/status/event lookup.
 - Errors: not found возвращается как `None` в read methods; runtime errors пробрасываются выше.
 
 ### OutboundProcessingRuntimeRepository
@@ -485,6 +486,10 @@ Protected routes используют `AuthenticatedRequestContextDep` и `requi
 | `POST` | `/api/communication/send`                                                   | `send_communication`             | `SendCommunicationUseCase`         | `SendCommunicationRequestSchema`        | `SendCommunicationResponseSchema`       |
 | `GET`  | `/api/communication/messages`                                               | `list_messages`                  | `ListOutboundMessagesUseCase`      | query `limit`, `offset`                 | `ListOutboundMessagesResponseSchema`    |
 | `GET`  | `/api/communication/messages/{outbound_message_id}`                         | `get_message`                    | `GetOutboundMessageUseCase`        | path param                              | `OutboundMessageResponseSchema`         |
+| `GET`  | `/api/communication/messages/{outbound_message_id}/attempts`                | `list_message_delivery_attempts` | `ListDeliveryAttemptsUseCase`      | path param, query `limit`, `offset`     | `ListDeliveryAttemptsResponseSchema`    |
+| `GET`  | `/api/communication/messages/{outbound_message_id}/events`                  | `list_message_delivery_events`   | `ListDeliveryEventsUseCase`        | path param, query `limit`, `offset`     | `ListDeliveryEventsResponseSchema`      |
+| `GET`  | `/api/communication/delivery-attempts`                                      | `list_delivery_attempts`         | `ListDeliveryAttemptsUseCase`      | query filters, `limit`, `offset`        | `ListDeliveryAttemptsResponseSchema`    |
+| `GET`  | `/api/communication/delivery-events`                                        | `list_delivery_events`           | `ListDeliveryEventsUseCase`        | query filters, `limit`, `offset`        | `ListDeliveryEventsResponseSchema`      |
 | `POST` | `/api/communication/webhooks/{tenant_id}/{provider_code}`                   | `handle_provider_webhook`        | `HandleProviderWebhookUseCase`     | raw JSON object                         | `WebhookResponseSchema`                 |
 
 HTTP status facts:
@@ -498,7 +503,13 @@ HTTP status facts:
   `SchemaRegistryMetadataInconsistentError`, `CommunicationRuntimeStateError` map to `409`.
 - `CommunicationValidationError`, `RuntimeDataValidationError`, `RuntimeDataFilterError`, generic `DomainError` map to
   `422`.
-- Outbound controllers use shared `map_outbound_http_error`.
+- Outbound controllers use shared `map_outbound_http_error`; delivery read controllers use
+  `map_communication_http_error`.
+
+Delivery read filters:
+
+- `delivery-attempts`: `outbound_message_id`, `status`, `limit`, `offset`.
+- `delivery-events`: `outbound_message_id`, `external_message_id`, `internal_status`, `event_type`, `limit`, `offset`.
 
 `send_communication` commits UoW after use case success and only then attempts to publish RabbitMQ job. If publisher is
 disabled or result is not `QUEUED`, no publish happens. Publish failure is logged, UoW is rolled back for publish

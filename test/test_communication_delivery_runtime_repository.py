@@ -53,8 +53,23 @@ def _descriptor(object_name: str) -> RuntimeObjectDescriptor:
             _field("created_at", "datetime"),
             _field("updated_at", "datetime"),
             _field("outbound_message_id", "uuid"),
+            _field("provider_connection_id", "uuid"),
+            _field("attempt_no", "int"),
             _field("provider_code"),
             _field("status"),
+            _field("request_payload", "json"),
+            _field("response_payload", "json"),
+            _field("http_status_code", "int"),
+            _field("external_message_id"),
+            _field("external_status"),
+            _field("internal_status"),
+            _field("event_type"),
+            _field("event_at", "datetime"),
+            _field("raw_payload", "json"),
+            _field("error_code"),
+            _field("error_message"),
+            _field("started_at", "datetime"),
+            _field("finished_at", "datetime"),
         ),
         relations=(),
     )
@@ -211,6 +226,123 @@ class CommunicationDeliveryRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCa
         self.assertEqual(command.inserts[0][1]["id"], event_id.uuid)
         self.assertEqual(result.delivery_event_id, event_id)
         self.assertEqual(result.created_at, created_at)
+
+    async def test_list_delivery_attempts_filters_paginates_and_maps_dto(
+        self,
+    ) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        outbound_id = OutboundMessageIdVO.from_value(uuid4())
+        provider_connection_id = uuid4()
+        now = datetime(2026, 5, 14, 12, 0, tzinfo=UTC)
+        query = _QueryGatewayStub()
+        query.list_rows_by_descriptor[_ATTEMPT] = [
+            {
+                "id": uuid4(),
+                "outbound_message_id": outbound_id.uuid,
+                "provider_connection_id": provider_connection_id,
+                "attempt_no": 2,
+                "status": "SUCCESS",
+                "request_payload": {"body": "hello"},
+                "response_payload": {"status": "sent"},
+                "http_status_code": 200,
+                "external_message_id": "ext-1",
+                "error_code": None,
+                "error_message": None,
+                "started_at": now,
+                "finished_at": now,
+            }
+        ]
+        repository = DeliveryRuntimeRepository(
+            runtime_object_resolver=_ResolverStub(),
+            runtime_command_gateway=_CommandGatewayStub(),
+            runtime_query_gateway=query,
+        )
+
+        result = await repository.list_delivery_attempts(
+            tenant_id=tenant_id,
+            outbound_message_id=outbound_id,
+            status="SUCCESS",
+            limit=25,
+            offset=50,
+        )
+
+        self.assertEqual(result[0].tenant_id, tenant_id.uuid)
+        self.assertEqual(result[0].outbound_message_id, outbound_id.uuid)
+        self.assertEqual(result[0].request_payload, {"body": "hello"})
+        call = query.list_calls[0]
+        self.assertEqual(call["descriptor"], _ATTEMPT)
+        self.assertEqual(
+            [item.field.name for item in call["filters"]],
+            [
+                "outbound_message_id",
+                "status",
+            ],
+        )
+        self.assertEqual(call["filters"][0].value, outbound_id.uuid)
+        self.assertEqual(call["filters"][1].value, "SUCCESS")
+        self.assertEqual(call["sorting"][0].field, "started_at")
+        self.assertEqual(call["sorting"][0].direction, "desc")
+        self.assertEqual(call["page"].limit, 25)
+        self.assertEqual(call["page"].offset, 50)
+
+    async def test_list_delivery_events_filters_paginates_and_maps_dto(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        outbound_id = OutboundMessageIdVO.from_value(uuid4())
+        provider_connection_id = uuid4()
+        now = datetime(2026, 5, 14, 12, 0, tzinfo=UTC)
+        query = _QueryGatewayStub()
+        query.list_rows_by_descriptor[_EVENT] = [
+            {
+                "id": uuid4(),
+                "created_at": now,
+                "outbound_message_id": outbound_id.uuid,
+                "provider_connection_id": provider_connection_id,
+                "external_message_id": "ext-1",
+                "external_status": "Delivered",
+                "internal_status": "DELIVERED",
+                "event_type": "WEBHOOK_RECEIVED",
+                "event_at": now,
+                "raw_payload": {"message_id": "ext-1"},
+            }
+        ]
+        repository = DeliveryRuntimeRepository(
+            runtime_object_resolver=_ResolverStub(),
+            runtime_command_gateway=_CommandGatewayStub(),
+            runtime_query_gateway=query,
+        )
+
+        result = await repository.list_delivery_events(
+            tenant_id=tenant_id,
+            outbound_message_id=outbound_id,
+            external_message_id="ext-1",
+            internal_status="DELIVERED",
+            event_type="WEBHOOK_RECEIVED",
+            limit=10,
+            offset=20,
+        )
+
+        self.assertEqual(result[0].tenant_id, tenant_id.uuid)
+        self.assertEqual(result[0].outbound_message_id, outbound_id.uuid)
+        self.assertEqual(result[0].raw_payload, {"message_id": "ext-1"})
+        call = query.list_calls[0]
+        self.assertEqual(call["descriptor"], _EVENT)
+        self.assertEqual(
+            [item.field.name for item in call["filters"]],
+            [
+                "outbound_message_id",
+                "external_message_id",
+                "internal_status",
+                "event_type",
+            ],
+        )
+        self.assertEqual(call["filters"][0].value, outbound_id.uuid)
+        self.assertEqual(call["filters"][1].value, "ext-1")
+        self.assertEqual(call["filters"][2].value, "DELIVERED")
+        self.assertEqual(call["filters"][3].value, "WEBHOOK_RECEIVED")
+        self.assertEqual(call["sorting"][0].field, "created_at")
+        self.assertEqual(call["sorting"][0].direction, "desc")
+        self.assertEqual(call["page"].limit, 10)
+        self.assertEqual(call["page"].offset, 20)
 
     async def test_get_active_connector_by_code_sets_runtime_filters(self) -> None:
         tenant_id = EntityIdVO.from_value(uuid4())
