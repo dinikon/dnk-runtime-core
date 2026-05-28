@@ -24,6 +24,7 @@ from src.modules.segmentation.domain.segment_static_member import (
     SegmentStaticMember,
     SegmentStaticMemberArchivedSegmentError,
     SegmentStaticMemberContactNotFoundError,
+    SegmentStaticMemberError,
     SegmentStaticMemberIdVO,
     SegmentStaticMemberNonStaticSegmentError,
     SegmentStaticMemberSourceTypeVO,
@@ -188,6 +189,29 @@ def _segment(
 
 
 class SegmentationStaticMemberUseCaseTests(unittest.IsolatedAsyncioTestCase):
+
+    def test_static_member_entity_copies_metadata(self) -> None:
+        metadata = {"nested": {"source": "test"}}
+        member = SegmentStaticMember(
+            segment_static_member_id=SegmentStaticMemberIdVO.from_value(uuid4()),
+            segment_id=SegmentIdVO.from_value(uuid4()),
+            contact_id=EntityIdVO.from_value(uuid4()),
+            source_type=SegmentStaticMemberSourceTypeVO.API,
+            metadata=metadata,
+        )
+
+        metadata["nested"]["source"] = "changed"
+
+        self.assertEqual(member.metadata["nested"]["source"], "test")
+        with self.assertRaises(SegmentStaticMemberError):
+            SegmentStaticMember(
+                segment_static_member_id=SegmentStaticMemberIdVO.from_value(uuid4()),
+                segment_id=SegmentIdVO.from_value(uuid4()),
+                contact_id=EntityIdVO.from_value(uuid4()),
+                source_type=SegmentStaticMemberSourceTypeVO.API,
+                metadata=[],
+            )
+
     async def test_add_static_member_is_idempotent_for_duplicate_contact(self) -> None:
         tenant_id = EntityIdVO.from_value(uuid4())
         segment_id = SegmentIdVO.from_value(uuid4())

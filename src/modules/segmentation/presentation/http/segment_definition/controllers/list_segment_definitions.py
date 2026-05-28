@@ -27,7 +27,7 @@ from src.modules.shared import EntityIdVO
 from src.modules.shared.domain.errors import DomainError
 from src.modules.shared.presentation import AuthenticatedRequestContextDep
 
-router = APIRouter(tags=["segments"])
+router = APIRouter(prefix="/segments", tags=["segments"])
 
 
 @router.get(

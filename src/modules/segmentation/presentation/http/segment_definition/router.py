@@ -1,20 +1,18 @@
 from fastapi import APIRouter
-from fastapi.routing import APIRoute
 
-from src.modules.segmentation.presentation.http.segment_definition import controllers
+from src.modules.segmentation.presentation.http.segment_definition.controllers import (
+    archive_segment_definition,
+    create_segment_definition,
+    get_segment_definition,
+    list_segment_definitions,
+    update_segment_definition,
+)
 
-router = APIRouter(prefix="/segments", tags=["segments"])
-for controller_router in controllers.routers:
-    for route in controller_router.routes:
-        if isinstance(route, APIRoute):
-            router.add_api_route(
-                route.path,
-                route.endpoint,
-                response_model=route.response_model,
-                status_code=route.status_code,
-                methods=route.methods,
-                tags=route.tags,
-                name=route.name,
-            )
+router = APIRouter()
+router.include_router(create_segment_definition.router)
+router.include_router(list_segment_definitions.router)
+router.include_router(get_segment_definition.router)
+router.include_router(update_segment_definition.router)
+router.include_router(archive_segment_definition.router)
 
 __all__ = ["router"]

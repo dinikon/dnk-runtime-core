@@ -1,3 +1,5 @@
+from fastapi import APIRouter
+
 from src.modules.segmentation.presentation.http import (
     segment_definition,
     segment_snapshot,
@@ -6,7 +8,8 @@ from src.modules.segmentation.presentation.http import (
     segment_version,
 )
 
-router = segment_definition.router
+router = APIRouter()
+router.include_router(segment_definition.router)
 router.include_router(segment_version.router)
 router.include_router(segment_static_member.router)
 router.include_router(segment_snapshot.router)

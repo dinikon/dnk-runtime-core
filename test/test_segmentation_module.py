@@ -12,8 +12,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 class SegmentationModuleSmokeTests(unittest.TestCase):
     def test_segments_router_is_importable_with_expected_prefix(self) -> None:
-        self.assertEqual(segments_router.prefix, "/segments")
-        self.assertEqual(segments_router.tags, ["segments"])
+        self.assertEqual(segments_router.prefix, "")
+        self.assertIn(
+            "/segments",
+            {route.path for route in segments_router.routes},
+        )
 
     def test_root_router_includes_segmentation_router(self) -> None:
         content = PROJECT_ROOT.joinpath("src/modules/router.py").read_text(

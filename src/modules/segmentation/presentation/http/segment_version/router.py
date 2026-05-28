@@ -1,9 +1,16 @@
 from fastapi import APIRouter
 
-from src.modules.segmentation.presentation.http.segment_version import controllers
+from src.modules.segmentation.presentation.http.segment_version.controllers import (
+    activate_segment_version,
+    create_segment_version,
+    get_segment_version,
+    list_segment_versions,
+)
 
 router = APIRouter()
-for controller_router in controllers.routers:
-    router.include_router(controller_router)
+router.include_router(create_segment_version.router)
+router.include_router(list_segment_versions.router)
+router.include_router(get_segment_version.router)
+router.include_router(activate_segment_version.router)
 
 __all__ = ["router"]
