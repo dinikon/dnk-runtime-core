@@ -234,6 +234,165 @@ class InventorySchemaSeedTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("recipient_snapshot", field_names)
             self.assertFalse(field_names & forbidden_source_fields)
 
+    async def test_default_seed_contains_contact_only_segmentation_objects(
+        self,
+    ) -> None:
+        service = SchemaSeedService(
+            PythonModuleSeedReader(),
+            FieldTypeCatalog(),
+        )
+
+        seed = await service.load(
+            seed_path="src.modules.schema_registry.seed.schema_seed"
+        )
+
+        expected_objects = {
+            "segment_definition",
+            "segment_version",
+            "segment_static_member",
+            "segment_snapshot",
+            "segment_snapshot_member",
+        }
+        seeded_objects = {object_seed.singular_name for object_seed in seed.objects}
+
+        self.assertTrue(expected_objects <= seeded_objects)
+        forbidden_fields = {
+            "target_object_id",
+            "target_object_name",
+            "target_record_id",
+        }
+        for object_name in expected_objects:
+            object_seed = seed.get_object(object_name)
+            assert object_seed is not None
+            field_names = {field.name for field in object_seed.fields}
+            self.assertIn("id", field_names)
+            self.assertNotIn("tenant_id", field_names)
+            self.assertFalse(field_names & forbidden_fields)
+
+        static_member = seed.get_object("segment_static_member")
+        snapshot_member = seed.get_object("segment_snapshot_member")
+        assert static_member is not None
+        assert snapshot_member is not None
+        static_contact = next(
+            field for field in static_member.fields if field.name == "contact_id"
+        )
+        snapshot_contact = next(
+            field for field in snapshot_member.fields if field.name == "contact_id"
+        )
+        self.assertEqual(
+            getattr(static_contact.type, "value", static_contact.type),
+            "uuid",
+        )
+        self.assertEqual(
+            getattr(snapshot_contact.type, "value", snapshot_contact.type),
+            "uuid",
+        )
+
+        unique_indexes = {
+            index.name
+            for object_seed in seed.objects
+            if object_seed.singular_name in expected_objects
+            for index in object_seed.indexes
+            if index.is_unique
+        }
+        self.assertTrue(
+            {
+                "ux_segment_versions_definition_version",
+                "ux_segment_static_members_definition_contact",
+                "ux_segment_snapshot_members_snapshot_contact",
+            }
+            <= unique_indexes
+        )
+
+        for object_name in expected_objects:
+            object_seed = seed.get_object(object_name)
+            assert object_seed is not None
+            for relation in object_seed.relations:
+                self.assertIn(relation.source_object, expected_objects)
+                self.assertIn(relation.target_object, expected_objects)
+                self.assertNotEqual(relation.target_object, "contact")
+                self.assertNotEqual(relation.referenced_object, "contact")
+
+    def test_create_plan_includes_segmentation_tables_indexes_and_fks(self) -> None:
+        plan_service = PostgresSchemaPlanService(
+            field_type_catalog=FieldTypeCatalog(),
+            postgres_field_canonicalizer=PostgresFieldCanonicalizer(),
+        )
+        seed_service = SchemaSeedService(
+            seed_reader=None,  # type: ignore[arg-type]
+            field_type_catalog=FieldTypeCatalog(),
+        )
+        seed = seed_service._normalize(SCHEMA_SEED)  # noqa: SLF001
+
+        plan = plan_service.build_create_plan(
+            schema_name="dnk_test",
+            seed=seed,
+        )
+
+        tables = [
+            operation.table_name
+            for operation in plan.operations
+            if isinstance(operation, CreateTableOperation)
+        ]
+        indexes = [
+            operation
+            for operation in plan.operations
+            if isinstance(operation, CreateIndexOperation)
+        ]
+        foreign_keys = [
+            operation
+            for operation in plan.operations
+            if isinstance(operation, AddForeignKeyOperation)
+        ]
+
+        self.assertIn("segment_definitions", tables)
+        self.assertIn("segment_versions", tables)
+        self.assertIn("segment_static_members", tables)
+        self.assertIn("segment_snapshots", tables)
+        self.assertIn("segment_snapshot_members", tables)
+        self.assertTrue(
+            any(
+                index.index_name == "ux_segment_versions_definition_version"
+                and index.is_unique
+                for index in indexes
+            )
+        )
+        self.assertTrue(
+            any(
+                index.index_name == "ux_segment_static_members_definition_contact"
+                and index.is_unique
+                for index in indexes
+            )
+        )
+        self.assertTrue(
+            any(
+                index.index_name == "ux_segment_snapshot_members_snapshot_contact"
+                and index.is_unique
+                for index in indexes
+            )
+        )
+        segmentation_tables = {
+            "segment_definitions",
+            "segment_versions",
+            "segment_static_members",
+            "segment_snapshots",
+            "segment_snapshot_members",
+        }
+        self.assertFalse(
+            any(
+                fk.table_name in segmentation_tables
+                and fk.target_table_name == "contacts"
+                for fk in foreign_keys
+            )
+        )
+        self.assertTrue(
+            any(
+                fk.table_name == "segment_versions"
+                and fk.target_table_name == "segment_definitions"
+                for fk in foreign_keys
+            )
+        )
+
     def test_create_plan_includes_communication_tables_indexes_and_fks(self) -> None:
         plan_service = PostgresSchemaPlanService(
             field_type_catalog=FieldTypeCatalog(),

@@ -576,6 +576,22 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                 msg=f"{path} should contain at most one Pydantic request schema",
             )
 
+    def test_segmentation_does_not_import_forbidden_modules(self) -> None:
+        forbidden_prefixes = (
+            "src.modules.broadcast",
+            "src.modules.campaigns",
+            "src.modules.communication",
+            "src.modules.contact_point",
+        )
+        for path in iter_python_files("src/modules/segmentation"):
+            for module_name in iter_imports(path):
+                self.assertFalse(
+                    any(
+                        module_name.startswith(prefix) for prefix in forbidden_prefixes
+                    ),
+                    msg=f"{path} imports forbidden module {module_name}",
+                )
+
     def test_communication_cleanup_removed_legacy_files(self) -> None:
         removed_files = (
             "src/modules/communication/application/dto.py",
