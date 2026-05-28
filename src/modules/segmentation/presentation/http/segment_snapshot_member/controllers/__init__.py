@@ -1,5 +1,7 @@
-from fastapi import APIRouter
+from src.modules.segmentation.presentation.http.segment_snapshot_member.controllers import (
+    list_segment_snapshot_members,
+)
 
-routers: tuple[APIRouter, ...] = ()
+routers = (list_segment_snapshot_members.router,)
 
 __all__ = ["routers"]

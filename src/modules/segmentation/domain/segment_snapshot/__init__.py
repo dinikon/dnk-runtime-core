@@ -3,6 +3,7 @@ from src.modules.segmentation.domain.segment_snapshot.error import (
     InvalidSegmentSnapshotError,
     SegmentSnapshotError,
     SegmentSnapshotImmutableError,
+    SegmentSnapshotNotFoundError,
     SegmentSnapshotTransitionError,
 )
 from src.modules.segmentation.domain.segment_snapshot.repository import (
@@ -20,6 +21,7 @@ __all__ = [
     "SegmentSnapshotError",
     "SegmentSnapshotIdVO",
     "SegmentSnapshotImmutableError",
+    "SegmentSnapshotNotFoundError",
     "SegmentSnapshotStatusVO",
     "SegmentSnapshotTransitionError",
 ]

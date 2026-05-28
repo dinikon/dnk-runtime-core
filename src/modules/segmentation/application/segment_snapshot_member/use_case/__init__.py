@@ -1,3 +1,9 @@
-"""Segment snapshot member use case package."""
+from src.modules.segmentation.application.segment_snapshot_member.use_case.list_segment_snapshot_members import (
+    ListSegmentSnapshotMembersUseCase,
+    ListSegmentSnapshotMembersUseCaseProtocol,
+)
 
-__all__: list[str] = []
+__all__ = [
+    "ListSegmentSnapshotMembersUseCase",
+    "ListSegmentSnapshotMembersUseCaseProtocol",
+]

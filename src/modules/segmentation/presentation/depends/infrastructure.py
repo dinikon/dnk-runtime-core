@@ -24,6 +24,8 @@ from src.modules.segmentation.infrastructure import (
     RuntimeObjectMetadataAdapter,
     SegmentDefinitionRuntimeRepository,
     SegmentStaticMemberRuntimeRepository,
+    SegmentSnapshotMemberRuntimeRepository,
+    SegmentSnapshotRuntimeRepository,
     SegmentVersionRuntimeRepository,
     StaticContactAudienceRuntimeQuery,
 )
@@ -140,6 +142,50 @@ SegmentVersionQueryRepositoryDep = Annotated[
 ]
 
 
+def get_segment_snapshot_repository(
+    runtime_object_resolver: RuntimeObjectResolverDep,
+    runtime_command_gateway: RuntimeCommandGatewayDep,
+    runtime_query_gateway: RuntimeQueryGatewayDep,
+) -> SegmentSnapshotRuntimeRepository:
+    return SegmentSnapshotRuntimeRepository(
+        runtime_object_resolver=runtime_object_resolver,
+        runtime_command_gateway=runtime_command_gateway,
+        runtime_query_gateway=runtime_query_gateway,
+    )
+
+
+SegmentSnapshotCommandRepositoryDep = Annotated[
+    SegmentSnapshotRuntimeRepository,
+    Depends(get_segment_snapshot_repository),
+]
+SegmentSnapshotQueryRepositoryDep = Annotated[
+    SegmentSnapshotRuntimeRepository,
+    Depends(get_segment_snapshot_repository),
+]
+
+
+def get_segment_snapshot_member_repository(
+    runtime_object_resolver: RuntimeObjectResolverDep,
+    runtime_command_gateway: RuntimeCommandGatewayDep,
+    runtime_query_gateway: RuntimeQueryGatewayDep,
+) -> SegmentSnapshotMemberRuntimeRepository:
+    return SegmentSnapshotMemberRuntimeRepository(
+        runtime_object_resolver=runtime_object_resolver,
+        runtime_command_gateway=runtime_command_gateway,
+        runtime_query_gateway=runtime_query_gateway,
+    )
+
+
+SegmentSnapshotMemberCommandRepositoryDep = Annotated[
+    SegmentSnapshotMemberRuntimeRepository,
+    Depends(get_segment_snapshot_member_repository),
+]
+SegmentSnapshotMemberQueryRepositoryDep = Annotated[
+    SegmentSnapshotMemberRuntimeRepository,
+    Depends(get_segment_snapshot_member_repository),
+]
+
+
 def get_contact_lookup(
     runtime_object_resolver: RuntimeObjectResolverDep,
     runtime_query_gateway: RuntimeQueryGatewayDep,
@@ -230,6 +276,10 @@ __all__ = [
     "SegmentDefinitionQueryRepositoryDep",
     "SegmentStaticMemberCommandRepositoryDep",
     "SegmentStaticMemberQueryRepositoryDep",
+    "SegmentSnapshotCommandRepositoryDep",
+    "SegmentSnapshotMemberCommandRepositoryDep",
+    "SegmentSnapshotMemberQueryRepositoryDep",
+    "SegmentSnapshotQueryRepositoryDep",
     "SegmentVersionCommandRepositoryDep",
     "SegmentVersionQueryRepositoryDep",
     "StaticContactAudienceQueryDep",
@@ -242,6 +292,8 @@ __all__ = [
     "get_runtime_query_gateway",
     "get_segment_definition_repository",
     "get_segment_static_member_repository",
+    "get_segment_snapshot_member_repository",
+    "get_segment_snapshot_repository",
     "get_segment_version_repository",
     "get_static_contact_audience_query",
 ]

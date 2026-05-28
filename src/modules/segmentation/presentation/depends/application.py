@@ -17,6 +17,14 @@ from src.modules.segmentation.application.segment_static_member import (
     ListStaticMembersUseCase,
     RemoveStaticMemberUseCase,
 )
+from src.modules.segmentation.application.segment_snapshot import (
+    CreateSegmentSnapshotUseCase,
+    GetSegmentSnapshotUseCase,
+    ListSegmentSnapshotsUseCase,
+)
+from src.modules.segmentation.application.segment_snapshot_member import (
+    ListSegmentSnapshotMembersUseCase,
+)
 from src.modules.segmentation.application.segment_version import (
     ActivateSegmentVersionUseCase,
     CreateSegmentVersionUseCase,
@@ -38,6 +46,10 @@ from src.modules.segmentation.presentation.depends.infrastructure import (
     SegmentDefinitionQueryRepositoryDep,
     SegmentStaticMemberCommandRepositoryDep,
     SegmentStaticMemberQueryRepositoryDep,
+    SegmentSnapshotCommandRepositoryDep,
+    SegmentSnapshotMemberCommandRepositoryDep,
+    SegmentSnapshotMemberQueryRepositoryDep,
+    SegmentSnapshotQueryRepositoryDep,
     SegmentVersionCommandRepositoryDep,
     SegmentVersionQueryRepositoryDep,
     StaticContactAudienceQueryDep,
@@ -172,6 +184,80 @@ def get_list_static_members_use_case(
 ListStaticMembersUseCaseDep = Annotated[
     ListStaticMembersUseCase,
     Depends(get_list_static_members_use_case),
+]
+
+
+def get_create_segment_snapshot_use_case(
+    segment_repository: SegmentDefinitionCommandRepositoryDep,
+    version_repository: SegmentVersionCommandRepositoryDep,
+    snapshot_command_repository: SegmentSnapshotCommandRepositoryDep,
+    snapshot_query_repository: SegmentSnapshotQueryRepositoryDep,
+    member_command_repository: SegmentSnapshotMemberCommandRepositoryDep,
+    evaluation_service: "SegmentVersionEvaluationServiceDep",
+    clock: ClockDep,
+    uuid_generator: UuidDep,
+) -> CreateSegmentSnapshotUseCase:
+    return CreateSegmentSnapshotUseCase(
+        segment_repository=segment_repository,
+        version_repository=version_repository,
+        snapshot_command_repository=snapshot_command_repository,
+        snapshot_query_repository=snapshot_query_repository,
+        member_command_repository=member_command_repository,
+        evaluation_service=evaluation_service,
+        clock=clock,
+        uuid_generator=uuid_generator,
+    )
+
+
+CreateSegmentSnapshotUseCaseDep = Annotated[
+    CreateSegmentSnapshotUseCase,
+    Depends(get_create_segment_snapshot_use_case),
+]
+
+
+def get_get_segment_snapshot_use_case(
+    repository: SegmentSnapshotQueryRepositoryDep,
+) -> GetSegmentSnapshotUseCase:
+    return GetSegmentSnapshotUseCase(repository=repository)
+
+
+GetSegmentSnapshotUseCaseDep = Annotated[
+    GetSegmentSnapshotUseCase,
+    Depends(get_get_segment_snapshot_use_case),
+]
+
+
+def get_list_segment_snapshots_use_case(
+    segment_repository: SegmentDefinitionCommandRepositoryDep,
+    repository: SegmentSnapshotQueryRepositoryDep,
+) -> ListSegmentSnapshotsUseCase:
+    return ListSegmentSnapshotsUseCase(
+        segment_repository=segment_repository,
+        repository=repository,
+    )
+
+
+ListSegmentSnapshotsUseCaseDep = Annotated[
+    ListSegmentSnapshotsUseCase,
+    Depends(get_list_segment_snapshots_use_case),
+]
+
+
+def get_list_segment_snapshot_members_use_case(
+    snapshot_repository: SegmentSnapshotQueryRepositoryDep,
+    member_repository: SegmentSnapshotMemberQueryRepositoryDep,
+    contact_lookup: ContactLookupDep,
+) -> ListSegmentSnapshotMembersUseCase:
+    return ListSegmentSnapshotMembersUseCase(
+        snapshot_repository=snapshot_repository,
+        member_repository=member_repository,
+        contact_lookup=contact_lookup,
+    )
+
+
+ListSegmentSnapshotMembersUseCaseDep = Annotated[
+    ListSegmentSnapshotMembersUseCase,
+    Depends(get_list_segment_snapshot_members_use_case),
 ]
 
 
@@ -376,10 +462,14 @@ __all__ = [
     "AddStaticMemberUseCaseDep",
     "ArchiveSegmentDefinitionUseCaseDep",
     "CreateSegmentDefinitionUseCaseDep",
+    "CreateSegmentSnapshotUseCaseDep",
     "CreateSegmentVersionUseCaseDep",
     "GetSegmentDefinitionUseCaseDep",
+    "GetSegmentSnapshotUseCaseDep",
     "GetSegmentVersionUseCaseDep",
     "ListSegmentDefinitionsUseCaseDep",
+    "ListSegmentSnapshotMembersUseCaseDep",
+    "ListSegmentSnapshotsUseCaseDep",
     "ListStaticMembersUseCaseDep",
     "ListSegmentVersionsUseCaseDep",
     "PreviewSegmentConfigUseCaseDep",
@@ -395,10 +485,14 @@ __all__ = [
     "get_add_static_member_use_case",
     "get_archive_segment_definition_use_case",
     "get_create_segment_definition_use_case",
+    "get_create_segment_snapshot_use_case",
     "get_create_segment_version_use_case",
     "get_get_segment_definition_use_case",
+    "get_get_segment_snapshot_use_case",
     "get_get_segment_version_use_case",
     "get_list_segment_definitions_use_case",
+    "get_list_segment_snapshot_members_use_case",
+    "get_list_segment_snapshots_use_case",
     "get_list_static_members_use_case",
     "get_list_segment_versions_use_case",
     "get_preview_segment_config_use_case",

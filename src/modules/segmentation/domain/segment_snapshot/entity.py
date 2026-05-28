@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import datetime
+from typing import Self
 
 from src.modules.segmentation.domain.segment_definition import SegmentIdVO
 from src.modules.segmentation.domain.segment_snapshot.error import (
@@ -30,35 +31,41 @@ class SegmentSnapshot:
     error_code: str | None = None
     error_message: str | None = None
 
-    def __post_init__(self) -> None:
-        if not isinstance(self.segment_snapshot_id, SegmentSnapshotIdVO):
-            object.__setattr__(
-                self,
-                "segment_snapshot_id",
-                SegmentSnapshotIdVO.from_value(self.segment_snapshot_id),
-            )
-        if not isinstance(self.segment_id, SegmentIdVO):
-            object.__setattr__(
-                self,
-                "segment_id",
-                SegmentIdVO.from_value(self.segment_id),
-            )
-        if not isinstance(self.segment_version_id, SegmentVersionIdVO):
-            object.__setattr__(
-                self,
-                "segment_version_id",
-                SegmentVersionIdVO.from_value(self.segment_version_id),
-            )
-        object.__setattr__(self, "status", SegmentSnapshotStatusVO(self.status))
-        if self.member_count < 0:
+    @classmethod
+    def create(
+        cls,
+        *,
+        segment_snapshot_id: SegmentSnapshotIdVO,
+        segment_id: SegmentIdVO,
+        segment_version_id: SegmentVersionIdVO,
+        status: SegmentSnapshotStatusVO = SegmentSnapshotStatusVO.PENDING,
+        member_count: int = 0,
+        started_at: datetime | None = None,
+        completed_at: datetime | None = None,
+        error_code: str | None = None,
+        error_message: str | None = None,
+    ) -> Self:
+        """Creates snapshot from already prepared value objects."""
+        if member_count < 0:
             raise InvalidSegmentSnapshotError(
                 "Segment snapshot member count must be >= 0."
             )
-        if self.status == SegmentSnapshotStatusVO.FAILED:
-            self._validate_failure_payload(
-                error_code=self.error_code,
-                error_message=self.error_message,
+        if status == SegmentSnapshotStatusVO.FAILED:
+            cls._validate_failure_payload(
+                error_code=error_code,
+                error_message=error_message,
             )
+        return cls(
+            segment_snapshot_id=segment_snapshot_id,
+            segment_id=segment_id,
+            segment_version_id=segment_version_id,
+            status=status,
+            member_count=member_count,
+            started_at=started_at,
+            completed_at=completed_at,
+            error_code=error_code,
+            error_message=error_message,
+        )
 
     def start(self, *, now: datetime) -> "SegmentSnapshot":
         """Moves pending snapshot to running."""
@@ -67,10 +74,16 @@ class SegmentSnapshot:
             raise SegmentSnapshotTransitionError(
                 "Only pending segment snapshot can be started."
             )
-        return replace(
-            self,
+        return SegmentSnapshot.create(
+            segment_snapshot_id=self.segment_snapshot_id,
+            segment_id=self.segment_id,
+            segment_version_id=self.segment_version_id,
             status=SegmentSnapshotStatusVO.RUNNING,
+            member_count=self.member_count,
             started_at=now,
+            completed_at=self.completed_at,
+            error_code=self.error_code,
+            error_message=self.error_message,
         )
 
     def complete(self, *, now: datetime, member_count: int) -> "SegmentSnapshot":
@@ -84,11 +97,16 @@ class SegmentSnapshot:
             raise InvalidSegmentSnapshotError(
                 "Segment snapshot member count must be >= 0."
             )
-        return replace(
-            self,
+        return SegmentSnapshot.create(
+            segment_snapshot_id=self.segment_snapshot_id,
+            segment_id=self.segment_id,
+            segment_version_id=self.segment_version_id,
             status=SegmentSnapshotStatusVO.COMPLETED,
             member_count=member_count,
+            started_at=self.started_at,
             completed_at=now,
+            error_code=self.error_code,
+            error_message=self.error_message,
         )
 
     def fail(
@@ -111,9 +129,13 @@ class SegmentSnapshot:
             error_code=error_code,
             error_message=error_message,
         )
-        return replace(
-            self,
+        return SegmentSnapshot.create(
+            segment_snapshot_id=self.segment_snapshot_id,
+            segment_id=self.segment_id,
+            segment_version_id=self.segment_version_id,
             status=SegmentSnapshotStatusVO.FAILED,
+            member_count=self.member_count,
+            started_at=self.started_at,
             completed_at=now,
             error_code=error_code.strip(),
             error_message=error_message.strip(),
