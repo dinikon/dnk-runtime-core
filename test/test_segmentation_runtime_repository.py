@@ -282,7 +282,7 @@ class SegmentationRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
             runtime_command_gateway=command_gateway,
             runtime_query_gateway=query_gateway,
         )
-        member = SegmentStaticMember(
+        member = SegmentStaticMember.create(
             segment_static_member_id=SegmentStaticMemberIdVO.from_value(uuid4()),
             segment_id=segment_id,
             contact_id=contact_id,
@@ -331,7 +331,7 @@ class SegmentationRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
 
         saved = await repository.add(
             tenant_id=tenant_id,
-            member=SegmentStaticMember(
+            member=SegmentStaticMember.create(
                 segment_static_member_id=SegmentStaticMemberIdVO.from_value(uuid4()),
                 segment_id=segment_id,
                 contact_id=contact_id,

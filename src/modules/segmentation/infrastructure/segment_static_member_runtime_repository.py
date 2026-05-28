@@ -236,7 +236,7 @@ class SegmentStaticMemberRuntimeRepository(
 
     @staticmethod
     def _row_to_entity(row: Mapping[str, Any]) -> SegmentStaticMember:
-        return SegmentStaticMember(
+        return SegmentStaticMember.create(
             segment_static_member_id=SegmentStaticMemberIdVO.from_value(
                 SegmentStaticMemberRuntimeRepository._as_uuid(row.get("id"))
             ),

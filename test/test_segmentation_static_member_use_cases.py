@@ -192,7 +192,7 @@ class SegmentationStaticMemberUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
     def test_static_member_entity_copies_metadata(self) -> None:
         metadata = {"nested": {"source": "test"}}
-        member = SegmentStaticMember(
+        member = SegmentStaticMember.create(
             segment_static_member_id=SegmentStaticMemberIdVO.from_value(uuid4()),
             segment_id=SegmentIdVO.from_value(uuid4()),
             contact_id=EntityIdVO.from_value(uuid4()),
@@ -204,7 +204,7 @@ class SegmentationStaticMemberUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(member.metadata["nested"]["source"], "test")
         with self.assertRaises(SegmentStaticMemberError):
-            SegmentStaticMember(
+            SegmentStaticMember.create(
                 segment_static_member_id=SegmentStaticMemberIdVO.from_value(uuid4()),
                 segment_id=SegmentIdVO.from_value(uuid4()),
                 contact_id=EntityIdVO.from_value(uuid4()),
@@ -343,7 +343,7 @@ class SegmentationStaticMemberUseCaseTests(unittest.IsolatedAsyncioTestCase):
         repository = _StaticMemberRepositoryStub()
         await repository.add(
             tenant_id=tenant_id,
-            member=SegmentStaticMember(
+            member=SegmentStaticMember.create(
                 segment_static_member_id=SegmentStaticMemberIdVO.from_value(uuid4()),
                 segment_id=segment_id,
                 contact_id=contact_id,
@@ -373,7 +373,7 @@ class SegmentationStaticMemberUseCaseTests(unittest.IsolatedAsyncioTestCase):
         repository = _StaticMemberRepositoryStub()
         await repository.add(
             tenant_id=tenant_id,
-            member=SegmentStaticMember(
+            member=SegmentStaticMember.create(
                 segment_static_member_id=SegmentStaticMemberIdVO.from_value(uuid4()),
                 segment_id=segment_id,
                 contact_id=EntityIdVO.from_value(uuid4()),

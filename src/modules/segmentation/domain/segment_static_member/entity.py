@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Self
 
 from src.modules.segmentation.domain.segment_definition import SegmentIdVO
 from src.modules.segmentation.domain.segment_static_member.error import (
@@ -26,36 +26,33 @@ class SegmentStaticMember:
     source_type: SegmentStaticMemberSourceTypeVO
     metadata: dict[str, Any] | None = None
 
-    def __post_init__(self) -> None:
-        if not isinstance(self.segment_static_member_id, SegmentStaticMemberIdVO):
-            object.__setattr__(
-                self,
-                "segment_static_member_id",
-                SegmentStaticMemberIdVO.from_value(self.segment_static_member_id),
-            )
-        if not isinstance(self.segment_id, SegmentIdVO):
-            object.__setattr__(
-                self,
-                "segment_id",
-                SegmentIdVO.from_value(self.segment_id),
-            )
-        if not isinstance(self.contact_id, EntityIdVO):
-            object.__setattr__(
-                self,
-                "contact_id",
-                EntityIdVO.from_value(self.contact_id),
-            )
-        object.__setattr__(
-            self,
-            "source_type",
-            SegmentStaticMemberSourceTypeVO(self.source_type),
+    @classmethod
+    def create(
+        cls,
+        *,
+        segment_static_member_id: SegmentStaticMemberIdVO,
+        segment_id: SegmentIdVO,
+        contact_id: EntityIdVO,
+        source_type: SegmentStaticMemberSourceTypeVO,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> Self:
+        """Creates static member from already prepared value objects."""
+        normalized_metadata = cls._copy_metadata(metadata)
+        return cls(
+            segment_static_member_id=segment_static_member_id,
+            segment_id=segment_id,
+            contact_id=contact_id,
+            source_type=source_type,
+            metadata=normalized_metadata,
         )
-        if self.metadata is not None:
-            if not isinstance(self.metadata, Mapping):
-                raise SegmentStaticMemberError(
-                    "Static member metadata must be a mapping."
-                )
-            object.__setattr__(self, "metadata", deepcopy(dict(self.metadata)))
+
+    @staticmethod
+    def _copy_metadata(metadata: Mapping[str, Any] | None) -> dict[str, Any] | None:
+        if metadata is None:
+            return None
+        if not isinstance(metadata, Mapping):
+            raise SegmentStaticMemberError("Static member metadata must be a mapping.")
+        return deepcopy(dict(metadata))
 
 
 __all__ = ["SegmentStaticMember"]

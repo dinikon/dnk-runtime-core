@@ -74,7 +74,7 @@ class AddStaticMemberUseCase:
             raise SegmentStaticMemberContactNotFoundError(str(command.contact_id))
 
         metadata = None if command.metadata is None else dict(command.metadata)
-        member = SegmentStaticMember(
+        member = SegmentStaticMember.create(
             segment_static_member_id=SegmentStaticMemberIdVO.from_value(
                 self._uuid_generator.new_uuid()
             ),
