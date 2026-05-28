@@ -25,8 +25,11 @@ class SegmentationModuleSmokeTests(unittest.TestCase):
         self.assertIn("router.include_router(segmentation_router)", content)
 
     def test_dependency_placeholders_import_without_side_effects(self) -> None:
-        self.assertEqual(application.__all__, [])
-        self.assertEqual(infrastructure.__all__, [])
+        self.assertIn("AddStaticMemberUseCaseDep", application.__all__)
+        self.assertIn("ListStaticMembersUseCaseDep", application.__all__)
+        self.assertIn("RemoveStaticMemberUseCaseDep", application.__all__)
+        self.assertIn("ContactLookupDep", infrastructure.__all__)
+        self.assertIn("SegmentStaticMemberCommandRepositoryDep", infrastructure.__all__)
 
     def test_domain_aggregations_are_split_by_runtime_object(self) -> None:
         expected = {

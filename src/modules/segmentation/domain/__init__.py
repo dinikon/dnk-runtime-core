@@ -1,5 +1,8 @@
 from src.modules.segmentation.domain.segment_definition import (
     SegmentDefinition,
+    SegmentDefinitionCommandRepositoryProtocol,
+    SegmentDefinitionError,
+    SegmentDefinitionNotFoundError,
     SegmentIdVO,
     SegmentKindVO,
     SegmentStatusVO,
@@ -15,7 +18,12 @@ from src.modules.segmentation.domain.segment_snapshot_member import (
 )
 from src.modules.segmentation.domain.segment_static_member import (
     SegmentStaticMember,
+    SegmentStaticMemberArchivedSegmentError,
+    SegmentStaticMemberCommandRepositoryProtocol,
+    SegmentStaticMemberContactNotFoundError,
+    SegmentStaticMemberError,
     SegmentStaticMemberIdVO,
+    SegmentStaticMemberNonStaticSegmentError,
     SegmentStaticMemberSourceTypeVO,
 )
 from src.modules.segmentation.domain.segment_version import (
@@ -26,6 +34,9 @@ from src.modules.segmentation.domain.segment_version import (
 
 __all__ = [
     "SegmentDefinition",
+    "SegmentDefinitionCommandRepositoryProtocol",
+    "SegmentDefinitionError",
+    "SegmentDefinitionNotFoundError",
     "SegmentIdVO",
     "SegmentKindVO",
     "SegmentSnapshot",
@@ -34,7 +45,12 @@ __all__ = [
     "SegmentSnapshotMemberIdVO",
     "SegmentSnapshotStatusVO",
     "SegmentStaticMember",
+    "SegmentStaticMemberArchivedSegmentError",
+    "SegmentStaticMemberCommandRepositoryProtocol",
+    "SegmentStaticMemberContactNotFoundError",
+    "SegmentStaticMemberError",
     "SegmentStaticMemberIdVO",
+    "SegmentStaticMemberNonStaticSegmentError",
     "SegmentStaticMemberSourceTypeVO",
     "SegmentStatusVO",
     "SegmentVersion",
