@@ -79,6 +79,7 @@ class SegmentVersionDslConfigValidator:
                 path="root_object",
             )
 
+        self._validate_unique_rule_ids(parsed)
         self._validate_limits(parsed)
         await self._validate_inherited_segments(
             tenant_id=tenant_id,
@@ -102,6 +103,21 @@ class SegmentVersionDslConfigValidator:
     def dump(self, config: SegmentVersionDslConfig) -> dict[str, Any]:
         """Dump validated config into canonical JSON-like representation."""
         return dump_segment_version_dsl_config(config)
+
+    @staticmethod
+    def _validate_unique_rule_ids(config: SegmentVersionDslConfig) -> None:
+        seen: set[str] = set()
+        for group_name, rules in (
+            ("include", config.include),
+            ("exclude", config.exclude),
+        ):
+            for index, rule in enumerate(rules):
+                if rule.rule_id in seen:
+                    raise SegmentVersionDslInvalidRuleError(
+                        f"Duplicate rule_id '{rule.rule_id}'.",
+                        path=f"{group_name}[{index}].rule_id",
+                    )
+                seen.add(rule.rule_id)
 
     @staticmethod
     def _validate_limits(config: SegmentVersionDslConfig) -> None:
@@ -188,28 +204,27 @@ class SegmentVersionDslConfigValidator:
                 path=f"{path}.object",
             ) from exc
 
+        if rule.object == _ROOT_OBJECT:
+            self._validate_contact_rule_mapping(rule=rule, path=path)
+        else:
+            contact_relation = await self._validate_relation_path(
+                tenant_id=tenant_id,
+                rule=rule,
+                path=path,
+            )
+            await self._validate_non_contact_mapping(
+                tenant_id=tenant_id,
+                rule=rule,
+                path=path,
+                contact_relation=contact_relation,
+            )
+
         assert_segment_version_filter_mapping(rule.filter, path=f"{path}.filter")
         await self._filter_validator.validate_filter(
             tenant_id=tenant_id,
             object_name=rule.object,
             filter_config=rule.filter,
             path=f"{path}.filter",
-        )
-
-        if rule.object == _ROOT_OBJECT:
-            self._validate_contact_rule_mapping(rule=rule, path=path)
-            return
-
-        contact_relation = await self._validate_relation_path(
-            tenant_id=tenant_id,
-            rule=rule,
-            path=path,
-        )
-        await self._validate_non_contact_mapping(
-            tenant_id=tenant_id,
-            rule=rule,
-            path=path,
-            contact_relation=contact_relation,
         )
 
     @staticmethod

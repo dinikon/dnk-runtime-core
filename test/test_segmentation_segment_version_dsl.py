@@ -355,6 +355,27 @@ class SegmentVersionDslTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
+    async def test_validator_rejects_duplicate_rule_ids_in_typed_config(self) -> None:
+        typed_config = parse_segment_version_dsl_config(_contact_config())
+        typed_config = type(typed_config)(
+            root_object=typed_config.root_object,
+            include=typed_config.include,
+            exclude=typed_config.include,
+            inherit_include_segment_ids=typed_config.inherit_include_segment_ids,
+            inherit_exclude_segment_ids=typed_config.inherit_exclude_segment_ids,
+        )
+        validator = SegmentVersionDslConfigValidator(
+            metadata=_MetadataStub(),
+            filter_validator=_FilterValidatorStub(),
+            segment_definition_repository=_SegmentRepositoryStub(),
+        )
+
+        with self.assertRaises(SegmentVersionDslInvalidRuleError):
+            await validator.validate(
+                tenant_id=EntityIdVO.from_value(uuid4()),
+                config=typed_config,
+            )
+
     async def test_validator_rejects_limits_and_bad_relation_or_mapping(self) -> None:
         tenant_id = EntityIdVO.from_value(uuid4())
         validator = SegmentVersionDslConfigValidator(
@@ -381,6 +402,24 @@ class SegmentVersionDslTests(unittest.IsolatedAsyncioTestCase):
         bad_mapping["include"][0]["contact_mapping"]["field"] = "missing_id"
         with self.assertRaises(SegmentVersionDslInvalidContactMappingError):
             await validator.validate(tenant_id=tenant_id, config=bad_mapping)
+
+    async def test_validator_checks_mapping_before_filter(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        config = _related_config()
+        config["include"][0]["contact_mapping"]["field"] = "missing_id"
+        validator = SegmentVersionDslConfigValidator(
+            metadata=_MetadataStub(),
+            filter_validator=_FilterValidatorStub(
+                SegmentVersionDslValidationError(
+                    "Bad filter.",
+                    path="include[0].filter",
+                )
+            ),
+            segment_definition_repository=_SegmentRepositoryStub(),
+        )
+
+        with self.assertRaises(SegmentVersionDslInvalidContactMappingError):
+            await validator.validate(tenant_id=tenant_id, config=config)
 
     async def test_validator_rejects_inherited_self_missing_and_archived_segments(
         self,
