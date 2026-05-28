@@ -14,6 +14,14 @@ from src.modules.segmentation.application.segment_version.use_case.list_segment_
     ListSegmentVersionsUseCase,
     ListSegmentVersionsUseCaseProtocol,
 )
+from src.modules.segmentation.application.segment_version.use_case.preview_segment_config import (
+    PreviewSegmentConfigUseCase,
+    PreviewSegmentConfigUseCaseProtocol,
+)
+from src.modules.segmentation.application.segment_version.use_case.preview_segment_version import (
+    PreviewSegmentVersionUseCase,
+    PreviewSegmentVersionUseCaseProtocol,
+)
 
 __all__ = [
     "ActivateSegmentVersionUseCase",
@@ -24,4 +32,8 @@ __all__ = [
     "GetSegmentVersionUseCaseProtocol",
     "ListSegmentVersionsUseCase",
     "ListSegmentVersionsUseCaseProtocol",
+    "PreviewSegmentConfigUseCase",
+    "PreviewSegmentConfigUseCaseProtocol",
+    "PreviewSegmentVersionUseCase",
+    "PreviewSegmentVersionUseCaseProtocol",
 ]

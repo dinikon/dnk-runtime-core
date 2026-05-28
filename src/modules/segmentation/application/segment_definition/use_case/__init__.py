@@ -14,6 +14,10 @@ from src.modules.segmentation.application.segment_definition.use_case.list_segme
     ListSegmentDefinitionsUseCase,
     ListSegmentDefinitionsUseCaseProtocol,
 )
+from src.modules.segmentation.application.segment_definition.use_case.preview_segment_definition import (
+    PreviewSegmentDefinitionUseCase,
+    PreviewSegmentDefinitionUseCaseProtocol,
+)
 from src.modules.segmentation.application.segment_definition.use_case.update_segment_definition import (
     UpdateSegmentDefinitionUseCase,
     UpdateSegmentDefinitionUseCaseProtocol,
@@ -28,6 +32,8 @@ __all__ = [
     "GetSegmentDefinitionUseCaseProtocol",
     "ListSegmentDefinitionsUseCase",
     "ListSegmentDefinitionsUseCaseProtocol",
+    "PreviewSegmentDefinitionUseCase",
+    "PreviewSegmentDefinitionUseCaseProtocol",
     "UpdateSegmentDefinitionUseCase",
     "UpdateSegmentDefinitionUseCaseProtocol",
 ]

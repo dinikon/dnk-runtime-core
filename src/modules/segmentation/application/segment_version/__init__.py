@@ -1,18 +1,37 @@
 from src.modules.segmentation.application.segment_version.command import (
     ActivateSegmentVersionCommand,
     CreateSegmentVersionCommand,
+    PreviewSegmentConfigCommand,
 )
 from src.modules.segmentation.application.segment_version.dsl import (
     SegmentVersionDslConfigValidator,
     SegmentVersionDslError,
 )
 from src.modules.segmentation.application.segment_version.dto import (
+    SegmentPreviewDTO,
     SegmentVersionDTO,
     build_segment_config_checksum,
 )
+from src.modules.segmentation.application.segment_version.evaluation import (
+    ContactAudienceItemDTO,
+    SegmentVersionActiveVersionNotFoundError,
+    SegmentVersionEvaluationDepthExceededError,
+    SegmentVersionEvaluationError,
+    SegmentVersionEvaluationFilterError,
+    SegmentVersionEvaluationInheritanceCycleError,
+    SegmentVersionEvaluationInvalidMappingError,
+    SegmentVersionEvaluationOptions,
+    SegmentVersionEvaluationResult,
+    SegmentVersionEvaluationService,
+    SegmentVersionEvaluationUnsupportedRelationPathError,
+    SegmentVersionInheritanceEvaluator,
+    SegmentVersionRuleExecutor,
+)
 from src.modules.segmentation.application.segment_version.query import (
+    ContactAudienceQueryProtocol,
     GetSegmentVersionQuery,
     ListSegmentVersionsQuery,
+    PreviewSegmentVersionQuery,
     SegmentVersionQueryRepositoryProtocol,
 )
 from src.modules.segmentation.application.segment_version.use_case import (
@@ -24,12 +43,18 @@ from src.modules.segmentation.application.segment_version.use_case import (
     GetSegmentVersionUseCaseProtocol,
     ListSegmentVersionsUseCase,
     ListSegmentVersionsUseCaseProtocol,
+    PreviewSegmentConfigUseCase,
+    PreviewSegmentConfigUseCaseProtocol,
+    PreviewSegmentVersionUseCase,
+    PreviewSegmentVersionUseCaseProtocol,
 )
 
 __all__ = [
     "ActivateSegmentVersionCommand",
     "ActivateSegmentVersionUseCase",
     "ActivateSegmentVersionUseCaseProtocol",
+    "ContactAudienceItemDTO",
+    "ContactAudienceQueryProtocol",
     "CreateSegmentVersionCommand",
     "CreateSegmentVersionUseCase",
     "CreateSegmentVersionUseCaseProtocol",
@@ -39,9 +64,28 @@ __all__ = [
     "ListSegmentVersionsQuery",
     "ListSegmentVersionsUseCase",
     "ListSegmentVersionsUseCaseProtocol",
+    "PreviewSegmentConfigCommand",
+    "PreviewSegmentConfigUseCase",
+    "PreviewSegmentConfigUseCaseProtocol",
+    "PreviewSegmentVersionQuery",
+    "PreviewSegmentVersionUseCase",
+    "PreviewSegmentVersionUseCaseProtocol",
+    "SegmentPreviewDTO",
     "SegmentVersionDTO",
+    "SegmentVersionActiveVersionNotFoundError",
     "SegmentVersionDslConfigValidator",
     "SegmentVersionDslError",
+    "SegmentVersionEvaluationDepthExceededError",
+    "SegmentVersionEvaluationError",
+    "SegmentVersionEvaluationFilterError",
+    "SegmentVersionEvaluationInheritanceCycleError",
+    "SegmentVersionEvaluationInvalidMappingError",
+    "SegmentVersionEvaluationOptions",
+    "SegmentVersionEvaluationResult",
+    "SegmentVersionEvaluationService",
+    "SegmentVersionEvaluationUnsupportedRelationPathError",
+    "SegmentVersionInheritanceEvaluator",
     "SegmentVersionQueryRepositoryProtocol",
+    "SegmentVersionRuleExecutor",
     "build_segment_config_checksum",
 ]

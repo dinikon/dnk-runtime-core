@@ -10,9 +10,13 @@ from src.modules.segmentation.application.segment_static_member.query.list_stati
 from src.modules.segmentation.application.segment_static_member.query.repository import (
     SegmentStaticMemberQueryRepositoryProtocol,
 )
+from src.modules.segmentation.application.segment_static_member.query.static_contact_audience_query import (
+    StaticContactAudienceQueryProtocol,
+)
 
 __all__ = [
     "ContactLookupProtocol",
     "ListStaticMembersQuery",
     "SegmentStaticMemberQueryRepositoryProtocol",
+    "StaticContactAudienceQueryProtocol",
 ]

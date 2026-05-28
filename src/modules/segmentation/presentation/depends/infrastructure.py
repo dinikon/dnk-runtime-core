@@ -18,12 +18,14 @@ from src.modules.schema_registry.presentation.depends.infrastructure import (
     ObjectServiceDep,
 )
 from src.modules.segmentation.infrastructure import (
+    RuntimeContactAudienceQuery,
     RuntimeContactLookupAdapter,
     RuntimeFilterValidatorAdapter,
     RuntimeObjectMetadataAdapter,
     SegmentDefinitionRuntimeRepository,
     SegmentStaticMemberRuntimeRepository,
     SegmentVersionRuntimeRepository,
+    StaticContactAudienceRuntimeQuery,
 )
 from src.modules.shared.presentation.persistence.depends import UoWDep
 
@@ -154,6 +156,38 @@ ContactLookupDep = Annotated[
 ]
 
 
+def get_contact_audience_query(
+    runtime_object_resolver: RuntimeObjectResolverDep,
+    runtime_query_gateway: RuntimeQueryGatewayDep,
+) -> RuntimeContactAudienceQuery:
+    return RuntimeContactAudienceQuery(
+        runtime_object_resolver=runtime_object_resolver,
+        runtime_query_gateway=runtime_query_gateway,
+    )
+
+
+ContactAudienceQueryDep = Annotated[
+    RuntimeContactAudienceQuery,
+    Depends(get_contact_audience_query),
+]
+
+
+def get_static_contact_audience_query(
+    runtime_object_resolver: RuntimeObjectResolverDep,
+    runtime_query_gateway: RuntimeQueryGatewayDep,
+) -> StaticContactAudienceRuntimeQuery:
+    return StaticContactAudienceRuntimeQuery(
+        runtime_object_resolver=runtime_object_resolver,
+        runtime_query_gateway=runtime_query_gateway,
+    )
+
+
+StaticContactAudienceQueryDep = Annotated[
+    StaticContactAudienceRuntimeQuery,
+    Depends(get_static_contact_audience_query),
+]
+
+
 def get_runtime_object_metadata(
     runtime_object_resolver: RuntimeObjectResolverDep,
     object_service: ObjectServiceDep,
@@ -185,6 +219,7 @@ RuntimeFilterValidatorDep = Annotated[
 
 
 __all__ = [
+    "ContactAudienceQueryDep",
     "ContactLookupDep",
     "RuntimeCommandGatewayDep",
     "RuntimeFilterValidatorDep",
@@ -197,6 +232,8 @@ __all__ = [
     "SegmentStaticMemberQueryRepositoryDep",
     "SegmentVersionCommandRepositoryDep",
     "SegmentVersionQueryRepositoryDep",
+    "StaticContactAudienceQueryDep",
+    "get_contact_audience_query",
     "get_contact_lookup",
     "get_runtime_filter_validator",
     "get_runtime_object_metadata",
@@ -206,4 +243,5 @@ __all__ = [
     "get_segment_definition_repository",
     "get_segment_static_member_repository",
     "get_segment_version_repository",
+    "get_static_contact_audience_query",
 ]

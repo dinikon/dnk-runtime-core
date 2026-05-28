@@ -4,8 +4,12 @@ from src.modules.segmentation.application.segment_version.command.activate_segme
 from src.modules.segmentation.application.segment_version.command.create_segment_version_command import (
     CreateSegmentVersionCommand,
 )
+from src.modules.segmentation.application.segment_version.command.preview_segment_config_command import (
+    PreviewSegmentConfigCommand,
+)
 
 __all__ = [
     "ActivateSegmentVersionCommand",
     "CreateSegmentVersionCommand",
+    "PreviewSegmentConfigCommand",
 ]

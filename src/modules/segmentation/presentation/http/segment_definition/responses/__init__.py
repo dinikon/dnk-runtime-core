@@ -7,8 +7,14 @@ from src.modules.segmentation.presentation.http.segment_definition.responses.lis
 from src.modules.segmentation.presentation.http.segment_definition.responses.segment_definition_response import (
     SegmentDefinitionResponseSchema,
 )
+from src.modules.segmentation.presentation.http.segment_definition.responses.segment_preview_response import (
+    SegmentPreviewContactResponseSchema,
+    SegmentPreviewResponseSchema,
+)
 
 __all__ = [
     "ListSegmentDefinitionsResponseSchema",
     "SegmentDefinitionResponseSchema",
+    "SegmentPreviewContactResponseSchema",
+    "SegmentPreviewResponseSchema",
 ]

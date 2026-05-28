@@ -9,6 +9,7 @@ from src.modules.segmentation.application.segment_definition import (
     CreateSegmentDefinitionUseCase,
     GetSegmentDefinitionUseCase,
     ListSegmentDefinitionsUseCase,
+    PreviewSegmentDefinitionUseCase,
     UpdateSegmentDefinitionUseCase,
 )
 from src.modules.segmentation.application.segment_static_member import (
@@ -21,9 +22,15 @@ from src.modules.segmentation.application.segment_version import (
     CreateSegmentVersionUseCase,
     GetSegmentVersionUseCase,
     ListSegmentVersionsUseCase,
+    PreviewSegmentConfigUseCase,
+    PreviewSegmentVersionUseCase,
     SegmentVersionDslConfigValidator,
+    SegmentVersionEvaluationService,
+    SegmentVersionInheritanceEvaluator,
+    SegmentVersionRuleExecutor,
 )
 from src.modules.segmentation.presentation.depends.infrastructure import (
+    ContactAudienceQueryDep,
     ContactLookupDep,
     RuntimeFilterValidatorDep,
     RuntimeObjectMetadataDep,
@@ -33,6 +40,7 @@ from src.modules.segmentation.presentation.depends.infrastructure import (
     SegmentStaticMemberQueryRepositoryDep,
     SegmentVersionCommandRepositoryDep,
     SegmentVersionQueryRepositoryDep,
+    StaticContactAudienceQueryDep,
 )
 from src.modules.shared.presentation import ClockDep, UuidDep
 
@@ -185,6 +193,64 @@ SegmentVersionDslConfigValidatorDep = Annotated[
 ]
 
 
+def get_segment_version_rule_executor(
+    metadata: RuntimeObjectMetadataDep,
+    contact_audience_query: ContactAudienceQueryDep,
+) -> SegmentVersionRuleExecutor:
+    return SegmentVersionRuleExecutor(
+        metadata=metadata,
+        contact_audience_query=contact_audience_query,
+    )
+
+
+SegmentVersionRuleExecutorDep = Annotated[
+    SegmentVersionRuleExecutor,
+    Depends(get_segment_version_rule_executor),
+]
+
+
+def get_segment_version_inheritance_evaluator(
+    segment_repository: SegmentDefinitionCommandRepositoryDep,
+    version_repository: SegmentVersionCommandRepositoryDep,
+    static_audience_query: StaticContactAudienceQueryDep,
+) -> SegmentVersionInheritanceEvaluator:
+    return SegmentVersionInheritanceEvaluator(
+        segment_repository=segment_repository,
+        version_repository=version_repository,
+        static_audience_query=static_audience_query,
+    )
+
+
+SegmentVersionInheritanceEvaluatorDep = Annotated[
+    SegmentVersionInheritanceEvaluator,
+    Depends(get_segment_version_inheritance_evaluator),
+]
+
+
+def get_segment_version_evaluation_service(
+    dsl_validator: SegmentVersionDslConfigValidatorDep,
+    rule_executor: SegmentVersionRuleExecutorDep,
+    inheritance_evaluator: SegmentVersionInheritanceEvaluatorDep,
+    segment_repository: SegmentDefinitionCommandRepositoryDep,
+    version_repository: SegmentVersionCommandRepositoryDep,
+    static_audience_query: StaticContactAudienceQueryDep,
+) -> SegmentVersionEvaluationService:
+    return SegmentVersionEvaluationService(
+        dsl_validator=dsl_validator,
+        rule_executor=rule_executor,
+        inheritance_evaluator=inheritance_evaluator,
+        segment_repository=segment_repository,
+        version_repository=version_repository,
+        static_audience_query=static_audience_query,
+    )
+
+
+SegmentVersionEvaluationServiceDep = Annotated[
+    SegmentVersionEvaluationService,
+    Depends(get_segment_version_evaluation_service),
+]
+
+
 def get_create_segment_version_use_case(
     segment_repository: SegmentDefinitionCommandRepositoryDep,
     version_command_repository: SegmentVersionCommandRepositoryDep,
@@ -253,6 +319,58 @@ ListSegmentVersionsUseCaseDep = Annotated[
 ]
 
 
+def get_preview_segment_config_use_case(
+    dsl_validator: SegmentVersionDslConfigValidatorDep,
+    evaluation_service: SegmentVersionEvaluationServiceDep,
+    contact_lookup: ContactLookupDep,
+) -> PreviewSegmentConfigUseCase:
+    return PreviewSegmentConfigUseCase(
+        dsl_validator=dsl_validator,
+        evaluation_service=evaluation_service,
+        contact_lookup=contact_lookup,
+    )
+
+
+PreviewSegmentConfigUseCaseDep = Annotated[
+    PreviewSegmentConfigUseCase,
+    Depends(get_preview_segment_config_use_case),
+]
+
+
+def get_preview_segment_version_use_case(
+    evaluation_service: SegmentVersionEvaluationServiceDep,
+    contact_lookup: ContactLookupDep,
+) -> PreviewSegmentVersionUseCase:
+    return PreviewSegmentVersionUseCase(
+        evaluation_service=evaluation_service,
+        contact_lookup=contact_lookup,
+    )
+
+
+PreviewSegmentVersionUseCaseDep = Annotated[
+    PreviewSegmentVersionUseCase,
+    Depends(get_preview_segment_version_use_case),
+]
+
+
+def get_preview_segment_definition_use_case(
+    segment_repository: SegmentDefinitionCommandRepositoryDep,
+    evaluation_service: SegmentVersionEvaluationServiceDep,
+    contact_lookup: ContactLookupDep,
+) -> PreviewSegmentDefinitionUseCase:
+    return PreviewSegmentDefinitionUseCase(
+        segment_repository=segment_repository,
+        evaluation_service=evaluation_service,
+        contact_lookup=contact_lookup,
+    )
+
+
+PreviewSegmentDefinitionUseCaseDep = Annotated[
+    PreviewSegmentDefinitionUseCase,
+    Depends(get_preview_segment_definition_use_case),
+]
+
+
 __all__ = [
     "ActivateSegmentVersionUseCaseDep",
     "AddStaticMemberUseCaseDep",
@@ -264,8 +382,14 @@ __all__ = [
     "ListSegmentDefinitionsUseCaseDep",
     "ListStaticMembersUseCaseDep",
     "ListSegmentVersionsUseCaseDep",
+    "PreviewSegmentConfigUseCaseDep",
+    "PreviewSegmentDefinitionUseCaseDep",
+    "PreviewSegmentVersionUseCaseDep",
     "RemoveStaticMemberUseCaseDep",
     "SegmentVersionDslConfigValidatorDep",
+    "SegmentVersionEvaluationServiceDep",
+    "SegmentVersionInheritanceEvaluatorDep",
+    "SegmentVersionRuleExecutorDep",
     "UpdateSegmentDefinitionUseCaseDep",
     "get_activate_segment_version_use_case",
     "get_add_static_member_use_case",
@@ -277,7 +401,13 @@ __all__ = [
     "get_list_segment_definitions_use_case",
     "get_list_static_members_use_case",
     "get_list_segment_versions_use_case",
+    "get_preview_segment_config_use_case",
+    "get_preview_segment_definition_use_case",
+    "get_preview_segment_version_use_case",
     "get_remove_static_member_use_case",
     "get_segment_version_dsl_config_validator",
+    "get_segment_version_evaluation_service",
+    "get_segment_version_inheritance_evaluator",
+    "get_segment_version_rule_executor",
     "get_update_segment_definition_use_case",
 ]

@@ -9,6 +9,7 @@ from src.modules.segmentation.application.segment_definition.dto import (
 from src.modules.segmentation.application.segment_definition.query import (
     GetSegmentDefinitionQuery,
     ListSegmentDefinitionsQuery,
+    PreviewSegmentDefinitionQuery,
     SegmentDefinitionQueryRepositoryProtocol,
 )
 from src.modules.segmentation.application.segment_definition.use_case import (
@@ -20,6 +21,8 @@ from src.modules.segmentation.application.segment_definition.use_case import (
     GetSegmentDefinitionUseCaseProtocol,
     ListSegmentDefinitionsUseCase,
     ListSegmentDefinitionsUseCaseProtocol,
+    PreviewSegmentDefinitionUseCase,
+    PreviewSegmentDefinitionUseCaseProtocol,
     UpdateSegmentDefinitionUseCase,
     UpdateSegmentDefinitionUseCaseProtocol,
 )
@@ -37,6 +40,9 @@ __all__ = [
     "ListSegmentDefinitionsQuery",
     "ListSegmentDefinitionsUseCase",
     "ListSegmentDefinitionsUseCaseProtocol",
+    "PreviewSegmentDefinitionQuery",
+    "PreviewSegmentDefinitionUseCase",
+    "PreviewSegmentDefinitionUseCaseProtocol",
     "SegmentDefinitionDTO",
     "SegmentDefinitionQueryRepositoryProtocol",
     "UpdateSegmentDefinitionCommand",

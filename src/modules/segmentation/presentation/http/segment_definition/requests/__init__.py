@@ -7,8 +7,12 @@ from src.modules.segmentation.presentation.http.segment_definition.requests.crea
 from src.modules.segmentation.presentation.http.segment_definition.requests.update_segment_definition_request import (
     UpdateSegmentDefinitionRequestSchema,
 )
+from src.modules.segmentation.presentation.http.segment_definition.requests.preview_segment_definition_request import (
+    PreviewSegmentDefinitionRequestSchema,
+)
 
 __all__ = [
     "CreateSegmentDefinitionRequestSchema",
+    "PreviewSegmentDefinitionRequestSchema",
     "UpdateSegmentDefinitionRequestSchema",
 ]

@@ -33,11 +33,20 @@ from src.modules.segmentation.domain.segment_version import (
     SegmentVersionIdVO,
     SegmentVersionStatusVO,
 )
+from src.modules.segmentation.application.segment_version.dsl import (
+    SegmentVersionContactMapping,
+)
+from src.modules.segmentation.application.segment_version.evaluation import (
+    SegmentVersionEvaluationInvalidMappingError,
+    SegmentVersionEvaluationUnsupportedRelationPathError,
+)
 from src.modules.segmentation.infrastructure import (
+    RuntimeContactAudienceQuery,
     RuntimeContactLookupAdapter,
     SegmentDefinitionRuntimeRepository,
     SegmentStaticMemberRuntimeRepository,
     SegmentVersionRuntimeRepository,
+    StaticContactAudienceRuntimeQuery,
 )
 from src.modules.shared import EntityIdVO
 
@@ -92,6 +101,11 @@ def _descriptor(object_name: str) -> RuntimeObjectDescriptor:
             _field("last_name", "text"),
             _field("middle_name", "text"),
             _field("status", "text"),
+        ),
+        "loan_application": (
+            _field("id", "uuid"),
+            _field("status", "text"),
+            _field("contact_id", "uuid"),
         ),
     }
     return RuntimeObjectDescriptor(
@@ -645,6 +659,154 @@ class SegmentationRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(summaries[contact_id.uuid].first_name, "Denis")
+
+    async def test_contact_audience_query_maps_contact_self_rule(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        contact_id = uuid4()
+        query_gateway = _QueryGatewayStub()
+        query_gateway.rows_by_object["contact"] = [
+            {
+                "id": contact_id,
+                "first_name": "Denis",
+                "last_name": "Nikon",
+                "middle_name": None,
+                "status": "active",
+            }
+        ]
+        adapter = RuntimeContactAudienceQuery(
+            runtime_object_resolver=_ResolverStub(),
+            runtime_query_gateway=query_gateway,
+        )
+
+        result = await adapter.list_contact_ids(
+            tenant_id=tenant_id,
+            object_name="contact",
+            filters=(),
+            relation_path=(),
+            contact_mapping=SegmentVersionContactMapping(type="self", field="id"),
+            limit=10,
+            offset=0,
+        )
+
+        self.assertEqual(result, (contact_id,))
+        self.assertEqual(query_gateway.last_page, PageSpec(limit=10, offset=0))
+        self.assertEqual(
+            query_gateway.last_sorting,
+            (SortSpec(field="id", direction="asc"),),
+        )
+
+    async def test_contact_audience_query_maps_related_object_field_rule(
+        self,
+    ) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        contact_id = uuid4()
+        query_gateway = _QueryGatewayStub()
+        query_gateway.rows_by_object["loan_application"] = [
+            {
+                "id": uuid4(),
+                "status": "approved",
+                "contact_id": contact_id,
+            }
+        ]
+        adapter = RuntimeContactAudienceQuery(
+            runtime_object_resolver=_ResolverStub(),
+            runtime_query_gateway=query_gateway,
+        )
+
+        result = await adapter.list_contact_ids(
+            tenant_id=tenant_id,
+            object_name="loan_application",
+            filters=(),
+            relation_path=("loan_application.contact",),
+            contact_mapping=SegmentVersionContactMapping(
+                type="field",
+                field="contact_id",
+            ),
+        )
+
+        self.assertEqual(result, (contact_id,))
+
+    async def test_contact_audience_query_rejects_deep_or_invalid_mapping(
+        self,
+    ) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        query_gateway = _QueryGatewayStub()
+        query_gateway.rows_by_object["loan_application"] = [
+            {
+                "id": uuid4(),
+                "status": "approved",
+                "contact_id": None,
+            }
+        ]
+        adapter = RuntimeContactAudienceQuery(
+            runtime_object_resolver=_ResolverStub(),
+            runtime_query_gateway=query_gateway,
+        )
+
+        with self.assertRaises(SegmentVersionEvaluationUnsupportedRelationPathError):
+            await adapter.list_contact_ids(
+                tenant_id=tenant_id,
+                object_name="loan_application",
+                filters=(),
+                relation_path=("loan_application.account", "account.contact"),
+                contact_mapping=SegmentVersionContactMapping(
+                    type="field",
+                    field="contact_id",
+                ),
+            )
+
+        with self.assertRaises(SegmentVersionEvaluationInvalidMappingError):
+            await adapter.list_contact_ids(
+                tenant_id=tenant_id,
+                object_name="loan_application",
+                filters=(),
+                relation_path=("loan_application.contact",),
+                contact_mapping=SegmentVersionContactMapping(
+                    type="field",
+                    field="contact_id",
+                ),
+            )
+
+    async def test_static_contact_audience_query_filters_and_sorts_members(
+        self,
+    ) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        segment_id = SegmentIdVO.from_value(uuid4())
+        contact_id = uuid4()
+        now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
+        query_gateway = _QueryGatewayStub()
+        query_gateway.rows_by_object["segment_static_member"] = [
+            {
+                "id": uuid4(),
+                "created_at": now,
+                "updated_at": now,
+                "segment_definition_id": segment_id.uuid,
+                "contact_id": contact_id,
+                "source_type": "api",
+                "metadata": None,
+            }
+        ]
+        adapter = StaticContactAudienceRuntimeQuery(
+            runtime_object_resolver=_ResolverStub(),
+            runtime_query_gateway=query_gateway,
+        )
+
+        result = await adapter.list_contact_ids(
+            tenant_id=tenant_id,
+            segment_id=segment_id,
+            limit=25,
+            offset=0,
+        )
+
+        self.assertEqual(result, (contact_id,))
+        self.assertEqual(query_gateway.last_page, PageSpec(limit=25, offset=0))
+        self.assertEqual(
+            query_gateway.last_sorting,
+            (
+                SortSpec(field="created_at", direction="asc"),
+                SortSpec(field="id", direction="asc"),
+            ),
+        )
 
 
 __all__ = ["SegmentationRuntimeRepositoryTests"]
