@@ -1,10 +1,15 @@
+from dataclasses import replace
 from typing import Protocol
 
 from src.modules.segmentation.application.segment_version.command import (
     ActivateSegmentVersionCommand,
 )
+from src.modules.segmentation.application.segment_version.dsl import (
+    SegmentVersionDslConfigValidator,
+)
 from src.modules.segmentation.application.segment_version.dto import (
     SegmentVersionDTO,
+    build_segment_config_checksum,
 )
 from src.modules.segmentation.application.segment_version.query import (
     SegmentVersionQueryRepositoryProtocol,
@@ -43,11 +48,13 @@ class ActivateSegmentVersionUseCase:
         segment_repository: SegmentDefinitionCommandRepositoryProtocol,
         version_command_repository: SegmentVersionCommandRepositoryProtocol,
         version_query_repository: SegmentVersionQueryRepositoryProtocol,
+        dsl_validator: SegmentVersionDslConfigValidator,
         clock: ClockPort,
     ) -> None:
         self._segment_repository = segment_repository
         self._version_command_repository = version_command_repository
         self._version_query_repository = version_query_repository
+        self._dsl_validator = dsl_validator
         self._clock = clock
 
     async def __call__(
@@ -70,6 +77,17 @@ class ActivateSegmentVersionUseCase:
         if version is None or version.segment_id != command.segment_id:
             raise SegmentVersionNotFoundError(str(command.segment_version_id))
 
+        dsl_config = await self._dsl_validator.validate(
+            tenant_id=command.tenant_id,
+            config=version.config,
+            current_segment_id=command.segment_id,
+        )
+        canonical_config = self._dsl_validator.dump(dsl_config)
+        version = replace(
+            version,
+            config=canonical_config,
+            config_checksum=build_segment_config_checksum(canonical_config),
+        )
         now = self._clock.now()
         activated = version.activate(now=now)
         await self._version_command_repository.archive_active_versions(

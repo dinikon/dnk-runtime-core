@@ -16,6 +16,13 @@ from src.modules.segmentation.application.segment_version import (
     ListSegmentVersionsUseCase,
     SegmentVersionDTO,
 )
+from src.modules.segmentation.application.segment_version.dsl import (
+    dump_segment_version_dsl_config,
+    parse_segment_version_dsl_config,
+)
+from src.modules.segmentation.application.segment_version.dsl.error import (
+    SegmentVersionDslInvalidRootObjectError,
+)
 from src.modules.segmentation.domain.segment_definition import (
     SegmentDefinition,
     SegmentDefinitionArchivedError,
@@ -159,6 +166,54 @@ class _SegmentVersionRepositoryStub:
         )
 
 
+class _DslValidatorStub:
+    def __init__(self, exc: Exception | None = None) -> None:
+        self.exc = exc
+        self.calls: list[dict[str, object]] = []
+
+    async def validate(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        config,
+        current_segment_id: SegmentIdVO | None = None,
+    ):
+        self.calls.append(
+            {
+                "tenant_id": tenant_id,
+                "config": config,
+                "current_segment_id": current_segment_id,
+            }
+        )
+        if self.exc is not None:
+            raise self.exc
+        return parse_segment_version_dsl_config(config)
+
+    def dump(self, config) -> dict:
+        return dump_segment_version_dsl_config(config)
+
+
+def _dsl_config() -> dict:
+    return {
+        "root_object": "contact",
+        "include": [
+            {
+                "rule_id": "main-contact-filter",
+                "object": "contact",
+                "relation_path": [],
+                "contact_mapping": {
+                    "type": "self",
+                    "field": "id",
+                },
+                "filter": {},
+            }
+        ],
+        "exclude": [],
+        "inherit_include_segment_ids": [],
+        "inherit_exclude_segment_ids": [],
+    }
+
+
 def _segment(
     *,
     segment_id: SegmentIdVO,
@@ -184,7 +239,7 @@ def _version(
         segment_id=segment_id,
         version_number=version_number,
         status=status,
-        config={"a": 1},
+        config=_dsl_config(),
         config_checksum="abc",
     )
 
@@ -198,27 +253,40 @@ class SegmentationSegmentVersionUseCaseTests(unittest.IsolatedAsyncioTestCase):
         version_id = uuid4()
         version_repository = _SegmentVersionRepositoryStub()
         version_repository.next_version_number = 3
+        dsl_validator = _DslValidatorStub()
         use_case = CreateSegmentVersionUseCase(
             segment_repository=_SegmentDefinitionRepositoryStub(
                 _segment(segment_id=segment_id)
             ),
             version_command_repository=version_repository,
             version_query_repository=version_repository,
+            dsl_validator=dsl_validator,
             uuid_generator=_UuidGeneratorStub(version_id),
         )
 
+        command_config = _dsl_config()
         result = await use_case(
             CreateSegmentVersionCommand(
                 tenant_id=tenant_id,
                 segment_id=segment_id,
-                config={"b": 2, "a": 1},
+                config=command_config,
             )
         )
 
-        expected_checksum = hashlib.sha256(b'{"a":1,"b":2}').hexdigest()
+        expected_checksum = hashlib.sha256(
+            (
+                '{"exclude":[],"include":[{"contact_mapping":{"field":"id",'
+                '"type":"self"},"filter":{},"object":"contact",'
+                '"relation_path":[],"rule_id":"main-contact-filter"}],'
+                '"inherit_exclude_segment_ids":[],'
+                '"inherit_include_segment_ids":[],"root_object":"contact"}'
+            ).encode()
+        ).hexdigest()
         self.assertEqual(result.id, version_id)
         self.assertEqual(result.version_number, 3)
         self.assertEqual(result.config_checksum, expected_checksum)
+        self.assertEqual(dsl_validator.calls[0]["config"], command_config)
+        self.assertEqual(version_repository.saved[0].config, command_config)
         self.assertEqual(
             version_repository.saved[0].status, SegmentVersionStatusVO.DRAFT
         )
@@ -231,6 +299,7 @@ class SegmentationSegmentVersionUseCaseTests(unittest.IsolatedAsyncioTestCase):
             ),
             version_command_repository=_SegmentVersionRepositoryStub(),
             version_query_repository=_SegmentVersionRepositoryStub(),
+            dsl_validator=_DslValidatorStub(),
             uuid_generator=_UuidGeneratorStub(uuid4()),
         )
 
@@ -239,9 +308,37 @@ class SegmentationSegmentVersionUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 CreateSegmentVersionCommand(
                     tenant_id=EntityIdVO.from_value(uuid4()),
                     segment_id=segment_id,
-                    config={},
+                    config=_dsl_config(),
                 )
             )
+
+    async def test_create_segment_version_dsl_error_prevents_save(self) -> None:
+        segment_id = SegmentIdVO.from_value(uuid4())
+        repository = _SegmentVersionRepositoryStub()
+        use_case = CreateSegmentVersionUseCase(
+            segment_repository=_SegmentDefinitionRepositoryStub(
+                _segment(segment_id=segment_id)
+            ),
+            version_command_repository=repository,
+            version_query_repository=repository,
+            dsl_validator=_DslValidatorStub(
+                SegmentVersionDslInvalidRootObjectError(
+                    "root_object must be contact.",
+                    path="root_object",
+                )
+            ),
+            uuid_generator=_UuidGeneratorStub(uuid4()),
+        )
+
+        with self.assertRaises(SegmentVersionDslInvalidRootObjectError):
+            await use_case(
+                CreateSegmentVersionCommand(
+                    tenant_id=EntityIdVO.from_value(uuid4()),
+                    segment_id=segment_id,
+                    config={"root_object": "company"},
+                )
+            )
+        self.assertEqual(repository.saved, [])
 
     async def test_activate_segment_version_archives_previous_active_versions(
         self,
@@ -253,12 +350,14 @@ class SegmentationSegmentVersionUseCaseTests(unittest.IsolatedAsyncioTestCase):
         version_repository = _SegmentVersionRepositoryStub(
             _version(segment_id=segment_id, version_id=version_id)
         )
+        dsl_validator = _DslValidatorStub()
         use_case = ActivateSegmentVersionUseCase(
             segment_repository=_SegmentDefinitionRepositoryStub(
                 _segment(segment_id=segment_id)
             ),
             version_command_repository=version_repository,
             version_query_repository=version_repository,
+            dsl_validator=dsl_validator,
             clock=_ClockStub(now),
         )
 
@@ -272,6 +371,7 @@ class SegmentationSegmentVersionUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.status, SegmentVersionStatusVO.ACTIVE.value)
         self.assertEqual(result.activated_at, now)
+        self.assertEqual(dsl_validator.calls[0]["config"], _dsl_config())
         self.assertEqual(version_repository.archived_active_calls, [(segment_id, now)])
 
     async def test_activate_segment_version_rejects_mismatched_segment(self) -> None:
@@ -286,6 +386,7 @@ class SegmentationSegmentVersionUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 _version(segment_id=real_segment_id, version_id=version_id)
             ),
             version_query_repository=_SegmentVersionRepositoryStub(),
+            dsl_validator=_DslValidatorStub(),
             clock=_ClockStub(datetime(2026, 5, 28, 12, 0, tzinfo=UTC)),
         )
 

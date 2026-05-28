@@ -14,7 +14,10 @@ from src.modules.segmentation.application.segment_static_member import (
     ContactSummaryDTO,
     StaticMemberDTO,
 )
-from src.modules.segmentation.application.segment_version import SegmentVersionDTO
+from src.modules.segmentation.application.segment_version import (
+    SegmentVersionDTO,
+    SegmentVersionDslError,
+)
 from src.modules.segmentation.domain.segment_static_member import (
     SegmentStaticMemberContactNotFoundError,
 )
@@ -200,6 +203,24 @@ class SegmentationHttpRouterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(use_case.command.config, {"a": 1})
         self.assertEqual(response.id, version_id)
         self.assertEqual(response.config, {"a": 1})
+
+    async def test_create_segment_version_maps_dsl_error_to_422(self) -> None:
+        with self.assertRaises(HTTPException) as caught:
+            await create_segment_version(
+                segment_id=uuid4(),
+                payload=CreateSegmentVersionRequestSchema(
+                    config={"root_object": "company"}
+                ),
+                context=_context(uuid4()),
+                use_case=_UseCaseStub(
+                    exc=SegmentVersionDslError(
+                        "root_object must be contact.",
+                        path="root_object",
+                    )
+                ),
+            )
+
+        self.assertEqual(caught.exception.status_code, 422)
 
     async def test_activate_segment_version_maps_command_and_response(self) -> None:
         tenant_id = uuid4()

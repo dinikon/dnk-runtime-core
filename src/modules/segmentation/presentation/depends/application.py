@@ -21,9 +21,12 @@ from src.modules.segmentation.application.segment_version import (
     CreateSegmentVersionUseCase,
     GetSegmentVersionUseCase,
     ListSegmentVersionsUseCase,
+    SegmentVersionDslConfigValidator,
 )
 from src.modules.segmentation.presentation.depends.infrastructure import (
     ContactLookupDep,
+    RuntimeFilterValidatorDep,
+    RuntimeObjectMetadataDep,
     SegmentDefinitionCommandRepositoryDep,
     SegmentDefinitionQueryRepositoryDep,
     SegmentStaticMemberCommandRepositoryDep,
@@ -164,16 +167,36 @@ ListStaticMembersUseCaseDep = Annotated[
 ]
 
 
+def get_segment_version_dsl_config_validator(
+    metadata: RuntimeObjectMetadataDep,
+    filter_validator: RuntimeFilterValidatorDep,
+    segment_repository: SegmentDefinitionCommandRepositoryDep,
+) -> SegmentVersionDslConfigValidator:
+    return SegmentVersionDslConfigValidator(
+        metadata=metadata,
+        filter_validator=filter_validator,
+        segment_definition_repository=segment_repository,
+    )
+
+
+SegmentVersionDslConfigValidatorDep = Annotated[
+    SegmentVersionDslConfigValidator,
+    Depends(get_segment_version_dsl_config_validator),
+]
+
+
 def get_create_segment_version_use_case(
     segment_repository: SegmentDefinitionCommandRepositoryDep,
     version_command_repository: SegmentVersionCommandRepositoryDep,
     version_query_repository: SegmentVersionQueryRepositoryDep,
+    dsl_validator: SegmentVersionDslConfigValidatorDep,
     uuid_generator: UuidDep,
 ) -> CreateSegmentVersionUseCase:
     return CreateSegmentVersionUseCase(
         segment_repository=segment_repository,
         version_command_repository=version_command_repository,
         version_query_repository=version_query_repository,
+        dsl_validator=dsl_validator,
         uuid_generator=uuid_generator,
     )
 
@@ -188,12 +211,14 @@ def get_activate_segment_version_use_case(
     segment_repository: SegmentDefinitionCommandRepositoryDep,
     version_command_repository: SegmentVersionCommandRepositoryDep,
     version_query_repository: SegmentVersionQueryRepositoryDep,
+    dsl_validator: SegmentVersionDslConfigValidatorDep,
     clock: ClockDep,
 ) -> ActivateSegmentVersionUseCase:
     return ActivateSegmentVersionUseCase(
         segment_repository=segment_repository,
         version_command_repository=version_command_repository,
         version_query_repository=version_query_repository,
+        dsl_validator=dsl_validator,
         clock=clock,
     )
 
@@ -240,6 +265,7 @@ __all__ = [
     "ListStaticMembersUseCaseDep",
     "ListSegmentVersionsUseCaseDep",
     "RemoveStaticMemberUseCaseDep",
+    "SegmentVersionDslConfigValidatorDep",
     "UpdateSegmentDefinitionUseCaseDep",
     "get_activate_segment_version_use_case",
     "get_add_static_member_use_case",
@@ -252,5 +278,6 @@ __all__ = [
     "get_list_static_members_use_case",
     "get_list_segment_versions_use_case",
     "get_remove_static_member_use_case",
+    "get_segment_version_dsl_config_validator",
     "get_update_segment_definition_use_case",
 ]

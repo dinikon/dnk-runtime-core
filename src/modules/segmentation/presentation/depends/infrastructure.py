@@ -14,8 +14,13 @@ from src.modules.runtime_data.infrastructure.persistence.postgres.gateway.query_
 from src.modules.schema_registry.presentation.depends.application import (
     RuntimeObjectResolverDep,
 )
+from src.modules.schema_registry.presentation.depends.infrastructure import (
+    ObjectServiceDep,
+)
 from src.modules.segmentation.infrastructure import (
     RuntimeContactLookupAdapter,
+    RuntimeFilterValidatorAdapter,
+    RuntimeObjectMetadataAdapter,
     SegmentDefinitionRuntimeRepository,
     SegmentStaticMemberRuntimeRepository,
     SegmentVersionRuntimeRepository,
@@ -149,10 +154,42 @@ ContactLookupDep = Annotated[
 ]
 
 
+def get_runtime_object_metadata(
+    runtime_object_resolver: RuntimeObjectResolverDep,
+    object_service: ObjectServiceDep,
+) -> RuntimeObjectMetadataAdapter:
+    return RuntimeObjectMetadataAdapter(
+        runtime_object_resolver=runtime_object_resolver,
+        object_service=object_service,
+    )
+
+
+RuntimeObjectMetadataDep = Annotated[
+    RuntimeObjectMetadataAdapter,
+    Depends(get_runtime_object_metadata),
+]
+
+
+def get_runtime_filter_validator(
+    runtime_object_resolver: RuntimeObjectResolverDep,
+) -> RuntimeFilterValidatorAdapter:
+    return RuntimeFilterValidatorAdapter(
+        runtime_object_resolver=runtime_object_resolver,
+    )
+
+
+RuntimeFilterValidatorDep = Annotated[
+    RuntimeFilterValidatorAdapter,
+    Depends(get_runtime_filter_validator),
+]
+
+
 __all__ = [
     "ContactLookupDep",
     "RuntimeCommandGatewayDep",
+    "RuntimeFilterValidatorDep",
     "RuntimeFieldTypePolicyDep",
+    "RuntimeObjectMetadataDep",
     "RuntimeQueryGatewayDep",
     "SegmentDefinitionCommandRepositoryDep",
     "SegmentDefinitionQueryRepositoryDep",
@@ -161,6 +198,8 @@ __all__ = [
     "SegmentVersionCommandRepositoryDep",
     "SegmentVersionQueryRepositoryDep",
     "get_contact_lookup",
+    "get_runtime_filter_validator",
+    "get_runtime_object_metadata",
     "get_runtime_command_gateway",
     "get_runtime_field_type_policy",
     "get_runtime_query_gateway",

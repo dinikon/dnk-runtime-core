@@ -17,6 +17,7 @@ from src.modules.schema_registry.domain.error import (
 )
 from src.modules.segmentation.application.segment_version import (
     CreateSegmentVersionCommand,
+    SegmentVersionDslError,
 )
 from src.modules.segmentation.domain.segment_definition import (
     SegmentDefinitionArchivedError,
@@ -83,7 +84,11 @@ async def create_segment_version(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
-    except (RuntimeDataValidationError, RuntimeDataFilterError) as exc:
+    except (
+        SegmentVersionDslError,
+        RuntimeDataValidationError,
+        RuntimeDataFilterError,
+    ) as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),

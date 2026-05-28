@@ -7,9 +7,19 @@ from src.modules.segmentation.application.segment_version.query.list_segment_ver
 from src.modules.segmentation.application.segment_version.query.repository import (
     SegmentVersionQueryRepositoryProtocol,
 )
+from src.modules.segmentation.application.segment_version.query.runtime_filter_validator import (
+    RuntimeFilterValidatorProtocol,
+)
+from src.modules.segmentation.application.segment_version.query.runtime_object_metadata import (
+    RuntimeObjectMetadataProtocol,
+    SegmentVersionRuntimeRelationMetadata,
+)
 
 __all__ = [
     "GetSegmentVersionQuery",
     "ListSegmentVersionsQuery",
+    "RuntimeFilterValidatorProtocol",
+    "RuntimeObjectMetadataProtocol",
     "SegmentVersionQueryRepositoryProtocol",
+    "SegmentVersionRuntimeRelationMetadata",
 ]

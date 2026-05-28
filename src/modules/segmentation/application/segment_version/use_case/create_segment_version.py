@@ -3,6 +3,9 @@ from typing import Protocol
 from src.modules.segmentation.application.segment_version.command import (
     CreateSegmentVersionCommand,
 )
+from src.modules.segmentation.application.segment_version.dsl import (
+    SegmentVersionDslConfigValidator,
+)
 from src.modules.segmentation.application.segment_version.dto import (
     SegmentVersionDTO,
     build_segment_config_checksum,
@@ -46,11 +49,13 @@ class CreateSegmentVersionUseCase:
         segment_repository: SegmentDefinitionCommandRepositoryProtocol,
         version_command_repository: SegmentVersionCommandRepositoryProtocol,
         version_query_repository: SegmentVersionQueryRepositoryProtocol,
+        dsl_validator: SegmentVersionDslConfigValidator,
         uuid_generator: UuidPort,
     ) -> None:
         self._segment_repository = segment_repository
         self._version_command_repository = version_command_repository
         self._version_query_repository = version_query_repository
+        self._dsl_validator = dsl_validator
         self._uuid_generator = uuid_generator
 
     async def __call__(
@@ -66,6 +71,12 @@ class CreateSegmentVersionUseCase:
         if segment.status == SegmentStatusVO.ARCHIVED:
             raise SegmentDefinitionArchivedError(str(command.segment_id))
 
+        dsl_config = await self._dsl_validator.validate(
+            tenant_id=command.tenant_id,
+            config=command.config,
+            current_segment_id=command.segment_id,
+        )
+        canonical_config = self._dsl_validator.dump(dsl_config)
         version_number = await self._version_command_repository.get_next_version_number(
             tenant_id=command.tenant_id,
             segment_id=command.segment_id,
@@ -77,8 +88,8 @@ class CreateSegmentVersionUseCase:
             segment_id=command.segment_id,
             version_number=version_number,
             status=SegmentVersionStatusVO.DRAFT,
-            config=dict(command.config),
-            config_checksum=build_segment_config_checksum(command.config),
+            config=canonical_config,
+            config_checksum=build_segment_config_checksum(canonical_config),
         )
         saved = await self._version_command_repository.save(
             tenant_id=command.tenant_id,

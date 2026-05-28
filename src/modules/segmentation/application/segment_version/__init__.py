@@ -2,6 +2,10 @@ from src.modules.segmentation.application.segment_version.command import (
     ActivateSegmentVersionCommand,
     CreateSegmentVersionCommand,
 )
+from src.modules.segmentation.application.segment_version.dsl import (
+    SegmentVersionDslConfigValidator,
+    SegmentVersionDslError,
+)
 from src.modules.segmentation.application.segment_version.dto import (
     SegmentVersionDTO,
     build_segment_config_checksum,
@@ -36,6 +40,8 @@ __all__ = [
     "ListSegmentVersionsUseCase",
     "ListSegmentVersionsUseCaseProtocol",
     "SegmentVersionDTO",
+    "SegmentVersionDslConfigValidator",
+    "SegmentVersionDslError",
     "SegmentVersionQueryRepositoryProtocol",
     "build_segment_config_checksum",
 ]
