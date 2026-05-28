@@ -76,46 +76,65 @@ def _descriptor(object_name: str) -> RuntimeObjectDescriptor:
 
 
 class _ResolverStub:
-    def __init__(self) -> None:
+
+    def __init__(self, events: list[tuple[str, str]] | None = None) -> None:
         self.calls: list[tuple[EntityIdVO, str]] = []
+        self.events = events
 
     async def resolve(self, *, tenant_id, object_name):
         self.calls.append((tenant_id, object_name))
+        if self.events is not None:
+            self.events.append(("resolve", object_name))
         return _descriptor(object_name)
 
 
 class _QueryGatewayStub:
-    def __init__(self) -> None:
+
+    def __init__(self, events: list[tuple[str, str]] | None = None) -> None:
         self.by_id_rows = {}
         self.list_rows_by_descriptor = {}
         self.get_calls = []
         self.list_calls = []
+        self.events = events
 
     async def get_by_id(self, *, descriptor, object_id, fetch_plan=None):
         descriptor_name = _descriptor_name(descriptor)
         self.get_calls.append((descriptor_name, object_id))
+        if self.events is not None:
+            self.events.append(("get", descriptor_name))
         return self.by_id_rows.get((descriptor_name, object_id))
 
     async def list(
         self, *, descriptor, filters=(), sorting=(), page=None, fetch_plan=None
     ):
+        descriptor_name = _descriptor_name(descriptor)
         self.list_calls.append(
             {
-                "descriptor": _descriptor_name(descriptor),
+                "descriptor": descriptor_name,
                 "filters": filters,
                 "sorting": sorting,
                 "page": page,
             }
         )
-        return self.list_rows_by_descriptor.get(_descriptor_name(descriptor), [])
+        if self.events is not None:
+            self.events.append(("list", descriptor_name))
+        return self.list_rows_by_descriptor.get(descriptor_name, [])
 
 
 class _CommandGatewayStub:
-    def __init__(self) -> None:
+
+    def __init__(self, events: list[tuple[str, str]] | None = None) -> None:
         self.inserts = []
         self.updates = []
         self.claims = []
         self.update_where_calls = []
+        self.locks = []
+        self.events = events
+
+    async def acquire_advisory_xact_lock(self, key: str) -> None:
+        self.locks.append(key)
+        if self.events is not None:
+            self.events.append(("lock", key))
 
     async def insert(self, *, descriptor, payload):
         descriptor_name = _descriptor_name(descriptor)
@@ -201,6 +220,34 @@ def _outbound_row(
     }
 
 
+def _request_row(
+    *,
+    communication_request_id=None,
+    idempotency_key: str = "idem-1",
+) -> dict:
+    now = datetime(2026, 5, 14, 12, 0, tzinfo=UTC)
+    return {
+        "id": communication_request_id or uuid4(),
+        "initiator_type": "API",
+        "initiator_ref_id": "manual:1",
+        "correlation_id": uuid4(),
+        "idempotency_key": idempotency_key,
+        "message_class": "TRANSACTIONAL",
+        "channel_code": "SMS",
+        "template_id": uuid4(),
+        "template_version_id": uuid4(),
+        "recipient_identifier_type": "PHONE",
+        "recipient_address": "380671112233",
+        "recipient_snapshot": {"source_kind": "RAW_VALUE"},
+        "variables": {"amount": 15000},
+        "scheduled_at": None,
+        "priority": 10,
+        "status": "QUEUED",
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
 class OutboundMessageRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
     async def test_create_send_request_inserts_request_and_outbound_rows(self) -> None:
         tenant_id = EntityIdVO.from_value(uuid4())
@@ -257,6 +304,47 @@ class OutboundMessageRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(request.communication_request_id, request_id)
         self.assertEqual(outbound.outbound_message_id, outbound_id)
+
+    async def test_idempotency_lookup_takes_advisory_lock_before_query(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        request_id = uuid4()
+        outbound_id = uuid4()
+        events: list[tuple[str, str]] = []
+        command = _CommandGatewayStub(events)
+        query = _QueryGatewayStub(events)
+        query.list_rows_by_descriptor[_REQUEST] = [
+            _request_row(
+                communication_request_id=request_id,
+                idempotency_key="idem-1",
+            )
+        ]
+        query.list_rows_by_descriptor[_OUTBOUND] = [
+            _outbound_row(
+                outbound_message_id=outbound_id,
+                communication_request_id=request_id,
+            )
+        ]
+        repository = OutboundMessageRuntimeRepository(
+            runtime_object_resolver=_ResolverStub(events),
+            runtime_command_gateway=command,
+            runtime_query_gateway=query,
+        )
+
+        existing = await repository.get_existing_send_by_idempotency(
+            tenant_id=tenant_id,
+            idempotency_key=" idem-1 ",
+        )
+
+        expected_lock = f"communication_send_idempotency:{tenant_id.uuid}:idem-1"
+        self.assertIsNotNone(existing)
+        self.assertEqual(command.locks, [expected_lock])
+        self.assertEqual(events[0], ("lock", expected_lock))
+        self.assertEqual(events[1], ("resolve", _REQUEST))
+        self.assertEqual(query.list_calls[0]["descriptor"], _REQUEST)
+        self.assertEqual(
+            query.list_calls[0]["filters"][0].value,
+            "idem-1",
+        )
 
     async def test_list_outbound_maps_dto_and_sets_page_spec(self) -> None:
         tenant_id = EntityIdVO.from_value(uuid4())

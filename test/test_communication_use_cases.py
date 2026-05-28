@@ -39,6 +39,7 @@ from src.modules.communication.domain.message_template import (
 from src.modules.communication.domain.outbound_message import (
     CommunicationRequestIdVO,
     InvalidIdempotencyKeyError,
+    InvalidInitiatorTypeError,
     OutboundMessageService,
     OutboundMessageIdVO,
     OutboundMessageStatus,
@@ -480,20 +481,28 @@ class _SendRepositoryStub:
             provider_connection_id=ProviderConnectionIdVO.from_value(uuid4()),
         )
         self.created_kwargs = None
+        self.get_existing_calls = []
+        self.template_calls = 0
+        self.version_calls = 0
+        self.connection_calls = 0
 
-    async def get_existing_send_by_idempotency(self, **_kwargs):
+    async def get_existing_send_by_idempotency(self, **kwargs):
+        self.get_existing_calls.append(kwargs)
         return None
 
     async def get_template(self, **_kwargs):
+        self.template_calls += 1
         return self.template
 
     async def get_template_by_code(self, **_kwargs):
         return self.template
 
     async def get_active_template_version(self, *_args, **_kwargs):
+        self.version_calls += 1
         return self.version
 
     async def find_active_connection(self, **_kwargs):
+        self.connection_calls += 1
         return self.connection
 
     async def create_send_request(self, **kwargs):
@@ -933,6 +942,40 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(repository.created_kwargs)
 
+    async def test_send_communication_rejects_invalid_initiator_after_idempotency_miss(
+        self,
+    ) -> None:
+        repository = _SendRepositoryStub()
+        use_case = SendCommunicationUseCase(
+            repository=repository,
+            service=OutboundMessageService(repository=repository, clock=_ClockStub()),
+            template_lookup=repository,
+            schema_validator=SimpleNamespace(validate=lambda *_args: None),
+            provider_connection_lookup=repository,
+        )
+
+        with self.assertRaises(InvalidInitiatorTypeError):
+            await use_case(
+                SendCommunicationCommand(
+                    tenant_id=uuid4(),
+                    initiator_type="manual",
+                    initiator_ref_id="manual:1",
+                    correlation_id=uuid4(),
+                    idempotency_key="idem-send-invalid-initiator",
+                    channel_code="SMS",
+                    template_id=MessageTemplateIdVO.from_value(uuid4()),
+                    recipient_identifier_type="PHONE",
+                    recipient_address="+380671112233",
+                    recipient_snapshot={"manual": True},
+                )
+            )
+
+        self.assertEqual(len(repository.get_existing_calls), 1)
+        self.assertEqual(repository.template_calls, 0)
+        self.assertEqual(repository.version_calls, 0)
+        self.assertEqual(repository.connection_calls, 0)
+        self.assertIsNone(repository.created_kwargs)
+
     async def test_send_communication_uses_prepared_recipient_address(self) -> None:
         repository = _SendRepositoryStub()
         use_case = SendCommunicationUseCase(
@@ -946,7 +989,7 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         result = await use_case(
             SendCommunicationCommand(
                 tenant_id=uuid4(),
-                initiator_type="CRM",
+                initiator_type=" crm ",
                 initiator_ref_id="manual:1",
                 correlation_id=uuid4(),
                 idempotency_key="idem-send-1",
@@ -972,6 +1015,7 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
             repository.created_kwargs["recipient_identifier_type"],
             "PHONE",
         )
+        self.assertEqual(repository.created_kwargs["initiator_type"], "CRM")
 
     async def test_webhook_updates_outbound_and_creates_delivery_event(self) -> None:
         repository = _WebhookRepositoryStub(matched=True)

@@ -19,6 +19,10 @@ if TYPE_CHECKING:
 class RuntimeCommandGateway(Protocol):
     """Порт командной записи runtime-данных по descriptor объекта."""
 
+    async def acquire_advisory_xact_lock(self, key: str) -> None:
+        """Берет transaction-scoped advisory lock в текущей runtime transaction."""
+        ...
+
     async def insert(
         self,
         *,

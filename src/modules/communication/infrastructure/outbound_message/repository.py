@@ -100,6 +100,9 @@ class OutboundMessageRuntimeRepository:
         """Возвращает существующий send request по idempotency key."""
         tenant_vo = _entity_id(tenant_id)
         idempotency_vo = IdempotencyKeyVO(idempotency_key)
+        await self._runtime_command_gateway.acquire_advisory_xact_lock(
+            _send_idempotency_lock_key(tenant_vo, idempotency_vo.value)
+        )
         request_descriptor = await self._resolve_descriptor(tenant_vo, _REQUEST)
         requests = await self._list(
             descriptor=request_descriptor,
@@ -985,6 +988,10 @@ def _provider_connector_id(value: Any) -> ProviderConnectorIdVO:
     if type(value) is ProviderConnectorIdVO:
         return value
     return ProviderConnectorIdVO.from_value(value)
+
+
+def _send_idempotency_lock_key(tenant_id: EntityIdVO, idempotency_key: str) -> str:
+    return f"communication_send_idempotency:{tenant_id.uuid}:{idempotency_key}"
 
 
 def _request_status_for_internal_status(internal_status: str) -> str:

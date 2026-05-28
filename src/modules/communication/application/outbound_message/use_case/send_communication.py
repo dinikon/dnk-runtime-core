@@ -20,6 +20,7 @@ from src.modules.communication.domain.message_template import (
 from src.modules.communication.domain.outbound_message import (
     CommunicationRequestIdVO,
     IdempotencyKeyVO,
+    InitiatorTypeVO,
     OutboundMessageIdVO,
     OutboundMessageRepositoryProtocol,
     OutboundMessageService,
@@ -109,6 +110,8 @@ class SendCommunicationUseCase:
                 idempotent=True,
             )
 
+        initiator_type = InitiatorTypeVO(command.initiator_type).value
+
         template = await self._template_lookup.get_template(
             tenant_id=tenant_id,
             template_id=_template_id(command.template_id),
@@ -148,7 +151,7 @@ class SendCommunicationUseCase:
                 command.communication_request_id
             ),
             outbound_message_id=_outbound_message_id(command.outbound_message_id),
-            initiator_type=command.initiator_type,
+            initiator_type=initiator_type,
             initiator_ref_id=command.initiator_ref_id,
             correlation_id=_entity_id(command.correlation_id),
             idempotency_key=idempotency_key,

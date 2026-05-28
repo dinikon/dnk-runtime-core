@@ -85,6 +85,14 @@ class _OutboundRepositoryStub:
 class OutboundMessageDomainTests(unittest.IsolatedAsyncioTestCase):
     def test_value_objects_normalize_and_reject_invalid_values(self) -> None:
         self.assertEqual(InitiatorTypeVO(" CRM ").value, "CRM")
+        for raw, expected in (
+            (" api ", "API"),
+            ("broadcast", "BROADCAST"),
+            (" Workflow ", "WORKFLOW"),
+            ("campaign", "CAMPAIGN"),
+        ):
+            with self.subTest(raw=raw):
+                self.assertEqual(InitiatorTypeVO(raw).value, expected)
         self.assertEqual(RecipientIdentifierTypeVO(" phone ").value, "PHONE")
         self.assertEqual(RecipientAddressVO(" 380671112233 ").value, "380671112233")
         self.assertEqual(IdempotencyKeyVO(" idem-1 ").value, "idem-1")
@@ -92,6 +100,10 @@ class OutboundMessageDomainTests(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(InvalidInitiatorTypeError):
             InitiatorTypeVO(" ")
+        with self.assertRaises(InvalidInitiatorTypeError):
+            InitiatorTypeVO("manual")
+        with self.assertRaises(InvalidInitiatorTypeError):
+            InitiatorTypeVO(123)
         with self.assertRaises(InvalidRecipientAddressError):
             RecipientAddressVO("")
         with self.assertRaises(InvalidRecipientIdentifierTypeError):
