@@ -8,7 +8,6 @@ from src.modules.communication.domain.error import (
 from src.modules.communication.presentation.depends.application import (
     ListProviderConnectorsUseCaseDep,
 )
-from src.modules.communication.presentation.http.common import require_tenant_id
 from src.modules.communication.presentation.http.provider_connector.responses import (
     ListProviderConnectorsResponseSchema,
     ProviderConnectorResponseSchema,
@@ -41,7 +40,13 @@ async def list_provider_connectors(
     use_case: ListProviderConnectorsUseCaseDep,
 ) -> ListProviderConnectorsResponseSchema:
     """HTTP endpoint списка provider connectors текущего tenant."""
-    tenant_id = EntityIdVO.from_value(require_tenant_id(context))
+    principal = context.principal
+    if principal is None or principal.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized.",
+        )
+    tenant_id = EntityIdVO.from_value(principal.tenant_id)
     try:
         result = await use_case(tenant_id)
     except CommunicationNotFoundError as exc:

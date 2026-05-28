@@ -541,6 +541,41 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                     msg=f"{path} should map HTTP responses explicitly in return blocks",
                 )
 
+    def test_communication_controller_files_have_one_top_level_function(self) -> None:
+        for path in iter_python_files("src/modules/communication/presentation/http"):
+            if "/controller/" not in path.as_posix() or path.name == "__init__.py":
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            function_count = sum(
+                isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef))
+                for node in tree.body
+            )
+            self.assertLessEqual(
+                function_count,
+                1,
+                msg=f"{path} should contain at most one top-level function",
+            )
+
+    def test_communication_request_schema_files_have_one_pydantic_model(self) -> None:
+        for path in iter_python_files("src/modules/communication/presentation/http"):
+            if "/requests/" not in path.as_posix() or path.name == "__init__.py":
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            model_count = 0
+            for node in tree.body:
+                if not isinstance(node, ast.ClassDef):
+                    continue
+                for base in node.bases:
+                    if isinstance(base, ast.Name) and base.id == "BaseModel":
+                        model_count += 1
+                    elif isinstance(base, ast.Attribute) and base.attr == "BaseModel":
+                        model_count += 1
+            self.assertLessEqual(
+                model_count,
+                1,
+                msg=f"{path} should contain at most one Pydantic request schema",
+            )
+
     def test_communication_cleanup_removed_legacy_files(self) -> None:
         removed_files = (
             "src/modules/communication/application/dto.py",

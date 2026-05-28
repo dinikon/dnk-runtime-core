@@ -470,8 +470,9 @@ Base prefix:
 ```
 
 Communication router монтируется в `src/modules/router.py` под `/api`; internal routers добавляют `/communication`.
-Protected routes используют `AuthenticatedRequestContextDep` и `require_tenant_id`. Webhook route использует
-`OptionalRequestContextDep` и получает tenant id из path.
+Protected routes используют `AuthenticatedRequestContextDep`; каждый controller явно читает
+`context.principal.tenant_id` и возвращает `401 Unauthorized`, если principal или tenant отсутствует.
+Webhook route использует `OptionalRequestContextDep` и получает tenant id из path.
 
 | Method | Path                                                                        | Controller                       | Use Case                           | Request                                 | Response                                |
 |--------|-----------------------------------------------------------------------------|----------------------------------|------------------------------------|-----------------------------------------|-----------------------------------------|
@@ -503,8 +504,7 @@ HTTP status facts:
   `SchemaRegistryMetadataInconsistentError`, `CommunicationRuntimeStateError` map to `409`.
 - `CommunicationValidationError`, `RuntimeDataValidationError`, `RuntimeDataFilterError`, generic `DomainError` map to
   `422`.
-- Outbound controllers use shared `map_outbound_http_error`; delivery read controllers use
-  `map_communication_http_error`.
+- Controllers handle domain/runtime errors explicitly and map DTOs into Pydantic response schemas in-place.
 
 Delivery read filters:
 

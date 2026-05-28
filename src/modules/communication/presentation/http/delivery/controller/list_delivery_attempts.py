@@ -1,48 +1,40 @@
 from __future__ import annotations
 
-from uuid import UUID
-
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from src.modules.communication.application.delivery import ListDeliveryAttemptsQuery
+from src.modules.communication.domain.error import (
+    CommunicationNotFoundError,
+    CommunicationRuntimeStateError,
+    CommunicationValidationError,
+)
 from src.modules.communication.domain.outbound_message import OutboundMessageIdVO
 from src.modules.communication.presentation.depends.application import (
     ListDeliveryAttemptsUseCaseDep,
 )
-from src.modules.communication.presentation.http.common import (
-    map_communication_http_error,
-    require_tenant_id,
+from src.modules.communication.presentation.http.delivery.requests import (
+    ListDeliveryAttemptsRequestSchema,
 )
 from src.modules.communication.presentation.http.delivery.responses import (
     DeliveryAttemptResponseSchema,
     ListDeliveryAttemptsResponseSchema,
 )
+from src.modules.runtime_data.domain.error import (
+    RuntimeDataFilterError,
+    RuntimeDataPersistenceError,
+    RuntimeDataPolicyError,
+    RuntimeDataValidationError,
+)
+from src.modules.schema_registry.domain.error import (
+    RuntimeObjectDescriptorError,
+    RuntimeObjectNotFoundError,
+    SchemaRegistryMetadataInconsistentError,
+)
 from src.modules.shared import EntityIdVO
+from src.modules.shared.domain.errors import DomainError
 from src.modules.shared.presentation import AuthenticatedRequestContextDep
 
 router = APIRouter(prefix="/communication", tags=["communication"])
-
-
-@router.get(
-    "/messages/{outbound_message_id}/attempts",
-    response_model=ListDeliveryAttemptsResponseSchema,
-)
-async def list_message_delivery_attempts(
-    outbound_message_id: UUID,
-    context: AuthenticatedRequestContextDep,
-    use_case: ListDeliveryAttemptsUseCaseDep,
-    limit: int = 100,
-    offset: int = 0,
-) -> ListDeliveryAttemptsResponseSchema:
-    """HTTP controller списка delivery attempts по outbound message."""
-    return await _list_delivery_attempts(
-        context=context,
-        use_case=use_case,
-        limit=limit,
-        offset=offset,
-        outbound_message_id=outbound_message_id,
-        status=None,
-    )
 
 
 @router.get(
@@ -52,48 +44,55 @@ async def list_message_delivery_attempts(
 async def list_delivery_attempts(
     context: AuthenticatedRequestContextDep,
     use_case: ListDeliveryAttemptsUseCaseDep,
-    outbound_message_id: UUID | None = None,
-    status: str | None = None,
-    limit: int = 100,
-    offset: int = 0,
+    request: ListDeliveryAttemptsRequestSchema = Depends(),
 ) -> ListDeliveryAttemptsResponseSchema:
     """HTTP controller списка delivery attempts."""
-    return await _list_delivery_attempts(
-        context=context,
-        use_case=use_case,
-        limit=limit,
-        offset=offset,
-        outbound_message_id=outbound_message_id,
-        status=status,
-    )
-
-
-async def _list_delivery_attempts(
-    *,
-    context: AuthenticatedRequestContextDep,
-    use_case: ListDeliveryAttemptsUseCaseDep,
-    limit: int,
-    offset: int,
-    outbound_message_id: UUID | None,
-    status: str | None,
-) -> ListDeliveryAttemptsResponseSchema:
-    tenant_id = require_tenant_id(context)
+    principal = context.principal
+    if principal is None or principal.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized.",
+        )
+    tenant_id = principal.tenant_id
     try:
         items = await use_case(
             ListDeliveryAttemptsQuery(
                 tenant_id=EntityIdVO.from_value(tenant_id),
-                limit=limit,
-                offset=offset,
+                limit=request.limit,
+                offset=request.offset,
                 outbound_message_id=(
                     None
-                    if outbound_message_id is None
-                    else OutboundMessageIdVO.from_value(outbound_message_id)
+                    if request.outbound_message_id is None
+                    else OutboundMessageIdVO.from_value(request.outbound_message_id)
                 ),
-                status=status,
+                status=request.status,
             )
         )
-    except Exception as exc:
-        raise map_communication_http_error(exc) from exc
+    except CommunicationNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
+    except (
+        RuntimeDataPersistenceError,
+        RuntimeDataPolicyError,
+        RuntimeObjectDescriptorError,
+        RuntimeObjectNotFoundError,
+        SchemaRegistryMetadataInconsistentError,
+        CommunicationRuntimeStateError,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from exc
+    except (
+        CommunicationValidationError,
+        RuntimeDataValidationError,
+        RuntimeDataFilterError,
+        DomainError,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
     return ListDeliveryAttemptsResponseSchema(
         items=[
             DeliveryAttemptResponseSchema(
@@ -125,6 +124,5 @@ async def _list_delivery_attempts(
 
 __all__ = [
     "list_delivery_attempts",
-    "list_message_delivery_attempts",
     "router",
 ]

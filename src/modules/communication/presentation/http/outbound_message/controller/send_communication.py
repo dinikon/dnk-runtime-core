@@ -1,21 +1,20 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
-import logging
-from uuid import UUID
-
-from fastapi import APIRouter, status
+from fastapi import APIRouter, HTTPException, status
 import uuid6
 
 from src.modules.communication.application.outbound_message import (
     SendCommunicationCommand,
-    SendCommunicationResultDTO,
+)
+from src.modules.communication.domain.error import (
+    CommunicationNotFoundError,
+    CommunicationRuntimeStateError,
+    CommunicationValidationError,
 )
 from src.modules.communication.domain.message_template import MessageTemplateIdVO
 from src.modules.communication.domain.outbound_message import (
     CommunicationRequestIdVO,
     OutboundMessageIdVO,
-    OutboundMessageStatus,
 )
 from src.modules.communication.presentation.depends.application import (
     OutboundMessagePublisherDep,
@@ -24,20 +23,29 @@ from src.modules.communication.presentation.depends.application import (
 from src.modules.communication.presentation.depends.infrastructure import (
     OutboundMessageRuntimeRepositoryDep,
 )
-from src.modules.communication.presentation.http.common import require_tenant_id
-from src.modules.communication.presentation.http.outbound_message.controller.error_mapper import (
-    map_outbound_http_error,
-)
 from src.modules.communication.presentation.http.outbound_message.requests import (
     SendCommunicationRequestSchema,
 )
 from src.modules.communication.presentation.http.outbound_message.responses import (
     SendCommunicationResponseSchema,
 )
+from src.modules.communication.presentation.http.outbound_message.controller.publish_send_job_after_commit import (
+    publish_send_job_after_commit,
+)
+from src.modules.runtime_data.domain.error import (
+    RuntimeDataFilterError,
+    RuntimeDataPersistenceError,
+    RuntimeDataPolicyError,
+    RuntimeDataValidationError,
+)
+from src.modules.schema_registry.domain.error import (
+    RuntimeObjectDescriptorError,
+    RuntimeObjectNotFoundError,
+    SchemaRegistryMetadataInconsistentError,
+)
 from src.modules.shared import EntityIdVO
+from src.modules.shared.domain.errors import DomainError
 from src.modules.shared.presentation import AuthenticatedRequestContextDep, UoWDep
-
-log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/communication", tags=["communication"])
 
@@ -56,7 +64,13 @@ async def send_communication(
     publisher: OutboundMessagePublisherDep,
 ) -> SendCommunicationResponseSchema:
     """HTTP controller постановки outbound message на отправку."""
-    tenant_id = require_tenant_id(context)
+    principal = context.principal
+    if principal is None or principal.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized.",
+        )
+    tenant_id = principal.tenant_id
     try:
         result = await use_case(
             SendCommunicationCommand(
@@ -81,15 +95,38 @@ async def send_communication(
             )
         )
         await uow.commit()
-        await _publish_send_job_after_commit(
+        await publish_send_job_after_commit(
             tenant_id=tenant_id,
             result=result,
             repository=repository,
             publisher=publisher,
             uow=uow,
         )
-    except Exception as exc:
-        raise map_outbound_http_error(exc) from exc
+    except CommunicationNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
+    except (
+        RuntimeDataPersistenceError,
+        RuntimeDataPolicyError,
+        RuntimeObjectDescriptorError,
+        RuntimeObjectNotFoundError,
+        SchemaRegistryMetadataInconsistentError,
+        CommunicationRuntimeStateError,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from exc
+    except (
+        CommunicationValidationError,
+        RuntimeDataValidationError,
+        RuntimeDataFilterError,
+        DomainError,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
     return SendCommunicationResponseSchema(
         communication_request_id=result.communication_request_id,
         outbound_message_id=result.outbound_message_id,
@@ -99,47 +136,9 @@ async def send_communication(
     )
 
 
-async def _publish_send_job_after_commit(
-    *,
-    tenant_id: UUID,
-    result: SendCommunicationResultDTO,
-    repository,
-    publisher: OutboundMessagePublisherDep,
-    uow: UoWDep,
-) -> None:
-    """Публикует queued outbound job после успешного commit send operation."""
-    if publisher is None:
-        return
-    if result.internal_status != OutboundMessageStatus.QUEUED.value:
-        return
-
-    published_at = datetime.now(UTC)
-    try:
-        await publisher.publish(
-            tenant_id=tenant_id,
-            outbound_message_id=result.outbound_message_id,
-            published_at=published_at,
-            source="send_communication",
-        )
-        await repository.mark_outbound_published(
-            tenant_id=tenant_id,
-            outbound_message_id=result.outbound_message_id,
-            published_at=published_at,
-        )
-        await uow.commit()
-    except Exception:
-        await uow.rollback()
-        log.warning(
-            "Failed to publish outbound communication message after send commit.",
-            extra={"outbound_message_id": str(result.outbound_message_id)},
-            exc_info=True,
-        )
-
-
 __all__ = [
     "SendCommunicationRequestSchema",
     "SendCommunicationResponseSchema",
-    "_publish_send_job_after_commit",
     "router",
     "send_communication",
 ]

@@ -206,5 +206,7 @@ def _required_text(value: str) -> str:
         raise CommunicationValidationError("Communication text value must be a string.")
     normalized = value.strip()
     if not normalized:
-        raise CommunicationValidationError("Communication text value must not be blank.")
+        raise CommunicationValidationError(
+            "Communication text value must not be blank."
+        )
     return normalized

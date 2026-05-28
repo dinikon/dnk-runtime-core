@@ -37,8 +37,8 @@ from src.modules.communication.domain.provider_connection import (
 from src.modules.communication.presentation.http.outbound_message.controller.list_messages import (
     list_messages,
 )
-from src.modules.communication.presentation.http.outbound_message.controller.send_communication import (
-    _publish_send_job_after_commit,
+from src.modules.communication.presentation.http.outbound_message.controller.publish_send_job_after_commit import (
+    publish_send_job_after_commit,
 )
 from src.modules.communication.presentation.http.outbound_message.requests import (
     SendCommunicationRequestSchema,
@@ -61,11 +61,21 @@ from src.modules.communication.presentation.http.delivery.controller.handle_prov
 )
 from src.modules.communication.presentation.http.delivery.controller.list_delivery_attempts import (
     list_delivery_attempts,
+)
+from src.modules.communication.presentation.http.delivery.controller.list_message_delivery_attempts import (
     list_message_delivery_attempts,
 )
 from src.modules.communication.presentation.http.delivery.controller.list_delivery_events import (
     list_delivery_events,
+)
+from src.modules.communication.presentation.http.delivery.controller.list_message_delivery_events import (
     list_message_delivery_events,
+)
+from src.modules.communication.presentation.http.delivery.requests import (
+    ListDeliveryAttemptsRequestSchema,
+    ListDeliveryEventsRequestSchema,
+    ListMessageDeliveryAttemptsRequestSchema,
+    ListMessageDeliveryEventsRequestSchema,
 )
 from src.modules.runtime_data.domain.error import RuntimeDataPersistenceError
 from src.modules.shared import EntityIdVO
@@ -379,8 +389,7 @@ class CommunicationControllerErrorTests(unittest.IsolatedAsyncioTestCase):
             outbound_message_id=outbound_message_id,
             context=SimpleNamespace(principal=SimpleNamespace(tenant_id=tenant_id)),
             use_case=use_case,
-            limit=25,
-            offset=50,
+            request=ListMessageDeliveryAttemptsRequestSchema(limit=25, offset=50),
         )
 
         self.assertEqual(use_case.query.tenant_id.uuid, tenant_id)
@@ -399,10 +408,12 @@ class CommunicationControllerErrorTests(unittest.IsolatedAsyncioTestCase):
         response = await list_delivery_attempts(
             context=SimpleNamespace(principal=SimpleNamespace(tenant_id=tenant_id)),
             use_case=use_case,
-            outbound_message_id=outbound_message_id,
-            status="SUCCESS",
-            limit=10,
-            offset=20,
+            request=ListDeliveryAttemptsRequestSchema(
+                outbound_message_id=outbound_message_id,
+                status="SUCCESS",
+                limit=10,
+                offset=20,
+            ),
         )
 
         self.assertEqual(use_case.query.tenant_id.uuid, tenant_id)
@@ -423,8 +434,7 @@ class CommunicationControllerErrorTests(unittest.IsolatedAsyncioTestCase):
             outbound_message_id=outbound_message_id,
             context=SimpleNamespace(principal=SimpleNamespace(tenant_id=tenant_id)),
             use_case=use_case,
-            limit=25,
-            offset=50,
+            request=ListMessageDeliveryEventsRequestSchema(limit=25, offset=50),
         )
 
         self.assertEqual(use_case.query.tenant_id.uuid, tenant_id)
@@ -444,12 +454,14 @@ class CommunicationControllerErrorTests(unittest.IsolatedAsyncioTestCase):
         response = await list_delivery_events(
             context=SimpleNamespace(principal=SimpleNamespace(tenant_id=tenant_id)),
             use_case=use_case,
-            outbound_message_id=outbound_message_id,
-            external_message_id="ext-1",
-            internal_status="DELIVERED",
-            event_type="WEBHOOK_RECEIVED",
-            limit=10,
-            offset=20,
+            request=ListDeliveryEventsRequestSchema(
+                outbound_message_id=outbound_message_id,
+                external_message_id="ext-1",
+                internal_status="DELIVERED",
+                event_type="WEBHOOK_RECEIVED",
+                limit=10,
+                offset=20,
+            ),
         )
 
         self.assertEqual(use_case.query.tenant_id.uuid, tenant_id)
@@ -512,6 +524,7 @@ class CommunicationControllerErrorTests(unittest.IsolatedAsyncioTestCase):
             await list_delivery_events(
                 context=_context(),
                 use_case=_FailingUseCase(RuntimeDataPersistenceError("db failed")),
+                request=ListDeliveryEventsRequestSchema(),
             )
 
         self.assertEqual(caught.exception.status_code, 409)
@@ -526,7 +539,7 @@ class CommunicationSendPublishTests(unittest.IsolatedAsyncioTestCase):
         uow = _UnitOfWorkStub()
         tenant_id = uuid4()
 
-        await _publish_send_job_after_commit(
+        await publish_send_job_after_commit(
             tenant_id=tenant_id,
             result=SendCommunicationResultDTO(
                 communication_request_id=uuid4(),
@@ -555,7 +568,7 @@ class CommunicationSendPublishTests(unittest.IsolatedAsyncioTestCase):
         repository = _RepositoryStub()
         uow = _UnitOfWorkStub()
 
-        await _publish_send_job_after_commit(
+        await publish_send_job_after_commit(
             tenant_id=uuid4(),
             result=SendCommunicationResultDTO(
                 communication_request_id=uuid4(),
