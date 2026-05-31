@@ -2,15 +2,13 @@ import { createRouter, createWebHistory } from "vue-router";
 
 import { useSessionStore } from "@/app/stores/session";
 import { authRoutes } from "@/modules/auth/routes";
+import { dashboardRoutes } from "@/modules/dashboard";
 import { ContactsPage } from "@/modules/crm";
 
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
-    {
-      path: "/",
-      redirect: "/crm/contacts",
-    },
+    ...dashboardRoutes,
     ...authRoutes,
     {
       path: "/crm/contacts",
