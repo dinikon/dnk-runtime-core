@@ -1,13 +1,13 @@
 import {defineStore} from "pinia";
 
+import {getApiErrorMessage, getApiErrorStatus} from "@/app/providers/http";
 import {
-    identityApi,
+    authApi,
     type ConsoleUser,
     type RequestEmailOtpResponse,
     type ResolveTenantResponse,
     type UpdateCurrentUserProfilePayload
-} from "@/api/identity";
-import {getApiErrorMessage, getApiErrorStatus} from "@/api/http/errors";
+} from "@/modules/auth/api";
 
 interface EmailChallenge {
     email: string;
@@ -26,6 +26,7 @@ interface SessionState {
     isRequestingOtp: boolean;
     isConfirmingOtp: boolean;
     isUpdatingProfile: boolean;
+    isLoggingOut: boolean;
 }
 
 interface UpdateProfileNameInput {
@@ -44,6 +45,7 @@ export const useSessionStore = defineStore("session", {
         isRequestingOtp: false,
         isConfirmingOtp: false,
         isUpdatingProfile: false,
+        isLoggingOut: false,
         isLoading: false
     }),
     getters: {
@@ -57,7 +59,7 @@ export const useSessionStore = defineStore("session", {
             this.authError = null;
 
             try {
-                this.tenant = await identityApi.resolveTenant();
+                this.tenant = await authApi.resolveTenant();
             } catch (error) {
                 const status = getApiErrorStatus(error);
                 this.tenant = {
@@ -76,7 +78,7 @@ export const useSessionStore = defineStore("session", {
             this.authError = null;
 
             try {
-                const result = await identityApi.requestEmailOtp(email);
+                const result = await authApi.requestEmailOtp(email);
                 this.emailChallenge = {
                     email,
                     token: result.token,
@@ -100,7 +102,7 @@ export const useSessionStore = defineStore("session", {
             this.authError = null;
 
             try {
-                await identityApi.confirmEmailOtp({
+                await authApi.confirmEmailOtp({
                     email: this.emailChallenge.email,
                     token: this.emailChallenge.token,
                     code
@@ -118,11 +120,24 @@ export const useSessionStore = defineStore("session", {
             this.isLoading = true;
 
             try {
-                this.user = await identityApi.getCurrentUser();
+                this.user = await authApi.getCurrentUser();
             } catch {
                 this.user = null;
             } finally {
                 this.isLoading = false;
+            }
+        },
+        async logout() {
+            this.isLoggingOut = true;
+            this.authError = null;
+
+            try {
+                await authApi.logoutCurrentSession();
+            } catch {
+                // Logout is treated as local cleanup even if the server no longer has a valid session.
+            } finally {
+                this.clearSession();
+                this.isLoggingOut = false;
             }
         },
         async updateProfileName(input: UpdateProfileNameInput) {
@@ -141,7 +156,7 @@ export const useSessionStore = defineStore("session", {
                     interface_theme: this.user.interface_theme,
                     timezone: this.user.timezone
                 };
-                this.user = await identityApi.updateCurrentUserProfile(payload);
+                this.user = await authApi.updateCurrentUserProfile(payload);
                 return this.user;
             } finally {
                 this.isUpdatingProfile = false;
@@ -152,6 +167,9 @@ export const useSessionStore = defineStore("session", {
             this.emailChallenge = null;
             this.authError = null;
             this.isLoading = false;
+            this.isConfirmingOtp = false;
+            this.isRequestingOtp = false;
+            this.isLoggingOut = false;
             this.isUpdatingProfile = false;
         }
     }

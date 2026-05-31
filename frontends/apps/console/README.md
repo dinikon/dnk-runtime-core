@@ -21,6 +21,6 @@ Optional environment:
 
 - `src/app/router.ts`
 - `src/app/stores/session.ts`
-- `src/api/`
-- `src/features/`
+- `src/app/providers/http/`
+- `src/modules/`
 - `src/layouts/`

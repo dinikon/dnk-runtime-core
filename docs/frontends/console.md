@@ -38,8 +38,8 @@ settings page, but those routes are not linked from the settings sidebar.
 ## Internal Structure
 
 - `frontends/apps/console/src/app/`: Vue application shell, router and Pinia stores.
-- `frontends/apps/console/src/api/`: typed API modules grouped by backend area.
-- `frontends/apps/console/src/features/`: feature-level page and component code.
+- `frontends/apps/console/src/app/providers/http/`: shared Axios client and HTTP error helpers.
+- `frontends/apps/console/src/modules/`: feature modules with pages, API methods and backend contract types.
 - `frontends/apps/console/src/layouts/`: app, settings and auth layout shells.
 - `frontends/apps/console/src/components/ui/`: shadcn-vue style primitives.
 - `frontends/apps/console/src/components/custom-ui/`: custom UI Kit components implemented from Figma.
@@ -49,11 +49,12 @@ settings page, but those routes are not linked from the settings sidebar.
 
 The console uses a shared Axios client configured with `VITE_API_BASE_URL` and
 `withCredentials: true`. If the environment variable is not set, the API base
-URL defaults to `/api`.
+URL defaults to `/api`. Backend methods and contract types live in their owning
+`src/modules/*/api/` folders.
 
 Current API modules:
 
-- `identityApi`: tenant resolve, email OTP request and confirmation, current user load and profile update.
+- `authApi`: tenant resolve, email OTP request and confirmation, current user load and profile update.
 - `schemaRegistryApi`: runtime object listing, object schema loading, custom object mutation and custom field mutation.
 - `objectRecordsApi`: object record listing for custom objects and configured standard objects.
 - `crmContactsApi`: contact field description and contact CRUD helpers.
@@ -132,6 +133,6 @@ code changes.
 
 - `frontends/apps/console/src/app/router.ts`
 - `frontends/apps/console/src/app/stores/session.ts`
-- `frontends/apps/console/src/api/`
-- `frontends/apps/console/src/features/`
+- `frontends/apps/console/src/app/providers/http/`
+- `frontends/apps/console/src/modules/`
 - `frontends/apps/console/src/layouts/`
