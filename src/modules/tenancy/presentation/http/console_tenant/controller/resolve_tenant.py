@@ -32,6 +32,7 @@ async def resolve_tenant(
         available=result.available,
         status=result.status,
         tenant_id=result.tenant_id,
+        tenant_name=result.tenant_name,
         api_host=result.api_host,
     )
 

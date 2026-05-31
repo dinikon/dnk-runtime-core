@@ -10,6 +10,7 @@ class ResolveTenantByHostResultDTO:
     available: bool
     status: str
     tenant_id: UUID | None
+    tenant_name: str | None
     api_host: str | None
 
 
