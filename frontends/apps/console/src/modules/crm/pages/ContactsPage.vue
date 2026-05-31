@@ -4,9 +4,7 @@ import { AppLayout } from "@/layouts";
 
 <template>
   <AppLayout>
-    <template #header>
-      <h1 class="truncate text-base font-semibold">Contacts</h1>
-    </template>
+    <template #header>Contacts</template>
 
     <div class="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
       Contacts workspace is available after authentication.

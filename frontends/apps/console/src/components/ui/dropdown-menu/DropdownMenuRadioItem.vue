@@ -4,7 +4,7 @@ import type {
   DropdownMenuRadioItemProps,
 } from "reka-ui";
 import type { HTMLAttributes } from "vue";
-import { Circle } from "@lucide/vue";
+import { Circle } from "lucide-vue-next";
 import { reactiveOmit } from "@vueuse/core";
 import {
   DropdownMenuItemIndicator,

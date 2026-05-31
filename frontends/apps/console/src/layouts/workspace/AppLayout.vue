@@ -1,44 +1,51 @@
 <script setup lang="ts">
-import { Menu } from "lucide-vue-next";
-
-import { useSessionStore } from "@/app/stores/session";
-import { Button } from "@/components/ui/button";
-import LogoutButton from "@/modules/auth/features/logout/LogoutButton.vue";
-
-const sessionStore = useSessionStore();
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import { Separator } from "@/components/ui/separator";
+import {
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
+import WorkspaceSidebar from "./components/WorkspaceSidebar.vue";
 </script>
 
 <template>
-  <div class="grid min-h-svh bg-background">
-    <header class="flex h-14 items-center gap-3 border-b px-4">
-      <Button
-        variant="ghost"
-        size="icon"
-        type="button"
-        aria-label="Open navigation"
-        disabled
-      >
-        <Menu class="size-4" aria-hidden="true" />
-      </Button>
+  <SidebarProvider>
+    <WorkspaceSidebar />
+    <SidebarInset>
+      <header class="flex h-16 shrink-0 items-center gap-2">
+        <div class="flex min-w-0 items-center gap-2 px-4">
+          <SidebarTrigger class="-ml-1" />
+          <Separator
+            orientation="vertical"
+            class="mr-2 data-[orientation=vertical]:h-4"
+          />
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem class="hidden md:block">
+                <BreadcrumbLink href="/dashboard">Workspace</BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator class="hidden md:block" />
+              <BreadcrumbItem>
+                <BreadcrumbPage>
+                  <slot name="header" />
+                </BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+        </div>
+      </header>
 
-      <div class="min-w-0 flex-1">
-        <slot name="header" />
+      <div class="flex flex-1 flex-col gap-4 p-4 pt-0">
+        <slot />
       </div>
-
-      <div class="hidden min-w-0 text-right text-sm sm:block">
-        <p class="truncate font-medium">
-          {{ sessionStore.user?.first_name }} {{ sessionStore.user?.last_name }}
-        </p>
-        <p class="truncate text-xs text-muted-foreground">
-          {{ sessionStore.primaryEmail }}
-        </p>
-      </div>
-
-      <LogoutButton />
-    </header>
-
-    <section class="min-h-0 p-4">
-      <slot />
-    </section>
-  </div>
+    </SidebarInset>
+  </SidebarProvider>
 </template>

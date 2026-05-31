@@ -1,10 +1,5 @@
 <script setup lang="ts">
-import {
-  ContactRound,
-  LayoutDashboard,
-  Settings,
-  ShieldCheck,
-} from "lucide-vue-next";
+import { ContactRound, Settings, ShieldCheck } from "lucide-vue-next";
 import { RouterLink } from "vue-router";
 
 import { AppLayout } from "@/layouts";
@@ -39,15 +34,7 @@ const dashboardSections = [
 
 <template>
   <AppLayout>
-    <template #header>
-      <div class="flex min-w-0 items-center gap-2">
-        <LayoutDashboard
-          class="size-4 shrink-0 text-muted-foreground"
-          aria-hidden="true"
-        />
-        <h1 class="truncate text-base font-semibold">Dashboard</h1>
-      </div>
-    </template>
+    <template #header>Dashboard</template>
 
     <div class="grid gap-4">
       <section class="grid gap-1">
