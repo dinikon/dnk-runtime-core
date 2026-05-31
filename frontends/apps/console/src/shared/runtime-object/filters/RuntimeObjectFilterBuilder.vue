@@ -470,9 +470,6 @@ function normalizeCondition(
     </div>
 
     <div class="mt-6 flex justify-end gap-2 border-t pt-4">
-      <Button type="button" variant="outline" @click="emit('apply', null)">
-        Clear
-      </Button>
       <Button type="button" variant="outline" @click="emit('cancel')">
         Cancel
       </Button>

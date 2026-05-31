@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { isAxiosError } from "axios";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
-import { Filter, Plus, RefreshCcw } from "lucide-vue-next";
+import { Filter, Plus, RefreshCcw, X } from "lucide-vue-next";
 import { toast } from "vue-sonner";
 
 import {
@@ -19,6 +19,13 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Pagination } from "@/components/ui/pagination";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -26,6 +33,14 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  areRuntimeFiltersEqual,
+  areRuntimeSortsEqual,
+  RUNTIME_OBJECT_PAGE_SIZES,
+  sanitizeRuntimeFilterForFields,
+  sanitizeRuntimeSortForFields,
+  useRuntimeObjectQueryState,
+} from "@/shared/runtime-object/composables/use-runtime-object-query-state";
 import type {
   RuntimeFilter,
   RuntimeObjectMutationPayload,
@@ -43,11 +58,8 @@ const props = defineProps<{
 }>();
 
 const queryClient = useQueryClient();
+const queryState = useRuntimeObjectQueryState();
 
-const filter = ref<RuntimeFilter | null>(null);
-const sort = ref<RuntimeSort[]>([]);
-const limit = ref(50);
-const offset = ref(0);
 const filterSheetOpen = ref(false);
 const formSheetOpen = ref(false);
 const formMode = ref<"create" | "edit">("create");
@@ -62,6 +74,17 @@ const schemaQuery = useQuery({
   queryFn: () => props.resource.describeFields(),
   retry: false,
 });
+
+const schema = computed(() => schemaQuery.data.value);
+const fields = computed(() => schema.value?.fields ?? []);
+const filter = computed(() =>
+  sanitizeRuntimeFilterForFields(queryState.filter.value, fields.value),
+);
+const sort = computed(() =>
+  sanitizeRuntimeSortForFields(queryState.sort.value, fields.value),
+);
+const limit = queryState.limit;
+const offset = queryState.offset;
 
 const searchPayload = computed<RuntimeObjectSearchRequest>(() => ({
   filter: filter.value,
@@ -103,8 +126,6 @@ const deleteMutation = useMutation({
   mutationFn: (id: string) => props.resource.delete(id),
 });
 
-const schema = computed(() => schemaQuery.data.value);
-const fields = computed(() => schema.value?.fields ?? []);
 const records = computed<RuntimeObjectRecord[]>(
   () => (searchQuery.data.value?.data ?? []) as RuntimeObjectRecord[],
 );
@@ -131,6 +152,44 @@ const pageDescription = computed(
   () => schema.value?.object.description ?? "Runtime object records.",
 );
 
+watch(
+  [fields, queryState.filter, queryState.sort, queryState.hasInvalidQuery],
+  () => {
+    if (!schema.value) {
+      return;
+    }
+
+    if (
+      queryState.hasInvalidQuery.value ||
+      !areRuntimeFiltersEqual(filter.value, queryState.filter.value) ||
+      !areRuntimeSortsEqual(sort.value, queryState.sort.value)
+    ) {
+      void queryState.replaceState({
+        filter: filter.value,
+        sort: sort.value,
+        limit: limit.value,
+        offset: offset.value,
+      });
+    }
+  },
+  { immediate: true },
+);
+
+watch(pagination, (nextPagination) => {
+  if (!nextPagination) {
+    return;
+  }
+
+  const lastOffset =
+    nextPagination.total === 0
+      ? 0
+      : Math.floor((nextPagination.total - 1) / limit.value) * limit.value;
+
+  if (offset.value > lastOffset) {
+    void queryState.replaceState({ offset: lastOffset });
+  }
+});
+
 function countFilterConditions(value: RuntimeFilter | null): number {
   if (!value) {
     return 0;
@@ -154,15 +213,31 @@ function countFilterConditions(value: RuntimeFilter | null): number {
 }
 
 function applyFilter(nextFilter: RuntimeFilter | null) {
-  filter.value = nextFilter;
-  offset.value = 0;
   tableError.value = null;
   filterSheetOpen.value = false;
+  void queryState.pushState({ filter: nextFilter, offset: 0 });
+}
+
+function resetFilters() {
+  tableError.value = null;
+  void queryState.pushState({ filter: null, offset: 0 });
 }
 
 function handleSortChange(nextSort: RuntimeSort[]) {
-  sort.value = nextSort;
-  offset.value = 0;
+  tableError.value = null;
+  void queryState.pushState({
+    sort: sanitizeRuntimeSortForFields(nextSort, fields.value),
+    offset: 0,
+  });
+}
+
+function setPageSize(value: unknown) {
+  const nextLimit = Number(value);
+  if (!RUNTIME_OBJECT_PAGE_SIZES.some((pageSize) => pageSize === nextLimit)) {
+    return;
+  }
+
+  void queryState.pushState({ limit: nextLimit, offset: 0 });
 }
 
 function goPrevious() {
@@ -170,7 +245,9 @@ function goPrevious() {
     return;
   }
 
-  offset.value = Math.max(0, offset.value - limit.value);
+  void queryState.pushState({
+    offset: Math.max(0, offset.value - limit.value),
+  });
 }
 
 function goNext() {
@@ -178,11 +255,13 @@ function goNext() {
     return;
   }
 
-  offset.value += limit.value;
+  void queryState.pushState({ offset: offset.value + limit.value });
 }
 
 function setPage(page: number) {
-  offset.value = Math.max(0, (page - 1) * limit.value);
+  void queryState.pushState({
+    offset: Math.max(0, (page - 1) * limit.value),
+  });
 }
 
 function openCreateForm() {
@@ -304,14 +383,24 @@ function apiErrorMessage(error: unknown): string {
           Refresh
         </Button>
         <Button
+          v-if="hasFilterableFields"
           type="button"
           variant="outline"
-          :disabled="!schema || !hasFilterableFields"
+          :disabled="!schema"
           @click="filterSheetOpen = true"
         >
           <Filter class="size-4" />
           Filters
           <span v-if="filterCount">({{ filterCount }})</span>
+        </Button>
+        <Button
+          v-if="hasFilterableFields && filterCount > 0"
+          type="button"
+          variant="outline"
+          @click="resetFilters"
+        >
+          <X class="size-4" />
+          Reset filters
         </Button>
         <Button type="button" :disabled="!schema" @click="openCreateForm">
           <Plus class="size-4" />
@@ -355,9 +444,31 @@ function apiErrorMessage(error: unknown): string {
       v-if="schema"
       class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
     >
-      <p class="text-sm text-muted-foreground">
-        Showing {{ pageStart }}-{{ pageEnd }} of {{ total }}
-      </p>
+      <div class="flex flex-wrap items-center gap-3">
+        <p class="text-sm text-muted-foreground">
+          Showing {{ pageStart }}-{{ pageEnd }} of {{ total }}
+        </p>
+        <div class="flex items-center gap-2">
+          <span class="text-sm text-muted-foreground">Rows per page</span>
+          <Select
+            :model-value="String(limit)"
+            @update:model-value="setPageSize"
+          >
+            <SelectTrigger class="h-8 w-20">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem
+                v-for="pageSize in RUNTIME_OBJECT_PAGE_SIZES"
+                :key="pageSize"
+                :value="String(pageSize)"
+              >
+                {{ pageSize }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
       <Pagination
         class="mx-0 justify-end"
         :items-per-page="limit"
@@ -388,7 +499,7 @@ function apiErrorMessage(error: unknown): string {
       </Pagination>
     </div>
 
-    <Sheet v-model:open="filterSheetOpen">
+    <Sheet v-if="hasFilterableFields" v-model:open="filterSheetOpen">
       <SheetContent class="sm:max-w-xl">
         <SheetHeader>
           <SheetTitle>Filters</SheetTitle>

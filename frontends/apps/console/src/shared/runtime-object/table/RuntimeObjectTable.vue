@@ -71,10 +71,17 @@ function fieldWeight(field: RuntimeFieldDescription): number {
 function sortDirection(
   field: RuntimeFieldDescription,
 ): RuntimeSort["direction"] | null {
-  return (
-    props.sort.find((item) => item.field === field.field_name)?.direction ??
-    null
-  );
+  const index = sortIndex(field);
+  return index === -1 ? null : props.sort[index].direction;
+}
+
+function sortPriority(field: RuntimeFieldDescription): number | null {
+  const index = sortIndex(field);
+  return index === -1 ? null : index + 1;
+}
+
+function sortIndex(field: RuntimeFieldDescription): number {
+  return props.sort.findIndex((item) => item.field === field.field_name);
 }
 
 function toggleSort(field: RuntimeFieldDescription) {
@@ -82,18 +89,28 @@ function toggleSort(field: RuntimeFieldDescription) {
     return;
   }
 
-  const direction = sortDirection(field);
-  if (direction === null) {
-    emit("sortChange", [{ field: field.field_name, direction: "asc" }]);
+  const index = sortIndex(field);
+  const nextSort = [...props.sort];
+
+  if (index === -1) {
+    emit("sortChange", [
+      ...nextSort,
+      { field: field.field_name, direction: "asc" },
+    ]);
     return;
   }
 
-  if (direction === "asc") {
-    emit("sortChange", [{ field: field.field_name, direction: "desc" }]);
+  if (nextSort[index].direction === "asc") {
+    nextSort.splice(index, 1, {
+      field: field.field_name,
+      direction: "desc",
+    });
+    emit("sortChange", nextSort);
     return;
   }
 
-  emit("sortChange", []);
+  nextSort.splice(index, 1);
+  emit("sortChange", nextSort);
 }
 
 function formatValue(
@@ -157,6 +174,13 @@ function optionLabel(field: RuntimeFieldDescription, value: string): string {
                 class="size-3.5"
               />
               <ArrowUpDown v-else class="size-3.5 opacity-50" />
+              <Badge
+                v-if="sort.length > 1 && sortPriority(field)"
+                variant="secondary"
+                class="h-5 min-w-5 justify-center px-1 text-[10px]"
+              >
+                {{ sortPriority(field) }}
+              </Badge>
             </Button>
             <span v-else>{{ field.label }}</span>
           </TableHead>
