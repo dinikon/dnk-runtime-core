@@ -9,6 +9,8 @@ All public HTTP routes are mounted under `/api`.
 | `POST` | `/api/admin/create-tenant`     | `tenancy` | `AdminCreateTenantRequestSchema` | `AdminCreateTenantResponseSchema` | Control-plane bearer API key | `401`, `409`, `422`, `500` if API key is not configured  |
 | `GET`  | `/api/console/tenants/resolve` | `tenancy` | query from request host          | `ResolveTenantResponseSchema`     | none                         | normal not-found/availability is encoded in response DTO |
 
+`ResolveTenantResponseSchema` includes `tenant_id`, `tenant_name`, `status`, and `api_host` when a tenant is found; missing tenants return nullable tenant fields.
+
 ## CRM
 
 | Method   | Path                              | Module | Request                        | Response                      | Auth                          | Main errors         |

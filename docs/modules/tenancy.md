@@ -51,7 +51,7 @@ Current domain layout is split by subdomain:
 - `POST /api/admin/create-tenant`
     - protected by control-plane bearer API key
 - `GET /api/console/tenants/resolve`
-    - resolves tenant availability by host
+    - resolves tenant availability by host and returns tenant id/name/status when found
 
 Current HTTP layout is organized by endpoint area:
 
