@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import type { LucideIcon } from "@lucide/vue";
+import type { WorkspaceNavigationGroup } from "@/app/navigation";
 import { ChevronRight } from "@lucide/vue";
+
 import {
   Collapsible,
   CollapsibleContent,
@@ -19,32 +20,27 @@ import {
 } from "@/components/ui/sidebar";
 
 defineProps<{
-  items: {
-    title: string;
-    url: string;
-    icon: LucideIcon;
-    isActive?: boolean;
-    items?: {
-      title: string;
-      url: string;
-    }[];
-  }[];
+  groups: WorkspaceNavigationGroup[];
 }>();
 </script>
 
 <template>
-  <SidebarGroup>
-    <SidebarGroupLabel>Platform</SidebarGroupLabel>
+  <SidebarGroup v-for="group in groups" :key="group.title">
+    <SidebarGroupLabel>{{ group.title }}</SidebarGroupLabel>
     <SidebarMenu>
       <Collapsible
-        v-for="item in items"
+        v-for="item in group.items"
         :key="item.title"
         as-child
-        :default-open="item.isActive"
+        :default-open="item.defaultOpen"
       >
         <SidebarMenuItem>
           <SidebarMenuButton as-child :tooltip="item.title">
-            <a :href="item.url">
+            <a
+              :href="item.url"
+              :target="item.external ? '_blank' : undefined"
+              :rel="item.external ? 'noopener noreferrer' : undefined"
+            >
               <component :is="item.icon" />
               <span>{{ item.title }}</span>
             </a>
@@ -53,7 +49,7 @@ defineProps<{
             <CollapsibleTrigger as-child>
               <SidebarMenuAction class="data-[state=open]:rotate-90">
                 <ChevronRight />
-                <span class="sr-only">Toggle</span>
+                <span class="sr-only">Toggle {{ item.title }}</span>
               </SidebarMenuAction>
             </CollapsibleTrigger>
             <CollapsibleContent>
@@ -63,7 +59,13 @@ defineProps<{
                   :key="subItem.title"
                 >
                   <SidebarMenuSubButton as-child>
-                    <a :href="subItem.url">
+                    <a
+                      :href="subItem.url"
+                      :target="subItem.external ? '_blank' : undefined"
+                      :rel="
+                        subItem.external ? 'noopener noreferrer' : undefined
+                      "
+                    >
                       <span>{{ subItem.title }}</span>
                     </a>
                   </SidebarMenuSubButton>

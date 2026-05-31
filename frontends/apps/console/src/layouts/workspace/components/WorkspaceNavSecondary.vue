@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { LucideIcon } from "@lucide/vue";
+import type { WorkspaceNavigationItem } from "@/app/navigation";
 
 import {
   SidebarGroup,
@@ -9,12 +9,8 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
-const props = defineProps<{
-  items: {
-    title: string;
-    url: string;
-    icon: LucideIcon;
-  }[];
+defineProps<{
+  items: WorkspaceNavigationItem[];
 }>();
 </script>
 
@@ -24,7 +20,11 @@ const props = defineProps<{
       <SidebarMenu>
         <SidebarMenuItem v-for="item in items" :key="item.title">
           <SidebarMenuButton as-child size="sm">
-            <a :href="item.url">
+            <a
+              :href="item.url"
+              :target="item.external ? '_blank' : undefined"
+              :rel="item.external ? 'noopener noreferrer' : undefined"
+            >
               <component :is="item.icon" />
               <span>{{ item.title }}</span>
             </a>

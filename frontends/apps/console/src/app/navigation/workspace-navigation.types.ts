@@ -1,40 +1,26 @@
 import type { Component } from "vue";
 
-export interface WorkspaceNavigationBrand {
-  name: string;
-  description: string;
+export interface WorkspaceNavigationItem {
+  title: string;
   url: string;
   icon: Component;
+  external?: boolean;
+  defaultOpen?: boolean;
+  items?: WorkspaceNavigationSubItem[];
 }
 
 export interface WorkspaceNavigationSubItem {
   title: string;
   url: string;
+  external?: boolean;
 }
 
-export interface WorkspaceNavigationMainItem {
+export interface WorkspaceNavigationGroup {
   title: string;
-  url: string;
-  icon: Component;
-  isActive?: boolean;
-  items?: WorkspaceNavigationSubItem[];
-}
-
-export interface WorkspaceNavigationLink {
-  title: string;
-  url: string;
-  icon: Component;
-}
-
-export interface WorkspaceNavigationProject {
-  name: string;
-  url: string;
-  icon: Component;
+  items: WorkspaceNavigationItem[];
 }
 
 export interface WorkspaceNavigation {
-  brand: WorkspaceNavigationBrand;
-  navMain: WorkspaceNavigationMainItem[];
-  navSecondary: WorkspaceNavigationLink[];
-  projects: WorkspaceNavigationProject[];
+  navGroups: WorkspaceNavigationGroup[];
+  support: WorkspaceNavigationItem;
 }

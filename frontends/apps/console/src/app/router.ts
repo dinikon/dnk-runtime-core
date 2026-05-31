@@ -21,5 +21,9 @@ export const router = createRouter({
         ...crmRoutes,
       ],
     },
+    {
+      path: "/:pathMatch(.*)*",
+      redirect: { name: "dashboard" },
+    },
   ],
 });

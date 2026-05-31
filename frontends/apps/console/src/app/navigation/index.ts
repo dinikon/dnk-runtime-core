@@ -1,9 +1,7 @@
-export { getWorkspaceNavigationMock } from "./workspace-navigation.mock";
+export { workspaceNavigation } from "./workspace-navigation";
 export type {
   WorkspaceNavigation,
-  WorkspaceNavigationBrand,
-  WorkspaceNavigationLink,
-  WorkspaceNavigationMainItem,
-  WorkspaceNavigationProject,
+  WorkspaceNavigationGroup,
+  WorkspaceNavigationItem,
   WorkspaceNavigationSubItem,
 } from "./workspace-navigation.types";
