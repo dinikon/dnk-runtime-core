@@ -1,9 +1,11 @@
 import {
+  Building2,
   ContactRound,
   LifeBuoy,
   Link2,
   SquareStack,
   Truck,
+  List,
 } from "lucide-vue-next";
 
 import type { WorkspaceNavigation } from "./workspace-navigation.types";
@@ -16,16 +18,18 @@ export const workspaceNavigation: WorkspaceNavigation = {
         {
           title: "Contacts",
           url: "/crm/contacts",
-          icon: ContactRound,
+          icon: List,
           defaultOpen: true,
           items: [
             {
               title: "Contact",
               url: "/crm/contacts",
+              icon: ContactRound,
             },
             {
               title: "Company",
               url: "/crm/companies",
+              icon: Building2,
             },
           ],
         },

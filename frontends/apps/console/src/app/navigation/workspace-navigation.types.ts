@@ -12,6 +12,7 @@ export interface WorkspaceNavigationItem {
 export interface WorkspaceNavigationSubItem {
   title: string;
   url: string;
+  icon: Component;
   external?: boolean;
 }
 

@@ -66,6 +66,7 @@ defineProps<{
                         subItem.external ? 'noopener noreferrer' : undefined
                       "
                     >
+                      <component :is="subItem.icon" />
                       <span>{{ subItem.title }}</span>
                     </a>
                   </SidebarMenuSubButton>
