@@ -7,6 +7,7 @@ import {
   LogOut,
   Sparkles,
 } from "@lucide/vue";
+import { useRouter } from "vue-router";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -25,9 +26,21 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useUserStore } from "@/app/stores/user";
+import { useLogoutMutation } from "@/modules/auth/mutations/use-logout";
 
+const router = useRouter();
 const userStore = useUserStore();
+const logoutMutation = useLogoutMutation();
 const { isMobile } = useSidebar();
+
+async function logout() {
+  if (logoutMutation.isPending.value) {
+    return;
+  }
+
+  await logoutMutation.mutateAsync();
+  await router.push({ name: "login" });
+}
 </script>
 
 <template>
@@ -111,9 +124,12 @@ const { isMobile } = useSidebar();
             </DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
-          <DropdownMenuItem>
+          <DropdownMenuItem
+            :disabled="logoutMutation.isPending.value"
+            @click="logout"
+          >
             <LogOut />
-            Log out
+            {{ logoutMutation.isPending.value ? "Logging out..." : "Log out" }}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
