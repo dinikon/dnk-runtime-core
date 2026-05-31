@@ -51,8 +51,7 @@ async function resendOtp() {
 }
 
 function changeEmail() {
-  sessionStore.emailChallenge = null;
-  sessionStore.authError = null;
+  sessionStore.clearEmailChallenge();
   code.value = "";
 }
 

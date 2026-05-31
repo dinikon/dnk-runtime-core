@@ -32,7 +32,8 @@ onMounted(() => {
 });
 
 async function redirectAfterLogin() {
-  await router.push({ name: "dashboard" });
+  await router.replace({ name: "dashboard" });
+  sessionStore.clearEmailChallenge();
 }
 </script>
 

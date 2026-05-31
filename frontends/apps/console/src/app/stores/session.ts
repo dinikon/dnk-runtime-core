@@ -88,7 +88,6 @@ export const useSessionStore = defineStore("session", {
           code,
         });
         this.user = await authApi.getCurrentUser();
-        this.emailChallenge = null;
       } catch (error) {
         this.authError = getApiErrorMessage(
           error,
@@ -146,6 +145,10 @@ export const useSessionStore = defineStore("session", {
       } finally {
         this.isUpdatingProfile = false;
       }
+    },
+    clearEmailChallenge() {
+      this.emailChallenge = null;
+      this.authError = null;
     },
     clearSession() {
       this.user = null;
