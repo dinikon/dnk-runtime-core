@@ -87,26 +87,44 @@ function sortIndex(field: RuntimeFieldDescription): number {
   return props.sort.findIndex((item) => item.field === field.field_name);
 }
 
-function toggleSort(field: RuntimeFieldDescription) {
+function toggleSort(field: RuntimeFieldDescription, event: MouseEvent) {
   if (!field.sort.enabled) {
     return;
   }
 
   const index = sortIndex(field);
-  const nextSort = [...props.sort];
+  const currentDirection = index === -1 ? null : props.sort[index].direction;
+  const nextDirection =
+    currentDirection === null
+      ? "asc"
+      : currentDirection === "asc"
+        ? "desc"
+        : null;
+
+  if (!event.shiftKey) {
+    emit(
+      "sortChange",
+      nextDirection
+        ? [{ field: field.field_name, direction: nextDirection }]
+        : [],
+    );
+    return;
+  }
 
   if (index === -1) {
     emit("sortChange", [
-      ...nextSort,
+      ...props.sort,
       { field: field.field_name, direction: "asc" },
     ]);
     return;
   }
 
-  if (nextSort[index].direction === "asc") {
+  const nextSort = [...props.sort];
+
+  if (nextDirection) {
     nextSort.splice(index, 1, {
       field: field.field_name,
-      direction: "desc",
+      direction: nextDirection,
     });
     emit("sortChange", nextSort);
     return;
@@ -170,7 +188,7 @@ function optionLabel(field: RuntimeFieldDescription, value: string): string {
               variant="ghost"
               size="sm"
               class="-ml-3 h-8 px-2"
-              @click="toggleSort(field)"
+              @click="toggleSort(field, $event)"
             >
               {{ field.label }}
               <ArrowUp v-if="sortDirection(field) === 'asc'" class="size-3.5" />
