@@ -121,6 +121,9 @@ const isSaving = computed(
   () => createMutation.isPending.value || updateMutation.isPending.value,
 );
 const filterCount = computed(() => countFilterConditions(filter.value));
+const hasFilterableFields = computed(() =>
+  fields.value.some((field) => field.filter.enabled),
+);
 const pageTitle = computed(
   () => schema.value?.object.plural_label ?? "Records",
 );
@@ -303,7 +306,7 @@ function apiErrorMessage(error: unknown): string {
         <Button
           type="button"
           variant="outline"
-          :disabled="!schema"
+          :disabled="!schema || !hasFilterableFields"
           @click="filterSheetOpen = true"
         >
           <Filter class="size-4" />
