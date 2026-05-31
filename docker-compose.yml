@@ -50,6 +50,18 @@ services:
       timeout: 5s
       retries: 10
 
+  frontend:
+    build:
+      context: ./frontends
+      dockerfile: Dockerfile
+    container_name: dnk-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
   events-publisher:
     <<: *backend-common
     container_name: dnk-events-publisher
