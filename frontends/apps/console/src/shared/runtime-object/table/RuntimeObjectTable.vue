@@ -6,6 +6,7 @@ import {
   ArrowUpDown,
   Pencil,
   Trash2,
+  X,
 } from "lucide-vue-next";
 
 import { Badge } from "@/components/ui/badge";
@@ -94,20 +95,10 @@ function toggleSort(field: RuntimeFieldDescription, event: MouseEvent) {
 
   const index = sortIndex(field);
   const currentDirection = index === -1 ? null : props.sort[index].direction;
-  const nextDirection =
-    currentDirection === null
-      ? "asc"
-      : currentDirection === "asc"
-        ? "desc"
-        : null;
+  const nextDirection = currentDirection === "asc" ? "desc" : "asc";
 
   if (!event.shiftKey) {
-    emit(
-      "sortChange",
-      nextDirection
-        ? [{ field: field.field_name, direction: nextDirection }]
-        : [],
-    );
+    emit("sortChange", [{ field: field.field_name, direction: nextDirection }]);
     return;
   }
 
@@ -120,18 +111,18 @@ function toggleSort(field: RuntimeFieldDescription, event: MouseEvent) {
   }
 
   const nextSort = [...props.sort];
-
-  if (nextDirection) {
-    nextSort.splice(index, 1, {
-      field: field.field_name,
-      direction: nextDirection,
-    });
-    emit("sortChange", nextSort);
-    return;
-  }
-
-  nextSort.splice(index, 1);
+  nextSort.splice(index, 1, {
+    field: field.field_name,
+    direction: nextDirection,
+  });
   emit("sortChange", nextSort);
+}
+
+function removeSort(field: RuntimeFieldDescription) {
+  emit(
+    "sortChange",
+    props.sort.filter((item) => item.field !== field.field_name),
+  );
 }
 
 function formatValue(
@@ -182,29 +173,44 @@ function optionLabel(field: RuntimeFieldDescription, value: string): string {
             :key="field.field_name"
             class="whitespace-nowrap"
           >
-            <Button
-              v-if="field.sort.enabled"
-              type="button"
-              variant="ghost"
-              size="sm"
-              class="-ml-3 h-8 px-2"
-              @click="toggleSort(field, $event)"
-            >
-              {{ field.label }}
-              <ArrowUp v-if="sortDirection(field) === 'asc'" class="size-3.5" />
-              <ArrowDown
-                v-else-if="sortDirection(field) === 'desc'"
-                class="size-3.5"
-              />
-              <ArrowUpDown v-else class="size-3.5 opacity-50" />
-              <Badge
-                v-if="sort.length > 1 && sortPriority(field)"
-                variant="secondary"
-                class="h-5 min-w-5 justify-center px-1 text-[10px]"
+            <div v-if="field.sort.enabled" class="-ml-3 flex items-center">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                class="h-8 px-2"
+                @click="toggleSort(field, $event)"
               >
-                {{ sortPriority(field) }}
-              </Badge>
-            </Button>
+                {{ field.label }}
+                <ArrowUpDown
+                  v-if="!sortDirection(field)"
+                  class="size-3.5 opacity-50"
+                />
+                <Badge
+                  v-if="sort.length > 1 && sortPriority(field)"
+                  variant="secondary"
+                  class="h-5 min-w-5 justify-center px-1 text-[10px]"
+                >
+                  {{ sortPriority(field) }}
+                </Badge>
+              </Button>
+              <Button
+                v-if="sortDirection(field)"
+                type="button"
+                variant="ghost"
+                size="icon"
+                class="group h-8 w-8"
+                :aria-label="`Remove ${field.label} sort`"
+                @click.stop="removeSort(field)"
+              >
+                <ArrowUp
+                  v-if="sortDirection(field) === 'asc'"
+                  class="size-3.5 group-hover:hidden"
+                />
+                <ArrowDown v-else class="size-3.5 group-hover:hidden" />
+                <X class="hidden size-3.5 group-hover:block" />
+              </Button>
+            </div>
             <span v-else>{{ field.label }}</span>
           </TableHead>
           <TableHead class="sticky right-0 z-10 w-24 bg-background text-right">
