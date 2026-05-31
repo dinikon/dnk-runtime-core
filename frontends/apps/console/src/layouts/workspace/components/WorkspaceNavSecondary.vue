@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceNavigationItem } from "@/app/navigation";
+import { RouterLink } from "vue-router";
 
 import {
   SidebarGroup,
@@ -21,13 +22,18 @@ defineProps<{
         <SidebarMenuItem v-for="item in items" :key="item.title">
           <SidebarMenuButton as-child size="sm">
             <a
+              v-if="item.external"
               :href="item.url"
-              :target="item.external ? '_blank' : undefined"
-              :rel="item.external ? 'noopener noreferrer' : undefined"
+              target="_blank"
+              rel="noopener noreferrer"
             >
               <component :is="item.icon" />
               <span>{{ item.title }}</span>
             </a>
+            <RouterLink v-else :to="item.url">
+              <component :is="item.icon" />
+              <span>{{ item.title }}</span>
+            </RouterLink>
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>

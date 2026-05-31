@@ -2,6 +2,7 @@
 import type { SidebarProps } from "@/components/ui/sidebar";
 
 import { Command } from "@lucide/vue";
+import { RouterLink } from "vue-router";
 
 import { workspaceNavigation } from "@/app/navigation";
 import WorkspaceNavMain from "./WorkspaceNavMain.vue";
@@ -29,14 +30,14 @@ const props = withDefaults(defineProps<SidebarProps>(), {
       <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton size="lg" as-child>
-            <a href="#">
+            <RouterLink to="/dashboard">
               <div
                 class="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground"
               >
                 <Command class="size-4" />
               </div>
               <WorkspaceTenantInfo />
-            </a>
+            </RouterLink>
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>

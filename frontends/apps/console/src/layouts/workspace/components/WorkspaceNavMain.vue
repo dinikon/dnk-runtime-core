@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { WorkspaceNavigationGroup } from "@/app/navigation";
 import { ChevronRight } from "@lucide/vue";
+import { RouterLink } from "vue-router";
 
 import {
   Collapsible,
@@ -37,13 +38,18 @@ defineProps<{
         <SidebarMenuItem>
           <SidebarMenuButton as-child :tooltip="item.title">
             <a
+              v-if="item.external"
               :href="item.url"
-              :target="item.external ? '_blank' : undefined"
-              :rel="item.external ? 'noopener noreferrer' : undefined"
+              target="_blank"
+              rel="noopener noreferrer"
             >
               <component :is="item.icon" />
               <span>{{ item.title }}</span>
             </a>
+            <RouterLink v-else :to="item.url">
+              <component :is="item.icon" />
+              <span>{{ item.title }}</span>
+            </RouterLink>
           </SidebarMenuButton>
           <template v-if="item.items?.length">
             <CollapsibleTrigger as-child>
@@ -60,15 +66,18 @@ defineProps<{
                 >
                   <SidebarMenuSubButton as-child>
                     <a
+                      v-if="subItem.external"
                       :href="subItem.url"
-                      :target="subItem.external ? '_blank' : undefined"
-                      :rel="
-                        subItem.external ? 'noopener noreferrer' : undefined
-                      "
+                      target="_blank"
+                      rel="noopener noreferrer"
                     >
                       <component :is="subItem.icon" />
                       <span>{{ subItem.title }}</span>
                     </a>
+                    <RouterLink v-else :to="subItem.url">
+                      <component :is="subItem.icon" />
+                      <span>{{ subItem.title }}</span>
+                    </RouterLink>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
               </SidebarMenuSub>
