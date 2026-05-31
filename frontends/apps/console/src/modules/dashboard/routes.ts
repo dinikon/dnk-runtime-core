@@ -1,15 +1,15 @@
 import type { RouteRecordRaw } from "vue-router";
 
+import DashboardHeader from "@/modules/dashboard/components/DashboardHeader.vue";
 import DashboardPage from "@/modules/dashboard/pages/DashboardPage.vue";
 
 export const dashboardRoutes: RouteRecordRaw[] = [
   {
-    path: "/",
-    redirect: "/dashboard",
-  },
-  {
-    path: "/dashboard",
+    path: "dashboard",
     name: "dashboard",
-    component: DashboardPage,
+    components: {
+      default: DashboardPage,
+      header: DashboardHeader,
+    },
   },
 ];

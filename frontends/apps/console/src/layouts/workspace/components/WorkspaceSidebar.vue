@@ -1,8 +1,23 @@
 <script setup lang="ts">
 import type { SidebarProps } from "@/components/ui/sidebar";
-import { RouterLink } from "vue-router";
 
-import { getWorkspaceNavigationMock } from "@/app/navigation";
+import {
+  BookOpen,
+  Bot,
+  Command,
+  Frame,
+  LifeBuoy,
+  Map,
+  PieChart,
+  Send,
+  Settings2,
+  SquareTerminal,
+} from "@lucide/vue";
+
+import WorkspaceNavMain from "./WorkspaceNavMain.vue";
+import WorkspaceNavProjects from "./WorkspaceNavProjects.vue";
+import WorkspaceNavSecondary from "./WorkspaceNavSecondary.vue";
+import WorkspaceNavUser from "./WorkspaceNavUser.vue";
 import {
   Sidebar,
   SidebarContent,
@@ -11,19 +26,135 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarRail,
 } from "@/components/ui/sidebar";
-import WorkspaceNavMain from "./WorkspaceNavMain.vue";
-import WorkspaceNavProjects from "./WorkspaceNavProjects.vue";
-import WorkspaceNavSecondary from "./WorkspaceNavSecondary.vue";
-import WorkspaceNavUser from "./WorkspaceNavUser.vue";
 
 const props = withDefaults(defineProps<SidebarProps>(), {
   variant: "inset",
-  collapsible: "icon",
 });
 
-const navigation = getWorkspaceNavigationMock();
+const data = {
+  user: {
+    name: "shadcn",
+    email: "m@example.com",
+    avatar: "/avatars/shadcn.jpg",
+  },
+  navMain: [
+    {
+      title: "Playground",
+      url: "#",
+      icon: SquareTerminal,
+      isActive: true,
+      items: [
+        {
+          title: "History",
+          url: "#",
+        },
+        {
+          title: "Starred",
+          url: "#",
+        },
+        {
+          title: "Settings",
+          url: "#",
+        },
+      ],
+    },
+    {
+      title: "Models",
+      url: "#",
+      icon: Bot,
+      items: [
+        {
+          title: "Genesis",
+          url: "#",
+        },
+        {
+          title: "Explorer",
+          url: "#",
+        },
+        {
+          title: "Quantum",
+          url: "#",
+        },
+      ],
+    },
+    {
+      title: "Documentation",
+      url: "#",
+      icon: BookOpen,
+      items: [
+        {
+          title: "Introduction",
+          url: "#",
+        },
+        {
+          title: "Get Started",
+          url: "#",
+        },
+        {
+          title: "Tutorials",
+          url: "#",
+        },
+        {
+          title: "Changelog",
+          url: "#",
+        },
+      ],
+    },
+    {
+      title: "Settings",
+      url: "#",
+      icon: Settings2,
+      items: [
+        {
+          title: "General",
+          url: "#",
+        },
+        {
+          title: "Team",
+          url: "#",
+        },
+        {
+          title: "Billing",
+          url: "#",
+        },
+        {
+          title: "Limits",
+          url: "#",
+        },
+      ],
+    },
+  ],
+  navSecondary: [
+    {
+      title: "Support",
+      url: "#",
+      icon: LifeBuoy,
+    },
+    {
+      title: "Feedback",
+      url: "#",
+      icon: Send,
+    },
+  ],
+  projects: [
+    {
+      name: "Design Engineering",
+      url: "#",
+      icon: Frame,
+    },
+    {
+      name: "Sales & Marketing",
+      url: "#",
+      icon: PieChart,
+    },
+    {
+      name: "Travel",
+      url: "#",
+      icon: Map,
+    },
+  ],
+};
 </script>
 
 <template>
@@ -32,35 +163,28 @@ const navigation = getWorkspaceNavigationMock();
       <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton size="lg" as-child>
-            <RouterLink :to="navigation.brand.url">
+            <a href="#">
               <div
                 class="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground"
               >
-                <component :is="navigation.brand.icon" class="size-4" />
+                <Command class="size-4" />
               </div>
               <div class="grid flex-1 text-left text-sm leading-tight">
-                <span class="truncate font-medium">
-                  {{ navigation.brand.name }}
-                </span>
-                <span class="truncate text-xs">
-                  {{ navigation.brand.description }}
-                </span>
+                <span class="truncate font-medium">Acme Inc</span>
+                <span class="truncate text-xs">Enterprise</span>
               </div>
-            </RouterLink>
+            </a>
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>
     </SidebarHeader>
-
     <SidebarContent>
-      <WorkspaceNavMain :items="navigation.navMain" />
-      <WorkspaceNavProjects :projects="navigation.projects" />
-      <WorkspaceNavSecondary :items="navigation.navSecondary" class="mt-auto" />
+      <WorkspaceNavMain :items="data.navMain" />
+      <WorkspaceNavProjects :projects="data.projects" />
+      <WorkspaceNavSecondary :items="data.navSecondary" class="mt-auto" />
     </SidebarContent>
-
     <SidebarFooter>
-      <WorkspaceNavUser />
+      <WorkspaceNavUser :user="data.user" />
     </SidebarFooter>
-    <SidebarRail />
   </Sidebar>
 </template>

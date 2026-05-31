@@ -1,13 +1,18 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { ChevronsUpDown, LogOut } from "lucide-vue-next";
-import { useRouter } from "vue-router";
+import {
+  BadgeCheck,
+  Bell,
+  ChevronsUpDown,
+  CreditCard,
+  LogOut,
+  Sparkles,
+} from "@lucide/vue";
 
-import { useSessionStore } from "@/app/stores/session";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -19,34 +24,16 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { useLogoutMutation } from "@/modules/auth/mutations/use-logout";
 
-const sessionStore = useSessionStore();
-const logoutMutation = useLogoutMutation();
-const router = useRouter();
+const props = defineProps<{
+  user: {
+    name: string;
+    email: string;
+    avatar: string;
+  };
+}>();
+
 const { isMobile } = useSidebar();
-
-const userName = computed(() => {
-  const name = [sessionStore.user?.first_name, sessionStore.user?.last_name]
-    .filter(Boolean)
-    .join(" ");
-
-  return name || "Workspace user";
-});
-
-const userInitials = computed(() =>
-  userName.value
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase(),
-);
-
-async function logout() {
-  await logoutMutation.mutateAsync();
-  await router.push({ name: "login" });
-}
 </script>
 
 <template>
@@ -58,20 +45,13 @@ async function logout() {
             size="lg"
             class="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
           >
-            <Avatar class="size-8 rounded-lg">
-              <AvatarImage
-                :src="sessionStore.user?.avatar ?? undefined"
-                :alt="userName"
-              />
-              <AvatarFallback class="rounded-lg">
-                {{ userInitials }}
-              </AvatarFallback>
+            <Avatar class="h-8 w-8 rounded-lg">
+              <AvatarImage :src="user.avatar" :alt="user.name" />
+              <AvatarFallback class="rounded-lg"> CN </AvatarFallback>
             </Avatar>
             <div class="grid flex-1 text-left text-sm leading-tight">
-              <span class="truncate font-medium">{{ userName }}</span>
-              <span class="truncate text-xs">{{
-                sessionStore.primaryEmail
-              }}</span>
+              <span class="truncate font-medium">{{ user.name }}</span>
+              <span class="truncate text-xs">{{ user.email }}</span>
             </div>
             <ChevronsUpDown class="ml-auto size-4" />
           </SidebarMenuButton>
@@ -84,28 +64,40 @@ async function logout() {
         >
           <DropdownMenuLabel class="p-0 font-normal">
             <div class="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-              <Avatar class="size-8 rounded-lg">
-                <AvatarImage
-                  :src="sessionStore.user?.avatar ?? undefined"
-                  :alt="userName"
-                />
-                <AvatarFallback class="rounded-lg">
-                  {{ userInitials }}
-                </AvatarFallback>
+              <Avatar class="h-8 w-8 rounded-lg">
+                <AvatarImage :src="user.avatar" :alt="user.name" />
+                <AvatarFallback class="rounded-lg"> CN </AvatarFallback>
               </Avatar>
               <div class="grid flex-1 text-left text-sm leading-tight">
-                <span class="truncate font-medium">{{ userName }}</span>
-                <span class="truncate text-xs">
-                  {{ sessionStore.primaryEmail }}
-                </span>
+                <span class="truncate font-semibold">{{ user.name }}</span>
+                <span class="truncate text-xs">{{ user.email }}</span>
               </div>
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem
-            :disabled="logoutMutation.isPending.value"
-            @select.prevent="logout"
-          >
+          <DropdownMenuGroup>
+            <DropdownMenuItem>
+              <Sparkles />
+              Upgrade to Pro
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuItem>
+              <BadgeCheck />
+              Account
+            </DropdownMenuItem>
+            <DropdownMenuItem>
+              <CreditCard />
+              Billing
+            </DropdownMenuItem>
+            <DropdownMenuItem>
+              <Bell />
+              Notifications
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem>
             <LogOut />
             Log out
           </DropdownMenuItem>

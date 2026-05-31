@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { RouterLink, useRoute } from "vue-router";
+import type { LucideIcon } from "@lucide/vue";
 
-import type { WorkspaceNavigationLink } from "@/app/navigation";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -11,27 +10,24 @@ import {
 } from "@/components/ui/sidebar";
 
 const props = defineProps<{
-  items: WorkspaceNavigationLink[];
+  items: {
+    title: string;
+    url: string;
+    icon: LucideIcon;
+  }[];
 }>();
-
-const route = useRoute();
 </script>
 
 <template>
-  <SidebarGroup v-bind="$attrs">
+  <SidebarGroup>
     <SidebarGroupContent>
       <SidebarMenu>
-        <SidebarMenuItem v-for="item in props.items" :key="item.title">
-          <SidebarMenuButton
-            as-child
-            size="sm"
-            :tooltip="item.title"
-            :is-active="route.path === item.url"
-          >
-            <RouterLink :to="item.url">
+        <SidebarMenuItem v-for="item in items" :key="item.title">
+          <SidebarMenuButton as-child size="sm">
+            <a :href="item.url">
               <component :is="item.icon" />
               <span>{{ item.title }}</span>
-            </RouterLink>
+            </a>
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>

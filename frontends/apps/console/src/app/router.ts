@@ -2,19 +2,26 @@ import { createRouter, createWebHistory } from "vue-router";
 
 import { getApiErrorStatus } from "@/app/providers/http";
 import { useSessionStore } from "@/app/stores/session";
+import { AppLayout } from "@/layouts";
 import { authRoutes } from "@/modules/auth/routes";
+import { crmRoutes } from "@/modules/crm";
 import { dashboardRoutes } from "@/modules/dashboard";
-import { ContactsPage } from "@/modules/crm";
 
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
-    ...dashboardRoutes,
     ...authRoutes,
     {
-      path: "/crm/contacts",
-      name: "crm-contacts",
-      component: ContactsPage,
+      path: "/",
+      component: AppLayout,
+      children: [
+        {
+          path: "",
+          redirect: { name: "dashboard" },
+        },
+        ...dashboardRoutes,
+        ...crmRoutes,
+      ],
     },
   ],
 });
