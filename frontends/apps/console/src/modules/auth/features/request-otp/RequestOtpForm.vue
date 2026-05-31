@@ -1,0 +1,89 @@
+<script setup lang="ts">
+import { computed, ref } from "vue";
+
+import { useSessionStore } from "@/app/stores/session";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import AuthErrorAlert from "@/modules/auth/components/AuthErrorAlert.vue";
+import AuthPageTitle from "@/modules/auth/components/AuthPageTitle.vue";
+import { useRequestOtpMutation } from "@/modules/auth/mutations/use-request-otp";
+
+const email = ref("");
+const sessionStore = useSessionStore();
+const requestOtpMutation = useRequestOtpMutation();
+
+const canRequestOtp = computed(
+  () => email.value.trim().length > 3 && !requestOtpMutation.isPending.value,
+);
+
+async function requestOtp() {
+  if (!canRequestOtp.value) {
+    return;
+  }
+
+  await requestOtpMutation.mutateAsync({ email: email.value.trim() });
+}
+</script>
+
+<template>
+  <Card class="w-full max-w-sm">
+    <CardHeader>
+      <AuthPageTitle
+        title="Welcome to dNiko"
+        description="Enter your email to continue."
+      />
+    </CardHeader>
+    <CardContent>
+      <form class="grid gap-4" @submit.prevent="requestOtp">
+        <div class="grid gap-2">
+          <Button type="button" class="w-full" disabled>
+            <span
+              class="grid size-4 place-items-center rounded-[3px] bg-[#4285f4] text-[0.6rem] font-extrabold text-white"
+              aria-hidden="true"
+            >
+              G
+            </span>
+            Continue with Google
+          </Button>
+          <Button type="button" class="w-full" disabled>
+            <span
+              class="grid size-4 place-items-center rounded-[3px] bg-[#f25022] text-[0.6rem] font-extrabold text-white"
+              aria-hidden="true"
+            >
+              M
+            </span>
+            Continue with Microsoft
+          </Button>
+        </div>
+
+        <div class="grid gap-2">
+          <Label for="auth-email">Email</Label>
+          <Input
+            id="auth-email"
+            v-model="email"
+            class="text-center"
+            type="email"
+            autocomplete="email"
+            placeholder="tim@apple.dev"
+            required
+          />
+        </div>
+
+        <Button class="w-full" type="submit" :disabled="!canRequestOtp">
+          {{ requestOtpMutation.isPending.value ? "Sending..." : "Continue" }}
+        </Button>
+
+        <AuthErrorAlert :message="sessionStore.authError" />
+
+        <p
+          class="px-1 text-center text-xs leading-relaxed text-muted-foreground"
+        >
+          By using dNiko, you agree to the Terms of Service and Data Processing
+          Agreement.
+        </p>
+      </form>
+    </CardContent>
+  </Card>
+</template>
