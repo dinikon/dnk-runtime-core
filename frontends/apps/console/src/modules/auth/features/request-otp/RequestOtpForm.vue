@@ -38,27 +38,6 @@ async function requestOtp() {
     <CardContent>
       <form class="grid gap-4" @submit.prevent="requestOtp">
         <div class="grid gap-2">
-          <Button type="button" class="w-full" disabled>
-            <span
-              class="grid size-4 place-items-center rounded-[3px] bg-[#4285f4] text-[0.6rem] font-extrabold text-white"
-              aria-hidden="true"
-            >
-              G
-            </span>
-            Continue with Google
-          </Button>
-          <Button type="button" class="w-full" disabled>
-            <span
-              class="grid size-4 place-items-center rounded-[3px] bg-[#f25022] text-[0.6rem] font-extrabold text-white"
-              aria-hidden="true"
-            >
-              M
-            </span>
-            Continue with Microsoft
-          </Button>
-        </div>
-
-        <div class="grid gap-2">
           <Label for="auth-email">Email</Label>
           <Input
             id="auth-email"

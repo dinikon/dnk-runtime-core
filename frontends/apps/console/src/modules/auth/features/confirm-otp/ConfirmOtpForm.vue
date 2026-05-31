@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { Mail } from "lucide-vue-next";
+import { REGEXP_ONLY_DIGITS } from "vue-input-otp";
 
 import { useSessionStore } from "@/app/stores/session";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -11,7 +12,11 @@ import {
   CardDescription,
   CardHeader,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
 import { Label } from "@/components/ui/label";
 import AuthErrorAlert from "@/modules/auth/components/AuthErrorAlert.vue";
 import AuthPageTitle from "@/modules/auth/components/AuthPageTitle.vue";
@@ -22,13 +27,17 @@ const emit = defineEmits<{
   confirmed: [];
 }>();
 
+const OTP_CODE_LENGTH = 6;
+
 const code = ref("");
 const sessionStore = useSessionStore();
 const confirmOtpMutation = useConfirmOtpMutation();
 const requestOtpMutation = useRequestOtpMutation();
 
 const canConfirmOtp = computed(
-  () => code.value.length === 6 && !confirmOtpMutation.isPending.value,
+  () =>
+    code.value.length === OTP_CODE_LENGTH &&
+    !confirmOtpMutation.isPending.value,
 );
 
 async function confirmOtp() {
@@ -53,10 +62,6 @@ async function resendOtp() {
 function changeEmail() {
   sessionStore.clearEmailChallenge();
   code.value = "";
-}
-
-function updateCode(value: string | number) {
-  code.value = String(value).replace(/\D/g, "").slice(0, 6);
 }
 
 function openMail(provider: "gmail" | "outlook") {
@@ -123,15 +128,24 @@ function openMail(provider: "gmail" | "outlook") {
 
         <div class="grid gap-2">
           <Label for="auth-code">Verification code</Label>
-          <Input
+          <InputOTP
             id="auth-code"
-            :model-value="code"
-            class="text-center tracking-[0.35em]"
+            v-model="code"
+            :maxlength="OTP_CODE_LENGTH"
+            :pattern="REGEXP_ONLY_DIGITS"
+            class="justify-center"
             inputmode="numeric"
             autocomplete="one-time-code"
-            maxlength="6"
-            @update:model-value="updateCode"
-          />
+          >
+            <InputOTPGroup class="gap-2">
+              <InputOTPSlot
+                v-for="index in OTP_CODE_LENGTH"
+                :key="index"
+                :index="index - 1"
+                class="rounded-md border-l"
+              />
+            </InputOTPGroup>
+          </InputOTP>
         </div>
 
         <Alert v-if="sessionStore.emailChallenge?.devCode">
