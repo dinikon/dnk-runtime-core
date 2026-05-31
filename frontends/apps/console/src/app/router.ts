@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
 
+import { getApiErrorStatus } from "@/app/providers/http";
 import { useSessionStore } from "@/app/stores/session";
 import { authRoutes } from "@/modules/auth/routes";
 import { dashboardRoutes } from "@/modules/dashboard";
@@ -22,15 +23,19 @@ router.beforeEach(async (to) => {
   const sessionStore = useSessionStore();
   const isPublicRoute = to.meta.public === true;
 
-  if (!sessionStore.isAuthenticated) {
+  try {
     await sessionStore.loadCurrentUser();
-  }
 
-  if (isPublicRoute && sessionStore.isAuthenticated) {
-    return "/";
-  }
+    if (isPublicRoute) {
+      return { name: "dashboard" };
+    }
 
-  if (!isPublicRoute && !sessionStore.isAuthenticated) {
+    return true;
+  } catch (error) {
+    if (isPublicRoute || getApiErrorStatus(error) !== 401) {
+      return true;
+    }
+
     return {
       name: "login",
       query: {
@@ -38,6 +43,4 @@ router.beforeEach(async (to) => {
       },
     };
   }
-
-  return true;
 });

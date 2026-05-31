@@ -25,7 +25,6 @@ export const useSessionStore = defineStore("session", {
     isLoading: false,
   }),
   getters: {
-    isAuthenticated: (state) => state.user !== null,
     primaryEmail: (state) =>
       state.user?.emails.find((email) => email.is_primary)?.email ?? null,
     isTenantAvailable: (state) =>
@@ -88,12 +87,12 @@ export const useSessionStore = defineStore("session", {
           token: this.emailChallenge.token,
           code,
         });
+        this.user = await authApi.getCurrentUser();
         this.emailChallenge = null;
-        await this.loadCurrentUser();
       } catch (error) {
         this.authError = getApiErrorMessage(
           error,
-          "The verification code is invalid or expired.",
+          "The verification code is invalid, expired, or the session could not be loaded.",
         );
         throw error;
       } finally {
@@ -105,8 +104,10 @@ export const useSessionStore = defineStore("session", {
 
       try {
         this.user = await authApi.getCurrentUser();
-      } catch {
+        return this.user;
+      } catch (error) {
         this.user = null;
+        throw error;
       } finally {
         this.isLoading = false;
       }

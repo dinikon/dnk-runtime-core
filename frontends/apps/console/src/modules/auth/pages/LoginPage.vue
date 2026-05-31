@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
 import { Loader2 } from "lucide-vue-next";
-import { useRoute, useRouter } from "vue-router";
+import { useRouter } from "vue-router";
 
 import { useSessionStore } from "@/app/stores/session";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -12,7 +12,6 @@ import ConfirmOtpForm from "@/modules/auth/features/confirm-otp/ConfirmOtpForm.v
 import RequestOtpForm from "@/modules/auth/features/request-otp/RequestOtpForm.vue";
 import type { AuthLoginStep } from "@/modules/auth/model/auth.types";
 
-const route = useRoute();
 const router = useRouter();
 const sessionStore = useSessionStore();
 
@@ -33,14 +32,7 @@ onMounted(() => {
 });
 
 async function redirectAfterLogin() {
-  await router.push(getRedirectTarget());
-}
-
-function getRedirectTarget() {
-  const redirect = route.query.redirect;
-  return typeof redirect === "string" && redirect.startsWith("/")
-    ? redirect
-    : "/";
+  await router.push({ name: "dashboard" });
 }
 </script>
 
