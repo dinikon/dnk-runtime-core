@@ -1,16 +1,14 @@
 import { useMutation } from "@tanstack/vue-query";
 
-import { useUserStore } from "@/app/stores/user";
+import { authApi } from "@/modules/auth/api/auth.api";
 
 interface RequestOtpVariables {
   email: string;
 }
 
 export function useRequestOtpMutation() {
-  const userStore = useUserStore();
-
   return useMutation({
     mutationFn: ({ email }: RequestOtpVariables) =>
-      userStore.requestEmailOtp(email),
+      authApi.requestEmailOtp(email),
   });
 }

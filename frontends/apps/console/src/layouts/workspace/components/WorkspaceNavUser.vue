@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from "vue";
 import {
   BadgeCheck,
   Bell,
@@ -29,41 +28,6 @@ import { useUserStore } from "@/app/stores/user";
 
 const userStore = useUserStore();
 const { isMobile } = useSidebar();
-
-const displayName = computed(() => {
-  const user = userStore.user;
-  if (!user) {
-    return userStore.primaryEmail ?? "User";
-  }
-
-  const fullName = [user.first_name, user.last_name]
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .join(" ");
-
-  return fullName || userStore.primaryEmail || "User";
-});
-
-const primaryEmail = computed(
-  () => userStore.primaryEmail ?? "No primary email",
-);
-const avatarUrl = computed(() => userStore.user?.avatar ?? "");
-const initials = computed(() => {
-  const source =
-    displayName.value === "User" ? primaryEmail.value : displayName.value;
-  const parts = source
-    .replace(/@.*/, "")
-    .split(/[\s._-]+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  return (
-    parts
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase())
-      .join("") || "U"
-  );
-});
 </script>
 
 <template>
@@ -77,15 +41,21 @@ const initials = computed(() => {
           >
             <Avatar class="h-8 w-8 rounded-lg">
               <AvatarImage
-                v-if="avatarUrl"
-                :src="avatarUrl"
-                :alt="displayName"
+                v-if="userStore.avatarUrl"
+                :src="userStore.avatarUrl"
+                :alt="userStore.displayName"
               />
-              <AvatarFallback class="rounded-lg">{{ initials }}</AvatarFallback>
+              <AvatarFallback class="rounded-lg">{{
+                userStore.initials
+              }}</AvatarFallback>
             </Avatar>
             <div class="grid flex-1 text-left text-sm leading-tight">
-              <span class="truncate font-medium">{{ displayName }}</span>
-              <span class="truncate text-xs">{{ primaryEmail }}</span>
+              <span class="truncate font-medium">{{
+                userStore.displayName
+              }}</span>
+              <span class="truncate text-xs">{{
+                userStore.primaryEmail ?? "No primary email"
+              }}</span>
             </div>
             <ChevronsUpDown class="ml-auto size-4" />
           </SidebarMenuButton>
@@ -100,17 +70,21 @@ const initials = computed(() => {
             <div class="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
               <Avatar class="h-8 w-8 rounded-lg">
                 <AvatarImage
-                  v-if="avatarUrl"
-                  :src="avatarUrl"
-                  :alt="displayName"
+                  v-if="userStore.avatarUrl"
+                  :src="userStore.avatarUrl"
+                  :alt="userStore.displayName"
                 />
                 <AvatarFallback class="rounded-lg">{{
-                  initials
+                  userStore.initials
                 }}</AvatarFallback>
               </Avatar>
               <div class="grid flex-1 text-left text-sm leading-tight">
-                <span class="truncate font-semibold">{{ displayName }}</span>
-                <span class="truncate text-xs">{{ primaryEmail }}</span>
+                <span class="truncate font-semibold">{{
+                  userStore.displayName
+                }}</span>
+                <span class="truncate text-xs">{{
+                  userStore.primaryEmail ?? "No primary email"
+                }}</span>
               </div>
             </div>
           </DropdownMenuLabel>

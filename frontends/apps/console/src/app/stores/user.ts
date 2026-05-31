@@ -1,141 +1,63 @@
 import { defineStore } from "pinia";
+import { computed, ref } from "vue";
 
-import { getApiErrorMessage } from "@/app/providers/http";
-import { authApi } from "@/modules/auth/api/auth.api";
-import type {
-  RequestEmailOtpResponse,
-  UpdateCurrentUserProfilePayload,
-} from "@/modules/auth/api/auth.contracts";
-import type {
-  AuthUserState,
-  UpdateProfileNameInput,
-} from "@/modules/auth/model/auth.types";
+import type { ConsoleUser } from "@/modules/auth/api/auth.contracts";
 
-export const useUserStore = defineStore("user", {
-  state: (): AuthUserState => ({
-    user: null,
-    emailChallenge: null,
-    authError: null,
-    isRequestingOtp: false,
-    isConfirmingOtp: false,
-    isUpdatingProfile: false,
-    isLoggingOut: false,
-    isLoading: false,
-  }),
-  getters: {
-    primaryEmail: (state) =>
-      state.user?.emails.find((email) => email.is_primary)?.email ?? null,
-  },
-  actions: {
-    async requestEmailOtp(email: string): Promise<RequestEmailOtpResponse> {
-      this.isRequestingOtp = true;
-      this.authError = null;
+export const useUserStore = defineStore("user", () => {
+  const user = ref<ConsoleUser | null>(null);
 
-      try {
-        const result = await authApi.requestEmailOtp(email);
-        this.emailChallenge = {
-          email,
-          token: result.token,
-          expiresIn: result.expires_in,
-          devCode: result.code ?? null,
-        };
-        return result;
-      } catch (error) {
-        this.authError = getApiErrorMessage(
-          error,
-          "We could not send a verification email.",
-        );
-        throw error;
-      } finally {
-        this.isRequestingOtp = false;
-      }
-    },
-    async confirmEmailOtp(code: string) {
-      if (!this.emailChallenge) {
-        throw new Error("Email challenge is missing.");
-      }
+  const primaryEmail = computed(
+    () => user.value?.emails.find((email) => email.is_primary)?.email ?? null,
+  );
+  const displayName = computed(() => {
+    if (!user.value) {
+      return primaryEmail.value ?? "User";
+    }
 
-      this.isConfirmingOtp = true;
-      this.authError = null;
+    const fullName = [user.value.first_name, user.value.last_name]
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .join(" ");
 
-      try {
-        await authApi.confirmEmailOtp({
-          email: this.emailChallenge.email,
-          token: this.emailChallenge.token,
-          code,
-        });
-        this.user = await authApi.getCurrentUser();
-      } catch (error) {
-        this.authError = getApiErrorMessage(
-          error,
-          "The verification code is invalid, expired, or the session could not be loaded.",
-        );
-        throw error;
-      } finally {
-        this.isConfirmingOtp = false;
-      }
-    },
-    async loadCurrentUser() {
-      this.isLoading = true;
+    return fullName || primaryEmail.value || "User";
+  });
+  const avatarUrl = computed(() => user.value?.avatar ?? "");
+  const initials = computed(() => {
+    const source =
+      displayName.value === "User"
+        ? (primaryEmail.value ?? displayName.value)
+        : displayName.value;
+    const parts = source
+      .replace(/@.*/, "")
+      .split(/[\s._-]+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
 
-      try {
-        this.user = await authApi.getCurrentUser();
-        return this.user;
-      } catch (error) {
-        this.user = null;
-        throw error;
-      } finally {
-        this.isLoading = false;
-      }
-    },
-    async logout() {
-      this.isLoggingOut = true;
-      this.authError = null;
+    return (
+      parts
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase())
+        .join("") || "U"
+    );
+  });
+  const isAuthenticated = computed(() => user.value !== null);
 
-      try {
-        await authApi.logoutCurrentSession();
-      } catch {
-        // Logout is treated as local cleanup even if the server no longer has a valid session.
-      } finally {
-        this.clearUser();
-        this.isLoggingOut = false;
-      }
-    },
-    async updateProfileName(input: UpdateProfileNameInput) {
-      if (!this.user) {
-        throw new Error("Current user is not loaded.");
-      }
+  function setUser(nextUser: ConsoleUser) {
+    user.value = nextUser;
+  }
 
-      this.isUpdatingProfile = true;
+  function clearUser() {
+    user.value = null;
+  }
 
-      try {
-        const payload: UpdateCurrentUserProfilePayload = {
-          first_name: input.first_name,
-          last_name: input.last_name,
-          middle_name: input.middle_name,
-          interface_language: this.user.interface_language,
-          interface_theme: this.user.interface_theme,
-          timezone: this.user.timezone,
-        };
-        this.user = await authApi.updateCurrentUserProfile(payload);
-        return this.user;
-      } finally {
-        this.isUpdatingProfile = false;
-      }
-    },
-    clearEmailChallenge() {
-      this.emailChallenge = null;
-      this.authError = null;
-    },
-    clearUser() {
-      this.user = null;
-      this.emailChallenge = null;
-      this.authError = null;
-      this.isLoading = false;
-      this.isConfirmingOtp = false;
-      this.isRequestingOtp = false;
-      this.isLoggingOut = false;
-      this.isUpdatingProfile = false;
-    },
-  },
+  return {
+    avatarUrl,
+    clearUser,
+    displayName,
+    initials,
+    isAuthenticated,
+    primaryEmail,
+    setUser,
+    user,
+  };
 });

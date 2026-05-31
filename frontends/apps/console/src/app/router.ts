@@ -1,8 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router";
 
-import { getApiErrorStatus } from "@/app/providers/http";
-import { useTenantStore } from "@/app/stores/tenant";
-import { useUserStore } from "@/app/stores/user";
 import { AppLayout } from "@/layouts";
 import { authRoutes } from "@/modules/auth/routes";
 import { crmRoutes } from "@/modules/crm";
@@ -25,35 +22,4 @@ export const router = createRouter({
       ],
     },
   ],
-});
-
-router.beforeEach(async (to) => {
-  const tenantStore = useTenantStore();
-  const userStore = useUserStore();
-  const isPublicRoute = to.meta.public === true;
-
-  try {
-    await userStore.loadCurrentUser();
-
-    if (isPublicRoute) {
-      return { name: "dashboard" };
-    }
-
-    if (!tenantStore.tenant) {
-      await tenantStore.resolveTenant();
-    }
-
-    return true;
-  } catch (error) {
-    if (isPublicRoute || getApiErrorStatus(error) !== 401) {
-      return true;
-    }
-
-    return {
-      name: "login",
-      query: {
-        redirect: to.fullPath,
-      },
-    };
-  }
 });

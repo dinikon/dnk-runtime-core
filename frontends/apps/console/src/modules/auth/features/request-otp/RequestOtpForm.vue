@@ -1,29 +1,34 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 
-import { useUserStore } from "@/app/stores/user";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import AuthErrorAlert from "@/modules/auth/components/AuthErrorAlert.vue";
 import AuthPageTitle from "@/modules/auth/components/AuthPageTitle.vue";
-import { useRequestOtpMutation } from "@/modules/auth/mutations/use-request-otp";
+
+const props = defineProps<{
+  authError: string | null;
+  isSubmitting: boolean;
+}>();
+
+const emit = defineEmits<{
+  request: [email: string];
+}>();
 
 const email = ref("");
-const userStore = useUserStore();
-const requestOtpMutation = useRequestOtpMutation();
 
 const canRequestOtp = computed(
-  () => email.value.trim().length > 3 && !requestOtpMutation.isPending.value,
+  () => email.value.trim().length > 3 && !props.isSubmitting,
 );
 
-async function requestOtp() {
+function requestOtp() {
   if (!canRequestOtp.value) {
     return;
   }
 
-  await requestOtpMutation.mutateAsync({ email: email.value.trim() });
+  emit("request", email.value.trim());
 }
 </script>
 
@@ -51,10 +56,10 @@ async function requestOtp() {
         </div>
 
         <Button class="w-full" type="submit" :disabled="!canRequestOtp">
-          {{ requestOtpMutation.isPending.value ? "Sending..." : "Continue" }}
+          {{ isSubmitting ? "Sending..." : "Continue" }}
         </Button>
 
-        <AuthErrorAlert :message="userStore.authError" />
+        <AuthErrorAlert :message="authError" />
 
         <p
           class="px-1 text-center text-xs leading-relaxed text-muted-foreground"
