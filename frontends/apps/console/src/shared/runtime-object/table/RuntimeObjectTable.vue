@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  Check,
+  Minus,
   Pencil,
   Trash2,
   X,
@@ -11,6 +13,7 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -51,9 +54,39 @@ const displayFields = computed(() =>
     .sort((left, right) => fieldWeight(left) - fieldWeight(right)),
 );
 
-const columnCount = computed(() => displayFields.value.length + 1);
+const selectedRecordIds = ref(new Set<string>());
+
+const visibleRecordIds = computed(() =>
+  props.records.map((record) => record.id),
+);
+const selectedVisibleRecordIds = computed(() =>
+  visibleRecordIds.value.filter((id) => selectedRecordIds.value.has(id)),
+);
+const headerSelectionState = computed<boolean | "indeterminate">(() => {
+  if (visibleRecordIds.value.length === 0) {
+    return false;
+  }
+
+  if (selectedVisibleRecordIds.value.length === visibleRecordIds.value.length) {
+    return true;
+  }
+
+  return selectedVisibleRecordIds.value.length > 0 ? "indeterminate" : false;
+});
+const columnCount = computed(() => displayFields.value.length + 2);
 const skeletonRowCount = computed(() =>
   Math.max(8, Math.min(props.records.length || 12, 20)),
+);
+
+watch(
+  visibleRecordIds,
+  (nextIds) => {
+    const nextVisibleIds = new Set(nextIds);
+    selectedRecordIds.value = new Set(
+      [...selectedRecordIds.value].filter((id) => nextVisibleIds.has(id)),
+    );
+  },
+  { immediate: true },
 );
 
 function fieldWeight(field: RuntimeFieldDescription): number {
@@ -125,6 +158,30 @@ function removeSort(field: RuntimeFieldDescription) {
   );
 }
 
+function isRecordSelected(record: RuntimeObjectRecord): boolean {
+  return selectedRecordIds.value.has(record.id);
+}
+
+function toggleAllRows(value: boolean | "indeterminate") {
+  selectedRecordIds.value =
+    value === true ? new Set(visibleRecordIds.value) : new Set();
+}
+
+function toggleRow(
+  record: RuntimeObjectRecord,
+  value: boolean | "indeterminate",
+) {
+  const nextSelectedIds = new Set(selectedRecordIds.value);
+
+  if (value === true) {
+    nextSelectedIds.add(record.id);
+  } else {
+    nextSelectedIds.delete(record.id);
+  }
+
+  selectedRecordIds.value = nextSelectedIds;
+}
+
 function formatValue(
   field: RuntimeFieldDescription,
   record: RuntimeObjectRecord,
@@ -168,6 +225,19 @@ function optionLabel(field: RuntimeFieldDescription, value: string): string {
     <Table>
       <TableHeader class="sticky top-0 z-20 bg-background">
         <TableRow>
+          <TableHead class="w-10">
+            <Checkbox
+              :model-value="headerSelectionState"
+              :disabled="isLoading || records.length === 0"
+              aria-label="Select all rows"
+              @update:model-value="toggleAllRows"
+            >
+              <template #default="{ state }">
+                <Minus v-if="state === 'indeterminate'" class="size-3.5" />
+                <Check v-else class="size-3.5" />
+              </template>
+            </Checkbox>
+          </TableHead>
           <TableHead
             v-for="field in displayFields"
             :key="field.field_name"
@@ -221,6 +291,9 @@ function optionLabel(field: RuntimeFieldDescription, value: string): string {
       <TableBody>
         <template v-if="isLoading">
           <TableRow v-for="index in skeletonRowCount" :key="index">
+            <TableCell class="w-10">
+              <Skeleton class="size-4" />
+            </TableCell>
             <TableCell v-for="field in displayFields" :key="field.field_name">
               <Skeleton class="h-4 w-28" />
             </TableCell>
@@ -242,9 +315,17 @@ function optionLabel(field: RuntimeFieldDescription, value: string): string {
           v-for="(record, index) in records"
           v-else
           :key="record.id"
+          :data-state="isRecordSelected(record) ? 'selected' : undefined"
           class="animate-in fade-in-0 slide-in-from-top-1 duration-300"
           :style="{ animationDelay: `${Math.min(index * 20, 180)}ms` }"
         >
+          <TableCell class="w-10">
+            <Checkbox
+              :model-value="isRecordSelected(record)"
+              :aria-label="`Select row ${index + 1}`"
+              @update:model-value="(value) => toggleRow(record, value)"
+            />
+          </TableCell>
           <TableCell v-for="field in displayFields" :key="field.field_name">
             <div
               v-if="field.type === 'multiselect'"
