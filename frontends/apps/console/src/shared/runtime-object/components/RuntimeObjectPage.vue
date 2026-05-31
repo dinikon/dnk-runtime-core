@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { isAxiosError } from "axios";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { Filter, Plus, RefreshCcw, X } from "lucide-vue-next";
@@ -57,8 +57,14 @@ const props = defineProps<{
   resource: RuntimeObjectResource;
 }>();
 
+const MIN_LOADING_VISIBLE_MS = 500;
+
 const queryClient = useQueryClient();
 const queryState = useRuntimeObjectQueryState();
+
+const isMinimumLoadingVisible = ref(true);
+let loadingStartedAt = Date.now();
+let loadingTimeoutId: ReturnType<typeof window.setTimeout> | null = null;
 
 const filterSheetOpen = ref(false);
 const formSheetOpen = ref(false);
@@ -107,6 +113,14 @@ const searchQuery = useQuery({
   retry: false,
 });
 
+const isRuntimeLoading = computed(
+  () =>
+    schemaQuery.isLoading.value ||
+    schemaQuery.isFetching.value ||
+    searchQuery.isLoading.value ||
+    searchQuery.isFetching.value,
+);
+
 const createMutation = useMutation({
   mutationFn: (payload: RuntimeObjectMutationPayload) =>
     props.resource.create(payload),
@@ -141,6 +155,9 @@ const canGoNext = computed(() => offset.value + limit.value < total.value);
 const isSaving = computed(
   () => createMutation.isPending.value || updateMutation.isPending.value,
 );
+const isTableLoading = computed(
+  () => !schema.value || isMinimumLoadingVisible.value,
+);
 const filterCount = computed(() => countFilterConditions(filter.value));
 const hasFilterableFields = computed(() =>
   fields.value.some((field) => field.filter.enabled),
@@ -174,6 +191,37 @@ watch(
   },
   { immediate: true },
 );
+
+watch(
+  isRuntimeLoading,
+  (isLoading) => {
+    if (loadingTimeoutId) {
+      window.clearTimeout(loadingTimeoutId);
+      loadingTimeoutId = null;
+    }
+
+    if (isLoading) {
+      loadingStartedAt = Date.now();
+      isMinimumLoadingVisible.value = true;
+      return;
+    }
+
+    const elapsed = Date.now() - loadingStartedAt;
+    const remaining = Math.max(0, MIN_LOADING_VISIBLE_MS - elapsed);
+
+    loadingTimeoutId = window.setTimeout(() => {
+      isMinimumLoadingVisible.value = false;
+      loadingTimeoutId = null;
+    }, remaining);
+  },
+  { immediate: true },
+);
+
+onBeforeUnmount(() => {
+  if (loadingTimeoutId) {
+    window.clearTimeout(loadingTimeoutId);
+  }
+});
 
 watch(pagination, (nextPagination) => {
   if (!nextPagination) {
@@ -426,7 +474,7 @@ function apiErrorMessage(error: unknown): string {
       :fields="fields"
       :records="records"
       :sort="sort"
-      :is-loading="searchQuery.isLoading.value || searchQuery.isFetching.value"
+      :is-loading="isTableLoading"
       @sort-change="handleSortChange"
       @edit="openEditForm"
       @delete="requestDelete"

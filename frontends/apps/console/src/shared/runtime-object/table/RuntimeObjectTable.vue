@@ -51,6 +51,9 @@ const displayFields = computed(() =>
 );
 
 const columnCount = computed(() => displayFields.value.length + 1);
+const skeletonRowCount = computed(() =>
+  Math.max(8, Math.min(props.records.length || 12, 20)),
+);
 
 function fieldWeight(field: RuntimeFieldDescription): number {
   if (field.kind !== "system") {
@@ -193,7 +196,7 @@ function optionLabel(field: RuntimeFieldDescription, value: string): string {
       </TableHeader>
       <TableBody>
         <template v-if="isLoading">
-          <TableRow v-for="index in 5" :key="index">
+          <TableRow v-for="index in skeletonRowCount" :key="index">
             <TableCell v-for="field in displayFields" :key="field.field_name">
               <Skeleton class="h-4 w-28" />
             </TableCell>
@@ -211,7 +214,13 @@ function optionLabel(field: RuntimeFieldDescription, value: string): string {
           No records found.
         </TableEmpty>
 
-        <TableRow v-for="record in records" v-else :key="record.id">
+        <TableRow
+          v-for="(record, index) in records"
+          v-else
+          :key="record.id"
+          class="animate-in fade-in-0 slide-in-from-top-1 duration-300"
+          :style="{ animationDelay: `${Math.min(index * 20, 180)}ms` }"
+        >
           <TableCell v-for="field in displayFields" :key="field.field_name">
             <div
               v-if="field.type === 'multiselect'"
