@@ -359,9 +359,9 @@ function apiErrorMessage(error: unknown): string {
 </script>
 
 <template>
-  <section class="grid min-h-0 gap-4">
+  <section class="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
     <div
-      class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"
+      class="flex shrink-0 flex-col gap-3 md:flex-row md:items-start md:justify-between"
     >
       <div class="grid gap-1">
         <h2 class="text-lg font-semibold tracking-normal">{{ pageTitle }}</h2>
@@ -422,6 +422,7 @@ function apiErrorMessage(error: unknown): string {
 
     <RuntimeObjectTable
       v-if="schema"
+      class="flex-1"
       :fields="fields"
       :records="records"
       :sort="sort"
@@ -431,7 +432,7 @@ function apiErrorMessage(error: unknown): string {
       @delete="requestDelete"
     />
 
-    <div v-else class="rounded-lg border p-4">
+    <div v-else class="min-h-0 flex-1 rounded-lg border p-4">
       <div class="space-y-3">
         <Skeleton class="h-5 w-40" />
         <Skeleton class="h-10 w-full" />
@@ -442,7 +443,7 @@ function apiErrorMessage(error: unknown): string {
 
     <div
       v-if="schema"
-      class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
+      class="flex shrink-0 flex-col gap-3 md:flex-row md:items-center md:justify-between"
     >
       <div class="flex flex-wrap items-center gap-3">
         <p class="text-sm text-muted-foreground">

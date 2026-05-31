@@ -19,7 +19,9 @@ useCurrentUserQuery();
 <template>
   <SidebarProvider>
     <WorkspaceSidebar />
-    <SidebarInset>
+    <SidebarInset
+      class="h-svh min-h-0 overflow-hidden md:h-[calc(100svh-1rem)]"
+    >
       <header class="flex h-16 shrink-0 items-center gap-2">
         <div class="flex items-center gap-2 px-4">
           <SidebarTrigger class="-ml-1" />
@@ -30,7 +32,7 @@ useCurrentUserQuery();
           <RouterView name="header" />
         </div>
       </header>
-      <div class="flex flex-1 flex-col gap-4 p-4 pt-0">
+      <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 pt-0">
         <RouterView />
       </div>
     </SidebarInset>

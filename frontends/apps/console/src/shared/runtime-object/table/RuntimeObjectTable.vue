@@ -150,9 +150,11 @@ function optionLabel(field: RuntimeFieldDescription, value: string): string {
 </script>
 
 <template>
-  <div class="overflow-hidden rounded-lg border">
+  <div
+    class="min-h-0 overflow-hidden rounded-lg border [&>[data-slot=table-container]]:h-full"
+  >
     <Table>
-      <TableHeader>
+      <TableHeader class="sticky top-0 z-20 bg-background">
         <TableRow>
           <TableHead
             v-for="field in displayFields"
