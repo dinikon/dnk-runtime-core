@@ -1,23 +1,21 @@
 import { defineStore } from "pinia";
 
-import { getApiErrorMessage, getApiErrorStatus } from "@/app/providers/http";
+import { getApiErrorMessage } from "@/app/providers/http";
 import { authApi } from "@/modules/auth/api/auth.api";
 import type {
   RequestEmailOtpResponse,
   UpdateCurrentUserProfilePayload,
 } from "@/modules/auth/api/auth.contracts";
 import type {
-  AuthSessionState,
+  AuthUserState,
   UpdateProfileNameInput,
 } from "@/modules/auth/model/auth.types";
 
-export const useSessionStore = defineStore("session", {
-  state: (): AuthSessionState => ({
+export const useUserStore = defineStore("user", {
+  state: (): AuthUserState => ({
     user: null,
-    tenant: null,
     emailChallenge: null,
     authError: null,
-    isResolvingTenant: false,
     isRequestingOtp: false,
     isConfirmingOtp: false,
     isUpdatingProfile: false,
@@ -27,29 +25,8 @@ export const useSessionStore = defineStore("session", {
   getters: {
     primaryEmail: (state) =>
       state.user?.emails.find((email) => email.is_primary)?.email ?? null,
-    isTenantAvailable: (state) =>
-      state.tenant?.exists === true && state.tenant.available === true,
   },
   actions: {
-    async resolveTenant() {
-      this.isResolvingTenant = true;
-      this.authError = null;
-
-      try {
-        this.tenant = await authApi.resolveTenant();
-      } catch (error) {
-        const status = getApiErrorStatus(error);
-        this.tenant = {
-          exists: false,
-          available: false,
-          status: status ? `http_${status}` : "unknown_error",
-          tenant_id: null,
-          api_host: null,
-        };
-      } finally {
-        this.isResolvingTenant = false;
-      }
-    },
     async requestEmailOtp(email: string): Promise<RequestEmailOtpResponse> {
       this.isRequestingOtp = true;
       this.authError = null;
@@ -120,7 +97,7 @@ export const useSessionStore = defineStore("session", {
       } catch {
         // Logout is treated as local cleanup even if the server no longer has a valid session.
       } finally {
-        this.clearSession();
+        this.clearUser();
         this.isLoggingOut = false;
       }
     },
@@ -150,7 +127,7 @@ export const useSessionStore = defineStore("session", {
       this.emailChallenge = null;
       this.authError = null;
     },
-    clearSession() {
+    clearUser() {
       this.user = null;
       this.emailChallenge = null;
       this.authError = null;

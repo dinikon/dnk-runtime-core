@@ -18,6 +18,7 @@ import WorkspaceNavMain from "./WorkspaceNavMain.vue";
 import WorkspaceNavProjects from "./WorkspaceNavProjects.vue";
 import WorkspaceNavSecondary from "./WorkspaceNavSecondary.vue";
 import WorkspaceNavUser from "./WorkspaceNavUser.vue";
+import WorkspaceTenantInfo from "./WorkspaceTenantInfo.vue";
 import {
   Sidebar,
   SidebarContent,
@@ -33,11 +34,6 @@ const props = withDefaults(defineProps<SidebarProps>(), {
 });
 
 const data = {
-  user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "/avatars/shadcn.jpg",
-  },
   navMain: [
     {
       title: "Playground",
@@ -169,10 +165,7 @@ const data = {
               >
                 <Command class="size-4" />
               </div>
-              <div class="grid flex-1 text-left text-sm leading-tight">
-                <span class="truncate font-medium">Acme Inc</span>
-                <span class="truncate text-xs">Enterprise</span>
-              </div>
+              <WorkspaceTenantInfo />
             </a>
           </SidebarMenuButton>
         </SidebarMenuItem>
@@ -184,7 +177,7 @@ const data = {
       <WorkspaceNavSecondary :items="data.navSecondary" class="mt-auto" />
     </SidebarContent>
     <SidebarFooter>
-      <WorkspaceNavUser :user="data.user" />
+      <WorkspaceNavUser />
     </SidebarFooter>
   </Sidebar>
 </template>

@@ -3,7 +3,7 @@ import { computed, ref } from "vue";
 import { Mail } from "lucide-vue-next";
 import { REGEXP_ONLY_DIGITS } from "vue-input-otp";
 
-import { useSessionStore } from "@/app/stores/session";
+import { useUserStore } from "@/app/stores/user";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,7 +30,7 @@ const emit = defineEmits<{
 const OTP_CODE_LENGTH = 6;
 
 const code = ref("");
-const sessionStore = useSessionStore();
+const userStore = useUserStore();
 const confirmOtpMutation = useConfirmOtpMutation();
 const requestOtpMutation = useRequestOtpMutation();
 
@@ -50,7 +50,7 @@ async function confirmOtp() {
 }
 
 async function resendOtp() {
-  const email = sessionStore.emailChallenge?.email;
+  const email = userStore.emailChallenge?.email;
   if (!email || requestOtpMutation.isPending.value) {
     return;
   }
@@ -60,7 +60,7 @@ async function resendOtp() {
 }
 
 function changeEmail() {
-  sessionStore.clearEmailChallenge();
+  userStore.clearEmailChallenge();
   code.value = "";
 }
 
@@ -88,7 +88,7 @@ function openMail(provider: "gmail" | "outlook") {
         <CardDescription>
           A verification email has been sent to:
           <strong class="block text-foreground">{{
-            sessionStore.emailChallenge?.email
+            userStore.emailChallenge?.email
           }}</strong>
         </CardDescription>
       </AuthPageTitle>
@@ -148,9 +148,9 @@ function openMail(provider: "gmail" | "outlook") {
           </InputOTP>
         </div>
 
-        <Alert v-if="sessionStore.emailChallenge?.devCode">
+        <Alert v-if="userStore.emailChallenge?.devCode">
           <AlertDescription>
-            Development code: {{ sessionStore.emailChallenge.devCode }}
+            Development code: {{ userStore.emailChallenge.devCode }}
           </AlertDescription>
         </Alert>
 
@@ -158,7 +158,7 @@ function openMail(provider: "gmail" | "outlook") {
           {{ confirmOtpMutation.isPending.value ? "Checking..." : "Continue" }}
         </Button>
 
-        <AuthErrorAlert :message="sessionStore.authError" />
+        <AuthErrorAlert :message="userStore.authError" />
 
         <div class="flex justify-center gap-3">
           <Button

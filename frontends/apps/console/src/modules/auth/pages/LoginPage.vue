@@ -3,7 +3,8 @@ import { computed, onMounted } from "vue";
 import { Loader2 } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 
-import { useSessionStore } from "@/app/stores/session";
+import { useTenantStore } from "@/app/stores/tenant";
+import { useUserStore } from "@/app/stores/user";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { AuthLayout } from "@/layouts";
@@ -13,27 +14,28 @@ import RequestOtpForm from "@/modules/auth/features/request-otp/RequestOtpForm.v
 import type { AuthLoginStep } from "@/modules/auth/model/auth.types";
 
 const router = useRouter();
-const sessionStore = useSessionStore();
+const tenantStore = useTenantStore();
+const userStore = useUserStore();
 
 const loginStep = computed<AuthLoginStep>(() => {
-  if (sessionStore.isResolvingTenant || !sessionStore.tenant) {
+  if (tenantStore.isResolvingTenant || !tenantStore.tenant) {
     return "checking";
   }
 
-  if (!sessionStore.isTenantAvailable) {
+  if (!tenantStore.isTenantAvailable) {
     return "workspace-not-found";
   }
 
-  return sessionStore.emailChallenge ? "confirm-otp" : "request-otp";
+  return userStore.emailChallenge ? "confirm-otp" : "request-otp";
 });
 
 onMounted(() => {
-  void sessionStore.resolveTenant();
+  void tenantStore.resolveTenant();
 });
 
 async function redirectAfterLogin() {
   await router.replace({ name: "dashboard" });
-  sessionStore.clearEmailChallenge();
+  userStore.clearEmailChallenge();
 }
 </script>
 

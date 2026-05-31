@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 
-import { useSessionStore } from "@/app/stores/session";
+import { useUserStore } from "@/app/stores/user";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import AuthPageTitle from "@/modules/auth/components/AuthPageTitle.vue";
 import { useRequestOtpMutation } from "@/modules/auth/mutations/use-request-otp";
 
 const email = ref("");
-const sessionStore = useSessionStore();
+const userStore = useUserStore();
 const requestOtpMutation = useRequestOtpMutation();
 
 const canRequestOtp = computed(
@@ -54,7 +54,7 @@ async function requestOtp() {
           {{ requestOtpMutation.isPending.value ? "Sending..." : "Continue" }}
         </Button>
 
-        <AuthErrorAlert :message="sessionStore.authError" />
+        <AuthErrorAlert :message="userStore.authError" />
 
         <p
           class="px-1 text-center text-xs leading-relaxed text-muted-foreground"

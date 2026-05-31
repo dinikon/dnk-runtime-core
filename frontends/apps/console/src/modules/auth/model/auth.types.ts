@@ -16,13 +16,16 @@ export interface EmailChallenge {
   devCode: string | null;
 }
 
-export interface AuthSessionState {
-  user: ConsoleUser | null;
+export interface AuthTenantState {
   tenant: ResolveTenantResponse | null;
+  isResolvingTenant: boolean;
+}
+
+export interface AuthUserState {
+  user: ConsoleUser | null;
   emailChallenge: EmailChallenge | null;
   authError: string | null;
   isLoading: boolean;
-  isResolvingTenant: boolean;
   isRequestingOtp: boolean;
   isConfirmingOtp: boolean;
   isUpdatingProfile: boolean;

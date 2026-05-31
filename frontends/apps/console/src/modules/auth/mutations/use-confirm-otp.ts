@@ -1,16 +1,16 @@
 import { useMutation } from "@tanstack/vue-query";
 
-import { useSessionStore } from "@/app/stores/session";
+import { useUserStore } from "@/app/stores/user";
 
 interface ConfirmOtpVariables {
   code: string;
 }
 
 export function useConfirmOtpMutation() {
-  const sessionStore = useSessionStore();
+  const userStore = useUserStore();
 
   return useMutation({
     mutationFn: ({ code }: ConfirmOtpVariables) =>
-      sessionStore.confirmEmailOtp(code),
+      userStore.confirmEmailOtp(code),
   });
 }
