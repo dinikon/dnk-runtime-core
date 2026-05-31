@@ -1,17 +1,11 @@
 <script setup lang="ts">
-import { LogOut, Menu } from "lucide-vue-next";
-import { useRouter } from "vue-router";
+import { Menu } from "lucide-vue-next";
 
 import { useSessionStore } from "@/app/stores/session";
 import { Button } from "@/components/ui/button";
+import LogoutButton from "@/modules/auth/features/logout/LogoutButton.vue";
 
-const router = useRouter();
 const sessionStore = useSessionStore();
-
-async function logout() {
-  await sessionStore.logout();
-  await router.push({ name: "login" });
-}
 </script>
 
 <template>
@@ -40,16 +34,7 @@ async function logout() {
         </p>
       </div>
 
-      <Button
-        variant="outline"
-        size="sm"
-        type="button"
-        :disabled="sessionStore.isLoggingOut"
-        @click="logout"
-      >
-        <LogOut class="size-4" aria-hidden="true" />
-        Logout
-      </Button>
+      <LogoutButton />
     </header>
 
     <section class="min-h-0 p-4">

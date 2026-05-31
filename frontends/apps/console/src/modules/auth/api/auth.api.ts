@@ -7,7 +7,7 @@ import type {
   RequestEmailOtpResponse,
   ResolveTenantResponse,
   UpdateCurrentUserProfilePayload,
-} from "@/modules/auth/api/types";
+} from "./auth.contracts";
 
 export const authApi = {
   resolveTenant: async () =>

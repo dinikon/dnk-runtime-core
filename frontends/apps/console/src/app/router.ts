@@ -1,8 +1,8 @@
 import { createRouter, createWebHistory } from "vue-router";
 
 import { useSessionStore } from "@/app/stores/session";
+import { authRoutes } from "@/modules/auth/routes";
 import { ContactsPage } from "@/modules/crm";
-import LoginPage from "@/modules/auth/pages/LoginPage.vue";
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -11,14 +11,7 @@ export const router = createRouter({
       path: "/",
       redirect: "/crm/contacts",
     },
-    {
-      path: "/login",
-      name: "login",
-      component: LoginPage,
-      meta: {
-        public: true,
-      },
-    },
+    ...authRoutes,
     {
       path: "/crm/contacts",
       name: "crm-contacts",
