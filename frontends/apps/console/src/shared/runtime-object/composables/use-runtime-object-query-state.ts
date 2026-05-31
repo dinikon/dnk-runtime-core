@@ -346,7 +346,7 @@ function sanitizeFilterGroup(
     return sanitizedItems[0];
   }
 
-  return { [logic]: sanitizedItems } as RuntimeFilter;
+  return logic === "and" ? { and: sanitizedItems } : { or: sanitizedItems };
 }
 
 function parseRuntimeFilter(value: unknown): RuntimeFilter | null {

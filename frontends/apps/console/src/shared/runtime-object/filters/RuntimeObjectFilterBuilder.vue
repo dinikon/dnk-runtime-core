@@ -233,7 +233,12 @@ function applyFilter() {
     return;
   }
 
-  emit("apply", { [logic.value]: normalizedConditions } as RuntimeFilter);
+  emit(
+    "apply",
+    logic.value === "and"
+      ? { and: normalizedConditions }
+      : { or: normalizedConditions },
+  );
 }
 
 function normalizeCondition(
