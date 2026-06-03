@@ -670,8 +670,8 @@ class ContactPointRuntimeRepository(
             ),
         )
 
+    @staticmethod
     def _contact_point_dto(
-        self,
         contact_point: ContactPointEntity,
     ) -> ContactPointDTO:
         return ContactPointDTO(
@@ -683,8 +683,8 @@ class ContactPointRuntimeRepository(
             normalized_value=contact_point.normalized_value,
         )
 
+    @staticmethod
     def _contact_point_binding_dto(
-        self,
         binding: ContactPointBindingEntity,
     ) -> ContactPointBindingDTO:
         return ContactPointBindingDTO(
