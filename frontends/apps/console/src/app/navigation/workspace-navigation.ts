@@ -3,6 +3,7 @@ import {
   ContactRound,
   LifeBuoy,
   Link2,
+  PlugZap,
   SquareStack,
   Truck,
   List,
@@ -39,14 +40,19 @@ export const workspaceNavigation: WorkspaceNavigation = {
       title: "CDP",
       items: [
         {
-          title: "Delivery",
-          url: "/cdp/delivery",
-          icon: Truck,
+          title: "Providers",
+          url: "/cdp/providers",
+          icon: PlugZap,
         },
         {
-          title: "Template",
+          title: "Templates",
           url: "/cdp/templates",
           icon: SquareStack,
+        },
+        {
+          title: "Deliveries",
+          url: "/cdp/deliveries",
+          icon: Truck,
         },
       ],
     },
