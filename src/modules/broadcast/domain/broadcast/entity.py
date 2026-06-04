@@ -23,7 +23,6 @@ class BroadcastEntity:
     template_id: EntityIdVO
     template_version_id: EntityIdVO | None
 
-    source_id: EntityIdVO | None
     mapping_config: BroadcastMappingConfigVO | None
     settings: BroadcastSettingsVO
 
