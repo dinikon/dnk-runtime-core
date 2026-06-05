@@ -1,33 +1,59 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
-import { RefreshCcw, Save, SendHorizontal } from "lucide-vue-next";
+import {
+  getCoreRowModel,
+  getFilteredRowModel,
+  useVueTable,
+  type ColumnDef,
+} from "@tanstack/vue-table";
+import { RefreshCcw, Save } from "lucide-vue-next";
+import { useRoute, useRouter } from "vue-router";
 import { toast } from "vue-sonner";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableEmpty,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { communicationApi } from "@/modules/communication/api";
-import type { JsonObject } from "@/modules/communication/api";
+import type {
+  JsonObject,
+  MessageTemplate,
+  ProviderConnection,
+  ProviderConnector,
+  ProviderMessageType,
+} from "@/modules/communication/api";
 import CommunicationPageHeader from "@/modules/communication/components/CommunicationPageHeader.vue";
 import JsonSchemaForm from "@/modules/communication/components/JsonSchemaForm.vue";
 import StatusBadge from "@/modules/communication/components/StatusBadge.vue";
+import TemplatesToolBar from "@/modules/communication/components/TemplatesToolBar.vue";
 import {
   apiErrorMessage,
   buildJsonSchemaDefaults,
-  createClientUuid,
   formatJsonObject,
   parseJsonObject,
 } from "@/modules/communication/lib";
+import { useCreateMessageTemplateWithVersionMutation } from "@/modules/communication/mutations/use-create-message-template-with-version";
+import { useProviderCatalogQuery } from "@/modules/communication/queries/use-provider-catalog-query";
+import { useProviderConnectionsQuery } from "@/modules/communication/queries/use-provider-connections-query";
+import { useMessageTemplatesQuery } from "@/modules/communication/queries/use-message-templates-query";
 
 const MESSAGE_CLASSES = [
   "TRANSACTIONAL",
@@ -37,7 +63,8 @@ const MESSAGE_CLASSES = [
   "INFO",
 ];
 
-const queryClient = useQueryClient();
+const route = useRoute();
+const router = useRouter();
 
 const selectedConnectionId = ref("");
 const selectedMessageTypeId = ref("");
@@ -53,80 +80,58 @@ const variablesSchemaText = ref(
   }),
 );
 
-const selectedTemplateId = ref("");
-const recipientIdentifierType = ref("phone");
-const recipientAddress = ref("");
-const recipientSnapshotText = ref(formatJsonObject({}));
-const variablesText = ref(formatJsonObject({}));
-const priority = ref(100);
+const catalogQuery = useProviderCatalogQuery();
+const connectionsQuery = useProviderConnectionsQuery();
+const templatesQuery = useMessageTemplatesQuery();
+const createTemplateMutation = useCreateMessageTemplateWithVersionMutation();
 
-const catalogQuery = useQuery({
-  queryKey: ["communication", "provider-catalog"],
-  queryFn: communicationApi.listProviderCatalog,
-  retry: false,
-});
-
-const connectionsQuery = useQuery({
-  queryKey: ["communication", "provider-connections"],
-  queryFn: communicationApi.listProviderConnections,
-  retry: false,
-});
-
-const templatesQuery = useQuery({
-  queryKey: ["communication", "message-templates"],
-  queryFn: communicationApi.listMessageTemplates,
-  retry: false,
-});
-
-const createTemplateMutation = useMutation({
-  mutationFn: communicationApi.createMessageTemplate,
-});
-
-const createVersionMutation = useMutation({
-  mutationFn: ({
-    templateId,
-    payload,
-  }: {
-    templateId: string;
-    payload: {
-      template_payload: JsonObject;
-      variables_schema: JsonObject;
-    };
-  }) => communicationApi.createTemplateVersion(templateId, payload),
-});
-
-const activateVersionMutation = useMutation({
-  mutationFn: ({
-    templateId,
-    versionId,
-  }: {
-    templateId: string;
-    versionId: string;
-  }) => communicationApi.activateTemplateVersion(templateId, versionId),
-});
-
-const sendMutation = useMutation({
-  mutationFn: communicationApi.sendCommunication,
-});
-
-const connectors = computed(() => catalogQuery.data.value?.connectors ?? []);
+const connectors = computed(() =>
+  (catalogQuery.data.value?.connectors ?? []).filter(
+    (connector) => !connector.status.startsWith("ARCHIV"),
+  ),
+);
+const connectorById = computed(() =>
+  connectors.value.reduce<Record<string, ProviderConnector>>(
+    (index, connector) => {
+      index[connector.provider_connector_id] = connector;
+      return index;
+    },
+    {},
+  ),
+);
 const messageTypes = computed(
   () => catalogQuery.data.value?.message_types ?? [],
 );
-const connections = computed(() => connectionsQuery.data.value?.items ?? []);
-const templates = computed(() => templatesQuery.data.value?.items ?? []);
+const messageTypeById = computed(() =>
+  messageTypes.value.reduce<Record<string, ProviderMessageType>>(
+    (index, messageType) => {
+      index[messageType.provider_message_type_id] = messageType;
+      return index;
+    },
+    {},
+  ),
+);
+const connections = computed(() =>
+  (connectionsQuery.data.value?.items ?? []).filter(
+    (connection) => !connection.status.startsWith("ARCHIV"),
+  ),
+);
+const activeConnections = computed(() =>
+  connections.value.filter((connection) => {
+    const connector = connectorById.value[connection.provider_connector_id];
+    return connection.status === "ACTIVE" && connector?.status === "ACTIVE";
+  }),
+);
 const selectedConnection = computed(() =>
-  connections.value.find(
+  activeConnections.value.find(
     (connection) =>
       connection.provider_connection_id === selectedConnectionId.value,
   ),
 );
 const selectedConnector = computed(() =>
-  connectors.value.find(
-    (connector) =>
-      connector.provider_connector_id ===
-      selectedConnection.value?.provider_connector_id,
-  ),
+  selectedConnection.value
+    ? connectorById.value[selectedConnection.value.provider_connector_id]
+    : undefined,
 );
 const availableMessageTypes = computed(() =>
   messageTypes.value.filter(
@@ -143,28 +148,88 @@ const selectedMessageType = computed(() =>
       messageType.provider_message_type_id === selectedMessageTypeId.value,
   ),
 );
-const templatesForConnection = computed(() =>
-  templates.value.filter(
-    (template) =>
-      template.provider_connector_id ===
-        selectedConnection.value?.provider_connector_id &&
-      template.channel_code === selectedConnection.value?.channel_code,
+const templates = computed(() =>
+  (templatesQuery.data.value?.items ?? []).filter(
+    (template) => !template.status.startsWith("ARCHIV"),
   ),
 );
-const selectedTemplate = computed(() =>
-  templates.value.find(
-    (template) => template.template_id === selectedTemplateId.value,
-  ),
-);
-const isCreatingTemplate = computed(
+const searchQuery = computed(() => {
+  const value = route.query.q;
+  return typeof value === "string" ? value : "";
+});
+const isCreateSheetOpen = computed({
+  get: () => route.query.create === "template",
+  set: (value: boolean) => {
+    patchQuery({ create: value ? "template" : undefined });
+  },
+});
+const isLoading = computed(
   () =>
-    createTemplateMutation.isPending.value ||
-    createVersionMutation.isPending.value ||
-    activateVersionMutation.isPending.value,
+    catalogQuery.isLoading.value ||
+    connectionsQuery.isLoading.value ||
+    templatesQuery.isLoading.value,
 );
+const isFetching = computed(
+  () =>
+    catalogQuery.isFetching.value ||
+    connectionsQuery.isFetching.value ||
+    templatesQuery.isFetching.value,
+);
+const columns: ColumnDef<MessageTemplate>[] = [
+  {
+    id: "template",
+    accessorFn: (template) =>
+      `${template.name} ${template.template_code} ${template.description ?? ""}`,
+    header: "Template",
+  },
+  {
+    id: "provider",
+    accessorFn: (template) =>
+      `${connectorName(template.provider_connector_id)} ${messageTypeName(template.provider_message_type_id)}`,
+    header: "Provider",
+  },
+  {
+    id: "channel_code",
+    accessorKey: "channel_code",
+    header: "Channel",
+  },
+  {
+    id: "message_class",
+    accessorKey: "message_class",
+    header: "Class",
+  },
+  {
+    id: "status",
+    accessorKey: "status",
+    header: "Status",
+  },
+  {
+    id: "active_version",
+    accessorKey: "active_version",
+    header: "Active version",
+  },
+  {
+    id: "updated_at",
+    accessorKey: "updated_at",
+    header: "Updated",
+  },
+];
+const table = useVueTable({
+  data: templates,
+  columns,
+  getCoreRowModel: getCoreRowModel(),
+  getFilteredRowModel: getFilteredRowModel(),
+  state: {
+    get globalFilter() {
+      return searchQuery.value;
+    },
+  },
+});
+const visibleRows = computed(() => table.getRowModel().rows);
+const columnCount = computed(() => table.getVisibleLeafColumns().length);
 
 watch(
-  connections,
+  activeConnections,
   (items) => {
     if (!items.length) {
       selectedConnectionId.value = "";
@@ -214,46 +279,25 @@ watch(selectedMessageType, (messageType) => {
   templatePayload.value = buildJsonSchemaDefaults(messageType.field_schema);
 });
 
-watch(
-  templates,
-  (items) => {
-    if (!items.length) {
-      selectedTemplateId.value = "";
-      return;
-    }
+function patchQuery(patch: Record<string, string | undefined>) {
+  const nextQuery = { ...route.query };
 
-    if (
-      !selectedTemplateId.value ||
-      !items.some((item) => item.template_id === selectedTemplateId.value)
-    ) {
-      selectedTemplateId.value =
-        items.find((item) => item.active_version_id)?.template_id ??
-        items[0].template_id;
+  for (const [key, value] of Object.entries(patch)) {
+    if (!value) {
+      delete nextQuery[key];
+    } else {
+      nextQuery[key] = value;
     }
-  },
-  { immediate: true },
-);
-
-watch(selectedTemplate, (template) => {
-  if (!template) {
-    return;
   }
 
-  recipientIdentifierType.value =
-    template.channel_code === "EMAIL" ? "email" : "phone";
-});
+  router.replace({ query: nextQuery });
+}
 
 async function refreshTemplates() {
   await Promise.all([
-    queryClient.invalidateQueries({
-      queryKey: ["communication", "provider-catalog"],
-    }),
-    queryClient.invalidateQueries({
-      queryKey: ["communication", "provider-connections"],
-    }),
-    queryClient.invalidateQueries({
-      queryKey: ["communication", "message-templates"],
-    }),
+    catalogQuery.refetch(),
+    connectionsQuery.refetch(),
+    templatesQuery.refetch(),
   ]);
 }
 
@@ -262,95 +306,59 @@ async function createTemplateWithActiveVersion() {
   const messageType = selectedMessageType.value;
 
   if (!connection || !messageType) {
-    toast.error("Select a connect and message type.");
+    toast.error("Select an active connection and message type.");
     return;
   }
 
   try {
-    const variablesSchema = parseJsonObject(variablesSchemaText.value, {});
-    const template = await createTemplateMutation.mutateAsync({
-      template_code: templateCode.value.trim(),
-      name: templateName.value.trim(),
-      description: templateDescription.value.trim() || null,
-      provider_connector_id: connection.provider_connector_id,
-      provider_message_type_id: messageType.provider_message_type_id,
-      channel_code: connection.channel_code,
-      message_class: messageClass.value,
+    const variablesSchema = parseJsonObject(variablesSchemaText.value, {
+      type: "object",
+      properties: {},
     });
-    const version = await createVersionMutation.mutateAsync({
-      templateId: template.template_id,
-      payload: {
+    const template = await createTemplateMutation.mutateAsync({
+      template: {
+        template_code: templateCode.value.trim(),
+        name: templateName.value.trim(),
+        description: templateDescription.value.trim() || null,
+        provider_connector_id: connection.provider_connector_id,
+        provider_message_type_id: messageType.provider_message_type_id,
+        channel_code: connection.channel_code,
+        message_class: messageClass.value,
+      },
+      version: {
         template_payload: templatePayload.value,
         variables_schema: variablesSchema,
       },
     });
 
-    await activateVersionMutation.mutateAsync({
-      templateId: template.template_id,
-      versionId: version.template_version_id,
-    });
-
-    selectedTemplateId.value = template.template_id;
-    toast.success("Template created and activated.");
-    await refreshTemplates();
-  } catch (error) {
-    toast.error(apiErrorMessage(error));
-  }
-}
-
-async function sendTestMessage() {
-  const template = selectedTemplate.value;
-
-  if (!template) {
-    toast.error("Select a template.");
-    return;
-  }
-
-  try {
-    const recipientSnapshot = parseJsonObject(recipientSnapshotText.value, {});
-    const variables = parseJsonObject(variablesText.value, {});
-
-    const result = await sendMutation.mutateAsync({
-      initiator_type: "CONSOLE_TEST",
-      initiator_ref_id: "communication-templates",
-      correlation_id: createClientUuid(),
-      idempotency_key: createClientUuid(),
-      channel_code: template.channel_code,
-      template_id: template.template_id,
-      recipient_identifier_type: recipientIdentifierType.value.trim(),
-      recipient_address: recipientAddress.value.trim(),
-      recipient_snapshot: recipientSnapshot,
-      message_class: template.message_class,
-      variables,
-      scheduled_at: null,
-      priority: priority.value,
-    });
-
-    toast.success(`Test message queued: ${result.internal_status}.`);
+    toast.success(`${template.name} created.`);
+    isCreateSheetOpen.value = false;
+    await templatesQuery.refetch();
   } catch (error) {
     toast.error(apiErrorMessage(error));
   }
 }
 
 function connectorName(connectorId: string) {
-  return (
-    connectors.value.find(
-      (connector) => connector.provider_connector_id === connectorId,
-    )?.provider_name ?? "Provider"
-  );
+  return connectorById.value[connectorId]?.provider_name ?? connectorId;
+}
+
+function connectionLabel(connection: ProviderConnection) {
+  const connector = connectorById.value[connection.provider_connector_id];
+  return `${connection.connection_name} · ${connector?.provider_name ?? connection.channel_code}`;
+}
+
+function providerCode(connectorId: string) {
+  return connectorById.value[connectorId]?.provider_code ?? connectorId;
 }
 
 function messageTypeName(messageTypeId: string) {
-  return (
-    messageTypes.value.find(
-      (messageType) => messageType.provider_message_type_id === messageTypeId,
-    )?.name ?? "Message type"
-  );
+  return messageTypeById.value[messageTypeId]?.name ?? messageTypeId;
 }
 
 function formatDate(value: string | null) {
   if (!value) {
-    return "No active version";
+    return "-";
   }
 
   return new Intl.DateTimeFormat(undefined, {
@@ -367,27 +375,15 @@ function formatDate(value: string | null) {
     >
       <CommunicationPageHeader
         title="Templates"
-        description="Create provider-bound message templates, activate payload versions, and queue quick single-recipient tests."
+        description="Create provider-bound message templates and inspect active payload versions."
       />
       <Button
         type="button"
         variant="outline"
-        :disabled="
-          catalogQuery.isFetching.value ||
-          connectionsQuery.isFetching.value ||
-          templatesQuery.isFetching.value
-        "
+        :disabled="isFetching"
         @click="refreshTemplates"
       >
-        <RefreshCcw
-          class="size-4"
-          :class="{
-            'animate-spin':
-              catalogQuery.isFetching.value ||
-              connectionsQuery.isFetching.value ||
-              templatesQuery.isFetching.value,
-          }"
-        />
+        <RefreshCcw class="size-4" :class="{ 'animate-spin': isFetching }" />
         Refresh
       </Button>
     </div>
@@ -411,49 +407,192 @@ function formatDate(value: string | null) {
       </AlertDescription>
     </Alert>
 
+    <TemplatesToolBar />
+
     <div
-      class="grid min-h-0 flex-1 gap-4 overflow-hidden xl:grid-cols-[0.95fr_1.05fr]"
+      class="min-h-0 flex-1 overflow-hidden rounded-lg border [&>[data-slot=table-container]]:h-full"
     >
-      <div class="min-h-0 overflow-auto pr-1">
+      <Table>
+        <TableHeader class="sticky top-0 z-20 bg-background">
+          <TableRow>
+            <TableHead
+              v-for="header in table.getHeaderGroups()[0]?.headers ?? []"
+              :key="header.id"
+              :class="{
+                'w-36': ['channel_code', 'message_class'].includes(
+                  header.column.id,
+                ),
+                'w-40': header.column.id === 'status',
+                'w-48': ['active_version', 'updated_at'].includes(
+                  header.column.id,
+                ),
+              }"
+            >
+              {{ header.column.columnDef.header }}
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <template v-if="isLoading">
+            <TableRow v-for="index in 8" :key="index">
+              <TableCell>
+                <div class="grid gap-2">
+                  <Skeleton class="h-4 w-40" />
+                  <Skeleton class="h-3 w-28" />
+                </div>
+              </TableCell>
+              <TableCell>
+                <div class="grid gap-2">
+                  <Skeleton class="h-4 w-32" />
+                  <Skeleton class="h-3 w-24" />
+                </div>
+              </TableCell>
+              <TableCell>
+                <Skeleton class="h-5 w-16" />
+              </TableCell>
+              <TableCell>
+                <Skeleton class="h-5 w-28" />
+              </TableCell>
+              <TableCell>
+                <Skeleton class="h-5 w-20" />
+              </TableCell>
+              <TableCell>
+                <Skeleton class="h-4 w-32" />
+              </TableCell>
+              <TableCell>
+                <Skeleton class="h-4 w-32" />
+              </TableCell>
+            </TableRow>
+          </template>
+
+          <TableEmpty
+            v-else-if="visibleRows.length === 0"
+            :colspan="columnCount"
+            class="text-muted-foreground"
+          >
+            No templates found.
+          </TableEmpty>
+
+          <TableRow
+            v-for="row in visibleRows"
+            v-else
+            :key="row.id"
+            class="animate-in fade-in-0 slide-in-from-top-1 duration-300"
+          >
+            <TableCell v-for="cell in row.getVisibleCells()" :key="cell.id">
+              <div v-if="cell.column.id === 'template'" class="grid gap-1">
+                <span class="font-medium">
+                  {{ row.original.name }}
+                </span>
+                <span class="font-mono text-xs text-muted-foreground">
+                  {{ row.original.template_code }}
+                </span>
+                <span
+                  v-if="row.original.description"
+                  class="line-clamp-2 max-w-xl text-xs text-muted-foreground"
+                >
+                  {{ row.original.description }}
+                </span>
+              </div>
+
+              <div v-else-if="cell.column.id === 'provider'" class="grid gap-1">
+                <span class="text-sm font-medium">
+                  {{ connectorName(row.original.provider_connector_id) }}
+                </span>
+                <span class="text-xs text-muted-foreground">
+                  {{ providerCode(row.original.provider_connector_id) }} ·
+                  {{ messageTypeName(row.original.provider_message_type_id) }}
+                </span>
+              </div>
+
+              <Badge
+                v-else-if="cell.column.id === 'channel_code'"
+                variant="secondary"
+              >
+                {{ row.original.channel_code }}
+              </Badge>
+
+              <Badge
+                v-else-if="cell.column.id === 'message_class'"
+                variant="outline"
+              >
+                {{ row.original.message_class }}
+              </Badge>
+
+              <StatusBadge
+                v-else-if="cell.column.id === 'status'"
+                :status="row.original.status"
+              />
+
+              <span
+                v-else-if="cell.column.id === 'active_version'"
+                class="whitespace-nowrap text-sm text-muted-foreground"
+              >
+                {{ formatDate(row.original.active_version) }}
+              </span>
+
+              <span
+                v-else
+                class="whitespace-nowrap text-sm text-muted-foreground"
+              >
+                {{ formatDate(row.original.updated_at) }}
+              </span>
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    </div>
+
+    <Sheet v-model:open="isCreateSheetOpen">
+      <SheetContent
+        class="w-[min(34rem,100vw)] gap-2 overflow-y-auto p-4 sm:max-w-xl"
+      >
+        <SheetHeader class="gap-1 p-0 pr-8">
+          <SheetTitle>Create template</SheetTitle>
+          <SheetDescription>
+            Select an active connection and fill the provider payload.
+          </SheetDescription>
+        </SheetHeader>
+
         <form
-          class="grid gap-4 rounded-lg border p-4"
+          class="grid gap-2"
           @submit.prevent="createTemplateWithActiveVersion"
         >
-          <div class="grid gap-1">
-            <h3 class="text-sm font-semibold">New template</h3>
-            <p class="text-sm text-muted-foreground">
-              Template fields are generated from the selected provider message
-              type.
-            </p>
-          </div>
-
           <div class="grid gap-2">
-            <label class="text-sm font-medium" for="connect">Connect</label>
+            <label class="text-sm font-medium" for="template-connection">
+              Connection
+            </label>
             <select
-              id="connect"
+              id="template-connection"
               v-model="selectedConnectionId"
+              required
               class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
             >
               <option
-                v-for="connection in connections"
+                v-for="connection in activeConnections"
                 :key="connection.provider_connection_id"
                 :value="connection.provider_connection_id"
               >
-                {{ connection.connection_name }} · {{ connection.channel_code }}
+                {{ connectionLabel(connection) }} ·
+                {{ connection.channel_code }}
               </option>
             </select>
-            <p v-if="selectedConnector" class="text-xs text-muted-foreground">
-              {{ selectedConnector.provider_name }}
-            </p>
+            <span
+              v-if="!activeConnections.length"
+              class="text-xs text-muted-foreground"
+            >
+              No active provider connections available.
+            </span>
           </div>
 
           <div class="grid gap-2">
-            <label class="text-sm font-medium" for="message-type">
+            <label class="text-sm font-medium" for="template-message-type">
               Message type
             </label>
             <select
-              id="message-type"
+              id="template-message-type"
               v-model="selectedMessageTypeId"
+              required
               class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
             >
               <option
@@ -464,9 +603,15 @@ function formatDate(value: string | null) {
                 {{ messageType.name }} · {{ messageType.message_type_code }}
               </option>
             </select>
+            <span
+              v-if="selectedConnector"
+              class="text-xs text-muted-foreground"
+            >
+              {{ selectedConnector.provider_name }}
+            </span>
           </div>
 
-          <div class="grid gap-3 md:grid-cols-2">
+          <div class="grid gap-2 md:grid-cols-2">
             <div class="grid gap-2">
               <label class="text-sm font-medium" for="template-code">
                 Code
@@ -482,11 +627,11 @@ function formatDate(value: string | null) {
           </div>
 
           <div class="grid gap-2">
-            <label class="text-sm font-medium" for="message-class">
+            <label class="text-sm font-medium" for="template-message-class">
               Message class
             </label>
             <select
-              id="message-class"
+              id="template-message-class"
               v-model="messageClass"
               class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
             >
@@ -503,12 +648,12 @@ function formatDate(value: string | null) {
             <Textarea
               id="template-description"
               v-model="templateDescription"
-              class="min-h-20"
+              class="min-h-16"
             />
           </div>
 
           <div class="grid gap-2">
-            <h4 class="text-sm font-medium">Payload</h4>
+            <h3 class="text-sm font-medium">Payload</h3>
             <JsonSchemaForm
               v-model="templatePayload"
               :schema="selectedMessageType?.field_schema"
@@ -523,184 +668,27 @@ function formatDate(value: string | null) {
             <Textarea
               id="variables-schema"
               v-model="variablesSchemaText"
-              class="min-h-32 font-mono text-xs"
-            />
-          </div>
-
-          <Button
-            type="submit"
-            :disabled="
-              !selectedConnection || !selectedMessageType || isCreatingTemplate
-            "
-          >
-            <Save class="size-4" />
-            {{ isCreatingTemplate ? "Saving" : "Create template" }}
-          </Button>
-        </form>
-      </div>
-
-      <div class="flex min-h-0 flex-col gap-4 overflow-auto pl-1">
-        <div class="grid gap-3">
-          <div class="flex items-center justify-between">
-            <h3 class="text-sm font-semibold">Templates</h3>
-            <Badge variant="outline">{{ templates.length }} templates</Badge>
-          </div>
-          <div class="grid gap-3 md:grid-cols-2">
-            <Card
-              v-for="template in templates"
-              :key="template.template_id"
-              class="cursor-pointer transition-colors hover:bg-accent/40"
-              :class="{
-                'border-primary bg-accent/50':
-                  selectedTemplateId === template.template_id,
-              }"
-              @click="selectedTemplateId = template.template_id"
-            >
-              <CardHeader class="gap-2">
-                <div class="flex items-start justify-between gap-3">
-                  <div class="grid gap-1">
-                    <CardTitle class="text-base">
-                      {{ template.name }}
-                    </CardTitle>
-                    <CardDescription>
-                      {{ template.template_code }} · {{ template.channel_code }}
-                    </CardDescription>
-                  </div>
-                  <StatusBadge :status="template.status" />
-                </div>
-              </CardHeader>
-              <CardContent class="grid gap-2 text-sm text-muted-foreground">
-                <div class="flex flex-wrap gap-1">
-                  <Badge variant="secondary">
-                    {{ connectorName(template.provider_connector_id) }}
-                  </Badge>
-                  <Badge variant="outline">
-                    {{ messageTypeName(template.provider_message_type_id) }}
-                  </Badge>
-                  <Badge variant="outline">{{ template.message_class }}</Badge>
-                </div>
-                <span
-                  >Active version
-                  {{ formatDate(template.active_version) }}</span
-                >
-              </CardContent>
-            </Card>
-          </div>
-          <p
-            v-if="!templatesQuery.isLoading.value && templates.length === 0"
-            class="text-sm text-muted-foreground"
-          >
-            No message templates created yet.
-          </p>
-        </div>
-
-        <form
-          class="grid gap-4 rounded-lg border p-4"
-          @submit.prevent="sendTestMessage"
-        >
-          <div class="grid gap-1">
-            <h3 class="text-sm font-semibold">Quick test send</h3>
-            <p class="text-sm text-muted-foreground">
-              Queue one message with recipient data and template variables.
-            </p>
-          </div>
-
-          <div class="grid gap-2">
-            <label class="text-sm font-medium" for="test-template">
-              Template
-            </label>
-            <select
-              id="test-template"
-              v-model="selectedTemplateId"
-              class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-            >
-              <option
-                v-for="template in templates"
-                :key="template.template_id"
-                :value="template.template_id"
-              >
-                {{ template.name }} · {{ template.channel_code }}
-              </option>
-            </select>
-          </div>
-
-          <div class="grid gap-3 md:grid-cols-2">
-            <div class="grid gap-2">
-              <label class="text-sm font-medium" for="recipient-type">
-                Recipient type
-              </label>
-              <Input
-                id="recipient-type"
-                v-model="recipientIdentifierType"
-                required
-              />
-            </div>
-            <div class="grid gap-2">
-              <label class="text-sm font-medium" for="recipient-address">
-                Recipient address
-              </label>
-              <Input
-                id="recipient-address"
-                v-model="recipientAddress"
-                required
-              />
-            </div>
-          </div>
-
-          <div class="grid gap-2">
-            <label class="text-sm font-medium" for="variables">Variables</label>
-            <Textarea
-              id="variables"
-              v-model="variablesText"
-              class="min-h-32 font-mono text-xs"
-            />
-          </div>
-
-          <div class="grid gap-2">
-            <label class="text-sm font-medium" for="recipient-snapshot">
-              Recipient snapshot
-            </label>
-            <Textarea
-              id="recipient-snapshot"
-              v-model="recipientSnapshotText"
               class="min-h-28 font-mono text-xs"
             />
           </div>
 
-          <div class="grid gap-2">
-            <label class="text-sm font-medium" for="priority">Priority</label>
-            <Input id="priority" v-model="priority" type="number" />
-          </div>
-
-          <Button
-            type="submit"
-            :disabled="!selectedTemplate || sendMutation.isPending.value"
-          >
-            <SendHorizontal class="size-4" />
-            {{ sendMutation.isPending.value ? "Sending" : "Send test" }}
-          </Button>
+          <SheetFooter class="mt-2 gap-2 p-0 sm:flex-row sm:justify-end">
+            <Button
+              type="submit"
+              :disabled="
+                !selectedConnection ||
+                !selectedMessageType ||
+                createTemplateMutation.isPending.value
+              "
+            >
+              <Save class="size-4" />
+              {{
+                createTemplateMutation.isPending.value ? "Creating" : "Create"
+              }}
+            </Button>
+          </SheetFooter>
         </form>
-
-        <div
-          v-if="templatesForConnection.length"
-          class="grid gap-2 rounded-lg border p-4"
-        >
-          <h3 class="text-sm font-semibold">Templates for selected connect</h3>
-          <div
-            v-for="template in templatesForConnection"
-            :key="template.template_id"
-            class="flex items-center justify-between gap-3 rounded-md border px-3 py-2"
-          >
-            <div class="grid gap-1">
-              <span class="text-sm font-medium">{{ template.name }}</span>
-              <span class="text-xs text-muted-foreground">
-                {{ template.template_code }} · {{ template.message_class }}
-              </span>
-            </div>
-            <StatusBadge :status="template.status" />
-          </div>
-        </div>
-      </div>
-    </div>
+      </SheetContent>
+    </Sheet>
   </section>
 </template>
