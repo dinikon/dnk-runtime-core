@@ -19,6 +19,14 @@ export interface CommunicationJsonSchema {
 
 export type JsonObject = Record<string, JsonValue>;
 
+export type ProviderConnectorStatus = "ACTIVE" | "DISABLED" | "ARCHIVED";
+
+export type ProviderConnectorMutableStatus = "ACTIVE" | "DISABLED";
+
+export type ProviderConnectionStatus = "ACTIVE" | "DISABLED" | "ARCHIVED";
+
+export type ProviderConnectionMutableStatus = "ACTIVE" | "DISABLED";
+
 export interface ProviderConnector {
   provider_connector_id: string;
   provider_code: string;
@@ -28,7 +36,7 @@ export interface ProviderConnector {
   channels: string[];
   config_schema: CommunicationJsonSchema;
   secrets_schema: CommunicationJsonSchema;
-  status: string;
+  status: ProviderConnectorStatus;
   created_at: string;
   updated_at: string;
 }
@@ -49,6 +57,11 @@ export interface ProviderConnectorCatalog {
   message_types: ProviderMessageType[];
 }
 
+export interface UpdateProviderConnectorStatusPayload {
+  provider_connector_id: string;
+  status: ProviderConnectorMutableStatus;
+}
+
 export interface ProviderConnection {
   provider_connection_id: string;
   tenant_id: string;
@@ -59,7 +72,7 @@ export interface ProviderConnection {
   config: JsonObject;
   secret_ref: string | null;
   has_secrets: boolean;
-  status: string;
+  status: ProviderConnectionStatus;
   created_at: string;
   updated_at: string;
 }
@@ -76,6 +89,11 @@ export interface CreateProviderConnectionPayload {
   config: JsonObject;
   secrets: JsonObject;
   secret_ref: string | null;
+}
+
+export interface UpdateProviderConnectionStatusPayload {
+  provider_connection_id: string;
+  status: ProviderConnectionMutableStatus;
 }
 
 export interface MessageTemplate {

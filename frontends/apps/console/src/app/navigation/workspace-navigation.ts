@@ -45,6 +45,11 @@ export const workspaceNavigation: WorkspaceNavigation = {
           icon: PlugZap,
         },
         {
+          title: "Connections",
+          url: "/cdp/connections",
+          icon: Link2,
+        },
+        {
           title: "Templates",
           url: "/cdp/templates",
           icon: SquareStack,
@@ -53,16 +58,6 @@ export const workspaceNavigation: WorkspaceNavigation = {
           title: "Deliveries",
           url: "/cdp/deliveries",
           icon: Truck,
-        },
-      ],
-    },
-    {
-      title: "Settings",
-      items: [
-        {
-          title: "Connection's",
-          url: "/settings/connections",
-          icon: Link2,
         },
       ],
     },

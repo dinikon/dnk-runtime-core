@@ -14,6 +14,8 @@ import type {
   SendCommunicationPayload,
   SendCommunicationResponse,
   TemplateVersion,
+  UpdateProviderConnectionStatusPayload,
+  UpdateProviderConnectorStatusPayload,
 } from "./types";
 
 export const communicationApi = {
@@ -32,6 +34,21 @@ export const communicationApi = {
         "/communication/providers/connectors",
       )
     ).data,
+  updateProviderConnectorStatus: async ({
+    provider_connector_id,
+    status,
+  }: UpdateProviderConnectorStatusPayload) =>
+    (
+      await httpClient.patch<ProviderConnector>(
+        `/communication/providers/connectors/${provider_connector_id}/status`,
+        { status },
+      )
+    ).data,
+  deleteProviderConnector: async (providerConnectorId: string) => {
+    await httpClient.delete(
+      `/communication/providers/connectors/${providerConnectorId}`,
+    );
+  },
   createProviderConnection: async (payload: CreateProviderConnectionPayload) =>
     (
       await httpClient.post<ProviderConnection>(
@@ -45,6 +62,21 @@ export const communicationApi = {
         "/communication/providers/connections",
       )
     ).data,
+  updateProviderConnectionStatus: async ({
+    provider_connection_id,
+    status,
+  }: UpdateProviderConnectionStatusPayload) =>
+    (
+      await httpClient.patch<ProviderConnection>(
+        `/communication/providers/connections/${provider_connection_id}/status`,
+        { status },
+      )
+    ).data,
+  deleteProviderConnection: async (providerConnectionId: string) => {
+    await httpClient.delete(
+      `/communication/providers/connections/${providerConnectionId}`,
+    );
+  },
   createMessageTemplate: async (payload: CreateMessageTemplatePayload) =>
     (
       await httpClient.post<MessageTemplate>(
