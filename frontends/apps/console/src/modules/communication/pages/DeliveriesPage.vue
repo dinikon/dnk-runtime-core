@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 import {
   getCoreRowModel,
   getFilteredRowModel,
@@ -22,6 +22,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetFooter } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Table,
   TableBody,
@@ -60,6 +61,7 @@ import { useMessageTemplatesQuery } from "@/modules/communication/queries/use-me
 import { useOutboundMessagesQuery } from "@/modules/communication/queries/use-outbound-messages-query";
 
 const PAGE_SIZE = 50;
+const SEND_TEST_COOLDOWN_SECONDS = 5;
 
 const offset = ref(0);
 const detailOpen = ref(false);
@@ -70,6 +72,9 @@ const recipientAddress = ref("");
 const recipientSnapshotText = ref(formatJsonObject({}));
 const variablesText = ref(formatJsonObject({}));
 const priority = ref(100);
+const sendTestError = ref<string | null>(null);
+const sendCooldownRemaining = ref(0);
+let sendCooldownTimer: ReturnType<typeof window.setInterval> | null = null;
 
 const outboundQueryParams = computed(() => ({
   limit: PAGE_SIZE,
@@ -98,6 +103,24 @@ const isSendTestSheetOpen = useRouteQueryFlag("send", "test");
 const currentPage = computed(() => Math.floor(offset.value / PAGE_SIZE) + 1);
 const canGoPrevious = computed(() => offset.value > 0);
 const canGoNext = computed(() => messages.value.length === PAGE_SIZE);
+const isSendCooldownActive = computed(() => sendCooldownRemaining.value > 0);
+const isSendButtonDisabled = computed(
+  () =>
+    !selectedTemplate.value ||
+    sendMutation.isPending.value ||
+    isSendCooldownActive.value,
+);
+const sendButtonLabel = computed(() => {
+  if (sendMutation.isPending.value) {
+    return "Sending";
+  }
+
+  if (isSendCooldownActive.value) {
+    return `Wait ${sendCooldownRemaining.value}s`;
+  }
+
+  return "Send";
+});
 const columns: ColumnDef<OutboundMessage>[] = [
   {
     id: "status",
@@ -197,15 +220,34 @@ watch(selectedTemplate, (template) => {
     template.channel_code === "EMAIL" ? "email" : "phone";
 });
 
+watch(isSendTestSheetOpen, (open) => {
+  if (open) {
+    sendTestError.value = null;
+  }
+});
+
+onUnmounted(() => {
+  clearSendCooldownTimer();
+});
+
 async function refreshDeliveries() {
   await Promise.all([messagesQuery.refetch(), templatesQuery.refetch()]);
 }
 
+async function refreshDeliveriesFirstPage() {
+  offset.value = 0;
+  await nextTick();
+  await messagesQuery.refetch();
+}
+
 async function sendTestMessage() {
   const template = selectedTemplate.value;
+  sendTestError.value = null;
 
   if (!template) {
-    toast.error("Select an active template.");
+    const message = "Select an active template.";
+    sendTestError.value = message;
+    toast.error(message);
     return;
   }
 
@@ -229,12 +271,35 @@ async function sendTestMessage() {
     });
 
     toast.success(`Test message queued: ${result.internal_status}.`);
-    isSendTestSheetOpen.value = false;
-    offset.value = 0;
-    await messagesQuery.refetch();
+    startSendCooldown();
+    await refreshDeliveriesFirstPage();
   } catch (error) {
-    toast.error(apiErrorMessage(error));
+    const message = apiErrorMessage(error);
+    sendTestError.value = message;
+    toast.error(message);
   }
+}
+
+function clearSendCooldownTimer() {
+  if (sendCooldownTimer === null) {
+    return;
+  }
+
+  window.clearInterval(sendCooldownTimer);
+  sendCooldownTimer = null;
+}
+
+function startSendCooldown() {
+  clearSendCooldownTimer();
+  sendCooldownRemaining.value = SEND_TEST_COOLDOWN_SECONDS;
+
+  sendCooldownTimer = window.setInterval(() => {
+    sendCooldownRemaining.value = Math.max(0, sendCooldownRemaining.value - 1);
+
+    if (sendCooldownRemaining.value === 0) {
+      clearSendCooldownTimer();
+    }
+  }, 1000);
 }
 
 function goPrevious() {
@@ -560,13 +625,17 @@ function templateLabel(template: MessageTemplate) {
             />
           </div>
 
+          <Alert v-if="sendTestError" variant="destructive">
+            <AlertDescription>{{ sendTestError }}</AlertDescription>
+          </Alert>
+
           <SheetFooter class="mt-2 gap-2 p-0 sm:flex-row sm:justify-end">
-            <Button
-              type="submit"
-              :disabled="!selectedTemplate || sendMutation.isPending.value"
-            >
-              <SendHorizontal class="size-4" />
-              {{ sendMutation.isPending.value ? "Sending" : "Send" }}
+            <Button type="submit" :disabled="isSendButtonDisabled">
+              <Spinner
+                v-if="sendMutation.isPending.value || isSendCooldownActive"
+              />
+              <SendHorizontal v-else class="size-4" />
+              {{ sendButtonLabel }}
             </Button>
           </SheetFooter>
         </form>
