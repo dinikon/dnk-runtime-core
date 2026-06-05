@@ -6,8 +6,7 @@ import {
   useVueTable,
   type ColumnDef,
 } from "@tanstack/vue-table";
-import { Eye, RefreshCcw, SendHorizontal } from "lucide-vue-next";
-import { useRoute, useRouter } from "vue-router";
+import { Eye, SendHorizontal } from "lucide-vue-next";
 import { toast } from "vue-sonner";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -21,14 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Sheet, SheetFooter } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -41,27 +33,33 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import type {
-  JsonObject,
   MessageTemplate,
   OutboundMessage,
 } from "@/modules/communication/api";
-import CommunicationPageHeader from "@/modules/communication/components/CommunicationPageHeader.vue";
-import DeliveriesToolBar from "@/modules/communication/components/DeliveriesToolBar.vue";
+import CommunicationPageTitleBar from "@/modules/communication/components/CommunicationPageTitleBar.vue";
+import CommunicationSelect from "@/modules/communication/components/CommunicationSelect.vue";
+import CommunicationSheetContent from "@/modules/communication/components/CommunicationSheetContent.vue";
+import CommunicationToolBar from "@/modules/communication/components/CommunicationToolBar.vue";
 import StatusBadge from "@/modules/communication/components/StatusBadge.vue";
 import {
   apiErrorMessage,
   createClientUuid,
+  formatCommunicationDate,
   formatJsonObject,
+  isArchivedStatus,
   parseJsonObject,
+  prettyJson,
+  shortCommunicationId,
 } from "@/modules/communication/lib";
+import {
+  useRouteQueryFlag,
+  useRouteSearchQuery,
+} from "@/modules/communication/composables/use-route-query";
 import { useSendCommunicationMutation } from "@/modules/communication/mutations/use-send-communication-mutation";
 import { useMessageTemplatesQuery } from "@/modules/communication/queries/use-message-templates-query";
 import { useOutboundMessagesQuery } from "@/modules/communication/queries/use-outbound-messages-query";
 
 const PAGE_SIZE = 50;
-
-const route = useRoute();
-const router = useRouter();
 
 const offset = ref(0);
 const detailOpen = ref(false);
@@ -87,7 +85,7 @@ const activeTemplates = computed(() =>
     (template) =>
       template.status === "ACTIVE" &&
       template.active_version_id &&
-      !template.status.startsWith("ARCHIV"),
+      !isArchivedStatus(template.status),
   ),
 );
 const selectedTemplate = computed(() =>
@@ -95,16 +93,8 @@ const selectedTemplate = computed(() =>
     (template) => template.template_id === selectedTemplateId.value,
   ),
 );
-const searchQuery = computed(() => {
-  const value = route.query.q;
-  return typeof value === "string" ? value : "";
-});
-const isSendTestSheetOpen = computed({
-  get: () => route.query.send === "test",
-  set: (value: boolean) => {
-    patchQuery({ send: value ? "test" : undefined });
-  },
-});
+const searchQuery = useRouteSearchQuery();
+const isSendTestSheetOpen = useRouteQueryFlag("send", "test");
 const currentPage = computed(() => Math.floor(offset.value / PAGE_SIZE) + 1);
 const canGoPrevious = computed(() => offset.value > 0);
 const canGoNext = computed(() => messages.value.length === PAGE_SIZE);
@@ -207,20 +197,6 @@ watch(selectedTemplate, (template) => {
     template.channel_code === "EMAIL" ? "email" : "phone";
 });
 
-function patchQuery(patch: Record<string, string | undefined>) {
-  const nextQuery = { ...route.query };
-
-  for (const [key, value] of Object.entries(patch)) {
-    if (!value) {
-      delete nextQuery[key];
-    } else {
-      nextQuery[key] = value;
-    }
-  }
-
-  router.replace({ query: nextQuery });
-}
-
 async function refreshDeliveries() {
   await Promise.all([messagesQuery.refetch(), templatesQuery.refetch()]);
 }
@@ -274,23 +250,9 @@ function openDetails(message: OutboundMessage) {
   detailOpen.value = true;
 }
 
-function formatDate(value: string | null) {
-  if (!value) {
-    return "-";
-  }
-
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
-
-function shortId(value: string) {
-  return value.slice(0, 8);
-}
-
-function prettyJson(value: JsonObject) {
-  return JSON.stringify(value, null, 2);
+function messageDate(message: OutboundMessage, columnId: string) {
+  const value = message[columnId as keyof OutboundMessage];
+  return typeof value === "string" ? formatCommunicationDate(value) : "-";
 }
 
 function templateLabel(template: MessageTemplate) {
@@ -300,31 +262,14 @@ function templateLabel(template: MessageTemplate) {
 
 <template>
   <section class="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
-    <div
-      class="flex shrink-0 flex-col gap-3 md:flex-row md:items-start md:justify-between"
-    >
-      <CommunicationPageHeader
-        title="Deliveries"
-        description="Search, inspect, and page through outbound communication messages and provider statuses."
-      />
-      <Button
-        type="button"
-        variant="outline"
-        :disabled="
-          messagesQuery.isFetching.value || templatesQuery.isFetching.value
-        "
-        @click="refreshDeliveries"
-      >
-        <RefreshCcw
-          class="size-4"
-          :class="{
-            'animate-spin':
-              messagesQuery.isFetching.value || templatesQuery.isFetching.value,
-          }"
-        />
-        Refresh
-      </Button>
-    </div>
+    <CommunicationPageTitleBar
+      title="Deliveries"
+      description="Search, inspect, and page through outbound communication messages and provider statuses."
+      :refreshing="
+        messagesQuery.isFetching.value || templatesQuery.isFetching.value
+      "
+      @refresh="refreshDeliveries"
+    />
 
     <Alert
       v-if="messagesQuery.error.value || templatesQuery.error.value"
@@ -339,7 +284,16 @@ function templateLabel(template: MessageTemplate) {
       </AlertDescription>
     </Alert>
 
-    <DeliveriesToolBar />
+    <CommunicationToolBar
+      action-label="Send Test"
+      action-query-key="send"
+      action-query-value="test"
+      search-placeholder="Search deliveries"
+    >
+      <template #action-icon>
+        <SendHorizontal class="size-4" />
+      </template>
+    </CommunicationToolBar>
 
     <div
       class="min-h-0 flex-1 overflow-hidden rounded-lg border [&>[data-slot=table-container]]:h-full"
@@ -469,13 +423,7 @@ function templateLabel(template: MessageTemplate) {
                 v-else-if="cell.column.id !== 'details'"
                 class="whitespace-nowrap text-sm text-muted-foreground"
               >
-                {{
-                  formatDate(
-                    row.original[cell.column.id as keyof OutboundMessage] as
-                      | string
-                      | null,
-                  )
-                }}
+                {{ messageDate(row.original, cell.column.id) }}
               </span>
 
               <div v-else class="flex justify-end">
@@ -487,7 +435,8 @@ function templateLabel(template: MessageTemplate) {
                 >
                   <Eye class="size-4" />
                   <span class="sr-only">
-                    Open {{ shortId(row.original.outbound_message_id) }}
+                    Open
+                    {{ shortCommunicationId(row.original.outbound_message_id) }}
                   </span>
                 </Button>
               </div>
@@ -527,26 +476,19 @@ function templateLabel(template: MessageTemplate) {
     </div>
 
     <Sheet v-model:open="isSendTestSheetOpen">
-      <SheetContent
-        class="w-[min(34rem,100vw)] gap-2 overflow-y-auto p-4 sm:max-w-xl"
+      <CommunicationSheetContent
+        title="Send test"
+        description="Queue one message with recipient data and template variables."
       >
-        <SheetHeader class="gap-1 p-0 pr-8">
-          <SheetTitle>Send test</SheetTitle>
-          <SheetDescription>
-            Queue one message with recipient data and template variables.
-          </SheetDescription>
-        </SheetHeader>
-
         <form class="grid gap-2" @submit.prevent="sendTestMessage">
           <div class="grid gap-2">
             <label class="text-sm font-medium" for="test-template">
               Template
             </label>
-            <select
+            <CommunicationSelect
               id="test-template"
               v-model="selectedTemplateId"
               required
-              class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
             >
               <option
                 v-for="template in activeTemplates"
@@ -555,7 +497,7 @@ function templateLabel(template: MessageTemplate) {
               >
                 {{ templateLabel(template) }}
               </option>
-            </select>
+            </CommunicationSelect>
             <span
               v-if="!activeTemplates.length"
               class="text-xs text-muted-foreground"
@@ -628,7 +570,7 @@ function templateLabel(template: MessageTemplate) {
             </Button>
           </SheetFooter>
         </form>
-      </SheetContent>
+      </CommunicationSheetContent>
     </Sheet>
 
     <Dialog v-model:open="detailOpen">

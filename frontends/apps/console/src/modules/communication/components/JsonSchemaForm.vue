@@ -4,6 +4,7 @@ import { computed, watch } from "vue";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import CommunicationSelect from "@/modules/communication/components/CommunicationSelect.vue";
 import type {
   CommunicationJsonSchema,
   JsonObject,
@@ -120,18 +121,26 @@ function inputType(field: SchemaField) {
   return "text";
 }
 
-function fieldValue(field: SchemaField) {
+function fieldValue(field: SchemaField): string | number | undefined {
   const value = props.modelValue[field.key];
 
   if (value === undefined || value === null) {
     return "";
   }
 
+  if (typeof value === "string" || typeof value === "number") {
+    return value;
+  }
+
+  if (typeof value === "boolean") {
+    return String(value);
+  }
+
   if (typeof value === "object") {
     return JSON.stringify(value);
   }
 
-  return value;
+  return undefined;
 }
 
 function booleanValue(field: SchemaField) {
@@ -155,18 +164,11 @@ function updateField(field: SchemaField, rawValue: string | number | boolean) {
   emit("update:modelValue", nextValue);
 }
 
-function updateEnumField(field: SchemaField, event: Event) {
-  const target = event.target;
+function updateEnumField(field: SchemaField, rawValue: unknown) {
+  const value = String(rawValue ?? "");
+  const option = enumOptions(field).find((item) => String(item) === value);
 
-  if (!(target instanceof HTMLSelectElement)) {
-    return;
-  }
-
-  const option = enumOptions(field).find(
-    (item) => String(item) === target.value,
-  );
-
-  updateField(field, option ?? target.value);
+  updateField(field, option ?? value);
 }
 
 function coerceFieldValue(
@@ -209,12 +211,11 @@ function coerceFieldValue(
       </div>
 
       <template v-if="field.schema.enum?.length">
-        <select
+        <CommunicationSelect
           :id="field.key"
-          :value="enumValue(field)"
+          :model-value="enumValue(field)"
           :disabled="disabled"
-          class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-          @change="updateEnumField(field, $event)"
+          @update:model-value="(value) => updateEnumField(field, value)"
         >
           <option
             v-for="option in enumOptions(field)"
@@ -223,7 +224,7 @@ function coerceFieldValue(
           >
             {{ option }}
           </option>
-        </select>
+        </CommunicationSelect>
       </template>
 
       <Switch

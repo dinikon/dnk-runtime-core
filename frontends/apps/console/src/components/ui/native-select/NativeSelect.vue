@@ -9,13 +9,15 @@ defineOptions({
   inheritAttrs: false,
 });
 
+type NativeSelectModelValue = AcceptableValue | AcceptableValue[] | undefined;
+
 const props = defineProps<{
-  modelValue?: AcceptableValue | AcceptableValue[];
+  modelValue?: NativeSelectModelValue;
   class?: HTMLAttributes["class"];
 }>();
 
 const emit = defineEmits<{
-  "update:modelValue": AcceptableValue;
+  "update:modelValue": [value: NativeSelectModelValue];
 }>();
 
 const modelValue = useVModel(props, "modelValue", emit, {

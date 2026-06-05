@@ -9,34 +9,16 @@ import {
 import {
   CheckCircle2,
   PauseCircle,
-  RefreshCcw,
+  Plus,
   Trash2,
   Upload,
 } from "lucide-vue-next";
-import { useRoute, useRouter } from "vue-router";
 import { toast } from "vue-sonner";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Sheet, SheetFooter } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -52,17 +34,24 @@ import type {
   ProviderConnector,
   ProviderConnectorMutableStatus,
 } from "@/modules/communication/api";
-import CommunicationPageHeader from "@/modules/communication/components/CommunicationPageHeader.vue";
-import ProvidersToolBar from "@/modules/communication/components/ProvidersToolBar.vue";
+import CommunicationDeleteDialog from "@/modules/communication/components/CommunicationDeleteDialog.vue";
+import CommunicationPageTitleBar from "@/modules/communication/components/CommunicationPageTitleBar.vue";
+import CommunicationSheetContent from "@/modules/communication/components/CommunicationSheetContent.vue";
+import CommunicationToolBar from "@/modules/communication/components/CommunicationToolBar.vue";
 import StatusBadge from "@/modules/communication/components/StatusBadge.vue";
-import { apiErrorMessage } from "@/modules/communication/lib";
+import {
+  apiErrorMessage,
+  formatCommunicationDate,
+  isArchivedStatus,
+} from "@/modules/communication/lib";
+import {
+  useRouteQueryFlag,
+  useRouteSearchQuery,
+} from "@/modules/communication/composables/use-route-query";
 import { useDeleteProviderConnectorMutation } from "@/modules/communication/mutations/use-delete-provider-connector";
 import { useImportProviderConnectorYamlMutation } from "@/modules/communication/mutations/use-import-provider-connector-yaml";
 import { useUpdateProviderConnectorStatusMutation } from "@/modules/communication/mutations/use-update-provider-connector-status";
 import { useProviderCatalogQuery } from "@/modules/communication/queries/use-provider-catalog-query";
-
-const route = useRoute();
-const router = useRouter();
 
 const yamlContent = ref("");
 const pendingConnectorId = ref<string | null>(null);
@@ -75,22 +64,14 @@ const deleteMutation = useDeleteProviderConnectorMutation();
 
 const connectors = computed(() =>
   (catalogQuery.data.value?.connectors ?? []).filter(
-    (connector) => !connector.status.startsWith("ARCHIV"),
+    (connector) => !isArchivedStatus(connector.status),
   ),
 );
 const messageTypes = computed(
   () => catalogQuery.data.value?.message_types ?? [],
 );
-const searchQuery = computed(() => {
-  const value = route.query.q;
-  return typeof value === "string" ? value : "";
-});
-const isImportSheetOpen = computed({
-  get: () => route.query.import === "provider",
-  set: (value: boolean) => {
-    patchQuery({ import: value ? "provider" : undefined });
-  },
-});
+const searchQuery = useRouteSearchQuery();
+const isImportSheetOpen = useRouteQueryFlag("import", "provider");
 const messageTypeCounts = computed(() =>
   messageTypes.value.reduce<Record<string, number>>((counts, messageType) => {
     const current = counts[messageType.provider_connector_id] ?? 0;
@@ -154,25 +135,11 @@ const table = useVueTable({
 const visibleRows = computed(() => table.getRowModel().rows);
 const columnCount = computed(() => table.getVisibleLeafColumns().length);
 
-function patchQuery(patch: Record<string, string | undefined>) {
-  const nextQuery = { ...route.query };
-
-  for (const [key, value] of Object.entries(patch)) {
-    if (!value) {
-      delete nextQuery[key];
-    } else {
-      nextQuery[key] = value;
-    }
-  }
-
-  router.replace({ query: nextQuery });
-}
-
 async function importYaml() {
   const content = yamlContent.value.trim();
 
   if (!content) {
-    toast.error("Select a YAML file or paste YAML content.");
+    toast.error("Paste YAML content.");
     return;
   }
 
@@ -231,13 +198,6 @@ function resetImportForm() {
   yamlContent.value = "";
 }
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
-
 function messageTypeCount(connector: ProviderConnector) {
   return messageTypeCounts.value[connector.provider_connector_id] ?? 0;
 }
@@ -252,26 +212,12 @@ function isConnectorPending(connector: ProviderConnector) {
 
 <template>
   <section class="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
-    <div
-      class="flex shrink-0 flex-col gap-3 md:flex-row md:items-start md:justify-between"
-    >
-      <CommunicationPageHeader
-        title="Providers"
-        description="Import provider connector templates, inspect supported channels and manage provider lifecycle status."
-      />
-      <Button
-        type="button"
-        variant="outline"
-        :disabled="catalogQuery.isFetching.value"
-        @click="catalogQuery.refetch()"
-      >
-        <RefreshCcw
-          class="size-4"
-          :class="{ 'animate-spin': catalogQuery.isFetching.value }"
-        />
-        Refresh
-      </Button>
-    </div>
+    <CommunicationPageTitleBar
+      title="Providers"
+      description="Import provider connector templates, inspect supported channels and manage provider lifecycle status."
+      :refreshing="catalogQuery.isFetching.value"
+      @refresh="catalogQuery.refetch()"
+    />
 
     <Alert v-if="catalogQuery.error.value" variant="destructive">
       <AlertDescription>
@@ -279,7 +225,16 @@ function isConnectorPending(connector: ProviderConnector) {
       </AlertDescription>
     </Alert>
 
-    <ProvidersToolBar />
+    <CommunicationToolBar
+      action-label="Add"
+      action-query-key="import"
+      action-query-value="provider"
+      search-placeholder="Search providers"
+    >
+      <template #action-icon>
+        <Plus class="size-4" />
+      </template>
+    </CommunicationToolBar>
 
     <div
       class="min-h-0 flex-1 overflow-hidden rounded-lg border [&>[data-slot=table-container]]:h-full"
@@ -397,7 +352,7 @@ function isConnectorPending(connector: ProviderConnector) {
                 v-else-if="cell.column.id === 'updated_at'"
                 class="whitespace-nowrap text-sm text-muted-foreground"
               >
-                {{ formatDate(row.original.updated_at) }}
+                {{ formatCommunicationDate(row.original.updated_at) }}
               </span>
 
               <div v-else class="flex justify-end gap-2">
@@ -443,16 +398,11 @@ function isConnectorPending(connector: ProviderConnector) {
     </div>
 
     <Sheet v-model:open="isImportSheetOpen">
-      <SheetContent
-        class="w-[min(32rem,100vw)] gap-2 overflow-y-auto p-4 sm:max-w-lg"
+      <CommunicationSheetContent
+        title="Import provider"
+        description="Paste provider connector YAML spec."
+        max-width-class="w-[min(32rem,100vw)] gap-2 overflow-y-auto p-4 sm:max-w-lg"
       >
-        <SheetHeader class="gap-1 p-0 pr-8">
-          <SheetTitle>Import provider</SheetTitle>
-          <SheetDescription>
-            Paste provider connector YAML spec.
-          </SheetDescription>
-        </SheetHeader>
-
         <form class="grid gap-2" @submit.prevent="importYaml">
           <div class="grid min-h-0 flex-1 gap-2">
             <label class="text-sm font-medium" for="provider-yaml-content">
@@ -476,35 +426,20 @@ function isConnectorPending(connector: ProviderConnector) {
             </Button>
           </SheetFooter>
         </form>
-      </SheetContent>
+      </CommunicationSheetContent>
     </Sheet>
 
-    <AlertDialog
+    <CommunicationDeleteDialog
       :open="connectorPendingDeletion !== null"
+      title="Delete provider"
+      description="The provider must stay disabled. Delete cannot be undone if there is no usage history."
+      :pending="deleteMutation.isPending.value"
       @update:open="
         (open) => {
           if (!open) connectorPendingDeletion = null;
         }
       "
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Delete provider</AlertDialogTitle>
-          <AlertDialogDescription>
-            The provider must stay disabled. Delete cannot be undone if there is
-            no usage history.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            :disabled="deleteMutation.isPending.value"
-            @click="deleteConnector"
-          >
-            Delete
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      @confirm="deleteConnector"
+    />
   </section>
 </template>

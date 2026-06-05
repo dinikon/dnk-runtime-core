@@ -6,22 +6,14 @@ import {
   useVueTable,
   type ColumnDef,
 } from "@tanstack/vue-table";
-import { RefreshCcw, Save } from "lucide-vue-next";
-import { useRoute, useRouter } from "vue-router";
+import { Plus, Save } from "lucide-vue-next";
 import { toast } from "vue-sonner";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Sheet, SheetFooter } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -40,16 +32,24 @@ import type {
   ProviderConnector,
   ProviderMessageType,
 } from "@/modules/communication/api";
-import CommunicationPageHeader from "@/modules/communication/components/CommunicationPageHeader.vue";
+import CommunicationPageTitleBar from "@/modules/communication/components/CommunicationPageTitleBar.vue";
+import CommunicationSelect from "@/modules/communication/components/CommunicationSelect.vue";
+import CommunicationSheetContent from "@/modules/communication/components/CommunicationSheetContent.vue";
+import CommunicationToolBar from "@/modules/communication/components/CommunicationToolBar.vue";
 import JsonSchemaForm from "@/modules/communication/components/JsonSchemaForm.vue";
 import StatusBadge from "@/modules/communication/components/StatusBadge.vue";
-import TemplatesToolBar from "@/modules/communication/components/TemplatesToolBar.vue";
 import {
   apiErrorMessage,
   buildJsonSchemaDefaults,
+  formatCommunicationDate,
   formatJsonObject,
+  isArchivedStatus,
   parseJsonObject,
 } from "@/modules/communication/lib";
+import {
+  useRouteQueryFlag,
+  useRouteSearchQuery,
+} from "@/modules/communication/composables/use-route-query";
 import { useCreateMessageTemplateWithVersionMutation } from "@/modules/communication/mutations/use-create-message-template-with-version";
 import { useProviderCatalogQuery } from "@/modules/communication/queries/use-provider-catalog-query";
 import { useProviderConnectionsQuery } from "@/modules/communication/queries/use-provider-connections-query";
@@ -62,9 +62,6 @@ const MESSAGE_CLASSES = [
   "OTP",
   "INFO",
 ];
-
-const route = useRoute();
-const router = useRouter();
 
 const selectedConnectionId = ref("");
 const selectedMessageTypeId = ref("");
@@ -87,7 +84,7 @@ const createTemplateMutation = useCreateMessageTemplateWithVersionMutation();
 
 const connectors = computed(() =>
   (catalogQuery.data.value?.connectors ?? []).filter(
-    (connector) => !connector.status.startsWith("ARCHIV"),
+    (connector) => !isArchivedStatus(connector.status),
   ),
 );
 const connectorById = computed(() =>
@@ -113,7 +110,7 @@ const messageTypeById = computed(() =>
 );
 const connections = computed(() =>
   (connectionsQuery.data.value?.items ?? []).filter(
-    (connection) => !connection.status.startsWith("ARCHIV"),
+    (connection) => !isArchivedStatus(connection.status),
   ),
 );
 const activeConnections = computed(() =>
@@ -150,19 +147,11 @@ const selectedMessageType = computed(() =>
 );
 const templates = computed(() =>
   (templatesQuery.data.value?.items ?? []).filter(
-    (template) => !template.status.startsWith("ARCHIV"),
+    (template) => !isArchivedStatus(template.status),
   ),
 );
-const searchQuery = computed(() => {
-  const value = route.query.q;
-  return typeof value === "string" ? value : "";
-});
-const isCreateSheetOpen = computed({
-  get: () => route.query.create === "template",
-  set: (value: boolean) => {
-    patchQuery({ create: value ? "template" : undefined });
-  },
-});
+const searchQuery = useRouteSearchQuery();
+const isCreateSheetOpen = useRouteQueryFlag("create", "template");
 const isLoading = computed(
   () =>
     catalogQuery.isLoading.value ||
@@ -279,20 +268,6 @@ watch(selectedMessageType, (messageType) => {
   templatePayload.value = buildJsonSchemaDefaults(messageType.field_schema);
 });
 
-function patchQuery(patch: Record<string, string | undefined>) {
-  const nextQuery = { ...route.query };
-
-  for (const [key, value] of Object.entries(patch)) {
-    if (!value) {
-      delete nextQuery[key];
-    } else {
-      nextQuery[key] = value;
-    }
-  }
-
-  router.replace({ query: nextQuery });
-}
-
 async function refreshTemplates() {
   await Promise.all([
     catalogQuery.refetch(),
@@ -355,38 +330,16 @@ function providerCode(connectorId: string) {
 function messageTypeName(messageTypeId: string) {
   return messageTypeById.value[messageTypeId]?.name ?? messageTypeId;
 }
-
-function formatDate(value: string | null) {
-  if (!value) {
-    return "-";
-  }
-
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
 </script>
 
 <template>
   <section class="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
-    <div
-      class="flex shrink-0 flex-col gap-3 md:flex-row md:items-start md:justify-between"
-    >
-      <CommunicationPageHeader
-        title="Templates"
-        description="Create provider-bound message templates and inspect active payload versions."
-      />
-      <Button
-        type="button"
-        variant="outline"
-        :disabled="isFetching"
-        @click="refreshTemplates"
-      >
-        <RefreshCcw class="size-4" :class="{ 'animate-spin': isFetching }" />
-        Refresh
-      </Button>
-    </div>
+    <CommunicationPageTitleBar
+      title="Templates"
+      description="Create provider-bound message templates and inspect active payload versions."
+      :refreshing="isFetching"
+      @refresh="refreshTemplates"
+    />
 
     <Alert
       v-if="
@@ -407,7 +360,16 @@ function formatDate(value: string | null) {
       </AlertDescription>
     </Alert>
 
-    <TemplatesToolBar />
+    <CommunicationToolBar
+      action-label="Add"
+      action-query-key="create"
+      action-query-value="template"
+      search-placeholder="Search templates"
+    >
+      <template #action-icon>
+        <Plus class="size-4" />
+      </template>
+    </CommunicationToolBar>
 
     <div
       class="min-h-0 flex-1 overflow-hidden rounded-lg border [&>[data-slot=table-container]]:h-full"
@@ -528,14 +490,14 @@ function formatDate(value: string | null) {
                 v-else-if="cell.column.id === 'active_version'"
                 class="whitespace-nowrap text-sm text-muted-foreground"
               >
-                {{ formatDate(row.original.active_version) }}
+                {{ formatCommunicationDate(row.original.active_version) }}
               </span>
 
               <span
                 v-else
                 class="whitespace-nowrap text-sm text-muted-foreground"
               >
-                {{ formatDate(row.original.updated_at) }}
+                {{ formatCommunicationDate(row.original.updated_at) }}
               </span>
             </TableCell>
           </TableRow>
@@ -544,16 +506,10 @@ function formatDate(value: string | null) {
     </div>
 
     <Sheet v-model:open="isCreateSheetOpen">
-      <SheetContent
-        class="w-[min(34rem,100vw)] gap-2 overflow-y-auto p-4 sm:max-w-xl"
+      <CommunicationSheetContent
+        title="Create template"
+        description="Select an active connection and fill the provider payload."
       >
-        <SheetHeader class="gap-1 p-0 pr-8">
-          <SheetTitle>Create template</SheetTitle>
-          <SheetDescription>
-            Select an active connection and fill the provider payload.
-          </SheetDescription>
-        </SheetHeader>
-
         <form
           class="grid gap-2"
           @submit.prevent="createTemplateWithActiveVersion"
@@ -562,11 +518,10 @@ function formatDate(value: string | null) {
             <label class="text-sm font-medium" for="template-connection">
               Connection
             </label>
-            <select
+            <CommunicationSelect
               id="template-connection"
               v-model="selectedConnectionId"
               required
-              class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
             >
               <option
                 v-for="connection in activeConnections"
@@ -576,7 +531,7 @@ function formatDate(value: string | null) {
                 {{ connectionLabel(connection) }} ·
                 {{ connection.channel_code }}
               </option>
-            </select>
+            </CommunicationSelect>
             <span
               v-if="!activeConnections.length"
               class="text-xs text-muted-foreground"
@@ -589,11 +544,10 @@ function formatDate(value: string | null) {
             <label class="text-sm font-medium" for="template-message-type">
               Message type
             </label>
-            <select
+            <CommunicationSelect
               id="template-message-type"
               v-model="selectedMessageTypeId"
               required
-              class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
             >
               <option
                 v-for="messageType in availableMessageTypes"
@@ -602,7 +556,7 @@ function formatDate(value: string | null) {
               >
                 {{ messageType.name }} · {{ messageType.message_type_code }}
               </option>
-            </select>
+            </CommunicationSelect>
             <span
               v-if="selectedConnector"
               class="text-xs text-muted-foreground"
@@ -630,15 +584,14 @@ function formatDate(value: string | null) {
             <label class="text-sm font-medium" for="template-message-class">
               Message class
             </label>
-            <select
+            <CommunicationSelect
               id="template-message-class"
               v-model="messageClass"
-              class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
             >
               <option v-for="item in MESSAGE_CLASSES" :key="item" :value="item">
                 {{ item }}
               </option>
-            </select>
+            </CommunicationSelect>
           </div>
 
           <div class="grid gap-2">
@@ -688,7 +641,7 @@ function formatDate(value: string | null) {
             </Button>
           </SheetFooter>
         </form>
-      </SheetContent>
+      </CommunicationSheetContent>
     </Sheet>
   </section>
 </template>

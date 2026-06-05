@@ -10,34 +10,16 @@ import {
   CheckCircle2,
   PauseCircle,
   PlugZap,
-  RefreshCcw,
+  Plus,
   Trash2,
 } from "lucide-vue-next";
-import { useRoute, useRouter } from "vue-router";
 import { toast } from "vue-sonner";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Sheet, SheetFooter } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -54,23 +36,29 @@ import type {
   ProviderConnectionMutableStatus,
   ProviderConnector,
 } from "@/modules/communication/api";
-import CommunicationPageHeader from "@/modules/communication/components/CommunicationPageHeader.vue";
-import ConnectionsToolBar from "@/modules/communication/components/ConnectionsToolBar.vue";
+import CommunicationDeleteDialog from "@/modules/communication/components/CommunicationDeleteDialog.vue";
+import CommunicationPageTitleBar from "@/modules/communication/components/CommunicationPageTitleBar.vue";
+import CommunicationSelect from "@/modules/communication/components/CommunicationSelect.vue";
+import CommunicationSheetContent from "@/modules/communication/components/CommunicationSheetContent.vue";
+import CommunicationToolBar from "@/modules/communication/components/CommunicationToolBar.vue";
 import JsonSchemaForm from "@/modules/communication/components/JsonSchemaForm.vue";
 import StatusBadge from "@/modules/communication/components/StatusBadge.vue";
 import {
   apiErrorMessage,
   buildJsonSchemaDefaults,
   compactJsonObject,
+  formatCommunicationDate,
+  isArchivedStatus,
 } from "@/modules/communication/lib";
+import {
+  useRouteQueryFlag,
+  useRouteSearchQuery,
+} from "@/modules/communication/composables/use-route-query";
 import { useCreateProviderConnectionMutation } from "@/modules/communication/mutations/use-create-provider-connection";
 import { useDeleteProviderConnectionMutation } from "@/modules/communication/mutations/use-delete-provider-connection";
 import { useUpdateProviderConnectionStatusMutation } from "@/modules/communication/mutations/use-update-provider-connection-status";
 import { useProviderCatalogQuery } from "@/modules/communication/queries/use-provider-catalog-query";
 import { useProviderConnectionsQuery } from "@/modules/communication/queries/use-provider-connections-query";
-
-const route = useRoute();
-const router = useRouter();
 
 const selectedConnectorId = ref("");
 const connectionCode = ref("");
@@ -90,7 +78,7 @@ const deleteMutation = useDeleteProviderConnectionMutation();
 
 const connectors = computed(() =>
   (catalogQuery.data.value?.connectors ?? []).filter(
-    (connector) => !connector.status.startsWith("ARCHIV"),
+    (connector) => !isArchivedStatus(connector.status),
   ),
 );
 const activeConnectors = computed(() =>
@@ -107,7 +95,7 @@ const connectorById = computed(() =>
 );
 const connections = computed(() =>
   (connectionsQuery.data.value?.items ?? []).filter(
-    (connection) => !connection.status.startsWith("ARCHIV"),
+    (connection) => !isArchivedStatus(connection.status),
   ),
 );
 const selectedConnector = computed(() =>
@@ -116,16 +104,8 @@ const selectedConnector = computed(() =>
       connector.provider_connector_id === selectedConnectorId.value,
   ),
 );
-const searchQuery = computed(() => {
-  const value = route.query.q;
-  return typeof value === "string" ? value : "";
-});
-const isCreateSheetOpen = computed({
-  get: () => route.query.create === "connection",
-  set: (value: boolean) => {
-    patchQuery({ create: value ? "connection" : undefined });
-  },
-});
+const searchQuery = useRouteSearchQuery();
+const isCreateSheetOpen = useRouteQueryFlag("create", "connection");
 const actionPending = computed(
   () => updateStatusMutation.isPending.value || deleteMutation.isPending.value,
 );
@@ -223,20 +203,6 @@ watch(selectedConnector, (connector) => {
   secretValues.value = buildJsonSchemaDefaults(connector.secrets_schema);
 });
 
-function patchQuery(patch: Record<string, string | undefined>) {
-  const nextQuery = { ...route.query };
-
-  for (const [key, value] of Object.entries(patch)) {
-    if (!value) {
-      delete nextQuery[key];
-    } else {
-      nextQuery[key] = value;
-    }
-  }
-
-  router.replace({ query: nextQuery });
-}
-
 async function refreshConnections() {
   await Promise.all([connectionsQuery.refetch(), catalogQuery.refetch()]);
 }
@@ -326,13 +292,6 @@ function providerCode(connection: ProviderConnection) {
   return connector?.provider_code ?? connection.provider_connector_id;
 }
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
-
 function isConnectionPending(connection: ProviderConnection) {
   return (
     pendingConnectionId.value === connection.provider_connection_id &&
@@ -343,32 +302,14 @@ function isConnectionPending(connection: ProviderConnection) {
 
 <template>
   <section class="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
-    <div
-      class="flex shrink-0 flex-col gap-3 md:flex-row md:items-start md:justify-between"
-    >
-      <CommunicationPageHeader
-        title="Connections"
-        description="Create provider connections, review tenant-specific credentials and manage lifecycle status."
-      />
-      <Button
-        type="button"
-        variant="outline"
-        :disabled="
-          connectionsQuery.isFetching.value || catalogQuery.isFetching.value
-        "
-        @click="refreshConnections"
-      >
-        <RefreshCcw
-          class="size-4"
-          :class="{
-            'animate-spin':
-              connectionsQuery.isFetching.value ||
-              catalogQuery.isFetching.value,
-          }"
-        />
-        Refresh
-      </Button>
-    </div>
+    <CommunicationPageTitleBar
+      title="Connections"
+      description="Create provider connections, review tenant-specific credentials and manage lifecycle status."
+      :refreshing="
+        connectionsQuery.isFetching.value || catalogQuery.isFetching.value
+      "
+      @refresh="refreshConnections"
+    />
 
     <Alert
       v-if="connectionsQuery.error.value || catalogQuery.error.value"
@@ -383,7 +324,16 @@ function isConnectionPending(connection: ProviderConnection) {
       </AlertDescription>
     </Alert>
 
-    <ConnectionsToolBar />
+    <CommunicationToolBar
+      action-label="Add"
+      action-query-key="create"
+      action-query-value="connection"
+      search-placeholder="Search connections"
+    >
+      <template #action-icon>
+        <Plus class="size-4" />
+      </template>
+    </CommunicationToolBar>
 
     <div
       class="min-h-0 flex-1 overflow-hidden rounded-lg border [&>[data-slot=table-container]]:h-full"
@@ -516,7 +466,7 @@ function isConnectionPending(connection: ProviderConnection) {
                 v-else-if="cell.column.id === 'updated_at'"
                 class="whitespace-nowrap text-sm text-muted-foreground"
               >
-                {{ formatDate(row.original.updated_at) }}
+                {{ formatCommunicationDate(row.original.updated_at) }}
               </span>
 
               <div v-else class="flex justify-end gap-2">
@@ -562,25 +512,18 @@ function isConnectionPending(connection: ProviderConnection) {
     </div>
 
     <Sheet v-model:open="isCreateSheetOpen">
-      <SheetContent
-        class="w-[min(34rem,100vw)] gap-2 overflow-y-auto p-4 sm:max-w-xl"
+      <CommunicationSheetContent
+        title="Create connection"
+        description="Select an active provider and fill connection config."
       >
-        <SheetHeader class="gap-1 p-0 pr-8">
-          <SheetTitle>Create connection</SheetTitle>
-          <SheetDescription>
-            Select an active provider and fill connection config.
-          </SheetDescription>
-        </SheetHeader>
-
         <form class="grid gap-2" @submit.prevent="createConnection">
           <div class="grid gap-2">
             <label class="text-sm font-medium" for="provider-connector">
               Provider
             </label>
-            <select
+            <CommunicationSelect
               id="provider-connector"
               v-model="selectedConnectorId"
-              class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
             >
               <option
                 v-for="connector in activeConnectors"
@@ -589,7 +532,7 @@ function isConnectionPending(connection: ProviderConnection) {
               >
                 {{ connector.provider_name }} ({{ connector.provider_code }})
               </option>
-            </select>
+            </CommunicationSelect>
           </div>
 
           <div class="grid gap-2 md:grid-cols-2">
@@ -611,11 +554,10 @@ function isConnectionPending(connection: ProviderConnection) {
             <label class="text-sm font-medium" for="connection-channel">
               Channel
             </label>
-            <select
+            <CommunicationSelect
               id="connection-channel"
               v-model="channelCode"
               required
-              class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
             >
               <option
                 v-for="channel in selectedConnector?.channels ?? []"
@@ -624,7 +566,7 @@ function isConnectionPending(connection: ProviderConnection) {
               >
                 {{ channel }}
               </option>
-            </select>
+            </CommunicationSelect>
           </div>
 
           <div class="grid gap-2">
@@ -669,35 +611,20 @@ function isConnectionPending(connection: ProviderConnection) {
             </Button>
           </SheetFooter>
         </form>
-      </SheetContent>
+      </CommunicationSheetContent>
     </Sheet>
 
-    <AlertDialog
+    <CommunicationDeleteDialog
       :open="connectionPendingDeletion !== null"
+      title="Delete connection"
+      description="The connection must stay disabled. Delete cannot be undone if there is no send history."
+      :pending="deleteMutation.isPending.value"
       @update:open="
         (open) => {
           if (!open) connectionPendingDeletion = null;
         }
       "
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Delete connection</AlertDialogTitle>
-          <AlertDialogDescription>
-            The connection must stay disabled. Delete cannot be undone if there
-            is no send history.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            :disabled="deleteMutation.isPending.value"
-            @click="deleteConnection"
-          >
-            Delete
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      @confirm="deleteConnection"
+    />
   </section>
 </template>
