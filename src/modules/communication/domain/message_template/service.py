@@ -84,6 +84,7 @@ class MessageTemplateService:
         )
         if connector is None:
             raise ProviderConnectorNotFoundError()
+        connector.ensure_active()
 
         message_type = await self._provider_lookup.load_provider_message_type(
             tenant_id=tenant_id,

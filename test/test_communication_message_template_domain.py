@@ -292,6 +292,28 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
                 message_class="OTP",
             )
 
+    async def test_service_create_template_rejects_disabled_connector(self) -> None:
+        self.connector.status = "DISABLED"
+        service = self._service(
+            provider_lookup=_ProviderLookupStub(
+                connector=self.connector,
+                message_type=self.message_type,
+            )
+        )
+
+        with self.assertRaises(CommunicationValidationError):
+            await service.create_template(
+                tenant_id=self.tenant_id,
+                template_id=self.template_id,
+                template_code="otp_sms",
+                name="OTP SMS",
+                description=None,
+                provider_connector_id=self.connector_id,
+                provider_message_type_id=self.message_type_id,
+                channel_code="SMS",
+                message_class="OTP",
+            )
+
     async def test_service_create_template_rejects_missing_message_type(self) -> None:
         service = self._service(
             provider_lookup=_ProviderLookupStub(

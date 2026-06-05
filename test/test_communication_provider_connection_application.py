@@ -7,8 +7,12 @@ from uuid import uuid4
 from src.modules.communication.application.provider_connection import (
     CreateProviderConnectionCommand,
     CreateProviderConnectionUseCase,
+    DeleteProviderConnectionCommand,
+    DeleteProviderConnectionUseCase,
     ListProviderConnectionsUseCase,
     ProviderConnectionDTO,
+    UpdateProviderConnectionStatusCommand,
+    UpdateProviderConnectionStatusUseCase,
 )
 from src.modules.communication.application.services import SecretCodec
 from src.modules.communication.domain.provider_connection import (
@@ -27,6 +31,14 @@ class _ProviderConnectionServiceStub:
     async def create_connection(self, **kwargs):
         self.calls.append(kwargs)
         return self.entity
+
+    async def change_connection_status(self, **kwargs):
+        self.calls.append(kwargs)
+        self.entity.status = kwargs["status"]
+        return self.entity
+
+    async def delete_connection(self, **kwargs):
+        self.calls.append(kwargs)
 
 
 class _QueryRepositoryStub:
@@ -110,6 +122,69 @@ class ProviderConnectionApplicationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result, [dto])
         self.assertEqual(repository.tenant_ids, [tenant_id])
+
+    async def test_update_status_use_case_returns_dto(self) -> None:
+        now = datetime(2026, 5, 13, 12, 0, tzinfo=UTC)
+        tenant_id = EntityIdVO.from_value(uuid4())
+        provider_connection_id = ProviderConnectionIdVO.from_value(uuid4())
+        entity = ProviderConnectionEntity.create(
+            provider_connection_id=provider_connection_id,
+            now=now,
+            tenant_id=tenant_id,
+            provider_connector_id=ProviderConnectorIdVO.from_value(uuid4()),
+            connection_code="sms_main",
+            connection_name="Main SMS",
+            channel_code="SMS",
+            config={},
+            secret_ref=None,
+            secrets_b64=None,
+        )
+        service = _ProviderConnectionServiceStub(entity)
+        use_case = UpdateProviderConnectionStatusUseCase(service)
+
+        result = await use_case(
+            UpdateProviderConnectionStatusCommand(
+                tenant_id=tenant_id,
+                provider_connection_id=provider_connection_id,
+                status="DISABLED",
+            )
+        )
+
+        self.assertEqual(result.status, "DISABLED")
+        self.assertEqual(
+            service.calls[0]["provider_connection_id"], provider_connection_id
+        )
+
+    async def test_delete_use_case_delegates_to_service(self) -> None:
+        now = datetime(2026, 5, 13, 12, 0, tzinfo=UTC)
+        tenant_id = EntityIdVO.from_value(uuid4())
+        provider_connection_id = ProviderConnectionIdVO.from_value(uuid4())
+        entity = ProviderConnectionEntity.create(
+            provider_connection_id=provider_connection_id,
+            now=now,
+            tenant_id=tenant_id,
+            provider_connector_id=ProviderConnectorIdVO.from_value(uuid4()),
+            connection_code="sms_main",
+            connection_name="Main SMS",
+            channel_code="SMS",
+            config={},
+            secret_ref=None,
+            secrets_b64=None,
+        )
+        service = _ProviderConnectionServiceStub(entity)
+        use_case = DeleteProviderConnectionUseCase(service)
+
+        await use_case(
+            DeleteProviderConnectionCommand(
+                tenant_id=tenant_id,
+                provider_connection_id=provider_connection_id,
+            )
+        )
+
+        self.assertEqual(service.calls[0]["tenant_id"], tenant_id)
+        self.assertEqual(
+            service.calls[0]["provider_connection_id"], provider_connection_id
+        )
 
 
 __all__ = ["ProviderConnectionApplicationTests"]

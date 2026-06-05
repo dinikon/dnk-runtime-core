@@ -69,6 +69,7 @@ COMMUNICATION_OBJECTS = (
                 "status",
                 "text",
                 "Status",
+                description="Provider connector lifecycle: ACTIVE, DISABLED, ARCHIVED.",
                 is_nullable=False,
                 default="'ACTIVE'",
             ),
@@ -171,7 +172,12 @@ COMMUNICATION_OBJECTS = (
             FieldSeed("secret_ref", "text", "Secret Ref", is_nullable=True),
             FieldSeed("secrets_b64", "text", "Encoded Secrets", is_nullable=True),
             FieldSeed(
-                "status", "text", "Status", is_nullable=False, default="'ACTIVE'"
+                "status",
+                "text",
+                "Status",
+                description="Provider connection lifecycle: ACTIVE, DISABLED, ARCHIVED.",
+                is_nullable=False,
+                default="'ACTIVE'",
             ),
         ),
         indexes=(

@@ -34,6 +34,7 @@ from src.modules.communication.application.delivery import (
     ListDeliveryEventsQuery,
     ListDeliveryEventsUseCase,
 )
+from src.modules.communication.domain.error import CommunicationValidationError
 from src.modules.communication.domain.delivery import (
     DeliveryEventIdVO,
     DeliveryService,
@@ -175,6 +176,7 @@ class _ProcessRepositoryStub:
                 {"username": "user", "password": "secret"}
             ),
         )
+        self.connection.ensure_active = lambda: None
         self.connector = SimpleNamespace(
             yaml_spec={
                 "auth": {
@@ -209,6 +211,7 @@ class _ProcessRepositoryStub:
                 },
             }
         )
+        self.connector.ensure_active = lambda: None
         self.attempt = SimpleNamespace(
             delivery_attempt_id=uuid4(),
             attempt_no=1,
@@ -654,6 +657,43 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(http_client.requests[0]["basic_auth"], ("user", "secret"))
         self.assertEqual(http_client.requests[0]["json_body"]["ttl"], 60)
+
+    async def test_process_queued_message_fails_when_connection_disabled(self) -> None:
+        repository = _ProcessRepositoryStub()
+
+        def _raise_disabled() -> None:
+            raise CommunicationValidationError("Provider connection is not active.")
+
+        repository.connection.ensure_active = _raise_disabled
+        http_client = _HttpClientStub()
+        use_case = ProcessOutboundMessageUseCase(
+            repository=repository,
+            sender_registry=ProviderSenderRegistry(
+                [
+                    YamlHttpProviderSender(
+                        http_client=http_client,
+                        payload_builder=ProviderPayloadBuildService(),
+                        status_mapper=ProviderStatusMappingService(),
+                        json_path=JsonPathService(),
+                        secret_codec=SecretCodec(),
+                    )
+                ]
+            ),
+            template_renderer=TemplateRenderService(),
+            clock=_ClockStub(),
+        )
+
+        result = await use_case(
+            ProcessQueuedMessagesCommand(tenant_id=uuid4(), limit=10)
+        )
+
+        self.assertEqual(result.processed, 1)
+        self.assertEqual(result.succeeded, 0)
+        self.assertEqual(result.failed, 1)
+        self.assertEqual(repository.outbound.internal_status, "FAILED")
+        self.assertEqual(repository.outbound.error_code, "CommunicationValidationError")
+        self.assertEqual(http_client.requests, [])
+        self.assertIsNone(repository.attempt.request_payload)
 
     async def test_process_queued_http_bearer_auth_uses_secret_without_persisting_it(
         self,

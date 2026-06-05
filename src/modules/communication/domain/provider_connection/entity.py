@@ -10,6 +10,11 @@ from src.modules.communication.domain.provider_connection.value_object import (
     ProviderConnectionNameVO,
     ProviderConnectionStatusVO,
 )
+from src.modules.communication.domain.provider_connection.error import (
+    ProviderConnectionDeleteForbiddenError,
+    ProviderConnectionInactiveError,
+    ProviderConnectionStatusTransitionError,
+)
 from src.modules.communication.domain.provider_connector.value_object import (
     ProviderConnectorIdVO,
 )
@@ -48,7 +53,7 @@ class ProviderConnectionEntity:
         secret_ref: str | None,
         secrets_b64: str | None,
         now: datetime,
-        status: ProviderConnectionStatusVO = ProviderConnectionStatusVO.ACTIVE,
+        status: ProviderConnectionStatusVO | str = ProviderConnectionStatusVO.ACTIVE,
     ) -> Self:
         """Создает active provider connection с едиными created_at/updated_at."""
         return cls(
@@ -63,8 +68,51 @@ class ProviderConnectionEntity:
             config=dict(config),
             secret_ref=secret_ref,
             secrets_b64=secrets_b64,
-            status=status,
+            status=ProviderConnectionStatusVO(status),
         )
+
+    def change_status(
+        self,
+        *,
+        status: ProviderConnectionStatusVO,
+        now: datetime,
+    ) -> Self:
+        """Меняет статус connection в рамках разрешенного lifecycle."""
+        target_status = ProviderConnectionStatusVO(status)
+        if self.status == ProviderConnectionStatusVO.ARCHIVED:
+            raise ProviderConnectionStatusTransitionError()
+        if target_status == ProviderConnectionStatusVO.ARCHIVED:
+            raise ProviderConnectionStatusTransitionError()
+        if target_status == self.status:
+            return self
+
+        allowed = {
+            ProviderConnectionStatusVO.ACTIVE,
+            ProviderConnectionStatusVO.DISABLED,
+        }
+        if self.status not in allowed or target_status not in allowed:
+            raise ProviderConnectionStatusTransitionError()
+
+        self.status = target_status
+        self.updated_at = now
+        return self
+
+    def ensure_deletable(self) -> None:
+        """Проверяет, что connection можно удалить или архивировать."""
+        if self.status != ProviderConnectionStatusVO.DISABLED:
+            raise ProviderConnectionDeleteForbiddenError()
+
+    def ensure_active(self) -> None:
+        """Проверяет, что connection можно использовать для отправки."""
+        if self.status != ProviderConnectionStatusVO.ACTIVE:
+            raise ProviderConnectionInactiveError()
+
+    def archive(self, *, now: datetime) -> Self:
+        """Переводит disabled connection в невосстанавливаемый archived статус."""
+        self.ensure_deletable()
+        self.status = ProviderConnectionStatusVO.ARCHIVED
+        self.updated_at = now
+        return self
 
 
 __all__ = [

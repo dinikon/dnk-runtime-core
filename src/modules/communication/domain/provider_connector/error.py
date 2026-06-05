@@ -13,6 +13,34 @@ class ProviderConnectorNotFoundError(CommunicationNotFoundError):
         super().__init__("Provider connector was not found.")
 
 
+class ProviderConnectorArchivedError(CommunicationValidationError):
+    """Raised when archived provider connector is mutated or imported."""
+
+    def __init__(self) -> None:
+        super().__init__("Provider connector is archived.")
+
+
+class ProviderConnectorDeleteForbiddenError(CommunicationValidationError):
+    """Raised when provider connector cannot be deleted."""
+
+    def __init__(self) -> None:
+        super().__init__("Provider connector must be disabled before deletion.")
+
+
+class ProviderConnectorInactiveError(CommunicationValidationError):
+    """Raised when provider connector cannot be used by dependent objects."""
+
+    def __init__(self) -> None:
+        super().__init__("Provider connector is not active.")
+
+
+class ProviderConnectorStatusTransitionError(CommunicationValidationError):
+    """Raised when provider connector status transition is invalid."""
+
+    def __init__(self) -> None:
+        super().__init__("Provider connector status transition is not allowed.")
+
+
 class ProviderMessageTypeNotFoundError(CommunicationNotFoundError):
     """Raised when a provider message type is missing."""
 
@@ -85,6 +113,10 @@ __all__ = [
     "InvalidProviderConnectorVersionError",
     "InvalidProviderMessageTypeCodeError",
     "InvalidProviderMessageTypeNameError",
+    "ProviderConnectorArchivedError",
+    "ProviderConnectorDeleteForbiddenError",
+    "ProviderConnectorInactiveError",
     "ProviderConnectorNotFoundError",
+    "ProviderConnectorStatusTransitionError",
     "ProviderMessageTypeNotFoundError",
 ]

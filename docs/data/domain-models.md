@@ -118,7 +118,7 @@ scope uses `EntityIdVO` directly; concrete entities expose concrete subclasses s
     - `provider_connector_id` as `ProviderConnectorIdVO`
     - provider code/name/version/type
     - YAML spec/checksum
-    - status and timestamps
+  - status (`ACTIVE`, `DISABLED`, `ARCHIVED`) and timestamps
 
 ### `ProviderConnection`
 
@@ -129,7 +129,7 @@ scope uses `EntityIdVO` directly; concrete entities expose concrete subclasses s
     - `tenant_id` as `EntityIdVO`
     - `provider_connector_id` as `ProviderConnectorIdVO`
     - connection code/name/channel
-    - config, secret ref, encoded secrets and status
+  - config, secret ref, encoded secrets and status (`ACTIVE`, `DISABLED`, `ARCHIVED`)
 
 ### `MessageTemplate` And `TemplateVersion`
 

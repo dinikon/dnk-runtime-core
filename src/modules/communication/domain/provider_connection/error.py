@@ -13,6 +13,27 @@ class ProviderConnectionNotFoundError(CommunicationNotFoundError):
         super().__init__("Provider connection was not found.")
 
 
+class ProviderConnectionDeleteForbiddenError(CommunicationValidationError):
+    """Raised when provider connection cannot be deleted."""
+
+    def __init__(self) -> None:
+        super().__init__("Provider connection must be disabled before deletion.")
+
+
+class ProviderConnectionInactiveError(CommunicationValidationError):
+    """Raised when provider connection cannot be used for sending."""
+
+    def __init__(self) -> None:
+        super().__init__("Provider connection is not active.")
+
+
+class ProviderConnectionStatusTransitionError(CommunicationValidationError):
+    """Raised when provider connection status transition is invalid."""
+
+    def __init__(self) -> None:
+        super().__init__("Provider connection status transition is not allowed.")
+
+
 class InvalidProviderConnectionCodeError(CommunicationValidationError):
     """Raised when provider connection code is invalid."""
 
@@ -34,6 +55,9 @@ class ProviderSecretsValidationError(CommunicationValidationError):
 __all__ = [
     "InvalidProviderConnectionCodeError",
     "InvalidProviderConnectionNameError",
+    "ProviderConnectionDeleteForbiddenError",
+    "ProviderConnectionInactiveError",
     "ProviderConnectionNotFoundError",
+    "ProviderConnectionStatusTransitionError",
     "ProviderSecretsValidationError",
 ]

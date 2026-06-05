@@ -28,6 +28,7 @@ from src.modules.communication.domain.provider_connection import (
     ProviderConnectionStatusVO,
 )
 from src.modules.communication.domain.provider_connector import (
+    ConnectorStatus,
     ProviderConnector,
     ProviderConnectorIdVO,
     ProviderMessageType,
@@ -253,7 +254,18 @@ class OutboundMessageRuntimeRepository:
         )
         if not rows:
             return None
-        return provider_connection_entity(tenant_id=tenant_vo, row=rows[0])
+        connection = provider_connection_entity(tenant_id=tenant_vo, row=rows[0])
+        connector_row = await self._get(
+            tenant_id=tenant_vo,
+            object_name=_CONNECTOR,
+            object_id=connection.provider_connector_id.uuid,
+        )
+        if connector_row is None:
+            return None
+        connector = provider_connector_entity(connector_row)
+        if connector.status != ConnectorStatus.ACTIVE.value:
+            return None
+        return connection
 
     async def create_send_request(
         self,

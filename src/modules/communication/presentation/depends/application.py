@@ -26,14 +26,22 @@ from src.modules.communication.application.outbound_message import (
 from src.modules.communication.application.provider_connection import (
     CreateProviderConnectionUseCase,
     CreateProviderConnectionUseCaseProtocol,
+    DeleteProviderConnectionUseCase,
+    DeleteProviderConnectionUseCaseProtocol,
     ListProviderConnectionsUseCase,
     ListProviderConnectionsUseCaseProtocol,
+    UpdateProviderConnectionStatusUseCase,
+    UpdateProviderConnectionStatusUseCaseProtocol,
 )
 from src.modules.communication.application.provider_connector import (
+    DeleteProviderConnectorUseCase,
+    DeleteProviderConnectorUseCaseProtocol,
     ListProviderConnectorsUseCase,
     ListProviderConnectorsUseCaseProtocol,
     RegisterProviderConnectorUseCase,
     RegisterProviderConnectorUseCaseProtocol,
+    UpdateProviderConnectorStatusUseCase,
+    UpdateProviderConnectorStatusUseCaseProtocol,
 )
 from src.modules.communication.domain.message_template import MessageTemplateService
 from src.modules.communication.domain.delivery import DeliveryService
@@ -112,6 +120,32 @@ ListProviderConnectorsUseCaseDep = Annotated[
 ]
 
 
+def get_update_provider_connector_status_use_case(
+    service: ProviderConnectorServiceDep,
+) -> UpdateProviderConnectorStatusUseCaseProtocol:
+    """Создает use case смены статуса provider connector."""
+    return UpdateProviderConnectorStatusUseCase(service)
+
+
+UpdateProviderConnectorStatusUseCaseDep = Annotated[
+    UpdateProviderConnectorStatusUseCaseProtocol,
+    Depends(get_update_provider_connector_status_use_case),
+]
+
+
+def get_delete_provider_connector_use_case(
+    service: ProviderConnectorServiceDep,
+) -> DeleteProviderConnectorUseCaseProtocol:
+    """Создает use case удаления provider connector."""
+    return DeleteProviderConnectorUseCase(service)
+
+
+DeleteProviderConnectorUseCaseDep = Annotated[
+    DeleteProviderConnectorUseCaseProtocol,
+    Depends(get_delete_provider_connector_use_case),
+]
+
+
 def get_provider_connection_service(
     repository: ProviderConnectionRuntimeRepositoryDep,
     schema_validator: JsonSchemaValidationServiceDep,
@@ -153,6 +187,32 @@ def get_list_provider_connections_use_case(
 ListProviderConnectionsUseCaseDep = Annotated[
     ListProviderConnectionsUseCaseProtocol,
     Depends(get_list_provider_connections_use_case),
+]
+
+
+def get_update_provider_connection_status_use_case(
+    service: ProviderConnectionServiceDep,
+) -> UpdateProviderConnectionStatusUseCaseProtocol:
+    """Создает use case смены статуса provider connection."""
+    return UpdateProviderConnectionStatusUseCase(service)
+
+
+UpdateProviderConnectionStatusUseCaseDep = Annotated[
+    UpdateProviderConnectionStatusUseCaseProtocol,
+    Depends(get_update_provider_connection_status_use_case),
+]
+
+
+def get_delete_provider_connection_use_case(
+    service: ProviderConnectionServiceDep,
+) -> DeleteProviderConnectionUseCaseProtocol:
+    """Создает use case удаления provider connection."""
+    return DeleteProviderConnectionUseCase(service)
+
+
+DeleteProviderConnectionUseCaseDep = Annotated[
+    DeleteProviderConnectionUseCaseProtocol,
+    Depends(get_delete_provider_connection_use_case),
 ]
 
 
@@ -385,6 +445,8 @@ __all__ = [
     "CreateMessageTemplateUseCaseDep",
     "CreateProviderConnectionUseCaseDep",
     "CreateTemplateVersionUseCaseDep",
+    "DeleteProviderConnectionUseCaseDep",
+    "DeleteProviderConnectorUseCaseDep",
     "DeliveryRuntimeRepositoryDep",
     "DeliveryServiceDep",
     "GetOutboundMessageUseCaseDep",
@@ -406,6 +468,10 @@ __all__ = [
     "ProviderSenderRegistryDep",
     "RegisterProviderConnectorUseCaseDep",
     "SendCommunicationUseCaseDep",
+    "UpdateProviderConnectionStatusUseCaseDep",
+    "UpdateProviderConnectorStatusUseCaseDep",
+    "get_delete_provider_connection_use_case",
+    "get_delete_provider_connector_use_case",
     "get_delivery_service",
     "get_message_template_service",
     "get_outbound_processing_repository",
@@ -414,4 +480,6 @@ __all__ = [
     "get_runtime_command_gateway",
     "get_runtime_field_type_policy",
     "get_runtime_query_gateway",
+    "get_update_provider_connection_status_use_case",
+    "get_update_provider_connector_status_use_case",
 ]

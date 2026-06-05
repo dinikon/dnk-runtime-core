@@ -19,6 +19,9 @@ from src.modules.communication.application.delivery import (
 from src.modules.communication.application.provider_connection import (
     ProviderConnectionDTO,
 )
+from src.modules.communication.application.provider_connector import (
+    ProviderConnectorDTO,
+)
 from src.modules.communication.domain.error import (
     CommunicationValidationError,
 )
@@ -46,8 +49,24 @@ from src.modules.communication.presentation.http.outbound_message.requests impor
 from src.modules.communication.presentation.http.provider_connection.controller.create_provider_connection import (
     create_provider_connection,
 )
+from src.modules.communication.presentation.http.provider_connection.controller.delete_provider_connection import (
+    delete_provider_connection,
+)
+from src.modules.communication.presentation.http.provider_connection.controller.update_provider_connection_status import (
+    update_provider_connection_status,
+)
 from src.modules.communication.presentation.http.provider_connection.requests import (
     CreateProviderConnectionRequestSchema,
+    UpdateProviderConnectionStatusRequestSchema,
+)
+from src.modules.communication.presentation.http.provider_connector.controller.delete_provider_connector import (
+    delete_provider_connector,
+)
+from src.modules.communication.presentation.http.provider_connector.controller.update_provider_connector_status import (
+    update_provider_connector_status,
+)
+from src.modules.communication.presentation.http.provider_connector.requests import (
+    UpdateProviderConnectorStatusRequestSchema,
 )
 from src.modules.communication.presentation.http.message_template.controller.create_message_template import (
     create_message_template,
@@ -93,8 +112,33 @@ class CommunicationHttpRouterTests(unittest.TestCase):
             ("POST", "/communication/providers/connectors/import-yaml"), routes
         )
         self.assertIn(("GET", "/communication/providers/connectors"), routes)
+        self.assertIn(
+            (
+                "PATCH",
+                "/communication/providers/connectors/{provider_connector_id}/status",
+            ),
+            routes,
+        )
+        self.assertIn(
+            ("DELETE", "/communication/providers/connectors/{provider_connector_id}"),
+            routes,
+        )
         self.assertIn(("POST", "/communication/providers/connections"), routes)
         self.assertIn(("GET", "/communication/providers/connections"), routes)
+        self.assertIn(
+            (
+                "PATCH",
+                "/communication/providers/connections/{provider_connection_id}/status",
+            ),
+            routes,
+        )
+        self.assertIn(
+            (
+                "DELETE",
+                "/communication/providers/connections/{provider_connection_id}",
+            ),
+            routes,
+        )
         self.assertIn(("POST", "/communication/templates"), routes)
         self.assertIn(
             ("POST", "/communication/templates/{template_id}/versions"), routes
@@ -233,6 +277,51 @@ class _CreateProviderConnectionUseCase:
         )
 
 
+class _UpdateProviderConnectionStatusUseCase:
+    def __init__(self) -> None:
+        self.command = None
+
+    async def __call__(self, command):
+        self.command = command
+        now = datetime(2026, 5, 13, 12, 0, tzinfo=UTC)
+        return ProviderConnectionDTO(
+            provider_connection_id=command.provider_connection_id.uuid,
+            tenant_id=command.tenant_id.uuid,
+            provider_connector_id=uuid4(),
+            connection_code="gms",
+            connection_name="GMS",
+            channel_code="SMS",
+            config={},
+            secret_ref=None,
+            has_secrets=False,
+            status=command.status,
+            created_at=now,
+            updated_at=now,
+        )
+
+
+class _UpdateProviderConnectorStatusUseCase:
+    def __init__(self) -> None:
+        self.command = None
+
+    async def __call__(self, command):
+        self.command = command
+        now = datetime(2026, 5, 13, 12, 0, tzinfo=UTC)
+        return ProviderConnectorDTO(
+            provider_connector_id=command.provider_connector_id.uuid,
+            provider_code="gms",
+            provider_name="GMS",
+            version="1.0",
+            connector_type="YAML_HTTP",
+            channels=["SMS"],
+            config_schema={},
+            secrets_schema={},
+            status=command.status,
+            created_at=now,
+            updated_at=now,
+        )
+
+
 class _HandleProviderWebhookUseCase:
     def __init__(self) -> None:
         self.command = None
@@ -343,6 +432,102 @@ class CommunicationControllerErrorTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(
             type(use_case.command.provider_connector_id),
             ProviderConnectorIdVO,
+        )
+
+    async def test_update_provider_connection_status_maps_command_and_response(
+        self,
+    ) -> None:
+        tenant_id = uuid4()
+        provider_connection_id = uuid4()
+        use_case = _UpdateProviderConnectionStatusUseCase()
+
+        response = await update_provider_connection_status(
+            provider_connection_id=provider_connection_id,
+            payload=UpdateProviderConnectionStatusRequestSchema(status="DISABLED"),
+            context=SimpleNamespace(principal=SimpleNamespace(tenant_id=tenant_id)),
+            use_case=use_case,
+        )
+
+        self.assertEqual(response.provider_connection_id, provider_connection_id)
+        self.assertEqual(response.tenant_id, tenant_id)
+        self.assertEqual(response.status, "DISABLED")
+        self.assertIs(type(use_case.command.tenant_id), EntityIdVO)
+        self.assertIs(
+            type(use_case.command.provider_connection_id),
+            ProviderConnectionIdVO,
+        )
+        self.assertEqual(use_case.command.status, "DISABLED")
+
+    async def test_update_provider_connector_status_maps_validation_to_422(
+        self,
+    ) -> None:
+        with self.assertRaises(HTTPException) as caught:
+            await update_provider_connector_status(
+                provider_connector_id=uuid4(),
+                payload=UpdateProviderConnectorStatusRequestSchema(status="DISABLED"),
+                context=_context(),
+                use_case=_FailingUseCase(
+                    CommunicationValidationError(
+                        "Provider connector status transition is not allowed."
+                    )
+                ),
+            )
+
+        self.assertEqual(caught.exception.status_code, 422)
+        self.assertEqual(
+            caught.exception.detail,
+            "Provider connector status transition is not allowed.",
+        )
+
+    async def test_update_provider_connector_status_maps_command_and_response(
+        self,
+    ) -> None:
+        tenant_id = uuid4()
+        provider_connector_id = uuid4()
+        use_case = _UpdateProviderConnectorStatusUseCase()
+
+        response = await update_provider_connector_status(
+            provider_connector_id=provider_connector_id,
+            payload=UpdateProviderConnectorStatusRequestSchema(status="ACTIVE"),
+            context=SimpleNamespace(principal=SimpleNamespace(tenant_id=tenant_id)),
+            use_case=use_case,
+        )
+
+        self.assertEqual(response.provider_connector_id, provider_connector_id)
+        self.assertEqual(response.status, "ACTIVE")
+        self.assertEqual(response.channels, ["SMS"])
+        self.assertIs(type(use_case.command.tenant_id), EntityIdVO)
+        self.assertIs(
+            type(use_case.command.provider_connector_id),
+            ProviderConnectorIdVO,
+        )
+        self.assertEqual(use_case.command.status, "ACTIVE")
+
+    async def test_delete_provider_connection_maps_runtime_conflict_to_409(
+        self,
+    ) -> None:
+        with self.assertRaises(HTTPException) as caught:
+            await delete_provider_connection(
+                provider_connection_id=uuid4(),
+                context=_context(),
+                use_case=_FailingUseCase(RuntimeDataPersistenceError("db failed")),
+            )
+
+        self.assertEqual(caught.exception.status_code, 409)
+        self.assertEqual(caught.exception.detail, "db failed")
+
+    async def test_delete_provider_connector_maps_not_found_to_404(self) -> None:
+        with self.assertRaises(HTTPException) as caught:
+            await delete_provider_connector(
+                provider_connector_id=uuid4(),
+                context=_context(),
+                use_case=_FailingUseCase(ProviderConnectorNotFoundError()),
+            )
+
+        self.assertEqual(caught.exception.status_code, 404)
+        self.assertEqual(
+            caught.exception.detail,
+            "Provider connector was not found.",
         )
 
     async def test_handle_provider_webhook_generates_id_and_converts_command_vo(

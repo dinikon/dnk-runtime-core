@@ -11,6 +11,9 @@ from src.modules.communication.domain.provider_connector.enum import (
 from src.modules.communication.domain.provider_connector.error import (
     InvalidProviderConnectorStatusError,
     InvalidProviderConnectorTypeError,
+    ProviderConnectorDeleteForbiddenError,
+    ProviderConnectorInactiveError,
+    ProviderConnectorStatusTransitionError,
 )
 from src.modules.communication.domain.provider_connector.value_object import (
     ProviderChannelCodeVO,
@@ -74,6 +77,48 @@ class ProviderConnector:
             created_at=now,
             updated_at=now,
         )
+
+    def change_status(self, *, status: str | ConnectorStatus, now: datetime) -> Self:
+        """Меняет статус connector в рамках разрешенного lifecycle."""
+        try:
+            target_status = ConnectorStatus(status).value
+        except ValueError as exc:
+            raise InvalidProviderConnectorStatusError() from exc
+
+        if self.status == ConnectorStatus.ARCHIVED.value:
+            raise ProviderConnectorStatusTransitionError()
+        if target_status == ConnectorStatus.ARCHIVED.value:
+            raise ProviderConnectorStatusTransitionError()
+        if target_status == self.status:
+            return self
+
+        allowed = {
+            ConnectorStatus.ACTIVE.value,
+            ConnectorStatus.DISABLED.value,
+        }
+        if self.status not in allowed or target_status not in allowed:
+            raise ProviderConnectorStatusTransitionError()
+
+        self.status = target_status
+        self.updated_at = now
+        return self
+
+    def ensure_deletable(self) -> None:
+        """Проверяет, что connector можно удалить или архивировать."""
+        if self.status != ConnectorStatus.DISABLED.value:
+            raise ProviderConnectorDeleteForbiddenError()
+
+    def ensure_active(self) -> None:
+        """Проверяет, что connector можно использовать зависимыми сценариями."""
+        if self.status != ConnectorStatus.ACTIVE.value:
+            raise ProviderConnectorInactiveError()
+
+    def archive(self, *, now: datetime) -> Self:
+        """Переводит disabled connector в невосстанавливаемый archived статус."""
+        self.ensure_deletable()
+        self.status = ConnectorStatus.ARCHIVED.value
+        self.updated_at = now
+        return self
 
 
 @dataclass(slots=True)

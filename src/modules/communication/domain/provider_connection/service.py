@@ -6,14 +6,18 @@ from src.modules.communication.domain.error import CommunicationValidationError
 from src.modules.communication.domain.provider_connection.entity import (
     ProviderConnectionEntity,
 )
+from src.modules.communication.domain.provider_connection.error import (
+    ProviderConnectionNotFoundError,
+)
 from src.modules.communication.domain.provider_connection.repository import (
     ProviderConnectionProviderLookupProtocol,
     ProviderConnectionRepositoryProtocol,
 )
 from src.modules.communication.domain.provider_connection.value_object import (
     ProviderConnectionIdVO,
+    ProviderConnectionStatusVO,
 )
-from src.modules.communication.domain.provider_connector.error import (
+from src.modules.communication.domain.provider_connector import (
     ProviderConnectorNotFoundError,
 )
 from src.modules.communication.domain.provider_connector.value_object import (
@@ -81,6 +85,7 @@ class ProviderConnectionService:
         )
         if connector is None:
             raise ProviderConnectorNotFoundError()
+        connector.ensure_active()
 
         spec = connector.yaml_spec
         if channel_code not in set(spec.get("channels") or []):
@@ -112,6 +117,56 @@ class ProviderConnectionService:
         return await self._command_repository.save(
             tenant_id=tenant_id,
             connection=connection,
+        )
+
+    async def change_connection_status(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        provider_connection_id: ProviderConnectionIdVO,
+        status: ProviderConnectionStatusVO,
+    ) -> ProviderConnectionEntity:
+        """Меняет статус provider connection по lifecycle-правилам."""
+        connection = await self._command_repository.load(
+            tenant_id=tenant_id,
+            provider_connection_id=provider_connection_id,
+        )
+        if connection is None:
+            raise ProviderConnectionNotFoundError()
+        connection.change_status(status=status, now=self._clock.now())
+        return await self._command_repository.save(
+            tenant_id=tenant_id,
+            connection=connection,
+        )
+
+    async def delete_connection(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        provider_connection_id: ProviderConnectionIdVO,
+    ) -> None:
+        """Удаляет connection физически или архивирует при наличии истории."""
+        connection = await self._command_repository.load(
+            tenant_id=tenant_id,
+            provider_connection_id=provider_connection_id,
+        )
+        if connection is None:
+            raise ProviderConnectionNotFoundError()
+        connection.ensure_deletable()
+        has_usage = await self._command_repository.has_usage(
+            tenant_id=tenant_id,
+            provider_connection_id=provider_connection_id,
+        )
+        if has_usage:
+            connection.archive(now=self._clock.now())
+            await self._command_repository.save(
+                tenant_id=tenant_id,
+                connection=connection,
+            )
+            return
+        await self._command_repository.delete(
+            tenant_id=tenant_id,
+            provider_connection_id=provider_connection_id,
         )
 
 
