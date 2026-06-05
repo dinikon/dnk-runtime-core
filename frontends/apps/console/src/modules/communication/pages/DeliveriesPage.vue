@@ -1,7 +1,14 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { useQuery } from "@tanstack/vue-query";
-import { ArrowDown, ArrowUp, Eye, RefreshCcw, Search } from "lucide-vue-next";
+import { computed, ref, watch } from "vue";
+import {
+  getCoreRowModel,
+  getFilteredRowModel,
+  useVueTable,
+  type ColumnDef,
+} from "@tanstack/vue-table";
+import { Eye, RefreshCcw, SendHorizontal } from "lucide-vue-next";
+import { useRoute, useRouter } from "vue-router";
+import { toast } from "vue-sonner";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -15,187 +22,251 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
   Table,
   TableBody,
   TableCell,
+  TableEmpty,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { communicationApi } from "@/modules/communication/api";
-import type { OutboundMessage } from "@/modules/communication/api";
+import { Textarea } from "@/components/ui/textarea";
+import type {
+  JsonObject,
+  MessageTemplate,
+  OutboundMessage,
+} from "@/modules/communication/api";
 import CommunicationPageHeader from "@/modules/communication/components/CommunicationPageHeader.vue";
+import DeliveriesToolBar from "@/modules/communication/components/DeliveriesToolBar.vue";
 import StatusBadge from "@/modules/communication/components/StatusBadge.vue";
-import { apiErrorMessage } from "@/modules/communication/lib";
+import {
+  apiErrorMessage,
+  createClientUuid,
+  formatJsonObject,
+  parseJsonObject,
+} from "@/modules/communication/lib";
+import { useSendCommunicationMutation } from "@/modules/communication/mutations/use-send-communication-mutation";
+import { useMessageTemplatesQuery } from "@/modules/communication/queries/use-message-templates-query";
+import { useOutboundMessagesQuery } from "@/modules/communication/queries/use-outbound-messages-query";
 
-type SortDirection = "asc" | "desc";
-type SortField =
-  | "created_at"
-  | "updated_at"
-  | "queued_at"
-  | "sent_at"
-  | "delivered_at"
-  | "failed_at"
-  | "internal_status"
-  | "channel_code"
-  | "recipient_address"
-  | "external_status";
+const PAGE_SIZE = 50;
 
-const SORT_OPTIONS: { field: SortField; label: string }[] = [
-  { field: "created_at", label: "Created" },
-  { field: "updated_at", label: "Updated" },
-  { field: "queued_at", label: "Queued" },
-  { field: "sent_at", label: "Sent" },
-  { field: "delivered_at", label: "Delivered" },
-  { field: "failed_at", label: "Failed" },
-  { field: "internal_status", label: "Status" },
-  { field: "channel_code", label: "Channel" },
-  { field: "recipient_address", label: "Recipient" },
-  { field: "external_status", label: "Provider status" },
-];
+const route = useRoute();
+const router = useRouter();
 
-const PAGE_SIZES = [25, 50, 100, 200];
-
-const search = ref("");
-const statusFilter = ref("ALL");
-const channelFilter = ref("ALL");
-const sortField = ref<SortField>("created_at");
-const sortDirection = ref<SortDirection>("desc");
-const pageSize = ref(50);
 const offset = ref(0);
 const detailOpen = ref(false);
 const activeMessage = ref<OutboundMessage | null>(null);
+const selectedTemplateId = ref("");
+const recipientIdentifierType = ref("phone");
+const recipientAddress = ref("");
+const recipientSnapshotText = ref(formatJsonObject({}));
+const variablesText = ref(formatJsonObject({}));
+const priority = ref(100);
 
-const messagesQuery = useQuery({
-  queryKey: computed(() => [
-    "communication",
-    "outbound-messages",
-    pageSize.value,
-    offset.value,
-  ]),
-  queryFn: () =>
-    communicationApi.listOutboundMessages({
-      limit: pageSize.value,
-      offset: offset.value,
-    }),
-  retry: false,
-});
+const outboundQueryParams = computed(() => ({
+  limit: PAGE_SIZE,
+  offset: offset.value,
+}));
+const messagesQuery = useOutboundMessagesQuery(outboundQueryParams);
+const templatesQuery = useMessageTemplatesQuery();
+const sendMutation = useSendCommunicationMutation();
 
 const messages = computed(() => messagesQuery.data.value?.items ?? []);
-const statusOptions = computed(() =>
-  uniqueOptions(messages.value.map((message) => message.internal_status)),
+const activeTemplates = computed(() =>
+  (templatesQuery.data.value?.items ?? []).filter(
+    (template) =>
+      template.status === "ACTIVE" &&
+      template.active_version_id &&
+      !template.status.startsWith("ARCHIV"),
+  ),
 );
-const channelOptions = computed(() =>
-  uniqueOptions(messages.value.map((message) => message.channel_code)),
+const selectedTemplate = computed(() =>
+  activeTemplates.value.find(
+    (template) => template.template_id === selectedTemplateId.value,
+  ),
 );
-const visibleMessages = computed(() => {
-  const query = search.value.trim().toLowerCase();
-
-  return messages.value
-    .filter((message) => {
-      if (
-        statusFilter.value !== "ALL" &&
-        message.internal_status !== statusFilter.value
-      ) {
-        return false;
-      }
-
-      if (
-        channelFilter.value !== "ALL" &&
-        message.channel_code !== channelFilter.value
-      ) {
-        return false;
-      }
-
-      if (!query) {
-        return true;
-      }
-
-      return searchableMessageText(message).includes(query);
-    })
-    .slice()
-    .sort((left, right) => compareMessages(left, right));
+const searchQuery = computed(() => {
+  const value = route.query.q;
+  return typeof value === "string" ? value : "";
 });
-const currentPage = computed(
-  () => Math.floor(offset.value / pageSize.value) + 1,
-);
+const isSendTestSheetOpen = computed({
+  get: () => route.query.send === "test",
+  set: (value: boolean) => {
+    patchQuery({ send: value ? "test" : undefined });
+  },
+});
+const currentPage = computed(() => Math.floor(offset.value / PAGE_SIZE) + 1);
 const canGoPrevious = computed(() => offset.value > 0);
-const canGoNext = computed(() => messages.value.length === pageSize.value);
+const canGoNext = computed(() => messages.value.length === PAGE_SIZE);
+const columns: ColumnDef<OutboundMessage>[] = [
+  {
+    id: "status",
+    accessorKey: "internal_status",
+    header: "Status",
+  },
+  {
+    id: "channel_code",
+    accessorKey: "channel_code",
+    header: "Channel",
+  },
+  {
+    id: "recipient",
+    accessorFn: (message) =>
+      `${message.recipient_address} ${message.recipient_identifier_type}`,
+    header: "Recipient",
+  },
+  {
+    id: "provider_status",
+    accessorKey: "external_status",
+    header: "Provider status",
+  },
+  {
+    id: "external_message_id",
+    accessorKey: "external_message_id",
+    header: "External ID",
+  },
+  {
+    id: "queued_at",
+    accessorKey: "queued_at",
+    header: "Queued",
+  },
+  {
+    id: "sent_at",
+    accessorKey: "sent_at",
+    header: "Sent",
+  },
+  {
+    id: "delivered_at",
+    accessorKey: "delivered_at",
+    header: "Delivered",
+  },
+  {
+    id: "failed_at",
+    accessorKey: "failed_at",
+    header: "Failed",
+  },
+  {
+    id: "updated_at",
+    accessorKey: "updated_at",
+    header: "Updated",
+  },
+  {
+    id: "details",
+    header: "Details",
+    enableGlobalFilter: false,
+  },
+];
+const table = useVueTable({
+  data: messages,
+  columns,
+  getCoreRowModel: getCoreRowModel(),
+  getFilteredRowModel: getFilteredRowModel(),
+  state: {
+    get globalFilter() {
+      return searchQuery.value;
+    },
+  },
+});
+const visibleRows = computed(() => table.getRowModel().rows);
+const columnCount = computed(() => table.getVisibleLeafColumns().length);
 
-function uniqueOptions(values: string[]) {
-  return Array.from(new Set(values.filter(Boolean))).sort((left, right) =>
-    left.localeCompare(right),
-  );
-}
+watch(
+  activeTemplates,
+  (items) => {
+    if (!items.length) {
+      selectedTemplateId.value = "";
+      return;
+    }
 
-function searchableMessageText(message: OutboundMessage) {
-  return [
-    message.outbound_message_id,
-    message.communication_request_id,
-    message.provider_connection_id,
-    message.channel_code,
-    message.recipient_identifier_type,
-    message.recipient_address,
-    message.external_message_id,
-    message.external_status,
-    message.internal_status,
-    message.error_code,
-    message.error_message,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-}
+    if (
+      !selectedTemplateId.value ||
+      !items.some((item) => item.template_id === selectedTemplateId.value)
+    ) {
+      selectedTemplateId.value = items[0].template_id;
+    }
+  },
+  { immediate: true },
+);
 
-function compareMessages(left: OutboundMessage, right: OutboundMessage) {
-  const leftValue = left[sortField.value];
-  const rightValue = right[sortField.value];
-  const direction = sortDirection.value === "asc" ? 1 : -1;
-
-  if (leftValue === rightValue) {
-    return 0;
-  }
-
-  if (leftValue === null || leftValue === undefined) {
-    return 1;
-  }
-
-  if (rightValue === null || rightValue === undefined) {
-    return -1;
-  }
-
-  return String(leftValue).localeCompare(String(rightValue)) * direction;
-}
-
-function toggleSortDirection() {
-  sortDirection.value = sortDirection.value === "asc" ? "desc" : "asc";
-}
-
-function setPageSize(event: Event) {
-  const target = event.target;
-
-  if (!(target instanceof HTMLSelectElement)) {
+watch(selectedTemplate, (template) => {
+  if (!template) {
     return;
   }
 
-  pageSize.value = Number(target.value);
-  offset.value = 0;
+  recipientIdentifierType.value =
+    template.channel_code === "EMAIL" ? "email" : "phone";
+});
+
+function patchQuery(patch: Record<string, string | undefined>) {
+  const nextQuery = { ...route.query };
+
+  for (const [key, value] of Object.entries(patch)) {
+    if (!value) {
+      delete nextQuery[key];
+    } else {
+      nextQuery[key] = value;
+    }
+  }
+
+  router.replace({ query: nextQuery });
+}
+
+async function refreshDeliveries() {
+  await Promise.all([messagesQuery.refetch(), templatesQuery.refetch()]);
+}
+
+async function sendTestMessage() {
+  const template = selectedTemplate.value;
+
+  if (!template) {
+    toast.error("Select an active template.");
+    return;
+  }
+
+  try {
+    const recipientSnapshot = parseJsonObject(recipientSnapshotText.value, {});
+    const variables = parseJsonObject(variablesText.value, {});
+    const result = await sendMutation.mutateAsync({
+      initiator_type: "CONSOLE_TEST",
+      initiator_ref_id: "communication-deliveries",
+      correlation_id: createClientUuid(),
+      idempotency_key: createClientUuid(),
+      channel_code: template.channel_code,
+      template_id: template.template_id,
+      recipient_identifier_type: recipientIdentifierType.value.trim(),
+      recipient_address: recipientAddress.value.trim(),
+      recipient_snapshot: recipientSnapshot,
+      message_class: template.message_class,
+      variables,
+      scheduled_at: null,
+      priority: Number(priority.value),
+    });
+
+    toast.success(`Test message queued: ${result.internal_status}.`);
+    isSendTestSheetOpen.value = false;
+    offset.value = 0;
+    await messagesQuery.refetch();
+  } catch (error) {
+    toast.error(apiErrorMessage(error));
+  }
 }
 
 function goPrevious() {
-  offset.value = Math.max(0, offset.value - pageSize.value);
+  offset.value = Math.max(0, offset.value - PAGE_SIZE);
 }
 
 function goNext() {
-  offset.value += pageSize.value;
-}
-
-function resetFilters() {
-  search.value = "";
-  statusFilter.value = "ALL";
-  channelFilter.value = "ALL";
-  sortField.value = "created_at";
-  sortDirection.value = "desc";
+  offset.value += PAGE_SIZE;
 }
 
 function openDetails(message: OutboundMessage) {
@@ -218,8 +289,12 @@ function shortId(value: string) {
   return value.slice(0, 8);
 }
 
-function prettyJson(value: unknown) {
+function prettyJson(value: JsonObject) {
   return JSON.stringify(value, null, 2);
+}
+
+function templateLabel(template: MessageTemplate) {
+  return `${template.name} · ${template.channel_code}`;
 }
 </script>
 
@@ -230,175 +305,192 @@ function prettyJson(value: unknown) {
     >
       <CommunicationPageHeader
         title="Deliveries"
-        description="Search, filter, sort, inspect, and page through outbound communication messages and provider statuses."
+        description="Search, inspect, and page through outbound communication messages and provider statuses."
       />
       <Button
         type="button"
         variant="outline"
-        :disabled="messagesQuery.isFetching.value"
-        @click="messagesQuery.refetch()"
+        :disabled="
+          messagesQuery.isFetching.value || templatesQuery.isFetching.value
+        "
+        @click="refreshDeliveries"
       >
         <RefreshCcw
           class="size-4"
-          :class="{ 'animate-spin': messagesQuery.isFetching.value }"
+          :class="{
+            'animate-spin':
+              messagesQuery.isFetching.value || templatesQuery.isFetching.value,
+          }"
         />
         Refresh
       </Button>
     </div>
 
-    <Alert v-if="messagesQuery.error.value" variant="destructive">
+    <Alert
+      v-if="messagesQuery.error.value || templatesQuery.error.value"
+      variant="destructive"
+    >
       <AlertDescription>
-        {{ apiErrorMessage(messagesQuery.error.value) }}
+        {{
+          apiErrorMessage(
+            messagesQuery.error.value ?? templatesQuery.error.value,
+          )
+        }}
       </AlertDescription>
     </Alert>
 
-    <div class="grid shrink-0 gap-3 rounded-lg border p-3">
-      <div
-        class="grid gap-3 xl:grid-cols-[minmax(16rem,1fr)_12rem_12rem_12rem_auto_auto]"
-      >
-        <div class="relative">
-          <Search
-            class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-          />
-          <Input v-model="search" class="pl-9" placeholder="Search messages" />
-        </div>
+    <DeliveriesToolBar />
 
-        <select
-          v-model="statusFilter"
-          class="border-input bg-background h-9 rounded-md border px-3 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-        >
-          <option value="ALL">All statuses</option>
-          <option v-for="status in statusOptions" :key="status" :value="status">
-            {{ status }}
-          </option>
-        </select>
-
-        <select
-          v-model="channelFilter"
-          class="border-input bg-background h-9 rounded-md border px-3 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-        >
-          <option value="ALL">All channels</option>
-          <option
-            v-for="channel in channelOptions"
-            :key="channel"
-            :value="channel"
-          >
-            {{ channel }}
-          </option>
-        </select>
-
-        <select
-          v-model="sortField"
-          class="border-input bg-background h-9 rounded-md border px-3 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-        >
-          <option
-            v-for="option in SORT_OPTIONS"
-            :key="option.field"
-            :value="option.field"
-          >
-            {{ option.label }}
-          </option>
-        </select>
-
-        <Button type="button" variant="outline" @click="toggleSortDirection">
-          <ArrowUp v-if="sortDirection === 'asc'" class="size-4" />
-          <ArrowDown v-else class="size-4" />
-          {{ sortDirection.toUpperCase() }}
-        </Button>
-
-        <Button type="button" variant="outline" @click="resetFilters">
-          Reset
-        </Button>
-      </div>
-    </div>
-
-    <div class="min-h-0 flex-1 overflow-auto rounded-lg border">
+    <div
+      class="min-h-0 flex-1 overflow-hidden rounded-lg border [&>[data-slot=table-container]]:h-full"
+    >
       <Table>
-        <TableHeader class="sticky top-0 z-10 bg-background">
+        <TableHeader class="sticky top-0 z-20 bg-background">
           <TableRow>
-            <TableHead>Status</TableHead>
-            <TableHead>Channel</TableHead>
-            <TableHead>Recipient</TableHead>
-            <TableHead>Provider status</TableHead>
-            <TableHead>External ID</TableHead>
-            <TableHead>Queued</TableHead>
-            <TableHead>Sent</TableHead>
-            <TableHead>Delivered</TableHead>
-            <TableHead>Failed</TableHead>
-            <TableHead>Updated</TableHead>
-            <TableHead class="text-right">Details</TableHead>
+            <TableHead
+              v-for="header in table.getHeaderGroups()[0]?.headers ?? []"
+              :key="header.id"
+              :class="{
+                'w-32': ['status', 'channel_code'].includes(header.column.id),
+                'w-44': ['provider_status', 'external_message_id'].includes(
+                  header.column.id,
+                ),
+                'w-40': [
+                  'queued_at',
+                  'sent_at',
+                  'delivered_at',
+                  'failed_at',
+                  'updated_at',
+                ].includes(header.column.id),
+                'w-20 text-right': header.column.id === 'details',
+              }"
+            >
+              {{ header.column.columnDef.header }}
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          <TableRow
-            v-for="message in visibleMessages"
-            :key="message.outbound_message_id"
-            class="cursor-pointer"
-            @click="openDetails(message)"
+          <template v-if="messagesQuery.isLoading.value">
+            <TableRow v-for="index in 8" :key="index">
+              <TableCell>
+                <Skeleton class="h-5 w-20" />
+              </TableCell>
+              <TableCell>
+                <Skeleton class="h-5 w-16" />
+              </TableCell>
+              <TableCell>
+                <div class="grid gap-2">
+                  <Skeleton class="h-4 w-40" />
+                  <Skeleton class="h-3 w-24" />
+                </div>
+              </TableCell>
+              <TableCell>
+                <Skeleton class="h-4 w-24" />
+              </TableCell>
+              <TableCell>
+                <Skeleton class="h-4 w-36" />
+              </TableCell>
+              <TableCell>
+                <Skeleton class="h-4 w-32" />
+              </TableCell>
+              <TableCell>
+                <Skeleton class="h-4 w-32" />
+              </TableCell>
+              <TableCell>
+                <Skeleton class="h-4 w-32" />
+              </TableCell>
+              <TableCell>
+                <Skeleton class="h-4 w-32" />
+              </TableCell>
+              <TableCell>
+                <Skeleton class="h-4 w-32" />
+              </TableCell>
+              <TableCell>
+                <Skeleton class="ml-auto h-8 w-8" />
+              </TableCell>
+            </TableRow>
+          </template>
+
+          <TableEmpty
+            v-else-if="visibleRows.length === 0"
+            :colspan="columnCount"
+            class="text-muted-foreground"
           >
-            <TableCell>
-              <StatusBadge :status="message.internal_status" />
-            </TableCell>
-            <TableCell>
-              <Badge variant="secondary">{{ message.channel_code }}</Badge>
-            </TableCell>
-            <TableCell class="min-w-56">
-              <div class="grid gap-1">
+            No deliveries found.
+          </TableEmpty>
+
+          <TableRow
+            v-for="row in visibleRows"
+            v-else
+            :key="row.id"
+            class="cursor-pointer animate-in fade-in-0 slide-in-from-top-1 duration-300"
+            @click="openDetails(row.original)"
+          >
+            <TableCell v-for="cell in row.getVisibleCells()" :key="cell.id">
+              <StatusBadge
+                v-if="cell.column.id === 'status'"
+                :status="row.original.internal_status"
+              />
+
+              <Badge
+                v-else-if="cell.column.id === 'channel_code'"
+                variant="secondary"
+              >
+                {{ row.original.channel_code }}
+              </Badge>
+
+              <div
+                v-else-if="cell.column.id === 'recipient'"
+                class="grid gap-1"
+              >
                 <span class="text-sm font-medium">
-                  {{ message.recipient_address }}
+                  {{ row.original.recipient_address }}
                 </span>
                 <span class="text-xs text-muted-foreground">
-                  {{ message.recipient_identifier_type }}
+                  {{ row.original.recipient_identifier_type }}
                 </span>
               </div>
-            </TableCell>
-            <TableCell>
-              <span class="text-sm">
-                {{ message.external_status ?? "-" }}
-              </span>
-            </TableCell>
-            <TableCell class="font-mono text-xs">
-              {{ message.external_message_id ?? "-" }}
-            </TableCell>
-            <TableCell class="whitespace-nowrap text-sm">
-              {{ formatDate(message.queued_at) }}
-            </TableCell>
-            <TableCell class="whitespace-nowrap text-sm">
-              {{ formatDate(message.sent_at) }}
-            </TableCell>
-            <TableCell class="whitespace-nowrap text-sm">
-              {{ formatDate(message.delivered_at) }}
-            </TableCell>
-            <TableCell class="whitespace-nowrap text-sm">
-              {{ formatDate(message.failed_at) }}
-            </TableCell>
-            <TableCell class="whitespace-nowrap text-sm">
-              {{ formatDate(message.updated_at) }}
-            </TableCell>
-            <TableCell class="text-right">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                @click.stop="openDetails(message)"
+
+              <span
+                v-else-if="cell.column.id === 'provider_status'"
+                class="text-sm"
               >
-                <Eye class="size-4" />
-                <span class="sr-only">
-                  Open {{ shortId(message.outbound_message_id) }}
-                </span>
-              </Button>
-            </TableCell>
-          </TableRow>
-          <TableRow
-            v-if="
-              !messagesQuery.isLoading.value && visibleMessages.length === 0
-            "
-          >
-            <TableCell
-              colspan="11"
-              class="h-24 text-center text-muted-foreground"
-            >
-              No messages match the current query.
+                {{ row.original.external_status ?? "-" }}
+              </span>
+
+              <span
+                v-else-if="cell.column.id === 'external_message_id'"
+                class="font-mono text-xs"
+              >
+                {{ row.original.external_message_id ?? "-" }}
+              </span>
+
+              <span
+                v-else-if="cell.column.id !== 'details'"
+                class="whitespace-nowrap text-sm text-muted-foreground"
+              >
+                {{
+                  formatDate(
+                    row.original[cell.column.id as keyof OutboundMessage] as
+                      | string
+                      | null,
+                  )
+                }}
+              </span>
+
+              <div v-else class="flex justify-end">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  @click.stop="openDetails(row.original)"
+                >
+                  <Eye class="size-4" />
+                  <span class="sr-only">
+                    Open {{ shortId(row.original.outbound_message_id) }}
+                  </span>
+                </Button>
+              </div>
             </TableCell>
           </TableRow>
         </TableBody>
@@ -408,28 +500,10 @@ function prettyJson(value: unknown) {
     <div
       class="flex shrink-0 flex-col gap-3 md:flex-row md:items-center md:justify-between"
     >
-      <div class="flex flex-wrap items-center gap-3">
-        <p class="text-sm text-muted-foreground">
-          Page {{ currentPage }} · showing {{ visibleMessages.length }} of
-          {{ messages.length }} loaded
-        </p>
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-muted-foreground">Rows</span>
-          <select
-            :value="String(pageSize)"
-            class="border-input bg-background h-8 rounded-md border px-2 text-sm shadow-xs outline-none"
-            @change="setPageSize"
-          >
-            <option
-              v-for="size in PAGE_SIZES"
-              :key="size"
-              :value="String(size)"
-            >
-              {{ size }}
-            </option>
-          </select>
-        </div>
-      </div>
+      <p class="text-sm text-muted-foreground">
+        Page {{ currentPage }} · showing {{ visibleRows.length }} of
+        {{ PAGE_SIZE }} loaded
+      </p>
       <div class="flex items-center justify-end gap-2">
         <Button
           type="button"
@@ -452,6 +526,111 @@ function prettyJson(value: unknown) {
       </div>
     </div>
 
+    <Sheet v-model:open="isSendTestSheetOpen">
+      <SheetContent
+        class="w-[min(34rem,100vw)] gap-2 overflow-y-auto p-4 sm:max-w-xl"
+      >
+        <SheetHeader class="gap-1 p-0 pr-8">
+          <SheetTitle>Send test</SheetTitle>
+          <SheetDescription>
+            Queue one message with recipient data and template variables.
+          </SheetDescription>
+        </SheetHeader>
+
+        <form class="grid gap-2" @submit.prevent="sendTestMessage">
+          <div class="grid gap-2">
+            <label class="text-sm font-medium" for="test-template">
+              Template
+            </label>
+            <select
+              id="test-template"
+              v-model="selectedTemplateId"
+              required
+              class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            >
+              <option
+                v-for="template in activeTemplates"
+                :key="template.template_id"
+                :value="template.template_id"
+              >
+                {{ templateLabel(template) }}
+              </option>
+            </select>
+            <span
+              v-if="!activeTemplates.length"
+              class="text-xs text-muted-foreground"
+            >
+              No active templates available.
+            </span>
+          </div>
+
+          <div class="grid gap-2 md:grid-cols-2">
+            <div class="grid gap-2">
+              <label class="text-sm font-medium" for="recipient-type">
+                Recipient type
+              </label>
+              <Input
+                id="recipient-type"
+                v-model="recipientIdentifierType"
+                required
+              />
+            </div>
+            <div class="grid gap-2">
+              <label class="text-sm font-medium" for="recipient-address">
+                Recipient address
+              </label>
+              <Input
+                id="recipient-address"
+                v-model="recipientAddress"
+                required
+              />
+            </div>
+          </div>
+
+          <div class="grid gap-2">
+            <label class="text-sm font-medium" for="variables">Variables</label>
+            <Textarea
+              id="variables"
+              v-model="variablesText"
+              class="min-h-28 font-mono text-xs"
+            />
+          </div>
+
+          <div class="grid gap-2">
+            <label class="text-sm font-medium" for="recipient-snapshot">
+              Recipient snapshot
+            </label>
+            <Textarea
+              id="recipient-snapshot"
+              v-model="recipientSnapshotText"
+              class="min-h-24 font-mono text-xs"
+            />
+          </div>
+
+          <div class="grid gap-2">
+            <label class="text-sm font-medium" for="priority">Priority</label>
+            <Input
+              id="priority"
+              v-model.number="priority"
+              min="0"
+              required
+              type="number"
+            />
+          </div>
+
+          <SheetFooter class="mt-2 gap-2 p-0 sm:flex-row sm:justify-end">
+            <Button
+              type="submit"
+              :disabled="!selectedTemplate || sendMutation.isPending.value"
+            >
+              <SendHorizontal class="size-4" />
+              {{ sendMutation.isPending.value ? "Sending" : "Send" }}
+            </Button>
+          </SheetFooter>
+        </form>
+      </SheetContent>
+    </Sheet>
+
     <Dialog v-model:open="detailOpen">
       <DialogContent class="max-h-[90svh] overflow-auto sm:max-w-4xl">
         <DialogHeader>
@@ -468,9 +647,9 @@ function prettyJson(value: unknown) {
             </div>
             <div class="grid gap-1 rounded-md border p-3">
               <span class="text-xs text-muted-foreground">Channel</span>
-              <span class="text-sm font-medium">{{
-                activeMessage.channel_code
-              }}</span>
+              <span class="text-sm font-medium">
+                {{ activeMessage.channel_code }}
+              </span>
             </div>
             <div class="grid gap-1 rounded-md border p-3">
               <span class="text-xs text-muted-foreground">Provider status</span>

@@ -5,6 +5,7 @@ import type {
   CreateProviderConnectionPayload,
   CreateTemplateVersionPayload,
   ListMessageTemplatesResponse,
+  ListOutboundMessagesParams,
   ListOutboundMessagesResponse,
   ListProviderConnectionsResponse,
   MessageTemplate,
@@ -113,7 +114,7 @@ export const communicationApi = {
         payload,
       )
     ).data,
-  listOutboundMessages: async (params: { limit: number; offset: number }) =>
+  listOutboundMessages: async (params: ListOutboundMessagesParams) =>
     (
       await httpClient.get<ListOutboundMessagesResponse>(
         "/communication/messages",

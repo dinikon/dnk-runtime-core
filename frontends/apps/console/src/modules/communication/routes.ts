@@ -52,6 +52,10 @@ export const communicationRoutes: RouteRecordRaw[] = [
     },
   },
   {
+    path: "cdp/Deliveries",
+    redirect: { name: "communication-deliveries" },
+  },
+  {
     path: "cdp/delivery",
     redirect: { name: "communication-deliveries" },
   },

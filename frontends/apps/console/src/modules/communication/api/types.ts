@@ -194,3 +194,8 @@ export interface OutboundMessage {
 export interface ListOutboundMessagesResponse {
   items: OutboundMessage[];
 }
+
+export interface ListOutboundMessagesParams {
+  limit: number;
+  offset: number;
+}
