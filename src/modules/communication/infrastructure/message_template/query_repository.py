@@ -53,7 +53,7 @@ class MessageTemplateQueryRuntimeRepository(MessageTemplateQueryRepositoryProtoc
         descriptor = await self._resolve_descriptor(tenant_id, _TEMPLATE)
         rows = await self._runtime_query_gateway.list(
             descriptor=descriptor,
-            sorting=(SortSpec("template_code"),),
+            sorting=(SortSpec("name"),),
         )
         result = []
         for row in rows:

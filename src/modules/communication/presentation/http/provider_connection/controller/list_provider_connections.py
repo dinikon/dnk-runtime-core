@@ -79,7 +79,6 @@ async def list_provider_connections(
                 provider_connection_id=item.provider_connection_id,
                 tenant_id=item.tenant_id,
                 provider_connector_id=item.provider_connector_id,
-                connection_code=item.connection_code,
                 connection_name=item.connection_name,
                 channel_code=item.channel_code,
                 config=item.config,

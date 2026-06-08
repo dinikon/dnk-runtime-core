@@ -24,7 +24,7 @@ class ProviderSendContext:
     recipient_address: str
     recipient_snapshot: dict[str, Any]
     variables: dict[str, Any]
-    connection_code: str
+    connection_name: str
     channel_code: str
     provider_message_type_code: str
     config: dict[str, Any]

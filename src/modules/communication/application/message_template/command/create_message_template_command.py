@@ -14,13 +14,11 @@ class CreateMessageTemplateCommand:
 
     tenant_id: EntityIdVO
     template_id: MessageTemplateIdVO
-    template_code: str
     name: str
     description: str | None
     provider_connector_id: ProviderConnectorIdVO
     provider_message_type_id: ProviderMessageTypeIdVO
     channel_code: str
-    message_class: str
 
 
 __all__ = ["CreateMessageTemplateCommand"]

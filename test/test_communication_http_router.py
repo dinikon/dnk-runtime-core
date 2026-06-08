@@ -265,7 +265,6 @@ class _CreateProviderConnectionUseCase:
             provider_connection_id=command.provider_connection_id.uuid,
             tenant_id=command.tenant_id.uuid,
             provider_connector_id=command.provider_connector_id.uuid,
-            connection_code=command.connection_code,
             connection_name=command.connection_name,
             channel_code=command.channel_code,
             config=command.config,
@@ -288,7 +287,6 @@ class _UpdateProviderConnectionStatusUseCase:
             provider_connection_id=command.provider_connection_id.uuid,
             tenant_id=command.tenant_id.uuid,
             provider_connector_id=uuid4(),
-            connection_code="gms",
             connection_name="GMS",
             channel_code="SMS",
             config={},
@@ -412,7 +410,6 @@ class CommunicationControllerErrorTests(unittest.IsolatedAsyncioTestCase):
             response = await create_provider_connection(
                 payload=CreateProviderConnectionRequestSchema(
                     provider_connector_id=provider_connector_id,
-                    connection_code="gms",
                     connection_name="GMS",
                     channel_code="SMS",
                     config={"client_id": "abc"},
@@ -663,7 +660,6 @@ class CommunicationControllerErrorTests(unittest.IsolatedAsyncioTestCase):
             await create_provider_connection(
                 payload=CreateProviderConnectionRequestSchema(
                     provider_connector_id=uuid4(),
-                    connection_code="gms",
                     connection_name="GMS",
                     channel_code="SMS",
                 ),
@@ -678,12 +674,10 @@ class CommunicationControllerErrorTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(HTTPException) as caught:
             await create_message_template(
                 payload=CreateMessageTemplateRequestSchema(
-                    template_code="loan",
                     name="Loan",
                     provider_connector_id=uuid4(),
                     provider_message_type_id=uuid4(),
                     channel_code="SMS",
-                    message_class="TRANSACTIONAL",
                 ),
                 context=_context(),
                 use_case=_FailingUseCase(

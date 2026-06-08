@@ -136,7 +136,6 @@ delivery statuses. Это остается ответственностью `com
 - `provider_connector_id`;
 - `provider_message_type_id`;
 - `channel_code`;
-- `message_class`;
 - `mapping_config`;
 - `orchestration_config`;
 - `total_rows`;
@@ -312,7 +311,7 @@ Relations:
 - `MessageTemplateLookupPort`
     - get template;
     - get active template version;
-    - expose variables schema, channel, message_class.
+    - expose variables schema and channel.
 - `CommunicationSendPort`
     - wraps `SendCommunicationUseCase`.
 - `AudienceImportAdapter`

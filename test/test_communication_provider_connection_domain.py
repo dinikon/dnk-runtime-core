@@ -7,9 +7,7 @@ from uuid import uuid4
 
 from src.modules.communication.domain.error import CommunicationValidationError
 from src.modules.communication.domain.provider_connection import (
-    InvalidProviderConnectionCodeError,
     InvalidProviderConnectionNameError,
-    ProviderConnectionCodeVO,
     ProviderConnectionDeleteForbiddenError,
     ProviderConnectionEntity,
     ProviderConnectionIdVO,
@@ -117,11 +115,8 @@ def _connector(
 
 class ProviderConnectionDomainTests(unittest.IsolatedAsyncioTestCase):
     def test_value_objects_trim_and_reject_empty_values(self) -> None:
-        self.assertEqual(ProviderConnectionCodeVO("  sms_main  ").value, "sms_main")
         self.assertEqual(ProviderConnectionNameVO("  Main SMS  ").value, "Main SMS")
 
-        with self.assertRaises(InvalidProviderConnectionCodeError):
-            ProviderConnectionCodeVO(" ")
         with self.assertRaises(InvalidProviderConnectionNameError):
             ProviderConnectionNameVO("")
 
@@ -134,7 +129,6 @@ class ProviderConnectionDomainTests(unittest.IsolatedAsyncioTestCase):
             now=now,
             tenant_id=EntityIdVO.from_value(uuid4()),
             provider_connector_id=ProviderConnectorIdVO.from_value(uuid4()),
-            connection_code="  sms_main  ",
             connection_name=" Main SMS ",
             channel_code="SMS",
             config=config,
@@ -146,7 +140,6 @@ class ProviderConnectionDomainTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(entity.created_at, now)
         self.assertEqual(entity.updated_at, now)
-        self.assertEqual(entity.connection_code.value, "sms_main")
         self.assertEqual(entity.connection_name.value, "Main SMS")
         self.assertEqual(entity.status, ProviderConnectionStatusVO.ACTIVE)
         self.assertEqual(entity.config, {"client_id": "abc"})
@@ -159,7 +152,6 @@ class ProviderConnectionDomainTests(unittest.IsolatedAsyncioTestCase):
             now=created_at,
             tenant_id=EntityIdVO.from_value(uuid4()),
             provider_connector_id=ProviderConnectorIdVO.from_value(uuid4()),
-            connection_code="sms_main",
             connection_name="Main SMS",
             channel_code="SMS",
             config={},
@@ -210,7 +202,6 @@ class ProviderConnectionDomainTests(unittest.IsolatedAsyncioTestCase):
             tenant_id=tenant_id,
             provider_connection_id=provider_connection_id,
             provider_connector_id=provider_connector_id,
-            connection_code="sms_main",
             connection_name="Main SMS",
             channel_code="SMS",
             config={"client_id": "abc"},
@@ -238,7 +229,6 @@ class ProviderConnectionDomainTests(unittest.IsolatedAsyncioTestCase):
                 tenant_id=EntityIdVO.from_value(uuid4()),
                 provider_connection_id=ProviderConnectionIdVO.from_value(uuid4()),
                 provider_connector_id=ProviderConnectorIdVO.from_value(uuid4()),
-                connection_code="sms_main",
                 connection_name="Main SMS",
                 channel_code="SMS",
                 config={},
@@ -262,7 +252,6 @@ class ProviderConnectionDomainTests(unittest.IsolatedAsyncioTestCase):
                 tenant_id=EntityIdVO.from_value(uuid4()),
                 provider_connection_id=ProviderConnectionIdVO.from_value(uuid4()),
                 provider_connector_id=provider_connector_id,
-                connection_code="email_main",
                 connection_name="Main Email",
                 channel_code="EMAIL",
                 config={},
@@ -290,7 +279,6 @@ class ProviderConnectionDomainTests(unittest.IsolatedAsyncioTestCase):
                 tenant_id=EntityIdVO.from_value(uuid4()),
                 provider_connection_id=ProviderConnectionIdVO.from_value(uuid4()),
                 provider_connector_id=provider_connector_id,
-                connection_code="sms_main",
                 connection_name="Main SMS",
                 channel_code="SMS",
                 config={},
@@ -310,7 +298,6 @@ class ProviderConnectionDomainTests(unittest.IsolatedAsyncioTestCase):
             now=now,
             tenant_id=tenant_id,
             provider_connector_id=ProviderConnectorIdVO.from_value(uuid4()),
-            connection_code="sms_main",
             connection_name="Main SMS",
             channel_code="SMS",
             config={},
@@ -342,7 +329,6 @@ class ProviderConnectionDomainTests(unittest.IsolatedAsyncioTestCase):
             now=now,
             tenant_id=tenant_id,
             provider_connector_id=ProviderConnectorIdVO.from_value(uuid4()),
-            connection_code="sms_secondary",
             connection_name="Secondary SMS",
             channel_code="SMS",
             config={},
@@ -389,7 +375,6 @@ class ProviderConnectionDomainTests(unittest.IsolatedAsyncioTestCase):
                 tenant_id=EntityIdVO.from_value(uuid4()),
                 provider_connection_id=ProviderConnectionIdVO.from_value(uuid4()),
                 provider_connector_id=provider_connector_id,
-                connection_code="sms_main",
                 connection_name="Main SMS",
                 channel_code="SMS",
                 config={},

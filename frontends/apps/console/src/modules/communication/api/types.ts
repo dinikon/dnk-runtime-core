@@ -66,7 +66,6 @@ export interface ProviderConnection {
   provider_connection_id: string;
   tenant_id: string;
   provider_connector_id: string;
-  connection_code: string;
   connection_name: string;
   channel_code: string;
   config: JsonObject;
@@ -83,7 +82,6 @@ export interface ListProviderConnectionsResponse {
 
 export interface CreateProviderConnectionPayload {
   provider_connector_id: string;
-  connection_code: string;
   connection_name: string;
   channel_code: string;
   config: JsonObject;
@@ -99,13 +97,11 @@ export interface UpdateProviderConnectionStatusPayload {
 export interface MessageTemplate {
   template_id: string;
   tenant_id: string;
-  template_code: string;
   name: string;
   description: string | null;
   provider_connector_id: string;
   provider_message_type_id: string;
   channel_code: string;
-  message_class: string;
   status: string;
   created_at: string;
   updated_at: string;
@@ -118,13 +114,11 @@ export interface ListMessageTemplatesResponse {
 }
 
 export interface CreateMessageTemplatePayload {
-  template_code: string;
   name: string;
   description: string | null;
   provider_connector_id: string;
   provider_message_type_id: string;
   channel_code: string;
-  message_class: string;
 }
 
 export interface TemplateVersion {
@@ -153,7 +147,6 @@ export interface SendCommunicationPayload {
   recipient_identifier_type: string;
   recipient_address: string;
   recipient_snapshot: JsonObject;
-  message_class: string | null;
   variables: JsonObject;
   scheduled_at: string | null;
   priority: number;

@@ -306,7 +306,7 @@ def _render_context(
             "initiator_ref_id": context.initiator_ref_id,
         },
         "connection": {
-            "connection_code": context.connection_code,
+            "connection_name": context.connection_name,
             "channel_code": context.channel_code,
         },
         "provider_message_type": {

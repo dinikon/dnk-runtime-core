@@ -34,13 +34,6 @@ class ProviderConnectionStatusTransitionError(CommunicationValidationError):
         super().__init__("Provider connection status transition is not allowed.")
 
 
-class InvalidProviderConnectionCodeError(CommunicationValidationError):
-    """Raised when provider connection code is invalid."""
-
-    def __init__(self) -> None:
-        super().__init__("Provider connection code cannot be empty.")
-
-
 class InvalidProviderConnectionNameError(CommunicationValidationError):
     """Raised when provider connection name is invalid."""
 
@@ -53,7 +46,6 @@ class ProviderSecretsValidationError(CommunicationValidationError):
 
 
 __all__ = [
-    "InvalidProviderConnectionCodeError",
     "InvalidProviderConnectionNameError",
     "ProviderConnectionDeleteForbiddenError",
     "ProviderConnectionInactiveError",

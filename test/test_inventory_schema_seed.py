@@ -3,9 +3,18 @@ from __future__ import annotations
 import unittest
 
 from src.modules.schema_registry.application.migration.operations import (
+    AddColumnOperation,
     AddForeignKeyOperation,
     CreateIndexOperation,
     CreateTableOperation,
+    DropColumnOperation,
+    DropIndexOperation,
+)
+from src.modules.schema_registry.application.migration.physical_schema_snapshot import (
+    ColumnSnapshot,
+    IndexSnapshot,
+    PhysicalSchemaSnapshot,
+    TableSnapshot,
 )
 from src.modules.schema_registry.application.migration.postgres_field_canonicalizer import (
     PostgresFieldCanonicalizer,
@@ -16,11 +25,23 @@ from src.modules.schema_registry.application.migration.postgres_schema_plan_serv
 from src.modules.schema_registry.application.service.schema_seed_service import (
     SchemaSeedService,
 )
+from src.modules.schema_registry.application.migration.sql_type_preset import (
+    SqlTypePresetEnum,
+)
 from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
 from src.modules.schema_registry.infrastructure.seed.python_module_seed_reader import (
     PythonModuleSeedReader,
 )
 from src.modules.schema_registry.seed.schema_seed import SCHEMA_SEED
+
+
+def _legacy_text_column(name: str) -> ColumnSnapshot:
+    return ColumnSnapshot(
+        name=name,
+        sql_preset=SqlTypePresetEnum.TEXT,
+        is_nullable=False,
+        default_value=None,
+    )
 
 
 class InventorySchemaSeedTests(unittest.IsolatedAsyncioTestCase):
@@ -98,6 +119,11 @@ class InventorySchemaSeedTests(unittest.IsolatedAsyncioTestCase):
             operation
             for operation in plan.operations
             if isinstance(operation, CreateIndexOperation)
+        ]
+        columns = [
+            (operation.table_name, operation.column_name)
+            for operation in plan.operations
+            if isinstance(operation, AddColumnOperation)
         ]
         foreign_keys = [
             operation
@@ -339,6 +365,11 @@ class InventorySchemaSeedTests(unittest.IsolatedAsyncioTestCase):
             for operation in plan.operations
             if isinstance(operation, CreateIndexOperation)
         ]
+        columns = [
+            (operation.table_name, operation.column_name)
+            for operation in plan.operations
+            if isinstance(operation, AddColumnOperation)
+        ]
         foreign_keys = [
             operation
             for operation in plan.operations
@@ -419,6 +450,11 @@ class InventorySchemaSeedTests(unittest.IsolatedAsyncioTestCase):
             for operation in plan.operations
             if isinstance(operation, CreateIndexOperation)
         ]
+        columns = [
+            (operation.table_name, operation.column_name)
+            for operation in plan.operations
+            if isinstance(operation, AddColumnOperation)
+        ]
         foreign_keys = [
             operation
             for operation in plan.operations
@@ -427,6 +463,25 @@ class InventorySchemaSeedTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("communication_provider_connectors", tables)
         self.assertIn("communication_outbound_messages", tables)
+        self.assertNotIn(
+            ("communication_provider_connections", "connection_code"),
+            columns,
+        )
+        self.assertNotIn(("communication_message_templates", "template_code"), columns)
+        self.assertNotIn(("communication_message_templates", "message_class"), columns)
+        self.assertNotIn(("communication_requests", "message_class"), columns)
+        self.assertNotIn(("communication_outbound_messages", "message_class"), columns)
+        self.assertFalse(
+            any(
+                index.index_name
+                in {
+                    "communication_provider_connections_code_uq",
+                    "communication_message_templates_code_uq",
+                    "communication_message_templates_class_idx",
+                }
+                for index in indexes
+            )
+        )
         self.assertTrue(
             any(
                 index.index_name == "communication_provider_connectors_code_version_uq"
@@ -450,3 +505,125 @@ class InventorySchemaSeedTests(unittest.IsolatedAsyncioTestCase):
                 for fk in foreign_keys
             )
         )
+
+    async def test_communication_schema_diff_drops_removed_code_and_class_artifacts(
+        self,
+    ) -> None:
+        plan_service = PostgresSchemaPlanService(
+            field_type_catalog=FieldTypeCatalog(),
+            postgres_field_canonicalizer=PostgresFieldCanonicalizer(),
+        )
+        seed_service = SchemaSeedService(
+            seed_reader=None,  # type: ignore[arg-type]
+            field_type_catalog=FieldTypeCatalog(),
+        )
+        seed = seed_service._normalize(SCHEMA_SEED)  # noqa: SLF001
+        create_plan = plan_service.build_create_plan(schema_name="dnk_test", seed=seed)
+
+        desired_columns = {
+            operation.table_name: []
+            for operation in create_plan.operations
+            if isinstance(operation, AddColumnOperation)
+        }
+        for operation in create_plan.operations:
+            if isinstance(operation, AddColumnOperation):
+                desired_columns[operation.table_name].append(
+                    ColumnSnapshot(
+                        name=operation.column_name,
+                        sql_preset=operation.sql_preset,
+                        is_nullable=operation.is_nullable,
+                        default_value=operation.default_value,
+                    )
+                )
+
+        actual_schema = PhysicalSchemaSnapshot(
+            schema_name="dnk_test",
+            tables=(
+                TableSnapshot(
+                    name="communication_provider_connections",
+                    columns=(
+                        *desired_columns["communication_provider_connections"],
+                        _legacy_text_column("connection_code"),
+                    ),
+                    indexes=(
+                        IndexSnapshot(
+                            name="communication_provider_connections_code_uq",
+                            columns=("connection_code",),
+                            is_unique=True,
+                        ),
+                    ),
+                ),
+                TableSnapshot(
+                    name="communication_message_templates",
+                    columns=(
+                        *desired_columns["communication_message_templates"],
+                        _legacy_text_column("template_code"),
+                        _legacy_text_column("message_class"),
+                    ),
+                    indexes=(
+                        IndexSnapshot(
+                            name="communication_message_templates_code_uq",
+                            columns=("template_code",),
+                            is_unique=True,
+                        ),
+                        IndexSnapshot(
+                            name="communication_message_templates_class_idx",
+                            columns=("message_class",),
+                            is_unique=False,
+                        ),
+                    ),
+                ),
+                TableSnapshot(
+                    name="communication_requests",
+                    columns=(
+                        *desired_columns["communication_requests"],
+                        _legacy_text_column("message_class"),
+                    ),
+                ),
+                TableSnapshot(
+                    name="communication_outbound_messages",
+                    columns=(
+                        *desired_columns["communication_outbound_messages"],
+                        _legacy_text_column("message_class"),
+                    ),
+                ),
+            ),
+        )
+
+        diff = plan_service.build_diff_plan(
+            schema_name="dnk_test",
+            seed=seed,
+            actual_schema=actual_schema,
+        )
+        dropped_columns = {
+            (operation.table_name, operation.column_name)
+            for operation in diff.destructive_operations
+            if isinstance(operation, DropColumnOperation)
+        }
+        dropped_indexes = {
+            operation.index_name
+            for operation in diff.destructive_operations
+            if isinstance(operation, DropIndexOperation)
+        }
+
+        self.assertGreaterEqual(len(diff.destructive_operations), 8)
+        self.assertIn(
+            ("communication_provider_connections", "connection_code"),
+            dropped_columns,
+        )
+        self.assertIn(
+            ("communication_message_templates", "template_code"),
+            dropped_columns,
+        )
+        self.assertIn(
+            ("communication_message_templates", "message_class"),
+            dropped_columns,
+        )
+        self.assertIn(("communication_requests", "message_class"), dropped_columns)
+        self.assertIn(
+            ("communication_outbound_messages", "message_class"),
+            dropped_columns,
+        )
+        self.assertIn("communication_provider_connections_code_uq", dropped_indexes)
+        self.assertIn("communication_message_templates_code_uq", dropped_indexes)
+        self.assertIn("communication_message_templates_class_idx", dropped_indexes)

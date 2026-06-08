@@ -55,20 +55,10 @@ import { useProviderCatalogQuery } from "@/modules/communication/queries/use-pro
 import { useProviderConnectionsQuery } from "@/modules/communication/queries/use-provider-connections-query";
 import { useMessageTemplatesQuery } from "@/modules/communication/queries/use-message-templates-query";
 
-const MESSAGE_CLASSES = [
-  "TRANSACTIONAL",
-  "MARKETING",
-  "SERVICE",
-  "OTP",
-  "INFO",
-];
-
 const selectedConnectionId = ref("");
 const selectedMessageTypeId = ref("");
-const templateCode = ref("");
 const templateName = ref("");
 const templateDescription = ref("");
-const messageClass = ref("TRANSACTIONAL");
 const templatePayload = ref<JsonObject>({});
 const variablesSchemaText = ref(
   formatJsonObject({
@@ -168,7 +158,7 @@ const columns: ColumnDef<MessageTemplate>[] = [
   {
     id: "template",
     accessorFn: (template) =>
-      `${template.name} ${template.template_code} ${template.description ?? ""}`,
+      `${template.name} ${template.description ?? ""}`,
     header: "Template",
   },
   {
@@ -181,11 +171,6 @@ const columns: ColumnDef<MessageTemplate>[] = [
     id: "channel_code",
     accessorKey: "channel_code",
     header: "Channel",
-  },
-  {
-    id: "message_class",
-    accessorKey: "message_class",
-    header: "Class",
   },
   {
     id: "status",
@@ -263,7 +248,6 @@ watch(selectedMessageType, (messageType) => {
     return;
   }
 
-  templateCode.value = `${messageType.message_type_code}_template`;
   templateName.value = messageType.name;
   templatePayload.value = buildJsonSchemaDefaults(messageType.field_schema);
 });
@@ -292,13 +276,11 @@ async function createTemplateWithActiveVersion() {
     });
     const template = await createTemplateMutation.mutateAsync({
       template: {
-        template_code: templateCode.value.trim(),
         name: templateName.value.trim(),
         description: templateDescription.value.trim() || null,
         provider_connector_id: connection.provider_connector_id,
         provider_message_type_id: messageType.provider_message_type_id,
         channel_code: connection.channel_code,
-        message_class: messageClass.value,
       },
       version: {
         template_payload: templatePayload.value,
@@ -381,9 +363,7 @@ function messageTypeName(messageTypeId: string) {
               v-for="header in table.getHeaderGroups()[0]?.headers ?? []"
               :key="header.id"
               :class="{
-                'w-36': ['channel_code', 'message_class'].includes(
-                  header.column.id,
-                ),
+                'w-36': header.column.id === 'channel_code',
                 'w-40': header.column.id === 'status',
                 'w-48': ['active_version', 'updated_at'].includes(
                   header.column.id,
@@ -411,9 +391,6 @@ function messageTypeName(messageTypeId: string) {
               </TableCell>
               <TableCell>
                 <Skeleton class="h-5 w-16" />
-              </TableCell>
-              <TableCell>
-                <Skeleton class="h-5 w-28" />
               </TableCell>
               <TableCell>
                 <Skeleton class="h-5 w-20" />
@@ -446,9 +423,6 @@ function messageTypeName(messageTypeId: string) {
                 <span class="font-medium">
                   {{ row.original.name }}
                 </span>
-                <span class="font-mono text-xs text-muted-foreground">
-                  {{ row.original.template_code }}
-                </span>
                 <span
                   v-if="row.original.description"
                   class="line-clamp-2 max-w-xl text-xs text-muted-foreground"
@@ -472,13 +446,6 @@ function messageTypeName(messageTypeId: string) {
                 variant="secondary"
               >
                 {{ row.original.channel_code }}
-              </Badge>
-
-              <Badge
-                v-else-if="cell.column.id === 'message_class'"
-                variant="outline"
-              >
-                {{ row.original.message_class }}
               </Badge>
 
               <StatusBadge
@@ -565,33 +532,11 @@ function messageTypeName(messageTypeId: string) {
             </span>
           </div>
 
-          <div class="grid gap-2 md:grid-cols-2">
-            <div class="grid gap-2">
-              <label class="text-sm font-medium" for="template-code">
-                Code
-              </label>
-              <Input id="template-code" v-model="templateCode" required />
-            </div>
-            <div class="grid gap-2">
-              <label class="text-sm font-medium" for="template-name">
-                Name
-              </label>
-              <Input id="template-name" v-model="templateName" required />
-            </div>
-          </div>
-
           <div class="grid gap-2">
-            <label class="text-sm font-medium" for="template-message-class">
-              Message class
+            <label class="text-sm font-medium" for="template-name">
+              Name
             </label>
-            <CommunicationSelect
-              id="template-message-class"
-              v-model="messageClass"
-            >
-              <option v-for="item in MESSAGE_CLASSES" :key="item" :value="item">
-                {{ item }}
-              </option>
-            </CommunicationSelect>
+            <Input id="template-name" v-model="templateName" required />
           </div>
 
           <div class="grid gap-2">

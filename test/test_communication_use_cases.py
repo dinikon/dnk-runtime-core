@@ -169,7 +169,7 @@ class _ProcessRepositoryStub:
         )
         self.connection = SimpleNamespace(
             provider_connection_id=self.outbound.provider_connection_id,
-            connection_code="gms_viber",
+            connection_name="GMS Viber",
             channel_code="VIBER",
             config={"client_id": "abc"},
             secrets_b64=self.secret_codec.encode(
@@ -349,7 +349,7 @@ class _SmtpProcessRepositoryStub(_ProcessRepositoryStub):
             "html_body": "<p>Hello {{ name }}</p>",
         }
         self.message_type.message_type_code = "email_html"
-        self.connection.connection_code = "dnk_smtp"
+        self.connection.connection_name = "DNK SMTP"
         self.connection.channel_code = "EMAIL"
         self.connection.config = {
             "smtp_host": "smtp.example.com",
@@ -416,7 +416,7 @@ class _TurboSmsProcessRepositoryStub(_ProcessRepositoryStub):
     def __init__(self) -> None:
         super().__init__()
         self.message_type.message_type_code = "sms_text"
-        self.connection.connection_code = "turbosms_sms"
+        self.connection.connection_name = "TurboSMS SMS"
         self.connection.channel_code = "SMS"
         self.connection.config = {"sender": "TurboSMS"}
         self.connection.secrets_b64 = self.secret_codec.encode(
@@ -479,7 +479,6 @@ class _SendRepositoryStub:
         self.template = SimpleNamespace(
             template_id=MessageTemplateIdVO.from_value(uuid4()),
             channel_code=SimpleNamespace(value=channel_code),
-            message_class=SimpleNamespace(value="TRANSACTIONAL"),
             provider_connector_id=ProviderConnectorIdVO.from_value(uuid4()),
         )
         self.version = SimpleNamespace(
@@ -501,9 +500,6 @@ class _SendRepositoryStub:
 
     async def get_template(self, **_kwargs):
         self.template_calls += 1
-        return self.template
-
-    async def get_template_by_code(self, **_kwargs):
         return self.template
 
     async def get_active_template_version(self, *_args, **_kwargs):

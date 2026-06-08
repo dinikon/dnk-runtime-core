@@ -64,7 +64,6 @@ class ProviderConnectionApplicationTests(unittest.IsolatedAsyncioTestCase):
             now=now,
             tenant_id=tenant_id,
             provider_connector_id=provider_connector_id,
-            connection_code="sms_main",
             connection_name="Main SMS",
             channel_code="SMS",
             config={"client_id": "abc"},
@@ -82,7 +81,6 @@ class ProviderConnectionApplicationTests(unittest.IsolatedAsyncioTestCase):
                 tenant_id=tenant_id,
                 provider_connection_id=provider_connection_id,
                 provider_connector_id=provider_connector_id,
-                connection_code="sms_main",
                 connection_name="Main SMS",
                 channel_code="SMS",
                 config={"client_id": "abc"},
@@ -91,7 +89,6 @@ class ProviderConnectionApplicationTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(result.provider_connection_id, provider_connection_id.uuid)
-        self.assertEqual(result.connection_code, "sms_main")
         self.assertTrue(result.has_secrets)
         self.assertFalse(hasattr(result, "secrets_b64"))
         self.assertNotIn("token", str(result))
@@ -105,7 +102,6 @@ class ProviderConnectionApplicationTests(unittest.IsolatedAsyncioTestCase):
             provider_connection_id=uuid4(),
             tenant_id=tenant_id.uuid,
             provider_connector_id=uuid4(),
-            connection_code="sms_main",
             connection_name="Main SMS",
             channel_code="SMS",
             config={},
@@ -132,7 +128,6 @@ class ProviderConnectionApplicationTests(unittest.IsolatedAsyncioTestCase):
             now=now,
             tenant_id=tenant_id,
             provider_connector_id=ProviderConnectorIdVO.from_value(uuid4()),
-            connection_code="sms_main",
             connection_name="Main SMS",
             channel_code="SMS",
             config={},
@@ -164,7 +159,6 @@ class ProviderConnectionApplicationTests(unittest.IsolatedAsyncioTestCase):
             now=now,
             tenant_id=tenant_id,
             provider_connector_id=ProviderConnectorIdVO.from_value(uuid4()),
-            connection_code="sms_main",
             connection_name="Main SMS",
             channel_code="SMS",
             config={},

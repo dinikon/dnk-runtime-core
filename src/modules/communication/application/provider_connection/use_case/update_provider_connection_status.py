@@ -50,7 +50,6 @@ class UpdateProviderConnectionStatusUseCase:
             provider_connection_id=connection.provider_connection_id.uuid,
             tenant_id=connection.tenant_id.uuid,
             provider_connector_id=connection.provider_connector_id.uuid,
-            connection_code=connection.connection_code.value,
             connection_name=connection.connection_name.value,
             channel_code=connection.channel_code,
             config=dict(connection.config or {}),

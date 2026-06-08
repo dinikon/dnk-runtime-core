@@ -43,7 +43,6 @@ class OutboundMessageRepositoryProtocol(Protocol):
         initiator_ref_id: str,
         correlation_id: EntityIdVO,
         idempotency_key: str,
-        message_class: str,
         channel_code: str,
         template_id: MessageTemplateIdVO,
         template_version_id: TemplateVersionIdVO,

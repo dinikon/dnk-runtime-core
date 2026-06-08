@@ -264,7 +264,6 @@ async function sendTestMessage() {
       recipient_identifier_type: recipientIdentifierType.value.trim(),
       recipient_address: recipientAddress.value.trim(),
       recipient_snapshot: recipientSnapshot,
-      message_class: template.message_class,
       variables,
       scheduled_at: null,
       priority: Number(priority.value),

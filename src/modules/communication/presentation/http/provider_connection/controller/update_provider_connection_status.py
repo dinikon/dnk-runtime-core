@@ -97,7 +97,6 @@ async def update_provider_connection_status(
         provider_connection_id=result.provider_connection_id,
         tenant_id=result.tenant_id,
         provider_connector_id=result.provider_connector_id,
-        connection_code=result.connection_code,
         connection_name=result.connection_name,
         channel_code=result.channel_code,
         config=result.config,

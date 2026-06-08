@@ -7,7 +7,6 @@ from src.modules.communication.domain.message_template.entity import (
     TemplateVersionEntity,
 )
 from src.modules.communication.domain.message_template.value_object import (
-    MessageTemplateCodeVO,
     MessageTemplateIdVO,
     TemplateVersionIdVO,
 )
@@ -32,15 +31,6 @@ class MessageTemplateRepositoryProtocol(Protocol):
         template_id: MessageTemplateIdVO,
     ) -> MessageTemplateEntity | None:
         """Загружает шаблон tenant по id или возвращает None."""
-        ...
-
-    async def load_template_by_code(
-        self,
-        *,
-        tenant_id: EntityIdVO,
-        template_code: MessageTemplateCodeVO,
-    ) -> MessageTemplateEntity | None:
-        """Загружает шаблон tenant по коду или возвращает None."""
         ...
 
     async def save_template(

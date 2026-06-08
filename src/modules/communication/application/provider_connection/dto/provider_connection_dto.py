@@ -11,7 +11,6 @@ class ProviderConnectionDTO:
     provider_connection_id: UUID
     tenant_id: UUID
     provider_connector_id: UUID
-    connection_code: str
     connection_name: str
     channel_code: str
     config: dict[str, Any]

@@ -107,13 +107,12 @@ communication runtime objects нет.
 - ID: `ProviderConnectionIdVO`.
 - Tenant scope: хранит `tenant_id: EntityIdVO`.
 - Fields: `provider_connection_id`, `created_at`, `updated_at`, `tenant_id`, `provider_connector_id`,
-  `connection_code`, `connection_name`, `channel_code`, `config`, `secret_ref`, `secrets_b64`, `status`.
-- Value Objects: `ProviderConnectionCodeVO`, `ProviderConnectionNameVO`, `ProviderConnectionStatusVO`,
-  `ProviderConnectorIdVO`.
+  `connection_name`, `channel_code`, `config`, `secret_ref`, `secrets_b64`, `status`.
+- Value Objects: `ProviderConnectionNameVO`, `ProviderConnectionStatusVO`, `ProviderConnectorIdVO`.
 - Factory methods: `ProviderConnectionEntity.create`.
 - Update methods: в entity не найдено.
-- Domain errors: `ProviderConnectionNotFoundError`, `InvalidProviderConnectionCodeError`,
-  `InvalidProviderConnectionNameError`, `ProviderSecretsValidationError`, `ProviderConnectorNotFoundError`,
+- Domain errors: `ProviderConnectionNotFoundError`, `InvalidProviderConnectionNameError`,
+  `ProviderSecretsValidationError`, `ProviderConnectorNotFoundError`,
   `CommunicationValidationError`.
 - Invariants: connection создается как `ACTIVE`; connector должен существовать; `channel_code` должен входить в
   `yaml_spec.channels`; `config` и `secrets` валидируются по JSON Schema из connector spec.
@@ -122,13 +121,13 @@ communication runtime objects нет.
 
 - ID: `MessageTemplateIdVO`.
 - Tenant scope: хранит `tenant_id: EntityIdVO`.
-- Fields: `template_id`, `created_at`, `updated_at`, `tenant_id`, `template_code`, `name`, `description`,
-  `provider_connector_id`, `provider_message_type_id`, `channel_code`, `message_class`, `status`.
-- Value Objects: `MessageTemplateCodeVO`, `MessageTemplateNameVO`, `ChannelCodeVO`, `MessageClassVO`,
-  `TemplateStatusVO`, `ProviderConnectorIdVO`, `ProviderMessageTypeIdVO`.
+- Fields: `template_id`, `created_at`, `updated_at`, `tenant_id`, `name`, `description`,
+  `provider_connector_id`, `provider_message_type_id`, `channel_code`, `status`.
+- Value Objects: `MessageTemplateNameVO`, `ChannelCodeVO`, `TemplateStatusVO`, `ProviderConnectorIdVO`,
+  `ProviderMessageTypeIdVO`.
 - Factory methods: `MessageTemplateEntity.create`.
 - Update methods: `ensure_message_type_binding`, `mark_active`.
-- Domain errors: `MessageTemplateNotFoundError`, `InvalidMessageTemplateCodeError`, `InvalidMessageTemplateNameError`,
+- Domain errors: `MessageTemplateNotFoundError`, `InvalidMessageTemplateNameError`,
   `ProviderConnectorNotFoundError`, `ProviderMessageTypeNotFoundError`, `CommunicationValidationError`.
 - Invariants: новая template создается в `DRAFT`; provider message type должен принадлежать выбранному connector;
   channel template должен совпадать с channel message type.
@@ -151,26 +150,26 @@ communication runtime objects нет.
 - ID: `CommunicationRequestIdVO`.
 - Tenant scope: хранит `tenant_id: EntityIdVO`.
 - Fields: `communication_request_id`, `tenant_id`, `initiator_type`, `initiator_ref_id`, `correlation_id`,
-  `idempotency_key`, `message_class`, `channel_code`, `template_id`, `template_version_id`,
+  `idempotency_key`, `channel_code`, `template_id`, `template_version_id`,
   `recipient_identifier_type`, `recipient_address`, `recipient_snapshot`, `variables`, `scheduled_at`, `priority`,
   `status`, timestamps.
-- Value Objects: `InitiatorTypeVO`, `IdempotencyKeyVO`, `MessageClassVO`, `ChannelCodeVO`,
-  `RecipientIdentifierTypeVO`, `RecipientAddressVO`, `OutboundPriorityVO`.
+- Value Objects: `InitiatorTypeVO`, `IdempotencyKeyVO`, `ChannelCodeVO`, `RecipientIdentifierTypeVO`,
+  `RecipientAddressVO`, `OutboundPriorityVO`.
 - Factory methods: `CommunicationRequest.create`.
 - Update methods: в entity не найдено.
 - Domain errors: invalid initiator/recipient/priority/idempotency errors, `CommunicationValidationError`.
-- Invariants: request create нормализует class/channel/recipient/priority; default status в domain factory - `QUEUED`.
+- Invariants: request create нормализует channel/recipient/priority; default status в domain factory - `QUEUED`.
 
 ### OutboundMessage
 
 - ID: `OutboundMessageIdVO`.
 - Tenant scope: хранит `tenant_id: EntityIdVO`.
 - Fields: `outbound_message_id`, `tenant_id`, `communication_request_id`, `provider_connection_id`, `channel_code`,
-  `message_class`, `priority`, `recipient_identifier_type`, `recipient_address`, `recipient_snapshot`,
-  `rendered_payload`, `provider_request_payload`, `external_message_id`, `external_status`, `internal_status`, errors,
-  delivery timestamps, processing lease fields, queue publishing fields, timestamps.
+  `priority`, `recipient_identifier_type`, `recipient_address`, `recipient_snapshot`, `rendered_payload`,
+  `provider_request_payload`, `external_message_id`, `external_status`, `internal_status`, errors, delivery timestamps,
+  processing lease fields, queue publishing fields, timestamps.
 - Value Objects: `OutboundMessageIdVO`, `CommunicationRequestIdVO`, `ProviderConnectionIdVO`, `ChannelCodeVO`,
-  `MessageClassVO`, `OutboundPriorityVO`, `RecipientIdentifierTypeVO`, `RecipientAddressVO`.
+  `OutboundPriorityVO`, `RecipientIdentifierTypeVO`, `RecipientAddressVO`.
 - Factory methods: `OutboundMessage.create_queued`.
 - Update methods: `mark_published`.
 - Domain errors: `OutboundMessageNotFoundError`, `ProviderPayloadValidationError`.
@@ -443,9 +442,7 @@ Events пишутся в shared outbox в той же transaction, где фик
 - `communication_provider_connectors_code_version_uq`: unique по `provider_code`, `version`.
 - `communication_provider_message_types_connector_code_uq`: unique по `provider_connector_id`, `message_type_code`.
 - `communication_provider_message_types_connector`: many-to-one к connector, `on_delete="cascade"`.
-- `communication_provider_connections_code_uq`: unique по `connection_code`.
 - `communication_provider_connections_connector`: many-to-one к connector, `on_delete="restrict"`.
-- `communication_message_templates_code_uq`: unique по `template_code`.
 - `communication_message_templates_connector`: many-to-one к connector, `on_delete="restrict"`.
 - `communication_message_templates_message_type`: many-to-one к message type, `on_delete="restrict"`.
 - `communication_template_versions_template_version_uq`: unique по `template_id`, `version`.

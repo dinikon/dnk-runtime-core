@@ -219,7 +219,7 @@ class CommunicationServicesTests(unittest.TestCase):
             send_spec={
                 "method": "POST",
                 "url": "https://example.test/{{ config.client_id }}",
-                "headers": {"X-Provider": "{{ connection.connection_code }}"},
+                "headers": {"X-Provider": "{{ connection.connection_name }}"},
                 "body": {
                     "phone_number": "{{ recipient.address }}",
                     "ttl": "{{ template.ttl }}",
@@ -227,7 +227,7 @@ class CommunicationServicesTests(unittest.TestCase):
             },
             context={
                 "config": {"client_id": "abc"},
-                "connection": {"connection_code": "gms_viber"},
+                "connection": {"connection_name": "GMS Viber"},
                 "recipient": {"address": "380671112233"},
                 "template": rendered,
             },
@@ -235,7 +235,7 @@ class CommunicationServicesTests(unittest.TestCase):
 
         self.assertEqual(method, "POST")
         self.assertEqual(url, "https://example.test/abc")
-        self.assertEqual(headers["X-Provider"], "gms_viber")
+        self.assertEqual(headers["X-Provider"], "GMS Viber")
         self.assertEqual(body["ttl"], 60)
 
     def test_status_mapping_and_jsonpath_extraction(self) -> None:
@@ -262,7 +262,6 @@ class CommunicationServicesTests(unittest.TestCase):
             tenant_id=UUID("00000000-0000-0000-0000-000000000001"),
             provider_connector_id=UUID("00000000-0000-0000-0000-000000000002"),
             provider_connection_id=UUID("00000000-0000-0000-0000-000000000003"),
-            connection_code="gms_viber",
             connection_name="GMS Viber",
             channel_code="VIBER",
             config={"client_id": "abc"},

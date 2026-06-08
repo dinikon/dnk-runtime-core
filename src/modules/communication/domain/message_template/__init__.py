@@ -3,7 +3,6 @@ from src.modules.communication.domain.message_template.entity import (
     TemplateVersionEntity,
 )
 from src.modules.communication.domain.message_template.error import (
-    InvalidMessageTemplateCodeError,
     InvalidMessageTemplateNameError,
     InvalidTemplateVersionTimestampError,
     MessageTemplateNotFoundError,
@@ -20,8 +19,6 @@ from src.modules.communication.domain.message_template.service import (
 )
 from src.modules.communication.domain.message_template.value_object import (
     ChannelCodeVO,
-    MessageClassVO,
-    MessageTemplateCodeVO,
     MessageTemplateIdVO,
     MessageTemplateNameVO,
     TemplateStatusVO,
@@ -32,11 +29,8 @@ from src.modules.communication.domain.message_template.value_object import (
 
 __all__ = [
     "ChannelCodeVO",
-    "InvalidMessageTemplateCodeError",
     "InvalidMessageTemplateNameError",
     "InvalidTemplateVersionTimestampError",
-    "MessageClassVO",
-    "MessageTemplateCodeVO",
     "MessageTemplateRepositoryProtocol",
     "MessageTemplateEntity",
     "MessageTemplateIdVO",

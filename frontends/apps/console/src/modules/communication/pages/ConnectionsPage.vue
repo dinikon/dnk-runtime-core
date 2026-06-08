@@ -61,7 +61,6 @@ import { useProviderCatalogQuery } from "@/modules/communication/queries/use-pro
 import { useProviderConnectionsQuery } from "@/modules/communication/queries/use-provider-connections-query";
 
 const selectedConnectorId = ref("");
-const connectionCode = ref("");
 const connectionName = ref("");
 const channelCode = ref("");
 const secretRef = ref("");
@@ -112,8 +111,7 @@ const actionPending = computed(
 const columns: ColumnDef<ProviderConnection>[] = [
   {
     id: "connection",
-    accessorFn: (connection) =>
-      `${connection.connection_name} ${connection.connection_code}`,
+    accessorFn: (connection) => connection.connection_name,
     header: "Connection",
   },
   {
@@ -196,7 +194,6 @@ watch(selectedConnector, (connector) => {
     return;
   }
 
-  connectionCode.value = `${connector.provider_code}_main`;
   connectionName.value = `${connector.provider_name} main`;
   channelCode.value = connector.channels[0] ?? "";
   configValues.value = buildJsonSchemaDefaults(connector.config_schema);
@@ -218,7 +215,6 @@ async function createConnection() {
   try {
     const connection = await createConnectionMutation.mutateAsync({
       provider_connector_id: connector.provider_connector_id,
-      connection_code: connectionCode.value.trim(),
       connection_name: connectionName.value.trim(),
       channel_code: channelCode.value,
       config: compactJsonObject(configValues.value),
@@ -274,7 +270,6 @@ async function deleteConnection() {
 }
 
 function resetConnectionForm() {
-  connectionCode.value = "";
   connectionName.value = "";
   channelCode.value = "";
   secretRef.value = "";
@@ -414,9 +409,6 @@ function isConnectionPending(connection: ProviderConnection) {
                 <span class="font-medium">
                   {{ row.original.connection_name }}
                 </span>
-                <span class="font-mono text-xs text-muted-foreground">
-                  {{ row.original.connection_code }}
-                </span>
               </div>
 
               <div v-else-if="cell.column.id === 'provider'" class="grid gap-1">
@@ -535,19 +527,11 @@ function isConnectionPending(connection: ProviderConnection) {
             </CommunicationSelect>
           </div>
 
-          <div class="grid gap-2 md:grid-cols-2">
-            <div class="grid gap-2">
-              <label class="text-sm font-medium" for="connection-code">
-                Code
-              </label>
-              <Input id="connection-code" v-model="connectionCode" required />
-            </div>
-            <div class="grid gap-2">
-              <label class="text-sm font-medium" for="connection-name">
-                Name
-              </label>
-              <Input id="connection-name" v-model="connectionName" required />
-            </div>
+          <div class="grid gap-2">
+            <label class="text-sm font-medium" for="connection-name">
+              Name
+            </label>
+            <Input id="connection-name" v-model="connectionName" required />
           </div>
 
           <div class="grid gap-2">

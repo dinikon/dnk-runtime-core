@@ -132,7 +132,6 @@ def _connection_row(
         "created_at": now,
         "updated_at": now,
         "provider_connector_id": provider_connector_id or uuid4(),
-        "connection_code": "sms_main",
         "connection_name": "Main SMS",
         "channel_code": "SMS",
         "config": {"client_id": "abc"},
@@ -184,7 +183,6 @@ class ProviderConnectionRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase)
                 now=now,
                 tenant_id=tenant_id,
                 provider_connector_id=provider_connector_id,
-                connection_code="sms_main",
                 connection_name="Main SMS",
                 channel_code="SMS",
                 config={"client_id": "abc"},
@@ -221,7 +219,6 @@ class ProviderConnectionRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase)
             now=now,
             tenant_id=tenant_id,
             provider_connector_id=provider_connector_id,
-            connection_code="sms_main",
             connection_name="Main SMS",
             channel_code="SMS",
             config={"client_id": "abc"},
@@ -254,7 +251,7 @@ class ProviderConnectionRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase)
         self.assertEqual(query.list_calls[0]["filters"][0].field.name, "status")
         self.assertEqual(query.list_calls[0]["filters"][0].op, "neq")
         self.assertEqual(query.list_calls[0]["filters"][0].value, "ARCHIVED")
-        self.assertEqual(query.list_calls[0]["sorting"][0].field, "connection_code")
+        self.assertEqual(query.list_calls[0]["sorting"][0].field, "connection_name")
         self.assertEqual(result[0].tenant_id, tenant_id.uuid)
         self.assertTrue(result[0].has_secrets)
 

@@ -66,7 +66,6 @@ async def create_provider_connection(
                 provider_connector_id=ProviderConnectorIdVO.from_value(
                     payload.provider_connector_id
                 ),
-                connection_code=payload.connection_code,
                 connection_name=payload.connection_name,
                 channel_code=payload.channel_code,
                 config=payload.config,
@@ -103,7 +102,6 @@ async def create_provider_connection(
         provider_connection_id=result.provider_connection_id,
         tenant_id=result.tenant_id,
         provider_connector_id=result.provider_connector_id,
-        connection_code=result.connection_code,
         connection_name=result.connection_name,
         channel_code=result.channel_code,
         config=result.config,

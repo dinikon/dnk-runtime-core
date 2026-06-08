@@ -6,7 +6,6 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from src.modules.communication.domain.message_template import (
-    MessageTemplateCodeVO,
     MessageTemplateEntity,
     MessageTemplateIdVO,
     TemplateVersionEntity,
@@ -156,36 +155,6 @@ class OutboundMessageRuntimeRepository:
             return None
         return message_template_entity(tenant_id=tenant_vo, row=row)
 
-    async def get_template_by_code(
-        self,
-        *,
-        tenant_id: EntityIdVO,
-        template_code: MessageTemplateCodeVO,
-    ) -> MessageTemplateEntity | None:
-        """Загружает message template entity по tenant-local code."""
-        tenant_vo = _entity_id(tenant_id)
-        code_vo = (
-            template_code
-            if type(template_code) is MessageTemplateCodeVO
-            else MessageTemplateCodeVO(str(template_code))
-        )
-        descriptor = await self._resolve_descriptor(tenant_vo, _TEMPLATE)
-        rows = await self._list(
-            descriptor=descriptor,
-            filters=(
-                self._filter_builder.condition(
-                    descriptor=descriptor,
-                    field="template_code",
-                    op="eq",
-                    value=code_vo.value,
-                ),
-            ),
-            limit=1,
-        )
-        if not rows:
-            return None
-        return message_template_entity(tenant_id=tenant_vo, row=rows[0])
-
     async def get_active_template_version(
         self,
         tenant_id: EntityIdVO,
@@ -277,7 +246,6 @@ class OutboundMessageRuntimeRepository:
         initiator_ref_id: str,
         correlation_id: EntityIdVO,
         idempotency_key: str,
-        message_class: str,
         channel_code: str,
         template_id: MessageTemplateIdVO,
         template_version_id,
@@ -305,7 +273,6 @@ class OutboundMessageRuntimeRepository:
                 "initiator_ref_id": initiator_ref_id,
                 "correlation_id": _entity_id(correlation_id).uuid,
                 "idempotency_key": idempotency_vo.value,
-                "message_class": message_class,
                 "channel_code": channel_code,
                 "template_id": _message_template_id(template_id).uuid,
                 "template_version_id": _id_uuid(template_version_id),
@@ -328,7 +295,6 @@ class OutboundMessageRuntimeRepository:
                     provider_connection_id
                 ).uuid,
                 "channel_code": channel_code,
-                "message_class": message_class,
                 "priority": priority,
                 "recipient_identifier_type": recipient_type_vo.value,
                 "recipient_address": recipient_address,

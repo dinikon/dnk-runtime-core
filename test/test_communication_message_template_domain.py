@@ -6,10 +6,8 @@ from uuid import uuid4
 
 from src.modules.communication.domain.error import CommunicationValidationError
 from src.modules.communication.domain.message_template import (
-    InvalidMessageTemplateCodeError,
     InvalidMessageTemplateNameError,
     InvalidTemplateVersionTimestampError,
-    MessageTemplateCodeVO,
     MessageTemplateEntity,
     MessageTemplateIdVO,
     MessageTemplateNameVO,
@@ -63,14 +61,6 @@ class _RepositoryStub:
 
     async def load_template(self, *, tenant_id, template_id):
         return self.templates.get(template_id)
-
-    async def load_template_by_code(
-        self, *, tenant_id, template_code: MessageTemplateCodeVO
-    ):
-        for template in self.templates.values():
-            if template.template_code == template_code:
-                return template
-        return None
 
     async def save_template(self, *, tenant_id, template):
         self.templates[template.template_id] = template
@@ -168,14 +158,9 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
         template = self._template()
 
         self.assertEqual(template.status, TemplateStatusVO.DRAFT)
-        self.assertEqual(template.template_code, MessageTemplateCodeVO("otp_sms"))
         self.assertEqual(template.name, MessageTemplateNameVO("OTP SMS"))
         self.assertEqual(template.created_at, NOW)
         self.assertEqual(template.updated_at, NOW)
-
-    def test_message_template_code_rejects_blank_value(self) -> None:
-        with self.assertRaises(InvalidMessageTemplateCodeError):
-            MessageTemplateCodeVO("  ")
 
     def test_message_template_name_rejects_blank_value(self) -> None:
         with self.assertRaises(InvalidMessageTemplateNameError):
@@ -258,13 +243,11 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
         template = await service.create_template(
             tenant_id=self.tenant_id,
             template_id=self.template_id,
-            template_code="otp_sms",
             name="OTP SMS",
             description=None,
             provider_connector_id=self.connector_id,
             provider_message_type_id=self.message_type_id,
             channel_code="SMS",
-            message_class="OTP",
         )
 
         self.assertEqual(template.template_id, self.template_id)
@@ -283,13 +266,11 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
             await service.create_template(
                 tenant_id=self.tenant_id,
                 template_id=self.template_id,
-                template_code="otp_sms",
                 name="OTP SMS",
                 description=None,
                 provider_connector_id=self.connector_id,
                 provider_message_type_id=self.message_type_id,
                 channel_code="SMS",
-                message_class="OTP",
             )
 
     async def test_service_create_template_rejects_disabled_connector(self) -> None:
@@ -305,13 +286,11 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
             await service.create_template(
                 tenant_id=self.tenant_id,
                 template_id=self.template_id,
-                template_code="otp_sms",
                 name="OTP SMS",
                 description=None,
                 provider_connector_id=self.connector_id,
                 provider_message_type_id=self.message_type_id,
                 channel_code="SMS",
-                message_class="OTP",
             )
 
     async def test_service_create_template_rejects_missing_message_type(self) -> None:
@@ -326,13 +305,11 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
             await service.create_template(
                 tenant_id=self.tenant_id,
                 template_id=self.template_id,
-                template_code="otp_sms",
                 name="OTP SMS",
                 description=None,
                 provider_connector_id=self.connector_id,
                 provider_message_type_id=self.message_type_id,
                 channel_code="SMS",
-                message_class="OTP",
             )
 
     async def test_service_create_template_version_validates_and_sets_utc_version(
@@ -411,13 +388,11 @@ class MessageTemplateDomainTests(unittest.IsolatedAsyncioTestCase):
         return MessageTemplateEntity.create(
             template_id=self.template_id,
             tenant_id=self.tenant_id,
-            template_code="otp_sms",
             name="OTP SMS",
             description=None,
             provider_connector_id=self.connector_id,
             provider_message_type_id=self.message_type_id,
             channel_code=channel_code,
-            message_class="OTP",
             now=NOW,
         )
 

@@ -165,7 +165,6 @@ COMMUNICATION_OBJECTS = (
                 "Provider Connector ID",
                 is_nullable=False,
             ),
-            FieldSeed("connection_code", "text", "Connection Code", is_nullable=False),
             FieldSeed("connection_name", "text", "Connection Name", is_nullable=False),
             FieldSeed("channel_code", "text", "Channel Code", is_nullable=False),
             FieldSeed("config", "json", "Config", is_nullable=False, default="'{}'"),
@@ -182,11 +181,6 @@ COMMUNICATION_OBJECTS = (
         ),
         indexes=(
             IndexSeed("communication_provider_connections_id_uq", ("id",), True),
-            IndexSeed(
-                "communication_provider_connections_code_uq",
-                ("connection_code",),
-                True,
-            ),
             IndexSeed(
                 "communication_provider_connections_connector_idx",
                 ("provider_connector_id",),
@@ -219,7 +213,6 @@ COMMUNICATION_OBJECTS = (
         kind=ObjectKind.SYSTEM,
         fields=(
             *_system_fields("Message template identifier."),
-            FieldSeed("template_code", "text", "Template Code", is_nullable=False),
             FieldSeed("name", "text", "Name", is_nullable=False),
             FieldSeed("description", "text", "Description", is_nullable=True),
             FieldSeed(
@@ -235,16 +228,10 @@ COMMUNICATION_OBJECTS = (
                 is_nullable=False,
             ),
             FieldSeed("channel_code", "text", "Channel Code", is_nullable=False),
-            FieldSeed("message_class", "text", "Message Class", is_nullable=False),
             FieldSeed("status", "text", "Status", is_nullable=False, default="'DRAFT'"),
         ),
         indexes=(
             IndexSeed("communication_message_templates_id_uq", ("id",), True),
-            IndexSeed(
-                "communication_message_templates_code_uq",
-                ("template_code",),
-                True,
-            ),
             IndexSeed(
                 "communication_message_templates_connector_idx",
                 ("provider_connector_id",),
@@ -254,7 +241,6 @@ COMMUNICATION_OBJECTS = (
                 ("provider_message_type_id",),
             ),
             IndexSeed("communication_message_templates_channel_idx", ("channel_code",)),
-            IndexSeed("communication_message_templates_class_idx", ("message_class",)),
             IndexSeed("communication_message_templates_status_idx", ("status",)),
         ),
         relations=(
@@ -343,7 +329,6 @@ COMMUNICATION_OBJECTS = (
             FieldSeed("initiator_ref_id", "text", "Initiator Ref ID", is_nullable=True),
             FieldSeed("correlation_id", "uuid", "Correlation ID", is_nullable=True),
             FieldSeed("idempotency_key", "text", "Idempotency Key", is_nullable=True),
-            FieldSeed("message_class", "text", "Message Class", is_nullable=False),
             FieldSeed("channel_code", "text", "Channel Code", is_nullable=False),
             FieldSeed("template_id", "reference", "Template ID", is_nullable=False),
             FieldSeed(
@@ -432,7 +417,6 @@ COMMUNICATION_OBJECTS = (
                 is_nullable=False,
             ),
             FieldSeed("channel_code", "text", "Channel Code", is_nullable=False),
-            FieldSeed("message_class", "text", "Message Class", is_nullable=False),
             FieldSeed("priority", "int", "Priority", is_nullable=False, default="100"),
             FieldSeed(
                 "recipient_identifier_type",
@@ -1239,6 +1223,7 @@ SCHEMA_SEED = SchemaSeed(
                     label="Legal Name",
                     description="Company legal name.",
                     is_nullable=False,
+                    default="'Unknown Company'",
                 ),
             ),
             indexes=(

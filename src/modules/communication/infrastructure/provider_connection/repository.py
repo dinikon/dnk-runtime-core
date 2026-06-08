@@ -95,7 +95,6 @@ class ProviderConnectionRuntimeRepository(
         )
         payload = {
             "provider_connector_id": connection.provider_connector_id.uuid,
-            "connection_code": connection.connection_code.value,
             "connection_name": connection.connection_name.value,
             "channel_code": connection.channel_code,
             "config": connection.config,
@@ -223,7 +222,7 @@ class ProviderConnectionRuntimeRepository(
                     value=ProviderConnectionStatusVO.ARCHIVED.value,
                 ),
             ),
-            sorting=(SortSpec("connection_code"),),
+            sorting=(SortSpec("connection_name"),),
         )
         return [
             provider_connection_dto(

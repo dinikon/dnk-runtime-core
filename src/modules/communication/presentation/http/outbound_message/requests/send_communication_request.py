@@ -21,7 +21,6 @@ class SendCommunicationRequestSchema(BaseModel):
     recipient_identifier_type: str = Field(min_length=1)
     recipient_address: str
     recipient_snapshot: dict[str, Any]
-    message_class: str | None = None
     variables: dict[str, Any] = Field(default_factory=dict)
     scheduled_at: datetime | None = None
     priority: int = 100

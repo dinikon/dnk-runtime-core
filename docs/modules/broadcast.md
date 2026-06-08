@@ -108,7 +108,6 @@ initiator_type = BROADCAST
 initiator_ref_id = broadcast_run_id or recipient_id
 correlation_id
 idempotency_key
-message_class
 channel_code
 template_id
 recipient_address

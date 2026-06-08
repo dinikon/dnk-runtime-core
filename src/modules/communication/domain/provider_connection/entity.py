@@ -5,7 +5,6 @@ from datetime import datetime
 from typing import Any, Self
 
 from src.modules.communication.domain.provider_connection.value_object import (
-    ProviderConnectionCodeVO,
     ProviderConnectionIdVO,
     ProviderConnectionNameVO,
     ProviderConnectionStatusVO,
@@ -31,7 +30,6 @@ class ProviderConnectionEntity:
     tenant_id: EntityIdVO
 
     provider_connector_id: ProviderConnectorIdVO
-    connection_code: ProviderConnectionCodeVO
     connection_name: ProviderConnectionNameVO
     channel_code: str
     config: dict[str, Any]
@@ -46,7 +44,6 @@ class ProviderConnectionEntity:
         provider_connection_id: ProviderConnectionIdVO,
         tenant_id: EntityIdVO,
         provider_connector_id: ProviderConnectorIdVO,
-        connection_code: str,
         connection_name: str,
         channel_code: str,
         config: dict[str, Any],
@@ -62,7 +59,6 @@ class ProviderConnectionEntity:
             updated_at=now,
             tenant_id=tenant_id,
             provider_connector_id=provider_connector_id,
-            connection_code=ProviderConnectionCodeVO(connection_code),
             connection_name=ProviderConnectionNameVO(connection_name),
             channel_code=channel_code,
             config=dict(config),

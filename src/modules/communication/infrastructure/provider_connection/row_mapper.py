@@ -9,7 +9,6 @@ from src.modules.communication.application.provider_connection.dto import (
     ProviderConnectionDTO,
 )
 from src.modules.communication.domain.provider_connection import (
-    ProviderConnectionCodeVO,
     ProviderConnectionEntity,
     ProviderConnectionIdVO,
     ProviderConnectionNameVO,
@@ -38,7 +37,6 @@ def provider_connection_entity(
         provider_connector_id=ProviderConnectorIdVO.from_value(
             as_uuid(row.get("provider_connector_id"))
         ),
-        connection_code=ProviderConnectionCodeVO(as_str(row.get("connection_code"))),
         connection_name=ProviderConnectionNameVO(as_str(row.get("connection_name"))),
         channel_code=as_str(row.get("channel_code")),
         config=as_dict(row.get("config")),
@@ -58,7 +56,6 @@ def provider_connection_dto(
         provider_connection_id=as_uuid(row.get("id")),
         tenant_id=tenant_id.uuid,
         provider_connector_id=as_uuid(row.get("provider_connector_id")),
-        connection_code=as_str(row.get("connection_code")),
         connection_name=as_str(row.get("connection_name")),
         channel_code=as_str(row.get("channel_code")),
         config=as_dict(row.get("config")),
