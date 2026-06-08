@@ -43,7 +43,7 @@ import {
   apiErrorMessage,
   formatCommunicationDate,
   isArchivedStatus,
-} from "@/modules/communication/lib";
+} from "@/modules/communication/util";
 import {
   useRouteQueryFlag,
   useRouteSearchQuery,

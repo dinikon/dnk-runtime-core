@@ -45,7 +45,7 @@ import {
   formatJsonObject,
   isArchivedStatus,
   parseJsonObject,
-} from "@/modules/communication/lib";
+} from "@/modules/communication/util";
 import {
   useRouteQueryFlag,
   useRouteSearchQuery,

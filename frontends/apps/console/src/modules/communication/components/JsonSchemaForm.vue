@@ -11,7 +11,10 @@ import type {
   JsonPrimitive,
   JsonValue,
 } from "@/modules/communication/api";
-import { defaultValueForSchema, schemaType } from "@/modules/communication/lib";
+import {
+  defaultValueForSchema,
+  schemaType,
+} from "@/modules/communication/util";
 
 interface SchemaField {
   key: string;

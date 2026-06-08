@@ -51,7 +51,7 @@ import {
   parseJsonObject,
   prettyJson,
   shortCommunicationId,
-} from "@/modules/communication/lib";
+} from "@/modules/communication/util";
 import {
   useRouteQueryFlag,
   useRouteSearchQuery,
