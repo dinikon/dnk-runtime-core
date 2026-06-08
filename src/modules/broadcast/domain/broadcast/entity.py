@@ -7,6 +7,10 @@ from src.modules.broadcast.domain.broadcast.value_object.broadcast_id import (
 from src.modules.broadcast.domain.broadcast.value_object.broadcast_status import (
     BroadcastStatusVO,
 )
+from src.modules.shared.domain.value_object.entity_description import (
+    EntityDescriptionVO,
+)
+from src.modules.shared.domain.value_object.entity_title import EntityTitleVO
 
 
 @dataclass(slots=True)
@@ -16,7 +20,7 @@ class BroadcastEntity:
     created_at: datetime
     updated_at: datetime | None
 
-    title: str
-    description: str | None
+    title: EntityTitleVO
+    description: EntityDescriptionVO | None
 
     status: BroadcastStatusVO
