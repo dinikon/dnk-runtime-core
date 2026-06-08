@@ -30,7 +30,7 @@ from src.modules.identity.domain import (
     User,
 )
 from src.modules.shared import EntityIdVO
-from src.modules.shared.domain.errors import DomainError
+from src.modules.shared import DomainError
 from src.modules.shared.domain.email import (
     EmailDeliveryError,
     SystemEmailKind,

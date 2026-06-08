@@ -38,7 +38,7 @@ from src.modules.schema_registry.domain.object_feature import (
 )
 from src.modules.shared import EntityIdVO
 from src.modules.shared.presentation import AuthenticatedRequestContextDep
-from src.modules.shared.domain.errors import DomainError
+from src.modules.shared import DomainError
 
 router = APIRouter(prefix="/contact-points", tags=["contact-points"])
 

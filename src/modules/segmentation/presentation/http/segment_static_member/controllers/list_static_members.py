@@ -36,7 +36,7 @@ from src.modules.segmentation.presentation.http.segment_static_member.responses 
     StaticMemberResponseSchema,
 )
 from src.modules.shared import EntityIdVO
-from src.modules.shared.domain.errors import DomainError
+from src.modules.shared import DomainError
 from src.modules.shared.presentation import AuthenticatedRequestContextDep
 
 router = APIRouter(prefix="/segments/{segment_id}/static-members", tags=["segments"])

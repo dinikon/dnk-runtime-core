@@ -1,4 +1,5 @@
-from src.modules.shared.domain.errors.domain_error import DomainError
+class DomainError(Exception):
+    """Базовая доменная ошибка всего проекта."""
 
 
 class EntityIdTypeError(DomainError):

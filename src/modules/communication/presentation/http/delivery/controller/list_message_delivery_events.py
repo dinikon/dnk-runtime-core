@@ -33,7 +33,7 @@ from src.modules.schema_registry.domain.error import (
     SchemaRegistryMetadataInconsistentError,
 )
 from src.modules.shared import EntityIdVO
-from src.modules.shared.domain.errors import DomainError
+from src.modules.shared import DomainError
 from src.modules.shared.presentation import AuthenticatedRequestContextDep
 
 router = APIRouter(prefix="/communication", tags=["communication"])

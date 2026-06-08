@@ -24,7 +24,7 @@ from src.modules.segmentation.presentation.http.segment_definition.responses imp
     SegmentDefinitionResponseSchema,
 )
 from src.modules.shared import EntityIdVO
-from src.modules.shared.domain.errors import DomainError
+from src.modules.shared import DomainError
 from src.modules.shared.presentation import AuthenticatedRequestContextDep
 
 router = APIRouter(prefix="/segments", tags=["segments"])

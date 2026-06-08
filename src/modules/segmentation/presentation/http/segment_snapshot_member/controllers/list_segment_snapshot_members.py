@@ -31,7 +31,7 @@ from src.modules.segmentation.presentation.http.segment_snapshot_member.response
     SegmentSnapshotMemberResponseSchema,
 )
 from src.modules.shared import EntityIdVO
-from src.modules.shared.domain.errors import DomainError
+from src.modules.shared import DomainError
 from src.modules.shared.presentation import AuthenticatedRequestContextDep
 
 router = APIRouter(

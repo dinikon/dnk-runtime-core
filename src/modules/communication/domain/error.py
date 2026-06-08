@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.modules.shared.domain.errors import DomainError
+from src.modules.shared import DomainError
 
 
 class CommunicationError(DomainError):

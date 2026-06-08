@@ -13,7 +13,7 @@ from src.modules.segmentation.application.segment_version.dsl.error import (
     SegmentVersionDslParseError,
 )
 from src.modules.segmentation.domain.segment_definition import SegmentIdVO
-from src.modules.shared.domain.errors import EntityIdTypeError
+from src.modules.shared import EntityIdTypeError
 
 _TOP_LEVEL_KEYS = {
     "root_object",
