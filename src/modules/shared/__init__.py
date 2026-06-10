@@ -1,4 +1,4 @@
-from src.modules.shared.application.uuid import UuidPort
+from src.modules.shared.application.uuid import UUIdGeneratorProtocol
 from src.modules.shared.domain import (
     CurrencyCodeVO,
     DomainError,
@@ -20,5 +20,5 @@ __all__ = [
     "Principal",
     "RequestContext",
     "ScheduledJob",
-    "UuidPort",
+    "UUIdGeneratorProtocol",
 ]

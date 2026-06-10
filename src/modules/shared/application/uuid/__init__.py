@@ -1,3 +1,3 @@
-from src.modules.shared.application.uuid.uuid_port import UuidPort
+from src.modules.shared.application.uuid.uuid_port import UUIdGeneratorProtocol
 
-__all__ = ["UuidPort"]
+__all__ = ["UUIdGeneratorProtocol"]

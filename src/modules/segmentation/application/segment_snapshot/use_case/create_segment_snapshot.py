@@ -36,7 +36,7 @@ from src.modules.segmentation.domain.segment_version import (
 from src.modules.segmentation.application.segment_version import (
     SegmentVersionActiveVersionNotFoundError,
 )
-from src.modules.shared import ClockPort, DomainError, EntityIdVO, UuidPort
+from src.modules.shared import ClockPort, DomainError, EntityIdVO, UUIdGeneratorProtocol
 
 
 class CreateSegmentSnapshotUseCaseProtocol(Protocol):
@@ -63,7 +63,7 @@ class CreateSegmentSnapshotUseCase:
         member_command_repository: SegmentSnapshotMemberCommandRepositoryProtocol,
         evaluation_service: SegmentVersionEvaluationService,
         clock: ClockPort,
-        uuid_generator: UuidPort,
+        uuid_generator: UUIdGeneratorProtocol,
     ) -> None:
         self._segment_repository = segment_repository
         self._version_repository = version_repository
@@ -90,7 +90,7 @@ class CreateSegmentSnapshotUseCase:
         version = await self._resolve_version(command)
         snapshot = SegmentSnapshot.create(
             segment_snapshot_id=SegmentSnapshotIdVO.from_value(
-                self._uuid_generator.new_uuid()
+                self._uuid_generator.new()
             ),
             segment_id=command.segment_id,
             segment_version_id=version.segment_version_id,

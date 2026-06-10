@@ -9,7 +9,7 @@ from src.modules.shared.application.jobs.schedule_scheduled_job_result_dto impor
 from src.modules.shared.application.jobs.scheduled_job_repository_protocol import (
     ScheduledJobRepositoryProtocol,
 )
-from src.modules.shared.application.uuid import UuidPort
+from src.modules.shared.application.uuid import UUIdGeneratorProtocol
 from src.modules.shared.domain.jobs import ScheduledJob, ScheduledJobStatus
 from src.modules.shared.domain.time import ClockPort
 
@@ -22,7 +22,7 @@ class ScheduleScheduledJobUseCase:
         *,
         repository: ScheduledJobRepositoryProtocol,
         clock: ClockPort,
-        uuid_generator: UuidPort,
+        uuid_generator: UUIdGeneratorProtocol,
     ) -> None:
         self._repository = repository
         self._clock = clock
@@ -34,7 +34,7 @@ class ScheduleScheduledJobUseCase:
     ) -> ScheduleScheduledJobResultDTO:
         now = self._clock.now()
         job = ScheduledJob(
-            id=command.job_id or self._uuid_generator.new_uuid(),
+            id=command.job_id or self._uuid_generator.new(),
             tenant_id=command.tenant_id,
             job_type=command.job_type,
             payload=dict(command.payload),

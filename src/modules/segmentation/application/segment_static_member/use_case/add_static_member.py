@@ -28,7 +28,7 @@ from src.modules.segmentation.domain.segment_static_member import (
     SegmentStaticMemberNonStaticSegmentError,
     SegmentStaticMemberSourceTypeVO,
 )
-from src.modules.shared import UuidPort
+from src.modules.shared import UUIdGeneratorProtocol
 
 
 class AddStaticMemberUseCaseProtocol(Protocol):
@@ -49,7 +49,7 @@ class AddStaticMemberUseCase:
         member_command_repository: SegmentStaticMemberCommandRepositoryProtocol,
         member_query_repository: SegmentStaticMemberQueryRepositoryProtocol,
         contact_lookup: ContactLookupProtocol,
-        uuid_generator: UuidPort,
+        uuid_generator: UUIdGeneratorProtocol,
     ) -> None:
         self._segment_repository = segment_repository
         self._member_command_repository = member_command_repository
@@ -76,7 +76,7 @@ class AddStaticMemberUseCase:
         metadata = None if command.metadata is None else dict(command.metadata)
         member = SegmentStaticMember.create(
             segment_static_member_id=SegmentStaticMemberIdVO.from_value(
-                self._uuid_generator.new_uuid()
+                self._uuid_generator.new()
             ),
             segment_id=command.segment_id,
             contact_id=command.contact_id,

@@ -4,13 +4,13 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
-from src.modules.shared.application.uuid import UuidPort
-from src.modules.shared.infrastructure.uuid import Uuid7Generator
+from src.modules.shared.application.uuid import UUIdGeneratorProtocol
+from src.modules.shared.infrastructure.uuid import UUID7Generator
 
-default_uuid_generator: UuidPort = Uuid7Generator()
+default_uuid_generator: UUIdGeneratorProtocol = UUID7Generator()
 
 
-def get_uuid_generator(request: Request) -> UuidPort:
+def get_uuid_generator(request: Request) -> UUIdGeneratorProtocol:
     """Возвращает UUID generator из app.state или default UUIDv7 generator."""
 
     from_state = getattr(request.app.state, "uuid_generator", None)
@@ -19,6 +19,6 @@ def get_uuid_generator(request: Request) -> UuidPort:
     return default_uuid_generator
 
 
-UuidDep = Annotated[UuidPort, Depends(get_uuid_generator)]
+UuidDep = Annotated[UUIdGeneratorProtocol, Depends(get_uuid_generator)]
 
 __all__ = ["UuidDep", "default_uuid_generator", "get_uuid_generator"]

@@ -19,7 +19,7 @@ class BroadcastEntity:
     id: BroadcastIdVO
 
     created_at: datetime
-    updated_at: datetime | None
+    updated_at: datetime
 
     title: EntityTitleVO
     description: EntityDescriptionVO | None

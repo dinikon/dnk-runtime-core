@@ -4,12 +4,12 @@ from typing import Protocol
 from uuid import UUID
 
 
-class UuidPort(Protocol):
+class UUIdGeneratorProtocol(Protocol):
     """Порт генерации UUID."""
 
-    def new_uuid(self) -> UUID:
+    def new(self) -> UUID:
         """Возвращает новый UUID."""
         ...
 
 
-__all__ = ["UuidPort"]
+__all__ = ["UUIdGeneratorProtocol"]

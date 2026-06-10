@@ -26,7 +26,7 @@ from src.modules.segmentation.domain.segment_version import (
     SegmentVersionIdVO,
     SegmentVersionStatusVO,
 )
-from src.modules.shared import UuidPort
+from src.modules.shared import UUIdGeneratorProtocol
 
 
 class CreateSegmentVersionUseCaseProtocol(Protocol):
@@ -50,7 +50,7 @@ class CreateSegmentVersionUseCase:
         version_command_repository: SegmentVersionCommandRepositoryProtocol,
         version_query_repository: SegmentVersionQueryRepositoryProtocol,
         dsl_validator: SegmentVersionDslConfigValidator,
-        uuid_generator: UuidPort,
+        uuid_generator: UUIdGeneratorProtocol,
     ) -> None:
         self._segment_repository = segment_repository
         self._version_command_repository = version_command_repository
@@ -83,7 +83,7 @@ class CreateSegmentVersionUseCase:
         )
         version = SegmentVersion(
             segment_version_id=SegmentVersionIdVO.from_value(
-                self._uuid_generator.new_uuid()
+                self._uuid_generator.new()
             ),
             segment_id=command.segment_id,
             version_number=version_number,

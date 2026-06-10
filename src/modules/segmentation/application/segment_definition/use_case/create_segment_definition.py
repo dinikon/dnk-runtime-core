@@ -16,7 +16,7 @@ from src.modules.segmentation.domain.segment_definition import (
     SegmentIdVO,
     SegmentStatusVO,
 )
-from src.modules.shared import UuidPort
+from src.modules.shared import UUIdGeneratorProtocol
 
 
 class CreateSegmentDefinitionUseCaseProtocol(Protocol):
@@ -38,7 +38,7 @@ class CreateSegmentDefinitionUseCase:
         *,
         command_repository: SegmentDefinitionCommandRepositoryProtocol,
         query_repository: SegmentDefinitionQueryRepositoryProtocol,
-        uuid_generator: UuidPort,
+        uuid_generator: UUIdGeneratorProtocol,
     ) -> None:
         self._command_repository = command_repository
         self._query_repository = query_repository
@@ -49,7 +49,7 @@ class CreateSegmentDefinitionUseCase:
         command: CreateSegmentDefinitionCommand,
     ) -> SegmentDefinitionDTO:
         segment = SegmentDefinition(
-            segment_id=SegmentIdVO.from_value(self._uuid_generator.new_uuid()),
+            segment_id=SegmentIdVO.from_value(self._uuid_generator.new()),
             name=command.name,
             segment_kind=command.segment_kind,
             status=SegmentStatusVO.DRAFT,

@@ -1567,6 +1567,51 @@ SCHEMA_SEED = SchemaSeed(
                 ),
             ),
         ),
+        ObjectSeed(
+            singular_name="broadcast",
+            plural_name="broadcasts",
+            singular_label="Broadcast",
+            plural_label="Broadcasts",
+            description="Tenant broadcast definitions.",
+            kind=ObjectKind.STANDARD,
+            fields=(
+                *_system_fields("Broadcast identifier."),
+                FieldSeed(
+                    name="title",
+                    type="text",
+                    label="Title",
+                    description="Broadcast display title.",
+                    is_nullable=False,
+                ),
+                FieldSeed(
+                    name="description",
+                    type="text",
+                    label="Description",
+                    description="Optional broadcast description.",
+                    is_nullable=True,
+                ),
+                FieldSeed(
+                    name="status",
+                    type="text",
+                    label="Status",
+                    description="Broadcast lifecycle status.",
+                    is_nullable=False,
+                    default="'DRAFT'",
+                ),
+            ),
+            indexes=(
+                IndexSeed(
+                    name="broadcasts_id_uq",
+                    fields=("id",),
+                    is_unique=True,
+                ),
+                IndexSeed(
+                    name="broadcasts_status_idx",
+                    fields=("status",),
+                    is_unique=False,
+                ),
+            ),
+        ),
         *COMMUNICATION_OBJECTS,
     ),
 )

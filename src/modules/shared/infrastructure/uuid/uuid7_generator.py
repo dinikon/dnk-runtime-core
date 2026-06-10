@@ -1,18 +1,16 @@
 from __future__ import annotations
 
-from uuid import UUID
+import uuid
 
-import uuid6
-
-from src.modules.shared.application.uuid import UuidPort
+from src.modules.shared.application.uuid import UUIdGeneratorProtocol
 
 
-class Uuid7Generator(UuidPort):
+class UUID7Generator(UUIdGeneratorProtocol):
     """UUID generator implementation based on UUIDv7."""
 
-    def new_uuid(self) -> UUID:
+    def new(self) -> uuid.UUID:
         """Возвращает новый UUIDv7."""
-        return uuid6.uuid7()
+        return uuid.uuid7()
 
 
-__all__ = ["Uuid7Generator"]
+__all__ = ["UUID7Generator"]

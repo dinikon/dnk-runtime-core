@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from src.modules.broadcast.presentation.http.router import router as broadcast_router
 from src.modules.contact_point.presentation.http.router import (
     router as contact_point_router,
 )
@@ -24,6 +25,7 @@ from src.modules.tenancy.presentation.http.router import router as tenancy_route
 router = APIRouter(prefix="/api")
 
 router.include_router(tenancy_router)
+router.include_router(broadcast_router)
 router.include_router(crm_router)
 router.include_router(inventory_router)
 router.include_router(schema_registry_router)
