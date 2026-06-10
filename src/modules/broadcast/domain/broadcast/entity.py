@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Self
 
 from src.modules.broadcast.domain.broadcast.value_object.broadcast_id import (
     BroadcastIdVO,
@@ -24,3 +25,21 @@ class BroadcastEntity:
     description: EntityDescriptionVO | None
 
     status: BroadcastStatusVO
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        _id: BroadcastIdVO,
+        title: EntityTitleVO,
+        description: EntityDescriptionVO | None,
+        now: datetime,
+    ) -> Self:
+        return cls(
+            id=_id,
+            created_at=now,
+            updated_at=now,
+            title=title,
+            description=description,
+            status=BroadcastStatusVO.DRAFT,
+        )
