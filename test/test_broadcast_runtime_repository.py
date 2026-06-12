@@ -8,8 +8,15 @@ from src.modules.broadcast.domain.broadcast.entity import BroadcastEntity
 from src.modules.broadcast.domain.broadcast.value_object.broadcast_id import (
     BroadcastIdVO,
 )
-from src.modules.broadcast.infrastructure import BroadcastRuntimeRepository
+from src.modules.broadcast.infrastructure import (
+    BroadcastModelDescriptionRepository,
+    BroadcastRuntimeRepository,
+)
 from src.modules.runtime_data.application.models import RuntimeRowsPage
+from src.modules.schema_registry.application.dto.runtime_object_description import (
+    RuntimeFieldDescriptionDTO,
+    RuntimeObjectDescriptionDTO,
+)
 from src.modules.schema_registry.runtime import (
     RuntimeFieldDescriptor,
     RuntimeObjectDescriptor,
@@ -283,3 +290,89 @@ class BroadcastRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
             [(item.field, item.direction) for item in query_gateway.query_plan.sorting],
             [("created_at", "desc"), ("id", "desc")],
         )
+
+    async def test_model_description_repository_maps_fields_and_capabilities(
+        self,
+    ) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        object_id = uuid4()
+        field_id = uuid4()
+
+        class DescribeRuntimeObjectUseCaseStub:
+            called_with = None
+
+            async def __call__(self, *, tenant_id, object_name):
+                self.called_with = {
+                    "tenant_id": tenant_id,
+                    "object_name": object_name,
+                }
+                return RuntimeObjectDescriptionDTO(
+                    id=object_id,
+                    singular_label="Broadcast",
+                    plural_label="Broadcasts",
+                    description="Tenant broadcast definitions.",
+                    kind="standard",
+                    fields=(
+                        RuntimeFieldDescriptionDTO(
+                            id=field_id,
+                            field_name="status",
+                            label="Status",
+                            description="Broadcast lifecycle status.",
+                            type="text",
+                            kind="standard",
+                            is_nullable=False,
+                            default_value="'DRAFT'",
+                            options={"DRAFT": "Draft"},
+                        ),
+                    ),
+                )
+
+        class ResolverStub:
+            called_with = None
+
+            async def resolve(self, *, tenant_id, object_name):
+                self.called_with = {
+                    "tenant_id": tenant_id,
+                    "object_name": object_name,
+                }
+                return _descriptor()
+
+        describe_use_case = DescribeRuntimeObjectUseCaseStub()
+        resolver = ResolverStub()
+        repository = BroadcastModelDescriptionRepository(
+            describe_runtime_object_use_case=describe_use_case,
+            runtime_object_resolver=resolver,
+        )
+
+        result = await repository.describe_fields(tenant_id=tenant_id)
+
+        self.assertEqual(
+            describe_use_case.called_with,
+            {
+                "tenant_id": tenant_id,
+                "object_name": "broadcast",
+            },
+        )
+        self.assertEqual(
+            resolver.called_with,
+            {
+                "tenant_id": tenant_id,
+                "object_name": "broadcast",
+            },
+        )
+        self.assertEqual(result.object_description.id, object_id)
+        self.assertEqual(result.object_description.singular_label, "Broadcast")
+        self.assertEqual(len(result.fields), 1)
+        field = result.fields[0]
+        self.assertEqual(field.id, field_id)
+        self.assertEqual(field.field_name, "status")
+        self.assertEqual(field.type, "text")
+        self.assertFalse(field.is_nullable)
+        self.assertEqual(field.default_value, "'DRAFT'")
+        self.assertEqual(field.options[0].value, "DRAFT")
+        self.assertEqual(field.options[0].label, "Draft")
+        self.assertTrue(field.filter.enabled)
+        self.assertIn("eq", field.filter.operators)
+        self.assertEqual(field.filter.input, "text")
+        self.assertEqual(field.filter.value_type, "string")
+        self.assertTrue(field.sort.enabled)

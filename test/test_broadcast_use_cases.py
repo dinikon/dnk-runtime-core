@@ -5,11 +5,16 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from src.modules.broadcast.application.broadcast.command import CreateBroadcastCommand
-from src.modules.broadcast.application.broadcast.dto import BroadcastDTO
-from src.modules.broadcast.application.broadcast.dto import BroadcastListDTO
+from src.modules.broadcast.application.broadcast.dto import (
+    BroadcastDTO,
+    BroadcastFieldsDescriptionDTO,
+    BroadcastListDTO,
+    BroadcastObjectDescriptionDTO,
+)
 from src.modules.broadcast.application.broadcast.query import ListBroadcastsQuery
 from src.modules.broadcast.application.broadcast.use_case import (
     CreateBroadcastUseCase,
+    DescribeBroadcastFieldsUseCase,
     ListBroadcastsUseCase,
 )
 from src.modules.broadcast.domain.broadcast.value_object.broadcast_id import (
@@ -129,3 +134,31 @@ class BroadcastUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(repository.list_kwargs["sort_dsl"], sort_dsl)
         self.assertEqual(repository.list_kwargs["limit"], 25)
         self.assertEqual(repository.list_kwargs["offset"], 50)
+
+    async def test_describe_broadcast_fields_delegates_to_repository(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        expected = BroadcastFieldsDescriptionDTO(
+            object_description=BroadcastObjectDescriptionDTO(
+                id=uuid4(),
+                singular_label="Broadcast",
+                plural_label="Broadcasts",
+                description="Tenant broadcast definitions.",
+                kind="standard",
+            ),
+            fields=(),
+        )
+
+        class RepositoryStub:
+            described_tenant_id = None
+
+            async def describe_fields(self, *, tenant_id):
+                self.described_tenant_id = tenant_id
+                return expected
+
+        repository = RepositoryStub()
+        use_case = DescribeBroadcastFieldsUseCase(repository)
+
+        result = await use_case(tenant_id)
+
+        self.assertEqual(result, expected)
+        self.assertEqual(repository.described_tenant_id, tenant_id)

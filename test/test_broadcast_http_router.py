@@ -6,13 +6,26 @@ from uuid import uuid4
 
 from fastapi import HTTPException, status
 
-from src.modules.broadcast.application.broadcast.dto import BroadcastDTO
-from src.modules.broadcast.application.broadcast.dto import BroadcastListDTO
+from src.modules.broadcast.application.broadcast.dto import (
+    BroadcastDTO,
+    BroadcastFieldDescriptionDTO,
+    BroadcastFieldOptionDTO,
+    BroadcastFieldsDescriptionDTO,
+    BroadcastListDTO,
+    BroadcastObjectDescriptionDTO,
+)
 from src.modules.broadcast.presentation.http.broadcast.controller.create_broadcast import (
     create_broadcast,
 )
+from src.modules.broadcast.presentation.http.broadcast.controller.describe_broadcast_fields import (
+    describe_broadcast_fields,
+)
 from src.modules.broadcast.presentation.http.broadcast.controller.list_broadcasts import (
     list_broadcasts,
+)
+from src.modules.runtime_data.application.query.capabilities.field_query_capability import (
+    FieldFilterCapability,
+    FieldSortCapability,
 )
 from src.modules.broadcast.presentation.http.broadcast.requests import (
     BroadcastListPaginationRequestSchema,
@@ -24,8 +37,7 @@ from src.modules.runtime_data.domain.error import (
     RuntimeDataValidationError,
 )
 from src.modules.schema_registry.domain.error import RuntimeObjectNotFoundError
-from src.modules.shared import Principal, RequestContext
-
+from src.modules.shared import DomainError, EntityIdVO, Principal, RequestContext
 
 def _context() -> RequestContext:
     return RequestContext(
@@ -231,6 +243,124 @@ class BroadcastHttpRouterTests(unittest.IsolatedAsyncioTestCase):
                         message="Invalid filter.",
                     )
                 ),
+            )
+
+        self.assertEqual(
+            caught.exception.status_code,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+
+    async def test_describe_broadcast_fields_returns_response_shape(self) -> None:
+        object_id = uuid4()
+        field_id = uuid4()
+        context = _context()
+        use_case = _UseCaseStub(
+            BroadcastFieldsDescriptionDTO(
+                object_description=BroadcastObjectDescriptionDTO(
+                    id=object_id,
+                    singular_label="Broadcast",
+                    plural_label="Broadcasts",
+                    description="Tenant broadcast definitions.",
+                    kind="standard",
+                ),
+                fields=(
+                    BroadcastFieldDescriptionDTO(
+                        id=field_id,
+                        field_name="status",
+                        label="Status",
+                        description="Broadcast lifecycle status.",
+                        type="text",
+                        kind="standard",
+                        is_nullable=False,
+                        default_value="'DRAFT'",
+                        options=(
+                            BroadcastFieldOptionDTO(
+                                value="DRAFT",
+                                label="Draft",
+                            ),
+                        ),
+                        filter=FieldFilterCapability(
+                            enabled=True,
+                            operators=("eq", "in"),
+                            input="text",
+                            value_type="string",
+                            options=(
+                                {
+                                    "value": "DRAFT",
+                                    "label": "Draft",
+                                },
+                            ),
+                        ),
+                        sort=FieldSortCapability(enabled=True),
+                    ),
+                ),
+            )
+        )
+
+        response = await describe_broadcast_fields(
+            context=context,
+            use_case=use_case,
+        )
+
+        self.assertEqual(response.object.id, object_id)
+        self.assertEqual(response.object.singular_label, "Broadcast")
+        self.assertEqual(response.object.plural_label, "Broadcasts")
+        self.assertEqual(response.object.kind, "standard")
+        self.assertEqual(len(response.fields), 1)
+        self.assertEqual(response.fields[0].id, field_id)
+        self.assertEqual(response.fields[0].field_name, "status")
+        self.assertEqual(response.fields[0].type, "text")
+        self.assertFalse(response.fields[0].is_nullable)
+        self.assertEqual(response.fields[0].default_value, "'DRAFT'")
+        self.assertEqual(response.fields[0].options[0].value, "DRAFT")
+        self.assertTrue(response.fields[0].filter.enabled)
+        self.assertEqual(response.fields[0].filter.operators, ["eq", "in"])
+        self.assertEqual(response.fields[0].filter.input, "text")
+        self.assertEqual(response.fields[0].filter.value_type, "string")
+        self.assertEqual(response.fields[0].filter.options[0].value, "DRAFT")
+        self.assertTrue(response.fields[0].sort.enabled)
+        self.assertEqual(
+            use_case.command,
+            EntityIdVO.from_value(context.principal.tenant_id),
+        )
+
+    async def test_describe_broadcast_fields_returns_401_without_principal(
+        self,
+    ) -> None:
+        with self.assertRaises(HTTPException) as caught:
+            await describe_broadcast_fields(
+                context=RequestContext(
+                    principal=None,
+                    request_id=None,
+                    ip=None,
+                    user_agent=None,
+                ),
+                use_case=_UseCaseStub(None),
+            )
+
+        self.assertEqual(caught.exception.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    async def test_describe_broadcast_fields_schema_runtime_error_returns_409(
+        self,
+    ) -> None:
+        with self.assertRaises(HTTPException) as caught:
+            await describe_broadcast_fields(
+                context=_context(),
+                use_case=_FailingUseCase(
+                    RuntimeObjectNotFoundError(
+                        tenant_id=str(uuid4()),
+                        object_name="broadcast",
+                    )
+                ),
+            )
+
+        self.assertEqual(caught.exception.status_code, status.HTTP_409_CONFLICT)
+
+    async def test_describe_broadcast_fields_domain_error_returns_422(self) -> None:
+        with self.assertRaises(HTTPException) as caught:
+            await describe_broadcast_fields(
+                context=_context(),
+                use_case=_FailingUseCase(DomainError("Invalid broadcast fields.")),
             )
 
         self.assertEqual(
