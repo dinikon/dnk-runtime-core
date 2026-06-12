@@ -39,6 +39,7 @@ from src.modules.runtime_data.domain.error import (
 from src.modules.schema_registry.domain.error import RuntimeObjectNotFoundError
 from src.modules.shared import DomainError, EntityIdVO, Principal, RequestContext
 
+
 def _context() -> RequestContext:
     return RequestContext(
         principal=Principal(
