@@ -29,11 +29,11 @@ from src.modules.tenancy.presentation.http.admin_tenant.responses import (
     AdminCreateTenantResponseSchema,
 )
 
-router = APIRouter(tags=["admin-tenants"])
+router = APIRouter()
 
 
 @router.post(
-    "/admin/create-tenant",
+    "/create-tenant",
     response_model=AdminCreateTenantResponseSchema,
 )
 async def create_tenant(

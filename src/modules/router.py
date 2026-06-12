@@ -22,7 +22,7 @@ from src.modules.segmentation.presentation.http.router import (
 
 from src.modules.tenancy.presentation.http.router import router as tenancy_router
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/api/console")
 
 router.include_router(tenancy_router)
 router.include_router(broadcast_router)
@@ -33,6 +33,6 @@ router.include_router(custom_object_router)
 router.include_router(communication_router)
 router.include_router(segmentation_router)
 router.include_router(contact_point_router)
-router.include_router(identity_router, prefix="/console/auth")
+router.include_router(identity_router)
 
 __all__ = ["router"]

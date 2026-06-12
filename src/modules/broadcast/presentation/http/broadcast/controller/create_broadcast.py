@@ -28,11 +28,11 @@ from src.modules.shared.presentation.identity_context import (
     AuthenticatedRequestContextDep,
 )
 
-router = APIRouter(prefix="/broadcasts", tags=["broadcasts"])
+router = APIRouter()
 
 
 @router.post(
-    "",
+    "/item/add",
     response_model=BroadcastResponseSchema,
     status_code=status.HTTP_201_CREATED,
 )

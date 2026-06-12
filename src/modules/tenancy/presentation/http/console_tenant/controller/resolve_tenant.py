@@ -13,11 +13,11 @@ from src.modules.tenancy.presentation.http.console_tenant.responses import (
     ResolveTenantResponseSchema,
 )
 
-router = APIRouter(tags=["console-tenants"])
+router = APIRouter()
 
 
 @router.get(
-    "/console/tenants/resolve",
+    "/resolve",
     response_model=ResolveTenantResponseSchema,
 )
 async def resolve_tenant(

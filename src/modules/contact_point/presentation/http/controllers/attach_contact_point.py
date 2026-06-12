@@ -35,7 +35,7 @@ from src.modules.shared import EntityIdVO
 from src.modules.shared.presentation import AuthenticatedRequestContextDep
 from src.modules.shared import DomainError
 
-router = APIRouter(prefix="/contact-points", tags=["contact-points"])
+router = APIRouter()
 
 
 @router.post(
