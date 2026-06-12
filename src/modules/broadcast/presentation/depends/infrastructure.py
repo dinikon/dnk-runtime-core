@@ -4,8 +4,9 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from src.modules.broadcast.application.broadcast.repository.broadcast_repository import (
+from src.modules.broadcast.application.broadcast.repository import (
     BroadcastCommandRepositoryProtocol,
+    BroadcastQueryRepositoryProtocol,
 )
 from src.modules.broadcast.infrastructure import BroadcastRuntimeRepository
 from src.modules.runtime_data.application.type_policy import RuntimeFieldTypePolicy
@@ -81,18 +82,38 @@ def get_broadcast_command_repository(
     )
 
 
+def get_broadcast_query_repository(
+    runtime_object_resolver: RuntimeObjectResolverDep,
+    runtime_command_gateway: RuntimeCommandGatewayDep,
+    runtime_query_gateway: RuntimeQueryGatewayDep,
+) -> BroadcastQueryRepositoryProtocol:
+    """Создает query repository broadcast поверх runtime gateway."""
+    return BroadcastRuntimeRepository(
+        runtime_object_resolver=runtime_object_resolver,
+        runtime_command_gateway=runtime_command_gateway,
+        runtime_query_gateway=runtime_query_gateway,
+    )
+
+
 BroadcastCommandRepositoryDep = Annotated[
     BroadcastCommandRepositoryProtocol,
     Depends(get_broadcast_command_repository),
 ]
 
+BroadcastQueryRepositoryDep = Annotated[
+    BroadcastQueryRepositoryProtocol,
+    Depends(get_broadcast_query_repository),
+]
+
 
 __all__ = [
     "BroadcastCommandRepositoryDep",
+    "BroadcastQueryRepositoryDep",
     "RuntimeCommandGatewayDep",
     "RuntimeFieldTypePolicyDep",
     "RuntimeQueryGatewayDep",
     "get_broadcast_command_repository",
+    "get_broadcast_query_repository",
     "get_runtime_command_gateway",
     "get_runtime_field_type_policy",
     "get_runtime_query_gateway",

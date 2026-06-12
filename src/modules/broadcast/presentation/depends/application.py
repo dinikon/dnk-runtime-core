@@ -4,9 +4,13 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from src.modules.broadcast.application.broadcast.use_case import CreateBroadcastUseCase
+from src.modules.broadcast.application.broadcast.use_case import (
+    CreateBroadcastUseCase,
+    ListBroadcastsUseCase,
+)
 from src.modules.broadcast.presentation.depends.infrastructure import (
     BroadcastCommandRepositoryDep,
+    BroadcastQueryRepositoryDep,
 )
 from src.modules.shared.presentation import ClockDep, UuidDep
 
@@ -24,13 +28,27 @@ def get_create_broadcast_use_case(
     )
 
 
+def get_list_broadcasts_use_case(
+    query_repository: BroadcastQueryRepositoryDep,
+) -> ListBroadcastsUseCase:
+    """Создает use case списка broadcast."""
+    return ListBroadcastsUseCase(query_repository=query_repository)
+
+
 CreateBroadcastUseCaseDep = Annotated[
     CreateBroadcastUseCase,
     Depends(get_create_broadcast_use_case),
 ]
 
+ListBroadcastsUseCaseDep = Annotated[
+    ListBroadcastsUseCase,
+    Depends(get_list_broadcasts_use_case),
+]
+
 
 __all__ = [
     "CreateBroadcastUseCaseDep",
+    "ListBroadcastsUseCaseDep",
     "get_create_broadcast_use_case",
+    "get_list_broadcasts_use_case",
 ]

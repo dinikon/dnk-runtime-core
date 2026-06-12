@@ -4,7 +4,7 @@ from src.modules.broadcast.application.broadcast.command.create_broadcast import
     CreateBroadcastCommand,
 )
 from src.modules.broadcast.application.broadcast.dto.broadcast_dto import BroadcastDTO
-from src.modules.broadcast.application.broadcast.repository.broadcast_repository import (
+from src.modules.broadcast.application.broadcast.repository import (
     BroadcastCommandRepositoryProtocol,
 )
 from src.modules.broadcast.domain.broadcast.entity import BroadcastEntity

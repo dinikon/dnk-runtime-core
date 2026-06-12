@@ -7,13 +7,22 @@ from uuid import uuid4
 from fastapi import HTTPException, status
 
 from src.modules.broadcast.application.broadcast.dto import BroadcastDTO
+from src.modules.broadcast.application.broadcast.dto import BroadcastListDTO
 from src.modules.broadcast.presentation.http.broadcast.controller.create_broadcast import (
     create_broadcast,
 )
-from src.modules.broadcast.presentation.http.broadcast.requests import (
-    CreateBroadcastRequestSchema,
+from src.modules.broadcast.presentation.http.broadcast.controller.list_broadcasts import (
+    list_broadcasts,
 )
-from src.modules.runtime_data.domain.error import RuntimeDataValidationError
+from src.modules.broadcast.presentation.http.broadcast.requests import (
+    BroadcastListPaginationRequestSchema,
+    CreateBroadcastRequestSchema,
+    ListBroadcastsRequestSchema,
+)
+from src.modules.runtime_data.domain.error import (
+    RuntimeDataFilterError,
+    RuntimeDataValidationError,
+)
 from src.modules.schema_registry.domain.error import RuntimeObjectNotFoundError
 from src.modules.shared import Principal, RequestContext
 
@@ -120,6 +129,107 @@ class BroadcastHttpRouterTests(unittest.IsolatedAsyncioTestCase):
                 context=_context(),
                 use_case=_FailingUseCase(
                     RuntimeDataValidationError("Field 'title' must not be empty.")
+                ),
+            )
+
+        self.assertEqual(
+            caught.exception.status_code,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+
+    async def test_list_broadcasts_returns_page_response_shape(self) -> None:
+        now = datetime.now(UTC)
+        broadcast_id = uuid4()
+        context = _context()
+        use_case = _UseCaseStub(
+            BroadcastListDTO(
+                items=(
+                    BroadcastDTO(
+                        id=broadcast_id,
+                        created_at=now,
+                        updated_at=now,
+                        title="June broadcast",
+                        description=None,
+                        status="DRAFT",
+                    ),
+                ),
+                total=123,
+                limit=25,
+                offset=50,
+            )
+        )
+        filter_dsl = {"field": "status", "op": "eq", "value": "DRAFT"}
+        sort_dsl = [{"field": "created_at", "direction": "desc"}]
+
+        response = await list_broadcasts(
+            payload=ListBroadcastsRequestSchema(
+                filter=filter_dsl,
+                sort=sort_dsl,
+                pagination=BroadcastListPaginationRequestSchema(
+                    limit=25,
+                    offset=50,
+                ),
+            ),
+            context=context,
+            use_case=use_case,
+        )
+
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0].id, broadcast_id)
+        self.assertEqual(response.data[0].created_at, now)
+        self.assertEqual(response.data[0].updated_at, now)
+        self.assertEqual(response.data[0].title, "June broadcast")
+        self.assertIsNone(response.data[0].description)
+        self.assertEqual(response.data[0].status, "DRAFT")
+        self.assertEqual(response.pagination.limit, 25)
+        self.assertEqual(response.pagination.offset, 50)
+        self.assertEqual(response.pagination.total, 123)
+        self.assertEqual(use_case.command.tenant_id, context.principal.tenant_id)
+        self.assertEqual(use_case.command.filter_dsl, filter_dsl)
+        self.assertEqual(use_case.command.sort_dsl, sort_dsl)
+        self.assertEqual(use_case.command.limit, 25)
+        self.assertEqual(use_case.command.offset, 50)
+
+    async def test_list_broadcasts_returns_401_without_principal(self) -> None:
+        with self.assertRaises(HTTPException) as caught:
+            await list_broadcasts(
+                payload=ListBroadcastsRequestSchema(),
+                context=RequestContext(
+                    principal=None,
+                    request_id=None,
+                    ip=None,
+                    user_agent=None,
+                ),
+                use_case=_UseCaseStub(None),
+            )
+
+        self.assertEqual(caught.exception.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    async def test_list_broadcasts_schema_runtime_error_returns_409(self) -> None:
+        with self.assertRaises(HTTPException) as caught:
+            await list_broadcasts(
+                payload=ListBroadcastsRequestSchema(),
+                context=_context(),
+                use_case=_FailingUseCase(
+                    RuntimeObjectNotFoundError(
+                        tenant_id=str(uuid4()),
+                        object_name="broadcast",
+                    )
+                ),
+            )
+
+        self.assertEqual(caught.exception.status_code, status.HTTP_409_CONFLICT)
+
+    async def test_list_broadcasts_filter_error_returns_422(self) -> None:
+        with self.assertRaises(HTTPException) as caught:
+            await list_broadcasts(
+                payload=ListBroadcastsRequestSchema(),
+                context=_context(),
+                use_case=_FailingUseCase(
+                    RuntimeDataFilterError(
+                        code="INVALID_FILTER_DSL",
+                        message="Invalid filter.",
+                    )
                 ),
             )
 

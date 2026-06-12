@@ -9,6 +9,7 @@ from src.modules.broadcast.domain.broadcast.value_object.broadcast_id import (
     BroadcastIdVO,
 )
 from src.modules.broadcast.infrastructure import BroadcastRuntimeRepository
+from src.modules.runtime_data.application.models import RuntimeRowsPage
 from src.modules.schema_registry.runtime import (
     RuntimeFieldDescriptor,
     RuntimeObjectDescriptor,
@@ -201,3 +202,84 @@ class BroadcastRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(loaded.title.value, "June broadcast")
         self.assertIsNone(loaded.description)
         self.assertEqual(loaded.status.value, "DRAFT")
+
+    async def test_list_searches_runtime_rows_with_default_sorting(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        broadcast_id = BroadcastIdVO.from_value(uuid4())
+        now = datetime.now(UTC)
+
+        class ResolverStub:
+            async def resolve(self, *, tenant_id, object_name):
+                return _descriptor()
+
+        class CommandGatewayStub:
+            async def insert(self, *, descriptor, payload):
+                raise AssertionError("insert should not be called")
+
+            async def update(self, *, descriptor, object_id, patch):
+                raise AssertionError("update should not be called")
+
+            async def delete(self, *, descriptor, object_id):
+                raise AssertionError("delete should not be called")
+
+        class QueryGatewayStub:
+            query_plan = None
+
+            async def get_by_id(self, *, descriptor, object_id, fetch_plan=None):
+                raise AssertionError("get_by_id should not be called")
+
+            async def list(
+                self, *, descriptor, filters=(), sorting=(), page=None, fetch_plan=None
+            ):
+                raise AssertionError("list should not be called")
+
+            async def search(self, query_plan):
+                self.query_plan = query_plan
+                return RuntimeRowsPage(
+                    rows=(
+                        {
+                            "id": broadcast_id.uuid,
+                            "created_at": now,
+                            "updated_at": now,
+                            "title": "June broadcast",
+                            "description": None,
+                            "status": "DRAFT",
+                        },
+                    ),
+                    total=7,
+                )
+
+        query_gateway = QueryGatewayStub()
+        repository = BroadcastRuntimeRepository(
+            runtime_object_resolver=ResolverStub(),
+            runtime_command_gateway=CommandGatewayStub(),
+            runtime_query_gateway=query_gateway,
+        )
+
+        result = await repository.list(
+            tenant_id=tenant_id,
+            filter_dsl={"field": "status", "op": "eq", "value": "DRAFT"},
+            sort_dsl=(),
+            limit=25,
+            offset=50,
+        )
+
+        self.assertEqual(result.total, 7)
+        self.assertEqual(result.limit, 25)
+        self.assertEqual(result.offset, 50)
+        self.assertEqual(len(result.items), 1)
+        self.assertEqual(result.items[0].id, broadcast_id.uuid)
+        self.assertEqual(result.items[0].title, "June broadcast")
+        self.assertIsNone(result.items[0].description)
+        self.assertEqual(result.items[0].status, "DRAFT")
+        self.assertIsNotNone(query_gateway.query_plan)
+        assert query_gateway.query_plan is not None
+        self.assertEqual(query_gateway.query_plan.page.limit, 25)
+        self.assertEqual(query_gateway.query_plan.page.offset, 50)
+        self.assertEqual(query_gateway.query_plan.filters[0].field.name, "status")
+        self.assertEqual(query_gateway.query_plan.filters[0].op, "eq")
+        self.assertEqual(query_gateway.query_plan.filters[0].value, "DRAFT")
+        self.assertEqual(
+            [(item.field, item.direction) for item in query_gateway.query_plan.sorting],
+            [("created_at", "desc"), ("id", "desc")],
+        )
