@@ -154,40 +154,71 @@ function formatValue(
   return String(value);
 }
 
-function columnClass(field: RuntimeFieldDescription) {
-  if (field.field_name === "description") {
-    return "max-w-[24rem] overflow-hidden";
+function columnWidth(field: RuntimeFieldDescription): string {
+  const contentChars = Math.max(
+    field.label.length,
+    ...props.records.map((record) => formatValue(field, record).length),
+  );
+
+  if (field.field_name === "title") {
+    return dynamicColumnWidth(contentChars, {
+      min: "10rem",
+      max: "min(18rem, 58vw)",
+      charLimit: 28,
+      paddingChars: 4,
+    });
   }
 
-  if (field.field_name === "created_at" || field.field_name === "updated_at") {
-    return "w-48 overflow-hidden";
+  if (field.field_name === "description") {
+    return dynamicColumnWidth(contentChars, {
+      min: "12rem",
+      max: "min(22rem, 70vw)",
+      charLimit: 42,
+      paddingChars: 4,
+    });
   }
 
   if (field.field_name === "status") {
-    return "w-36 overflow-hidden";
+    return dynamicColumnWidth(contentChars, {
+      min: "7.5rem",
+      max: "9rem",
+      charLimit: 12,
+      paddingChars: 5,
+    });
   }
 
-  return "overflow-hidden";
+  if (field.field_name === "created_at" || field.field_name === "updated_at") {
+    return dynamicColumnWidth(contentChars, {
+      min: "10rem",
+      max: "12rem",
+      charLimit: 18,
+      paddingChars: 3,
+    });
+  }
+
+  return dynamicColumnWidth(contentChars, {
+    min: "8rem",
+    max: "min(14rem, 52vw)",
+    charLimit: 24,
+    paddingChars: 4,
+  });
 }
 
-function columnWidth(field: RuntimeFieldDescription): string {
-  if (field.field_name === "title") {
-    return "22rem";
-  }
+function dynamicColumnWidth(
+  contentChars: number,
+  options: {
+    min: string;
+    max: string;
+    charLimit: number;
+    paddingChars: number;
+  },
+): string {
+  const preferredChars = Math.min(
+    contentChars + options.paddingChars,
+    options.charLimit,
+  );
 
-  if (field.field_name === "description") {
-    return "26rem";
-  }
-
-  if (field.field_name === "status") {
-    return "9rem";
-  }
-
-  if (field.field_name === "created_at" || field.field_name === "updated_at") {
-    return "12rem";
-  }
-
-  return "12rem";
+  return `clamp(${options.min}, ${preferredChars}ch, ${options.max})`;
 }
 </script>
 
@@ -202,7 +233,7 @@ function columnWidth(field: RuntimeFieldDescription): string {
     >
       <div class="h-full w-1/3 animate-pulse bg-primary" />
     </div>
-    <Table class="min-w-[81rem] table-fixed">
+    <Table class="w-max min-w-full table-fixed">
       <colgroup>
         <col
           v-for="field in displayFields"
@@ -215,8 +246,7 @@ function columnWidth(field: RuntimeFieldDescription): string {
           <TableHead
             v-for="field in displayFields"
             :key="field.field_name"
-            class="whitespace-nowrap"
-            :class="columnClass(field)"
+            class="overflow-hidden whitespace-nowrap"
           >
             <div v-if="field.sort.enabled" class="-ml-3 flex items-center">
               <Button
@@ -293,7 +323,7 @@ function columnWidth(field: RuntimeFieldDescription): string {
           <TableCell
             v-for="field in displayFields"
             :key="field.field_name"
-            :class="columnClass(field)"
+            class="overflow-hidden"
           >
             <Badge v-if="field.field_name === 'status'" variant="outline">
               {{ formatValue(field, record) }}
