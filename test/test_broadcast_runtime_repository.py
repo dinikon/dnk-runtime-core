@@ -210,6 +210,106 @@ class BroadcastRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(loaded.description)
         self.assertEqual(loaded.status.value, "DRAFT")
 
+    async def test_get_maps_runtime_row_to_dto(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        broadcast_id = BroadcastIdVO.from_value(uuid4())
+        now = datetime.now(UTC)
+
+        class ResolverStub:
+            async def resolve(self, *, tenant_id, object_name):
+                return _descriptor()
+
+        class CommandGatewayStub:
+            async def insert(self, *, descriptor, payload):
+                raise AssertionError("insert should not be called")
+
+            async def update(self, *, descriptor, object_id, patch):
+                raise AssertionError("update should not be called")
+
+            async def delete(self, *, descriptor, object_id):
+                raise AssertionError("delete should not be called")
+
+        class QueryGatewayStub:
+            requested_object_id = None
+
+            async def get_by_id(self, *, descriptor, object_id, fetch_plan=None):
+                self.requested_object_id = object_id
+                return {
+                    "id": broadcast_id.uuid,
+                    "created_at": now,
+                    "updated_at": now,
+                    "title": "June broadcast",
+                    "description": None,
+                    "status": "DRAFT",
+                }
+
+            async def list(
+                self, *, descriptor, filters=(), sorting=(), page=None, fetch_plan=None
+            ):
+                raise AssertionError("list should not be called")
+
+        query_gateway = QueryGatewayStub()
+        repository = BroadcastRuntimeRepository(
+            runtime_object_resolver=ResolverStub(),
+            runtime_command_gateway=CommandGatewayStub(),
+            runtime_query_gateway=query_gateway,
+        )
+
+        result = await repository.get(
+            tenant_id=tenant_id,
+            broadcast_id=broadcast_id,
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(query_gateway.requested_object_id, broadcast_id.uuid)
+        self.assertEqual(result.id, broadcast_id.uuid)
+        self.assertEqual(result.created_at, now)
+        self.assertEqual(result.updated_at, now)
+        self.assertEqual(result.title, "June broadcast")
+        self.assertIsNone(result.description)
+        self.assertEqual(result.status, "DRAFT")
+
+    async def test_get_returns_none_when_runtime_row_is_missing(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        broadcast_id = BroadcastIdVO.from_value(uuid4())
+
+        class ResolverStub:
+            async def resolve(self, *, tenant_id, object_name):
+                return _descriptor()
+
+        class CommandGatewayStub:
+            async def insert(self, *, descriptor, payload):
+                raise AssertionError("insert should not be called")
+
+            async def update(self, *, descriptor, object_id, patch):
+                raise AssertionError("update should not be called")
+
+            async def delete(self, *, descriptor, object_id):
+                raise AssertionError("delete should not be called")
+
+        class QueryGatewayStub:
+            async def get_by_id(self, *, descriptor, object_id, fetch_plan=None):
+                return None
+
+            async def list(
+                self, *, descriptor, filters=(), sorting=(), page=None, fetch_plan=None
+            ):
+                raise AssertionError("list should not be called")
+
+        repository = BroadcastRuntimeRepository(
+            runtime_object_resolver=ResolverStub(),
+            runtime_command_gateway=CommandGatewayStub(),
+            runtime_query_gateway=QueryGatewayStub(),
+        )
+
+        result = await repository.get(
+            tenant_id=tenant_id,
+            broadcast_id=broadcast_id,
+        )
+
+        self.assertIsNone(result)
+
     async def test_list_searches_runtime_rows_with_default_sorting(self) -> None:
         tenant_id = EntityIdVO.from_value(uuid4())
         broadcast_id = BroadcastIdVO.from_value(uuid4())

@@ -6,6 +6,10 @@ from src.modules.broadcast.application.broadcast.use_case.describe_broadcast_fie
     DescribeBroadcastFieldsUseCase,
     DescribeBroadcastFieldsUseCaseProtocol,
 )
+from src.modules.broadcast.application.broadcast.use_case.get_broadcast_use_case import (
+    GetBroadcastUseCase,
+    GetBroadcastUseCaseProtocol,
+)
 from src.modules.broadcast.application.broadcast.use_case.list_broadcasts_use_case import (
     ListBroadcastsUseCase,
     ListBroadcastsUseCaseProtocol,
@@ -16,6 +20,8 @@ __all__ = [
     "CreateBroadcastUseCaseProtocol",
     "DescribeBroadcastFieldsUseCase",
     "DescribeBroadcastFieldsUseCaseProtocol",
+    "GetBroadcastUseCase",
+    "GetBroadcastUseCaseProtocol",
     "ListBroadcastsUseCase",
     "ListBroadcastsUseCaseProtocol",
 ]

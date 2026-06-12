@@ -20,6 +20,9 @@ from src.modules.broadcast.presentation.http.broadcast.controller.create_broadca
 from src.modules.broadcast.presentation.http.broadcast.controller.describe_broadcast_fields import (
     describe_broadcast_fields,
 )
+from src.modules.broadcast.presentation.http.broadcast.controller.get_broadcast import (
+    get_broadcast,
+)
 from src.modules.broadcast.presentation.http.broadcast.controller.list_broadcasts import (
     list_broadcasts,
 )
@@ -30,6 +33,7 @@ from src.modules.runtime_data.application.query.capabilities.field_query_capabil
 from src.modules.broadcast.presentation.http.broadcast.requests import (
     BroadcastListPaginationRequestSchema,
     CreateBroadcastRequestSchema,
+    GetBroadcastRequestSchema,
     ListBroadcastsRequestSchema,
 )
 from src.modules.runtime_data.domain.error import (
@@ -244,6 +248,89 @@ class BroadcastHttpRouterTests(unittest.IsolatedAsyncioTestCase):
                         message="Invalid filter.",
                     )
                 ),
+            )
+
+        self.assertEqual(
+            caught.exception.status_code,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+
+    async def test_get_broadcast_returns_response_shape(self) -> None:
+        now = datetime.now(UTC)
+        broadcast_id = uuid4()
+        context = _context()
+        use_case = _UseCaseStub(
+            BroadcastDTO(
+                id=broadcast_id,
+                created_at=now,
+                updated_at=now,
+                title="June broadcast",
+                description=None,
+                status="DRAFT",
+            )
+        )
+
+        response = await get_broadcast(
+            payload=GetBroadcastRequestSchema(id=broadcast_id),
+            context=context,
+            use_case=use_case,
+        )
+
+        self.assertEqual(response.id, broadcast_id)
+        self.assertEqual(response.created_at, now)
+        self.assertEqual(response.updated_at, now)
+        self.assertEqual(response.title, "June broadcast")
+        self.assertIsNone(response.description)
+        self.assertEqual(response.status, "DRAFT")
+        self.assertEqual(use_case.command.tenant_id, context.principal.tenant_id)
+        self.assertEqual(use_case.command.broadcast_id, broadcast_id)
+
+    async def test_get_broadcast_returns_401_without_principal(self) -> None:
+        with self.assertRaises(HTTPException) as caught:
+            await get_broadcast(
+                payload=GetBroadcastRequestSchema(id=uuid4()),
+                context=RequestContext(
+                    principal=None,
+                    request_id=None,
+                    ip=None,
+                    user_agent=None,
+                ),
+                use_case=_UseCaseStub(None),
+            )
+
+        self.assertEqual(caught.exception.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    async def test_get_broadcast_returns_404_when_row_is_missing(self) -> None:
+        with self.assertRaises(HTTPException) as caught:
+            await get_broadcast(
+                payload=GetBroadcastRequestSchema(id=uuid4()),
+                context=_context(),
+                use_case=_UseCaseStub(None),
+            )
+
+        self.assertEqual(caught.exception.status_code, status.HTTP_404_NOT_FOUND)
+
+    async def test_get_broadcast_schema_runtime_error_returns_409(self) -> None:
+        with self.assertRaises(HTTPException) as caught:
+            await get_broadcast(
+                payload=GetBroadcastRequestSchema(id=uuid4()),
+                context=_context(),
+                use_case=_FailingUseCase(
+                    RuntimeObjectNotFoundError(
+                        tenant_id=str(uuid4()),
+                        object_name="broadcast",
+                    )
+                ),
+            )
+
+        self.assertEqual(caught.exception.status_code, status.HTTP_409_CONFLICT)
+
+    async def test_get_broadcast_validation_error_returns_422(self) -> None:
+        with self.assertRaises(HTTPException) as caught:
+            await get_broadcast(
+                payload=GetBroadcastRequestSchema(id=uuid4()),
+                context=_context(),
+                use_case=_FailingUseCase(RuntimeDataValidationError("Invalid id.")),
             )
 
         self.assertEqual(

@@ -12,9 +12,11 @@ from src.modules.broadcast.application.broadcast.dto import (
     BroadcastObjectDescriptionDTO,
 )
 from src.modules.broadcast.application.broadcast.query import ListBroadcastsQuery
+from src.modules.broadcast.application.broadcast.query import GetBroadcastQuery
 from src.modules.broadcast.application.broadcast.use_case import (
     CreateBroadcastUseCase,
     DescribeBroadcastFieldsUseCase,
+    GetBroadcastUseCase,
     ListBroadcastsUseCase,
 )
 from src.modules.broadcast.domain.broadcast.value_object.broadcast_id import (
@@ -134,6 +136,48 @@ class BroadcastUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(repository.list_kwargs["sort_dsl"], sort_dsl)
         self.assertEqual(repository.list_kwargs["limit"], 25)
         self.assertEqual(repository.list_kwargs["offset"], 50)
+
+    async def test_get_broadcast_delegates_to_query_repository(self) -> None:
+        tenant_id = uuid4()
+        broadcast_id = uuid4()
+        now = datetime.now(UTC)
+        expected = BroadcastDTO(
+            id=broadcast_id,
+            created_at=now,
+            updated_at=now,
+            title="June broadcast",
+            description=None,
+            status="DRAFT",
+        )
+
+        class RepositoryStub:
+            get_kwargs = None
+
+            async def get(self, **kwargs):
+                self.get_kwargs = kwargs
+                return expected
+
+        repository = RepositoryStub()
+        use_case = GetBroadcastUseCase(query_repository=repository)
+
+        result = await use_case(
+            GetBroadcastQuery(
+                tenant_id=tenant_id,
+                broadcast_id=broadcast_id,
+            )
+        )
+
+        self.assertEqual(result, expected)
+        self.assertIsNotNone(repository.get_kwargs)
+        assert repository.get_kwargs is not None
+        self.assertEqual(
+            repository.get_kwargs["tenant_id"],
+            EntityIdVO.from_value(tenant_id),
+        )
+        self.assertEqual(
+            repository.get_kwargs["broadcast_id"],
+            BroadcastIdVO.from_value(broadcast_id),
+        )
 
     async def test_describe_broadcast_fields_delegates_to_repository(self) -> None:
         tenant_id = EntityIdVO.from_value(uuid4())

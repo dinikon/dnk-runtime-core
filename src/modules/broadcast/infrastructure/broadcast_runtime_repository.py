@@ -103,6 +103,22 @@ class BroadcastRuntimeRepository(
             offset=result.offset,
         )
 
+    async def get(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        broadcast_id: BroadcastIdVO,
+    ) -> BroadcastDTO | None:
+        """Возвращает одну broadcast definition через runtime get_by_id."""
+        descriptor = await self._resolve_descriptor(tenant_id)
+        row = await self._runtime_query_gateway.get_by_id(
+            descriptor=descriptor,
+            object_id=broadcast_id.uuid,
+        )
+        if row is None:
+            return None
+        return self._entity_to_dto(self._row_to_entity(row))
+
     async def save(
         self,
         *,

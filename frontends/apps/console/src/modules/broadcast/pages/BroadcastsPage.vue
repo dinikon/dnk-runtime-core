@@ -3,6 +3,7 @@ import { computed, ref, watch } from "vue";
 import { Filter, Plus, RefreshCcw, Search, X } from "lucide-vue-next";
 import { useQueryClient } from "@tanstack/vue-query";
 import { toast } from "vue-sonner";
+import { useRoute, useRouter } from "vue-router";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,8 @@ import type {
 } from "@/shared/runtime-object";
 
 const queryClient = useQueryClient();
+const route = useRoute();
+const router = useRouter();
 const queryState = useRuntimeObjectQueryState();
 
 const filterSheetOpen = ref(false);
@@ -103,11 +106,13 @@ const pageEnd = computed(() =>
 );
 const canGoPrevious = computed(() => offset.value > 0);
 const canGoNext = computed(() => offset.value + limit.value < total.value);
-const isTableLoading = computed(
+const isInitialTableLoading = computed(
   () =>
     fieldsQuery.isLoading.value ||
-    listQuery.isLoading.value ||
-    listQuery.isFetching.value,
+    (listQuery.isLoading.value && records.value.length === 0),
+);
+const isTableRefreshing = computed(
+  () => !isInitialTableLoading.value && listQuery.isFetching.value,
 );
 const filterCount = computed(() => countFilterConditions(filter.value));
 const hasFilterableFields = computed(() =>
@@ -340,6 +345,14 @@ async function createBroadcast(payload: CreateBroadcastPayload) {
     createError.value = apiErrorMessage(error);
   }
 }
+
+function openBroadcast(record: BroadcastListItem) {
+  void router.push({
+    name: "broadcast-detail",
+    params: { id: record.id },
+    query: route.query,
+  });
+}
 </script>
 
 <template>
@@ -448,7 +461,9 @@ async function createBroadcast(payload: CreateBroadcastPayload) {
       :fields="fields"
       :records="records"
       :sort="sort"
-      :is-loading="isTableLoading"
+      :is-loading="isInitialTableLoading"
+      :is-refreshing="isTableRefreshing"
+      @open="openBroadcast"
       @sort-change="handleSortChange"
     />
 

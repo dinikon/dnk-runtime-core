@@ -7,6 +7,7 @@ from fastapi import Depends
 from src.modules.broadcast.application.broadcast.use_case import (
     CreateBroadcastUseCase,
     DescribeBroadcastFieldsUseCase,
+    GetBroadcastUseCase,
     ListBroadcastsUseCase,
 )
 from src.modules.broadcast.presentation.depends.infrastructure import (
@@ -37,6 +38,13 @@ def get_list_broadcasts_use_case(
     return ListBroadcastsUseCase(query_repository=query_repository)
 
 
+def get_get_broadcast_use_case(
+    query_repository: BroadcastQueryRepositoryDep,
+) -> GetBroadcastUseCase:
+    """Создает use case чтения broadcast."""
+    return GetBroadcastUseCase(query_repository=query_repository)
+
+
 def get_describe_broadcast_fields_use_case(
     repository: BroadcastFieldsDescriptionRepositoryDep,
 ) -> DescribeBroadcastFieldsUseCase:
@@ -59,12 +67,19 @@ ListBroadcastsUseCaseDep = Annotated[
     Depends(get_list_broadcasts_use_case),
 ]
 
+GetBroadcastUseCaseDep = Annotated[
+    GetBroadcastUseCase,
+    Depends(get_get_broadcast_use_case),
+]
+
 
 __all__ = [
     "CreateBroadcastUseCaseDep",
     "DescribeBroadcastFieldsUseCaseDep",
+    "GetBroadcastUseCaseDep",
     "ListBroadcastsUseCaseDep",
     "get_create_broadcast_use_case",
     "get_describe_broadcast_fields_use_case",
+    "get_get_broadcast_use_case",
     "get_list_broadcasts_use_case",
 ]

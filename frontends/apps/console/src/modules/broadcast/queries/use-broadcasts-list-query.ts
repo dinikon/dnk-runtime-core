@@ -15,6 +15,7 @@ export function useBroadcastsListQuery(
     queryKey: computed(() => broadcastQueryKeys.list(toValue(payload))),
     queryFn: () => broadcastApi.list(toValue(payload)),
     enabled: computed(() => toValue(enabled)),
+    placeholderData: (previousData) => previousData,
     retry: false,
   });
 }

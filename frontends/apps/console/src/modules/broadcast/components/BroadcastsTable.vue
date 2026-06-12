@@ -30,13 +30,16 @@ const props = withDefaults(
     records: BroadcastListItem[];
     sort: RuntimeSort[];
     isLoading?: boolean;
+    isRefreshing?: boolean;
   }>(),
   {
     isLoading: false,
+    isRefreshing: false,
   },
 );
 
 const emit = defineEmits<{
+  (event: "open", record: BroadcastListItem): void;
   (event: "sortChange", sort: RuntimeSort[]): void;
 }>();
 
@@ -153,26 +156,60 @@ function formatValue(
 
 function columnClass(field: RuntimeFieldDescription) {
   if (field.field_name === "description") {
-    return "max-w-[24rem]";
+    return "max-w-[24rem] overflow-hidden";
   }
 
   if (field.field_name === "created_at" || field.field_name === "updated_at") {
-    return "w-48";
+    return "w-48 overflow-hidden";
   }
 
   if (field.field_name === "status") {
-    return "w-36";
+    return "w-36 overflow-hidden";
   }
 
-  return undefined;
+  return "overflow-hidden";
+}
+
+function columnWidth(field: RuntimeFieldDescription): string {
+  if (field.field_name === "title") {
+    return "22rem";
+  }
+
+  if (field.field_name === "description") {
+    return "26rem";
+  }
+
+  if (field.field_name === "status") {
+    return "9rem";
+  }
+
+  if (field.field_name === "created_at" || field.field_name === "updated_at") {
+    return "12rem";
+  }
+
+  return "12rem";
 }
 </script>
 
 <template>
   <div
-    class="min-h-0 overflow-hidden rounded-lg border [&>[data-slot=table-container]]:h-full"
+    class="relative min-h-0 overflow-hidden rounded-lg border [&>[data-slot=table-container]]:h-full"
+    :aria-busy="isLoading || isRefreshing"
   >
-    <Table>
+    <div
+      v-if="isRefreshing"
+      class="absolute inset-x-0 top-0 z-30 h-0.5 overflow-hidden bg-primary/10"
+    >
+      <div class="h-full w-1/3 animate-pulse bg-primary" />
+    </div>
+    <Table class="min-w-[81rem] table-fixed">
+      <colgroup>
+        <col
+          v-for="field in displayFields"
+          :key="field.field_name"
+          :style="{ width: columnWidth(field) }"
+        />
+      </colgroup>
       <TableHeader class="sticky top-0 z-20 bg-background">
         <TableRow>
           <TableHead
@@ -244,8 +281,14 @@ function columnClass(field: RuntimeFieldDescription) {
           v-for="(record, index) in records"
           v-else
           :key="record.id"
-          class="animate-in fade-in-0 slide-in-from-top-1 duration-300"
+          role="link"
+          tabindex="0"
+          :aria-label="`Open broadcast ${record.title}`"
+          class="animate-in cursor-pointer fade-in-0 slide-in-from-top-1 duration-300 hover:bg-muted/50"
           :style="{ animationDelay: `${Math.min(index * 20, 180)}ms` }"
+          @click="emit('open', record)"
+          @keydown.enter="emit('open', record)"
+          @keydown.space.prevent="emit('open', record)"
         >
           <TableCell
             v-for="field in displayFields"
@@ -255,6 +298,14 @@ function columnClass(field: RuntimeFieldDescription) {
             <Badge v-if="field.field_name === 'status'" variant="outline">
               {{ formatValue(field, record) }}
             </Badge>
+            <button
+              v-else-if="field.field_name === 'title'"
+              type="button"
+              class="line-clamp-2 text-left font-medium text-primary hover:underline"
+              @click.stop="emit('open', record)"
+            >
+              {{ formatValue(field, record) }}
+            </button>
             <span v-else class="line-clamp-2">
               {{ formatValue(field, record) }}
             </span>

@@ -23,6 +23,10 @@ export type ListBroadcastsPayload = RuntimeObjectSearchRequest;
 export type ListBroadcastsResponse =
   RuntimeObjectSearchResponse<BroadcastListItem>;
 
+export interface GetBroadcastPayload {
+  id: string;
+}
+
 export interface CreateBroadcastPayload {
   title: string;
   description: string | null;

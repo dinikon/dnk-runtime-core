@@ -6,7 +6,7 @@ import type {
   ListCompaniesResponse,
   NormalizedCompanyFieldsResponse,
   UpdateCompanyPayload,
-} from "@/modules/crm/api/types";
+} from "@/modules/console/crm/api/types";
 import type {
   RuntimeFieldDescription,
   RuntimeObjectMutationPayload,
@@ -17,12 +17,15 @@ import type {
 export const crmCompaniesApi = {
   describeFields: async () =>
     normalizeCompanyFieldsResponse(
-      (await httpClient.post<CompanyFieldsResponse>("/crm/companies/fields"))
-        .data,
+      (
+        await httpClient.post<CompanyFieldsResponse>(
+          "/console/crm/companies/fields",
+        )
+      ).data,
     ),
   search: async (payload: RuntimeObjectSearchRequest) => {
     const response = (
-      await httpClient.get<ListCompaniesResponse>("/crm/companies", {
+      await httpClient.get<ListCompaniesResponse>("/console/crm/companies", {
         params: payload.pagination,
       })
     ).data;
@@ -37,21 +40,28 @@ export const crmCompaniesApi = {
     } satisfies RuntimeObjectSearchResponse<Company>;
   },
   list: async (params: { limit?: number; offset?: number } = {}) =>
-    (await httpClient.get<ListCompaniesResponse>("/crm/companies", { params }))
-      .data,
+    (
+      await httpClient.get<ListCompaniesResponse>("/console/crm/companies", {
+        params,
+      })
+    ).data,
   get: async (companyId: string) =>
-    (await httpClient.get<Company>(`/crm/companies/${companyId}`)).data,
+    (await httpClient.get<Company>(`/console/crm/companies/${companyId}`)).data,
   create: async (
     payload: CreateCompanyPayload | RuntimeObjectMutationPayload,
-  ) => (await httpClient.post<Company>("/crm/companies", payload)).data,
+  ) => (await httpClient.post<Company>("/console/crm/companies", payload)).data,
   update: async (
     companyId: string,
     payload: UpdateCompanyPayload | RuntimeObjectMutationPayload,
   ) =>
-    (await httpClient.put<Company>(`/crm/companies/${companyId}`, payload))
-      .data,
+    (
+      await httpClient.put<Company>(
+        `/console/crm/companies/${companyId}`,
+        payload,
+      )
+    ).data,
   delete: async (companyId: string) => {
-    await httpClient.delete(`/crm/companies/${companyId}`);
+    await httpClient.delete(`/console/crm/companies/${companyId}`);
   },
 };
 
