@@ -24,8 +24,8 @@ class NodeExecutionEntity:
 
     finished_at: datetime
 
-    app_id: EntityIdVO
-    workflow_id: EntityIdVO
+    workflow_application_id: EntityIdVO
+    workflow_definition_id: EntityIdVO
     run_id: EntityIdVO
 
     index: NodeIndexVO

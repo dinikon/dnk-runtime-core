@@ -2,23 +2,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Self
 
 from src.modules.shared import EntityIdVO
 from src.modules.shared.domain.value_object.entity_description import (
     EntityDescriptionVO,
 )
 from src.modules.shared.domain.value_object.entity_title import EntityTitleVO
-from src.modules.workflow.domain.error import WorkflowValidationError
-from src.modules.workflow.domain.workflow.value_object.workflow_id import WorkflowIdVO
-from src.modules.workflow.domain.workflow_app.value_object import (
+from src.modules.workflow.domain.workflow_definition.value_object import (
+    WorkflowDefinitionIdVO,
+)
+from src.modules.workflow.domain.workflow_application.value_object import (
+    WorkflowApplicationIdVO,
     WorkflowApplicationStatusVO,
     WorkflowIconBackgroundVO,
     WorkflowIconVO,
     WorkflowKindVO,
-)
-from src.modules.workflow.domain.workflow_app.value_object.workflow_application_id import (
-    WorkflowApplicationIdVO,
 )
 
 
@@ -41,7 +39,7 @@ class WorkflowApplicationEntity:
     icon: WorkflowIconVO
     icon_background: WorkflowIconBackgroundVO
 
-    active_workflow_id: WorkflowIdVO | None
+    active_workflow_definition_id: WorkflowDefinitionIdVO | None
 
     @classmethod
     def create(
@@ -67,15 +65,19 @@ class WorkflowApplicationEntity:
             description=description,
             icon=icon,
             icon_background=icon_background,
-            active_workflow_id=None,
+            active_workflow_definition_id=None,
         )
 
     def rename(self, title: EntityTitleVO, clock: datetime) -> None:
         self.title = title
         self.updated_at = clock
 
-    def set_active_workflow(self, workflow_id: WorkflowIdVO, clock: datetime) -> None:
-        self.active_workflow_id = workflow_id
+    def set_active_workflow_definition(
+        self,
+        workflow_definition_id: WorkflowDefinitionIdVO,
+        clock: datetime,
+    ) -> None:
+        self.active_workflow_definition_id = workflow_definition_id
         self.updated_at = clock
 
 

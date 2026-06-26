@@ -2,7 +2,8 @@
 
 ## Статус
 
-Roadmap-документ M0 для фиксации границ. `workflow` пока не реализован в `src/modules`.
+Roadmap-документ M0 для фиксации границ и текущего domain skeleton.
+`workflow` частично реализован в `src/modules/workflow/domain`.
 
 Документ фиксирует целевые границы bounded context до добавления runtime objects, API и workers.
 
@@ -43,14 +44,29 @@ workflow definition + trigger + runtime context -> ordered node executions
 
 ## Доменные понятия
 
+- `WorkflowApplication`: приложение/контейнер workflow, владеющий активной definition.
 - `WorkflowDefinition`: редактируемый draft workflow.
 - `WorkflowVersion`: неизменяемый опубликованный graph.
 - `WorkflowNode`: типизированный step в graph.
 - `WorkflowEdge`: transition rule между nodes.
 - `WorkflowRun`: один execution instance.
-- `WorkflowNodeRun`: группа попыток выполнения node внутри run.
+- `NodeExecution`: дочерняя entity внутри `WorkflowRun`, представляющая выполнение node.
 - `WorkflowTrigger`: abstract trigger descriptor, например manual, schedule или normalized event.
 - `WorkflowAction`: generic action, запрошенный node через зарегистрированный port.
+
+## Текущая доменная структура
+
+Domain код сгруппирован по Aggregate Root:
+
+```text
+src/modules/workflow/domain/
+├── workflow_application/
+├── workflow_definition/
+└── workflow_run/
+```
+
+`NodeExecutionEntity` хранится в `workflow_run/entities/node_execution.py`, потому что относится к consistency boundary
+`WorkflowRun`, а не является самостоятельным aggregate root.
 
 ## Планируемая application surface
 
@@ -153,4 +169,4 @@ state.
 ## Источник истины
 
 - GitHub issue #36.
-- Будущий `src/modules/workflow/...`.
+- `src/modules/workflow/...`.

@@ -1,6 +1,6 @@
-from src.modules.workflow.domain.workflow_run.entity import WorkflowRunEntity
-from src.modules.workflow.domain.workflow_run.node_execution_entity import (
+from src.modules.workflow.domain.workflow_run.entities import (
     NodeExecutionEntity,
+    WorkflowRunEntity,
 )
 from src.modules.workflow.domain.workflow_run.value_object import (
     ElapsedTimeVO,

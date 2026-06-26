@@ -2,11 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
 
 from src.modules.shared import EntityIdVO
-from src.modules.workflow.domain.error import WorkflowValidationError
-from src.modules.workflow.domain.workflow.value_object import WorkflowGraphVO
+from src.modules.workflow.domain.workflow_definition.value_object import WorkflowGraphVO
 from src.modules.workflow.domain.workflow_run.value_object import (
     ElapsedTimeVO,
     TotalStepsVO,
@@ -26,8 +24,8 @@ class WorkflowRunEntity:
 
     finished_at: datetime
 
-    app_id: EntityIdVO
-    workflow_id: EntityIdVO
+    workflow_application_id: EntityIdVO
+    workflow_definition_id: EntityIdVO
 
     triggered_from: TriggeredFromVO
 

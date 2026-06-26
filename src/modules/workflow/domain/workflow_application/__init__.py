@@ -1,5 +1,8 @@
-from src.modules.workflow.domain.workflow_app.entity import WorkflowApplicationEntity
-from src.modules.workflow.domain.workflow_app.value_object import (
+from src.modules.workflow.domain.workflow_application.entity import (
+    WorkflowApplicationEntity,
+)
+from src.modules.workflow.domain.workflow_application.value_object import (
+    WorkflowApplicationIdVO,
     WorkflowApplicationStatusVO,
     WorkflowIconBackgroundVO,
     WorkflowIconVO,
@@ -8,6 +11,7 @@ from src.modules.workflow.domain.workflow_app.value_object import (
 
 __all__ = [
     "WorkflowApplicationEntity",
+    "WorkflowApplicationIdVO",
     "WorkflowApplicationStatusVO",
     "WorkflowIconBackgroundVO",
     "WorkflowIconVO",

@@ -16,7 +16,7 @@ from src.modules.workflow.domain import (
     TriggeredFromVO,
     WorkflowApplicationEntity,
     WorkflowApplicationStatusVO,
-    WorkflowEntity,
+    WorkflowDefinitionEntity,
     WorkflowEnvironmentVO,
     WorkflowFeaturesVO,
     WorkflowGraphVO,
@@ -122,6 +122,7 @@ class WorkflowDomainTests(unittest.TestCase):
             description="Campaign orchestrator",
             icon="  megaphone  ",
             icon_background="  #ffffff  ",
+            active_workflow_definition_id=None,
         )
 
         self.assertEqual(entity.kind, WorkflowKindVO.CAMPAIGN)
@@ -131,18 +132,20 @@ class WorkflowDomainTests(unittest.TestCase):
         self.assertEqual(entity.icon.value, "megaphone")
         self.assertEqual(entity.icon_background.value, "#ffffff")
 
-    def test_workflow_entity_normalizes_and_copies_graph_fields(self) -> None:
+    def test_workflow_definition_entity_normalizes_and_copies_graph_fields(
+        self,
+    ) -> None:
         now = datetime(2026, 6, 26, 12, 0, tzinfo=UTC)
         graph = {"nodes": [{"id": "question"}]}
         features = {"node_types": ["question", "answer"]}
 
-        entity = WorkflowEntity(
+        entity = WorkflowDefinitionEntity(
             id=uuid4(),
             created_at=now,
             updated_at=now,
             created_by=uuid4(),
             updated_by=uuid4(),
-            app_id=uuid4(),
+            workflow_application_id=uuid4(),
             version="  v1  ",
             graph=graph,
             features=features,
@@ -169,8 +172,8 @@ class WorkflowDomainTests(unittest.TestCase):
             created_at=now,
             updated_at=now,
             finished_at=now,
-            app_id=uuid4(),
-            workflow_id=uuid4(),
+            workflow_application_id=uuid4(),
+            workflow_definition_id=uuid4(),
             triggered_from=" manual ",
             graph=graph,
             status="completed",
@@ -203,8 +206,8 @@ class WorkflowDomainTests(unittest.TestCase):
             created_at=now,
             updated_at=now,
             finished_at=now,
-            app_id=uuid4(),
-            workflow_id=uuid4(),
+            workflow_application_id=uuid4(),
+            workflow_definition_id=uuid4(),
             run_id=uuid4(),
             index=0,
             status="completed",
@@ -235,13 +238,13 @@ class WorkflowDomainTests(unittest.TestCase):
         now = datetime(2026, 6, 26, 12, 0, tzinfo=UTC)
 
         with self.assertRaises(WorkflowValidationError):
-            WorkflowEntity(
+            WorkflowDefinitionEntity(
                 id=uuid4(),
                 created_at="not-datetime",
                 updated_at=now,
                 created_by=uuid4(),
                 updated_by=uuid4(),
-                app_id=uuid4(),
+                workflow_application_id=uuid4(),
                 version="v1",
                 graph={},
                 features={},
@@ -256,8 +259,8 @@ class WorkflowDomainTests(unittest.TestCase):
                 created_at=now,
                 updated_at=now,
                 finished_at=now,
-                app_id=uuid4(),
-                workflow_id=uuid4(),
+                workflow_application_id=uuid4(),
+                workflow_definition_id=uuid4(),
                 triggered_from="manual",
                 graph={},
                 status="running",

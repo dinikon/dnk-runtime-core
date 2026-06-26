@@ -8,19 +8,19 @@ from src.modules.shared.domain.value_object.entity_description import (
     EntityDescriptionVO,
 )
 from src.modules.shared.domain.value_object.entity_title import EntityTitleVO
-from src.modules.workflow.domain.workflow.value_object import (
+from src.modules.workflow.domain.workflow_definition.value_object import (
+    WorkflowDefinitionIdVO,
     WorkflowEnvironmentVO,
     WorkflowFeaturesVO,
     WorkflowGraphVO,
     WorkflowVersionVO,
 )
-from src.modules.workflow.domain.workflow.value_object.workflow_id import WorkflowIdVO
 
 
 @dataclass(slots=True)
-class WorkflowEntity:
+class WorkflowDefinitionEntity:
 
-    id: WorkflowIdVO
+    id: WorkflowDefinitionIdVO
 
     created_at: datetime
     updated_at: datetime
@@ -28,7 +28,7 @@ class WorkflowEntity:
     created_by: EntityIdVO
     updated_by: EntityIdVO
 
-    app_id: EntityIdVO
+    workflow_application_id: EntityIdVO
 
     version: WorkflowVersionVO
     graph: WorkflowGraphVO
@@ -43,8 +43,8 @@ class WorkflowEntity:
     @classmethod
     def create_draft(
         cls,
-        workflow_id: WorkflowIdVO,
-        app_id: EntityIdVO,
+        workflow_definition_id: WorkflowDefinitionIdVO,
+        workflow_application_id: EntityIdVO,
         graph: WorkflowGraphVO,
         features: WorkflowFeaturesVO,
         environment: WorkflowEnvironmentVO,
@@ -52,14 +52,14 @@ class WorkflowEntity:
         description: EntityDescriptionVO | None,
         created_by: EntityIdVO,
         now: datetime,
-    ) -> "WorkflowEntity":
+    ) -> "WorkflowDefinitionEntity":
         return cls(
-            id=workflow_id,
+            id=workflow_definition_id,
             created_at=now,
             updated_at=now,
             created_by=created_by,
             updated_by=created_by,
-            app_id=app_id,
+            workflow_application_id=workflow_application_id,
             version=WorkflowVersionVO.first(),
             graph=graph,
             features=features,
@@ -69,4 +69,4 @@ class WorkflowEntity:
         )
 
 
-__all__ = ["WorkflowEntity"]
+__all__ = ["WorkflowDefinitionEntity"]

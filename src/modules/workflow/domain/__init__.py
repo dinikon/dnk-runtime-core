@@ -3,19 +3,21 @@ from src.modules.workflow.domain.error import (
     WorkflowError,
     WorkflowValidationError,
 )
-from src.modules.workflow.domain.workflow import (
-    WorkflowEntity,
-    WorkflowEnvironmentVO,
-    WorkflowFeaturesVO,
-    WorkflowGraphVO,
-    WorkflowVersionVO,
-)
-from src.modules.workflow.domain.workflow_app import (
+from src.modules.workflow.domain.workflow_application import (
     WorkflowApplicationEntity,
+    WorkflowApplicationIdVO,
     WorkflowApplicationStatusVO,
     WorkflowIconBackgroundVO,
     WorkflowIconVO,
     WorkflowKindVO,
+)
+from src.modules.workflow.domain.workflow_definition import (
+    WorkflowDefinitionEntity,
+    WorkflowDefinitionIdVO,
+    WorkflowEnvironmentVO,
+    WorkflowFeaturesVO,
+    WorkflowGraphVO,
+    WorkflowVersionVO,
 )
 from src.modules.workflow.domain.workflow_run import (
     ElapsedTimeVO,
@@ -43,8 +45,10 @@ __all__ = [
     "TotalStepsVO",
     "TriggeredFromVO",
     "WorkflowApplicationEntity",
+    "WorkflowApplicationIdVO",
     "WorkflowApplicationStatusVO",
-    "WorkflowEntity",
+    "WorkflowDefinitionEntity",
+    "WorkflowDefinitionIdVO",
     "WorkflowEnvironmentVO",
     "WorkflowError",
     "WorkflowErrorVO",
