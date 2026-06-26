@@ -15,6 +15,9 @@ from src.modules.workflow.application.workflow_application.dto import (
 from src.modules.workflow.application.workflow_application.repository import (
     WorkflowApplicationCommandRepositoryProtocol,
 )
+from src.modules.workflow.application.workflow_definition import (
+    WorkflowDefinitionCommandRepositoryProtocol,
+)
 from src.modules.workflow.domain import (
     WorkflowApplicationEntity,
     WorkflowApplicationIdVO,
@@ -43,11 +46,13 @@ class CreateWorkflowUseCase:
     def __init__(
         self,
         *,
-        command_repository: WorkflowApplicationCommandRepositoryProtocol,
+        application_repository: WorkflowApplicationCommandRepositoryProtocol,
+        definition_repository: WorkflowDefinitionCommandRepositoryProtocol,
         clock: ClockPort,
         uuid_generator: UUIdGeneratorProtocol,
     ) -> None:
-        self._command_repository = command_repository
+        self._application_repository = application_repository
+        self._definition_repository = definition_repository
         self._clock = clock
         self._uuid_generator = uuid_generator
 
@@ -85,9 +90,12 @@ class CreateWorkflowUseCase:
             now=now,
         )
 
-        workflow, _ = await self._command_repository.save_with_definition(
+        workflow = await self._application_repository.save(
             tenant_id=tenant_id,
             workflow=workflow,
+        )
+        await self._definition_repository.save(
+            tenant_id=tenant_id,
             definition=definition,
         )
         return self._to_dto(workflow)

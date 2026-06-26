@@ -5,6 +5,9 @@ from src.modules.workflow.application.workflow_application import (
     WorkflowApplicationCommandRepositoryProtocol,
     WorkflowApplicationDTO,
 )
+from src.modules.workflow.application.workflow_definition import (
+    WorkflowDefinitionCommandRepositoryProtocol,
+)
 
 __all__ = [
     "CreateWorkflowCommand",
@@ -12,4 +15,5 @@ __all__ = [
     "CreateWorkflowUseCaseProtocol",
     "WorkflowApplicationCommandRepositoryProtocol",
     "WorkflowApplicationDTO",
+    "WorkflowDefinitionCommandRepositoryProtocol",
 ]

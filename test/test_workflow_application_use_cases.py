@@ -37,13 +37,22 @@ class _WorkflowApplicationRepositoryStub:
     def __init__(self) -> None:
         self.saved_tenant_id = None
         self.saved_workflow = None
-        self.saved_definition = None
 
-    async def save_with_definition(self, *, tenant_id, workflow, definition):
+    async def save(self, *, tenant_id, workflow):
         self.saved_tenant_id = tenant_id
         self.saved_workflow = workflow
+        return workflow
+
+
+class _WorkflowDefinitionRepositoryStub:
+    def __init__(self) -> None:
+        self.saved_tenant_id = None
+        self.saved_definition = None
+
+    async def save(self, *, tenant_id, definition):
+        self.saved_tenant_id = tenant_id
         self.saved_definition = definition
-        return workflow, definition
+        return definition
 
 
 class WorkflowApplicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
@@ -55,9 +64,11 @@ class WorkflowApplicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         workflow_id = uuid4()
         definition_id = uuid4()
         now = datetime(2026, 6, 27, 12, 0, tzinfo=UTC)
-        repository = _WorkflowApplicationRepositoryStub()
+        application_repository = _WorkflowApplicationRepositoryStub()
+        definition_repository = _WorkflowDefinitionRepositoryStub()
         use_case = CreateWorkflowUseCase(
-            command_repository=repository,
+            application_repository=application_repository,
+            definition_repository=definition_repository,
             clock=_ClockStub(now),
             uuid_generator=_UuidGeneratorStub(workflow_id, definition_id),
         )
@@ -73,14 +84,21 @@ class WorkflowApplicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
             )
         )
 
-        self.assertEqual(repository.saved_tenant_id, EntityIdVO.from_value(tenant_id))
-        self.assertIsNotNone(repository.saved_workflow)
-        self.assertIsNotNone(repository.saved_definition)
-        assert repository.saved_workflow is not None
-        assert repository.saved_definition is not None
+        self.assertEqual(
+            application_repository.saved_tenant_id,
+            EntityIdVO.from_value(tenant_id),
+        )
+        self.assertEqual(
+            definition_repository.saved_tenant_id,
+            EntityIdVO.from_value(tenant_id),
+        )
+        self.assertIsNotNone(application_repository.saved_workflow)
+        self.assertIsNotNone(definition_repository.saved_definition)
+        assert application_repository.saved_workflow is not None
+        assert definition_repository.saved_definition is not None
 
-        workflow = repository.saved_workflow
-        definition = repository.saved_definition
+        workflow = application_repository.saved_workflow
+        definition = definition_repository.saved_definition
 
         self.assertEqual(workflow.id, WorkflowApplicationIdVO.from_value(workflow_id))
         self.assertEqual(
