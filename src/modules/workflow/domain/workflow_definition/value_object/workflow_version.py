@@ -7,5 +7,10 @@ class WorkflowVersionVO:
 
     value: str
 
+    @classmethod
+    def draft(cls) -> "WorkflowVersionVO":
+        """Creates the draft workflow definition version."""
+        return cls("draft")
+
 
 __all__ = ["WorkflowVersionVO"]

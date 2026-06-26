@@ -60,7 +60,7 @@ class WorkflowDefinitionEntity:
             created_by=created_by,
             updated_by=created_by,
             workflow_application_id=workflow_application_id,
-            version=WorkflowVersionVO.first(),
+            version=WorkflowVersionVO.draft(),
             graph=graph,
             features=features,
             environment=environment,
