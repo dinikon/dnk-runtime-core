@@ -1,1 +1,0 @@
-"""Inventory presentation layer."""

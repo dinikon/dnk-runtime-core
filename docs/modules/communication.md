@@ -629,7 +629,6 @@ uv run python -m unittest test.test_communication_services test.test_communicati
 ## Related Documentation
 
 - [Develop Style](../develop-style.md)
-- [Inventory Module](./inventory.md)
 - [HTTP API](../interfaces/http-api.md)
 - [Management CLI](../interfaces/management-cli.md)
 

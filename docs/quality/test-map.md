@@ -86,18 +86,12 @@ This page maps current tests to the behaviors they protect.
 - `test_crm_*`
     - CRM endpoints and domain/use case behavior around contacts and companies
 
-## Inventory
+## Schema Seed Cleanup
 
 - `test/test_inventory_schema_seed.py`
-    - default seed inventory objects, indexes and foreign keys
-- `test/test_inventory_domain_use_cases.py`
-    - product/category value objects and category tree validation
-- `test/test_inventory_runtime_repositories.py`
-    - runtime repository mapping and filter payloads
-- `test/test_inventory_controller_errors.py`
-    - controller error mapping and product category filtering
-- `test/test_inventory_http_router.py`
-    - public inventory route registration
+    - current default seed core objects
+    - absence of removed inventory, segmentation and broadcast runtime objects
+    - destructive diff operations for legacy removed runtime tables
 
 ## Communication
 
@@ -159,7 +153,6 @@ This page maps current tests to the behaviors they protect.
 - [Constraints and conventions](constraints-and-conventions.md)
 - [Schema Registry module](../modules/schema-registry.md)
 - [Tenancy module](../modules/tenancy.md)
-- [Inventory module](../modules/inventory.md)
 
 ## Source Of Truth
 

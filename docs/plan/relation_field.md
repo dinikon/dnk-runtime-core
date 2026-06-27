@@ -1287,8 +1287,8 @@ target_relation_name уникален внутри target object
 ## 13.2. Self-relation
 
 Self-relation нельзя запрещать полностью.
-Текущий seed уже использует self-reference для `product_category.parent_category_id`, поэтому правило
-`source_object != target_object` нельзя применять глобально.
+Правило `source_object != target_object` нельзя применять глобально: future standard/custom objects may need
+self-referencing parent-child relations.
 
 MVP rule:
 
@@ -1305,7 +1305,7 @@ MVP rule:
 То есть:
 
 ```text
-product_categories.parent_category_id -> product_categories.id
+categories.parent_category_id -> categories.id
 валидно.
 ```
 

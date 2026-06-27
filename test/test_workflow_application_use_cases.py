@@ -125,7 +125,7 @@ class WorkflowApplicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(definition.version.value, "draft")
         self.assertEqual(definition.graph.value, {})
         self.assertEqual(definition.features.value, {})
-        self.assertEqual(definition.environment.value, [])
+        self.assertEqual(definition.environment.value, {})
         self.assertEqual(definition.title.value, "Customer journey")
         self.assertEqual(definition.description.value, "Default customer workflow")
 

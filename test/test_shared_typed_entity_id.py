@@ -3,10 +3,9 @@ from __future__ import annotations
 import unittest
 from uuid import uuid4
 
+from src.modules.crm.domain.company.value_object import CompanyIdVO
 from src.modules.crm.domain.contact.value_object import ContactIdVO
-from src.modules.inventory.domain.product.value_object import ProductIdVO
-from src.modules.shared import EntityIdVO
-from src.modules.shared.domain.errors import EntityIdTypeError
+from src.modules.shared import EntityIdTypeError, EntityIdVO
 from src.modules.tenancy.domain.tenant.value_object import TenantIdVO
 
 
@@ -38,18 +37,18 @@ class EntityIdVOTests(unittest.TestCase):
 
         self.assertNotEqual(
             ContactIdVO.from_value(raw_id),
-            ProductIdVO.from_value(raw_id),
+            CompanyIdVO.from_value(raw_id),
         )
         self.assertNotEqual(
             TenantIdVO.from_value(raw_id),
-            ProductIdVO.from_value(raw_id),
+            CompanyIdVO.from_value(raw_id),
         )
 
     def test_concrete_ids_are_not_interchangeable_in_from_value(self) -> None:
         contact_id = ContactIdVO.from_value(uuid4())
 
         with self.assertRaises(EntityIdTypeError):
-            ProductIdVO.from_value(contact_id)
+            CompanyIdVO.from_value(contact_id)
 
 
 __all__ = ["EntityIdVOTests"]

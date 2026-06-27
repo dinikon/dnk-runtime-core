@@ -1,10 +1,10 @@
 # Develop Style
 
-Эталонный модуль проекта: `src/modules/inventory`.
+Эталонная форма backend-модуля описана ниже; для живых примеров смотрите `src/modules/crm`,
+`src/modules/communication` и `src/modules/workflow`.
 
 Этот документ фиксирует правила структуры и стиля разработки backend-модулей.
-Если новый код не имеет отдельного архитектурного решения, его нужно писать по
-образцу `inventory`.
+Если новый код не имеет отдельного архитектурного решения, его нужно писать по этой структуре.
 
 ## Базовый Принцип
 
@@ -55,7 +55,7 @@ src/modules/<module>/
 ```
 
 Если модуль владеет несколькими близкими понятиями, разделяйте их по поддоменам
-как `inventory/product` и `inventory/category`. Не смешивайте сущности,
+как `crm/contact` и `crm/company`. Не смешивайте сущности,
 команды, use case и HTTP-схемы разных поддоменов в одном большом файле.
 
 ## Domain Layer
@@ -75,14 +75,13 @@ Domain layer отвечает за бизнес-инварианты.
 - Domain errors живут рядом с aggregate в `error.py`.
 - Repository в domain является `Protocol`, а не реализацией.
 
-Пример из `inventory`:
+Пример:
 
-- `ProductEntity.create(...)` создает товар с едиными `created_at/updated_at`.
-- `ProductEntity.update(...)` меняет поля и обновляет `updated_at` только при
+- `ContactEntity.create(...)` создает запись с едиными `created_at/updated_at`.
+- `ContactEntity.update(...)` меняет поля и обновляет `updated_at` только при
   реальном изменении.
-- `SkuVO` нормализует строку и запрещает пустой SKU.
-- `ProductService` проверяет существование категории перед созданием или
-  обновлением товара.
+- Value object нормализует входную строку и запрещает невалидное значение.
+- Domain service координирует несколько repository/aggregate, если сценарий этого требует.
 
 ## Application Layer
 
@@ -91,7 +90,7 @@ Application layer содержит сценарии и контракты меж
 Правила:
 
 - На каждое действие создается отдельный use case:
-  `CreateProductUseCase`, `GetProductUseCase`, `ListProductsUseCase`.
+  `CreateContactUseCase`, `GetContactUseCase`, `ListContactsUseCase`.
 - Use case вызывается через `async def __call__(...)`.
 - Для входа в command-сценарии используйте immutable dataclass:
   `@dataclass(slots=True, frozen=True)`.
@@ -128,7 +127,7 @@ Infrastructure layer реализует порты domain/application.
 - Ошибки not found поднимаются как domain errors.
 - Инфраструктура не должна возвращать сырые runtime rows в application layer.
 
-Для runtime-моделей повторяйте подход `ProductRuntimeRepository`:
+Для runtime-backed моделей повторяйте подход существующих runtime repositories:
 
 - `_resolve_descriptor(tenant_id)` получает descriptor через
   `RuntimeObjectResolverProtocol`.
@@ -155,11 +154,11 @@ Presentation layer отвечает только за протокол вход�
 - Роутер поддомена экспортирует `router`, а общий
   `presentation/http/router.py` подключает все action routers.
 
-Префиксы должны быть предметными и стабильными. Для `inventory` используется:
+Префиксы должны быть предметными и стабильными. Например:
 
 ```text
-/inventory/products
-/inventory/categories
+/crm/contacts
+/crm/companies
 ```
 
 ## Dependency Injection
@@ -183,7 +182,7 @@ DI собирается только в `presentation/depends`.
 
 - Tenant scope передается через `EntityIdVO`.
 - Domain identifiers оформляются отдельными VO:
-  `ProductIdVO`, `CategoryIdVO`.
+  `ContactIdVO`, `CompanyIdVO`.
 - На HTTP/runtime boundary UUID конвертируется в VO и обратно.
 - Внутри domain/application не передавайте голые `UUID`, если есть конкретный
   value object.
@@ -208,7 +207,7 @@ DI собирается только в `presentation/depends`.
 - Не импортируйте private helpers между слоями.
 - Не создавайте циклические зависимости между поддоменами.
 - Если один aggregate ссылается на другой, используйте его public VO/protocol,
-  как `ProductService` использует `CategoryCommandRepositoryProtocol`.
+  через public VO/protocol другого aggregate.
 
 ## Асинхронность
 
@@ -264,7 +263,7 @@ DI собирается только в `presentation/depends`.
 
 Перед завершением работы проверьте:
 
-- структура повторяет `inventory`;
+- структура повторяет форму, описанную в этом документе;
 - domain не зависит от FastAPI/Pydantic/SQLAlchemy/runtime gateway;
 - все входные примитивы валидируются через VO или Pydantic на HTTP boundary;
 - commands frozen и slots;
@@ -280,10 +279,9 @@ DI собирается только в `presentation/depends`.
 
 ## Source Of Truth
 
-- `src/modules/inventory/domain/product/entity.py`
-- `src/modules/inventory/domain/product/service.py`
-- `src/modules/inventory/application/product/use_case/create_product.py`
-- `src/modules/inventory/infrastructure/product_runtime_repository.py`
-- `src/modules/inventory/presentation/depends/application.py`
-- `src/modules/inventory/presentation/depends/infrastructure.py`
-- `src/modules/inventory/presentation/http/router.py`
+- `src/modules/crm/domain/contact/entity.py`
+- `src/modules/crm/application/contact/use_case/create_contact.py`
+- `src/modules/crm/infrastructure/contact_runtime_repository.py`
+- `src/modules/crm/presentation/depends/application.py`
+- `src/modules/crm/presentation/depends/infrastructure.py`
+- `src/modules/crm/presentation/http/router.py`

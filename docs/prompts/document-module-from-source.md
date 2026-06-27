@@ -26,7 +26,6 @@
 Дополнительные источники:
 
 - `docs/develop-style.md`
-- `docs/modules/inventory.md`
 - `docs/modules/crm.md`
 - существующий `docs/modules/<module_name>.md`, если он уже есть
 - `tests`, если они покрывают поведение модуля
@@ -129,7 +128,7 @@
 9. Существующую документацию:
 
     - `docs/modules/<module_name>.md`
-    - `docs/modules/inventory.md`
+    - `docs/modules/crm.md`
     - `docs/develop-style.md`
 
 ## Context Collection Checklist
@@ -313,7 +312,7 @@
 - no explicit row mapping;
 - inconsistent naming;
 - missing `__all__`;
-- module structure differs from inventory.
+- module structure differs from the current project module shape.
 
 Важно: не исправляй код. Только документируй факт.
 
@@ -437,7 +436,7 @@ Base prefix:
 ## Related Documentation
 
 - [Develop Style](../develop-style.md)
-- [Inventory Module](./inventory.md)
+- [CRM Module](./crm.md)
 
 ## Source Of Truth
 

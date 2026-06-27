@@ -72,9 +72,7 @@ class CreateWorkflowUseCase:
             title=title,
             description=description,
             icon=WorkflowIconVO(command.icon.strip()),
-            icon_background=WorkflowIconBackgroundVO(
-                command.icon_background.strip()
-            ),
+            icon_background=WorkflowIconBackgroundVO(command.icon_background.strip()),
             created_by=created_by,
             now=now,
         )
@@ -83,7 +81,7 @@ class CreateWorkflowUseCase:
             workflow_application_id=workflow.id,
             graph=WorkflowGraphVO({}),
             features=WorkflowFeaturesVO({}),
-            environment=WorkflowEnvironmentVO([]),
+            environment=WorkflowEnvironmentVO({}),
             title=title,
             description=description,
             created_by=created_by,
@@ -107,8 +105,12 @@ class CreateWorkflowUseCase:
             id=workflow.id.uuid,
             created_at=workflow.created_at,
             updated_at=workflow.updated_at,
-            created_by=None if workflow.created_by is None else workflow.created_by.uuid,
-            updated_by=None if workflow.updated_by is None else workflow.updated_by.uuid,
+            created_by=(
+                None if workflow.created_by is None else workflow.created_by.uuid
+            ),
+            updated_by=(
+                None if workflow.updated_by is None else workflow.updated_by.uuid
+            ),
             kind=workflow.kind.value,
             status=workflow.status.value,
             title=workflow.title.value,

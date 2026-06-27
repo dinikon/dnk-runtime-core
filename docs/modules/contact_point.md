@@ -159,8 +159,7 @@ DTO возвращают UUID на application boundary. HTTP Pydantic schemas �
 - `ContactPointObjectFeatureGatePort`: проверяет включенность object feature `CONTACT_POINT`.
 - `ContactPointNormalizerPort`: нормализует raw contact point value.
 - `ContactPointHashPort`: считает hash нормализованного значения.
-- `ContactPointSelectionPort`: application-level порт выбора recipient address для orchestration modules вроде будущего
-  `broadcast`.
+- `ContactPointSelectionPort`: application-level порт выбора recipient address для будущих bulk-send orchestration modules.
 - `ContactPointSelectionRepositoryProtocol`: selection reads для active primary, last active, all active и explicit
   active owner binding.
 
@@ -409,7 +408,6 @@ uv run python -m unittest test.test_contact_point_application test.test_contact_
 ## Related Documentation
 
 - [Develop Style](../develop-style.md)
-- [Inventory Module](./inventory.md)
 - [CRM Module](./crm.md)
 - [HTTP API](../interfaces/http-api.md)
 

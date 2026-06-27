@@ -36,7 +36,7 @@ workflow definition + trigger + runtime context -> ordered node executions
 
 - campaign business concepts, campaign goals или campaign metrics;
 - segment definition/calculation DSL;
-- broadcast recipient fan-out;
+- recipient fan-out будущего send orchestration boundary;
 - provider-specific message delivery;
 - provider webhook processing;
 - external event ingestion и normalization;
@@ -100,16 +100,16 @@ Node-specific adapters должны быть узкими и заменяемы�
 
 | Зависимость       | Для чего используется                                                  |
 |-------------------|------------------------------------------------------------------------|
-| `segmentation`    | Segment calculation или audience resolution nodes.                     |
-| `broadcast`       | Broadcast creation/start nodes.                                        |
 | `communication`   | Прямые one-off communication nodes, если нужны.                        |
 | `external_events` | Event schema lookup, только если это не покрыто shared event contract. |
+
+Audience-resolution and bulk-send adapters are future boundaries and are not implemented in the current source tree.
 
 Запрещенные исходящие зависимости:
 
 - `campaigns`;
 - provider HTTP clients, SMTP clients или SMS provider adapters;
-- direct writes в module-owned tables модулей `segmentation`, `broadcast`, `communication`, `campaigns` или
+- direct writes в module-owned tables модулей `communication`, future campaign/audience/send modules или
   `external_events`.
 
 Разрешенные входящие вызовы:
@@ -161,8 +161,6 @@ state.
 ## Связанная документация
 
 - [Campaigns Module](./campaigns.md)
-- [Segmentation Module](./segmentation.md)
-- [Broadcast Module](./broadcast.md)
 - [External Events Module](./external-events.md)
 - [Develop Style](../develop-style.md)
 

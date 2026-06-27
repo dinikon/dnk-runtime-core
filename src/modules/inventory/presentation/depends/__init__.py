@@ -1,1 +1,0 @@
-"""Inventory FastAPI dependency assembly."""
