@@ -19,5 +19,10 @@
     "eslint-plugin-vue": "^10.9.1",
     "globals": "^17.6.0",
     "typescript-eslint": "^8.59.3"
+  },
+  "allowScripts": {
+    "vue-demi@0.14.10": true,
+    "esbuild@0.28.1": true,
+    "fsevents@2.3.3": true
   }
 }

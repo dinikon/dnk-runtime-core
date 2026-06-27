@@ -446,6 +446,8 @@ Important gaps:
 - `src/modules/schema_registry/presentation/`
 - `src/modules/schema_registry/runtime/`
 - `src/modules/schema_registry/seed/schema_seed.py`
+- `src/modules/schema_registry/seed/common.py`
+- `src/modules/schema_registry/seed/contexts/`
 - `src/management/commands/schema_registry.py`
 - `test/test_schema_registry_*.py`
 - `test/test_schema_config_*.py`

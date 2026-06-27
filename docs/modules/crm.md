@@ -16,7 +16,7 @@ HTTP routes CRM подключаются через `src/modules/router.py`: о�
 - `contact`: создание, получение по id, список, поиск по runtime filter/sort DSL, обновление имени/статуса/тегов,
   удаление, описание runtime-полей.
 - `company`: создание, получение по id, список, обновление юридического названия, удаление, описание runtime-полей.
-- Runtime seed для CRM находится в `src/modules/schema_registry/seed/schema_seed.py`: объекты `contact` и `company`,
+- Runtime seed для CRM находится в `src/modules/schema_registry/seed/contexts/crm.py`: объекты `contact` и `company`,
   а также many-to-many relation `contact_companies`.
 
 В текущей реализации не найдено:
@@ -384,7 +384,7 @@ Important uncovered or partially covered areas found during audit:
 - `src/modules/crm/infrastructure/company_model_description_repository.py`
 - `src/modules/crm/presentation/depends/`
 - `src/modules/crm/presentation/http/`
-- `src/modules/schema_registry/seed/schema_seed.py`
+- `src/modules/schema_registry/seed/contexts/crm.py`
 - `test/test_crm_contact_entity.py`
 - `test/test_crm_company_entity.py`
 - `test/test_crm_contact_name_vo.py`

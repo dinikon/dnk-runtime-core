@@ -7,7 +7,8 @@
 `ContactPointEntity` внутри tenant schema по паре `contact_point_type` + `normalized_hash`.
 
 Модуль является runtime-data module: собственных статических ORM-таблиц не найдено. Хранение идет через runtime objects
-`contact_point` и `contact_point_binding`, описанные seed metadata в `src/modules/schema_registry/seed/schema_seed.py`.
+`contact_point` и `contact_point_binding`, описанные seed metadata в
+`src/modules/schema_registry/seed/contexts/contact_point.py`.
 
 ## Current Scope
 
@@ -273,7 +274,7 @@ active primary, первый active binding по сортировке `created_a
 
 ### Runtime Seed
 
-Source: `src/modules/schema_registry/seed/schema_seed.py`.
+Source: `src/modules/schema_registry/seed/contexts/contact_point.py`.
 
 - `contact_point` fields: `id`, `created_at`, `updated_at`, `contact_point_type`, `raw_value`, `normalized_value`,
   `normalized_hash`.
@@ -434,7 +435,7 @@ uv run python -m unittest test.test_contact_point_application test.test_contact_
 - `src/modules/contact_point/infrastructure/services.py`
 - `src/modules/contact_point/presentation/depends/`
 - `src/modules/contact_point/presentation/http/`
-- `src/modules/schema_registry/seed/schema_seed.py`
+- `src/modules/schema_registry/seed/contexts/contact_point.py`
 - `test/test_contact_point_application.py`
 - `test/test_contact_point_runtime_repository.py`
 - `test/test_contact_point_http_router.py`
