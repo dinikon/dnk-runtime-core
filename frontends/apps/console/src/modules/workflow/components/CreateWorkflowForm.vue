@@ -28,7 +28,7 @@ import type { WorkflowApplication } from "@/modules/workflow/api";
 import { useCreateWorkflowMutation } from "@/modules/workflow/mutations/use-create-workflow";
 
 const DEFAULT_ICON = "🚀";
-const DEFAULT_ICON_BACKGROUND = "#2563EB";
+const DEFAULT_ICON_BACKGROUND = "#FDEAD7";
 
 const props = defineProps<{
   open: boolean;
@@ -59,7 +59,7 @@ const titleError = computed(() =>
 );
 const iconBackgroundError = computed(() =>
   submitted.value && !/^#[0-9A-Fa-f]{6}$/.test(iconBackground.value.trim())
-    ? "Use a hex color like #2563EB."
+    ? "Use a hex color like #FDEAD7."
     : "",
 );
 const previewBackground = computed(() =>
@@ -113,107 +113,109 @@ watch(
 <template>
   <Sheet v-model:open="sheetOpen">
     <SheetContent
-      class="!w-full !max-w-none overflow-y-auto p-4 sm:!top-1/2 sm:!bottom-auto sm:!h-auto sm:!max-h-[90svh] sm:!w-[min(34rem,90vw)] sm:!max-w-[34rem] sm:!-translate-y-1/2 sm:rounded-l-lg"
+      class="w-full! max-w-none! gap-0 overflow-hidden p-0 sm:w-[min(44rem,92vw)]! sm:max-w-176!"
     >
-      <SheetHeader class="p-0 pr-8">
+      <SheetHeader class="border-b px-5 py-4 pr-14 text-left">
         <SheetTitle>Create workflow</SheetTitle>
         <SheetDescription>
           Name the flow and choose how it appears in the list.
         </SheetDescription>
       </SheetHeader>
 
-      <form class="flex flex-col gap-4" @submit.prevent="createWorkflow">
-        <Alert class="py-2.5">
-          <Info aria-hidden="true" />
-          <AlertTitle>What is a workflow?</AlertTitle>
-          <AlertDescription>
-            An automated sequence of steps that reacts to events and moves work
-            through a repeatable process.
-          </AlertDescription>
-        </Alert>
+      <form
+        class="flex min-h-0 flex-1 flex-col"
+        @submit.prevent="createWorkflow"
+      >
+        <div class="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+          <div class="mx-auto flex w-full max-w-160 flex-col gap-5">
+            <Alert class="rounded-xl py-3">
+              <Info aria-hidden="true" />
+              <AlertTitle>What is a workflow?</AlertTitle>
+              <AlertDescription>
+                An automated sequence of steps that reacts to events and moves
+                work through a repeatable process.
+              </AlertDescription>
+            </Alert>
 
-        <FieldGroup class="gap-3">
-          <Field :data-invalid="Boolean(titleError)">
-            <FieldLabel for="workflow-title">Name</FieldLabel>
-            <Input
-              id="workflow-title"
-              v-model="title"
-              :aria-invalid="Boolean(titleError)"
-              placeholder="Welcome journey"
-            />
-            <FieldError v-if="titleError">{{ titleError }}</FieldError>
-          </Field>
+            <FieldGroup class="gap-5">
+              <Field :data-invalid="Boolean(titleError || iconBackgroundError)">
+                <div
+                  class="grid grid-cols-[minmax(0,1fr)_5.625rem] items-stretch gap-3"
+                >
+                  <div class="flex min-w-0 flex-col gap-3">
+                    <FieldLabel
+                      for="workflow-title"
+                      class="text-base font-semibold"
+                    >
+                      App Name &amp; Icon
+                    </FieldLabel>
+                    <Input
+                      id="workflow-title"
+                      v-model="title"
+                      :aria-invalid="Boolean(titleError)"
+                      class="h-14 rounded-2xl bg-muted/60 px-5 text-base shadow-none"
+                      placeholder="Give your workflow a name"
+                    />
+                  </div>
+                  <EmojiPicker
+                    v-model="icon"
+                    v-model:background="iconBackground"
+                    :invalid="Boolean(iconBackgroundError)"
+                    trigger-class="h-full min-h-[5.625rem] w-full"
+                    icon-class="text-4xl"
+                  />
+                </div>
+                <FieldError v-if="titleError">{{ titleError }}</FieldError>
+                <FieldError v-if="iconBackgroundError">
+                  {{ iconBackgroundError }}
+                </FieldError>
+              </Field>
 
-          <Field>
-            <FieldLabel for="workflow-description">
-              Description
-            </FieldLabel>
-            <Textarea
-              id="workflow-description"
-              v-model="description"
-              class="min-h-20 resize-none"
-              placeholder="Optional context for the team"
-            />
-          </Field>
-
-          <div class="grid gap-3 sm:grid-cols-[10rem_minmax(0,1fr)]">
-            <Field>
-              <FieldLabel>Icon</FieldLabel>
-              <EmojiPicker v-model="icon" />
-            </Field>
-
-            <Field :data-invalid="Boolean(iconBackgroundError)">
-              <FieldLabel for="workflow-icon-background">
-                Icon background
-              </FieldLabel>
-              <div class="grid gap-2 sm:grid-cols-[2.75rem_minmax(0,1fr)]">
-                <Input
-                  id="workflow-icon-background-picker"
-                  v-model="iconBackground"
-                  aria-label="Choose icon background"
-                  class="h-9 p-1"
-                  type="color"
+              <Field>
+                <div class="flex items-baseline gap-2">
+                  <FieldLabel
+                    for="workflow-description"
+                    class="text-base font-semibold"
+                  >
+                    Description
+                  </FieldLabel>
+                  <span class="text-sm text-muted-foreground">(Optional)</span>
+                </div>
+                <Textarea
+                  id="workflow-description"
+                  v-model="description"
+                  class="min-h-32 resize-none rounded-2xl bg-muted/60 px-5 py-4 text-base shadow-none"
+                  placeholder="Enter the description of the workflow"
                 />
-                <Input
-                  id="workflow-icon-background"
-                  v-model="iconBackground"
-                  :aria-invalid="Boolean(iconBackgroundError)"
-                  placeholder="#2563EB"
-                />
+              </Field>
+            </FieldGroup>
+
+            <div class="rounded-xl border bg-card p-3">
+              <div class="flex items-center gap-3">
+                <div
+                  class="flex size-12 shrink-0 items-center justify-center rounded-xl text-2xl shadow-xs"
+                  :style="{ backgroundColor: previewBackground }"
+                  aria-hidden="true"
+                >
+                  {{ icon }}
+                </div>
+                <div class="min-w-0">
+                  <p class="truncate text-sm font-medium">
+                    {{ title.trim() || "New workflow" }}
+                  </p>
+                  <p class="truncate text-sm text-muted-foreground">
+                    {{ description.trim() || "Draft flow" }}
+                  </p>
+                </div>
               </div>
-              <FieldError v-if="iconBackgroundError">
-                {{ iconBackgroundError }}
-              </FieldError>
-            </Field>
-          </div>
-        </FieldGroup>
-
-        <div class="rounded-lg border bg-muted/30 p-3">
-          <div class="flex items-center gap-3">
-            <div
-              class="flex size-11 shrink-0 items-center justify-center rounded-md text-2xl shadow-xs"
-              :style="{ backgroundColor: previewBackground }"
-              aria-hidden="true"
-            >
-              {{ icon }}
-            </div>
-            <div class="min-w-0">
-              <p class="truncate text-sm font-medium">
-                {{ title.trim() || "New workflow" }}
-              </p>
-              <p class="truncate text-sm text-muted-foreground">
-                {{ description.trim() || "Draft flow" }}
-              </p>
             </div>
           </div>
         </div>
 
-        <SheetFooter class="mt-0 gap-2 p-0 pt-1 sm:flex-row sm:justify-end">
-          <Button
-            type="button"
-            variant="outline"
-            @click="sheetOpen = false"
-          >
+        <SheetFooter
+          class="gap-2 border-t bg-background px-5 py-4 sm:flex-row sm:justify-end"
+        >
+          <Button type="button" variant="outline" @click="sheetOpen = false">
             Cancel
           </Button>
           <Button
