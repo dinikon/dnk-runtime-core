@@ -66,6 +66,16 @@ async def lifespan(app: DnkApp):
 
 
 def create_app() -> DnkApp:
-    app = DnkApp(lifespan=lifespan)
+    app = DnkApp(
+        lifespan=lifespan,
+        title="DNK API",
+        version="1.0.0",
+        description="DNK API is a RESTful API for managing digital knowledge.",
+        servers=[
+            {"url": "http://localhost:8000", "description": "Default Develop Server"},
+            {"url": "https://test.dniko.app", "description": "Test Server"},
+            {"url": "https://dniko.app", "description": "Production Server"},
+        ],
+    )
     app.include_router(api_router)
     return app

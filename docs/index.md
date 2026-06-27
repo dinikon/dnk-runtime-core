@@ -16,20 +16,17 @@ This documentation describes the current implementation of `dnk-runtime-core` as
 - [Tenancy](modules/tenancy.md)
 - [Identity](modules/identity.md)
 - [CRM](modules/crm.md)
-- [Inventory](modules/inventory.md)
 - [Communication](modules/communication.md)
 - [Custom Object](modules/custom-object.md)
 - [Schema Registry](modules/schema-registry.md)
 - [Shared](modules/shared.md)
+- [Workflow](modules/workflow.md)
 
 ## Roadmap-границы модулей
 
 Эти документы описывают планируемые границы bounded contexts. Это не документация текущей реализации, пока не добавлены
 соответствующие пакеты `src/modules/*`.
 
-- [Segmentation](modules/segmentation.md)
-- [Broadcast](modules/broadcast.md)
-- [Workflow](modules/workflow.md)
 - [Campaigns](modules/campaigns.md)
 - [External Events](modules/external-events.md)
 

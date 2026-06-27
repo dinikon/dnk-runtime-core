@@ -10,9 +10,9 @@ OutboundMessageSent
 OutboundMessageFailed
 OutboundMessageDelivered
 OutboundMessageBounced
-BroadcastStarted
-BroadcastFinished
-BroadcastFailed
+BulkSendStarted
+BulkSendFinished
+BulkSendFailed
 ```
 
 Но не для команд:
@@ -20,7 +20,7 @@ BroadcastFailed
 ```text
 Send this SMS now
 Send this email now
-Process broadcast batch
+Process future bulk-send batch
 Retry outbound message
 ```
 
@@ -46,8 +46,8 @@ Retry outbound message
 communication.outbound_message.sent.v1
 communication.outbound_message.failed.v1
 communication.delivery_status.changed.v1
-campaign.broadcast.finished.v1
-segment.materialized.v1
+campaign.bulk_send.finished.v1
+audience.materialized.v1
 ```
 
 Свойства:
@@ -98,18 +98,18 @@ segment.materialized.v1
 
 ---
 
-## Рекомендация по рассылкам
+## Рекомендация по будущим массовым отправкам
 
-Для массовых рассылок я бы не отправлял каждое сообщение напрямую через `shared.events`.
+Для будущей переделки массовых отправок не стоит отправлять каждое сообщение напрямую через `shared.events`.
 
 Правильнее так:
 
 ```mermaid
 flowchart LR
-  Broadcast["Broadcast / Campaign"] --> Segment["Resolve Segment"]
-  Segment --> Batch["Create BroadcastRun + Batches"]
-  Batch --> DispatchQ["communication.broadcast.dispatch"]
-  DispatchQ --> Dispatcher["Broadcast dispatcher"]
+  BulkSend["Bulk send / Campaign"] --> Audience["Resolve audience (TBD)"]
+  Audience --> Batch["Create run + batches (TBD)"]
+  Batch --> DispatchQ["communication.bulk_send.dispatch"]
+  DispatchQ --> Dispatcher["Bulk-send dispatcher"]
   Dispatcher --> OM["Create OutboundMessage per recipient"]
   OM --> SendQ["communication.outbound.send"]
   SendQ --> Worker["Communication worker"]
@@ -120,15 +120,15 @@ flowchart LR
 То есть можно иметь минимум две operational queues:
 
 ```text
-communication.broadcast.dispatch   # fan-out / подготовка пачек
+communication.bulk_send.dispatch   # future fan-out / подготовка пачек
 communication.outbound.send        # отправка одного сообщения
 ```
 
 А `shared.events` использовать только для событий:
 
 ```text
-BroadcastStarted
-BroadcastBatchProcessed
+BulkSendStarted
+BulkSendBatchProcessed
 OutboundMessageQueued
 OutboundMessageSent
 OutboundMessageFailed
@@ -529,11 +529,11 @@ communication.outbound.send.retry
 communication.outbound.send.dlq
   dead-letter queue
 
-communication.broadcast
+communication.bulk_send
   type: direct/topic
   purpose: fan-out массовых рассылок
 
-communication.broadcast.dispatch
+communication.bulk_send.dispatch
   queue для обработки batch'ей рассылки
 ```
 
@@ -555,12 +555,12 @@ communication.delivery_status.changed.v1
 Для рассылок:
 
 ```text
-communication.broadcast.created.v1
-communication.broadcast.started.v1
-communication.broadcast.batch_processed.v1
-communication.broadcast.completed.v1
-communication.broadcast.failed.v1
-communication.broadcast.canceled.v1
+communication.bulk_send.created.v1
+communication.bulk_send.started.v1
+communication.bulk_send.batch_processed.v1
+communication.bulk_send.completed.v1
+communication.bulk_send.failed.v1
+communication.bulk_send.canceled.v1
 ```
 
 Но событие `queued` я бы публиковал только если другим модулям действительно нужно знать, что сообщение поставлено в очередь. Иначе оно может создать слишком много шума.
@@ -590,11 +590,11 @@ shared.events
 
 communication
   outbound queue publisher/worker
-  broadcast dispatch queue
+  future bulk-send dispatch queue
   provider workers
   delivery state machine
 
-campaigns / broadcast / workflow
+campaigns / future bulk-send / workflow
   создают задания/сообщения
   получают факты через shared.events
 ```

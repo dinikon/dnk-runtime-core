@@ -1,15 +1,8 @@
 <script setup lang="ts">
-import { AppLayout } from "@/layouts";
+import { RuntimeObjectPage } from "@/shared/runtime-object";
+import { contactsRuntimeObject } from "@/modules/crm/models/contacts-runtime-object";
 </script>
 
 <template>
-  <AppLayout>
-    <template #header>
-      <h1 class="truncate text-base font-semibold">Contacts</h1>
-    </template>
-
-    <div class="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
-      Contacts workspace is available after authentication.
-    </div>
-  </AppLayout>
+  <RuntimeObjectPage :resource="contactsRuntimeObject" />
 </template>

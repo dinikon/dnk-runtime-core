@@ -10,8 +10,6 @@ from src.modules.communication.application.message_template.dto import (
 )
 from src.modules.communication.domain.message_template import (
     ChannelCodeVO,
-    MessageClassVO,
-    MessageTemplateCodeVO,
     MessageTemplateEntity,
     MessageTemplateIdVO,
     MessageTemplateNameVO,
@@ -41,7 +39,6 @@ def message_template_entity(
         created_at=as_datetime(row.get("created_at")),
         updated_at=as_datetime(row.get("updated_at")),
         tenant_id=tenant_id,
-        template_code=MessageTemplateCodeVO(as_str(row.get("template_code"))),
         name=MessageTemplateNameVO(as_str(row.get("name"))),
         description=as_optional_str(row.get("description")),
         provider_connector_id=ProviderConnectorIdVO.from_value(
@@ -51,7 +48,6 @@ def message_template_entity(
             as_uuid(row.get("provider_message_type_id"))
         ),
         channel_code=ChannelCodeVO(as_str(row.get("channel_code"))),
-        message_class=MessageClassVO(as_str(row.get("message_class"))),
         status=TemplateStatusVO(as_str(row.get("status"))),
     )
 
@@ -81,13 +77,11 @@ def message_template_dto(
     return MessageTemplateDTO(
         template_id=as_uuid(row.get("id")),
         tenant_id=tenant_id.uuid,
-        template_code=as_str(row.get("template_code")),
         name=as_str(row.get("name")),
         description=as_optional_str(row.get("description")),
         provider_connector_id=as_uuid(row.get("provider_connector_id")),
         provider_message_type_id=as_uuid(row.get("provider_message_type_id")),
         channel_code=as_str(row.get("channel_code")),
-        message_class=as_str(row.get("message_class")),
         status=as_str(row.get("status")),
         created_at=as_datetime(row.get("created_at")),
         updated_at=as_datetime(row.get("updated_at")),

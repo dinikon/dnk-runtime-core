@@ -37,6 +37,7 @@ class ResolveTenantByHostUseCase:
                 available=False,
                 status="not_found",
                 tenant_id=None,
+                tenant_name=None,
                 api_host=None,
             )
 
@@ -49,6 +50,7 @@ class ResolveTenantByHostUseCase:
                 available=False,
                 status="not_found",
                 tenant_id=None,
+                tenant_name=None,
                 api_host=None,
             )
 
@@ -59,6 +61,7 @@ class ResolveTenantByHostUseCase:
                 available=False,
                 status="not_found",
                 tenant_id=None,
+                tenant_name=None,
                 api_host=None,
             )
 
@@ -73,6 +76,7 @@ class ResolveTenantByHostUseCase:
             available=tenant.allows_login(),
             status=tenant.status.value,
             tenant_id=tenant.id.uuid,
+            tenant_name=tenant.name,
             api_host=api_host,
         )
 

@@ -29,7 +29,7 @@
 - HTTP business routes use request context from shared authentication dependency.
 - Console auth is host-aware and session-cookie based.
 - Control-plane protected routes use bearer API key validation.
-- Client data routes such as `crm`, `inventory` and `custom_object` must not accept `tenant_id` from public payloads,
+- Client data routes such as `crm` and `custom_object` must not accept `tenant_id` from public payloads,
   query params or
   path
   params. Controllers read tenant from the authenticated request context, put it into application command/query DTOs and
@@ -40,7 +40,7 @@
 
 - `EntityIdVO` is the single shared UUID primitive and the base class for concrete domain identifiers.
 - Tenant scope uses `EntityIdVO` directly. Concrete domain entities use concrete subclasses: for example `UserIdVO`,
-  `ContactIdVO`, `ProductIdVO`, `CategoryIdVO`, `DataSourceIdVO`, `RuntimeObjectIdVO` and `RuntimeFieldIdVO`.
+  `ContactIdVO`, `CompanyIdVO`, `DataSourceIdVO`, `RuntimeObjectIdVO` and `RuntimeFieldIdVO`.
 - Transport, token and persistence boundaries may use `UUID` or `str`, but values are converted to `EntityIdVO` or a
   concrete id subclass before entering domain/application behavior and converted back with `.uuid` when leaving it.
 - Concrete id classes are intentionally not interchangeable, even when they wrap the same UUID.

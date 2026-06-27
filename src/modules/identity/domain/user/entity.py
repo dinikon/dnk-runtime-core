@@ -7,7 +7,7 @@ import uuid6
 
 from src.modules.identity.domain.user.value_object import UserEmailIdVO, UserIdVO
 from src.modules.shared import EntityIdVO
-from src.modules.shared.domain.errors import DomainError
+from src.modules.shared import DomainError
 
 
 @dataclass(slots=True)

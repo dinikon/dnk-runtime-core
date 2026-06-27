@@ -200,6 +200,8 @@ class ProcessOutboundMessageByIdUseCase:
                 message_type,
             ) = await repository.load_processing_context(tenant_id, outbound_message_id)
             try:
+                connection.ensure_active()
+                connector.ensure_active()
                 rendered_payload = self._template_renderer.render(
                     version.template_payload,
                     request.variables,

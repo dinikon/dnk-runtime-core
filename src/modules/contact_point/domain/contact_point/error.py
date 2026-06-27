@@ -1,4 +1,4 @@
-from src.modules.shared.domain.errors import DomainError
+from src.modules.shared import DomainError
 
 
 class ContactPointNotFoundError(DomainError):

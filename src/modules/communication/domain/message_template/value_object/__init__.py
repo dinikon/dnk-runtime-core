@@ -1,12 +1,6 @@
 from src.modules.communication.domain.message_template.value_object.channel_code import (
     ChannelCodeVO,
 )
-from src.modules.communication.domain.message_template.value_object.message_class import (
-    MessageClassVO,
-)
-from src.modules.communication.domain.message_template.value_object.message_template_code import (
-    MessageTemplateCodeVO,
-)
 from src.modules.communication.domain.message_template.value_object.message_template_id import (
     MessageTemplateIdVO,
 )
@@ -28,8 +22,6 @@ from src.modules.communication.domain.message_template.value_object.template_ver
 
 __all__ = [
     "ChannelCodeVO",
-    "MessageClassVO",
-    "MessageTemplateCodeVO",
     "MessageTemplateIdVO",
     "MessageTemplateNameVO",
     "TemplateStatusVO",

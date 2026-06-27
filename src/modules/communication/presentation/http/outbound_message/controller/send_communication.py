@@ -44,7 +44,7 @@ from src.modules.schema_registry.domain.error import (
     SchemaRegistryMetadataInconsistentError,
 )
 from src.modules.shared import EntityIdVO
-from src.modules.shared.domain.errors import DomainError
+from src.modules.shared import DomainError
 from src.modules.shared.presentation import AuthenticatedRequestContextDep, UoWDep
 
 router = APIRouter(prefix="/communication", tags=["communication"])
@@ -88,7 +88,6 @@ async def send_communication(
                 recipient_identifier_type=payload.recipient_identifier_type,
                 recipient_address=payload.recipient_address,
                 recipient_snapshot=payload.recipient_snapshot,
-                message_class=payload.message_class,
                 variables=payload.variables,
                 scheduled_at=payload.scheduled_at,
                 priority=payload.priority,

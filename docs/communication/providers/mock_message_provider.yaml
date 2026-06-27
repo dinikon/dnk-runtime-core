@@ -1,0 +1,183 @@
+provider_code: mock
+provider_name: Local Mock Message Provider
+version: "1.0.0"
+connector_type: YAML_HTTP
+
+channels:
+  - SMS
+  - VIBER
+  - EMAIL
+
+config_schema:
+  type: object
+  required:
+    - base_url
+    - callback_url
+  additionalProperties: false
+  properties:
+    base_url:
+      type: string
+      title: Mock provider base URL
+      description: Use host.docker.internal when DNK runs in Docker and the mock server is published on the host.
+      format: uri
+      default: http://host.docker.internal:18080
+    callback_url:
+      type: string
+      title: Delivery callback URL
+      description: Full DNK webhook URL reachable from the mock server container.
+      format: uri
+      examples:
+        - http://host.docker.internal:8000/api/communication/webhooks/00000000-0000-0000-0000-000000000000/mock
+        - http://localhost:8000/api/communication/webhooks/00000000-0000-0000-0000-000000000000/mock
+
+message_types:
+  - code: mock_sms_text
+    channel: SMS
+    name: Mock SMS text
+    field_schema:
+      type: object
+      required:
+        - text
+      additionalProperties: false
+      properties:
+        text:
+          type: string
+          title: SMS text
+          minLength: 1
+          maxLength: 1600
+    ui_schema:
+      text:
+        ui:widget: textarea
+    send:
+      transport: http
+      method: POST
+      url: "{{ config.base_url }}/message/send_sms"
+      headers:
+        Content-Type: application/json
+      body:
+        phone: "{{ ((recipient.address|string) if (recipient.address|string).startswith('+') else '+' ~ (recipient.address|string))|tojson }}"
+        text: "{{ template.text }}"
+        callback_url: "{{ config.callback_url }}"
+        client_message_id: "{{ message.outbound_message_id }}"
+      response_mapping:
+        external_message_id: "$.message_id"
+        external_status: "$.status"
+
+  - code: mock_viber_button
+    channel: VIBER
+    name: Mock Viber message with button
+    field_schema:
+      type: object
+      required:
+        - text
+        - button_text
+        - button_url
+      additionalProperties: false
+      properties:
+        text:
+          type: string
+          title: Viber text
+          minLength: 1
+          maxLength: 1000
+        button_text:
+          type: string
+          title: Button text
+          minLength: 1
+          maxLength: 64
+        button_url:
+          type: string
+          title: Button URL
+          format: uri
+    ui_schema:
+      text:
+        ui:widget: textarea
+    send:
+      transport: http
+      method: POST
+      url: "{{ config.base_url }}/message/send_viber"
+      headers:
+        Content-Type: application/json
+      body:
+        phone: "{{ ((recipient.address|string) if (recipient.address|string).startswith('+') else '+' ~ (recipient.address|string))|tojson }}"
+        text: "{{ template.text }}"
+        button_text: "{{ template.button_text }}"
+        button_url: "{{ template.button_url }}"
+        callback_url: "{{ config.callback_url }}"
+        client_message_id: "{{ message.outbound_message_id }}"
+      response_mapping:
+        external_message_id: "$.message_id"
+        external_status: "$.status"
+
+  - code: mock_email_text
+    channel: EMAIL
+    name: Mock email text
+    field_schema:
+      type: object
+      required:
+        - subject
+        - text
+      additionalProperties: false
+      properties:
+        subject:
+          type: string
+          title: Email subject
+          minLength: 1
+          maxLength: 255
+        text:
+          type: string
+          title: Email text
+          minLength: 1
+    ui_schema:
+      text:
+        ui:widget: textarea
+    send:
+      transport: http
+      method: POST
+      url: "{{ config.base_url }}/message/send_email"
+      headers:
+        Content-Type: application/json
+      body:
+        email: "{{ recipient.address }}"
+        subject: "{{ template.subject }}"
+        text: "{{ template.text }}"
+        callback_url: "{{ config.callback_url }}"
+        client_message_id: "{{ message.outbound_message_id }}"
+      response_mapping:
+        external_message_id: "$.message_id"
+        external_status: "$.status"
+
+webhook:
+  external_message_id_path: "$.message_id"
+  external_status_path: "$.status"
+  event_time_path: "$.occurred_at"
+
+status_mapping:
+  accepted: SENT
+  Accepted: SENT
+  ACCEPTED: SENT
+  delivered: DELIVERED
+  Delivered: DELIVERED
+  DELIVERED: DELIVERED
+  read: OPENED
+  Read: OPENED
+  READ: OPENED
+  click: CLICKED
+  Click: CLICKED
+  CLICK: CLICKED
+  clicked: CLICKED
+  Clicked: CLICKED
+  CLICKED: CLICKED
+  failed: FAILED
+  Failed: FAILED
+  FAILED: FAILED
+
+retry_policy:
+  max_attempts: 3
+  backoff:
+    type: exponential
+    initial_seconds: 10
+    max_seconds: 120
+
+rate_limit:
+  per_second: 100
+  per_minute: 6000

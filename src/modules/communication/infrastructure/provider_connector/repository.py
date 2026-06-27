@@ -6,6 +6,7 @@ from src.modules.communication.application.provider_connector.query import (
     ProviderConnectorQueryRepositoryProtocol,
 )
 from src.modules.communication.domain.provider_connector import (
+    ConnectorStatus,
     ProviderChannelCodeVO,
     ProviderConnector,
     ProviderConnectorCodeVO,
@@ -25,8 +26,10 @@ from src.modules.communication.infrastructure.provider_connector.row_mapper impo
     provider_message_type_entity,
 )
 from src.modules.communication.infrastructure.runtime_object_names import (
+    _CONNECTION,
     _CONNECTOR,
     _MESSAGE_TYPE,
+    _TEMPLATE,
 )
 from src.modules.runtime_data.application.models import PageSpec, SortSpec
 from src.modules.runtime_data.application.ports import (
@@ -62,22 +65,32 @@ class ProviderConnectorRuntimeRepository(
         self._runtime_query_gateway = runtime_query_gateway
         self._filter_builder = RuntimeTypedFilterBuilder()
 
-    async def upsert_connector(
+    async def load_connector(
         self,
         *,
         tenant_id: EntityIdVO,
         provider_connector_id: ProviderConnectorIdVO,
-        provider_code: ProviderConnectorCodeVO,
-        provider_name: ProviderConnectorNameVO,
-        version: ProviderConnectorVersionVO,
-        connector_type: str,
-        yaml_spec: dict[str, Any],
-        yaml_checksum: str,
-        status: str,
-    ) -> ProviderConnector:
-        """Создает или обновляет runtime-строку provider connector."""
+    ) -> ProviderConnector | None:
+        """Загружает provider connector entity из runtime-таблицы tenant."""
         descriptor = await self._resolve_descriptor(tenant_id, self._OBJECT_NAME)
-        existing = await self._runtime_query_gateway.list(
+        row = await self._runtime_query_gateway.get_by_id(
+            descriptor=descriptor,
+            object_id=provider_connector_id.uuid,
+        )
+        if row is None:
+            return None
+        return provider_connector_entity(row)
+
+    async def load_connector_by_code_version(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        provider_code: ProviderConnectorCodeVO,
+        version: ProviderConnectorVersionVO,
+    ) -> ProviderConnector | None:
+        """Загружает provider connector entity по tenant-local code/version."""
+        descriptor = await self._resolve_descriptor(tenant_id, self._OBJECT_NAME)
+        rows = await self._runtime_query_gateway.list(
             descriptor=descriptor,
             filters=(
                 self._filter_builder.condition(
@@ -96,6 +109,30 @@ class ProviderConnectorRuntimeRepository(
             sorting=(SortSpec("created_at", "asc"),),
             page=PageSpec(limit=1, offset=0),
         )
+        if not rows:
+            return None
+        return provider_connector_entity(rows[0])
+
+    async def upsert_connector(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        provider_connector_id: ProviderConnectorIdVO,
+        provider_code: ProviderConnectorCodeVO,
+        provider_name: ProviderConnectorNameVO,
+        version: ProviderConnectorVersionVO,
+        connector_type: str,
+        yaml_spec: dict[str, Any],
+        yaml_checksum: str,
+        status: str,
+    ) -> ProviderConnector:
+        """Создает или обновляет runtime-строку provider connector."""
+        descriptor = await self._resolve_descriptor(tenant_id, self._OBJECT_NAME)
+        existing = await self.load_connector_by_code_version(
+            tenant_id=tenant_id,
+            provider_code=provider_code,
+            version=version,
+        )
         payload = {
             "provider_code": provider_code.value,
             "provider_name": provider_name.value,
@@ -105,10 +142,10 @@ class ProviderConnectorRuntimeRepository(
             "yaml_checksum": yaml_checksum,
             "status": status,
         }
-        if existing:
+        if existing is not None:
             row = await self._runtime_command_gateway.update(
                 descriptor=descriptor,
-                object_id=existing[0]["id"],
+                object_id=existing.provider_connector_id.uuid,
                 patch=payload,
             )
             if row is None:
@@ -192,6 +229,14 @@ class ProviderConnectorRuntimeRepository(
         descriptor = await self._resolve_descriptor(tenant_id, self._OBJECT_NAME)
         rows = await self._runtime_query_gateway.list(
             descriptor=descriptor,
+            filters=(
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="status",
+                    op="neq",
+                    value=ConnectorStatus.ARCHIVED.value,
+                ),
+            ),
             sorting=(SortSpec("provider_code"), SortSpec("version")),
         )
         return [provider_connector_dto(row) for row in rows]
@@ -202,15 +247,67 @@ class ProviderConnectorRuntimeRepository(
         tenant_id: EntityIdVO,
     ):
         """Возвращает DTO provider message types tenant."""
+        connectors = await self.list_connectors(tenant_id=tenant_id)
+        connector_ids = [connector.provider_connector_id for connector in connectors]
+        if not connector_ids:
+            return []
         descriptor = await self._resolve_descriptor(
             tenant_id,
             self._MESSAGE_TYPE_OBJECT_NAME,
         )
         rows = await self._runtime_query_gateway.list(
             descriptor=descriptor,
+            filters=(
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="provider_connector_id",
+                    op="in",
+                    value=connector_ids,
+                ),
+            ),
             sorting=(SortSpec("channel_code"), SortSpec("message_type_code")),
         )
         return [provider_message_type_dto(row) for row in rows]
+
+    async def has_usage(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        provider_connector_id: ProviderConnectorIdVO,
+    ) -> bool:
+        """Проверяет provider connections/templates по connector id."""
+        for object_name in (_CONNECTION, _TEMPLATE):
+            descriptor = await self._resolve_descriptor(tenant_id, object_name)
+            rows = await self._runtime_query_gateway.list(
+                descriptor=descriptor,
+                filters=(
+                    self._filter_builder.condition(
+                        descriptor=descriptor,
+                        field="provider_connector_id",
+                        op="eq",
+                        value=provider_connector_id.uuid,
+                    ),
+                ),
+                page=PageSpec(limit=1, offset=0),
+            )
+            if rows:
+                return True
+        return False
+
+    async def delete_connector(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        provider_connector_id: ProviderConnectorIdVO,
+    ) -> None:
+        """Физически удаляет provider connector runtime row."""
+        descriptor = await self._resolve_descriptor(tenant_id, self._OBJECT_NAME)
+        deleted = await self._runtime_command_gateway.delete(
+            descriptor=descriptor,
+            object_id=provider_connector_id.uuid,
+        )
+        if not deleted:
+            raise ProviderConnectorNotFoundError()
 
     async def _resolve_descriptor(self, tenant_id: EntityIdVO, object_name: str):
         """Получает runtime descriptor communication-объекта для tenant."""

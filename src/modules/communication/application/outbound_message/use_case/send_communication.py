@@ -155,7 +155,6 @@ class SendCommunicationUseCase:
             initiator_ref_id=command.initiator_ref_id,
             correlation_id=_entity_id(command.correlation_id),
             idempotency_key=idempotency_key,
-            message_class=command.message_class or template.message_class.value,
             channel_code=command.channel_code,
             template_id=template.template_id,
             template_version_id=active_version.template_version_id,

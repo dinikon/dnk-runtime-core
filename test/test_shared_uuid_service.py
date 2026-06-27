@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 
 from src.modules.shared.presentation import UuidDep, get_uuid_generator
 from src.modules.shared.presentation.uuid.depends import default_uuid_generator
-from src.modules.shared.infrastructure.uuid import Uuid7Generator
+from src.modules.shared.infrastructure.uuid import UUID7Generator
 
 
 class _UuidGeneratorStub:
@@ -19,7 +19,7 @@ class _UuidGeneratorStub:
 
 class SharedUuidServiceTests(unittest.TestCase):
     def test_uuid7_generator_returns_uuid(self) -> None:
-        value = Uuid7Generator().new_uuid()
+        value = UUID7Generator().new()
 
         self.assertIsInstance(value, UUID)
 

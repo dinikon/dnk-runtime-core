@@ -33,7 +33,7 @@ from src.modules.schema_registry.domain.error import (
 )
 from src.modules.shared import EntityIdVO
 from src.modules.shared.presentation import OptionalRequestContextDep
-from src.modules.shared.domain.errors import DomainError
+from src.modules.shared import DomainError
 
 router = APIRouter(prefix="/communication/webhooks", tags=["communication"])
 

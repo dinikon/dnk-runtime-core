@@ -10,8 +10,6 @@ from src.modules.communication.domain.message_template.error import (
 )
 from src.modules.communication.domain.message_template.value_object import (
     ChannelCodeVO,
-    MessageClassVO,
-    MessageTemplateCodeVO,
     MessageTemplateIdVO,
     MessageTemplateNameVO,
     TemplateStatusVO,
@@ -38,13 +36,11 @@ class MessageTemplateEntity:
     updated_at: datetime
     tenant_id: EntityIdVO
 
-    template_code: MessageTemplateCodeVO
     name: MessageTemplateNameVO
     description: str | None
     provider_connector_id: ProviderConnectorIdVO
     provider_message_type_id: ProviderMessageTypeIdVO
     channel_code: ChannelCodeVO
-    message_class: MessageClassVO
     status: TemplateStatusVO
 
     @classmethod
@@ -53,13 +49,11 @@ class MessageTemplateEntity:
         *,
         template_id: MessageTemplateIdVO,
         tenant_id: EntityIdVO,
-        template_code: str,
         name: str,
         description: str | None,
         provider_connector_id: ProviderConnectorIdVO,
         provider_message_type_id: ProviderMessageTypeIdVO,
         channel_code: ChannelCodeVO | str,
-        message_class: MessageClassVO | str,
         now: datetime,
     ) -> Self:
         """Создает черновой шаблон сообщения с едиными created_at/updated_at."""
@@ -68,13 +62,11 @@ class MessageTemplateEntity:
             created_at=now,
             updated_at=now,
             tenant_id=tenant_id,
-            template_code=MessageTemplateCodeVO(template_code),
             name=MessageTemplateNameVO(name),
             description=description,
             provider_connector_id=provider_connector_id,
             provider_message_type_id=provider_message_type_id,
             channel_code=ChannelCodeVO(channel_code),
-            message_class=MessageClassVO(message_class),
             status=TemplateStatusVO.DRAFT,
         )
 

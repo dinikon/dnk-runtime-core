@@ -18,7 +18,7 @@ from src.modules.identity.presentation.http.console_auth.responses import (
     CurrentUserEmailResponseSchema,
     CurrentUserResponseSchema,
 )
-from src.modules.shared.domain.errors import DomainError
+from src.modules.shared import DomainError
 from src.modules.shared.presentation.http.depends import RequestHostDep
 from src.modules.tenancy.domain.tenant_domain import (
     TenantHostNotFoundError,

@@ -112,7 +112,6 @@ def _event(
             ),
             "provider_connection_id": str(_id_uuid(outbound.provider_connection_id)),
             "channel_code": outbound.channel_code,
-            "message_class": outbound.message_class,
             "internal_status": internal_status,
             "external_status": external_status,
             "external_message_id": external_message_id,

@@ -23,7 +23,7 @@ from src.modules.contact_point.domain.contact_point import (
     ContactPointRepositoryProtocol,
 )
 from src.modules.shared.domain.time import ClockPort
-from src.modules.shared.application.uuid import UuidPort
+from src.modules.shared.application.uuid import UUIdGeneratorProtocol
 
 
 class AttachContactPointUseCaseProtocol(Protocol):
@@ -44,7 +44,7 @@ class AttachContactPointUseCase:
         feature_gate: ContactPointObjectFeatureGatePort,
         normalizer: ContactPointNormalizerPort,
         hash_service: ContactPointHashPort,
-        uuid_generator: UuidPort,
+        uuid_generator: UUIdGeneratorProtocol,
         clock: ClockPort,
     ) -> None:
         self._contact_points = contact_points
@@ -94,7 +94,7 @@ class AttachContactPointUseCase:
         now = self._clock.now()
         if contact_point is None:
             contact_point = ContactPointEntity.create(
-                id_=ContactPointIdVO.from_value(self._uuid_generator.new_uuid()),
+                id_=ContactPointIdVO.from_value(self._uuid_generator.new()),
                 now=now,
                 contact_point_type=command.contact_point_type,
                 raw_value=command.raw_value,
@@ -169,7 +169,7 @@ class AttachContactPointUseCase:
             )
 
         binding = ContactPointBindingEntity.create(
-            id_=ContactPointBindingIdVO.from_value(self._uuid_generator.new_uuid()),
+            id_=ContactPointBindingIdVO.from_value(self._uuid_generator.new()),
             now=now,
             contact_point_id=contact_point.id,
             contact_point_type=command.contact_point_type,

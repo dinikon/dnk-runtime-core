@@ -1,29 +1,14 @@
-export interface ContactFieldOption {
-  value: string;
-  label: string;
-}
+import type {
+  RuntimeFieldDescription,
+  RuntimeFieldOption,
+  RuntimeObjectFieldsResponse,
+} from "@/shared/runtime-object";
+import { RuntimeObjectDescription } from "@/shared/runtime-object/model";
 
-export interface ContactFieldDescription {
-  id: string;
-  field_name: string;
-  label: string;
-  description: string;
-  type: string;
-  kind: string;
-  is_nullable: boolean;
-  default_value: string | null;
-  options: ContactFieldOption[];
-}
+export type ContactFieldOption = RuntimeFieldOption;
 
-export interface ContactObjectDescription {
-  id: string;
-  singular_label: string;
-  plural_label: string;
-  description: string;
-  kind: string;
-}
+export type ContactFieldDescription = RuntimeFieldDescription;
 
-export interface ContactFieldsResponse {
-  object: ContactObjectDescription;
-  fields: ContactFieldDescription[];
-}
+export type ContactObjectDescription = RuntimeObjectDescription;
+
+export type ContactFieldsResponse = RuntimeObjectFieldsResponse;

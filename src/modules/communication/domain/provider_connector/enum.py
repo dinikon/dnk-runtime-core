@@ -12,7 +12,7 @@ class ConnectorType(StrEnum):
 class ConnectorStatus(StrEnum):
     ACTIVE = "ACTIVE"
     DISABLED = "DISABLED"
-    DEPRECATED = "DEPRECATED"
+    ARCHIVED = "ARCHIVED"
 
 
 __all__ = [

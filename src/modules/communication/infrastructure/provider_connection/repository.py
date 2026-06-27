@@ -15,6 +15,7 @@ from src.modules.communication.domain.provider_connection import (
     ProviderConnectionStatusVO,
 )
 from src.modules.communication.domain.provider_connector import (
+    ConnectorStatus,
     ProviderConnector,
     ProviderConnectorIdVO,
 )
@@ -24,8 +25,11 @@ from src.modules.communication.infrastructure.provider_connection.row_mapper imp
     provider_connector_entity,
 )
 from src.modules.communication.infrastructure.runtime_object_names import (
+    _ATTEMPT,
     _CONNECTION,
     _CONNECTOR,
+    _EVENT,
+    _OUTBOUND,
 )
 from src.modules.runtime_data.application.models import PageSpec, SortSpec
 from src.modules.runtime_data.application.ports import (
@@ -91,7 +95,6 @@ class ProviderConnectionRuntimeRepository(
         )
         payload = {
             "provider_connector_id": connection.provider_connector_id.uuid,
-            "connection_code": connection.connection_code.value,
             "connection_name": connection.connection_name.value,
             "channel_code": connection.channel_code,
             "config": connection.config,
@@ -153,7 +156,14 @@ class ProviderConnectionRuntimeRepository(
         )
         if not rows:
             return None
-        return provider_connection_entity(tenant_id=tenant_id, row=rows[0])
+        connection = provider_connection_entity(tenant_id=tenant_id, row=rows[0])
+        connector = await self.load_provider_connector(
+            tenant_id=tenant_id,
+            provider_connector_id=connection.provider_connector_id,
+        )
+        if connector is None or connector.status != ConnectorStatus.ACTIVE.value:
+            return None
+        return connection
 
     async def find_active_connection(
         self,
@@ -204,7 +214,15 @@ class ProviderConnectionRuntimeRepository(
         descriptor = await self._resolve_descriptor(tenant_id, self._OBJECT_NAME)
         rows = await self._runtime_query_gateway.list(
             descriptor=descriptor,
-            sorting=(SortSpec("connection_code"),),
+            filters=(
+                self._filter_builder.condition(
+                    descriptor=descriptor,
+                    field="status",
+                    op="neq",
+                    value=ProviderConnectionStatusVO.ARCHIVED.value,
+                ),
+            ),
+            sorting=(SortSpec("connection_name"),),
         )
         return [
             provider_connection_dto(
@@ -213,6 +231,46 @@ class ProviderConnectionRuntimeRepository(
             )
             for row in rows
         ]
+
+    async def has_usage(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        provider_connection_id: ProviderConnectionIdVO,
+    ) -> bool:
+        """Проверяет outbound/delivery историю по connection id."""
+        for object_name in (_OUTBOUND, _ATTEMPT, _EVENT):
+            descriptor = await self._resolve_descriptor(tenant_id, object_name)
+            rows = await self._runtime_query_gateway.list(
+                descriptor=descriptor,
+                filters=(
+                    self._filter_builder.condition(
+                        descriptor=descriptor,
+                        field="provider_connection_id",
+                        op="eq",
+                        value=provider_connection_id.uuid,
+                    ),
+                ),
+                page=PageSpec(limit=1, offset=0),
+            )
+            if rows:
+                return True
+        return False
+
+    async def delete(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        provider_connection_id: ProviderConnectionIdVO,
+    ) -> None:
+        """Физически удаляет provider connection runtime row."""
+        descriptor = await self._resolve_descriptor(tenant_id, self._OBJECT_NAME)
+        deleted = await self._runtime_command_gateway.delete(
+            descriptor=descriptor,
+            object_id=provider_connection_id.uuid,
+        )
+        if not deleted:
+            raise ProviderConnectionNotFoundError()
 
     async def _resolve_descriptor(self, tenant_id: EntityIdVO, object_name: str):
         """Получает runtime descriptor communication-объекта для tenant."""

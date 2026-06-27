@@ -7,7 +7,7 @@
 отдает runtime descriptors потребителям runtime data.
 
 Модуль управляет структурой runtime objects, но не выполняет CRUD runtime-записей. Чтение и запись строк находятся в
-`runtime_data`, `custom_object`, `crm`, `inventory`, `communication` и других потребителях descriptors.
+`runtime_data`, `custom_object`, `crm`, `communication` и других потребителях descriptors.
 
 ## Current Scope
 
@@ -358,7 +358,6 @@ HTTP error mapping:
 | `runtime_data`  | consumer dependency, not imported by module code for DDL | Consumers use `RuntimeObjectDescriptor`; schema_registry itself does not do runtime row CRUD.                  |
 | `custom_object` | consumer dependency                                      | Record APIs use `RuntimeObjectIdVO` and descriptors; metadata/DDL remains in schema_registry config API.       |
 | `crm`           | consumer dependency                                      | CRM model description/runtime repositories resolve descriptors and rely on default seed objects.               |
-| `inventory`     | consumer dependency                                      | Inventory runtime repositories and field descriptions use schema_registry descriptors and seed objects.        |
 | `communication` | consumer dependency                                      | Communication runtime repositories/management wiring use schema_registry descriptors and default seed objects. |
 | `config`        | management/bootstrap                                     | `dnk_config.DEFAULT_SEED_MODULE` and `SCHEMA_PREFIX`.                                                          |
 
@@ -404,8 +403,8 @@ Command зарегистрирован в `src/management/commands/schema_regist
 - Integration / boundary:
   - `test/test_tenant_schema_bootstrap_boundary.py`;
   - `test/test_architecture_boundaries.py`;
-  - `test/test_inventory_schema_seed.py`;
-  - runtime descriptor usage is also covered by CRM, inventory, custom_object, communication and runtime_data tests.
+  - `test/test_inventory_schema_seed.py` covers current default seed objects and removed-model cleanup behavior;
+  - runtime descriptor usage is also covered by CRM, custom_object, communication and runtime_data tests.
 
 Important gaps:
 
@@ -433,7 +432,6 @@ Important gaps:
 ## Related Documentation
 
 - [Develop Style](../develop-style.md)
-- [Inventory Module](./inventory.md)
 - [Runtime Schema](../data/runtime-schema.md)
 - [HTTP API](../interfaces/http-api.md)
 - [Management CLI](../interfaces/management-cli.md)

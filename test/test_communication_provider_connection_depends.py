@@ -5,7 +5,9 @@ from datetime import UTC, datetime
 
 from src.modules.communication.application.provider_connection import (
     CreateProviderConnectionUseCase,
+    DeleteProviderConnectionUseCase,
     ListProviderConnectionsUseCase,
+    UpdateProviderConnectionStatusUseCase,
 )
 from src.modules.communication.application.services import (
     JsonSchemaValidationService,
@@ -19,8 +21,10 @@ from src.modules.communication.infrastructure.provider_connection import (
 )
 from src.modules.communication.presentation.depends.application import (
     get_create_provider_connection_use_case,
+    get_delete_provider_connection_use_case,
     get_list_provider_connections_use_case,
     get_provider_connection_service,
+    get_update_provider_connection_status_use_case,
 )
 from src.modules.communication.presentation.depends.infrastructure import (
     get_provider_connection_repository,
@@ -49,11 +53,20 @@ class ProviderConnectionDependsTests(unittest.TestCase):
             secret_codec=SecretCodec(),
         )
         list_use_case = get_list_provider_connections_use_case(repository=repository)
+        update_status_use_case = get_update_provider_connection_status_use_case(
+            service=service
+        )
+        delete_use_case = get_delete_provider_connection_use_case(service=service)
 
         self.assertIsInstance(repository, ProviderConnectionRuntimeRepository)
         self.assertIsInstance(service, ProviderConnectionService)
         self.assertIsInstance(create_use_case, CreateProviderConnectionUseCase)
         self.assertIsInstance(list_use_case, ListProviderConnectionsUseCase)
+        self.assertIsInstance(
+            update_status_use_case,
+            UpdateProviderConnectionStatusUseCase,
+        )
+        self.assertIsInstance(delete_use_case, DeleteProviderConnectionUseCase)
 
 
 __all__ = ["ProviderConnectionDependsTests"]

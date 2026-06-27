@@ -10,7 +10,8 @@ exposes HTTP endpoints through FastAPI and management commands through `dnk-mana
 - `runtime_data`: provides tenant-scoped persistence/query primitives for runtime objects described by metadata.
 - `custom_object`: exposes tenant-defined runtime objects, fields and records over schema registry metadata.
 - `crm`: currently exposes contact CRUD for authenticated users.
-- `inventory`: exposes product and product category CRUD for authenticated users.
+- `communication`: owns provider connectors, message templates, outbound messages and delivery state.
+- `workflow`: owns workflow application/definition/run foundations.
 - `schema_registry`: loads seed manifests, creates or diffs tenant runtime schemas in PostgreSQL, and stores metadata
   snapshot for runtime objects and fields.
 - `shared`: cross-cutting infrastructure such as database helper, unit of work, request context, authentication,

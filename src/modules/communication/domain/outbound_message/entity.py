@@ -7,7 +7,6 @@ from typing import Any, Self
 from src.modules.communication.domain.error import CommunicationValidationError
 from src.modules.communication.domain.message_template.value_object import (
     ChannelCodeVO,
-    MessageClassVO,
     MessageTemplateIdVO,
     TemplateVersionIdVO,
 )
@@ -40,7 +39,6 @@ class CommunicationRequest:
     initiator_ref_id: str
     correlation_id: EntityIdVO
     idempotency_key: str
-    message_class: str
     channel_code: str
     template_id: MessageTemplateIdVO
     template_version_id: TemplateVersionIdVO
@@ -64,7 +62,6 @@ class CommunicationRequest:
         initiator_ref_id: str,
         correlation_id: EntityIdVO,
         idempotency_key: str,
-        message_class: str,
         channel_code: str,
         template_id: MessageTemplateIdVO,
         template_version_id: TemplateVersionIdVO,
@@ -85,7 +82,6 @@ class CommunicationRequest:
             initiator_ref_id=_required_text(initiator_ref_id),
             correlation_id=correlation_id,
             idempotency_key=IdempotencyKeyVO(idempotency_key).value,
-            message_class=MessageClassVO(message_class).value,
             channel_code=ChannelCodeVO(channel_code).value,
             template_id=template_id,
             template_version_id=template_version_id,
@@ -112,7 +108,6 @@ class OutboundMessage:
     communication_request_id: CommunicationRequestIdVO
     provider_connection_id: ProviderConnectionIdVO
     channel_code: str
-    message_class: str
     priority: int
     recipient_identifier_type: str
     recipient_address: str
@@ -146,7 +141,6 @@ class OutboundMessage:
         communication_request_id: CommunicationRequestIdVO,
         provider_connection_id: ProviderConnectionIdVO,
         channel_code: str,
-        message_class: str,
         priority: int,
         recipient_identifier_type: str,
         recipient_address: str,
@@ -160,7 +154,6 @@ class OutboundMessage:
             communication_request_id=communication_request_id,
             provider_connection_id=provider_connection_id,
             channel_code=ChannelCodeVO(channel_code).value,
-            message_class=MessageClassVO(message_class).value,
             priority=OutboundPriorityVO(priority).value,
             recipient_identifier_type=RecipientIdentifierTypeVO(
                 recipient_identifier_type

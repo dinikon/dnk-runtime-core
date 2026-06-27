@@ -197,6 +197,49 @@ class CommunicationServicesTests(unittest.TestCase):
             "https://api.turbosms.ua/message/send.json",
         )
 
+    def test_provider_yaml_loader_accepts_mock_message_provider_contract(self) -> None:
+        yaml_content = (
+            PROJECT_ROOT / "docs/communication/providers/mock_message_provider.yaml"
+        ).read_text(encoding="utf-8")
+
+        parsed = ProviderYamlLoader().load(yaml_content)
+
+        self.assertEqual(parsed.spec["provider_code"], "mock")
+        self.assertEqual(parsed.spec["connector_type"], "YAML_HTTP")
+        self.assertEqual(parsed.spec["channels"], ["SMS", "VIBER", "EMAIL"])
+        self.assertEqual(len(parsed.spec["message_types"]), 3)
+        self.assertEqual(
+            parsed.spec["message_types"][1]["send"]["url"],
+            "{{ config.base_url }}/message/send_viber",
+        )
+        self.assertEqual(
+            parsed.spec["webhook"]["external_message_id_path"],
+            "$.message_id",
+        )
+        self.assertEqual(parsed.spec["status_mapping"]["click"], "CLICKED")
+
+    def test_mock_provider_sms_payload_normalizes_numeric_phone(self) -> None:
+        yaml_content = (
+            PROJECT_ROOT / "docs/communication/providers/mock_message_provider.yaml"
+        ).read_text(encoding="utf-8")
+        parsed = ProviderYamlLoader().load(yaml_content)
+
+        _method, _url, _headers, body = ProviderPayloadBuildService().build(
+            send_spec=parsed.spec["message_types"][0]["send"],
+            context={
+                "config": {
+                    "base_url": "http://localhost:18080",
+                    "callback_url": "http://localhost:8000/api/communication/webhooks/tenant/mock",
+                },
+                "recipient": {"address": 380935410006},
+                "template": {"text": "Mock SMS"},
+                "message": {"outbound_message_id": "message-1"},
+            },
+        )
+
+        self.assertEqual(body["phone"], "+380935410006")
+        self.assertIs(type(body["phone"]), str)
+
     def test_provider_yaml_loader_rejects_invalid_yaml_smtp_contract(self) -> None:
         yaml_content = (
             PROJECT_ROOT / "docs/communication/providers/smtp_email.yaml"
@@ -219,7 +262,7 @@ class CommunicationServicesTests(unittest.TestCase):
             send_spec={
                 "method": "POST",
                 "url": "https://example.test/{{ config.client_id }}",
-                "headers": {"X-Provider": "{{ connection.connection_code }}"},
+                "headers": {"X-Provider": "{{ connection.connection_name }}"},
                 "body": {
                     "phone_number": "{{ recipient.address }}",
                     "ttl": "{{ template.ttl }}",
@@ -227,7 +270,7 @@ class CommunicationServicesTests(unittest.TestCase):
             },
             context={
                 "config": {"client_id": "abc"},
-                "connection": {"connection_code": "gms_viber"},
+                "connection": {"connection_name": "GMS Viber"},
                 "recipient": {"address": "380671112233"},
                 "template": rendered,
             },
@@ -235,7 +278,7 @@ class CommunicationServicesTests(unittest.TestCase):
 
         self.assertEqual(method, "POST")
         self.assertEqual(url, "https://example.test/abc")
-        self.assertEqual(headers["X-Provider"], "gms_viber")
+        self.assertEqual(headers["X-Provider"], "GMS Viber")
         self.assertEqual(body["ttl"], 60)
 
     def test_status_mapping_and_jsonpath_extraction(self) -> None:
@@ -262,7 +305,6 @@ class CommunicationServicesTests(unittest.TestCase):
             tenant_id=UUID("00000000-0000-0000-0000-000000000001"),
             provider_connector_id=UUID("00000000-0000-0000-0000-000000000002"),
             provider_connection_id=UUID("00000000-0000-0000-0000-000000000003"),
-            connection_code="gms_viber",
             connection_name="GMS Viber",
             channel_code="VIBER",
             config={"client_id": "abc"},

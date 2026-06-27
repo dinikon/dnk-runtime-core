@@ -37,13 +37,11 @@ class CreateMessageTemplateUseCase:
         template = await self._service.create_template(
             tenant_id=command.tenant_id,
             template_id=command.template_id,
-            template_code=command.template_code,
             name=command.name,
             description=command.description,
             provider_connector_id=command.provider_connector_id,
             provider_message_type_id=command.provider_message_type_id,
             channel_code=command.channel_code,
-            message_class=command.message_class,
         )
         return self._to_dto(template)
 
@@ -53,13 +51,11 @@ class CreateMessageTemplateUseCase:
         return MessageTemplateDTO(
             template_id=template.template_id.uuid,
             tenant_id=template.tenant_id.uuid,
-            template_code=template.template_code.value,
             name=template.name.value,
             description=template.description,
             provider_connector_id=template.provider_connector_id.uuid,
             provider_message_type_id=template.provider_message_type_id.uuid,
             channel_code=template.channel_code.value,
-            message_class=template.message_class.value,
             status=template.status.value,
             created_at=template.created_at,
             updated_at=template.updated_at,

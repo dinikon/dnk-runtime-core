@@ -2,7 +2,8 @@
 
 ## Статус
 
-Roadmap-документ M0 для фиксации границ. `workflow` пока не реализован в `src/modules`.
+Roadmap-документ M0 для фиксации границ и текущего domain skeleton.
+`workflow` частично реализован в `src/modules/workflow/domain`.
 
 Документ фиксирует целевые границы bounded context до добавления runtime objects, API и workers.
 
@@ -35,7 +36,7 @@ workflow definition + trigger + runtime context -> ordered node executions
 
 - campaign business concepts, campaign goals или campaign metrics;
 - segment definition/calculation DSL;
-- broadcast recipient fan-out;
+- recipient fan-out будущего send orchestration boundary;
 - provider-specific message delivery;
 - provider webhook processing;
 - external event ingestion и normalization;
@@ -43,14 +44,29 @@ workflow definition + trigger + runtime context -> ordered node executions
 
 ## Доменные понятия
 
+- `WorkflowApplication`: приложение/контейнер workflow, владеющий активной definition.
 - `WorkflowDefinition`: редактируемый draft workflow.
 - `WorkflowVersion`: неизменяемый опубликованный graph.
 - `WorkflowNode`: типизированный step в graph.
 - `WorkflowEdge`: transition rule между nodes.
 - `WorkflowRun`: один execution instance.
-- `WorkflowNodeRun`: группа попыток выполнения node внутри run.
+- `NodeExecution`: дочерняя entity внутри `WorkflowRun`, представляющая выполнение node.
 - `WorkflowTrigger`: abstract trigger descriptor, например manual, schedule или normalized event.
 - `WorkflowAction`: generic action, запрошенный node через зарегистрированный port.
+
+## Текущая доменная структура
+
+Domain код сгруппирован по Aggregate Root:
+
+```text
+src/modules/workflow/domain/
+├── workflow_application/
+├── workflow_definition/
+└── workflow_run/
+```
+
+`NodeExecutionEntity` хранится в `workflow_run/entities/node_execution.py`, потому что относится к consistency boundary
+`WorkflowRun`, а не является самостоятельным aggregate root.
 
 ## Планируемая application surface
 
@@ -84,16 +100,16 @@ Node-specific adapters должны быть узкими и заменяемы�
 
 | Зависимость       | Для чего используется                                                  |
 |-------------------|------------------------------------------------------------------------|
-| `segmentation`    | Segment calculation или audience resolution nodes.                     |
-| `broadcast`       | Broadcast creation/start nodes.                                        |
 | `communication`   | Прямые one-off communication nodes, если нужны.                        |
 | `external_events` | Event schema lookup, только если это не покрыто shared event contract. |
+
+Audience-resolution and bulk-send adapters are future boundaries and are not implemented in the current source tree.
 
 Запрещенные исходящие зависимости:
 
 - `campaigns`;
 - provider HTTP clients, SMTP clients или SMS provider adapters;
-- direct writes в module-owned tables модулей `segmentation`, `broadcast`, `communication`, `campaigns` или
+- direct writes в module-owned tables модулей `communication`, future campaign/audience/send modules или
   `external_events`.
 
 Разрешенные входящие вызовы:
@@ -145,12 +161,10 @@ state.
 ## Связанная документация
 
 - [Campaigns Module](./campaigns.md)
-- [Segmentation Module](./segmentation.md)
-- [Broadcast Module](./broadcast.md)
 - [External Events Module](./external-events.md)
 - [Develop Style](../develop-style.md)
 
 ## Источник истины
 
 - GitHub issue #36.
-- Будущий `src/modules/workflow/...`.
+- `src/modules/workflow/...`.

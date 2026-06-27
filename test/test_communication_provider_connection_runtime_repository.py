@@ -14,8 +14,10 @@ from src.modules.communication.infrastructure.provider_connection import (
     ProviderConnectionRuntimeRepository,
 )
 from src.modules.communication.infrastructure.runtime_object_names import (
+    _ATTEMPT,
     _CONNECTION,
     _CONNECTOR,
+    _OUTBOUND,
 )
 from src.modules.schema_registry.runtime import (
     RuntimeFieldDescriptor,
@@ -51,6 +53,7 @@ def _descriptor(object_name: str) -> RuntimeObjectDescriptor:
             _field("created_at", "datetime"),
             _field("updated_at", "datetime"),
             _field("provider_connector_id", "uuid"),
+            _field("provider_connection_id", "uuid"),
             _field("channel_code"),
             _field("status"),
         ),
@@ -71,6 +74,7 @@ class _QueryGatewayStub:
     def __init__(self) -> None:
         self.by_id_rows = {}
         self.list_rows = []
+        self.list_rows_by_descriptor = {}
         self.get_calls = []
         self.list_calls = []
 
@@ -82,15 +86,16 @@ class _QueryGatewayStub:
     async def list(
         self, *, descriptor, filters=(), sorting=(), page=None, fetch_plan=None
     ):
+        descriptor_name = _descriptor_name(descriptor)
         self.list_calls.append(
             {
-                "descriptor": _descriptor_name(descriptor),
+                "descriptor": descriptor_name,
                 "filters": filters,
                 "sorting": sorting,
                 "page": page,
             }
         )
-        return self.list_rows
+        return self.list_rows_by_descriptor.get(descriptor_name, self.list_rows)
 
 
 class _CommandGatewayStub:
@@ -98,6 +103,7 @@ class _CommandGatewayStub:
         self.row = row
         self.inserts = []
         self.updates = []
+        self.deletes = []
         self.update_result = row
 
     async def insert(self, *, descriptor, payload):
@@ -109,6 +115,7 @@ class _CommandGatewayStub:
         return self.update_result
 
     async def delete(self, *, descriptor, object_id):
+        self.deletes.append((descriptor, object_id))
         return True
 
 
@@ -125,7 +132,6 @@ def _connection_row(
         "created_at": now,
         "updated_at": now,
         "provider_connector_id": provider_connector_id or uuid4(),
-        "connection_code": "sms_main",
         "connection_name": "Main SMS",
         "channel_code": "SMS",
         "config": {"client_id": "abc"},
@@ -135,7 +141,7 @@ def _connection_row(
     }
 
 
-def _connector_row(provider_connector_id) -> dict:
+def _connector_row(provider_connector_id, *, status: str = "ACTIVE") -> dict:
     now = datetime(2026, 5, 13, 12, 0, tzinfo=UTC)
     return {
         "id": provider_connector_id,
@@ -145,7 +151,7 @@ def _connector_row(provider_connector_id) -> dict:
         "connector_type": "YAML_HTTP",
         "yaml_spec": {"channels": ["SMS"]},
         "yaml_checksum": "abc",
-        "status": "ACTIVE",
+        "status": status,
         "created_at": now,
         "updated_at": now,
     }
@@ -177,7 +183,6 @@ class ProviderConnectionRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase)
                 now=now,
                 tenant_id=tenant_id,
                 provider_connector_id=provider_connector_id,
-                connection_code="sms_main",
                 connection_name="Main SMS",
                 channel_code="SMS",
                 config={"client_id": "abc"},
@@ -214,7 +219,6 @@ class ProviderConnectionRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase)
             now=now,
             tenant_id=tenant_id,
             provider_connector_id=provider_connector_id,
-            connection_code="sms_main",
             connection_name="Main SMS",
             channel_code="SMS",
             config={"client_id": "abc"},
@@ -244,7 +248,10 @@ class ProviderConnectionRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase)
         result = await repository.list_connections(tenant_id=tenant_id)
 
         self.assertEqual(query.list_calls[0]["descriptor"], _CONNECTION)
-        self.assertEqual(query.list_calls[0]["sorting"][0].field, "connection_code")
+        self.assertEqual(query.list_calls[0]["filters"][0].field.name, "status")
+        self.assertEqual(query.list_calls[0]["filters"][0].op, "neq")
+        self.assertEqual(query.list_calls[0]["filters"][0].value, "ARCHIVED")
+        self.assertEqual(query.list_calls[0]["sorting"][0].field, "connection_name")
         self.assertEqual(result[0].tenant_id, tenant_id.uuid)
         self.assertTrue(result[0].has_secrets)
 
@@ -257,6 +264,9 @@ class ProviderConnectionRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase)
         query.list_rows = [
             _connection_row(provider_connector_id=provider_connector_id.uuid)
         ]
+        query.by_id_rows[(_CONNECTOR, provider_connector_id.uuid)] = _connector_row(
+            provider_connector_id.uuid
+        )
         repository = ProviderConnectionRuntimeRepository(
             runtime_object_resolver=_ResolverStub(),
             runtime_command_gateway=_CommandGatewayStub(_connection_row()),
@@ -279,6 +289,31 @@ class ProviderConnectionRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase)
         self.assertEqual(filters[2].value, "ACTIVE")
         self.assertEqual(query.list_calls[0]["page"].limit, 1)
 
+    async def test_find_active_returns_none_when_connector_is_not_active(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        provider_connector_id = ProviderConnectorIdVO.from_value(uuid4())
+        query = _QueryGatewayStub()
+        query.list_rows = [
+            _connection_row(provider_connector_id=provider_connector_id.uuid)
+        ]
+        query.by_id_rows[(_CONNECTOR, provider_connector_id.uuid)] = _connector_row(
+            provider_connector_id.uuid,
+            status="DISABLED",
+        )
+        repository = ProviderConnectionRuntimeRepository(
+            runtime_object_resolver=_ResolverStub(),
+            runtime_command_gateway=_CommandGatewayStub(_connection_row()),
+            runtime_query_gateway=query,
+        )
+
+        result = await repository.find_active(
+            tenant_id=tenant_id,
+            provider_connector_id=provider_connector_id,
+            channel_code="SMS",
+        )
+
+        self.assertIsNone(result)
+
     async def test_load_provider_connector_maps_connector_row(self) -> None:
         tenant_id = EntityIdVO.from_value(uuid4())
         provider_connector_id = ProviderConnectorIdVO.from_value(uuid4())
@@ -299,6 +334,52 @@ class ProviderConnectionRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase)
 
         self.assertEqual(result.provider_connector_id, provider_connector_id)
         self.assertEqual(result.yaml_spec, {"channels": ["SMS"]})
+
+    async def test_has_usage_checks_outbound_attempt_and_event_rows(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        provider_connection_id = ProviderConnectionIdVO.from_value(uuid4())
+        query = _QueryGatewayStub()
+        query.list_rows_by_descriptor[_ATTEMPT] = [
+            {"provider_connection_id": provider_connection_id.uuid}
+        ]
+        repository = ProviderConnectionRuntimeRepository(
+            runtime_object_resolver=_ResolverStub(),
+            runtime_command_gateway=_CommandGatewayStub(_connection_row()),
+            runtime_query_gateway=query,
+        )
+
+        result = await repository.has_usage(
+            tenant_id=tenant_id,
+            provider_connection_id=provider_connection_id,
+        )
+
+        self.assertTrue(result)
+        self.assertEqual(
+            [call["descriptor"] for call in query.list_calls],
+            [_OUTBOUND, _ATTEMPT],
+        )
+        self.assertEqual(
+            query.list_calls[1]["filters"][0].field.name,
+            "provider_connection_id",
+        )
+
+    async def test_delete_calls_runtime_gateway(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        provider_connection_id = ProviderConnectionIdVO.from_value(uuid4())
+        command = _CommandGatewayStub(_connection_row())
+        repository = ProviderConnectionRuntimeRepository(
+            runtime_object_resolver=_ResolverStub(),
+            runtime_command_gateway=command,
+            runtime_query_gateway=_QueryGatewayStub(),
+        )
+
+        await repository.delete(
+            tenant_id=tenant_id,
+            provider_connection_id=provider_connection_id,
+        )
+
+        self.assertEqual(_descriptor_name(command.deletes[0][0]), _CONNECTION)
+        self.assertEqual(command.deletes[0][1], provider_connection_id.uuid)
 
 
 __all__ = ["ProviderConnectionRuntimeRepositoryTests"]

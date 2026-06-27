@@ -8,7 +8,6 @@ class CreateProviderConnectionRequestSchema(BaseModel):
     """Pydantic-схема тела запроса создания provider connection."""
 
     provider_connector_id: UUID
-    connection_code: str
     connection_name: str
     channel_code: str
     config: dict[str, Any] = Field(default_factory=dict)

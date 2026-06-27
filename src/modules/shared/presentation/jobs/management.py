@@ -14,11 +14,11 @@ from src.modules.shared.application.jobs import (
     ScheduledJobHandlerPort,
     ScheduledJobRetryPolicy,
 )
-from src.modules.shared.application.uuid import UuidPort
+from src.modules.shared.application.uuid import UUIdGeneratorProtocol
 from src.modules.shared.domain.time import ClockPort
 from src.modules.shared.infrastructure.jobs import SqlAlchemyScheduledJobRepository
 from src.modules.shared.infrastructure.time import UtcClock
-from src.modules.shared.infrastructure.uuid import Uuid7Generator
+from src.modules.shared.infrastructure.uuid import UUID7Generator
 
 
 def build_scheduled_job_repository(
@@ -39,13 +39,13 @@ def build_schedule_scheduled_job_use_case(
     *,
     session: AsyncSession,
     clock: ClockPort | None = None,
-    uuid_generator: UuidPort | None = None,
+    uuid_generator: UUIdGeneratorProtocol | None = None,
 ) -> ScheduleScheduledJobUseCase:
     """Builds the scheduled job scheduling use case."""
     return ScheduleScheduledJobUseCase(
         repository=build_scheduled_job_repository(session),
         clock=clock or UtcClock(),
-        uuid_generator=uuid_generator or Uuid7Generator(),
+        uuid_generator=uuid_generator or UUID7Generator(),
     )
 
 
@@ -55,14 +55,14 @@ def build_process_due_scheduled_jobs_use_case(
     retry_base_seconds: int,
     dispatcher: ScheduledJobDispatcherPort | None = None,
     clock: ClockPort | None = None,
-    uuid_generator: UuidPort | None = None,
+    uuid_generator: UUIdGeneratorProtocol | None = None,
 ) -> ProcessDueScheduledJobsUseCase:
     """Builds the due scheduled jobs processing use case."""
     return ProcessDueScheduledJobsUseCase(
         repository=build_scheduled_job_repository(session),
         dispatcher=dispatcher or build_scheduled_job_dispatcher(),
         clock=clock or UtcClock(),
-        uuid_generator=uuid_generator or Uuid7Generator(),
+        uuid_generator=uuid_generator or UUID7Generator(),
         retry_policy=ScheduledJobRetryPolicy(retry_base_seconds),
     )
 

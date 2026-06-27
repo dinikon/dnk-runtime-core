@@ -9,13 +9,11 @@ class MessageTemplateResponseSchema(BaseModel):
 
     template_id: UUID
     tenant_id: UUID
-    template_code: str
     name: str
     description: str | None
     provider_connector_id: UUID
     provider_message_type_id: UUID
     channel_code: str
-    message_class: str
     status: str
     created_at: datetime
     updated_at: datetime

@@ -153,4 +153,4 @@ communication/
     └── http/
 ```
 
-Ключевая правка относительно текущего состояния: не держать все domain models в `domain/models.py` и один общий `CommunicationRepository`. Лучше разнести модели, errors, enums, repositories и services по aggregate, как это сделано в `inventory/product` и `inventory/category`.
+Ключевая правка относительно текущего состояния: не держать все domain models в `domain/models.py` и один общий `CommunicationRepository`. Лучше разнести модели, errors, enums, repositories и services по aggregate, как описано в `docs/develop-style.md`.

@@ -28,7 +28,7 @@ def build_provider_send_context(
         recipient_address=outbound.recipient_address,
         recipient_snapshot=request.recipient_snapshot,
         variables=request.variables,
-        connection_code=connection.connection_code,
+        connection_name=text_value(connection.connection_name),
         channel_code=connection.channel_code,
         provider_message_type_code=provider_message_type_code,
         config=connection.config,
@@ -74,8 +74,18 @@ def id_uuid(value: Any) -> UUID:
     raise TypeError("Communication id value must expose UUID.")
 
 
+def text_value(value: Any) -> str:
+    """Возвращает текст из строки или value object."""
+    if isinstance(value, str):
+        return value
+    if hasattr(value, "value"):
+        return str(value.value)
+    return str(value)
+
+
 __all__ = [
     "build_provider_send_context",
     "id_uuid",
     "resolve_send_spec",
+    "text_value",
 ]

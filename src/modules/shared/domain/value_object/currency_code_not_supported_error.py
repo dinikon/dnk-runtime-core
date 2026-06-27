@@ -1,4 +1,4 @@
-from src.modules.shared.domain.errors.domain_error import DomainError
+from src.modules.shared.domain.domain_error import DomainError
 
 
 class CurrencyCodeNotSupportedError(DomainError):

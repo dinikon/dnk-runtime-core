@@ -46,6 +46,24 @@ class ProviderConnectionRepositoryProtocol(Protocol):
         """Ищет active provider connection по connector и channel."""
         ...
 
+    async def has_usage(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        provider_connection_id: ProviderConnectionIdVO,
+    ) -> bool:
+        """Проверяет, есть ли outbound/delivery история по connection."""
+        ...
+
+    async def delete(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        provider_connection_id: ProviderConnectionIdVO,
+    ) -> None:
+        """Физически удаляет provider connection tenant."""
+        ...
+
 
 class ProviderConnectionProviderLookupProtocol(Protocol):
     """Порт чтения provider connector данных для правил подключения."""

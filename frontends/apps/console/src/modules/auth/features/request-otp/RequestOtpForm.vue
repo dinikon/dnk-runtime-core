@@ -1,29 +1,34 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 
-import { useSessionStore } from "@/app/stores/session";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import AuthErrorAlert from "@/modules/auth/components/AuthErrorAlert.vue";
 import AuthPageTitle from "@/modules/auth/components/AuthPageTitle.vue";
-import { useRequestOtpMutation } from "@/modules/auth/mutations/use-request-otp";
+
+const props = defineProps<{
+  authError: string | null;
+  isSubmitting: boolean;
+}>();
+
+const emit = defineEmits<{
+  request: [email: string];
+}>();
 
 const email = ref("");
-const sessionStore = useSessionStore();
-const requestOtpMutation = useRequestOtpMutation();
 
 const canRequestOtp = computed(
-  () => email.value.trim().length > 3 && !requestOtpMutation.isPending.value,
+  () => email.value.trim().length > 3 && !props.isSubmitting,
 );
 
-async function requestOtp() {
+function requestOtp() {
   if (!canRequestOtp.value) {
     return;
   }
 
-  await requestOtpMutation.mutateAsync({ email: email.value.trim() });
+  emit("request", email.value.trim());
 }
 </script>
 
@@ -38,27 +43,6 @@ async function requestOtp() {
     <CardContent>
       <form class="grid gap-4" @submit.prevent="requestOtp">
         <div class="grid gap-2">
-          <Button type="button" class="w-full" disabled>
-            <span
-              class="grid size-4 place-items-center rounded-[3px] bg-[#4285f4] text-[0.6rem] font-extrabold text-white"
-              aria-hidden="true"
-            >
-              G
-            </span>
-            Continue with Google
-          </Button>
-          <Button type="button" class="w-full" disabled>
-            <span
-              class="grid size-4 place-items-center rounded-[3px] bg-[#f25022] text-[0.6rem] font-extrabold text-white"
-              aria-hidden="true"
-            >
-              M
-            </span>
-            Continue with Microsoft
-          </Button>
-        </div>
-
-        <div class="grid gap-2">
           <Label for="auth-email">Email</Label>
           <Input
             id="auth-email"
@@ -72,10 +56,10 @@ async function requestOtp() {
         </div>
 
         <Button class="w-full" type="submit" :disabled="!canRequestOtp">
-          {{ requestOtpMutation.isPending.value ? "Sending..." : "Continue" }}
+          {{ isSubmitting ? "Sending..." : "Continue" }}
         </Button>
 
-        <AuthErrorAlert :message="sessionStore.authError" />
+        <AuthErrorAlert :message="authError" />
 
         <p
           class="px-1 text-center text-xs leading-relaxed text-muted-foreground"

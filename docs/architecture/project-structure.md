@@ -57,8 +57,9 @@ src/modules/
 ├── runtime_data/
 ├── custom_object/
 ├── crm/
-├── inventory/
+├── contact_point/
 ├── communication/
+├── workflow/
 ├── schema_registry/
 └── shared/
 ```

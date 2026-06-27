@@ -334,7 +334,8 @@ HTTP error mapping:
   - `test/test_crm_company_fields_controller.py`.
 - Integration / architecture / schema-related:
   - `test/test_architecture_boundaries.py`;
-  - `test/test_inventory_schema_seed.py` проверяет наличие CRM seed objects/relations вместе с inventory schema plan.
+  - `test/test_inventory_schema_seed.py` проверяет наличие CRM seed objects/relations и отсутствие удалённых runtime
+    models.
 
 Important uncovered or partially covered areas found during audit:
 
@@ -358,7 +359,6 @@ Important uncovered or partially covered areas found during audit:
 ## Related Documentation
 
 - [Develop Style](../develop-style.md)
-- [Inventory Module](./inventory.md)
 - [HTTP API](../interfaces/http-api.md)
 - [Runtime schema](../data/runtime-schema.md)
 - [Domain models](../data/domain-models.md)

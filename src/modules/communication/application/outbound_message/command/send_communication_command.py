@@ -28,7 +28,6 @@ class SendCommunicationCommand:
     recipient_snapshot: dict[str, Any]
     communication_request_id: CommunicationRequestIdVO | None = None
     outbound_message_id: OutboundMessageIdVO | None = None
-    message_class: str | None = None
     variables: dict[str, Any] = field(default_factory=dict)
     scheduled_at: datetime | None = None
     priority: int = 100

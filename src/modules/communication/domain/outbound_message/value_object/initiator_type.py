@@ -11,6 +11,7 @@ _ALLOWED_INITIATOR_TYPES = frozenset(
         "WORKFLOW",
         "CAMPAIGN",
         "API",
+        "CONSOLE_TEST",
     }
 )
 

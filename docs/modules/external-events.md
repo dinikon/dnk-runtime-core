@@ -38,7 +38,7 @@ external payload + source config -> normalized tenant event
 
 - campaign goals или metrics;
 - выполнением workflow graph;
-- broadcast recipient dispatch;
+- future bulk recipient dispatch;
 - communication provider delivery webhooks, которые принадлежат `communication`;
 - CRM record mutation policies;
 - provider-specific outbound send adapters.
@@ -86,7 +86,7 @@ external payload + source config -> normalized tenant event
 
 - `campaigns`;
 - `workflow`;
-- `broadcast`;
+- future bulk-send orchestration modules;
 - `communication` provider sender internals;
 - CRM/business modules, которые потребляют normalized events.
 

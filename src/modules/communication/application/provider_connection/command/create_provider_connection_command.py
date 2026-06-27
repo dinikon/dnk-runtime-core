@@ -15,7 +15,6 @@ class CreateProviderConnectionCommand:
     tenant_id: EntityIdVO
     provider_connection_id: ProviderConnectionIdVO
     provider_connector_id: ProviderConnectorIdVO
-    connection_code: str
     connection_name: str
     channel_code: str
     config: dict[str, Any] = field(default_factory=dict)

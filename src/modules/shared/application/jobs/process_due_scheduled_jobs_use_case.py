@@ -17,7 +17,7 @@ from src.modules.shared.application.jobs.scheduled_job_repository_protocol impor
 from src.modules.shared.application.jobs.scheduled_job_retry_policy import (
     ScheduledJobRetryPolicy,
 )
-from src.modules.shared.application.uuid import UuidPort
+from src.modules.shared.application.uuid import UUIdGeneratorProtocol
 from src.modules.shared.domain.time import ClockPort
 
 
@@ -30,7 +30,7 @@ class ProcessDueScheduledJobsUseCase:
         repository: ScheduledJobRepositoryProtocol,
         dispatcher: ScheduledJobDispatcherPort,
         clock: ClockPort,
-        uuid_generator: UuidPort,
+        uuid_generator: UUIdGeneratorProtocol,
         retry_policy: ScheduledJobRetryPolicy,
     ) -> None:
         self._repository = repository
@@ -44,7 +44,7 @@ class ProcessDueScheduledJobsUseCase:
         command: ProcessDueScheduledJobsCommand,
     ) -> ProcessDueScheduledJobsResultDTO:
         now = self._clock.now()
-        lock_token = str(self._uuid_generator.new_uuid())
+        lock_token = str(self._uuid_generator.new())
         locked_until = now + timedelta(seconds=command.lock_ttl_seconds)
         jobs = await self._repository.claim_due_jobs(
             limit=command.limit,

@@ -7,7 +7,7 @@ from src.modules.schema_registry.domain.error import (
     DataSourceAlreadyExistsError,
     PhysicalSchemaAlreadyExistsError,
 )
-from src.modules.shared.domain.errors import DomainError as DomainDomainError
+from src.modules.shared import DomainError as DomainDomainError
 from src.modules.tenancy.application.tenant.command import CreateTenantCommand
 from src.modules.tenancy.domain.tenant import (
     TenantExternalIdAlreadyExistsError,
@@ -29,11 +29,11 @@ from src.modules.tenancy.presentation.http.admin_tenant.responses import (
     AdminCreateTenantResponseSchema,
 )
 
-router = APIRouter(tags=["admin-tenants"])
+router = APIRouter()
 
 
 @router.post(
-    "/admin/create-tenant",
+    "/create-tenant",
     response_model=AdminCreateTenantResponseSchema,
 )
 async def create_tenant(

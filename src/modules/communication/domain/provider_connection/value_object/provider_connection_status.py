@@ -6,3 +6,4 @@ class ProviderConnectionStatusVO(StrEnum):
 
     ACTIVE = "ACTIVE"
     DISABLED = "DISABLED"
+    ARCHIVED = "ARCHIVED"

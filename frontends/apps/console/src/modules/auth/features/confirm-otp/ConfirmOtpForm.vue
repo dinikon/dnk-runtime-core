@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { Mail } from "lucide-vue-next";
+import { REGEXP_ONLY_DIGITS } from "vue-input-otp";
 
-import { useSessionStore } from "@/app/stores/session";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,52 +11,57 @@ import {
   CardDescription,
   CardHeader,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
 import { Label } from "@/components/ui/label";
 import AuthErrorAlert from "@/modules/auth/components/AuthErrorAlert.vue";
 import AuthPageTitle from "@/modules/auth/components/AuthPageTitle.vue";
-import { useConfirmOtpMutation } from "@/modules/auth/mutations/use-confirm-otp";
-import { useRequestOtpMutation } from "@/modules/auth/mutations/use-request-otp";
+import type { EmailChallenge } from "@/modules/auth/model/auth.types";
 
-const emit = defineEmits<{
-  confirmed: [];
+const props = defineProps<{
+  authError: string | null;
+  emailChallenge: EmailChallenge;
+  isConfirming: boolean;
+  isResending: boolean;
 }>();
 
+const emit = defineEmits<{
+  changeEmail: [];
+  confirm: [code: string];
+  resend: [];
+}>();
+
+const OTP_CODE_LENGTH = 6;
+
 const code = ref("");
-const sessionStore = useSessionStore();
-const confirmOtpMutation = useConfirmOtpMutation();
-const requestOtpMutation = useRequestOtpMutation();
 
 const canConfirmOtp = computed(
-  () => code.value.length === 6 && !confirmOtpMutation.isPending.value,
+  () => code.value.length === OTP_CODE_LENGTH && !props.isConfirming,
 );
 
-async function confirmOtp() {
+function confirmOtp() {
   if (!canConfirmOtp.value) {
     return;
   }
 
-  await confirmOtpMutation.mutateAsync({ code: code.value });
-  emit("confirmed");
+  emit("confirm", code.value);
 }
 
-async function resendOtp() {
-  const email = sessionStore.emailChallenge?.email;
-  if (!email || requestOtpMutation.isPending.value) {
+function resendOtp() {
+  if (props.isResending) {
     return;
   }
 
-  await requestOtpMutation.mutateAsync({ email });
+  emit("resend");
   code.value = "";
 }
 
 function changeEmail() {
-  sessionStore.clearEmailChallenge();
+  emit("changeEmail");
   code.value = "";
-}
-
-function updateCode(value: string | number) {
-  code.value = String(value).replace(/\D/g, "").slice(0, 6);
 }
 
 function openMail(provider: "gmail" | "outlook") {
@@ -83,7 +88,7 @@ function openMail(provider: "gmail" | "outlook") {
         <CardDescription>
           A verification email has been sent to:
           <strong class="block text-foreground">{{
-            sessionStore.emailChallenge?.email
+            emailChallenge.email
           }}</strong>
         </CardDescription>
       </AuthPageTitle>
@@ -123,28 +128,37 @@ function openMail(provider: "gmail" | "outlook") {
 
         <div class="grid gap-2">
           <Label for="auth-code">Verification code</Label>
-          <Input
+          <InputOTP
             id="auth-code"
-            :model-value="code"
-            class="text-center tracking-[0.35em]"
+            v-model="code"
+            :maxlength="OTP_CODE_LENGTH"
+            :pattern="REGEXP_ONLY_DIGITS"
+            class="justify-center"
             inputmode="numeric"
             autocomplete="one-time-code"
-            maxlength="6"
-            @update:model-value="updateCode"
-          />
+          >
+            <InputOTPGroup class="gap-2">
+              <InputOTPSlot
+                v-for="index in OTP_CODE_LENGTH"
+                :key="index"
+                :index="index - 1"
+                class="rounded-md border-l"
+              />
+            </InputOTPGroup>
+          </InputOTP>
         </div>
 
-        <Alert v-if="sessionStore.emailChallenge?.devCode">
+        <Alert v-if="emailChallenge.devCode">
           <AlertDescription>
-            Development code: {{ sessionStore.emailChallenge.devCode }}
+            Development code: {{ emailChallenge.devCode }}
           </AlertDescription>
         </Alert>
 
         <Button class="w-full" type="submit" :disabled="!canConfirmOtp">
-          {{ confirmOtpMutation.isPending.value ? "Checking..." : "Continue" }}
+          {{ isConfirming ? "Checking..." : "Continue" }}
         </Button>
 
-        <AuthErrorAlert :message="sessionStore.authError" />
+        <AuthErrorAlert :message="authError" />
 
         <div class="flex justify-center gap-3">
           <Button
@@ -152,7 +166,7 @@ function openMail(provider: "gmail" | "outlook") {
             size="sm"
             type="button"
             class="h-auto px-0 text-muted-foreground"
-            :disabled="requestOtpMutation.isPending.value"
+            :disabled="isResending"
             @click="resendOtp"
           >
             Resend email

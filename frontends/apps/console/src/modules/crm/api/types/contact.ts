@@ -1,4 +1,5 @@
 export interface Contact {
+  [key: string]: unknown;
   id: string;
   created_at: string;
   updated_at: string;

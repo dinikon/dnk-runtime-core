@@ -15,8 +15,6 @@ from src.modules.communication.domain.error import (
 )
 from src.modules.communication.domain.message_template import (
     ChannelCodeVO,
-    MessageClassVO,
-    MessageTemplateCodeVO,
     MessageTemplateEntity,
     MessageTemplateIdVO,
     MessageTemplateNameVO,
@@ -39,7 +37,6 @@ from src.modules.communication.domain.outbound_message import (
     RequestStatus,
 )
 from src.modules.communication.domain.provider_connection import (
-    ProviderConnectionCodeVO,
     ProviderConnectionEntity,
     ProviderConnectionIdVO,
     ProviderConnectionNameVO,
@@ -75,8 +72,6 @@ __all__ = [
     "DeliveryEvent",
     "DeliveryEventIdVO",
     "DeliveryEventType",
-    "MessageClassVO",
-    "MessageTemplateCodeVO",
     "MessageTemplateEntity",
     "MessageTemplateIdVO",
     "MessageTemplateNameVO",
@@ -85,7 +80,6 @@ __all__ = [
     "OutboundMessageIdVO",
     "OutboundMessageNotFoundError",
     "OutboundMessageStatus",
-    "ProviderConnectionCodeVO",
     "ProviderConnectionEntity",
     "ProviderConnectionIdVO",
     "ProviderConnectionNameVO",

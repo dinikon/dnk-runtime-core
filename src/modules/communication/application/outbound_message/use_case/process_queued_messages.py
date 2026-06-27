@@ -86,6 +86,8 @@ class ProcessOutboundMessageUseCase:
         attempt = None
 
         try:
+            connection.ensure_active()
+            connector.ensure_active()
             rendered_payload = self._template_renderer.render(
                 version.template_payload,
                 request.variables,

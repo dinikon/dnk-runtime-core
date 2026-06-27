@@ -39,7 +39,6 @@ def communication_request_entity(
         initiator_ref_id=as_str(row.get("initiator_ref_id")),
         correlation_id=as_entity_id(row.get("correlation_id")),
         idempotency_key=as_str(row.get("idempotency_key")),
-        message_class=as_str(row.get("message_class")),
         channel_code=as_str(row.get("channel_code")),
         template_id=MessageTemplateIdVO.from_value(as_uuid(row.get("template_id"))),
         template_version_id=TemplateVersionIdVO.from_value(
@@ -73,7 +72,6 @@ def outbound_message_entity(
             as_uuid(row.get("provider_connection_id"))
         ),
         channel_code=as_str(row.get("channel_code")),
-        message_class=as_str(row.get("message_class")),
         priority=int(row.get("priority")),
         recipient_identifier_type=as_str(row.get("recipient_identifier_type")),
         recipient_address=as_str(row.get("recipient_address")),

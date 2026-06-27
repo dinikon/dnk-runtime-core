@@ -34,6 +34,7 @@ from src.modules.communication.application.delivery import (
     ListDeliveryEventsQuery,
     ListDeliveryEventsUseCase,
 )
+from src.modules.communication.domain.error import CommunicationValidationError
 from src.modules.communication.domain.delivery import (
     DeliveryEventIdVO,
     DeliveryService,
@@ -168,13 +169,14 @@ class _ProcessRepositoryStub:
         )
         self.connection = SimpleNamespace(
             provider_connection_id=self.outbound.provider_connection_id,
-            connection_code="gms_viber",
+            connection_name="GMS Viber",
             channel_code="VIBER",
             config={"client_id": "abc"},
             secrets_b64=self.secret_codec.encode(
                 {"username": "user", "password": "secret"}
             ),
         )
+        self.connection.ensure_active = lambda: None
         self.connector = SimpleNamespace(
             yaml_spec={
                 "auth": {
@@ -209,6 +211,7 @@ class _ProcessRepositoryStub:
                 },
             }
         )
+        self.connector.ensure_active = lambda: None
         self.attempt = SimpleNamespace(
             delivery_attempt_id=uuid4(),
             attempt_no=1,
@@ -346,7 +349,7 @@ class _SmtpProcessRepositoryStub(_ProcessRepositoryStub):
             "html_body": "<p>Hello {{ name }}</p>",
         }
         self.message_type.message_type_code = "email_html"
-        self.connection.connection_code = "dnk_smtp"
+        self.connection.connection_name = "DNK SMTP"
         self.connection.channel_code = "EMAIL"
         self.connection.config = {
             "smtp_host": "smtp.example.com",
@@ -413,7 +416,7 @@ class _TurboSmsProcessRepositoryStub(_ProcessRepositoryStub):
     def __init__(self) -> None:
         super().__init__()
         self.message_type.message_type_code = "sms_text"
-        self.connection.connection_code = "turbosms_sms"
+        self.connection.connection_name = "TurboSMS SMS"
         self.connection.channel_code = "SMS"
         self.connection.config = {"sender": "TurboSMS"}
         self.connection.secrets_b64 = self.secret_codec.encode(
@@ -476,7 +479,6 @@ class _SendRepositoryStub:
         self.template = SimpleNamespace(
             template_id=MessageTemplateIdVO.from_value(uuid4()),
             channel_code=SimpleNamespace(value=channel_code),
-            message_class=SimpleNamespace(value="TRANSACTIONAL"),
             provider_connector_id=ProviderConnectorIdVO.from_value(uuid4()),
         )
         self.version = SimpleNamespace(
@@ -498,9 +500,6 @@ class _SendRepositoryStub:
 
     async def get_template(self, **_kwargs):
         self.template_calls += 1
-        return self.template
-
-    async def get_template_by_code(self, **_kwargs):
         return self.template
 
     async def get_active_template_version(self, *_args, **_kwargs):
@@ -654,6 +653,43 @@ class CommunicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(http_client.requests[0]["basic_auth"], ("user", "secret"))
         self.assertEqual(http_client.requests[0]["json_body"]["ttl"], 60)
+
+    async def test_process_queued_message_fails_when_connection_disabled(self) -> None:
+        repository = _ProcessRepositoryStub()
+
+        def _raise_disabled() -> None:
+            raise CommunicationValidationError("Provider connection is not active.")
+
+        repository.connection.ensure_active = _raise_disabled
+        http_client = _HttpClientStub()
+        use_case = ProcessOutboundMessageUseCase(
+            repository=repository,
+            sender_registry=ProviderSenderRegistry(
+                [
+                    YamlHttpProviderSender(
+                        http_client=http_client,
+                        payload_builder=ProviderPayloadBuildService(),
+                        status_mapper=ProviderStatusMappingService(),
+                        json_path=JsonPathService(),
+                        secret_codec=SecretCodec(),
+                    )
+                ]
+            ),
+            template_renderer=TemplateRenderService(),
+            clock=_ClockStub(),
+        )
+
+        result = await use_case(
+            ProcessQueuedMessagesCommand(tenant_id=uuid4(), limit=10)
+        )
+
+        self.assertEqual(result.processed, 1)
+        self.assertEqual(result.succeeded, 0)
+        self.assertEqual(result.failed, 1)
+        self.assertEqual(repository.outbound.internal_status, "FAILED")
+        self.assertEqual(repository.outbound.error_code, "CommunicationValidationError")
+        self.assertEqual(http_client.requests, [])
+        self.assertIsNone(repository.attempt.request_payload)
 
     async def test_process_queued_http_bearer_auth_uses_secret_without_persisting_it(
         self,

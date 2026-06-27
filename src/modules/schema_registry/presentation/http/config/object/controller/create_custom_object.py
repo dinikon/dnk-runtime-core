@@ -31,7 +31,7 @@ from src.modules.shared import EntityIdVO
 from src.modules.shared.presentation.identity_context.depends import (
     AuthenticatedRequestContextDep,
 )
-from src.modules.shared.domain.errors import DomainError
+from src.modules.shared import DomainError
 
 router = APIRouter(prefix="/config/objects", tags=["config"])
 

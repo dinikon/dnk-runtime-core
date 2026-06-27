@@ -6,13 +6,6 @@ from src.modules.communication.domain.error import (
 )
 
 
-class InvalidMessageTemplateCodeError(CommunicationValidationError):
-    """Raised when message template code is invalid."""
-
-    def __init__(self) -> None:
-        super().__init__("Message template code cannot be empty.")
-
-
 class InvalidMessageTemplateNameError(CommunicationValidationError):
     """Raised when message template name is invalid."""
 
@@ -42,7 +35,6 @@ class TemplateVersionNotFoundError(CommunicationNotFoundError):
 
 
 __all__ = [
-    "InvalidMessageTemplateCodeError",
     "InvalidMessageTemplateNameError",
     "InvalidTemplateVersionTimestampError",
     "MessageTemplateNotFoundError",

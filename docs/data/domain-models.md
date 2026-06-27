@@ -4,7 +4,7 @@ This page maps the main business entities that currently appear in the service.
 
 Identifier convention: `EntityIdVO` is the single shared UUID primitive and the base class for concrete ids. Tenant
 scope uses `EntityIdVO` directly; concrete entities expose concrete subclasses such as `UserIdVO`, `ContactIdVO`,
-`ProductIdVO`, `CategoryIdVO`, `DataSourceIdVO`, `RuntimeObjectIdVO` and `RuntimeFieldIdVO`.
+`CompanyIdVO`, `DataSourceIdVO`, `RuntimeObjectIdVO` and `RuntimeFieldIdVO`.
 
 ## Tenancy
 
@@ -84,30 +84,6 @@ scope uses `EntityIdVO` directly; concrete entities expose concrete subclasses s
     - timestamps
     - `legal_name`
 
-## Inventory
-
-### `ProductEntity`
-
-- Module owner: `inventory`
-- Business meaning: tenant-scoped physical good that can be sold
-- Key fields:
-    - `id` as `ProductIdVO`
-    - timestamps
-    - `sku`
-    - `product_name`
-    - `description`
-    - `category_id` as `CategoryIdVO`
-
-### `CategoryEntity`
-
-- Module owner: `inventory`
-- Business meaning: product category node in a tenant category tree
-- Key fields:
-    - `id` as `CategoryIdVO`
-    - timestamps
-    - `name`
-    - `parent_category_id` as `CategoryIdVO`
-
 ## Communication
 
 ### `ProviderConnector`
@@ -118,7 +94,7 @@ scope uses `EntityIdVO` directly; concrete entities expose concrete subclasses s
     - `provider_connector_id` as `ProviderConnectorIdVO`
     - provider code/name/version/type
     - YAML spec/checksum
-    - status and timestamps
+  - status (`ACTIVE`, `DISABLED`, `ARCHIVED`) and timestamps
 
 ### `ProviderConnection`
 
@@ -129,7 +105,7 @@ scope uses `EntityIdVO` directly; concrete entities expose concrete subclasses s
     - `tenant_id` as `EntityIdVO`
     - `provider_connector_id` as `ProviderConnectorIdVO`
     - connection code/name/channel
-    - config, secret ref, encoded secrets and status
+  - config, secret ref, encoded secrets and status (`ACTIVE`, `DISABLED`, `ARCHIVED`)
 
 ### `MessageTemplate` And `TemplateVersion`
 
@@ -233,7 +209,6 @@ Each custom object has system fields `id`, `created_at` and `updated_at`.
 - [Tenancy module](../modules/tenancy.md)
 - [Identity module](../modules/identity.md)
 - [CRM module](../modules/crm.md)
-- [Inventory module](../modules/inventory.md)
 - [Communication module](../modules/communication.md)
 - [Schema Registry module](../modules/schema-registry.md)
 
@@ -245,8 +220,6 @@ Each custom object has system fields `id`, `created_at` and `updated_at`.
 - `src/modules/identity/domain/auth/error.py`
 - `src/modules/crm/domain/contact/entity.py`
 - `src/modules/crm/domain/company/entity.py`
-- `src/modules/inventory/domain/product/entity.py`
-- `src/modules/inventory/domain/category/entity.py`
 - `src/modules/communication/domain/models.py`
 - `src/modules/schema_registry/domain/datasource/entity.py`
 - `src/modules/schema_registry/domain/object/entity.py`

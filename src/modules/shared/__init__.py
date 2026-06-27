@@ -1,9 +1,9 @@
-from src.modules.shared.application.uuid import UuidPort
+from src.modules.shared.application.uuid import UUIdGeneratorProtocol
 from src.modules.shared.domain import (
     CurrencyCodeVO,
     DomainError,
-    EntityIdTypeError,
     EntityIdVO,
+    EntityIdTypeError,
 )
 from src.modules.shared.domain.events import IntegrationEvent
 from src.modules.shared.domain.identity_context import Principal, RequestContext
@@ -20,5 +20,5 @@ __all__ = [
     "Principal",
     "RequestContext",
     "ScheduledJob",
-    "UuidPort",
+    "UUIdGeneratorProtocol",
 ]

@@ -11,7 +11,7 @@ from src.modules.contact_point.presentation.http.controllers import (
     list_owner_contact_points_router,
 )
 
-router = APIRouter()
+router = APIRouter(prefix="/contact-points", tags=["contact-points"])
 router.include_router(attach_contact_point_router)
 router.include_router(detach_contact_point_router)
 router.include_router(list_contact_points_router)

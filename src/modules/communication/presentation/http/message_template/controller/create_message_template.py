@@ -36,7 +36,7 @@ from src.modules.schema_registry.domain.error import (
 )
 from src.modules.shared import EntityIdVO
 from src.modules.shared.presentation import AuthenticatedRequestContextDep
-from src.modules.shared.domain.errors import DomainError
+from src.modules.shared import DomainError
 
 router = APIRouter(prefix="/communication/templates", tags=["communication"])
 
@@ -64,7 +64,6 @@ async def create_message_template(
             CreateMessageTemplateCommand(
                 tenant_id=tenant_id,
                 template_id=MessageTemplateIdVO.from_value(uuid6.uuid7()),
-                template_code=payload.template_code,
                 name=payload.name,
                 description=payload.description,
                 provider_connector_id=ProviderConnectorIdVO.from_value(
@@ -74,7 +73,6 @@ async def create_message_template(
                     payload.provider_message_type_id
                 ),
                 channel_code=payload.channel_code,
-                message_class=payload.message_class,
             )
         )
     except CommunicationNotFoundError as exc:
@@ -105,13 +103,11 @@ async def create_message_template(
     return MessageTemplateResponseSchema(
         template_id=result.template_id,
         tenant_id=result.tenant_id,
-        template_code=result.template_code,
         name=result.name,
         description=result.description,
         provider_connector_id=result.provider_connector_id,
         provider_message_type_id=result.provider_message_type_id,
         channel_code=result.channel_code,
-        message_class=result.message_class,
         status=result.status,
         created_at=result.created_at,
         updated_at=result.updated_at,

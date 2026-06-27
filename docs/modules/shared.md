@@ -36,7 +36,7 @@ as `events`, `jobs`, `persistence`, `identity_context`, `email`, `tokens`, `time
 
 - `EntityIdVO`
     - UUID value object used directly for tenant scope and as the base class for concrete identifiers such as
-      `UserIdVO`, `ContactIdVO`, `ProductIdVO`, `RuntimeObjectIdVO` and `RuntimeFieldIdVO`
+      `UserIdVO`, `ContactIdVO`, `CompanyIdVO`, `RuntimeObjectIdVO` and `RuntimeFieldIdVO`
 - `RequestContext`
     - current request principal + request metadata
 - `Principal`
@@ -60,7 +60,7 @@ as `events`, `jobs`, `persistence`, `identity_context`, `email`, `tokens`, `time
 - `ScheduledJob`
     - shared scheduled work contract persisted through PostgreSQL and processed by at-least-once workers
 - `ScheduledJobHandlerPort`
-    - handler contract implemented by future workflow, broadcast or polling modules
+    - handler contract implemented by future workflow, bulk-send or polling modules
 
 ## Event Bus, Outbox And Inbox
 
@@ -99,7 +99,7 @@ Shared scheduled jobs provide at-least-once execution for deferred, timer and po
 - `dnk-manage jobs recover-stuck` returns expired `running` jobs to `scheduled` or marks exhausted jobs `failed`
 - `cancel` moves only non-terminal jobs to `canceled`
 
-No concrete workflow, campaign, broadcast or external polling handlers live in this foundation. Business modules should
+No concrete workflow, campaign, bulk-send or external polling handlers live in this foundation. Business modules should
 depend on the application ports and presentation wiring, not on `shared.infrastructure.jobs`.
 
 ## Why It Matters

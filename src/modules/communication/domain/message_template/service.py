@@ -15,7 +15,6 @@ from src.modules.communication.domain.message_template.repository import (
     MessageTemplateProviderLookupProtocol,
 )
 from src.modules.communication.domain.message_template.value_object import (
-    MessageTemplateCodeVO,
     MessageTemplateIdVO,
     TemplateVersionIdVO,
 )
@@ -69,13 +68,11 @@ class MessageTemplateService:
         *,
         tenant_id: EntityIdVO,
         template_id: MessageTemplateIdVO,
-        template_code: str,
         name: str,
         description: str | None,
         provider_connector_id: ProviderConnectorIdVO,
         provider_message_type_id: ProviderMessageTypeIdVO,
         channel_code: str,
-        message_class: str,
     ) -> MessageTemplateEntity:
         """Создает provider-bound шаблон сообщения и сохраняет его."""
         connector = await self._provider_lookup.load_provider_connector(
@@ -84,6 +81,7 @@ class MessageTemplateService:
         )
         if connector is None:
             raise ProviderConnectorNotFoundError()
+        connector.ensure_active()
 
         message_type = await self._provider_lookup.load_provider_message_type(
             tenant_id=tenant_id,
@@ -96,13 +94,11 @@ class MessageTemplateService:
         template = MessageTemplateEntity.create(
             template_id=template_id,
             tenant_id=tenant_id,
-            template_code=template_code,
             name=name,
             description=description,
             provider_connector_id=provider_connector_id,
             provider_message_type_id=provider_message_type_id,
             channel_code=channel_code,
-            message_class=message_class,
             now=now,
         )
         template.ensure_message_type_binding(message_type)
@@ -217,18 +213,6 @@ class MessageTemplateService:
         if template is None:
             raise MessageTemplateNotFoundError()
         return template
-
-    async def load_template_by_code(
-        self,
-        *,
-        tenant_id: EntityIdVO,
-        template_code: MessageTemplateCodeVO,
-    ) -> MessageTemplateEntity | None:
-        """Загружает шаблон tenant по коду, если он существует."""
-        return await self._command_repository.load_template_by_code(
-            tenant_id=tenant_id,
-            template_code=template_code,
-        )
 
 
 __all__ = [

@@ -21,6 +21,25 @@ from src.modules.shared import EntityIdVO
 class ProviderConnectorRepositoryProtocol(Protocol):
     """Порт командного хранения provider connector aggregate."""
 
+    async def load_connector(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        provider_connector_id: ProviderConnectorIdVO,
+    ) -> ProviderConnector | None:
+        """Загружает provider connector tenant по id или возвращает None."""
+        ...
+
+    async def load_connector_by_code_version(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        provider_code: ProviderConnectorCodeVO,
+        version: ProviderConnectorVersionVO,
+    ) -> ProviderConnector | None:
+        """Загружает provider connector tenant по provider code/version."""
+        ...
+
     async def upsert_connector(
         self,
         *,
@@ -50,6 +69,24 @@ class ProviderConnectorRepositoryProtocol(Protocol):
         is_active: bool,
     ) -> ProviderMessageType:
         """Создает или обновляет provider message type tenant."""
+        ...
+
+    async def has_usage(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        provider_connector_id: ProviderConnectorIdVO,
+    ) -> bool:
+        """Проверяет, используются ли connector connections/templates."""
+        ...
+
+    async def delete_connector(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        provider_connector_id: ProviderConnectorIdVO,
+    ) -> None:
+        """Физически удаляет provider connector tenant."""
         ...
 
 

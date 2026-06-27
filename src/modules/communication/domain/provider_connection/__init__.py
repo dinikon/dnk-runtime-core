@@ -5,9 +5,11 @@ from src.modules.communication.domain.provider_connection.enum import (
     ProviderConnectionStatus,
 )
 from src.modules.communication.domain.provider_connection.error import (
-    InvalidProviderConnectionCodeError,
     InvalidProviderConnectionNameError,
+    ProviderConnectionDeleteForbiddenError,
+    ProviderConnectionInactiveError,
     ProviderConnectionNotFoundError,
+    ProviderConnectionStatusTransitionError,
     ProviderSecretsValidationError,
 )
 from src.modules.communication.domain.provider_connection.repository import (
@@ -19,16 +21,15 @@ from src.modules.communication.domain.provider_connection.service import (
     ProviderConnectionService,
 )
 from src.modules.communication.domain.provider_connection.value_object import (
-    ProviderConnectionCodeVO,
     ProviderConnectionIdVO,
     ProviderConnectionNameVO,
     ProviderConnectionStatusVO,
 )
 
 __all__ = [
-    "InvalidProviderConnectionCodeError",
     "InvalidProviderConnectionNameError",
-    "ProviderConnectionCodeVO",
+    "ProviderConnectionDeleteForbiddenError",
+    "ProviderConnectionInactiveError",
     "ProviderConnectionEntity",
     "ProviderConnectionIdVO",
     "ProviderConnectionNameVO",
@@ -38,6 +39,7 @@ __all__ = [
     "ProviderConnectionSchemaValidatorProtocol",
     "ProviderConnectionService",
     "ProviderConnectionStatus",
+    "ProviderConnectionStatusTransitionError",
     "ProviderConnectionStatusVO",
     "ProviderSecretsValidationError",
 ]

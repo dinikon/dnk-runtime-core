@@ -25,7 +25,7 @@ from src.modules.schema_registry.domain.error import (
 )
 from src.modules.shared import EntityIdVO
 from src.modules.shared.presentation import AuthenticatedRequestContextDep
-from src.modules.shared.domain.errors import DomainError
+from src.modules.shared import DomainError
 
 router = APIRouter(prefix="/communication/templates", tags=["communication"])
 
@@ -75,13 +75,11 @@ async def list_message_templates(
             MessageTemplateResponseSchema(
                 template_id=item.template_id,
                 tenant_id=item.tenant_id,
-                template_code=item.template_code,
                 name=item.name,
                 description=item.description,
                 provider_connector_id=item.provider_connector_id,
                 provider_message_type_id=item.provider_message_type_id,
                 channel_code=item.channel_code,
-                message_class=item.message_class,
                 status=item.status,
                 created_at=item.created_at,
                 updated_at=item.updated_at,

@@ -6,6 +6,7 @@ from typing import Any
 from uuid import uuid4
 
 from src.modules.communication.domain.provider_connector import (
+    ConnectorStatus,
     InvalidProviderChannelCodeError,
     InvalidProviderConnectorCodeError,
     InvalidProviderConnectorNameError,
@@ -15,10 +16,14 @@ from src.modules.communication.domain.provider_connector import (
     InvalidProviderMessageTypeNameError,
     ProviderChannelCodeVO,
     ProviderConnector,
+    ProviderConnectorArchivedError,
     ProviderConnectorCodeVO,
+    ProviderConnectorDeleteForbiddenError,
     ProviderConnectorIdVO,
+    ProviderConnectorInactiveError,
     ProviderConnectorNameVO,
     ProviderConnectorService,
+    ProviderConnectorStatusTransitionError,
     ProviderConnectorVersionVO,
     ProviderMessageType,
     ProviderMessageTypeCodeVO,
@@ -34,13 +39,28 @@ class _ClockStub:
 
 
 class _ProviderConnectorRepositoryStub:
-    def __init__(self) -> None:
+
+    def __init__(
+        self,
+        *,
+        loaded: ProviderConnector | None = None,
+        has_usage: bool = False,
+    ) -> None:
+        self.loaded = loaded
+        self.has_usage_result = has_usage
         self.connector_calls: list[dict[str, Any]] = []
         self.message_type_calls: list[dict[str, Any]] = []
+        self.deleted: list[ProviderConnectorIdVO] = []
+
+    async def load_connector(self, **_kwargs):
+        return self.loaded
+
+    async def load_connector_by_code_version(self, **_kwargs):
+        return self.loaded
 
     async def upsert_connector(self, **kwargs):
         self.connector_calls.append(kwargs)
-        return ProviderConnector.create(
+        connector = ProviderConnector.create(
             provider_connector_id=kwargs["provider_connector_id"],
             provider_code=kwargs["provider_code"].value,
             provider_name=kwargs["provider_name"].value,
@@ -51,6 +71,8 @@ class _ProviderConnectorRepositoryStub:
             status=kwargs["status"],
             now=datetime(2026, 5, 13, 12, 0, tzinfo=UTC),
         )
+        self.loaded = connector
+        return connector
 
     async def upsert_message_type(self, **kwargs):
         self.message_type_calls.append(kwargs)
@@ -64,6 +86,12 @@ class _ProviderConnectorRepositoryStub:
             ui_schema=kwargs["ui_schema"],
             is_active=kwargs["is_active"],
         )
+
+    async def has_usage(self, *, tenant_id, provider_connector_id):
+        return self.has_usage_result
+
+    async def delete_connector(self, *, tenant_id, provider_connector_id):
+        self.deleted.append(provider_connector_id)
 
 
 class ProviderConnectorDomainTests(unittest.IsolatedAsyncioTestCase):
@@ -100,6 +128,40 @@ class ProviderConnectorDomainTests(unittest.IsolatedAsyncioTestCase):
                 yaml_checksum="abc",
                 now=datetime(2026, 5, 13, 12, 0, tzinfo=UTC),
             )
+
+    def test_entity_status_lifecycle_and_archive_are_guarded(self) -> None:
+        created_at = datetime(2026, 5, 13, 12, 0, tzinfo=UTC)
+        updated_at = datetime(2026, 5, 13, 12, 5, tzinfo=UTC)
+        connector = ProviderConnector.create(
+            provider_connector_id=ProviderConnectorIdVO.from_value(uuid4()),
+            provider_code="gms",
+            provider_name="GMS",
+            version="1.0.0",
+            connector_type="YAML_HTTP",
+            yaml_spec={},
+            yaml_checksum="abc",
+            now=created_at,
+        )
+
+        connector.change_status(status=ConnectorStatus.DISABLED, now=updated_at)
+        self.assertEqual(connector.status, ConnectorStatus.DISABLED.value)
+        self.assertEqual(connector.updated_at, updated_at)
+
+        same_status_updated_at = connector.updated_at
+        connector.change_status(status=ConnectorStatus.DISABLED, now=created_at)
+        self.assertEqual(connector.updated_at, same_status_updated_at)
+
+        connector.change_status(status=ConnectorStatus.ACTIVE, now=created_at)
+        with self.assertRaises(ProviderConnectorDeleteForbiddenError):
+            connector.ensure_deletable()
+
+        connector.change_status(status=ConnectorStatus.DISABLED, now=updated_at)
+        connector.archive(now=created_at)
+        self.assertEqual(connector.status, ConnectorStatus.ARCHIVED.value)
+        with self.assertRaises(ProviderConnectorStatusTransitionError):
+            connector.change_status(status=ConnectorStatus.ACTIVE, now=updated_at)
+        with self.assertRaises(ProviderConnectorInactiveError):
+            connector.ensure_active()
 
     async def test_service_registers_connector_and_message_types(self) -> None:
         tenant_id = EntityIdVO.from_value(uuid4())
@@ -143,6 +205,121 @@ class ProviderConnectorDomainTests(unittest.IsolatedAsyncioTestCase):
             "sms_text",
         )
         self.assertEqual(repository.message_type_calls[0]["channel_code"].value, "SMS")
+
+    async def test_service_register_preserves_disabled_and_rejects_archived(
+        self,
+    ) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        provider_connector_id = ProviderConnectorIdVO.from_value(uuid4())
+        existing = ProviderConnector.create(
+            provider_connector_id=provider_connector_id,
+            provider_code="gms",
+            provider_name="GMS",
+            version="1.0.0",
+            connector_type="YAML_HTTP",
+            yaml_spec={},
+            yaml_checksum="old",
+            status=ConnectorStatus.DISABLED.value,
+            now=datetime(2026, 5, 13, 12, 0, tzinfo=UTC),
+        )
+        repository = _ProviderConnectorRepositoryStub(loaded=existing)
+        service = ProviderConnectorService(repository=repository, clock=_ClockStub())
+
+        connector = await service.register_connector(
+            tenant_id=tenant_id,
+            provider_connector_id=ProviderConnectorIdVO.from_value(uuid4()),
+            checksum="abc",
+            spec={
+                "provider_code": "gms",
+                "provider_name": "GMS",
+                "version": "1.0.0",
+                "connector_type": "YAML_HTTP",
+                "channels": ["SMS"],
+                "message_types": [
+                    {
+                        "code": "sms_text",
+                        "channel": "SMS",
+                        "name": "SMS text",
+                        "field_schema": {"type": "object"},
+                    }
+                ],
+            },
+        )
+
+        self.assertEqual(connector.provider_connector_id, provider_connector_id)
+        self.assertEqual(connector.status, ConnectorStatus.DISABLED.value)
+
+        repository.loaded.status = ConnectorStatus.ARCHIVED.value
+        with self.assertRaises(ProviderConnectorArchivedError):
+            await service.register_connector(
+                tenant_id=tenant_id,
+                provider_connector_id=ProviderConnectorIdVO.from_value(uuid4()),
+                checksum="abc",
+                spec={
+                    "provider_code": "gms",
+                    "provider_name": "GMS",
+                    "version": "1.0.0",
+                    "connector_type": "YAML_HTTP",
+                    "channels": ["SMS"],
+                    "message_types": [],
+                },
+            )
+
+    async def test_service_changes_status_and_deletes_hard_or_soft(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        provider_connector_id = ProviderConnectorIdVO.from_value(uuid4())
+        connector = ProviderConnector.create(
+            provider_connector_id=provider_connector_id,
+            provider_code="gms",
+            provider_name="GMS",
+            version="1.0.0",
+            connector_type="YAML_HTTP",
+            yaml_spec={"channels": ["SMS"]},
+            yaml_checksum="abc",
+            now=datetime(2026, 5, 13, 12, 0, tzinfo=UTC),
+        )
+        repository = _ProviderConnectorRepositoryStub(loaded=connector)
+        service = ProviderConnectorService(repository=repository, clock=_ClockStub())
+
+        changed = await service.change_connector_status(
+            tenant_id=tenant_id,
+            provider_connector_id=provider_connector_id,
+            status=ConnectorStatus.DISABLED,
+        )
+        self.assertEqual(changed.status, ConnectorStatus.DISABLED.value)
+        await service.delete_connector(
+            tenant_id=tenant_id,
+            provider_connector_id=provider_connector_id,
+        )
+        self.assertEqual(repository.deleted, [provider_connector_id])
+
+        used_connector = ProviderConnector.create(
+            provider_connector_id=ProviderConnectorIdVO.from_value(uuid4()),
+            provider_code="sms",
+            provider_name="SMS",
+            version="1.0.0",
+            connector_type="YAML_HTTP",
+            yaml_spec={"channels": ["SMS"]},
+            yaml_checksum="abc",
+            status=ConnectorStatus.DISABLED.value,
+            now=datetime(2026, 5, 13, 12, 0, tzinfo=UTC),
+        )
+        used_repository = _ProviderConnectorRepositoryStub(
+            loaded=used_connector,
+            has_usage=True,
+        )
+        used_service = ProviderConnectorService(
+            repository=used_repository,
+            clock=_ClockStub(),
+        )
+
+        await used_service.delete_connector(
+            tenant_id=tenant_id,
+            provider_connector_id=used_connector.provider_connector_id,
+        )
+
+        self.assertEqual(used_repository.deleted, [])
+        self.assertEqual(used_repository.connector_calls[-1]["status"], "ARCHIVED")
 
 
 __all__ = ["ProviderConnectorDomainTests"]

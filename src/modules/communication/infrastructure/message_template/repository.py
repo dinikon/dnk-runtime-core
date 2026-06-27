@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from src.modules.communication.domain.message_template import (
-    MessageTemplateCodeVO,
     MessageTemplateEntity,
     MessageTemplateIdVO,
     MessageTemplateProviderLookupProtocol,
@@ -27,7 +26,7 @@ from src.modules.communication.infrastructure.runtime_object_names import (
     _TEMPLATE,
     _TEMPLATE_VERSION,
 )
-from src.modules.runtime_data.application.models import PageSpec, SortSpec
+from src.modules.runtime_data.application.models import SortSpec
 from src.modules.runtime_data.application.ports import (
     RuntimeCommandGateway,
     RuntimeQueryGateway,
@@ -74,30 +73,6 @@ class MessageTemplateRuntimeRepository(
             return None
         return message_template_entity(tenant_id=tenant_id, row=row)
 
-    async def load_template_by_code(
-        self,
-        *,
-        tenant_id: EntityIdVO,
-        template_code: MessageTemplateCodeVO,
-    ) -> MessageTemplateEntity | None:
-        """Загружает message template entity по tenant-local code."""
-        descriptor = await self._resolve_descriptor(tenant_id, _TEMPLATE)
-        rows = await self._runtime_query_gateway.list(
-            descriptor=descriptor,
-            filters=(
-                self._filter_builder.condition(
-                    descriptor=descriptor,
-                    field="template_code",
-                    op="eq",
-                    value=template_code.value,
-                ),
-            ),
-            page=PageSpec(limit=1, offset=0),
-        )
-        if not rows:
-            return None
-        return message_template_entity(tenant_id=tenant_id, row=rows[0])
-
     async def save_template(
         self,
         *,
@@ -111,13 +86,11 @@ class MessageTemplateRuntimeRepository(
             object_id=template.template_id.uuid,
         )
         payload = {
-            "template_code": template.template_code.value,
             "name": template.name.value,
             "description": template.description,
             "provider_connector_id": template.provider_connector_id.uuid,
             "provider_message_type_id": template.provider_message_type_id.uuid,
             "channel_code": template.channel_code.value,
-            "message_class": template.message_class.value,
             "status": template.status.value,
         }
         if existing is None:
