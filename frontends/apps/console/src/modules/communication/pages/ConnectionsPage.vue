@@ -12,7 +12,7 @@ import {
   PlugZap,
   Plus,
   Trash2,
-} from "lucide-vue-next";
+} from "@lucide/vue";
 import { toast } from "vue-sonner";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";

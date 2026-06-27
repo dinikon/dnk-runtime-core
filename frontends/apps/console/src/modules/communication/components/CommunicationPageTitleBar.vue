@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { RefreshCcw } from "lucide-vue-next";
+import { RefreshCcw } from "@lucide/vue";
 
 import { Button } from "@/components/ui/button";
 import CommunicationPageHeader from "@/modules/communication/components/CommunicationPageHeader.vue";

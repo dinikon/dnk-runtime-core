@@ -7,7 +7,8 @@ import {
   SquareStack,
   Truck,
   List,
-} from "lucide-vue-next";
+  Workflow,
+} from "@lucide/vue";
 
 import type { WorkspaceNavigation } from "./workspace-navigation.types";
 
@@ -39,6 +40,11 @@ export const workspaceNavigation: WorkspaceNavigation = {
     {
       title: "CDP",
       items: [
+        {
+          title: "Workflows",
+          url: "/workflows",
+          icon: Workflow,
+        },
         {
           title: "Providers",
           url: "/cdp/providers",

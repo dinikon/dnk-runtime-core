@@ -5,6 +5,7 @@ import { authRoutes } from "@/modules/auth/routes";
 import { communicationRoutes } from "@/modules/communication";
 import { crmRoutes } from "@/modules/crm";
 import { dashboardRoutes } from "@/modules/dashboard";
+import { workflowRoutes } from "@/modules/workflow";
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -20,6 +21,7 @@ export const router = createRouter({
         },
         ...dashboardRoutes,
         ...crmRoutes,
+        ...workflowRoutes,
         ...communicationRoutes,
       ],
     },

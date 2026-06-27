@@ -6,7 +6,7 @@ import {
   useVueTable,
   type ColumnDef,
 } from "@tanstack/vue-table";
-import { Plus, Save } from "lucide-vue-next";
+import { Plus, Save } from "@lucide/vue";
 import { toast } from "vue-sonner";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";

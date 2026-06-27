@@ -9,7 +9,7 @@ import {
   Pencil,
   Trash2,
   X,
-} from "lucide-vue-next";
+} from "@lucide/vue";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

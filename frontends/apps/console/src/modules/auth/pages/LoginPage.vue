@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { Loader2 } from "lucide-vue-next";
+import { Loader2 } from "@lucide/vue";
 import { useRoute, useRouter } from "vue-router";
 
 import { getApiErrorMessage } from "@/app/providers/http";

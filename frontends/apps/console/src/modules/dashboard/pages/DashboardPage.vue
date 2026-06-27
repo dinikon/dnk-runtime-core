@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ContactRound, Settings, ShieldCheck } from "lucide-vue-next";
+import { ContactRound, Settings, ShieldCheck } from "@lucide/vue";
 import { RouterLink } from "vue-router";
 
 import {

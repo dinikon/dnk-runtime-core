@@ -6,7 +6,7 @@ import {
   useVueTable,
   type ColumnDef,
 } from "@tanstack/vue-table";
-import { Eye, SendHorizontal } from "lucide-vue-next";
+import { Eye, SendHorizontal } from "@lucide/vue";
 import { toast } from "vue-sonner";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
