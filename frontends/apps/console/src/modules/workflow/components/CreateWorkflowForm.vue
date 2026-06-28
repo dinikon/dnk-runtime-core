@@ -23,12 +23,16 @@ import {
 } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import EmojiPicker from "@/modules/workflow/components/EmojiPicker.vue";
 import type { WorkflowApplication } from "@/modules/workflow/api";
 import { useCreateWorkflowMutation } from "@/modules/workflow/mutations/use-create-workflow";
+import {
+  DEFAULT_ICON_COVER_BACKGROUND,
+  IconCoverPicker,
+  isHexColor,
+  normalizeHexColor,
+} from "@/shared/icon-cover-picker";
 
 const DEFAULT_ICON = "🚀";
-const DEFAULT_ICON_BACKGROUND = "#FDEAD7";
 
 const props = defineProps<{
   open: boolean;
@@ -44,7 +48,7 @@ const createWorkflowMutation = useCreateWorkflowMutation();
 const title = ref("");
 const description = ref("");
 const icon = ref(DEFAULT_ICON);
-const iconBackground = ref(DEFAULT_ICON_BACKGROUND);
+const iconBackground = ref(DEFAULT_ICON_COVER_BACKGROUND);
 const submitted = ref(false);
 
 const sheetOpen = computed({
@@ -58,21 +62,21 @@ const titleError = computed(() =>
     : "",
 );
 const iconBackgroundError = computed(() =>
-  submitted.value && !/^#[0-9A-Fa-f]{6}$/.test(iconBackground.value.trim())
+  submitted.value && !isHexColor(iconBackground.value)
     ? "Use a hex color like #FDEAD7."
     : "",
 );
 const previewBackground = computed(() =>
-  /^#[0-9A-Fa-f]{6}$/.test(iconBackground.value.trim())
-    ? iconBackground.value.trim()
-    : DEFAULT_ICON_BACKGROUND,
+  isHexColor(iconBackground.value)
+    ? normalizeHexColor(iconBackground.value)
+    : DEFAULT_ICON_COVER_BACKGROUND,
 );
 
 function resetForm() {
   title.value = "";
   description.value = "";
   icon.value = DEFAULT_ICON;
-  iconBackground.value = DEFAULT_ICON_BACKGROUND;
+  iconBackground.value = DEFAULT_ICON_COVER_BACKGROUND;
   submitted.value = false;
 }
 
@@ -88,7 +92,7 @@ async function createWorkflow() {
       title: title.value.trim(),
       description: description.value.trim() || null,
       icon: icon.value,
-      icon_background: iconBackground.value.trim(),
+      icon_background: normalizeHexColor(iconBackground.value),
     });
 
     toast.success(`${workflow.title} created.`);
@@ -157,7 +161,7 @@ watch(
                       placeholder="Give your workflow a name"
                     />
                   </div>
-                  <EmojiPicker
+                  <IconCoverPicker
                     v-model="icon"
                     v-model:background="iconBackground"
                     :invalid="Boolean(iconBackgroundError)"
