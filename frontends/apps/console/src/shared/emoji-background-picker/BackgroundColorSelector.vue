@@ -4,15 +4,15 @@ import { computed } from "vue";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-import { DEFAULT_ICON_COVER_BACKGROUND } from "../model/constants";
-import type { IconCoverPickerLabels } from "../model/types";
-import { normalizeHexColor } from "../model/utils";
+import { DEFAULT_EMOJI_BACKGROUND } from "./constants";
+import type { EmojiBackgroundPickerLabels } from "./types";
+import { normalizeHexColor } from "./utils";
 
 const props = defineProps<{
   modelValue: string;
-  icon: string;
+  emoji: string;
   isValid: boolean;
-  labels: IconCoverPickerLabels;
+  labels: EmojiBackgroundPickerLabels;
   backgroundPresets: string[];
 }>();
 
@@ -25,7 +25,7 @@ const backgroundValue = computed({
   set: (value: string | number) => emit("update:modelValue", String(value)),
 });
 const displayedBackground = computed(
-  () => normalizeHexColor(props.modelValue) || DEFAULT_ICON_COVER_BACKGROUND,
+  () => normalizeHexColor(props.modelValue) || DEFAULT_EMOJI_BACKGROUND,
 );
 
 function isSelectedBackground(background: string) {
@@ -47,7 +47,7 @@ function isSelectedBackground(background: string) {
       </span>
     </div>
     <div
-      class="icon-cover-picker-scrollbar-hide flex gap-2 overflow-x-auto p-2"
+      class="emoji-background-picker-scrollbar-hide flex gap-2 overflow-x-auto p-2"
     >
       <button
         v-for="backgroundPreset in backgroundPresets"
@@ -64,7 +64,7 @@ function isSelectedBackground(background: string) {
         :aria-label="labels.useBackgroundLabel(backgroundPreset)"
         @click="backgroundValue = backgroundPreset"
       >
-        <span class="text-lg leading-none">{{ icon }}</span>
+        <span class="text-lg leading-none">{{ emoji }}</span>
       </button>
     </div>
 
@@ -79,7 +79,7 @@ function isSelectedBackground(background: string) {
         v-model="backgroundValue"
         :aria-invalid="!isValid"
         class="h-9"
-        :placeholder="DEFAULT_ICON_COVER_BACKGROUND"
+        :placeholder="DEFAULT_EMOJI_BACKGROUND"
       />
     </div>
     <p v-if="!isValid" class="mt-1 text-xs text-destructive">
@@ -89,12 +89,12 @@ function isSelectedBackground(background: string) {
 </template>
 
 <style scoped>
-.icon-cover-picker-scrollbar-hide {
+.emoji-background-picker-scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
 
-.icon-cover-picker-scrollbar-hide::-webkit-scrollbar {
+.emoji-background-picker-scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
 </style>

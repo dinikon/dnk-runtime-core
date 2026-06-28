@@ -26,11 +26,11 @@ import { Textarea } from "@/components/ui/textarea";
 import type { WorkflowApplication } from "@/modules/workflow/api";
 import { useCreateWorkflowMutation } from "@/modules/workflow/mutations/use-create-workflow";
 import {
-  DEFAULT_ICON_COVER_BACKGROUND,
-  IconCoverPicker,
+  DEFAULT_EMOJI_BACKGROUND,
+  EmojiBackgroundPicker,
   isHexColor,
   normalizeHexColor,
-} from "@/shared/icon-cover-picker";
+} from "@/shared/emoji-background-picker";
 
 const DEFAULT_ICON = "🚀";
 
@@ -48,7 +48,7 @@ const createWorkflowMutation = useCreateWorkflowMutation();
 const title = ref("");
 const description = ref("");
 const icon = ref(DEFAULT_ICON);
-const iconBackground = ref(DEFAULT_ICON_COVER_BACKGROUND);
+const iconBackground = ref(DEFAULT_EMOJI_BACKGROUND);
 const submitted = ref(false);
 
 const sheetOpen = computed({
@@ -69,14 +69,14 @@ const iconBackgroundError = computed(() =>
 const previewBackground = computed(() =>
   isHexColor(iconBackground.value)
     ? normalizeHexColor(iconBackground.value)
-    : DEFAULT_ICON_COVER_BACKGROUND,
+    : DEFAULT_EMOJI_BACKGROUND,
 );
 
 function resetForm() {
   title.value = "";
   description.value = "";
   icon.value = DEFAULT_ICON;
-  iconBackground.value = DEFAULT_ICON_COVER_BACKGROUND;
+  iconBackground.value = DEFAULT_EMOJI_BACKGROUND;
   submitted.value = false;
 }
 
@@ -161,12 +161,14 @@ watch(
                       placeholder="Give your workflow a name"
                     />
                   </div>
-                  <IconCoverPicker
+                  <EmojiBackgroundPicker
                     v-model="icon"
                     v-model:background="iconBackground"
                     :invalid="Boolean(iconBackgroundError)"
+                    title="Workflow icon"
+                    description="Choose emoji and background for workflow."
                     trigger-class="h-full min-h-[5.625rem] w-full"
-                    icon-class="text-4xl"
+                    emoji-class="text-4xl"
                   />
                 </div>
                 <FieldError v-if="titleError">{{ titleError }}</FieldError>

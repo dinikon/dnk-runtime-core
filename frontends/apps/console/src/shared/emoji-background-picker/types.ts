@@ -1,6 +1,6 @@
 import type { HTMLAttributes } from "vue";
 
-export interface IconCoverPickerLabels {
+export interface EmojiBackgroundPickerLabels {
   triggerAriaLabel: string;
   title: string;
   description: string;
@@ -12,13 +12,24 @@ export interface IconCoverPickerLabels {
   useBackgroundLabel: (color: string) => string;
 }
 
-export interface IconCoverPickerProps {
+export interface EmojiBackgroundPickerProps {
   modelValue: string;
   background: string;
+  title?: string;
+  description?: string;
   invalid?: boolean;
   disabled?: boolean;
   triggerClass?: HTMLAttributes["class"];
-  iconClass?: HTMLAttributes["class"];
-  labels?: Partial<IconCoverPickerLabels>;
+  emojiClass?: HTMLAttributes["class"];
+  labels?: Partial<EmojiBackgroundPickerLabels>;
   backgroundPresets?: string[];
+}
+
+export interface EmojiBackgroundPickerChange {
+  emoji: string;
+  background: string;
+}
+
+export interface EmojiMartSelection {
+  native?: string;
 }

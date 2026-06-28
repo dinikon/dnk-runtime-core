@@ -5,13 +5,13 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const props = defineProps<{
-  icon: string;
+  emoji: string;
   background: string;
-  ariaLabel: string;
+  label: string;
   invalid?: boolean;
   disabled?: boolean;
   triggerClass?: HTMLAttributes["class"];
-  iconClass?: HTMLAttributes["class"];
+  emojiClass?: HTMLAttributes["class"];
 }>();
 </script>
 
@@ -27,19 +27,19 @@ const props = defineProps<{
         props.triggerClass,
       )
     "
-    :aria-label="ariaLabel"
+    :aria-label="label"
   >
     <span
       :class="
         cn(
           'flex size-full items-center justify-center rounded-xl text-3xl shadow-inner',
-          props.iconClass,
+          props.emojiClass,
         )
       "
       :style="{ backgroundColor: background }"
       aria-hidden="true"
     >
-      {{ icon }}
+      {{ emoji }}
     </span>
   </Button>
 </template>
