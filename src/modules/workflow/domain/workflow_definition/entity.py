@@ -37,7 +37,7 @@ class WorkflowDefinitionEntity:
 
     environment: WorkflowEnvironmentVO
 
-    title: EntityTitleVO
+    title: EntityTitleVO | None
     description: EntityDescriptionVO | None
 
     @classmethod
@@ -48,7 +48,7 @@ class WorkflowDefinitionEntity:
         graph: WorkflowGraphVO,
         features: WorkflowFeaturesVO,
         environment: WorkflowEnvironmentVO,
-        title: EntityTitleVO,
+        title: EntityTitleVO | None,
         description: EntityDescriptionVO | None,
         created_by: EntityIdVO,
         now: datetime,

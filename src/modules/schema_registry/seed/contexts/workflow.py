@@ -162,7 +162,7 @@ WORKFLOW_OBJECTS = (
                 type="text",
                 label="Title",
                 description="Workflow definition display title.",
-                is_nullable=False,
+                is_nullable=True,
             ),
             FieldSeed(
                 name="description",

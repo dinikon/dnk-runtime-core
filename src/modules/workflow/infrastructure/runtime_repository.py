@@ -175,7 +175,7 @@ class WorkflowRuntimeRepository(
             "graph": definition.graph.value,
             "features": definition.features.value,
             "environment": definition.environment.value,
-            "title": definition.title.value,
+            "title": None if definition.title is None else definition.title.value,
             "description": (
                 None if definition.description is None else definition.description.value
             ),
@@ -253,6 +253,7 @@ class WorkflowRuntimeRepository(
 
     @staticmethod
     def _row_to_workflow_definition(row: Mapping[str, Any]) -> WorkflowDefinitionEntity:
+        title = WorkflowRuntimeRepository._as_optional_str(row.get("title"))
         description = WorkflowRuntimeRepository._as_optional_str(row.get("description"))
         return WorkflowDefinitionEntity(
             id=WorkflowDefinitionIdVO.from_value(
@@ -279,7 +280,7 @@ class WorkflowRuntimeRepository(
             environment=WorkflowEnvironmentVO(
                 WorkflowRuntimeRepository._as_dict(row.get("environment"))
             ),
-            title=EntityTitleVO(WorkflowRuntimeRepository._as_str(row.get("title"))),
+            title=None if title is None else EntityTitleVO(title),
             description=(
                 None if description is None else EntityDescriptionVO(description)
             ),
