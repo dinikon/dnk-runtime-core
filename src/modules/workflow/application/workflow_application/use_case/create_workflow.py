@@ -82,7 +82,7 @@ class CreateWorkflowUseCase:
             graph=WorkflowGraphVO({}),
             features=WorkflowFeaturesVO({}),
             environment=WorkflowEnvironmentVO({}),
-            title=EntityTitleVO(""),
+            title=None,
             description=None,
             created_by=created_by,
             now=now,

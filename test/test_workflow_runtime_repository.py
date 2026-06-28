@@ -60,7 +60,7 @@ def _application_descriptor() -> RuntimeObjectDescriptor:
             _field("updated_by", "uuid"),
             _field("kind", "select", default_value="'STANDARD'"),
             _field("status", "select", default_value="'NORMAL'"),
-            _field("title", "text"),
+            _field("title", "text", is_nullable=True),
             _field("description", "text", is_nullable=True),
             _field("icon", "text"),
             _field("icon_background", "text"),
@@ -208,7 +208,7 @@ class WorkflowRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
             graph=WorkflowGraphVO({}),
             features=WorkflowFeaturesVO({}),
             environment=WorkflowEnvironmentVO({}),
-            title=EntityTitleVO("Customer journey"),
+            title=None,
             description=None,
             created_by=created_by,
             now=now,
@@ -231,12 +231,13 @@ class WorkflowRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["graph"], {})
         self.assertEqual(payload["features"], {})
         self.assertEqual(payload["environment"], {})
-        self.assertEqual(payload["title"], "Customer journey")
+        self.assertIsNone(payload["title"])
         self.assertIsNone(payload["description"])
         self.assertEqual(saved.id, definition_id)
         self.assertEqual(saved.workflow_application_id, workflow_id)
         self.assertEqual(saved.version.value, "draft")
         self.assertEqual(saved.environment.value, {})
+        self.assertIsNone(saved.title)
 
 
 if __name__ == "__main__":
