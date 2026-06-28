@@ -21,7 +21,7 @@ from src.modules.shared import EntityIdVO
 from src.modules.workflow.application.workflow_application.dto import (
     WorkflowApplicationListItemDTO,
 )
-from src.modules.workflow.application.workflow_application.query import (
+from src.modules.workflow.application.workflow_application.pagination import (
     WorkflowApplicationCursor,
 )
 from src.modules.workflow.application.workflow_application.repository import (
@@ -163,7 +163,7 @@ class WorkflowApplicationRuntimeRepository(
             logic="and",
             items=(
                 TypedFilterSpec(field=created_at, op="eq", value=cursor.created_at),
-                TypedFilterSpec(field=workflow_id, op="lt", value=cursor.id),
+                TypedFilterSpec(field=workflow_id, op="lt", value=cursor.uuid),
             ),
         )
         return (

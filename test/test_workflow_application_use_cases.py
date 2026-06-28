@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from src.modules.shared import EntityIdVO
+from src.modules.shared.application.pagination import CursorCodec, InvalidCursorError
 from src.modules.workflow.application.workflow_application import (
     CreateWorkflowCommand,
     CreateWorkflowUseCase,
@@ -216,8 +217,10 @@ class WorkflowApplicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(result.next_cursor)
         assert result.next_cursor is not None
         decoded = WorkflowApplicationCursor.decode(result.next_cursor)
-        self.assertEqual(decoded.id, second_id)
+        self.assertEqual(decoded.id, str(second_id))
         self.assertEqual(decoded.created_at, second_created_at)
+        self.assertEqual(decoded.VERSION, 1)
+        self.assertEqual(decoded.SORT, "created_at_desc_id_desc")
 
     async def test_list_workflows_returns_no_cursor_without_extra_row(self) -> None:
         tenant_id = uuid4()
@@ -243,7 +246,7 @@ class WorkflowApplicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         tenant_id = uuid4()
         cursor = WorkflowApplicationCursor(
             created_at=datetime(2026, 6, 27, 12, 0, tzinfo=UTC),
-            id=uuid4(),
+            id=str(uuid4()),
         )
         repository = _WorkflowApplicationQueryRepositoryStub([])
         use_case = ListWorkflowsUseCase(repository=repository)
@@ -263,12 +266,56 @@ class WorkflowApplicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
             repository=_WorkflowApplicationQueryRepositoryStub([])
         )
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(InvalidCursorError):
             await use_case(
                 ListWorkflowsQuery(
                     tenant_id=uuid4(),
                     limit=50,
                     cursor="not-a-valid-cursor",
+                )
+            )
+
+    async def test_list_workflows_rejects_cursor_with_wrong_version(self) -> None:
+        use_case = ListWorkflowsUseCase(
+            repository=_WorkflowApplicationQueryRepositoryStub([])
+        )
+        cursor = CursorCodec.encode(
+            {
+                "v": 2,
+                "sort": WorkflowApplicationCursor.SORT,
+                "created_at": datetime(2026, 6, 27, 12, 0, tzinfo=UTC).isoformat(),
+                "id": str(uuid4()),
+            }
+        )
+
+        with self.assertRaises(InvalidCursorError):
+            await use_case(
+                ListWorkflowsQuery(
+                    tenant_id=uuid4(),
+                    limit=50,
+                    cursor=cursor,
+                )
+            )
+
+    async def test_list_workflows_rejects_cursor_with_wrong_sort(self) -> None:
+        use_case = ListWorkflowsUseCase(
+            repository=_WorkflowApplicationQueryRepositoryStub([])
+        )
+        cursor = CursorCodec.encode(
+            {
+                "v": WorkflowApplicationCursor.VERSION,
+                "sort": "created_at_asc_id_asc",
+                "created_at": datetime(2026, 6, 27, 12, 0, tzinfo=UTC).isoformat(),
+                "id": str(uuid4()),
+            }
+        )
+
+        with self.assertRaises(InvalidCursorError):
+            await use_case(
+                ListWorkflowsQuery(
+                    tenant_id=uuid4(),
+                    limit=50,
+                    cursor=cursor,
                 )
             )
 

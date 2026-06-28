@@ -1,15 +1,17 @@
 from typing import Protocol
 
 from src.modules.shared import EntityIdVO
-from src.modules.workflow.application.workflow_application import (
-    WorkflowApplicationQueryRepositoryProtocol,
-)
 from src.modules.workflow.application.workflow_application.dto import (
     WorkflowApplicationListDTO,
 )
+from src.modules.workflow.application.workflow_application.pagination import (
+    WorkflowApplicationCursor,
+)
 from src.modules.workflow.application.workflow_application.query import (
     ListWorkflowsQuery,
-    WorkflowApplicationCursor,
+)
+from src.modules.workflow.application.workflow_application.repository import (
+    WorkflowApplicationQueryRepositoryProtocol,
 )
 
 
@@ -51,10 +53,7 @@ class ListWorkflowsUseCase:
         next_cursor = None
         if len(rows) > query.limit and items:
             last_item = items[-1]
-            next_cursor = WorkflowApplicationCursor(
-                created_at=last_item.created_at,
-                id=last_item.id,
-            ).encode()
+            next_cursor = WorkflowApplicationCursor.from_item(last_item).encode()
         return WorkflowApplicationListDTO(
             items=items,
             next_cursor=next_cursor,

@@ -6,9 +6,11 @@ from src.modules.workflow.application.workflow_application.dto import (
     WorkflowApplicationListDTO,
     WorkflowApplicationListItemDTO,
 )
+from src.modules.workflow.application.workflow_application.pagination import (
+    WorkflowApplicationCursor,
+)
 from src.modules.workflow.application.workflow_application.query import (
     ListWorkflowsQuery,
-    WorkflowApplicationCursor,
 )
 from src.modules.workflow.application.workflow_application.repository import (
     WorkflowApplicationCommandRepositoryProtocol,

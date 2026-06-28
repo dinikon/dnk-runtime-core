@@ -266,7 +266,7 @@ class WorkflowRuntimeRepositoriesTests(unittest.IsolatedAsyncioTestCase):
         first_created_at = datetime.now(UTC)
         cursor = WorkflowApplicationCursor(
             created_at=first_created_at,
-            id=first_id,
+            id=str(first_id),
         )
         query_gateway = _QueryGatewayStub(
             rows=[
