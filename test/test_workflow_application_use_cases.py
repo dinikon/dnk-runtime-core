@@ -8,6 +8,10 @@ from src.modules.shared import EntityIdVO
 from src.modules.workflow.application.workflow_application import (
     CreateWorkflowCommand,
     CreateWorkflowUseCase,
+    ListWorkflowsQuery,
+    ListWorkflowsUseCase,
+    WorkflowApplicationCursor,
+    WorkflowApplicationListItemDTO,
 )
 from src.modules.workflow.domain import (
     WorkflowApplicationIdVO,
@@ -53,6 +57,38 @@ class _WorkflowDefinitionRepositoryStub:
         self.saved_tenant_id = tenant_id
         self.saved_definition = definition
         return definition
+
+
+class _WorkflowApplicationQueryRepositoryStub:
+    def __init__(self, items) -> None:
+        self.items = list(items)
+        self.tenant_id = None
+        self.limit = None
+        self.cursor = None
+
+    async def list(self, *, tenant_id, limit, cursor):
+        self.tenant_id = tenant_id
+        self.limit = limit
+        self.cursor = cursor
+        return self.items
+
+
+def _workflow_item(
+    *,
+    workflow_id: UUID,
+    created_at: datetime,
+    title: str,
+) -> WorkflowApplicationListItemDTO:
+    return WorkflowApplicationListItemDTO(
+        id=workflow_id,
+        created_at=created_at,
+        kind=WorkflowKindVO.STANDARD.value,
+        status=WorkflowApplicationStatusVO.NORMAL.value,
+        title=title,
+        description=None,
+        icon="workflow",
+        icon_background="#ffffff",
+    )
 
 
 class WorkflowApplicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
@@ -141,6 +177,100 @@ class WorkflowApplicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.icon, "workflow")
         self.assertEqual(result.icon_background, "#ffffff")
         self.assertIsNone(result.active_workflow_definition_id)
+
+    async def test_list_workflows_returns_items_and_next_cursor(self) -> None:
+        tenant_id = uuid4()
+        first_id = uuid4()
+        second_id = uuid4()
+        third_id = uuid4()
+        first_created_at = datetime(2026, 6, 27, 12, 2, tzinfo=UTC)
+        second_created_at = datetime(2026, 6, 27, 12, 1, tzinfo=UTC)
+        third_created_at = datetime(2026, 6, 27, 12, 0, tzinfo=UTC)
+        repository = _WorkflowApplicationQueryRepositoryStub(
+            [
+                _workflow_item(
+                    workflow_id=first_id,
+                    created_at=first_created_at,
+                    title="First",
+                ),
+                _workflow_item(
+                    workflow_id=second_id,
+                    created_at=second_created_at,
+                    title="Second",
+                ),
+                _workflow_item(
+                    workflow_id=third_id,
+                    created_at=third_created_at,
+                    title="Third",
+                ),
+            ]
+        )
+        use_case = ListWorkflowsUseCase(repository=repository)
+
+        result = await use_case(ListWorkflowsQuery(tenant_id=tenant_id, limit=2))
+
+        self.assertEqual(repository.tenant_id, EntityIdVO.from_value(tenant_id))
+        self.assertEqual(repository.limit, 3)
+        self.assertIsNone(repository.cursor)
+        self.assertEqual([item.id for item in result.items], [first_id, second_id])
+        self.assertIsNotNone(result.next_cursor)
+        assert result.next_cursor is not None
+        decoded = WorkflowApplicationCursor.decode(result.next_cursor)
+        self.assertEqual(decoded.id, second_id)
+        self.assertEqual(decoded.created_at, second_created_at)
+
+    async def test_list_workflows_returns_no_cursor_without_extra_row(self) -> None:
+        tenant_id = uuid4()
+        workflow_id = uuid4()
+        created_at = datetime(2026, 6, 27, 12, 0, tzinfo=UTC)
+        repository = _WorkflowApplicationQueryRepositoryStub(
+            [
+                _workflow_item(
+                    workflow_id=workflow_id,
+                    created_at=created_at,
+                    title="Only",
+                ),
+            ]
+        )
+        use_case = ListWorkflowsUseCase(repository=repository)
+
+        result = await use_case(ListWorkflowsQuery(tenant_id=tenant_id, limit=2))
+
+        self.assertEqual(len(result.items), 1)
+        self.assertIsNone(result.next_cursor)
+
+    async def test_list_workflows_passes_decoded_cursor_to_repository(self) -> None:
+        tenant_id = uuid4()
+        cursor = WorkflowApplicationCursor(
+            created_at=datetime(2026, 6, 27, 12, 0, tzinfo=UTC),
+            id=uuid4(),
+        )
+        repository = _WorkflowApplicationQueryRepositoryStub([])
+        use_case = ListWorkflowsUseCase(repository=repository)
+
+        await use_case(
+            ListWorkflowsQuery(
+                tenant_id=tenant_id,
+                limit=50,
+                cursor=cursor.encode(),
+            )
+        )
+
+        self.assertEqual(repository.cursor, cursor)
+
+    async def test_list_workflows_rejects_invalid_cursor(self) -> None:
+        use_case = ListWorkflowsUseCase(
+            repository=_WorkflowApplicationQueryRepositoryStub([])
+        )
+
+        with self.assertRaises(ValueError):
+            await use_case(
+                ListWorkflowsQuery(
+                    tenant_id=uuid4(),
+                    limit=50,
+                    cursor="not-a-valid-cursor",
+                )
+            )
 
 
 if __name__ == "__main__":

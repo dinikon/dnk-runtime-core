@@ -11,6 +11,11 @@ from src.modules.schema_registry.domain.error import RuntimeObjectNotFoundError
 from src.modules.shared import Principal, RequestContext
 from src.modules.workflow.application.workflow_application.dto import (
     WorkflowApplicationDTO,
+    WorkflowApplicationListDTO,
+    WorkflowApplicationListItemDTO,
+)
+from src.modules.workflow.presentation.http.workflow_application.controller.list_workflows import (
+    list_workflows,
 )
 from src.modules.workflow.presentation.http.router import router
 from src.modules.workflow.presentation.http.workflow_application.controller.create_workflow import (
@@ -69,6 +74,7 @@ class WorkflowHttpRouterTests(unittest.IsolatedAsyncioTestCase):
         }
 
         self.assertIn(("POST", "/workflows"), routes)
+        self.assertIn(("GET", "/workflows"), routes)
 
     async def test_create_workflow_returns_response_shape(self) -> None:
         now = datetime.now(UTC)
@@ -120,6 +126,49 @@ class WorkflowHttpRouterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(use_case.command.title, "Customer journey")
         self.assertEqual(use_case.command.icon, "workflow")
 
+    async def test_list_workflows_returns_response_shape(self) -> None:
+        now = datetime.now(UTC)
+        workflow_id = uuid4()
+        context = _context()
+        use_case = _UseCaseStub(
+            WorkflowApplicationListDTO(
+                items=(
+                    WorkflowApplicationListItemDTO(
+                        id=workflow_id,
+                        created_at=now,
+                        kind="STANDARD",
+                        status="NORMAL",
+                        title="Customer journey",
+                        description=None,
+                        icon="workflow",
+                        icon_background="#ffffff",
+                    ),
+                ),
+                next_cursor="next",
+            )
+        )
+
+        response = await list_workflows(
+            context=context,
+            use_case=use_case,
+            limit=50,
+            cursor=None,
+        )
+
+        self.assertEqual(len(response.items), 1)
+        self.assertEqual(response.items[0].id, workflow_id)
+        self.assertEqual(response.items[0].created_at, now)
+        self.assertEqual(response.items[0].kind, "STANDARD")
+        self.assertEqual(response.items[0].status, "NORMAL")
+        self.assertEqual(response.items[0].title, "Customer journey")
+        self.assertIsNone(response.items[0].description)
+        self.assertEqual(response.items[0].icon, "workflow")
+        self.assertEqual(response.items[0].icon_background, "#ffffff")
+        self.assertEqual(response.next_cursor, "next")
+        self.assertEqual(use_case.command.tenant_id, context.principal.tenant_id)
+        self.assertEqual(use_case.command.limit, 50)
+        self.assertIsNone(use_case.command.cursor)
+
     async def test_create_workflow_returns_401_without_principal(self) -> None:
         with self.assertRaises(HTTPException) as caught:
             await create_workflow(
@@ -135,6 +184,22 @@ class WorkflowHttpRouterTests(unittest.IsolatedAsyncioTestCase):
                     user_agent=None,
                 ),
                 use_case=_UseCaseStub(None),
+            )
+
+        self.assertEqual(caught.exception.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    async def test_list_workflows_returns_401_without_principal(self) -> None:
+        with self.assertRaises(HTTPException) as caught:
+            await list_workflows(
+                context=RequestContext(
+                    principal=None,
+                    request_id=None,
+                    ip=None,
+                    user_agent=None,
+                ),
+                use_case=_UseCaseStub(None),
+                limit=50,
+                cursor=None,
             )
 
         self.assertEqual(caught.exception.status_code, status.HTTP_401_UNAUTHORIZED)
@@ -222,6 +287,20 @@ class WorkflowHttpRouterTests(unittest.IsolatedAsyncioTestCase):
                 use_case=_FailingUseCase(
                     RuntimeDataValidationError("Field 'title' must not be empty.")
                 ),
+            )
+
+        self.assertEqual(
+            caught.exception.status_code,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+
+    async def test_list_workflows_invalid_cursor_returns_422(self) -> None:
+        with self.assertRaises(HTTPException) as caught:
+            await list_workflows(
+                context=_context(),
+                use_case=_FailingUseCase(ValueError("Invalid workflow cursor.")),
+                limit=50,
+                cursor="invalid",
             )
 
         self.assertEqual(

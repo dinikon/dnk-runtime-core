@@ -25,7 +25,13 @@ from src.modules.workflow.domain import (
     WorkflowIconVO,
     WorkflowKindVO,
 )
-from src.modules.workflow.infrastructure import WorkflowRuntimeRepository
+from src.modules.workflow.application.workflow_application import (
+    WorkflowApplicationCursor,
+)
+from src.modules.workflow.infrastructure import (
+    WorkflowApplicationRuntimeRepository,
+    WorkflowDefinitionRuntimeRepository,
+)
 
 
 def _field(
@@ -109,13 +115,26 @@ class _ResolverStub:
 
 
 class _QueryGatewayStub:
+    def __init__(self, rows=None) -> None:
+        self.rows = list(rows or [])
+        self.list_calls = []
+
     async def get_by_id(self, *, descriptor, object_id, fetch_plan=None):
         return None
 
     async def list(
         self, *, descriptor, filters=(), sorting=(), page=None, fetch_plan=None
     ):
-        return []
+        self.list_calls.append(
+            {
+                "descriptor": descriptor,
+                "filters": filters,
+                "sorting": sorting,
+                "page": page,
+                "fetch_plan": fetch_plan,
+            }
+        )
+        return self.rows
 
 
 class _CommandGatewayStub:
@@ -137,7 +156,7 @@ class _CommandGatewayStub:
         return True
 
 
-class WorkflowRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
+class WorkflowRuntimeRepositoriesTests(unittest.IsolatedAsyncioTestCase):
     async def test_save_workflow_application_inserts_payload_and_maps_entity(
         self,
     ) -> None:
@@ -147,7 +166,7 @@ class WorkflowRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
         now = datetime.now(UTC)
         resolver = _ResolverStub()
         command_gateway = _CommandGatewayStub()
-        repository = WorkflowRuntimeRepository(
+        repository = WorkflowApplicationRuntimeRepository(
             runtime_object_resolver=resolver,
             runtime_command_gateway=command_gateway,
             runtime_query_gateway=_QueryGatewayStub(),
@@ -197,7 +216,7 @@ class WorkflowRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
         now = datetime.now(UTC)
         resolver = _ResolverStub()
         command_gateway = _CommandGatewayStub()
-        repository = WorkflowRuntimeRepository(
+        repository = WorkflowDefinitionRuntimeRepository(
             runtime_object_resolver=resolver,
             runtime_command_gateway=command_gateway,
             runtime_query_gateway=_QueryGatewayStub(),
@@ -238,6 +257,75 @@ class WorkflowRuntimeRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(saved.version.value, "draft")
         self.assertEqual(saved.environment.value, {})
         self.assertIsNone(saved.title)
+
+    async def test_list_workflow_applications_uses_cursor_filters_and_projection(
+        self,
+    ) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        first_id = uuid4()
+        first_created_at = datetime.now(UTC)
+        cursor = WorkflowApplicationCursor(
+            created_at=first_created_at,
+            id=first_id,
+        )
+        query_gateway = _QueryGatewayStub(
+            rows=[
+                {
+                    "id": first_id,
+                    "created_at": first_created_at,
+                    "kind": "STANDARD",
+                    "status": "NORMAL",
+                    "title": "Customer journey",
+                    "description": None,
+                    "icon": "workflow",
+                    "icon_background": "#ffffff",
+                }
+            ]
+        )
+        repository = WorkflowApplicationRuntimeRepository(
+            runtime_object_resolver=_ResolverStub(),
+            runtime_command_gateway=_CommandGatewayStub(),
+            runtime_query_gateway=query_gateway,
+        )
+
+        result = await repository.list(
+            tenant_id=tenant_id,
+            limit=51,
+            cursor=cursor,
+        )
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].id, first_id)
+        self.assertEqual(result[0].title, "Customer journey")
+        self.assertEqual(len(query_gateway.list_calls), 1)
+        call = query_gateway.list_calls[0]
+        self.assertEqual(call["descriptor"].object_name, "workflow_application")
+        self.assertEqual(call["page"].limit, 51)
+        self.assertEqual(call["page"].offset, 0)
+        self.assertEqual(
+            [(sort.field, sort.direction) for sort in call["sorting"]],
+            [("created_at", "desc"), ("id", "desc")],
+        )
+        self.assertEqual(
+            call["fetch_plan"].projections,
+            (
+                "id",
+                "created_at",
+                "kind",
+                "status",
+                "title",
+                "description",
+                "icon",
+                "icon_background",
+            ),
+        )
+        cursor_filter = call["filters"][0]
+        self.assertEqual(cursor_filter.logic, "or")
+        same_created_at = cursor_filter.items[1]
+        self.assertEqual(same_created_at.logic, "and")
+        self.assertEqual(same_created_at.items[1].field.name, "id")
+        self.assertEqual(same_created_at.items[1].op, "lt")
+        self.assertEqual(same_created_at.items[1].value, first_id)
 
 
 if __name__ == "__main__":

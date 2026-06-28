@@ -5,9 +5,13 @@ from typing import Annotated
 from fastapi import Depends
 
 from src.modules.shared.presentation import ClockDep, UuidDep
-from src.modules.workflow.application.workflow_application import CreateWorkflowUseCase
+from src.modules.workflow.application.workflow_application import (
+    CreateWorkflowUseCase,
+    ListWorkflowsUseCase,
+)
 from src.modules.workflow.presentation.depends.infrastructure import (
     WorkflowApplicationCommandRepositoryDep,
+    WorkflowApplicationQueryRepositoryDep,
     WorkflowDefinitionCommandRepositoryDep,
 )
 
@@ -32,7 +36,21 @@ CreateWorkflowUseCaseDep = Annotated[
 ]
 
 
+def get_list_workflows_use_case(
+    repository: WorkflowApplicationQueryRepositoryDep,
+) -> ListWorkflowsUseCase:
+    return ListWorkflowsUseCase(repository=repository)
+
+
+ListWorkflowsUseCaseDep = Annotated[
+    ListWorkflowsUseCase,
+    Depends(get_list_workflows_use_case),
+]
+
+
 __all__ = [
     "CreateWorkflowUseCaseDep",
+    "ListWorkflowsUseCaseDep",
     "get_create_workflow_use_case",
+    "get_list_workflows_use_case",
 ]
