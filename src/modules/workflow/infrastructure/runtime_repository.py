@@ -219,6 +219,7 @@ class WorkflowRuntimeRepository(
         )
         created_by = WorkflowRuntimeRepository._as_optional_uuid(row.get("created_by"))
         updated_by = WorkflowRuntimeRepository._as_optional_uuid(row.get("updated_by"))
+        title = WorkflowRuntimeRepository._as_optional_str(row.get("title"))
         description = WorkflowRuntimeRepository._as_optional_str(row.get("description"))
         return WorkflowApplicationEntity(
             id=WorkflowApplicationIdVO.from_value(
@@ -236,7 +237,7 @@ class WorkflowRuntimeRepository(
             status=WorkflowApplicationStatusVO(
                 WorkflowRuntimeRepository._as_str(row.get("status"))
             ),
-            title=EntityTitleVO(WorkflowRuntimeRepository._as_str(row.get("title"))),
+            title=None if title is None else EntityTitleVO(title),
             description=(
                 None if description is None else EntityDescriptionVO(description)
             ),

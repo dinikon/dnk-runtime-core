@@ -60,7 +60,7 @@ def _application_descriptor() -> RuntimeObjectDescriptor:
             _field("updated_by", "uuid"),
             _field("kind", "select", default_value="'STANDARD'"),
             _field("status", "select", default_value="'NORMAL'"),
-            _field("title", "text"),
+            _field("title", "text", is_nullable=True),
             _field("description", "text", is_nullable=True),
             _field("icon", "text"),
             _field("icon_background", "text"),
