@@ -11,6 +11,13 @@ const workflowApplicationsQuery = useWorkflowApplicationsInfiniteQuery(limit);
 const errorMessage = computed(() => {
   return workflowApplicationsQuery.error.value?.message ?? null;
 });
+
+const paginationDisabled = computed(() => {
+  return (
+    workflowApplicationsQuery.isFetching.value &&
+    !workflowApplicationsQuery.isFetchingNextPage.value
+  );
+});
 </script>
 
 <template>
@@ -29,16 +36,10 @@ const errorMessage = computed(() => {
       :applications="workflowApplicationsQuery.items.value"
       :pending="workflowApplicationsQuery.isPending.value"
       :error-message="errorMessage"
-      :refreshing="
-        workflowApplicationsQuery.isFetching.value &&
-        !workflowApplicationsQuery.isFetchingNextPage.value
-      "
+      :refreshing="paginationDisabled"
       :has-next-page="workflowApplicationsQuery.hasNextPage.value"
       :loading-more="workflowApplicationsQuery.isFetchingNextPage.value"
-      :pagination-disabled="
-        workflowApplicationsQuery.isFetching.value &&
-        !workflowApplicationsQuery.isFetchingNextPage.value
-      "
+      :pagination-disabled="paginationDisabled"
       :skeleton-count="limit"
       @load-more="workflowApplicationsQuery.loadMore()"
     />
