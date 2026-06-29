@@ -43,7 +43,7 @@ class RuntimeFieldTypePolicy:
         "datetime": RuntimeFieldTypeDefinition(
             "datetime",
             "datetime(UTC-aware)",
-            "timestamp without time zone",
+            "timestamp with time zone",
         ),
         "json": RuntimeFieldTypeDefinition("json", "dict[str, Any]", "jsonb"),
         "multiselect": RuntimeFieldTypeDefinition("multiselect", "list[str]", "jsonb"),
@@ -335,7 +335,7 @@ class RuntimeFieldTypePolicy:
 
     @staticmethod
     def _coerce_datetime(*, field_name: str, raw_value: Any) -> datetime:
-        """Приводит datetime к UTC и снимает tzinfo для PostgreSQL timestamp."""
+        """Приводит datetime к UTC-aware значению для PostgreSQL timestamptz."""
         value = raw_value
         if isinstance(value, str):
             iso = value.replace("Z", "+00:00")
@@ -356,4 +356,4 @@ class RuntimeFieldTypePolicy:
         else:
             aware = value.astimezone(UTC)
 
-        return aware.replace(tzinfo=None)
+        return aware

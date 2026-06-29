@@ -192,7 +192,7 @@
 - `FieldTypeCatalog` поддерживает seed types `uuid`, `text`, `int`, `decimal`, `bool`, `date`, `datetime`, `json`,
   `select`, `multiselect`, `reference`.
 - `PostgresFieldCanonicalizer` maps seed types to SQL presets: `reference` and `uuid` to `uuid`, `decimal` to
-  `numeric(14,2)`, `datetime` to `timestamp without time zone`, `json`/`multiselect` to `jsonb`.
+  `numeric(14,2)`, `datetime` to `timestamp with time zone`, `json`/`multiselect` to `jsonb`.
 - Defaults canonicalization нормализует `now()`/`current_timestamp` в `CURRENT_TIMESTAMP`, SQL strings, UUID functions,
   booleans, numbers and jsonb literals.
 - `SchemaNamingStrategy` validates PostgreSQL identifiers with `^[a-z][a-z0-9_]*$`, max length 63, and shortens

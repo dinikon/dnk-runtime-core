@@ -7,6 +7,7 @@ from src.modules.schema_registry.application.migration.operations import (
     AddForeignKeyOperation,
     AlterColumnDefaultOperation,
     AlterColumnNullableOperation,
+    AlterColumnTypeOperation,
     CreateIndexOperation,
     CreateTableOperation,
     DropColumnOperation,
@@ -997,6 +998,75 @@ class PostgresSchemaPlanServiceTests(unittest.TestCase):
                 seed=seed,
                 actual_schema=actual_schema,
             )
+
+    def test_build_diff_plan_upgrades_datetime_columns_to_timestamptz(
+        self,
+    ) -> None:
+        seed = SchemaSeed(
+            version=None,
+            code="crm",
+            label="CRM",
+            objects=(
+                ObjectSeed(
+                    singular_name="contact",
+                    plural_name="contacts",
+                    singular_label="Contact",
+                    plural_label="Contacts",
+                    description="Contacts.",
+                    fields=(
+                        FieldSeed(
+                            name="id", type="uuid", label="ID", is_nullable=False
+                        ),
+                        FieldSeed(
+                            name="created_at",
+                            type="datetime",
+                            label="Created At",
+                            is_nullable=False,
+                            default="CURRENT_TIMESTAMP",
+                        ),
+                    ),
+                ),
+            ),
+        )
+        actual_schema = PhysicalSchemaSnapshot(
+            schema_name="dnk_test",
+            tables=(
+                TableSnapshot(
+                    name="contacts",
+                    columns=(
+                        ColumnSnapshot(
+                            name="id",
+                            sql_preset=SqlTypePresetEnum.UUID,
+                            is_nullable=False,
+                            default_value=None,
+                        ),
+                        ColumnSnapshot(
+                            name="created_at",
+                            sql_preset=SqlTypePresetEnum.TIMESTAMP,
+                            is_nullable=False,
+                            default_value="CURRENT_TIMESTAMP",
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        plan = self.service.build_diff_plan(
+            schema_name="dnk_test",
+            seed=seed,
+            actual_schema=actual_schema,
+        )
+
+        self.assertTrue(
+            any(
+                isinstance(item, AlterColumnTypeOperation)
+                and item.table_name == "contacts"
+                and item.column_name == "created_at"
+                and item.from_sql_preset == SqlTypePresetEnum.TIMESTAMP
+                and item.to_sql_preset == SqlTypePresetEnum.TIMESTAMPTZ
+                for item in plan.operations
+            )
+        )
 
     def test_build_diff_plan_allows_retained_column_drop_not_null(self) -> None:
         seed = SchemaSeed(

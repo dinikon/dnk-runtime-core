@@ -211,6 +211,20 @@ class RuntimeFieldTypePolicyTests(unittest.TestCase):
         self.assertIsNotNone(normalized["created_at"].tzinfo)
         self.assertEqual(normalized["updated_at"].tzinfo, UTC)
 
+    def test_datetime_write_value_remains_utc_aware(self) -> None:
+        policy = RuntimeFieldTypePolicy()
+        descriptor = _contact_descriptor()
+        created_at = descriptor.field_by_name("created_at")
+        assert created_at is not None
+
+        coerced = policy.coerce_value_for_field(
+            field=created_at,
+            raw_value="2026-01-01T12:00:00+03:00",
+        )
+
+        self.assertEqual(coerced, datetime(2026, 1, 1, 9, 0, 0, tzinfo=UTC))
+        self.assertEqual(coerced.tzinfo, UTC)
+
     def test_non_nullable_text_accepts_empty_string(self) -> None:
         policy = RuntimeFieldTypePolicy()
         descriptor = _contact_descriptor()

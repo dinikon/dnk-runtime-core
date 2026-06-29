@@ -821,7 +821,7 @@ class SchemaConfigRepository(
                 schema_name=schema_name,
                 table_name=table_name,
                 column_name="created_at",
-                sql_preset=SqlTypePresetEnum.TIMESTAMP,
+                sql_preset=SqlTypePresetEnum.TIMESTAMPTZ,
                 is_nullable=False,
                 default_value="CURRENT_TIMESTAMP",
             )

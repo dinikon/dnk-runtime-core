@@ -17,11 +17,15 @@ class FieldTypeCatalogTests(unittest.TestCase):
         self.catalog = FieldTypeCatalog()
         self.canonicalizer = PostgresFieldCanonicalizer()
 
-    def test_canonicalizes_seed_and_postgres_types_to_same_sql_preset(self) -> None:
+    def test_datetime_seed_uses_timestamptz_sql_preset(self) -> None:
         field_type = self.catalog.from_seed_type("datetime")
         self.assertEqual(
             self.canonicalizer.sql_preset_from_field_type(field_type),
-            SqlTypePresetEnum.TIMESTAMP,
+            SqlTypePresetEnum.TIMESTAMPTZ,
+        )
+        self.assertEqual(
+            self.canonicalizer.sql_preset_from_postgres_type("timestamp with time zone"),
+            SqlTypePresetEnum.TIMESTAMPTZ,
         )
         self.assertEqual(
             self.canonicalizer.sql_preset_from_postgres_type(
@@ -42,11 +46,11 @@ class FieldTypeCatalogTests(unittest.TestCase):
     ) -> None:
         seed_default = self.canonicalizer.normalize_seed_default(
             raw_default="now()",
-            sql_preset=SqlTypePresetEnum.TIMESTAMP,
+            sql_preset=SqlTypePresetEnum.TIMESTAMPTZ,
         )
         postgres_default = self.canonicalizer.normalize_postgres_default(
             raw_default="(now())",
-            sql_preset=SqlTypePresetEnum.TIMESTAMP,
+            sql_preset=SqlTypePresetEnum.TIMESTAMPTZ,
         )
 
         self.assertEqual(seed_default, "CURRENT_TIMESTAMP")

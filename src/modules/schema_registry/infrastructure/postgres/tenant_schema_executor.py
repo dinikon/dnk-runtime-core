@@ -12,6 +12,7 @@ from src.modules.schema_registry.application.migration.operations import (
     AddPrimaryKeyOperation,
     AlterColumnDefaultOperation,
     AlterColumnNullableOperation,
+    AlterColumnTypeOperation,
     CreateIndexOperation,
     CreateSchemaOperation,
     CreateTableOperation,
@@ -25,6 +26,9 @@ from src.modules.schema_registry.application.migration.operations import (
 from src.modules.schema_registry.application.migration.plan import MigrationPlan
 from src.modules.schema_registry.application.migration.postgres_field_canonicalizer import (
     PostgresFieldCanonicalizer,
+)
+from src.modules.schema_registry.application.migration.sql_type_preset import (
+    SqlTypePresetEnum,
 )
 from src.modules.schema_registry.domain.error import UnsupportedSchemaBackendError
 
@@ -114,6 +118,23 @@ class PostgresTenantSchemaExecutor(TenantSchemaExecutorPort):
                 sql += "DROP NOT NULL"
             else:
                 sql += "SET NOT NULL"
+            await self._session.execute(text(sql))
+            return
+
+        if isinstance(operation, AlterColumnTypeOperation):
+            column_type = self._postgres_field_canonicalizer.render_sql_preset(
+                operation.to_sql_preset
+            )
+            sql = (
+                "ALTER TABLE "
+                f"{self._qualified_table(operation.schema_name, operation.table_name)} "
+                f"ALTER COLUMN {self._qi(operation.column_name)} TYPE {column_type}"
+            )
+            if self._is_timestamp_utc_upgrade(operation):
+                sql += (
+                    f" USING {self._qi(operation.column_name)} "
+                    "AT TIME ZONE 'UTC'"
+                )
             await self._session.execute(text(sql))
             return
 
@@ -232,3 +253,10 @@ class PostgresTenantSchemaExecutor(TenantSchemaExecutorPort):
             "no_action": "NO ACTION",
         }
         return mapping.get(value.strip().lower(), "RESTRICT")
+
+    @staticmethod
+    def _is_timestamp_utc_upgrade(operation: AlterColumnTypeOperation) -> bool:
+        return (
+            operation.from_sql_preset == SqlTypePresetEnum.TIMESTAMP
+            and operation.to_sql_preset == SqlTypePresetEnum.TIMESTAMPTZ
+        )
