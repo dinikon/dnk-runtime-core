@@ -1,3 +1,13 @@
+<script setup lang="ts">
+import { Plus } from "@lucide/vue";
+
+import { Button } from "@/components/ui/button";
+
+const emit = defineEmits<{
+  (event: "create"): void;
+}>();
+</script>
+
 <template>
   <header
     class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"
@@ -7,5 +17,10 @@
         Workflow applications
       </h2>
     </div>
+
+    <Button type="button" @click="emit('create')">
+      <Plus data-icon="inline-start" />
+      Create
+    </Button>
   </header>
 </template>

@@ -1,5 +1,9 @@
 import { httpClient } from "@/app/providers/http";
-import type { WorkflowApplicationListResponseDto } from "@/modules/workflow/applications/api/workflow-application.dto.ts";
+import type {
+  CreateWorkflowApplicationRequestDto,
+  WorkflowApplicationListResponseDto,
+  WorkflowApplicationResponseDto,
+} from "@/modules/workflow/applications/api/workflow-application.dto.ts";
 
 interface ListWorkflowApplicationsParams {
   limit: number;
@@ -17,6 +21,17 @@ export async function listWorkflowApplications(
         cursor: params.cursor ?? undefined,
       },
     },
+  );
+
+  return response.data;
+}
+
+export async function createWorkflowApplication(
+  payload: CreateWorkflowApplicationRequestDto,
+): Promise<WorkflowApplicationResponseDto> {
+  const response = await httpClient.post<WorkflowApplicationResponseDto>(
+    "/console/workflows",
+    payload,
   );
 
   return response.data;

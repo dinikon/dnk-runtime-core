@@ -1,8 +1,10 @@
 import {
+  type CreateWorkflowApplicationRequestDto,
   type WorkflowApplicationListItemDto,
   type WorkflowApplicationListResponseDto,
 } from "@/modules/workflow/applications/api/workflow-application.dto.ts";
 import {
+  type CreateWorkflowApplicationPayload,
   type WorkflowApplicationListItem,
   type WorkflowApplicationListResponse,
 } from "@/modules/workflow/applications/model/workflow-application.types.ts";
@@ -28,5 +30,16 @@ export function mapWorkflowApplicationList(
   return {
     items: dto.items.map(mapWorkflowApplicationListItem),
     nextCursor: dto.next_cursor,
+  };
+}
+
+export function mapCreateWorkflowApplicationPayload(
+  payload: CreateWorkflowApplicationPayload,
+): CreateWorkflowApplicationRequestDto {
+  return {
+    title: payload.title,
+    description: payload.description,
+    icon: payload.icon,
+    icon_background: payload.iconBackground,
   };
 }

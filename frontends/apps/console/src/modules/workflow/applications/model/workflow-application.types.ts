@@ -14,4 +14,11 @@ export interface WorkflowApplicationListResponse {
   nextCursor: string | null;
 }
 
+export interface CreateWorkflowApplicationPayload {
+  title: string;
+  description: string | null;
+  icon: string;
+  iconBackground: string;
+}
+
 export type WorkflowCursor = string | null;
