@@ -3,7 +3,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { WorkflowApplicationListItem } from "@/modules/workflow/model/workflow-application.types.ts";
 import { CursorPagination } from "@/shared/pagination";
 import WorkflowApplicationsEmpty from "@/modules/workflow/components/WorkflowApplicationsEmpty.vue";
-import WorkflowApplicationsGrid from "@/modules/workflow/components/WorkflowApplicationsGrid.vue";
+import WorkflowApplicationsResult from "@/modules/workflow/components/WorkflowApplicationsResult.vue";
 import WorkflowApplicationsSkeleton from "@/modules/workflow/components/WorkflowApplicationsSkeleton.vue";
 
 withDefaults(
@@ -46,7 +46,7 @@ const emit = defineEmits<{
       <WorkflowApplicationsEmpty v-if="applications.length === 0" />
 
       <template v-else>
-        <WorkflowApplicationsGrid :applications="applications" />
+        <WorkflowApplicationsResult :applications="applications" />
 
         <CursorPagination
           :has-more="hasNextPage"

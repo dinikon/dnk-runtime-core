@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 
-import WorkflowApplicationsList from "@/modules/workflow/components/WorkflowApplicationsList.vue";
+import WorkflowApplicationsState from "@/modules/workflow/components/WorkflowApplicationsState.vue";
 import { useWorkflowApplicationsInfiniteQuery } from "@/modules/workflow/queries/use-workflow-applications-infinite-query.ts";
 
-const limit = ref(10);
+const limit = ref(12);
 
 const workflowApplicationsQuery = useWorkflowApplicationsInfiniteQuery(limit);
 
@@ -32,7 +32,7 @@ const paginationDisabled = computed(() => {
       </div>
     </header>
 
-    <WorkflowApplicationsList
+    <WorkflowApplicationsState
       :applications="workflowApplicationsQuery.items.value"
       :pending="workflowApplicationsQuery.isPending.value"
       :error-message="errorMessage"
