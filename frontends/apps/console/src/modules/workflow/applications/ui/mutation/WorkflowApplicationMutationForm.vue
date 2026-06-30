@@ -10,7 +10,6 @@ import {
 } from "@/shared/emoji-background-picker";
 import {
   Field,
-  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
@@ -77,20 +76,35 @@ defineExpose({
 <template>
   <form :class="props.class" @submit.prevent="submit">
     <FieldGroup>
-      <Field :data-invalid="Boolean(titleError)">
-        <FieldLabel for="workflow-application-title"> Title </FieldLabel>
-        <Input
-          id="workflow-application-title"
-          v-model="title"
-          :aria-invalid="Boolean(titleError)"
-          :disabled="disabled"
-          placeholder="Customer onboarding"
-          required
-        />
-        <FieldError v-if="titleError">
-          {{ titleError }}
-        </FieldError>
-      </Field>
+      <div class="grid grid-cols-[minmax(0,1fr)_4.25rem] items-start gap-4">
+        <Field :data-invalid="Boolean(titleError)">
+          <FieldLabel for="workflow-application-title"> Title </FieldLabel>
+          <Input
+            id="workflow-application-title"
+            v-model="title"
+            :aria-invalid="Boolean(titleError)"
+            :disabled="disabled"
+            placeholder="Customer onboarding"
+            required
+          />
+          <FieldError v-if="titleError">
+            {{ titleError }}
+          </FieldError>
+        </Field>
+
+        <Field class="w-17">
+          <FieldLabel class="sr-only"> Icon and background color </FieldLabel>
+          <EmojiBackgroundPicker
+            v-model="icon"
+            v-model:background="iconBackground"
+            :disabled="disabled"
+            trigger-class="size-[4.25rem] rounded-xl"
+            emoji-class="rounded-lg text-3xl"
+            title="Workflow app icon"
+            description="Choose an icon and background color for the workflow app card."
+          />
+        </Field>
+      </div>
 
       <Field>
         <FieldLabel for="workflow-application-description">
@@ -100,19 +114,8 @@ defineExpose({
           id="workflow-application-description"
           v-model="description"
           :disabled="disabled"
+          class="min-h-28"
           placeholder="Optional workflow app description"
-        />
-        <FieldDescription> Optional. </FieldDescription>
-      </Field>
-
-      <Field>
-        <FieldLabel> Icon and background color </FieldLabel>
-        <EmojiBackgroundPicker
-          v-model="icon"
-          v-model:background="iconBackground"
-          :disabled="disabled"
-          title="Workflow app icon"
-          description="Choose an icon and background color for the workflow app card."
         />
       </Field>
     </FieldGroup>
