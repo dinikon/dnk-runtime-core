@@ -74,6 +74,113 @@ Reusable primitives live under `components/ui` and follow the shadcn-vue
 composition style. Figma-specific custom components live under
 `components/custom-ui`.
 
+## Page Structure And Component Responsibilities
+
+For page-oriented Vue modules, the route-level page component is an
+orchestrator. It connects page state, queries, mutations, router concerns and
+dialogs, then passes plain props down and handles emitted events back up.
+
+The dependency shape should stay simple:
+
+```text
+Page
+|-- Header
+|-- Toolbar
+|-- SearchBar
+|-- Body
+|   |-- Skeleton
+|   |-- Empty
+|   `-- Results
+|       |-- List
+|       |-- Grid / Cards
+|       `-- Kanban
+|-- Footer
+|   |-- PagePagination
+|   `-- InfinitePagination
+`-- Forms / Dialogs
+    |-- CreateDialog + Form
+    |-- EditDialog + Form
+    `-- DeleteDialog / ConfirmDialog
+```
+
+The core rule is:
+
+```text
+Page knows about all page collaborators.
+Child components know only about their own props and emits.
+UI components do not know about API clients, DTOs, router state or TanStack Query.
+```
+
+When a feature grows beyond a single small page, prefer this module shape:
+
+```text
+frontends/apps/console/src/modules/<feature>/
+|-- api/
+|   |-- <entity>.api.ts
+|   |-- <entity>.dto.ts
+|   `-- <entity>.mapper.ts
+|-- model/
+|   |-- <entity>.types.ts
+|   |-- <entity>.constants.ts
+|   |-- <entity>.query-keys.ts
+|   |-- use-<entity-plural>-query.ts
+|   |-- use-create-<entity>.ts
+|   |-- use-update-<entity>.ts
+|   |-- use-delete-<entity>.ts
+|   `-- use-<entity-plural>-page-state.ts
+|-- ui/
+|   |-- page/
+|   |-- results/
+|   |-- item/
+|   `-- forms/
+`-- index.ts
+```
+
+Existing modules may still use `pages/`, `components/`, `queries/` and
+`mutations/`; keep local consistency when making narrow changes. New or
+substantially refactored modules should move toward the responsibility model
+above.
+
+Component responsibilities:
+
+| Component | Responsibility |
+| --- | --- |
+| `[EntityPlural]Page.vue` | Route-level orchestrator. Owns page state, query/mutation wiring, router integration, dialog open state, event handling and data flow. It should not render cards, list rows, form fields or all loading/empty/result branches inline. |
+| `[EntityPlural]Header.vue` | Page title, description and primary page action. It should not own search, filters or sorting. |
+| `[EntityPlural]Toolbar.vue` | List actions such as view mode, sort, filters, bulk actions and refresh. |
+| `[EntityPlural]SearchBar.vue` | Search input and search-related emits or `v-model`. Keep it separate when search is a first-class page control. |
+| `[EntityPlural]Body.vue` | Chooses the current data state: `Skeleton`, `Empty`, `Error` or `Results`. List, grid and kanban components should not receive `loading` or `empty` props. |
+| `[EntityPlural]Results.vue` | Chooses the concrete result view: `List`, `Grid` or `Kanban`. It represents loaded data, not pagination or fetching state. |
+| `[EntityPlural]List.vue`, `[EntityPlural]Grid.vue`, `[EntityPlural]Kanban.vue` | Render collection layout only. They do not know how data is loaded, paginated, created, updated or deleted. |
+| `[Entity]Card.vue`, `[Entity]ListItem.vue`, `[Entity]KanbanCard.vue` | Render one item. Use singular names for one entity and plural names for collections. |
+| `[Entity]Form.vue` | Owns fields and validation. It emits submitted values and does not call API clients directly. |
+| `Create[Entity]Dialog.vue`, `Edit[Entity]Dialog.vue` | Own modal UX, submit/cancel behavior and contain the form component. They emit submit events to the page or smart feature boundary. |
+| `Delete[Entity]Dialog.vue` or `Delete[Entity]ConfirmDialog.vue` | Owns delete confirmation UX. Delete is a confirm dialog, not a form. |
+| `[EntityPlural]Footer.vue` | Owns page navigation controls. Pagination belongs in the footer, not in `Results`. |
+
+Shared UI components must remain free of business meaning. For example,
+`shared/ui/pagination/PagePagination.vue` can render generic pagination, while
+`[EntityPlural]Footer.vue` adapts that pagination to a feature's page state.
+
+Keep DTOs and frontend models separate. DTOs live in `api/*.dto.ts`, mappers
+translate them in `api/*.mapper.ts`, and Vue UI components consume frontend
+types from `model/*.types.ts`. The UI layer may import child UI components,
+shared UI primitives and model types, but it should not import `api`, DTOs,
+mappers, query keys or query/mutation composables.
+
+Use this quick naming check when adding a component:
+
+```text
+Route-level screen?              -> Page
+Page block?                      -> Header / Toolbar / SearchBar / Body / Footer
+Data state?                      -> Skeleton / Empty / Results
+Concrete data view?              -> List / Grid / Kanban
+One entity?                      -> Card / ListItem / KanbanCard
+Input fields?                    -> Form
+Modal action wrapper?            -> Dialog
+Reusable UI without domain terms? -> shared/ui
+```
+
 ## State And Session
 
 `useSessionStore` is the current session state boundary. It owns:

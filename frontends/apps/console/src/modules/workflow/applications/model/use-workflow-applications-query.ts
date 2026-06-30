@@ -5,28 +5,29 @@ import {
   useInfiniteQuery,
 } from "@tanstack/vue-query";
 
-import { listWorkflowApplications } from "@/modules/workflow/api/workflow-application.api.ts";
+import type { WorkflowApplicationListResponseDto } from "@/modules/workflow/applications/api/workflow-application.dto.ts";
+import { listWorkflowApplications } from "@/modules/workflow/applications/api/workflow-application.api.ts";
+import { mapWorkflowApplicationList } from "@/modules/workflow/applications/model/workflow-application.mapper.ts";
 import {
   type WorkflowApplicationsQueryKey,
-  workflowQueryKeys,
-} from "@/modules/workflow/queries/workflow.query-keys.ts";
+  workflowApplicationQueryKeys,
+} from "@/modules/workflow/applications/model/workflow-application.query-keys.ts";
 import type {
   WorkflowApplicationListItem,
-  WorkflowApplicationListResponse,
   WorkflowCursor,
-} from "@/modules/workflow/model/workflow-application.types.ts";
+} from "@/modules/workflow/applications/model/workflow-application.types.ts";
 
-export function useWorkflowApplicationsInfiniteQuery(limit: Ref<number>) {
+export function useWorkflowApplicationsQuery(limit: Ref<number>) {
   const queryKey = computed<WorkflowApplicationsQueryKey>(() =>
-    workflowQueryKeys.applicationsList({
+    workflowApplicationQueryKeys.applicationsList({
       limit: limit.value,
     }),
   );
 
   const query = useInfiniteQuery<
-    WorkflowApplicationListResponse,
+    WorkflowApplicationListResponseDto,
     Error,
-    InfiniteData<WorkflowApplicationListResponse>,
+    InfiniteData<WorkflowApplicationListResponseDto>,
     WorkflowApplicationsQueryKey,
     WorkflowCursor
   >({
@@ -49,12 +50,16 @@ export function useWorkflowApplicationsInfiniteQuery(limit: Ref<number>) {
     },
 
     getNextPageParam: (lastPage) => {
-      return lastPage.nextCursor ?? undefined;
+      return lastPage.next_cursor ?? undefined;
     },
   });
 
   const items = computed<WorkflowApplicationListItem[]>(() => {
-    return query.data.value?.pages.flatMap((page) => page.items) ?? [];
+    return (
+      query.data.value?.pages.flatMap((page) => {
+        return mapWorkflowApplicationList(page).items;
+      }) ?? []
+    );
   });
 
   const pageCount = computed(() => {
@@ -64,7 +69,7 @@ export function useWorkflowApplicationsInfiniteQuery(limit: Ref<number>) {
   const lastNextCursor = computed(() => {
     const pages = query.data.value?.pages ?? [];
 
-    return pages.at(-1)?.nextCursor ?? null;
+    return pages.at(-1)?.next_cursor ?? null;
   });
 
   async function loadMore(): Promise<void> {

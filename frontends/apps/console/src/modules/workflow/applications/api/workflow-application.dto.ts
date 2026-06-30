@@ -16,4 +16,3 @@ export interface WorkflowApplicationListResponseDto {
   items: WorkflowApplicationListItemDto[];
   next_cursor: string | null;
 }
-

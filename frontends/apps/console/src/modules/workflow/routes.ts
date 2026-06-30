@@ -1,15 +1,15 @@
 import type { RouteRecordRaw } from "vue-router";
 
-import WorkflowHeader from "@/modules/workflow/components/WorkflowHeader.vue";
-import WorkflowListPage from "@/modules/workflow/pages/WorkflowListPage.vue";
+import WorkflowApplicationsPage from "@/modules/workflow/applications/ui/page/WorkflowApplicationsPage.vue";
+import WorkflowApplicationsRouteHeader from "@/modules/workflow/applications/ui/page/WorkflowApplicationsRouteHeader.vue";
 
 export const workflowRoutes: RouteRecordRaw[] = [
   {
     path: "workflows",
     name: "workflow-list",
     components: {
-      default: WorkflowListPage,
-      header: WorkflowHeader,
+      default: WorkflowApplicationsPage,
+      header: WorkflowApplicationsRouteHeader,
     },
     meta: {
       title: "Workflows",

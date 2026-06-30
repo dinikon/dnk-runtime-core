@@ -1,12 +1,11 @@
 import {
-    WorkflowApplicationListItemDto,
-    WorkflowApplicationListResponseDto
-} from "@/modules/workflow/api/workflow-application.dto.ts";
+  type WorkflowApplicationListItemDto,
+  type WorkflowApplicationListResponseDto,
+} from "@/modules/workflow/applications/api/workflow-application.dto.ts";
 import {
-    WorkflowApplicationListItem,
-    WorkflowApplicationListResponse
-} from "@/modules/workflow/model/workflow-application.types.ts";
-
+  type WorkflowApplicationListItem,
+  type WorkflowApplicationListResponse,
+} from "@/modules/workflow/applications/model/workflow-application.types.ts";
 
 export function mapWorkflowApplicationListItem(
   dto: WorkflowApplicationListItemDto,
