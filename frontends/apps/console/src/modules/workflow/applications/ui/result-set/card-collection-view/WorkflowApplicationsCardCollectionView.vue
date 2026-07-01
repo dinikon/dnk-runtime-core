@@ -12,7 +12,9 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+  <div
+    class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,22rem),1fr))] items-stretch gap-4"
+  >
     <WorkflowApplicationCardView
       v-for="application in items"
       :key="application.id"

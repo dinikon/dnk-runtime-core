@@ -15,7 +15,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <Card class="h-full gap-4 overflow-hidden">
+  <Card class="h-full min-h-32 gap-0 overflow-hidden rounded-2xl py-0">
     <WorkflowApplicationCardHeader :application="application" />
     <WorkflowApplicationCardContent :application="application" />
     <WorkflowApplicationCardFooter
