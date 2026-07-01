@@ -4,10 +4,16 @@ import { toast } from "vue-sonner";
 
 import { getApiErrorMessage } from "@/app/providers/http";
 import { useCreateWorkflowApplication } from "@/modules/workflow/applications/model/use-create-workflow-application.ts";
+import { useUpdateWorkflowApplication } from "@/modules/workflow/applications/model/use-update-workflow-application.ts";
 import { useWorkflowApplicationsPageState } from "@/modules/workflow/applications/model/use-workflow-applications-page-state.ts";
 import { useWorkflowApplicationsQuery } from "@/modules/workflow/applications/model/use-workflow-applications-query.ts";
-import type { CreateWorkflowApplicationPayload } from "@/modules/workflow/applications/model/workflow-application.types.ts";
+import type {
+  CreateWorkflowApplicationPayload,
+  WorkflowApplicationListItem,
+  WorkflowApplicationMutationPayload,
+} from "@/modules/workflow/applications/model/workflow-application.types.ts";
 import WorkflowApplicationCreationDialog from "@/modules/workflow/applications/ui/mutation/WorkflowApplicationCreationDialog.vue";
+import WorkflowApplicationUpdateDialog from "@/modules/workflow/applications/ui/mutation/WorkflowApplicationUpdateDialog.vue";
 import WorkflowApplicationsNavigationPanel from "@/modules/workflow/applications/ui/page/WorkflowApplicationsNavigationPanel.vue";
 import WorkflowApplicationsPageHeader from "@/modules/workflow/applications/ui/page/WorkflowApplicationsPageHeader.vue";
 import WorkflowApplicationsViewState from "@/modules/workflow/applications/ui/view-state/WorkflowApplicationsViewState.vue";
@@ -15,7 +21,10 @@ import WorkflowApplicationsViewState from "@/modules/workflow/applications/ui/vi
 const pageState = useWorkflowApplicationsPageState();
 const workflowApplicationsQuery = useWorkflowApplicationsQuery(pageState.limit);
 const createWorkflowApplicationMutation = useCreateWorkflowApplication();
+const updateWorkflowApplicationMutation = useUpdateWorkflowApplication();
 const createOpen = ref(false);
+const updateOpen = ref(false);
+const selectedApplication = ref<WorkflowApplicationListItem | null>(null);
 
 const errorMessage = computed(() => {
   return workflowApplicationsQuery.error.value?.message ?? null;
@@ -51,6 +60,44 @@ async function createWorkflowApplication(
     );
   }
 }
+
+function editWorkflowApplication(application: WorkflowApplicationListItem) {
+  selectedApplication.value = application;
+  updateOpen.value = true;
+}
+
+function setUpdateOpen(open: boolean) {
+  updateOpen.value = open;
+
+  if (!open) {
+    selectedApplication.value = null;
+  }
+}
+
+async function updateWorkflowApplication(
+  payload: WorkflowApplicationMutationPayload,
+) {
+  const application = selectedApplication.value;
+
+  if (application === null) {
+    return;
+  }
+
+  try {
+    const workflow = await updateWorkflowApplicationMutation.mutateAsync({
+      id: application.id,
+      ...payload,
+    });
+
+    updateOpen.value = false;
+    selectedApplication.value = null;
+    toast.success(`${workflow.title} saved.`);
+  } catch (error) {
+    toast.error(
+      getApiErrorMessage(error, "Failed to update workflow application."),
+    );
+  }
+}
 </script>
 
 <template>
@@ -65,6 +112,7 @@ async function createWorkflowApplication(
         :fetching="backgroundFetching"
         :view-mode="pageState.viewMode.value"
         :skeleton-count="pageState.limit.value"
+        @edit="editWorkflowApplication"
       />
 
       <WorkflowApplicationsNavigationPanel
@@ -81,6 +129,14 @@ async function createWorkflowApplication(
       v-model:open="createOpen"
       :saving="createWorkflowApplicationMutation.isPending.value"
       @submit="createWorkflowApplication"
+    />
+
+    <WorkflowApplicationUpdateDialog
+      :open="updateOpen"
+      :saving="updateWorkflowApplicationMutation.isPending.value"
+      :application="selectedApplication"
+      @update:open="setUpdateOpen"
+      @submit="updateWorkflowApplication"
     />
   </section>
 </template>

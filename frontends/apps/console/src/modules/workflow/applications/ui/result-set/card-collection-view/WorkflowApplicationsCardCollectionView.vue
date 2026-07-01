@@ -5,14 +5,19 @@ import WorkflowApplicationCardView from "@/modules/workflow/applications/ui/resu
 defineProps<{
   items: WorkflowApplicationListItem[];
 }>();
+
+const emit = defineEmits<{
+  (event: "edit", value: WorkflowApplicationListItem): void;
+}>();
 </script>
 
 <template>
-  <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+  <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
     <WorkflowApplicationCardView
       v-for="application in items"
       :key="application.id"
       :application="application"
+      @edit="emit('edit', $event)"
     />
   </div>
 </template>

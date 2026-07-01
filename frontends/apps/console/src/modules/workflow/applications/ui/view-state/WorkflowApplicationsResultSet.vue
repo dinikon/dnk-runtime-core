@@ -7,11 +7,16 @@ defineProps<{
   items: WorkflowApplicationListItem[];
   viewMode: WorkflowApplicationsViewMode;
 }>();
+
+const emit = defineEmits<{
+  (event: "edit", value: WorkflowApplicationListItem): void;
+}>();
 </script>
 
 <template>
   <WorkflowApplicationsCardCollectionView
     v-if="viewMode === 'cards'"
     :items="items"
+    @edit="emit('edit', $event)"
   />
 </template>

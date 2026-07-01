@@ -8,12 +8,19 @@ import WorkflowApplicationCardHeader from "@/modules/workflow/applications/ui/re
 defineProps<{
   application: WorkflowApplicationListItem;
 }>();
+
+const emit = defineEmits<{
+  (event: "edit", value: WorkflowApplicationListItem): void;
+}>();
 </script>
 
 <template>
   <Card class="h-full gap-4 overflow-hidden">
     <WorkflowApplicationCardHeader :application="application" />
     <WorkflowApplicationCardContent :application="application" />
-    <WorkflowApplicationCardFooter :application="application" />
+    <WorkflowApplicationCardFooter
+      :application="application"
+      @edit="emit('edit', $event)"
+    />
   </Card>
 </template>

@@ -14,21 +14,24 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
-import type { CreateWorkflowApplicationPayload } from "@/modules/workflow/applications/model/workflow-application.types.ts";
+import type { WorkflowApplicationMutationPayload } from "@/modules/workflow/applications/model/workflow-application.types.ts";
 
 const props = defineProps<{
   disabled?: boolean;
+  initialValue?: WorkflowApplicationMutationPayload | null;
   class?: string;
 }>();
 
 const emit = defineEmits<{
-  (event: "submit", value: CreateWorkflowApplicationPayload): void;
+  (event: "submit", value: WorkflowApplicationMutationPayload): void;
 }>();
 
-const title = ref("");
-const description = ref("");
-const icon = ref(DEFAULT_EMOJI);
-const iconBackground = ref(DEFAULT_EMOJI_BACKGROUND);
+const title = ref(props.initialValue?.title ?? "");
+const description = ref(props.initialValue?.description ?? "");
+const icon = ref(props.initialValue?.icon ?? DEFAULT_EMOJI);
+const iconBackground = ref(
+  props.initialValue?.iconBackground ?? DEFAULT_EMOJI_BACKGROUND,
+);
 const submitAttempted = ref(false);
 
 const trimmedTitle = computed(() => title.value.trim());
@@ -43,10 +46,11 @@ const titleError = computed(() => {
 const canSubmit = computed(() => trimmedTitle.value.length > 0);
 
 function reset() {
-  title.value = "";
-  description.value = "";
-  icon.value = DEFAULT_EMOJI;
-  iconBackground.value = DEFAULT_EMOJI_BACKGROUND;
+  title.value = props.initialValue?.title ?? "";
+  description.value = props.initialValue?.description ?? "";
+  icon.value = props.initialValue?.icon ?? DEFAULT_EMOJI;
+  iconBackground.value =
+    props.initialValue?.iconBackground ?? DEFAULT_EMOJI_BACKGROUND;
   submitAttempted.value = false;
 }
 

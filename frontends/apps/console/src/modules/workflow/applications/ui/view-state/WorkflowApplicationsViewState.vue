@@ -20,6 +20,10 @@ withDefaults(
     skeletonCount: 10,
   },
 );
+
+const emit = defineEmits<{
+  (event: "edit", value: WorkflowApplicationListItem): void;
+}>();
 </script>
 
 <template>
@@ -45,6 +49,7 @@ withDefaults(
         v-else
         :items="items"
         :view-mode="viewMode"
+        @edit="emit('edit', $event)"
       />
     </template>
   </div>
