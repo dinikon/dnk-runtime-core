@@ -17,7 +17,7 @@ const description = computed(() => {
 <template>
   <CardHeader class="grid-cols-[auto_1fr_auto] gap-x-3 gap-y-2">
     <div
-      class="row-span-2 flex size-11 items-center justify-center rounded-md border text-lg font-semibold"
+      class="row-span-2 flex size-14 items-center justify-center rounded-md border text-3xl font-semibold"
       :style="{ backgroundColor: application.iconBackground }"
       aria-hidden="true"
     >
