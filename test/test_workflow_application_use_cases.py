@@ -6,18 +6,28 @@ from uuid import UUID, uuid4
 
 from src.modules.shared import EntityIdVO
 from src.modules.shared.application.pagination import CursorCodec, InvalidCursorError
+from src.modules.shared.domain.value_object.entity_description import (
+    EntityDescriptionVO,
+)
+from src.modules.shared.domain.value_object.entity_title import EntityTitleVO
 from src.modules.workflow.application.workflow_application import (
     CreateWorkflowCommand,
     CreateWorkflowUseCase,
     ListWorkflowsQuery,
     ListWorkflowsUseCase,
+    UpdateWorkflowCommand,
+    UpdateWorkflowUseCase,
     WorkflowApplicationCursor,
     WorkflowApplicationListItemDTO,
 )
 from src.modules.workflow.domain import (
+    WorkflowApplicationEntity,
     WorkflowApplicationIdVO,
+    WorkflowApplicationNotFoundError,
     WorkflowApplicationStatusVO,
     WorkflowDefinitionIdVO,
+    WorkflowIconBackgroundVO,
+    WorkflowIconVO,
     WorkflowKindVO,
 )
 
@@ -39,9 +49,17 @@ class _ClockStub:
 
 
 class _WorkflowApplicationRepositoryStub:
-    def __init__(self) -> None:
+    def __init__(self, workflow=None) -> None:
+        self.workflow = workflow
+        self.loaded_tenant_id = None
+        self.loaded_workflow_id = None
         self.saved_tenant_id = None
         self.saved_workflow = None
+
+    async def load(self, *, tenant_id, workflow_id):
+        self.loaded_tenant_id = tenant_id
+        self.loaded_workflow_id = workflow_id
+        return self.workflow
 
     async def save(self, *, tenant_id, workflow):
         self.saved_tenant_id = tenant_id
@@ -178,6 +196,120 @@ class WorkflowApplicationUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.icon, "workflow")
         self.assertEqual(result.icon_background, "#ffffff")
         self.assertIsNone(result.active_workflow_definition_id)
+
+    async def test_update_workflow_updates_application_details(self) -> None:
+        tenant_id = uuid4()
+        workflow_id = uuid4()
+        created_by = uuid4()
+        updated_by = uuid4()
+        created_at = datetime(2026, 6, 27, 12, 0, tzinfo=UTC)
+        updated_at = datetime(2026, 6, 27, 13, 0, tzinfo=UTC)
+        workflow = WorkflowApplicationEntity.create(
+            entity_id=WorkflowApplicationIdVO.from_value(workflow_id),
+            kind=WorkflowKindVO.STANDARD,
+            title=EntityTitleVO("Customer journey"),
+            description=EntityDescriptionVO("Default customer workflow"),
+            icon=WorkflowIconVO("workflow"),
+            icon_background=WorkflowIconBackgroundVO("#ffffff"),
+            created_by=EntityIdVO.from_value(created_by),
+            now=created_at,
+        )
+        repository = _WorkflowApplicationRepositoryStub(workflow)
+        use_case = UpdateWorkflowUseCase(
+            repository=repository,
+            clock=_ClockStub(updated_at),
+        )
+
+        result = await use_case(
+            UpdateWorkflowCommand(
+                tenant_id=tenant_id,
+                updated_by=updated_by,
+                workflow_id=workflow_id,
+                title="  Updated journey  ",
+                description="  Updated description  ",
+                icon="  sparkles  ",
+                icon_background="  #111111  ",
+            )
+        )
+
+        self.assertEqual(repository.loaded_tenant_id, EntityIdVO.from_value(tenant_id))
+        self.assertEqual(
+            repository.loaded_workflow_id,
+            WorkflowApplicationIdVO.from_value(workflow_id),
+        )
+        self.assertEqual(repository.saved_tenant_id, EntityIdVO.from_value(tenant_id))
+        self.assertIs(repository.saved_workflow, workflow)
+        self.assertEqual(workflow.title.value, "Updated journey")
+        self.assertEqual(workflow.description.value, "Updated description")
+        self.assertEqual(workflow.icon.value, "sparkles")
+        self.assertEqual(workflow.icon_background.value, "#111111")
+        self.assertEqual(workflow.updated_by, EntityIdVO.from_value(updated_by))
+        self.assertEqual(workflow.updated_at, updated_at)
+
+        self.assertEqual(result.id, workflow_id)
+        self.assertEqual(result.created_at, created_at)
+        self.assertEqual(result.updated_at, updated_at)
+        self.assertEqual(result.created_by, created_by)
+        self.assertEqual(result.updated_by, updated_by)
+        self.assertEqual(result.title, "Updated journey")
+        self.assertEqual(result.description, "Updated description")
+        self.assertEqual(result.icon, "sparkles")
+        self.assertEqual(result.icon_background, "#111111")
+
+    async def test_update_workflow_converts_blank_description_to_null(self) -> None:
+        tenant_id = uuid4()
+        workflow_id = uuid4()
+        created_by = uuid4()
+        updated_by = uuid4()
+        now = datetime(2026, 6, 27, 12, 0, tzinfo=UTC)
+        workflow = WorkflowApplicationEntity.create(
+            entity_id=WorkflowApplicationIdVO.from_value(workflow_id),
+            kind=WorkflowKindVO.STANDARD,
+            title=EntityTitleVO("Customer journey"),
+            description=EntityDescriptionVO("Default customer workflow"),
+            icon=WorkflowIconVO("workflow"),
+            icon_background=WorkflowIconBackgroundVO("#ffffff"),
+            created_by=EntityIdVO.from_value(created_by),
+            now=now,
+        )
+        use_case = UpdateWorkflowUseCase(
+            repository=_WorkflowApplicationRepositoryStub(workflow),
+            clock=_ClockStub(now),
+        )
+
+        result = await use_case(
+            UpdateWorkflowCommand(
+                tenant_id=tenant_id,
+                updated_by=updated_by,
+                workflow_id=workflow_id,
+                title="Customer journey",
+                description="  ",
+                icon="workflow",
+                icon_background="#ffffff",
+            )
+        )
+
+        self.assertIsNone(workflow.description)
+        self.assertIsNone(result.description)
+
+    async def test_update_workflow_raises_not_found(self) -> None:
+        use_case = UpdateWorkflowUseCase(
+            repository=_WorkflowApplicationRepositoryStub(),
+            clock=_ClockStub(datetime(2026, 6, 27, 12, 0, tzinfo=UTC)),
+        )
+
+        with self.assertRaises(WorkflowApplicationNotFoundError):
+            await use_case(
+                UpdateWorkflowCommand(
+                    tenant_id=uuid4(),
+                    updated_by=uuid4(),
+                    workflow_id=uuid4(),
+                    title="Customer journey",
+                    description=None,
+                    icon="workflow",
+                    icon_background="#ffffff",
+                )
+            )
 
     async def test_list_workflows_returns_items_and_next_cursor(self) -> None:
         tenant_id = uuid4()

@@ -38,3 +38,10 @@ export interface CreateWorkflowApplicationRequestDto {
   icon: string;
   icon_background: string;
 }
+
+export interface UpdateWorkflowApplicationRequestDto {
+  title: string;
+  description: string | null;
+  icon: string;
+  icon_background: string;
+}

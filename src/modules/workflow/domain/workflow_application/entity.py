@@ -72,6 +72,23 @@ class WorkflowApplicationEntity:
         self.title = title
         self.updated_at = clock
 
+    def update_details(
+        self,
+        *,
+        title: EntityTitleVO,
+        description: EntityDescriptionVO | None,
+        icon: WorkflowIconVO,
+        icon_background: WorkflowIconBackgroundVO,
+        updated_by: EntityIdVO,
+        now: datetime,
+    ) -> None:
+        self.title = title
+        self.description = description
+        self.icon = icon
+        self.icon_background = icon_background
+        self.updated_by = updated_by
+        self.updated_at = now
+
     def set_active_workflow_definition(
         self,
         workflow_definition_id: WorkflowDefinitionIdVO,

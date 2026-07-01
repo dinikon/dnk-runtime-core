@@ -14,6 +14,10 @@ from src.modules.workflow.application.workflow_application.dto import (
     WorkflowApplicationListDTO,
     WorkflowApplicationListItemDTO,
 )
+from src.modules.workflow.domain import WorkflowApplicationNotFoundError
+from src.modules.workflow.presentation.http.workflow_application.controller.update_workflow import (
+    update_workflow,
+)
 from src.modules.workflow.presentation.http.workflow_application.controller.list_workflows import (
     list_workflows,
 )
@@ -23,6 +27,7 @@ from src.modules.workflow.presentation.http.workflow_application.controller.crea
 )
 from src.modules.workflow.presentation.http.workflow_application.requests import (
     CreateWorkflowRequestSchema,
+    UpdateWorkflowRequestSchema,
 )
 
 
@@ -75,6 +80,7 @@ class WorkflowHttpRouterTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn(("POST", "/workflows"), routes)
         self.assertIn(("GET", "/workflows"), routes)
+        self.assertIn(("PUT", "/workflows/{workflow_id}"), routes)
 
     async def test_create_workflow_returns_response_shape(self) -> None:
         now = datetime.now(UTC)
@@ -125,6 +131,62 @@ class WorkflowHttpRouterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(use_case.command.created_by, context.principal.user_id)
         self.assertEqual(use_case.command.title, "Customer journey")
         self.assertEqual(use_case.command.icon, "workflow")
+
+    async def test_update_workflow_returns_response_shape(self) -> None:
+        created_at = datetime(2026, 6, 27, 12, 0, tzinfo=UTC)
+        updated_at = datetime(2026, 6, 27, 13, 0, tzinfo=UTC)
+        workflow_id = uuid4()
+        created_by = uuid4()
+        updated_by = uuid4()
+        context = _context()
+        use_case = _UseCaseStub(
+            WorkflowApplicationDTO(
+                id=workflow_id,
+                created_at=created_at,
+                updated_at=updated_at,
+                created_by=created_by,
+                updated_by=updated_by,
+                kind="STANDARD",
+                status="NORMAL",
+                title="Updated journey",
+                description=None,
+                icon="sparkles",
+                icon_background="#111111",
+                active_workflow_definition_id=None,
+            )
+        )
+
+        response = await update_workflow(
+            workflow_id=workflow_id,
+            payload=UpdateWorkflowRequestSchema(
+                title="Updated journey",
+                description=None,
+                icon="sparkles",
+                icon_background="#111111",
+            ),
+            context=context,
+            use_case=use_case,
+        )
+
+        self.assertEqual(response.id, workflow_id)
+        self.assertEqual(response.created_at, created_at)
+        self.assertEqual(response.updated_at, updated_at)
+        self.assertEqual(response.created_by, created_by)
+        self.assertEqual(response.updated_by, updated_by)
+        self.assertEqual(response.kind, "STANDARD")
+        self.assertEqual(response.status, "NORMAL")
+        self.assertEqual(response.title, "Updated journey")
+        self.assertIsNone(response.description)
+        self.assertEqual(response.icon, "sparkles")
+        self.assertEqual(response.icon_background, "#111111")
+        self.assertIsNone(response.active_workflow_definition_id)
+        self.assertEqual(use_case.command.tenant_id, context.principal.tenant_id)
+        self.assertEqual(use_case.command.updated_by, context.principal.user_id)
+        self.assertEqual(use_case.command.workflow_id, workflow_id)
+        self.assertEqual(use_case.command.title, "Updated journey")
+        self.assertEqual(use_case.command.description, None)
+        self.assertEqual(use_case.command.icon, "sparkles")
+        self.assertEqual(use_case.command.icon_background, "#111111")
 
     async def test_list_workflows_returns_response_shape(self) -> None:
         now = datetime.now(UTC)
@@ -188,6 +250,26 @@ class WorkflowHttpRouterTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(caught.exception.status_code, status.HTTP_401_UNAUTHORIZED)
 
+    async def test_update_workflow_returns_401_without_principal(self) -> None:
+        with self.assertRaises(HTTPException) as caught:
+            await update_workflow(
+                workflow_id=uuid4(),
+                payload=UpdateWorkflowRequestSchema(
+                    title="Customer journey",
+                    icon="workflow",
+                    icon_background="#ffffff",
+                ),
+                context=RequestContext(
+                    principal=None,
+                    request_id=None,
+                    ip=None,
+                    user_agent=None,
+                ),
+                use_case=_UseCaseStub(None),
+            )
+
+        self.assertEqual(caught.exception.status_code, status.HTTP_401_UNAUTHORIZED)
+
     async def test_list_workflows_returns_401_without_principal(self) -> None:
         with self.assertRaises(HTTPException) as caught:
             await list_workflows(
@@ -230,6 +312,33 @@ class WorkflowHttpRouterTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(caught.exception.status_code, status.HTTP_401_UNAUTHORIZED)
 
+    async def test_update_workflow_returns_401_without_tenant(self) -> None:
+        context = RequestContext(
+            principal=Principal(
+                user_id=str(uuid4()),
+                tenant_id=None,
+                session_id=str(uuid4()),
+                roles=(),
+            ),
+            request_id=None,
+            ip=None,
+            user_agent=None,
+        )
+
+        with self.assertRaises(HTTPException) as caught:
+            await update_workflow(
+                workflow_id=uuid4(),
+                payload=UpdateWorkflowRequestSchema(
+                    title="Customer journey",
+                    icon="workflow",
+                    icon_background="#ffffff",
+                ),
+                context=context,
+                use_case=_UseCaseStub(None),
+            )
+
+        self.assertEqual(caught.exception.status_code, status.HTTP_401_UNAUTHORIZED)
+
     async def test_create_workflow_returns_401_without_user(self) -> None:
         context = RequestContext(
             principal=Principal(
@@ -246,6 +355,33 @@ class WorkflowHttpRouterTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(HTTPException) as caught:
             await create_workflow(
                 payload=CreateWorkflowRequestSchema(
+                    title="Customer journey",
+                    icon="workflow",
+                    icon_background="#ffffff",
+                ),
+                context=context,
+                use_case=_UseCaseStub(None),
+            )
+
+        self.assertEqual(caught.exception.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    async def test_update_workflow_returns_401_without_user(self) -> None:
+        context = RequestContext(
+            principal=Principal(
+                user_id="",
+                tenant_id=str(uuid4()),
+                session_id=str(uuid4()),
+                roles=(),
+            ),
+            request_id=None,
+            ip=None,
+            user_agent=None,
+        )
+
+        with self.assertRaises(HTTPException) as caught:
+            await update_workflow(
+                workflow_id=uuid4(),
+                payload=UpdateWorkflowRequestSchema(
                     title="Customer journey",
                     icon="workflow",
                     icon_background="#ffffff",
@@ -275,10 +411,47 @@ class WorkflowHttpRouterTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(caught.exception.status_code, status.HTTP_409_CONFLICT)
 
+    async def test_update_workflow_returns_404_when_not_found(self) -> None:
+        with self.assertRaises(HTTPException) as caught:
+            await update_workflow(
+                workflow_id=uuid4(),
+                payload=UpdateWorkflowRequestSchema(
+                    title="Customer journey",
+                    icon="workflow",
+                    icon_background="#ffffff",
+                ),
+                context=_context(),
+                use_case=_FailingUseCase(
+                    WorkflowApplicationNotFoundError(str(uuid4()))
+                ),
+            )
+
+        self.assertEqual(caught.exception.status_code, status.HTTP_404_NOT_FOUND)
+
     async def test_create_workflow_validation_error_returns_422(self) -> None:
         with self.assertRaises(HTTPException) as caught:
             await create_workflow(
                 payload=CreateWorkflowRequestSchema(
+                    title="",
+                    icon="workflow",
+                    icon_background="#ffffff",
+                ),
+                context=_context(),
+                use_case=_FailingUseCase(
+                    RuntimeDataValidationError("Field 'title' must not be empty.")
+                ),
+            )
+
+        self.assertEqual(
+            caught.exception.status_code,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+
+    async def test_update_workflow_validation_error_returns_422(self) -> None:
+        with self.assertRaises(HTTPException) as caught:
+            await update_workflow(
+                workflow_id=uuid4(),
+                payload=UpdateWorkflowRequestSchema(
                     title="",
                     icon="workflow",
                     icon_background="#ffffff",

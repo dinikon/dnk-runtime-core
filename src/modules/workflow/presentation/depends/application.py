@@ -8,6 +8,7 @@ from src.modules.shared.presentation import ClockDep, UuidDep
 from src.modules.workflow.application.workflow_application import (
     CreateWorkflowUseCase,
     ListWorkflowsUseCase,
+    UpdateWorkflowUseCase,
 )
 from src.modules.workflow.presentation.depends.infrastructure import (
     WorkflowApplicationCommandRepositoryDep,
@@ -48,9 +49,27 @@ ListWorkflowsUseCaseDep = Annotated[
 ]
 
 
+def get_update_workflow_use_case(
+    repository: WorkflowApplicationCommandRepositoryDep,
+    clock: ClockDep,
+) -> UpdateWorkflowUseCase:
+    return UpdateWorkflowUseCase(
+        repository=repository,
+        clock=clock,
+    )
+
+
+UpdateWorkflowUseCaseDep = Annotated[
+    UpdateWorkflowUseCase,
+    Depends(get_update_workflow_use_case),
+]
+
+
 __all__ = [
     "CreateWorkflowUseCaseDep",
     "ListWorkflowsUseCaseDep",
+    "UpdateWorkflowUseCaseDep",
     "get_create_workflow_use_case",
     "get_list_workflows_use_case",
+    "get_update_workflow_use_case",
 ]

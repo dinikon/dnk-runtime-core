@@ -28,7 +28,11 @@ from src.modules.workflow.application.workflow_application.repository import (
     WorkflowApplicationCommandRepositoryProtocol,
     WorkflowApplicationQueryRepositoryProtocol,
 )
-from src.modules.workflow.domain import WorkflowApplicationEntity
+from src.modules.workflow.domain import (
+    WorkflowApplicationEntity,
+    WorkflowApplicationIdVO,
+    WorkflowApplicationNotFoundError,
+)
 from src.modules.workflow.infrastructure.runtime_mapping import (
     row_to_workflow_application,
     row_to_workflow_application_list_item,
@@ -63,6 +67,22 @@ class WorkflowApplicationRuntimeRepository(
         self._runtime_object_resolver = runtime_object_resolver
         self._runtime_command_gateway = runtime_command_gateway
         self._runtime_query_gateway = runtime_query_gateway
+
+    async def load(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        workflow_id: WorkflowApplicationIdVO,
+    ) -> WorkflowApplicationEntity | None:
+        """Loads workflow application by id."""
+        descriptor = await self._resolve_descriptor(tenant_id)
+        row = await self._runtime_query_gateway.get_by_id(
+            descriptor=descriptor,
+            object_id=workflow_id.uuid,
+        )
+        if row is None:
+            return None
+        return row_to_workflow_application(row)
 
     async def save(
         self,
@@ -114,7 +134,7 @@ class WorkflowApplicationRuntimeRepository(
                 patch=payload,
             )
             if row is None:
-                raise LookupError(str(workflow.id))
+                raise WorkflowApplicationNotFoundError(str(workflow.id.uuid))
         return row_to_workflow_application(row)
 
     async def list(

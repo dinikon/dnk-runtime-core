@@ -115,12 +115,21 @@ class _ResolverStub:
 
 
 class _QueryGatewayStub:
-    def __init__(self, rows=None) -> None:
+    def __init__(self, rows=None, by_id_rows=None) -> None:
         self.rows = list(rows or [])
+        self.by_id_rows = dict(by_id_rows or {})
+        self.get_by_id_calls = []
         self.list_calls = []
 
     async def get_by_id(self, *, descriptor, object_id, fetch_plan=None):
-        return None
+        self.get_by_id_calls.append(
+            {
+                "descriptor": descriptor,
+                "object_id": object_id,
+                "fetch_plan": fetch_plan,
+            }
+        )
+        return self.by_id_rows.get(object_id)
 
     async def list(
         self, *, descriptor, filters=(), sorting=(), page=None, fetch_plan=None
@@ -140,6 +149,8 @@ class _QueryGatewayStub:
 class _CommandGatewayStub:
     def __init__(self) -> None:
         self.inserts = []
+        self.updates = []
+        self.updated_row = None
 
     async def insert(self, *, descriptor, payload):
         self.inserts.append((descriptor.object_name, payload))
@@ -150,7 +161,15 @@ class _CommandGatewayStub:
         }
 
     async def update(self, *, descriptor, object_id, patch):
-        raise AssertionError("update should not be called")
+        self.updates.append((descriptor.object_name, object_id, patch))
+        if self.updated_row is not None:
+            return self.updated_row
+        return {
+            "id": object_id,
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
+            **patch,
+        }
 
     async def delete(self, *, descriptor, object_id):
         return True
@@ -205,6 +224,133 @@ class WorkflowRuntimeRepositoriesTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(saved.created_by, created_by)
         self.assertEqual(saved.updated_by, created_by)
         self.assertEqual(saved.title.value, "Customer journey")
+
+    async def test_load_workflow_application_maps_runtime_row(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        workflow_id = uuid4()
+        created_by = uuid4()
+        updated_by = uuid4()
+        created_at = datetime(2026, 6, 27, 12, 0, tzinfo=UTC)
+        updated_at = datetime(2026, 6, 27, 13, 0, tzinfo=UTC)
+        query_gateway = _QueryGatewayStub(
+            by_id_rows={
+                workflow_id: {
+                    "id": workflow_id,
+                    "created_at": created_at,
+                    "updated_at": updated_at,
+                    "created_by": created_by,
+                    "updated_by": updated_by,
+                    "kind": "STANDARD",
+                    "status": "NORMAL",
+                    "title": "Customer journey",
+                    "description": "Default customer workflow",
+                    "icon": "workflow",
+                    "icon_background": "#ffffff",
+                    "active_workflow_definition_id": None,
+                }
+            }
+        )
+        repository = WorkflowApplicationRuntimeRepository(
+            runtime_object_resolver=_ResolverStub(),
+            runtime_command_gateway=_CommandGatewayStub(),
+            runtime_query_gateway=query_gateway,
+        )
+
+        workflow = await repository.load(
+            tenant_id=tenant_id,
+            workflow_id=WorkflowApplicationIdVO.from_value(workflow_id),
+        )
+
+        self.assertIsNotNone(workflow)
+        assert workflow is not None
+        self.assertEqual(query_gateway.get_by_id_calls[0]["object_id"], workflow_id)
+        self.assertEqual(workflow.id, WorkflowApplicationIdVO.from_value(workflow_id))
+        self.assertEqual(workflow.created_at, created_at)
+        self.assertEqual(workflow.updated_at, updated_at)
+        self.assertEqual(workflow.created_by, EntityIdVO.from_value(created_by))
+        self.assertEqual(workflow.updated_by, EntityIdVO.from_value(updated_by))
+        self.assertEqual(workflow.title.value, "Customer journey")
+        self.assertEqual(workflow.description.value, "Default customer workflow")
+        self.assertEqual(workflow.icon.value, "workflow")
+        self.assertEqual(workflow.icon_background.value, "#ffffff")
+
+    async def test_save_workflow_application_updates_payload_and_maps_entity(
+        self,
+    ) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        workflow_id = WorkflowApplicationIdVO.from_value(uuid4())
+        created_by = EntityIdVO.from_value(uuid4())
+        updated_by = EntityIdVO.from_value(uuid4())
+        created_at = datetime(2026, 6, 27, 12, 0, tzinfo=UTC)
+        updated_at = datetime(2026, 6, 27, 13, 0, tzinfo=UTC)
+        existing_row = {
+            "id": workflow_id.uuid,
+            "created_at": created_at,
+            "updated_at": created_at,
+            "created_by": created_by.uuid,
+            "updated_by": created_by.uuid,
+            "kind": "STANDARD",
+            "status": "NORMAL",
+            "title": "Customer journey",
+            "description": "Default customer workflow",
+            "icon": "workflow",
+            "icon_background": "#ffffff",
+            "active_workflow_definition_id": None,
+        }
+        query_gateway = _QueryGatewayStub(by_id_rows={workflow_id.uuid: existing_row})
+        command_gateway = _CommandGatewayStub()
+        command_gateway.updated_row = {
+            **existing_row,
+            "updated_at": updated_at,
+            "updated_by": updated_by.uuid,
+            "title": "Updated journey",
+            "description": None,
+            "icon": "sparkles",
+            "icon_background": "#111111",
+        }
+        repository = WorkflowApplicationRuntimeRepository(
+            runtime_object_resolver=_ResolverStub(),
+            runtime_command_gateway=command_gateway,
+            runtime_query_gateway=query_gateway,
+        )
+        workflow = WorkflowApplicationEntity.create(
+            entity_id=workflow_id,
+            kind=WorkflowKindVO.STANDARD,
+            title=EntityTitleVO("Customer journey"),
+            description=EntityDescriptionVO("Default customer workflow"),
+            icon=WorkflowIconVO("workflow"),
+            icon_background=WorkflowIconBackgroundVO("#ffffff"),
+            created_by=created_by,
+            now=created_at,
+        )
+        workflow.update_details(
+            title=EntityTitleVO("Updated journey"),
+            description=None,
+            icon=WorkflowIconVO("sparkles"),
+            icon_background=WorkflowIconBackgroundVO("#111111"),
+            updated_by=updated_by,
+            now=updated_at,
+        )
+
+        saved = await repository.save(
+            tenant_id=tenant_id,
+            workflow=workflow,
+        )
+
+        self.assertEqual(len(command_gateway.updates), 1)
+        object_name, object_id, patch = command_gateway.updates[0]
+        self.assertEqual(object_name, "workflow_application")
+        self.assertEqual(object_id, workflow_id.uuid)
+        self.assertEqual(patch["updated_by"], updated_by.uuid)
+        self.assertEqual(patch["title"], "Updated journey")
+        self.assertIsNone(patch["description"])
+        self.assertEqual(patch["icon"], "sparkles")
+        self.assertEqual(patch["icon_background"], "#111111")
+        self.assertEqual(saved.id, workflow_id)
+        self.assertEqual(saved.updated_at, updated_at)
+        self.assertEqual(saved.updated_by, updated_by)
+        self.assertEqual(saved.title.value, "Updated journey")
+        self.assertIsNone(saved.description)
 
     async def test_save_workflow_definition_inserts_payload_and_maps_entity(
         self,

@@ -1,6 +1,7 @@
 import { httpClient } from "@/app/providers/http";
 import type {
   CreateWorkflowApplicationRequestDto,
+  UpdateWorkflowApplicationRequestDto,
   WorkflowApplicationListResponseDto,
   WorkflowApplicationResponseDto,
 } from "@/modules/workflow/applications/api/workflow-application.dto.ts";
@@ -21,6 +22,18 @@ export async function listWorkflowApplications(
         cursor: params.cursor ?? undefined,
       },
     },
+  );
+
+  return response.data;
+}
+
+export async function updateWorkflowApplication(
+  id: string,
+  payload: UpdateWorkflowApplicationRequestDto,
+): Promise<WorkflowApplicationResponseDto> {
+  const response = await httpClient.put<WorkflowApplicationResponseDto>(
+    `/console/workflows/${id}`,
+    payload,
   );
 
   return response.data;

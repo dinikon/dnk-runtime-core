@@ -1,5 +1,6 @@
 from src.modules.workflow.domain.error import (
     InvalidWorkflowValueObjectError,
+    WorkflowApplicationNotFoundError,
     WorkflowError,
     WorkflowValidationError,
 )
@@ -46,6 +47,7 @@ __all__ = [
     "TriggeredFromVO",
     "WorkflowApplicationEntity",
     "WorkflowApplicationIdVO",
+    "WorkflowApplicationNotFoundError",
     "WorkflowApplicationStatusVO",
     "WorkflowDefinitionEntity",
     "WorkflowDefinitionIdVO",

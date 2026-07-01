@@ -1,5 +1,6 @@
 from src.modules.workflow.application.workflow_application.command import (
     CreateWorkflowCommand,
+    UpdateWorkflowCommand,
 )
 from src.modules.workflow.application.workflow_application.dto import (
     WorkflowApplicationDTO,
@@ -21,6 +22,8 @@ from src.modules.workflow.application.workflow_application.use_case import (
     CreateWorkflowUseCaseProtocol,
     ListWorkflowsUseCase,
     ListWorkflowsUseCaseProtocol,
+    UpdateWorkflowUseCase,
+    UpdateWorkflowUseCaseProtocol,
 )
 
 __all__ = [
@@ -30,6 +33,9 @@ __all__ = [
     "ListWorkflowsQuery",
     "ListWorkflowsUseCase",
     "ListWorkflowsUseCaseProtocol",
+    "UpdateWorkflowCommand",
+    "UpdateWorkflowUseCase",
+    "UpdateWorkflowUseCaseProtocol",
     "WorkflowApplicationCommandRepositoryProtocol",
     "WorkflowApplicationCursor",
     "WorkflowApplicationDTO",
