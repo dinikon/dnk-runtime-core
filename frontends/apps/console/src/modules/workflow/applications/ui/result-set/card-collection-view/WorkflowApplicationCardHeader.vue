@@ -25,18 +25,18 @@ const editedAtLabel = computed(() => {
 <template>
   <CardHeader class="grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 p-4 pb-2">
     <div
-      class="row-span-2 flex size-14 items-center justify-center rounded-2xl border text-2xl shadow-xs"
+      class="row-span-2 flex size-14 items-center justify-center rounded-2xl border text-3xl shadow-xs"
       :style="{ backgroundColor: application.iconBackground }"
       aria-hidden="true"
     >
       {{ application.icon }}
     </div>
 
-    <CardTitle class="min-w-0 truncate text-[16px] leading-6 font-semibold">
+    <CardTitle class="min-w-0 truncate text-base leading-6 font-semibold">
       {{ application.title }}
     </CardTitle>
 
-    <CardDescription class="min-w-0 truncate text-[12px] leading-5 font-medium">
+    <CardDescription class="min-w-0 truncate text-xs leading-5 font-medium">
       {{ application.kind }} · Edited at {{ editedAtLabel }}
     </CardDescription>
   </CardHeader>

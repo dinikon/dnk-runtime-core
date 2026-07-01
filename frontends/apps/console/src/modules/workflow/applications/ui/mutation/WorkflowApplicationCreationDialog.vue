@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { X } from "@lucide/vue";
 
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
   SheetFooter,
@@ -51,12 +53,31 @@ watch(
 
 <template>
   <Sheet v-model:open="isOpen">
-    <SheetContent class="w-[min(34rem,100vw)] gap-0 p-0 sm:max-w-xl">
-      <SheetHeader class="border-b px-6 py-4 pr-12">
-        <SheetTitle>Create workflow application</SheetTitle>
-        <SheetDescription>
-          Create a workflow app with an initial empty draft definition.
-        </SheetDescription>
+    <SheetContent
+      class="w-[min(34rem,100vw)] gap-0 p-0 sm:max-w-xl"
+      :show-close-button="false"
+    >
+      <SheetHeader
+        class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-1 border-b px-6 py-4"
+      >
+        <div class="min-w-0">
+          <SheetTitle>Create workflow application</SheetTitle>
+          <SheetDescription>
+            Create a workflow app with an initial empty draft definition.
+          </SheetDescription>
+        </div>
+
+        <SheetClose as-child>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            aria-label="Close"
+          >
+            <X data-icon="inline-start" />
+            <span class="sr-only">Close</span>
+          </Button>
+        </SheetClose>
       </SheetHeader>
 
       <WorkflowApplicationMutationForm
