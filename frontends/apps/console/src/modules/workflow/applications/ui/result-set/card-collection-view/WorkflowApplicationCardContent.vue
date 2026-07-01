@@ -15,7 +15,7 @@ const description = computed(() => {
 
 <template>
   <CardContent class="flex-1 px-4 pt-2 pb-4">
-    <p class="line-clamp-3 text-base leading-6 font-medium text-muted-foreground">
+    <p class="line-clamp-2 text-sm leading-6 font-medium text-muted-foreground">
       {{ description }}
     </p>
   </CardContent>
