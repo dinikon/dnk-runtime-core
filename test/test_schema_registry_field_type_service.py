@@ -24,7 +24,9 @@ class FieldTypeCatalogTests(unittest.TestCase):
             SqlTypePresetEnum.TIMESTAMPTZ,
         )
         self.assertEqual(
-            self.canonicalizer.sql_preset_from_postgres_type("timestamp with time zone"),
+            self.canonicalizer.sql_preset_from_postgres_type(
+                "timestamp with time zone"
+            ),
             SqlTypePresetEnum.TIMESTAMPTZ,
         )
         self.assertEqual(

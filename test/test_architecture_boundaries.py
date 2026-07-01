@@ -582,9 +582,9 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                 msg=f"src/modules/{module_name} should stay removed.",
             )
 
-        router_content = (
-            PROJECT_ROOT / "src/modules/router.py"
-        ).read_text(encoding="utf-8")
+        router_content = (PROJECT_ROOT / "src/modules/router.py").read_text(
+            encoding="utf-8"
+        )
         for module_name in removed_modules:
             self.assertNotIn(
                 f"src.modules.{module_name}",

@@ -131,10 +131,7 @@ class PostgresTenantSchemaExecutor(TenantSchemaExecutorPort):
                 f"ALTER COLUMN {self._qi(operation.column_name)} TYPE {column_type}"
             )
             if self._is_timestamp_utc_upgrade(operation):
-                sql += (
-                    f" USING {self._qi(operation.column_name)} "
-                    "AT TIME ZONE 'UTC'"
-                )
+                sql += f" USING {self._qi(operation.column_name)} " "AT TIME ZONE 'UTC'"
             await self._session.execute(text(sql))
             return
 

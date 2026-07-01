@@ -34,7 +34,6 @@ from src.modules.schema_registry.infrastructure.seed.python_module_seed_reader i
 )
 from src.modules.schema_registry.seed.schema_seed import SCHEMA_SEED
 
-
 REMOVED_OBJECTS = {
     "product",
     "product_category",
