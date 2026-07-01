@@ -32,7 +32,7 @@ const editedAtLabel = computed(() => {
       {{ application.icon }}
     </div>
 
-    <CardTitle class="min-w-0 truncate text-lg leading-6 font-semibold">
+    <CardTitle class="min-w-0 truncate text-[16px] leading-6 font-semibold">
       {{ application.title }}
     </CardTitle>
 
