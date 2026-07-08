@@ -1,0 +1,52 @@
+name: ci
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - pre-release
+      - release
+      - main
+  push:
+    branches:
+      - develop
+      - "feature/**"
+      - "bug-fix/**"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13.9"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.2.0
+        with:
+          version: "0.10.4"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Prepare test environment
+        run: cp temaplate.dev.env .env
+
+      - name: Compile source
+        run: uv run python -m compileall src
+
+      - name: Check formatting
+        run: uv run black --check src test
+
+      - name: Run tests
+        run: uv run python -m unittest discover -s test -p "test_*.py" -v

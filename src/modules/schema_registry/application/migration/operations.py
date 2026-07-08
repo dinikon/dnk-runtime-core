@@ -71,6 +71,17 @@ class AlterColumnNullableOperation:
 
 
 @dataclass(frozen=True, slots=True)
+class AlterColumnTypeOperation:
+    """Операция изменения типа колонки на поддержанный канонический SQL-тип."""
+
+    schema_name: str
+    table_name: str
+    column_name: str
+    from_sql_preset: SqlTypePresetEnum
+    to_sql_preset: SqlTypePresetEnum
+
+
+@dataclass(frozen=True, slots=True)
 class AddPrimaryKeyOperation:
     """Операция добавления primary key constraint к таблице."""
 
@@ -139,6 +150,7 @@ MigrationOperation: TypeAlias = (
     | DropColumnOperation
     | AlterColumnDefaultOperation
     | AlterColumnNullableOperation
+    | AlterColumnTypeOperation
     | AddPrimaryKeyOperation
     | DropPrimaryKeyOperation
     | CreateIndexOperation

@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { isAxiosError } from "axios";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
-import { Filter, Plus, RefreshCcw, X } from "lucide-vue-next";
+import { Filter, Plus, RefreshCcw, X } from "@lucide/vue";
 import { toast } from "vue-sonner";
 
 import {

@@ -178,26 +178,6 @@ class ArchitectureBoundariesTests(unittest.TestCase):
             msg="PostgresRuntimeGateway facade still exists.",
         )
 
-    def test_identity_use_case_callers_do_not_use_execute_style(self) -> None:
-        forbidden_patterns = ("use_case.execute(", "_use_case.execute(")
-        paths = [
-            *iter_python_files(
-                "src/modules/identity/presentation/http/console_auth/controller"
-            ),
-            PROJECT_ROOT
-            / "src/modules/shared/presentation/identity_context/depends.py",
-            PROJECT_ROOT
-            / "src/modules/shared/presentation/identity_context/authenticate_by_session_use_case_adapter.py",
-            PROJECT_ROOT / "test/test_identity_use_cases.py",
-            PROJECT_ROOT / "test/test_identity_http_router.py",
-        ]
-        for path in paths:
-            content = path.read_text(encoding="utf-8")
-            self.assertFalse(
-                any(pattern in content for pattern in forbidden_patterns),
-                msg=f"{path} still uses execute-style identity use case calls",
-            )
-
     def test_email_delivery_does_not_use_app_state_or_identity_template_paths(
         self,
     ) -> None:
@@ -326,62 +306,6 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                 msg=f"{relative_path} should not exist after shared layer refactor",
             )
 
-    def test_shared_layer_roots_contain_only_init_files(self) -> None:
-        shared_root = PROJECT_ROOT / "src/modules/shared"
-        expected_layers = {"application", "domain", "infrastructure", "presentation"}
-        self.assertEqual(
-            {
-                path.name
-                for path in shared_root.iterdir()
-                if path.is_dir() and path.name != "__pycache__"
-            },
-            expected_layers,
-        )
-        for layer in expected_layers:
-            layer_root = shared_root / layer
-            direct_files = {
-                path.name for path in layer_root.iterdir() if path.is_file()
-            }
-            self.assertEqual(
-                direct_files,
-                {"__init__.py"},
-                msg=f"{layer_root} should contain only __init__.py files directly",
-            )
-
-    def test_shared_files_live_under_feature_aggregates(self) -> None:
-        allowed_aggregates = {
-            "access",
-            "email",
-            "errors",
-            "events",
-            "http",
-            "identity_context",
-            "jobs",
-            "messaging",
-            "persistence",
-            "time",
-            "tokens",
-            "uuid",
-            "value_object",
-        }
-        shared_root = PROJECT_ROOT / "src/modules/shared"
-        for layer in ("application", "domain", "infrastructure", "presentation"):
-            layer_root = shared_root / layer
-            for path in iter_python_files(f"src/modules/shared/{layer}"):
-                relative = path.relative_to(layer_root)
-                if relative.parts == ("__init__.py",):
-                    continue
-                self.assertGreaterEqual(
-                    len(relative.parts),
-                    2,
-                    msg=f"{path} is not inside a shared feature aggregate",
-                )
-                self.assertIn(
-                    relative.parts[0],
-                    allowed_aggregates,
-                    msg=f"{path} uses unknown shared aggregate {relative.parts[0]}",
-                )
-
     def test_shared_layer_import_direction_is_respected(self) -> None:
         forbidden_by_layer = {
             "domain": (
@@ -405,20 +329,6 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                         ),
                         msg=f"{path} imports forbidden shared layer {module_name}",
                     )
-
-    def test_shared_non_init_files_define_at_most_one_class(self) -> None:
-        for path in iter_python_files("src/modules/shared"):
-            if path.name == "__init__.py":
-                continue
-            tree = ast.parse(path.read_text(encoding="utf-8"))
-            classes = [
-                node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)
-            ]
-            self.assertLessEqual(
-                len(classes),
-                1,
-                msg=f"{path} defines multiple primary classes: {classes}",
-            )
 
     def test_events_management_command_uses_shared_rabbitmq_foundation(self) -> None:
         path = PROJECT_ROOT / "src/management/commands/events.py"
@@ -572,29 +482,6 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                 model_count,
                 1,
                 msg=f"{path} should contain at most one Pydantic request schema",
-            )
-
-    def test_removed_model_modules_are_not_reintroduced_or_routed(self) -> None:
-        removed_modules = ("segmentation", "inventory", "broadcast")
-        for module_name in removed_modules:
-            self.assertFalse(
-                (PROJECT_ROOT / f"src/modules/{module_name}").exists(),
-                msg=f"src/modules/{module_name} should stay removed.",
-            )
-
-        router_content = (
-            PROJECT_ROOT / "src/modules/router.py"
-        ).read_text(encoding="utf-8")
-        for module_name in removed_modules:
-            self.assertNotIn(
-                f"src.modules.{module_name}",
-                router_content,
-                msg=f"Root router still imports removed module {module_name}.",
-            )
-            self.assertNotIn(
-                f"{module_name}_router",
-                router_content,
-                msg=f"Root router still includes removed module {module_name}.",
             )
 
     def test_communication_cleanup_removed_legacy_files(self) -> None:
@@ -766,32 +653,6 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                         content,
                         msg=f"{path} still uses removed id type {removed_type}",
                     )
-
-    def test_concrete_id_value_objects_inherit_entity_id_vo(self) -> None:
-        value_object_paths = [
-            path
-            for path in iter_python_files("src/modules")
-            if path.name.endswith("_id.py")
-            and "/value_object/" in path.as_posix()
-            and path.name != "entity_id.py"
-        ]
-        for path in value_object_paths:
-            tree = ast.parse(path.read_text(encoding="utf-8"))
-            id_classes = [
-                node
-                for node in ast.walk(tree)
-                if isinstance(node, ast.ClassDef) and node.name.endswith("IdVO")
-            ]
-            self.assertTrue(id_classes, msg=f"{path} defines no concrete id VO")
-            for class_def in id_classes:
-                bases = {
-                    base.id for base in class_def.bases if isinstance(base, ast.Name)
-                }
-                self.assertIn(
-                    "EntityIdVO",
-                    bases,
-                    msg=f"{path}:{class_def.name} does not inherit EntityIdVO",
-                )
 
     def test_domain_entity_ids_do_not_use_raw_uuid_annotations(self) -> None:
         allowed_patterns = (

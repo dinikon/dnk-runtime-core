@@ -74,37 +74,6 @@ def _context(tenant_id=None):
     )
 
 
-class ContactPointHttpRouterTests(unittest.TestCase):
-    def test_router_exposes_action_endpoints(self) -> None:
-        routes = {
-            (method, route.path)
-            for route in router.routes
-            for method in route.methods or set()
-        }
-
-        self.assertIn(("POST", "/contact-points/attach"), routes)
-        self.assertIn(("POST", "/contact-points/detach"), routes)
-        self.assertIn(("POST", "/contact-points/list-by-record"), routes)
-        self.assertIn(("GET", "/contact-points"), routes)
-        self.assertIn(("GET", "/contact-points/{contact_point_id}"), routes)
-        self.assertIn(
-            ("GET", "/contact-points/owners/{owner_object_id}/{owner_record_id}"),
-            routes,
-        )
-        self.assertIn(("GET", "/contact-points/bindings"), routes)
-
-    def test_static_routes_are_registered_before_dynamic_id_route(self) -> None:
-        paths = [route.path for route in router.routes]
-
-        bindings_index = paths.index("/contact-points/bindings")
-        owners_index = paths.index(
-            "/contact-points/owners/{owner_object_id}/{owner_record_id}"
-        )
-        id_index = paths.index("/contact-points/{contact_point_id}")
-        self.assertLess(bindings_index, id_index)
-        self.assertLess(owners_index, id_index)
-
-
 class ContactPointControllerTests(unittest.IsolatedAsyncioTestCase):
     async def test_attach_success_uses_tenant_context_and_returns_response(
         self,

@@ -63,14 +63,14 @@ class CreateWorkflowUseCase:
         definition_id = WorkflowDefinitionIdVO.from_value(self._uuid_generator.new())
         now = self._clock.now()
 
-        title = EntityTitleVO(command.title.strip())
-        description = EntityDescriptionVO.optional(command.description)
+        application_title = EntityTitleVO(command.title.strip())
+        application_description = EntityDescriptionVO.optional(command.description)
 
         workflow = WorkflowApplicationEntity.create(
             entity_id=workflow_id,
             kind=WorkflowKindVO.STANDARD,
-            title=title,
-            description=description,
+            title=application_title,
+            description=application_description,
             icon=WorkflowIconVO(command.icon.strip()),
             icon_background=WorkflowIconBackgroundVO(command.icon_background.strip()),
             created_by=created_by,
@@ -82,8 +82,8 @@ class CreateWorkflowUseCase:
             graph=WorkflowGraphVO({}),
             features=WorkflowFeaturesVO({}),
             environment=WorkflowEnvironmentVO({}),
-            title=title,
-            description=description,
+            title=None,
+            description=None,
             created_by=created_by,
             now=now,
         )

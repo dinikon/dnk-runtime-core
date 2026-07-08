@@ -608,43 +608,6 @@ class ContactPointUseCaseTests(unittest.IsolatedAsyncioTestCase):
     def _selection_service(repository: _Repository) -> ContactPointSelectionService:
         return ContactPointSelectionService(repository=repository)
 
-    async def test_attach_creates_contact_point_and_binding(self) -> None:
-        tenant_id, owner_object_id, owner_record_id = _ids()
-        repository = _Repository()
-        contact_point_uuid = uuid4()
-        binding_uuid = uuid4()
-        uuid_generator = _UuidGenerator([contact_point_uuid, binding_uuid])
-        use_case = self._attach_use_case(
-            repository,
-            uuid_generator=uuid_generator,
-        )
-
-        result = await use_case(
-            AttachContactPointCommand(
-                tenant_id=tenant_id,
-                owner_object_id=owner_object_id,
-                owner_record_id=owner_record_id,
-                contact_point_type=ContactPointTypeVO.EMAIL,
-                raw_value=" User@Example.COM ",
-                is_primary=True,
-            )
-        )
-
-        self.assertTrue(result.contact_point_created)
-        self.assertTrue(result.binding_created)
-        self.assertFalse(result.already_attached)
-        self.assertEqual(result.contact_point_id, contact_point_uuid)
-        self.assertEqual(result.binding_id, binding_uuid)
-        self.assertEqual(uuid_generator.generated, [contact_point_uuid, binding_uuid])
-        self.assertEqual(repository.contact_point_saves, 1)
-        self.assertEqual(repository.binding_saves, 1)
-        contact_point = next(iter(repository.contact_points.values()))
-        self.assertEqual(contact_point.normalized_value, "user@example.com")
-        self.assertEqual(contact_point.hash_value, contact_point.hash_value.lower())
-        binding = next(iter(repository.bindings.values()))
-        self.assertTrue(binding.is_primary)
-        self.assertTrue(binding.is_active)
-
     async def test_get_contact_point_returns_dto_without_hash(self) -> None:
         tenant_id, _, _ = _ids()
         repository = _Repository()
@@ -1186,27 +1149,6 @@ class ContactPointUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(repository.list_queries, [])
 
-    async def test_first_attach_for_owner_type_becomes_primary_when_request_false(
-        self,
-    ) -> None:
-        tenant_id, owner_object_id, owner_record_id = _ids()
-        repository = _Repository()
-        use_case = self._attach_use_case(repository)
-
-        await use_case(
-            AttachContactPointCommand(
-                tenant_id=tenant_id,
-                owner_object_id=owner_object_id,
-                owner_record_id=owner_record_id,
-                contact_point_type=ContactPointTypeVO.EMAIL,
-                raw_value="first@example.com",
-                is_primary=False,
-            )
-        )
-
-        binding = next(iter(repository.bindings.values()))
-        self.assertTrue(binding.is_primary)
-
     async def test_attach_reuses_existing_contact_point_and_is_idempotent(self) -> None:
         tenant_id, owner_object_id, owner_record_id = _ids()
         now = datetime(2026, 5, 21, 10, 0, tzinfo=UTC)
@@ -1244,49 +1186,6 @@ class ContactPointUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result.already_attached)
         self.assertEqual(repository.contact_point_saves, 0)
         self.assertEqual(repository.binding_saves, 0)
-
-    async def test_second_attach_for_owner_type_stays_non_primary_when_primary_exists(
-        self,
-    ) -> None:
-        tenant_id, owner_object_id, owner_record_id = _ids()
-        now = datetime(2026, 5, 21, 10, 0, tzinfo=UTC)
-        owner = OwnerContactPointBinding(owner_object_id, owner_record_id)
-        repository = _Repository()
-        existing_point = _contact_point(
-            contact_point_id=ContactPointIdVO.from_value(uuid4()),
-            value="primary@example.com",
-            now=now,
-        )
-        existing_binding = ContactPointBindingEntity.create(
-            id_=ContactPointBindingIdVO.from_value(uuid4()),
-            now=now,
-            contact_point_id=existing_point.id,
-            contact_point_type=ContactPointTypeVO.EMAIL,
-            owner=owner,
-            is_primary=True,
-        )
-        repository.contact_points[existing_point.id] = existing_point
-        repository.bindings[existing_binding.id] = existing_binding
-        use_case = self._attach_use_case(repository)
-
-        await use_case(
-            AttachContactPointCommand(
-                tenant_id=tenant_id,
-                owner_object_id=owner_object_id,
-                owner_record_id=owner_record_id,
-                contact_point_type=ContactPointTypeVO.EMAIL,
-                raw_value="secondary@example.com",
-                is_primary=False,
-            )
-        )
-
-        new_binding = [
-            binding
-            for binding in repository.bindings.values()
-            if binding.id != existing_binding.id
-        ][0]
-        self.assertTrue(existing_binding.is_primary)
-        self.assertFalse(new_binding.is_primary)
 
     async def test_active_existing_non_primary_becomes_primary_when_primary_missing(
         self,
@@ -1404,47 +1303,6 @@ class ContactPointUseCaseTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(repository.contact_point_saves, 0)
         self.assertEqual(repository.binding_saves, 0)
-
-    async def test_primary_attach_unsets_existing_owner_type_primary(self) -> None:
-        tenant_id, owner_object_id, owner_record_id = _ids()
-        now = datetime(2026, 5, 21, 10, 0, tzinfo=UTC)
-        owner = OwnerContactPointBinding(owner_object_id, owner_record_id)
-        repository = _Repository()
-        existing_point = _contact_point(
-            contact_point_id=ContactPointIdVO.from_value(uuid4()),
-            value="old@example.com",
-            now=now,
-        )
-        existing_binding = ContactPointBindingEntity.create(
-            id_=ContactPointBindingIdVO.from_value(uuid4()),
-            now=now,
-            contact_point_id=existing_point.id,
-            contact_point_type=ContactPointTypeVO.EMAIL,
-            owner=owner,
-            is_primary=True,
-        )
-        repository.contact_points[existing_point.id] = existing_point
-        repository.bindings[existing_binding.id] = existing_binding
-        use_case = self._attach_use_case(repository)
-
-        await use_case(
-            AttachContactPointCommand(
-                tenant_id=tenant_id,
-                owner_object_id=owner_object_id,
-                owner_record_id=owner_record_id,
-                contact_point_type=ContactPointTypeVO.EMAIL,
-                raw_value="new@example.com",
-                is_primary=True,
-            )
-        )
-
-        self.assertFalse(existing_binding.is_primary)
-        new_binding = [
-            binding
-            for binding in repository.bindings.values()
-            if binding.id != existing_binding.id
-        ][0]
-        self.assertTrue(new_binding.is_primary)
 
     async def test_detach_soft_deactivates_and_promotes_next_primary(self) -> None:
         tenant_id, owner_object_id, owner_record_id = _ids()

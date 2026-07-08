@@ -6,6 +6,7 @@ from src.modules.schema_registry.application.migration.operations import (
     AddColumnOperation,
     AlterColumnDefaultOperation,
     AlterColumnNullableOperation,
+    AlterColumnTypeOperation,
     AddForeignKeyOperation,
     AddPrimaryKeyOperation,
     CreateIndexOperation,
@@ -176,6 +177,7 @@ class PostgresSchemaPlanService:
         desired_schema = self._build_desired_schema(seed=seed, schema_name=schema_name)
         actual_tables = {table.name: table for table in actual_schema.tables}
         desired_tables = {table.name: table for table in desired_schema.tables}
+        alter_type_operations: list[AlterColumnTypeOperation] = []
         alter_default_operations: list[AlterColumnDefaultOperation] = []
         alter_nullable_operations: list[AlterColumnNullableOperation] = []
 
@@ -273,10 +275,24 @@ class PostgresSchemaPlanService:
                     continue
 
                 if desired_column.sql_preset != column.sql_preset:
-                    raise UnsupportedSchemaChangeError(
-                        "Unsupported retained column change "
-                        f"for '{actual_table.name}.{column.name}'."
-                    )
+                    if self._is_supported_timestamp_utc_upgrade(
+                        from_sql_preset=column.sql_preset,
+                        to_sql_preset=desired_column.sql_preset,
+                    ):
+                        alter_type_operations.append(
+                            AlterColumnTypeOperation(
+                                schema_name=schema_name,
+                                table_name=actual_table.name,
+                                column_name=column.name,
+                                from_sql_preset=column.sql_preset,
+                                to_sql_preset=desired_column.sql_preset,
+                            )
+                        )
+                    else:
+                        raise UnsupportedSchemaChangeError(
+                            "Unsupported retained column change "
+                            f"for '{actual_table.name}.{column.name}'."
+                        )
                 if desired_column.is_nullable != column.is_nullable:
                     if desired_column.is_nullable and not column.is_nullable:
                         alter_nullable_operations.append(
@@ -371,6 +387,9 @@ class PostgresSchemaPlanService:
                     columns=desired_table.primary_key.columns,
                 )
             )
+
+        for operation in alter_type_operations:
+            plan.add(operation)
 
         for operation in alter_nullable_operations:
             plan.add(operation)
@@ -646,7 +665,7 @@ class PostgresSchemaPlanService:
                         ),
                         ColumnSnapshot(
                             name="created_at",
-                            sql_preset=SqlTypePresetEnum.TIMESTAMP,
+                            sql_preset=SqlTypePresetEnum.TIMESTAMPTZ,
                             is_nullable=False,
                             default_value="CURRENT_TIMESTAMP",
                         ),
@@ -772,6 +791,17 @@ class PostgresSchemaPlanService:
     def _is_custom_table(table_name: str) -> bool:
         """Проверяет, принадлежит ли физическая таблица custom object namespace."""
         return has_custom_object_prefix(table_name)
+
+    @staticmethod
+    def _is_supported_timestamp_utc_upgrade(
+        *,
+        from_sql_preset: SqlTypePresetEnum,
+        to_sql_preset: SqlTypePresetEnum,
+    ) -> bool:
+        return (
+            from_sql_preset == SqlTypePresetEnum.TIMESTAMP
+            and to_sql_preset == SqlTypePresetEnum.TIMESTAMPTZ
+        )
 
     @staticmethod
     def _normalize_on_delete(value: str) -> str:

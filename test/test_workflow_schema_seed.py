@@ -61,6 +61,7 @@ class WorkflowSchemaSeedTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(definition_fields["graph"].type, "json")
         self.assertEqual(definition_fields["features"].type, "json")
         self.assertEqual(definition_fields["environment"].type, "json")
+        self.assertTrue(definition_fields["title"].is_nullable)
         self.assertNotIn("tenant_id", definition_fields)
 
         self.assertTrue(

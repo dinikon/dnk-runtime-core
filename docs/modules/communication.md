@@ -435,7 +435,8 @@ Events пишутся в shared outbox в той же transaction, где фик
 
 ### Schema Seed Facts
 
-`src/modules/schema_registry/seed/schema_seed.py` содержит `COMMUNICATION_OBJECTS` для всех runtime objects модуля.
+`src/modules/schema_registry/seed/contexts/communication.py` содержит `COMMUNICATION_OBJECTS` для всех runtime objects
+модуля.
 
 Важные indexes/relations:
 
@@ -639,6 +640,6 @@ uv run python -m unittest test.test_communication_services test.test_communicati
 - `src/modules/communication/infrastructure/...`
 - `src/modules/communication/presentation/...`
 - `src/management/commands/communication.py`
-- `src/modules/schema_registry/seed/schema_seed.py`
+- `src/modules/schema_registry/seed/contexts/communication.py`
 - `test/test_communication_*.py`
 - `test/test_architecture_boundaries.py`

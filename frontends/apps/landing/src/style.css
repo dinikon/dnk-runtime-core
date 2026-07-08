@@ -1,0 +1,279 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme inline {
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  font-family: var(--font-sans);
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.18 0.012 248);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.012 248);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.012 248);
+  --primary: oklch(0.22 0.025 240);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.965 0.008 248);
+  --secondary-foreground: oklch(0.22 0.025 240);
+  --muted: oklch(0.97 0.006 248);
+  --muted-foreground: oklch(0.48 0.018 248);
+  --accent: oklch(0.955 0.03 190);
+  --accent-foreground: oklch(0.24 0.055 195);
+  --border: oklch(0.9 0.01 248);
+  --input: oklch(0.9 0.01 248);
+  --ring: oklch(0.58 0.12 190);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    margin: 0;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer utilities {
+  .landing-shell {
+    background:
+      radial-gradient(
+        circle at top right,
+        oklch(0.96 0.035 190),
+        transparent 34rem
+      ),
+      linear-gradient(180deg, #fff 0%, #fff 62%, oklch(0.985 0.006 248) 100%);
+  }
+
+  .workflow-grid {
+    background-image:
+      linear-gradient(to right, oklch(0.9 0.01 248 / 45%) 1px, transparent 1px),
+      linear-gradient(to bottom, oklch(0.9 0.01 248 / 45%) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+
+  .workflow-node-glow {
+    box-shadow:
+      0 18px 45px oklch(0.62 0.12 194 / 15%),
+      0 1px 0 oklch(1 0 0 / 85%) inset;
+  }
+
+  .map-line-dash {
+    stroke-dasharray: 9 9;
+    animation: dash-flow 16s linear infinite;
+  }
+
+  .soft-panel-shadow {
+    box-shadow:
+      0 20px 70px oklch(0.36 0.03 245 / 8%),
+      0 1px 0 oklch(1 0 0 / 90%) inset;
+  }
+
+  .workflow-chain-progress {
+    position: relative;
+    height: 0.5rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: oklch(0.94 0.008 248);
+  }
+
+  .workflow-chain-progress > span {
+    position: relative;
+    display: block;
+    height: 100%;
+    min-width: 2rem;
+    border-radius: inherit;
+    background: linear-gradient(
+      90deg,
+      oklch(0.62 0.12 194),
+      oklch(0.72 0.12 78)
+    );
+    transition: width 500ms ease;
+  }
+
+  .workflow-chain-progress > span::after {
+    position: absolute;
+    inset: 0;
+    content: "";
+    background: linear-gradient(
+      90deg,
+      transparent,
+      oklch(1 0 0 / 62%),
+      transparent
+    );
+    animation: pulse-travel 1.4s linear infinite;
+  }
+
+  .execution-pulse {
+    position: relative;
+    display: inline-flex;
+    width: 0.7rem;
+    height: 0.7rem;
+    flex-shrink: 0;
+    border-radius: 999px;
+    background: oklch(0.72 0.12 78);
+  }
+
+  .execution-pulse::after {
+    position: absolute;
+    inset: -0.45rem;
+    content: "";
+    border-radius: inherit;
+    border: 1px solid oklch(0.72 0.12 78 / 55%);
+    animation: execution-ping 1.4s ease-out infinite;
+  }
+
+  .provider-card:hover,
+  .provider-card:focus-visible {
+    border-color: oklch(0.74 0.08 194);
+    box-shadow: 0 18px 50px oklch(0.36 0.03 245 / 8%);
+  }
+
+  .provider-card-selected {
+    border-color: oklch(0.62 0.12 194);
+    box-shadow:
+      0 18px 50px oklch(0.62 0.12 194 / 13%),
+      0 1px 0 oklch(1 0 0 / 90%) inset;
+  }
+
+  .batch-stream {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .batch-stream > span {
+    height: 0.42rem;
+    border-radius: 999px;
+    background: linear-gradient(
+      90deg,
+      oklch(0.62 0.12 194 / 22%),
+      oklch(0.62 0.12 194 / 78%),
+      oklch(0.72 0.12 78 / 45%)
+    );
+    animation: batch-flow 1.8s ease-in-out infinite;
+  }
+
+  .batch-stream > span:nth-child(2) {
+    animation-delay: 160ms;
+  }
+
+  .batch-stream > span:nth-child(3) {
+    animation-delay: 320ms;
+  }
+
+  .event-stage-active {
+    border-color: oklch(0.72 0.12 78);
+    box-shadow: 0 16px 45px oklch(0.72 0.12 78 / 16%);
+    transform: translateY(-2px);
+  }
+
+  .table-field-row {
+    transition:
+      border-color 180ms ease,
+      box-shadow 180ms ease,
+      transform 180ms ease;
+  }
+
+  .table-field-row:hover {
+    border-color: oklch(0.74 0.08 194);
+    box-shadow: 0 12px 30px oklch(0.36 0.03 245 / 7%);
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes dash-flow {
+  from {
+    stroke-dashoffset: 0;
+  }
+
+  to {
+    stroke-dashoffset: -180;
+  }
+}
+
+@keyframes pulse-travel {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes execution-ping {
+  from {
+    opacity: 0.75;
+    transform: scale(0.72);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+
+@keyframes batch-flow {
+  0%,
+  100% {
+    opacity: 0.48;
+    transform: scaleX(0.72);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

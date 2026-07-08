@@ -12,5 +12,6 @@ class SqlTypePresetEnum(str, Enum):
     BOOLEAN = "boolean"
     DATE = "date"
     TIMESTAMP = "timestamp"
+    TIMESTAMPTZ = "timestamptz"
     JSONB = "jsonb"
     UUID = "uuid"

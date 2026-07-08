@@ -30,7 +30,7 @@ class PostgresFieldCanonicalizer:
             FieldTypeEnum.DECIMAL: SqlTypePresetEnum.NUMERIC_14_2,
             FieldTypeEnum.BOOL: SqlTypePresetEnum.BOOLEAN,
             FieldTypeEnum.DATE: SqlTypePresetEnum.DATE,
-            FieldTypeEnum.DATETIME: SqlTypePresetEnum.TIMESTAMP,
+            FieldTypeEnum.DATETIME: SqlTypePresetEnum.TIMESTAMPTZ,
             FieldTypeEnum.JSON: SqlTypePresetEnum.JSONB,
             FieldTypeEnum.SELECT: SqlTypePresetEnum.TEXT,
             FieldTypeEnum.MULTISELECT: SqlTypePresetEnum.JSONB,
@@ -58,6 +58,8 @@ class PostgresFieldCanonicalizer:
             "boolean": SqlTypePresetEnum.BOOLEAN,
             "date": SqlTypePresetEnum.DATE,
             "timestamp without time zone": SqlTypePresetEnum.TIMESTAMP,
+            "timestamp with time zone": SqlTypePresetEnum.TIMESTAMPTZ,
+            "timestamptz": SqlTypePresetEnum.TIMESTAMPTZ,
             "jsonb": SqlTypePresetEnum.JSONB,
         }
         try:
@@ -80,6 +82,7 @@ class PostgresFieldCanonicalizer:
             SqlTypePresetEnum.BOOLEAN: "boolean",
             SqlTypePresetEnum.DATE: "date",
             SqlTypePresetEnum.TIMESTAMP: "timestamp without time zone",
+            SqlTypePresetEnum.TIMESTAMPTZ: "timestamp with time zone",
             SqlTypePresetEnum.JSONB: "jsonb",
         }
         return mapping[sql_preset]
@@ -129,7 +132,10 @@ class PostgresFieldCanonicalizer:
         value = self._strip_postgres_casts(value)
         lowered = value.lower()
 
-        if sql_preset == SqlTypePresetEnum.TIMESTAMP and lowered in {
+        if sql_preset in {
+            SqlTypePresetEnum.TIMESTAMP,
+            SqlTypePresetEnum.TIMESTAMPTZ,
+        } and lowered in {
             "now()",
             "current_timestamp",
         }:
@@ -146,10 +152,15 @@ class PostgresFieldCanonicalizer:
         if sql_preset == SqlTypePresetEnum.DATE:
             return f"{self._quote_sql_string(self._extract_literal(value))}::date"
 
-        if sql_preset == SqlTypePresetEnum.TIMESTAMP:
+        if sql_preset in {SqlTypePresetEnum.TIMESTAMP, SqlTypePresetEnum.TIMESTAMPTZ}:
+            cast_type = (
+                "timestamp with time zone"
+                if sql_preset == SqlTypePresetEnum.TIMESTAMPTZ
+                else "timestamp without time zone"
+            )
             return (
                 f"{self._quote_sql_string(self._extract_literal(value))}"
-                "::timestamp without time zone"
+                f"::{cast_type}"
             )
 
         if sql_preset == SqlTypePresetEnum.BOOLEAN:

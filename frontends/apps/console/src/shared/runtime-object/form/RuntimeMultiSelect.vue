@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Check, ChevronsUpDown, X } from "lucide-vue-next";
+import { Check, ChevronsUpDown, X } from "@lucide/vue";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

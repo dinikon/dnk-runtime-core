@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { Mail } from "lucide-vue-next";
+import { Mail } from "@lucide/vue";
 import { REGEXP_ONLY_DIGITS } from "vue-input-otp";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";

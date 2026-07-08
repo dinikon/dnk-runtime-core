@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ContactRound, Settings, ShieldCheck } from "lucide-vue-next";
+import { Settings, ShieldCheck, Workflow } from "@lucide/vue";
 import { RouterLink } from "vue-router";
 
 import {
@@ -13,10 +13,10 @@ import { Button } from "@/components/ui/button";
 
 const dashboardSections = [
   {
-    title: "CRM",
-    description: "Open contacts and customer records.",
-    to: "/crm/contacts",
-    icon: ContactRound,
+    title: "Workflows",
+    description: "Create and manage workflow apps.",
+    to: "/workflows",
+    icon: Workflow,
   },
   {
     title: "Access",

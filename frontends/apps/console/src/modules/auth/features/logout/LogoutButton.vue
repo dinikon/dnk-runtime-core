@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { LogOut } from "lucide-vue-next";
+import { LogOut } from "@lucide/vue";
 import { useRouter } from "vue-router";
 
 import { Button } from "@/components/ui/button";

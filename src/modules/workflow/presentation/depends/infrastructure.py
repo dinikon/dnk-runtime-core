@@ -17,11 +17,15 @@ from src.modules.schema_registry.presentation.depends.application import (
 from src.modules.shared.presentation.persistence.depends import UoWDep
 from src.modules.workflow.application.workflow_application.repository import (
     WorkflowApplicationCommandRepositoryProtocol,
+    WorkflowApplicationQueryRepositoryProtocol,
 )
 from src.modules.workflow.application.workflow_definition.repository import (
     WorkflowDefinitionCommandRepositoryProtocol,
 )
-from src.modules.workflow.infrastructure import WorkflowRuntimeRepository
+from src.modules.workflow.infrastructure import (
+    WorkflowApplicationRuntimeRepository,
+    WorkflowDefinitionRuntimeRepository,
+)
 
 
 def get_runtime_field_type_policy() -> RuntimeFieldTypePolicy:
@@ -68,32 +72,56 @@ RuntimeCommandGatewayDep = Annotated[
 ]
 
 
-def get_workflow_runtime_repository(
+def get_workflow_application_runtime_repository(
     runtime_object_resolver: RuntimeObjectResolverDep,
     runtime_command_gateway: RuntimeCommandGatewayDep,
     runtime_query_gateway: RuntimeQueryGatewayDep,
-) -> WorkflowRuntimeRepository:
-    return WorkflowRuntimeRepository(
+) -> WorkflowApplicationRuntimeRepository:
+    return WorkflowApplicationRuntimeRepository(
         runtime_object_resolver=runtime_object_resolver,
         runtime_command_gateway=runtime_command_gateway,
         runtime_query_gateway=runtime_query_gateway,
     )
 
 
-WorkflowRuntimeRepositoryDep = Annotated[
-    WorkflowRuntimeRepository,
-    Depends(get_workflow_runtime_repository),
+WorkflowApplicationRuntimeRepositoryDep = Annotated[
+    WorkflowApplicationRuntimeRepository,
+    Depends(get_workflow_application_runtime_repository),
+]
+
+
+def get_workflow_definition_runtime_repository(
+    runtime_object_resolver: RuntimeObjectResolverDep,
+    runtime_command_gateway: RuntimeCommandGatewayDep,
+    runtime_query_gateway: RuntimeQueryGatewayDep,
+) -> WorkflowDefinitionRuntimeRepository:
+    return WorkflowDefinitionRuntimeRepository(
+        runtime_object_resolver=runtime_object_resolver,
+        runtime_command_gateway=runtime_command_gateway,
+        runtime_query_gateway=runtime_query_gateway,
+    )
+
+
+WorkflowDefinitionRuntimeRepositoryDep = Annotated[
+    WorkflowDefinitionRuntimeRepository,
+    Depends(get_workflow_definition_runtime_repository),
 ]
 
 
 def get_workflow_application_command_repository(
-    repository: WorkflowRuntimeRepositoryDep,
+    repository: WorkflowApplicationRuntimeRepositoryDep,
 ) -> WorkflowApplicationCommandRepositoryProtocol:
     return repository
 
 
+def get_workflow_application_query_repository(
+    repository: WorkflowApplicationRuntimeRepositoryDep,
+) -> WorkflowApplicationQueryRepositoryProtocol:
+    return repository
+
+
 def get_workflow_definition_command_repository(
-    repository: WorkflowRuntimeRepositoryDep,
+    repository: WorkflowDefinitionRuntimeRepositoryDep,
 ) -> WorkflowDefinitionCommandRepositoryProtocol:
     return repository
 
@@ -101,6 +129,11 @@ def get_workflow_definition_command_repository(
 WorkflowApplicationCommandRepositoryDep = Annotated[
     WorkflowApplicationCommandRepositoryProtocol,
     Depends(get_workflow_application_command_repository),
+]
+
+WorkflowApplicationQueryRepositoryDep = Annotated[
+    WorkflowApplicationQueryRepositoryProtocol,
+    Depends(get_workflow_application_query_repository),
 ]
 
 WorkflowDefinitionCommandRepositoryDep = Annotated[
@@ -114,12 +147,16 @@ __all__ = [
     "RuntimeFieldTypePolicyDep",
     "RuntimeQueryGatewayDep",
     "WorkflowApplicationCommandRepositoryDep",
+    "WorkflowApplicationQueryRepositoryDep",
+    "WorkflowApplicationRuntimeRepositoryDep",
     "WorkflowDefinitionCommandRepositoryDep",
-    "WorkflowRuntimeRepositoryDep",
+    "WorkflowDefinitionRuntimeRepositoryDep",
     "get_runtime_command_gateway",
     "get_runtime_field_type_policy",
     "get_runtime_query_gateway",
     "get_workflow_application_command_repository",
+    "get_workflow_application_query_repository",
+    "get_workflow_application_runtime_repository",
     "get_workflow_definition_command_repository",
-    "get_workflow_runtime_repository",
+    "get_workflow_definition_runtime_repository",
 ]
