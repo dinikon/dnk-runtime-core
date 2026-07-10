@@ -1,1 +1,0 @@
-"""Custom object bounded context."""

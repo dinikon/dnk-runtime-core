@@ -219,7 +219,7 @@ Base prefix:
 | В текущей реализации не найдено. | В текущей реализации не найдено. | В текущей реализации не найдено. | В текущей реализации не найдено. | В текущей реализации не найдено. | В текущей реализации не найдено. |
 
 В модуле отсутствует `src/modules/runtime_data/presentation/`. HTTP endpoints, которые используют `runtime_data`,
-находятся в потребляющих модулях (`custom_object`, `communication`).
+находятся в потребляющих модулях, например `communication`.
 
 ## Dependency Injection
 
@@ -230,8 +230,6 @@ Base prefix:
 
 Фактическая wiring-точка находится вне `runtime_data`:
 
-- `src/modules/custom_object/presentation/depends/infrastructure.py` создает `RuntimeFieldTypePolicy`,
-  `PostgresRuntimeQueryGateway`, `PostgresRuntimeCommandGateway`.
 - `src/modules/communication/presentation/depends/infrastructure.py` и
   `src/modules/communication/presentation/depends/management.py` создают runtime gateways для communication
   repositories/management flows.
@@ -242,11 +240,9 @@ Base prefix:
 |---------------------------|---------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
 | `shared`                  | `domain`, `application`         | `DomainError` для runtime errors; `EntityIdVO` для tenant scope в queries/relation use cases.                                         |
 | `schema_registry.runtime` | `application`, `infrastructure` | `RuntimeObjectDescriptor`, `RuntimeFieldDescriptor`, `RuntimeRelationDescriptor`, `RuntimeObjectResolverProtocol`.                    |
-| `custom_object`           | внешний потребитель             | Использует runtime gateways и DSL validators для dynamic custom record CRUD/search.                                                   |
 | `communication`           | внешний потребитель             | Использует runtime gateways, `RuntimeTypedFilterBuilder`, runtime errors и type policy для runtime-backed communication repositories. |
 
-Внутри `runtime_data` нет зависимости на `custom_object` или `communication`; эти зависимости
-направлены от потребителей к `runtime_data`.
+Внутри `runtime_data` нет зависимости на `communication`; зависимость направлена от потребителя к `runtime_data`.
 
 ## Events / Background Processing
 
@@ -297,7 +293,6 @@ queue adapters.
 
 - [Develop Style](../develop-style.md)
 - [Schema Registry Module](./schema-registry.md)
-- [Custom Object Module](./custom-object.md)
 - [Communication Module](./communication.md)
 
 ## Source Of Truth

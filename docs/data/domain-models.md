@@ -162,14 +162,14 @@ scope uses `EntityIdVO` directly; concrete entities expose concrete subclasses s
     - `options`
     - `settings`
 
-## Custom Object
+## Custom Runtime Objects
 
-`custom_object` does not define a separate persistence entity for object metadata. It manages only runtime record rows
-for descriptors whose `ObjectEntity.kind` is `custom`.
-
-Schema metadata and DDL for custom objects and custom fields are managed by `schema_registry` config APIs.
-
-Each custom object has system fields `id`, `created_at` and `updated_at`.
+- Module owner: `schema_registry`.
+- `ObjectKind.CUSTOM` identifies tenant-defined runtime objects.
+- Names and physical tables use the reserved `c_` prefix.
+- Schema metadata, DDL, custom fields and relations are managed by `schema_registry` config APIs.
+- Each custom object has system fields `id`, `created_at` and `updated_at`.
+- No generic public record CRUD API is currently exposed for custom objects.
 
 ## Shared Kernel Concepts
 

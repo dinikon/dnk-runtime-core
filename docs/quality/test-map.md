@@ -110,20 +110,15 @@ This page maps current tests to the behaviors they protect.
 - `test/test_communication_queue.py`
   - queue settings-derived RabbitMQ topology names
 
-## Custom Object
+## Runtime Data
 
-- `test/test_custom_object_records_use_cases.py`
-    - custom object record CRUD/list orchestration
-    - system field write protection
-- `test/test_custom_object_controller_errors.py`
-    - controller error mapping and Filter/Sort parsing
-- `test/test_custom_object_http_router.py`
-    - public custom object route registration
 - `test/test_runtime_data_postgres_gateway.py`
     - nested AND/OR runtime filter SQL generation
 
 ## Schema Config
 
+- `test/test_schema_config_object_controller.py`
+    - object describe HTTP error mapping
 - `test/test_schema_config_repository.py`
     - object metadata creation and targeted DDL planning
     - object kind policy for system/view/standard/custom

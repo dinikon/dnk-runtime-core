@@ -6,12 +6,48 @@ from pathlib import Path
 import httpx
 
 from src.app_factory import create_app
+from src.modules.schema_registry.domain.object.value_object import ObjectKind
 from src.modules.shared.infrastructure.persistence import Base
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_custom_object_module_is_absent_but_custom_kind_remains(
+        self,
+    ) -> None:
+        self.assertFalse((PROJECT_ROOT / "src/modules/custom_object").exists())
+
+        app = create_app()
+        openapi_paths = set(app.openapi()["paths"])
+        self.assertFalse(
+            any(
+                path.startswith("/api/console/custom-objects/records")
+                for path in openapi_paths
+            )
+        )
+        self.assertTrue(
+            {
+                "/api/console/config/objects/list",
+                "/api/console/config/objects/create",
+                "/api/console/config/objects/delete",
+                "/api/console/config/objects/schema",
+            }.issubset(openapi_paths)
+        )
+
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://testserver",
+        ) as client:
+            response = await client.post(
+                "/api/console/custom-objects/records/list",
+                json={},
+            )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(ObjectKind.CUSTOM.value, "custom")
+
     async def test_contact_point_and_object_feature_are_absent(self) -> None:
         removed_paths = (
             "src/modules/contact_point",

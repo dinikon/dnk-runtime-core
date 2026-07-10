@@ -53,19 +53,6 @@ Config rules:
 - `custom` object names are saved and returned with the `c_` prefix; create requests may omit it.
 - `system` fields are hidden in config responses; `standard` fields are visible but not deletable.
 
-## Custom Object
-
-Custom object read routes use `POST` bodies instead of `GET`. The module owns only custom-object record CRUD.
-
-| Method   | Path                                 | Module          | Request / Params                     | Response                          | Auth                          | Main errors                |
-|----------|--------------------------------------|-----------------|--------------------------------------|-----------------------------------|-------------------------------|----------------------------|
-| `POST`   | `/api/custom-objects/records/create` | `custom_object` | body `object_id`, `values`           | `CustomRecordResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
-| `POST`   | `/api/custom-objects/records/detail` | `custom_object` | body `object_id`, `row_id`           | `CustomRecordResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
-| `POST`   | `/api/custom-objects/records/list`   | `custom_object` | body `object_id`, `filter`, `sort`   | `ListCustomRecordsResponseSchema` | authenticated request context | `401`, `404`, `409`, `422` |
-| `PATCH`  | `/api/custom-objects/records/update` | `custom_object` | body `object_id`, `row_id`, `values` | `CustomRecordResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
-| `PUT`    | `/api/custom-objects/records/update` | `custom_object` | body `object_id`, `row_id`, `values` | `CustomRecordResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
-| `DELETE` | `/api/custom-objects/records/delete` | `custom_object` | body `object_id`, `row_id`           | empty `204`                       | authenticated request context | `401`, `404`, `409`, `422` |
-
 ## Identity / Console Auth
 
 Mounted under `/api/console/auth`.
@@ -83,13 +70,10 @@ Mounted under `/api/console/auth`.
 - Session cookie name comes from auth config and defaults to `dnk_session`.
 - Identity routes are tenant-host aware, so host extraction is part of the authentication flow.
 - Identity controllers map domain/tenancy errors directly inside controller files.
-- Schema registry config and custom object routes do not accept `tenant_id` from the client. Controllers derive it
+- Schema registry config routes do not accept `tenant_id` from the client. Controllers derive it
   from the request domain/auth context and pass it internally through commands/queries and use cases.
-- `schema_registry` config routes and `custom_object` record routes follow the same tenant rule and accept runtime
-  `object_id` / `row_id` in request bodies.
 - `PATCH /api/console/auth/me` requires `interface_theme` and does not accept `null`.
 - `GET /api/console/auth/me` and `PATCH /api/console/auth/me` always return `interface_theme` as a string.
-- schema metadata/DDL changes are exposed only through `/api/config/...`; `custom_object` does not proxy those routes.
 - communication routes return standard FastAPI error bodies with readable string `detail`; provider secrets are never
   returned by connection responses.
 
@@ -107,4 +91,3 @@ Mounted under `/api/console/auth`.
 - `src/modules/tenancy/presentation/http/console_tenant/controller/`
 - `src/modules/identity/presentation/http/console_auth/controller/`
 - `src/modules/schema_registry/presentation/http/config/`
-- `src/modules/custom_object/presentation/http/record/controller/`

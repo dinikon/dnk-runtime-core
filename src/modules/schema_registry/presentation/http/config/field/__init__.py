@@ -1,1 +1,1 @@
-"""HTTP field subcontext for custom_object."""
+"""HTTP field subcontext for custom object configuration."""

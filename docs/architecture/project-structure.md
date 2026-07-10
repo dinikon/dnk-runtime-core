@@ -55,7 +55,6 @@ src/modules/
 ├── tenancy/
 ├── identity/
 ├── runtime_data/
-├── custom_object/
 ├── communication/
 ├── workflow/
 ├── schema_registry/
