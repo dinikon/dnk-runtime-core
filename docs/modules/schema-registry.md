@@ -17,7 +17,6 @@
 - diff существующей tenant schema против seed/spec через `DiffSchemaUseCase`;
 - metadata storage для `data_sources`, `objects`, `fields`, `relations`;
 - config API для custom objects, custom fields и custom relations;
-- object feature config API для включения, выключения, обновления и чтения feature metadata runtime-объектов;
 - runtime descriptor resolver для gateway/use case потребителей;
 - adapter для `tenancy` onboarding через `SchemaRegistryTenantSchemaBootstrapAdapter`;
 - management CLI `dnk-manage schema-registry diff`.
@@ -37,7 +36,6 @@
 - создать, описать, перечислить и удалить custom object;
 - добавить и удалить custom field у `standard` или `custom` object;
 - создать, удалить и перечислить custom relations для object;
-- включить, выключить, обновить, получить и перечислить object feature configs для runtime object;
 - проинспектировать PostgreSQL schema и применить migration plan;
 - запустить schema diff из management CLI.
 
@@ -57,11 +55,6 @@
 | `CreateRelationUseCase`            | `CreateRelationCommand`            | `RelationDTO`                 | Создает custom FK-based или M2M relation, сначала применяя targeted DDL.                                                                                      |
 | `DeleteRelationUseCase`            | `DeleteRelationCommand`            | `None`                        | Удаляет custom relation и physical artifacts после safety checks по данным.                                                                                   |
 | `ListObjectRelationsUseCase`       | `ListObjectRelationsQuery`         | `list[RelationDTO]`           | Возвращает relations, где object является source или target.                                                                                                  |
-| `EnableObjectFeatureUseCase`       | `EnableObjectFeatureCommand`       | `ObjectFeatureConfigDTO`      | Создает или обновляет custom feature config runtime object, затем переводит его в `enabled`.                                                                  |
-| `DisableObjectFeatureUseCase`      | `DisableObjectFeatureCommand`      | `ObjectFeatureConfigDTO`      | Переводит custom feature config runtime object в `disabled`.                                                                                                  |
-| `UpdateObjectFeatureConfigUseCase` | `UpdateObjectFeatureConfigCommand` | `ObjectFeatureConfigDTO`      | Заменяет JSON config существующей custom feature metadata.                                                                                                    |
-| `GetObjectFeatureConfigUseCase`    | `GetObjectFeatureQuery`            | `ObjectFeatureConfigDTO`      | Возвращает feature config по tenant/object/feature.                                                                                                           |
-| `ListObjectFeaturesUseCase`        | `ListObjectFeaturesQuery`          | `ObjectFeatureConfigListDTO`  | Возвращает все feature configs runtime object tenant.                                                                                                         |
 
 ## Domain Model
 
@@ -142,16 +135,12 @@
 - `DeleteCustomFieldCommand`: `tenant_id`, `object_id`, `field_id`;
 - `CreateRelationCommand`: `tenant_id`, `RelationInput`;
 - `DeleteRelationCommand`: `tenant_id`, `relation_id`.
-- `EnableObjectFeatureCommand`, `DisableObjectFeatureCommand`, `UpdateObjectFeatureConfigCommand`: tenant/object id,
-  `FeatureCodeVO`, optional JSON config.
 
 ### Queries
 
 - `ListCustomObjectsQuery`: `tenant_id`.
 - `CustomObjectByIdQuery`: `tenant_id`, `object_id`.
 - `ListObjectRelationsQuery`: `tenant_id`, `object_id`.
-- `GetObjectFeatureQuery`: `tenant_id`, `object_id`, `feature_code`.
-- `ListObjectFeaturesQuery`: `tenant_id`, `object_id`.
 
 ### DTOs
 
@@ -160,7 +149,6 @@
   model/schema descriptions.
 - `CustomObjectDTO`, `CustomFieldDTO`: config API object/field result.
 - `RelationDTO`: config API relation result with object/field ids, physical names and settings.
-- `ObjectFeatureConfigDTO`, `ObjectFeatureConfigListDTO`: object feature config result DTOs.
 
 ### Services
 
@@ -216,7 +204,6 @@
 - `SchemaConfigRepositoryProtocol`: config object list/describe/create/delete.
 - `SchemaConfigFieldRepositoryProtocol`: config field add/delete.
 - `SchemaConfigRelationRepositoryProtocol`: config relation create/delete/list.
-- `ObjectFeatureConfigRepositoryProtocol`: get/save/list object feature configs.
 - `SeedReaderPort`, `TenantSchemaInspectorPort`, `TenantSchemaExecutorPort`.
 
 ## Infrastructure / Persistence
@@ -270,16 +257,6 @@
   - required field without default запрещен для existing object;
   - delete relation запрещен, если M2M table has rows или FK column has non-null values;
   - config-created FK relations в MVP могут ссылаться только на referenced field `id`.
-
-### `SqlAlchemyObjectFeatureConfigRepository`
-
-- File: `src/modules/schema_registry/infrastructure/repository/object_feature_config_repository.py`.
-- Implements: `ObjectFeatureConfigRepositoryProtocol`.
-- Storage: SQLAlchemy ORM table `object_feature_config`.
-- Runtime object: хранит metadata feature configs для runtime object, но не работает с runtime rows.
-- Tenant handling: каждый метод получает `tenant_id`.
-- Mapping: `_to_model`, `_update_model`, `_map_model` являются private methods внутри repository.
-- Errors: not-found возвращается как `None`; application use cases поднимают `ObjectFeatureConfigNotFoundError`.
 
 ### `PythonModuleSeedReader`
 

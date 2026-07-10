@@ -226,7 +226,6 @@ dependencies = [
     { name = "jinja2" },
     { name = "jsonpath-ng" },
     { name = "jsonschema" },
-    { name = "phonenumbers" },
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "redis" },
@@ -249,7 +248,6 @@ requires-dist = [
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "jsonpath-ng", specifier = ">=1.8.0" },
     { name = "jsonschema", specifier = ">=4.26.0" },
-    { name = "phonenumbers", specifier = ">=9.0.30" },
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "redis", specifier = ">=6.4.0" },
@@ -667,15 +665,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/fa/36/e27608899f9b8d4dff0617b2d9ab17ca5608956ca44461ac14ac48b44015/pathspec-1.0.4.tar.gz", hash = "sha256:0210e2ae8a21a9137c0d470578cb0e595af87edaa6ebf12ff176f14a02e0e645", size = 131200, upload-time = "2026-01-27T03:59:46.938Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ef/3c/2c197d226f9ea224a9ab8d197933f9da0ae0aac5b6e0f884e2b8d9c8e9f7/pathspec-1.0.4-py3-none-any.whl", hash = "sha256:fb6ae2fd4e7c921a165808a552060e722767cfa526f99ca5156ed2ce45a5c723", size = 55206, upload-time = "2026-01-27T03:59:45.137Z" },
-]
-
-[[package]]
-name = "phonenumbers"
-version = "9.0.31"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/7b/20/51f0eafd5819e923d09c6f508a764b84d00e7e7d96c4087627a1adab8d30/phonenumbers-9.0.31.tar.gz", hash = "sha256:287dbd012b12cf9bcc4803b55a29e0d204db5a0df747d38c9130fee1b1b6b0aa", size = 2306679, upload-time = "2026-05-23T06:09:06.338Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/dc/d3/17268202ea3fa5a597c98ca5dd178ca013f96b42373c54604e59b3bb8d02/phonenumbers-9.0.31-py2.py3-none-any.whl", hash = "sha256:f308c1f425e2637b92ff34a174f0888ddf47aacfa6199531f7097e00ad90f57c", size = 2595455, upload-time = "2026-05-23T06:09:03.35Z" },
 ]
 
 [[package]]

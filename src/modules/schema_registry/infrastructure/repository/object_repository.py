@@ -32,9 +32,6 @@ from src.modules.schema_registry.domain.object.value_object.object_name import (
 from src.modules.schema_registry.domain.object.value_object import RuntimeObjectIdVO
 from src.modules.schema_registry.infrastructure.persistence.field import FieldORM
 from src.modules.schema_registry.infrastructure.persistence.object import ObjectORM
-from src.modules.schema_registry.infrastructure.persistence.object_feature_config import (
-    ObjectFeatureConfigORM,
-)
 from src.modules.shared import EntityIdVO
 
 
@@ -156,11 +153,6 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
         ).all()
         if object_ids:
             await self._session.execute(
-                delete(ObjectFeatureConfigORM).where(
-                    ObjectFeatureConfigORM.object_id.in_(tuple(object_ids))
-                )
-            )
-            await self._session.execute(
                 delete(FieldORM).where(FieldORM.object_id.in_(tuple(object_ids)))
             )
 
@@ -203,11 +195,6 @@ class SqlAlchemyObjectRepository(ObjectRepositoryProtocol):
             if object_id not in desired_object_ids
         ]
         if removed_object_ids:
-            await self._session.execute(
-                delete(ObjectFeatureConfigORM).where(
-                    ObjectFeatureConfigORM.object_id.in_(tuple(removed_object_ids))
-                )
-            )
             await self._session.execute(
                 delete(FieldORM).where(
                     FieldORM.object_id.in_(tuple(removed_object_ids))

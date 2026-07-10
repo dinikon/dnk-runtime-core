@@ -282,7 +282,7 @@ queue adapters.
 
 ## Known Gaps / Technical Debt
 
-- Текущая структура намеренно отличается от aggregate-модулей вроде `contact_point`: нет `domain/<aggregate>/entity.py`,
+- Текущая структура намеренно отличается от aggregate-модулей вроде `workflow`: нет `domain/<aggregate>/entity.py`,
   `repository.py`, `service.py` и нет `application/<aggregate>/use_case/`.
 - Между application ports и infrastructure проходят raw runtime rows как `Mapping[str, Any]`; это осознанная форма
   runtime gateway, но она отличается от project style “DTO вместо raw dict” для бизнес-модулей.

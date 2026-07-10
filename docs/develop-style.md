@@ -1,7 +1,7 @@
 # Develop Style
 
-Эталонная форма backend-модуля описана ниже; для живых примеров смотрите `src/modules/contact_point`,
-`src/modules/communication` и `src/modules/workflow`.
+Эталонная форма backend-модуля описана ниже; для живых примеров смотрите `src/modules/communication` и
+`src/modules/workflow`.
 
 Этот документ фиксирует правила структуры и стиля разработки backend-модулей.
 Если новый код не имеет отдельного архитектурного решения, его нужно писать по этой структуре.
@@ -157,7 +157,7 @@ Presentation layer отвечает только за протокол вход�
 Префиксы должны быть предметными и стабильными. Например:
 
 ```text
-/contact-points
+/workflows
 /communication/templates
 ```
 
@@ -279,9 +279,9 @@ DI собирается только в `presentation/depends`.
 
 ## Source Of Truth
 
-- `src/modules/contact_point/domain/contact_point/entity.py`
-- `src/modules/contact_point/application/use_case/attach_contact_point.py`
-- `src/modules/contact_point/infrastructure/runtime_repository.py`
-- `src/modules/contact_point/presentation/depends/application.py`
-- `src/modules/contact_point/presentation/depends/infrastructure.py`
-- `src/modules/contact_point/presentation/http/router.py`
+- `src/modules/workflow/domain/workflow_application/entity.py`
+- `src/modules/workflow/application/workflow_application/use_case/create_workflow.py`
+- `src/modules/workflow/infrastructure/workflow_application_runtime_repository.py`
+- `src/modules/workflow/presentation/depends/application.py`
+- `src/modules/workflow/presentation/depends/infrastructure.py`
+- `src/modules/workflow/presentation/http/router.py`

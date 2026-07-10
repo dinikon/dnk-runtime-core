@@ -1,8 +1,5 @@
 from fastapi import APIRouter
 
-from src.modules.contact_point.presentation.http.router import (
-    router as contact_point_router,
-)
 from src.modules.custom_object.presentation.http.router import (
     router as custom_object_router,
 )
@@ -24,7 +21,6 @@ router.include_router(workflow_router)
 router.include_router(schema_registry_router)
 router.include_router(custom_object_router)
 router.include_router(communication_router)
-router.include_router(contact_point_router)
 router.include_router(identity_router)
 
 __all__ = ["router"]

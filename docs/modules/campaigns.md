@@ -35,7 +35,6 @@ business campaign goal + audience + schedule + orchestration template -> measura
 - dynamic segment DSL и audience calculation internals;
 - recipient fan-out и dispatch mechanics будущего send orchestration boundary;
 - provider payload rendering или provider send attempts;
-- contact point normalization/resolution internals;
 - external event ingestion и normalization.
 
 ## Доменные понятия
@@ -72,7 +71,7 @@ business campaign goal + audience + schedule + orchestration template -> measura
 | `shared`          | IDs, domain errors, clock/UUID ports, UoW и request context dependencies.                |
 | `workflow`        | Создание/publish workflow definitions и запуск workflow runs.                            |
 | `communication`   | Чтение summarized communication outcomes только для reporting.                           |
-| `schema_registry` | Runtime object descriptors и object feature metadata для campaign-owned runtime objects. |
+| `schema_registry` | Runtime object descriptors для campaign-owned runtime objects.                             |
 | `runtime_data`    | Хранение/поиск campaign runtime rows, если campaign objects descriptor-backed.           |
 
 Audience resolution and bulk-send orchestration are future boundaries and are intentionally not documented as current

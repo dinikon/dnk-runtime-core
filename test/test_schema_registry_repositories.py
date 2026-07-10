@@ -319,7 +319,7 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
             any(isinstance(model, FieldORM) for model in session.added_models)
         )
 
-    async def test_reconcile_deletes_feature_config_before_retired_object(self) -> None:
+    async def test_reconcile_deletes_fields_before_retired_object(self) -> None:
         tenant_id = EntityIdVO.from_value(uuid4())
         retired_object_id = uuid4()
 
@@ -346,7 +346,7 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             session.deleted_tables,
-            ["object_feature_config", "fields", "objects"],
+            ["fields", "objects"],
         )
 
     async def test_relation_repository_replace_all_maps_entity_to_orm_model(
