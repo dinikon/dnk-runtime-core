@@ -35,6 +35,8 @@ from src.modules.schema_registry.infrastructure.seed.python_module_seed_reader i
 from src.modules.schema_registry.seed.schema_seed import SCHEMA_SEED
 
 REMOVED_OBJECTS = {
+    "contact",
+    "company",
     "product",
     "product_category",
     "broadcast",
@@ -46,6 +48,9 @@ REMOVED_OBJECTS = {
 }
 
 REMOVED_TABLES = {
+    "contacts",
+    "companies",
+    "contacts_companies",
     "products",
     "product_categories",
     "broadcasts",
@@ -79,22 +84,6 @@ class SchemaSeedRuntimeCleanupTests(unittest.IsolatedAsyncioTestCase):
         seeded_objects = {object_seed.singular_name for object_seed in seed.objects}
 
         self.assertFalse(REMOVED_OBJECTS & seeded_objects)
-
-        contact = seed.get_object("contact")
-        company = seed.get_object("company")
-        self.assertIsNotNone(contact)
-        self.assertIsNotNone(company)
-        assert contact is not None
-        assert company is not None
-        self.assertEqual(company.plural_name, "companies")
-        self.assertIn("legal_name", {field.name for field in company.fields})
-        self.assertTrue(
-            any(
-                relation.name == "contact_companies"
-                and relation.relation_type.value == "many_to_many"
-                for relation in contact.relations
-            )
-        )
 
         expected_communication_objects = {
             "communication_provider_connector",
@@ -149,25 +138,6 @@ class SchemaSeedRuntimeCleanupTests(unittest.IsolatedAsyncioTestCase):
             if isinstance(operation, AddForeignKeyOperation)
         ]
 
-        self.assertIn("contacts", tables)
-        self.assertIn("companies", tables)
-        self.assertIn("contacts_companies", tables)
-        self.assertTrue(
-            any(
-                fk.constraint_name == "fk_contacts_companies_contact_id_contacts"
-                and fk.table_name == "contacts_companies"
-                and fk.target_table_name == "contacts"
-                for fk in foreign_keys
-            )
-        )
-        self.assertTrue(
-            any(
-                fk.constraint_name == "fk_contacts_companies_company_id_companies"
-                and fk.table_name == "contacts_companies"
-                and fk.target_table_name == "companies"
-                for fk in foreign_keys
-            )
-        )
         self.assertFalse(REMOVED_TABLES & tables)
         self.assertFalse(
             any(
@@ -190,6 +160,69 @@ class SchemaSeedRuntimeCleanupTests(unittest.IsolatedAsyncioTestCase):
         actual_schema = PhysicalSchemaSnapshot(
             schema_name="dnk_test",
             tables=(
+                TableSnapshot(
+                    name="companies",
+                    columns=(_uuid_column("id"),),
+                    indexes=(
+                        IndexSnapshot(
+                            name="companies_id_uq",
+                            columns=("id",),
+                            is_unique=True,
+                        ),
+                    ),
+                ),
+                TableSnapshot(
+                    name="contacts",
+                    columns=(_uuid_column("id"),),
+                    indexes=(
+                        IndexSnapshot(
+                            name="contacts_id_uq",
+                            columns=("id",),
+                            is_unique=True,
+                        ),
+                    ),
+                ),
+                TableSnapshot(
+                    name="contacts_companies",
+                    columns=(
+                        _uuid_column("id"),
+                        _uuid_column("contact_id"),
+                        _uuid_column("company_id"),
+                    ),
+                    indexes=(
+                        IndexSnapshot(
+                            name="uq_contacts_companies_contact_id_company_id",
+                            columns=("contact_id", "company_id"),
+                            is_unique=True,
+                        ),
+                        IndexSnapshot(
+                            name="idx_contacts_companies_contact_id",
+                            columns=("contact_id",),
+                            is_unique=False,
+                        ),
+                        IndexSnapshot(
+                            name="idx_contacts_companies_company_id",
+                            columns=("company_id",),
+                            is_unique=False,
+                        ),
+                    ),
+                    foreign_keys=(
+                        ForeignKeySnapshot(
+                            name="fk_contacts_companies_contact_id_contacts",
+                            source_columns=("contact_id",),
+                            target_table_name="contacts",
+                            target_columns=("id",),
+                            on_delete="restrict",
+                        ),
+                        ForeignKeySnapshot(
+                            name="fk_contacts_companies_company_id_companies",
+                            source_columns=("company_id",),
+                            target_table_name="companies",
+                            target_columns=("id",),
+                            on_delete="restrict",
+                        ),
+                    ),
+                ),
                 TableSnapshot(
                     name="product_categories",
                     columns=(
@@ -310,6 +343,11 @@ class SchemaSeedRuntimeCleanupTests(unittest.IsolatedAsyncioTestCase):
                 "products_sku_uq",
                 "product_categories_id_uq",
                 "broadcasts_status_idx",
+                "contacts_id_uq",
+                "companies_id_uq",
+                "uq_contacts_companies_contact_id_company_id",
+                "idx_contacts_companies_contact_id",
+                "idx_contacts_companies_company_id",
             }
             <= dropped_indexes
         )
@@ -318,6 +356,8 @@ class SchemaSeedRuntimeCleanupTests(unittest.IsolatedAsyncioTestCase):
                 "fk_products_category_id_product_categories",
                 "fk_product_categories_parent_category_id_product_categories",
                 "fk_segment_versions_segment_definition_id_segment_definitions",
+                "fk_contacts_companies_contact_id_contacts",
+                "fk_contacts_companies_company_id_companies",
             }
             <= dropped_foreign_keys
         )

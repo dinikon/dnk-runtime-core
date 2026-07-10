@@ -3,8 +3,8 @@
 This page maps the main business entities that currently appear in the service.
 
 Identifier convention: `EntityIdVO` is the single shared UUID primitive and the base class for concrete ids. Tenant
-scope uses `EntityIdVO` directly; concrete entities expose concrete subclasses such as `UserIdVO`, `ContactIdVO`,
-`CompanyIdVO`, `DataSourceIdVO`, `RuntimeObjectIdVO` and `RuntimeFieldIdVO`.
+scope uses `EntityIdVO` directly; concrete entities expose concrete subclasses such as `UserIdVO`, `DataSourceIdVO`,
+`RuntimeObjectIdVO` and `RuntimeFieldIdVO`.
 
 ## Tenancy
 
@@ -63,26 +63,6 @@ scope uses `EntityIdVO` directly; concrete entities expose concrete subclasses s
     - `is_primary`
     - `is_verified`
     - `is_deleted`
-
-## CRM
-
-### `ContactEntity`
-
-- Module owner: `crm`
-- Business meaning: CRM contact record
-- Key fields:
-    - `id` as `ContactIdVO`
-    - timestamps
-    - `contact_name` with last/first/middle name
-
-### `CompanyEntity`
-
-- Module owner: `crm`
-- Business meaning: CRM company record
-- Key fields:
-    - `id` as `CompanyIdVO`
-    - timestamps
-    - `legal_name`
 
 ## Communication
 
@@ -208,7 +188,6 @@ Each custom object has system fields `id`, `created_at` and `updated_at`.
 - [Runtime schema](runtime-schema.md)
 - [Tenancy module](../modules/tenancy.md)
 - [Identity module](../modules/identity.md)
-- [CRM module](../modules/crm.md)
 - [Communication module](../modules/communication.md)
 - [Schema Registry module](../modules/schema-registry.md)
 
@@ -218,8 +197,6 @@ Each custom object has system fields `id`, `created_at` and `updated_at`.
 - `src/modules/tenancy/domain/tenant_domain/entity.py`
 - `src/modules/identity/domain/user/entity.py`
 - `src/modules/identity/domain/auth/error.py`
-- `src/modules/crm/domain/contact/entity.py`
-- `src/modules/crm/domain/company/entity.py`
 - `src/modules/communication/domain/models.py`
 - `src/modules/schema_registry/domain/datasource/entity.py`
 - `src/modules/schema_registry/domain/object/entity.py`

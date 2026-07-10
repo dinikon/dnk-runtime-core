@@ -836,7 +836,7 @@ contact_point/application/ports.py
 
 ## OwnerResolverPort
 
-Нужен, чтобы ContactPoint module не зависел напрямую от CRM/runtime_data.
+Нужен, чтобы ContactPoint module не зависел напрямую от owning business module/runtime_data.
 
 ```python
 class OwnerResolverPort(Protocol):

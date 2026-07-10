@@ -5,7 +5,6 @@ from src.modules.schema_registry.seed.contexts.communication import (
 from src.modules.schema_registry.seed.contexts.contact_point import (
     CONTACT_POINT_OBJECTS,
 )
-from src.modules.schema_registry.seed.contexts.crm import CRM_OBJECTS
 from src.modules.schema_registry.seed.contexts.workflow import WORKFLOW_OBJECTS
 
 SCHEMA_SEED = SchemaSeed(
@@ -13,7 +12,6 @@ SCHEMA_SEED = SchemaSeed(
     code="crm",
     label="CRM",
     objects=(
-        *CRM_OBJECTS,
         *CONTACT_POINT_OBJECTS,
         *WORKFLOW_OBJECTS,
         *COMMUNICATION_OBJECTS,
@@ -24,7 +22,6 @@ SCHEMA_SEED = SchemaSeed(
 __all__ = [
     "COMMUNICATION_OBJECTS",
     "CONTACT_POINT_OBJECTS",
-    "CRM_OBJECTS",
     "SCHEMA_SEED",
     "WORKFLOW_OBJECTS",
 ]

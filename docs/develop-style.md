@@ -1,6 +1,6 @@
 # Develop Style
 
-Эталонная форма backend-модуля описана ниже; для живых примеров смотрите `src/modules/crm`,
+Эталонная форма backend-модуля описана ниже; для живых примеров смотрите `src/modules/contact_point`,
 `src/modules/communication` и `src/modules/workflow`.
 
 Этот документ фиксирует правила структуры и стиля разработки backend-модулей.
@@ -55,7 +55,7 @@ src/modules/<module>/
 ```
 
 Если модуль владеет несколькими близкими понятиями, разделяйте их по поддоменам
-как `crm/contact` и `crm/company`. Не смешивайте сущности,
+как `tenancy/tenant` и `tenancy/tenant_domain`. Не смешивайте сущности,
 команды, use case и HTTP-схемы разных поддоменов в одном большом файле.
 
 ## Domain Layer
@@ -77,8 +77,8 @@ Domain layer отвечает за бизнес-инварианты.
 
 Пример:
 
-- `ContactEntity.create(...)` создает запись с едиными `created_at/updated_at`.
-- `ContactEntity.update(...)` меняет поля и обновляет `updated_at` только при
+- Factory-метод entity создает запись с едиными `created_at/updated_at`.
+- Метод изменения entity обновляет `updated_at` только при
   реальном изменении.
 - Value object нормализует входную строку и запрещает невалидное значение.
 - Domain service координирует несколько repository/aggregate, если сценарий этого требует.
@@ -157,8 +157,8 @@ Presentation layer отвечает только за протокол вход�
 Префиксы должны быть предметными и стабильными. Например:
 
 ```text
-/crm/contacts
-/crm/companies
+/contact-points
+/communication/templates
 ```
 
 ## Dependency Injection
@@ -279,9 +279,9 @@ DI собирается только в `presentation/depends`.
 
 ## Source Of Truth
 
-- `src/modules/crm/domain/contact/entity.py`
-- `src/modules/crm/application/contact/use_case/create_contact.py`
-- `src/modules/crm/infrastructure/contact_runtime_repository.py`
-- `src/modules/crm/presentation/depends/application.py`
-- `src/modules/crm/presentation/depends/infrastructure.py`
-- `src/modules/crm/presentation/http/router.py`
+- `src/modules/contact_point/domain/contact_point/entity.py`
+- `src/modules/contact_point/application/use_case/attach_contact_point.py`
+- `src/modules/contact_point/infrastructure/runtime_repository.py`
+- `src/modules/contact_point/presentation/depends/application.py`
+- `src/modules/contact_point/presentation/depends/infrastructure.py`
+- `src/modules/contact_point/presentation/http/router.py`

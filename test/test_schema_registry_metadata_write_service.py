@@ -244,3 +244,91 @@ class SchemaRegistryMetadataWriteServiceTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(object_repository.recorded_objects[1].id, original_custom_id)
         self.assertIs(object_repository.recorded_objects[1], custom_object)
+
+    async def test_reconcile_prunes_relations_before_removing_objects(self) -> None:
+        now = UtcClock().now()
+        tenant_id = EntityIdVO.from_value(uuid4())
+        datasource = DataSourceEntity.create(
+            id_=DataSourceIdVO.from_value(uuid4()),
+            now=now,
+            tenant_id=tenant_id,
+            schema_name=SchemaNameVO("dnk_crm"),
+        )
+        retired_object = ObjectEntity.create(
+            id_=RuntimeObjectIdVO.from_value(uuid4()),
+            tenant_id=tenant_id,
+            data_source_id=datasource.id,
+            now=now,
+            object_name=ObjectNameVO(singular="contact", plural="contacts"),
+            object_label=ObjectLabelVO(singular="Contact", plural="Contacts"),
+            description="Contacts.",
+            kind=ObjectKind.STANDARD,
+        )
+        retained_object = ObjectEntity.create(
+            id_=RuntimeObjectIdVO.from_value(uuid4()),
+            tenant_id=tenant_id,
+            data_source_id=datasource.id,
+            now=now,
+            object_name=ObjectNameVO(singular="c_deal", plural="c_deals"),
+            object_label=ObjectLabelVO(singular="Deal", plural="Deals"),
+            description="Deals.",
+            kind=ObjectKind.CUSTOM,
+        )
+        calls: list[str] = []
+
+        class DataSourceServiceStub:
+            async def get_required_by_tenant(self, *, tenant_id):
+                return datasource
+
+        class ObjectServiceStub:
+            async def list_by_tenant_id(self, *, tenant_id):
+                calls.append("list-objects")
+                return [retired_object, retained_object]
+
+            async def reconcile_for_tenant_from_spec(
+                self, *, tenant_id, data_source_id, schema_spec
+            ):
+                calls.append("reconcile-objects")
+                return [retained_object]
+
+        class RelationServiceStub:
+            async def prune_for_retained_members(
+                self, *, tenant_id, retained_object_ids, retained_field_ids
+            ):
+                calls.append("prune-relations")
+                self.retained_object_ids = retained_object_ids
+                return []
+
+            async def reconcile_for_tenant_from_spec(
+                self, *, tenant_id, data_source_id, schema_spec, objects
+            ):
+                calls.append("reconcile-relations")
+                return []
+
+        relation_service = RelationServiceStub()
+        service = SchemaRegistryMetadataWriteService(
+            data_source_service=DataSourceServiceStub(),
+            object_service=ObjectServiceStub(),  # type: ignore[arg-type]
+            relation_service=relation_service,  # type: ignore[arg-type]
+        )
+
+        await service.reconcile_from_spec(
+            tenant_id=tenant_id,
+            schema_spec=ValidatedSchemaSpec(
+                version=None,
+                code="crm",
+                label="CRM",
+                objects=(),
+            ),
+        )
+
+        self.assertEqual(
+            calls,
+            [
+                "list-objects",
+                "prune-relations",
+                "reconcile-objects",
+                "reconcile-relations",
+            ],
+        )
+        self.assertEqual(relation_service.retained_object_ids, {retained_object.id})

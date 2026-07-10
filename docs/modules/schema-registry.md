@@ -7,7 +7,7 @@
 отдает runtime descriptors потребителям runtime data.
 
 Модуль управляет структурой runtime objects, но не выполняет CRUD runtime-записей. Чтение и запись строк находятся в
-`runtime_data`, `custom_object`, `crm`, `communication` и других потребителях descriptors.
+`runtime_data`, `custom_object`, `communication` и других потребителях descriptors.
 
 ## Current Scope
 
@@ -198,7 +198,9 @@
 - `SchemaNamingStrategy` validates PostgreSQL identifiers with `^[a-z][a-z0-9_]*$`, max length 63, and shortens
   generated identifiers with deterministic hash suffix.
 - Create plan order: create schema, create tables, add columns, add primary keys, create indexes, add foreign keys.
-- Diff plan protects custom `c_` tables and preserved relation artifacts; retained column type changes and unsafe
+- Diff plan protects custom `c_` tables and custom relation artifacts while all referenced objects/fields survive.
+  Relations that reference retired seed objects are removed before those objects, including join tables and custom FK
+  columns. Retained column type changes and unsafe
   `nullable -> not null` changes are rejected.
 - FK-based relations require `reference` FK field and referenced field `id` or another unique field in seed planning.
 - `many_to_many` relations create join table with `id`, `created_at`, two UUID join columns, primary key, unique pair
@@ -357,7 +359,6 @@ HTTP error mapping:
 | `tenancy`       | infrastructure/presentation DI                           | `TenantSchemaBootstrapPort` and `TenantSchemaBootstrapContext` adapter for tenant onboarding.                  |
 | `runtime_data`  | consumer dependency, not imported by module code for DDL | Consumers use `RuntimeObjectDescriptor`; schema_registry itself does not do runtime row CRUD.                  |
 | `custom_object` | consumer dependency                                      | Record APIs use `RuntimeObjectIdVO` and descriptors; metadata/DDL remains in schema_registry config API.       |
-| `crm`           | consumer dependency                                      | CRM model description/runtime repositories resolve descriptors and rely on default seed objects.               |
 | `communication` | consumer dependency                                      | Communication runtime repositories/management wiring use schema_registry descriptors and default seed objects. |
 | `config`        | management/bootstrap                                     | `dnk_config.DEFAULT_SEED_MODULE` and `SCHEMA_PREFIX`.                                                          |
 
@@ -404,7 +405,7 @@ Command зарегистрирован в `src/management/commands/schema_regist
   - `test/test_tenant_schema_bootstrap_boundary.py`;
   - `test/test_architecture_boundaries.py`;
   - `test/test_inventory_schema_seed.py` covers current default seed objects and removed-model cleanup behavior;
-  - runtime descriptor usage is also covered by CRM, custom_object, communication and runtime_data tests.
+  - runtime descriptor usage is also covered by custom_object, communication and runtime_data tests.
 
 Important gaps:
 

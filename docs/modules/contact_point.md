@@ -409,7 +409,6 @@ uv run python -m unittest test.test_contact_point_application test.test_contact_
 ## Related Documentation
 
 - [Develop Style](../develop-style.md)
-- [CRM Module](./crm.md)
 - [HTTP API](../interfaces/http-api.md)
 
 ## Source Of Truth

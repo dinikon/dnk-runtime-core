@@ -26,7 +26,7 @@
 Дополнительные источники:
 
 - `docs/develop-style.md`
-- `docs/modules/crm.md`
+- `docs/modules/communication.md`
 - существующий `docs/modules/<module_name>.md`, если он уже есть
 - `tests`, если они покрывают поведение модуля
 
@@ -128,7 +128,7 @@
 9. Существующую документацию:
 
     - `docs/modules/<module_name>.md`
-    - `docs/modules/crm.md`
+    - `docs/modules/communication.md`
     - `docs/develop-style.md`
 
 ## Context Collection Checklist
@@ -257,7 +257,6 @@
 - `shared`
 - `schema_registry`
 - `runtime_data`
-- `crm`
 - `communication`
 - `workflow`
 - любые другие
@@ -436,7 +435,7 @@ Base prefix:
 ## Related Documentation
 
 - [Develop Style](../develop-style.md)
-- [CRM Module](./crm.md)
+- [Communication Module](./communication.md)
 
 ## Source Of Truth
 

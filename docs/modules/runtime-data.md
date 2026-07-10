@@ -219,7 +219,7 @@ Base prefix:
 | В текущей реализации не найдено. | В текущей реализации не найдено. | В текущей реализации не найдено. | В текущей реализации не найдено. | В текущей реализации не найдено. | В текущей реализации не найдено. |
 
 В модуле отсутствует `src/modules/runtime_data/presentation/`. HTTP endpoints, которые используют `runtime_data`,
-находятся в потребляющих модулях (`crm`, `custom_object`, `communication`).
+находятся в потребляющих модулях (`custom_object`, `communication`).
 
 ## Dependency Injection
 
@@ -230,9 +230,6 @@ Base prefix:
 
 Фактическая wiring-точка находится вне `runtime_data`:
 
-- `src/modules/crm/presentation/depends/infrastructure.py` создает `RuntimeFieldTypePolicy`,
-  `PostgresRuntimeQueryGateway`, `PostgresRuntimeCommandGateway`, `RuntimeObjectQueryService`,
-  `QueryCapabilityResolver`.
 - `src/modules/custom_object/presentation/depends/infrastructure.py` создает `RuntimeFieldTypePolicy`,
   `PostgresRuntimeQueryGateway`, `PostgresRuntimeCommandGateway`.
 - `src/modules/communication/presentation/depends/infrastructure.py` и
@@ -245,11 +242,10 @@ Base prefix:
 |---------------------------|---------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
 | `shared`                  | `domain`, `application`         | `DomainError` для runtime errors; `EntityIdVO` для tenant scope в queries/relation use cases.                                         |
 | `schema_registry.runtime` | `application`, `infrastructure` | `RuntimeObjectDescriptor`, `RuntimeFieldDescriptor`, `RuntimeRelationDescriptor`, `RuntimeObjectResolverProtocol`.                    |
-| `crm`                     | внешний потребитель             | Использует runtime gateways, `RuntimeObjectQueryService`, `QueryCapabilityResolver` и runtime errors в repositories/controllers.      |
 | `custom_object`           | внешний потребитель             | Использует runtime gateways и DSL validators для dynamic custom record CRUD/search.                                                   |
 | `communication`           | внешний потребитель             | Использует runtime gateways, `RuntimeTypedFilterBuilder`, runtime errors и type policy для runtime-backed communication repositories. |
 
-Внутри `runtime_data` нет зависимости на `crm`, `custom_object` или `communication`; эти зависимости
+Внутри `runtime_data` нет зависимости на `custom_object` или `communication`; эти зависимости
 направлены от потребителей к `runtime_data`.
 
 ## Events / Background Processing
@@ -286,7 +282,7 @@ queue adapters.
 
 ## Known Gaps / Technical Debt
 
-- Текущая структура намеренно отличается от aggregate-модулей вроде `crm`: нет `domain/<aggregate>/entity.py`,
+- Текущая структура намеренно отличается от aggregate-модулей вроде `contact_point`: нет `domain/<aggregate>/entity.py`,
   `repository.py`, `service.py` и нет `application/<aggregate>/use_case/`.
 - Между application ports и infrastructure проходят raw runtime rows как `Mapping[str, Any]`; это осознанная форма
   runtime gateway, но она отличается от project style “DTO вместо raw dict” для бизнес-модулей.

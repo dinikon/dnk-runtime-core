@@ -20,10 +20,10 @@
     - tenancy use case
     - identity provisioning
     - schema bootstrap through tenancy-owned port
-- `POST /api/crm/contacts`
+- `POST /api/custom-objects/records/create`
     - authenticated request context
-    - CRM contact use case
-    - contact domain service
+    - custom object record use case
+    - runtime data repository
 - `POST /api/console/auth/request-otp`
     - host extraction
   - identity controller in `presentation/http/console_auth/controller/`

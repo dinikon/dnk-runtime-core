@@ -11,23 +11,6 @@ All public HTTP routes are mounted under `/api`.
 
 `ResolveTenantResponseSchema` includes `tenant_id`, `tenant_name`, `status`, and `api_host` when a tenant is found; missing tenants return nullable tenant fields.
 
-## CRM
-
-| Method   | Path                              | Module | Request                        | Response                      | Auth                          | Main errors         |
-|----------|-----------------------------------|--------|--------------------------------|-------------------------------|-------------------------------|---------------------|
-| `POST`   | `/api/crm/contacts`               | `crm`  | `CreateContactRequestSchema`   | `ContactResponseSchema`       | authenticated request context | `401`, `422`        |
-| `POST`   | `/api/crm/contacts/fields`        | `crm`  | none                           | `ContactFieldsResponseSchema` | authenticated request context | `401`, `409`, `422` |
-| `GET`    | `/api/crm/contacts`               | `crm`  | query params `limit`, `offset` | `ListContactsResponseSchema`  | authenticated request context | `401`, `422`        |
-| `GET`    | `/api/crm/contacts/{contact_id}`  | `crm`  | path `contact_id`              | `ContactResponseSchema`       | authenticated request context | `401`, `404`, `422` |
-| `PUT`    | `/api/crm/contacts/{contact_id}`  | `crm`  | `UpdateContactRequestSchema`   | `ContactResponseSchema`       | authenticated request context | `401`, `404`, `422` |
-| `DELETE` | `/api/crm/contacts/{contact_id}`  | `crm`  | path `contact_id`              | empty `204`                   | authenticated request context | `401`, `404`, `422` |
-| `POST`   | `/api/crm/companies`              | `crm`  | `CreateCompanyRequestSchema`   | `CompanyResponseSchema`       | authenticated request context | `401`, `422`        |
-| `POST`   | `/api/crm/companies/fields`       | `crm`  | none                           | `CompanyFieldsResponseSchema` | authenticated request context | `401`, `409`, `422` |
-| `GET`    | `/api/crm/companies`              | `crm`  | query params `limit`, `offset` | `ListCompaniesResponseSchema` | authenticated request context | `401`, `422`        |
-| `GET`    | `/api/crm/companies/{company_id}` | `crm`  | path `company_id`              | `CompanyResponseSchema`       | authenticated request context | `401`, `404`, `422` |
-| `PUT`    | `/api/crm/companies/{company_id}` | `crm`  | `UpdateCompanyRequestSchema`   | `CompanyResponseSchema`       | authenticated request context | `401`, `404`, `422` |
-| `DELETE` | `/api/crm/companies/{company_id}` | `crm`  | path `company_id`              | empty `204`                   | authenticated request context | `401`, `404`, `422` |
-
 ## Communication
 
 | Method   | Path                                                                        | Module          | Request / Params                              | Response                                | Auth                          | Main errors                |
@@ -106,7 +89,7 @@ Mounted under `/api/console/auth`.
 - Session cookie name comes from auth config and defaults to `dnk_session`.
 - Identity routes are tenant-host aware, so host extraction is part of the authentication flow.
 - Identity controllers map domain/tenancy errors directly inside controller files.
-- CRM, schema registry config and custom object routes do not accept `tenant_id` from the client. Controllers derive it
+- Schema registry config and custom object routes do not accept `tenant_id` from the client. Controllers derive it
   from the request domain/auth context and pass it internally through commands/queries and use cases.
 - `schema_registry` config routes and `custom_object` record routes follow the same tenant rule and accept runtime
   `object_id` / `row_id` in request bodies.
@@ -122,7 +105,6 @@ Mounted under `/api/console/auth`.
 - [Tenancy module](../modules/tenancy.md)
 - [Identity module](../modules/identity.md)
 - [Communication module](../modules/communication.md)
-- [CRM module](../modules/crm.md)
 
 ## Source Of Truth
 
@@ -130,6 +112,5 @@ Mounted under `/api/console/auth`.
 - `src/modules/tenancy/presentation/http/admin_tenant/controller/`
 - `src/modules/tenancy/presentation/http/console_tenant/controller/`
 - `src/modules/identity/presentation/http/console_auth/controller/`
-- `src/modules/crm/presentation/http/contact/controller/`
 - `src/modules/schema_registry/presentation/http/config/`
 - `src/modules/custom_object/presentation/http/record/controller/`

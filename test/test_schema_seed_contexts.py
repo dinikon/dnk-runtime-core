@@ -13,7 +13,6 @@ from src.modules.schema_registry.infrastructure.seed.python_module_seed_reader i
 from src.modules.schema_registry.seed.contexts import (
     COMMUNICATION_OBJECTS,
     CONTACT_POINT_OBJECTS,
-    CRM_OBJECTS,
     WORKFLOW_OBJECTS,
 )
 from src.modules.schema_registry.seed.schema_seed import (
@@ -21,9 +20,6 @@ from src.modules.schema_registry.seed.schema_seed import (
 )
 from src.modules.schema_registry.seed.schema_seed import (
     CONTACT_POINT_OBJECTS as AGGREGATED_CONTACT_POINT_OBJECTS,
-)
-from src.modules.schema_registry.seed.schema_seed import (
-    CRM_OBJECTS as AGGREGATED_CRM_OBJECTS,
 )
 from src.modules.schema_registry.seed.schema_seed import (
     WORKFLOW_OBJECTS as AGGREGATED_WORKFLOW_OBJECTS,
@@ -36,7 +32,6 @@ def _object_names(objects: tuple[ObjectSeed, ...]) -> tuple[str, ...]:
 
 class SchemaSeedContextTests(unittest.IsolatedAsyncioTestCase):
     def test_context_modules_export_expected_object_groups(self) -> None:
-        self.assertEqual(_object_names(CRM_OBJECTS), ("contact", "company"))
         self.assertEqual(
             _object_names(CONTACT_POINT_OBJECTS),
             ("contact_point", "contact_point_binding"),
@@ -60,7 +55,6 @@ class SchemaSeedContextTests(unittest.IsolatedAsyncioTestCase):
             ),
         )
 
-        self.assertIs(AGGREGATED_CRM_OBJECTS, CRM_OBJECTS)
         self.assertIs(AGGREGATED_CONTACT_POINT_OBJECTS, CONTACT_POINT_OBJECTS)
         self.assertIs(AGGREGATED_WORKFLOW_OBJECTS, WORKFLOW_OBJECTS)
         self.assertIs(AGGREGATED_COMMUNICATION_OBJECTS, COMMUNICATION_OBJECTS)
@@ -80,7 +74,6 @@ class SchemaSeedContextTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             _object_names(seed.objects),
             (
-                *_object_names(CRM_OBJECTS),
                 *_object_names(CONTACT_POINT_OBJECTS),
                 *_object_names(WORKFLOW_OBJECTS),
                 *_object_names(COMMUNICATION_OBJECTS),

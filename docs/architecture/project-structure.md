@@ -56,7 +56,6 @@ src/modules/
 ├── identity/
 ├── runtime_data/
 ├── custom_object/
-├── crm/
 ├── contact_point/
 ├── communication/
 ├── workflow/

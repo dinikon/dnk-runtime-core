@@ -26,7 +26,7 @@ Schema metadata, object/field configuration and physical DDL belong to `schema_r
 - `object_id` is a `schema_registry.RuntimeObjectIdVO`
 - records are generic runtime rows returned as `{ object_id, row_id, values }`
 - system fields such as `id`, `created_at` and `updated_at` are immutable in write payloads
-- non-custom descriptors are rejected; standard CRM records and future standard modules are handled by their owning
+- non-custom descriptors are rejected; standard records are handled by their owning
   modules
 
 ## Infrastructure / Persistence

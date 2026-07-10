@@ -53,15 +53,24 @@ from src.modules.schema_registry.domain.seed.validated_schema_spec import (
 
 @dataclass(frozen=True, slots=True)
 class PreservedSchemaArtifacts:
-    """Физические артефакты, которые diff не должен удалять автоматически."""
+    """Политика для metadata-managed артефактов вне текущего seed."""
 
     table_names: frozenset[str] = frozenset()
+    column_names: frozenset[tuple[str, str]] = frozenset()
     index_names: frozenset[str] = frozenset()
     foreign_keys: frozenset[tuple[str, str]] = frozenset()
+    removed_table_names: frozenset[str] = frozenset()
+    removed_column_names: frozenset[tuple[str, str]] = frozenset()
+    removed_index_names: frozenset[str] = frozenset()
+    removed_foreign_keys: frozenset[tuple[str, str]] = frozenset()
 
     def has_table(self, table_name: str) -> bool:
         """Проверяет, нужно ли сохранить таблицу даже если ее нет в desired."""
         return table_name in self.table_names
+
+    def has_column(self, table_name: str, column_name: str) -> bool:
+        """Проверяет, нужно ли сохранить metadata-managed колонку."""
+        return (table_name, column_name) in self.column_names
 
     def has_index(self, index_name: str) -> bool:
         """Проверяет, нужно ли сохранить индекс даже если его нет в desired."""
@@ -70,6 +79,22 @@ class PreservedSchemaArtifacts:
     def has_foreign_key(self, table_name: str, constraint_name: str) -> bool:
         """Проверяет, нужно ли сохранить FK даже если его нет в desired."""
         return (table_name, constraint_name) in self.foreign_keys
+
+    def removes_table(self, table_name: str) -> bool:
+        """Проверяет, нужно ли удалить retired relation table."""
+        return table_name in self.removed_table_names
+
+    def removes_column(self, table_name: str, column_name: str) -> bool:
+        """Проверяет, нужно ли удалить retired relation column."""
+        return (table_name, column_name) in self.removed_column_names
+
+    def removes_index(self, index_name: str) -> bool:
+        """Проверяет, нужно ли удалить retired relation index."""
+        return index_name in self.removed_index_names
+
+    def removes_foreign_key(self, table_name: str, constraint_name: str) -> bool:
+        """Проверяет, нужно ли удалить retired relation FK."""
+        return (table_name, constraint_name) in self.removed_foreign_keys
 
 
 class PostgresSchemaPlanService:
@@ -183,7 +208,15 @@ class PostgresSchemaPlanService:
 
         for actual_table in sorted(actual_schema.tables, key=lambda item: item.name):
             desired_table = desired_tables.get(actual_table.name)
-            if desired_table is None and self._is_custom_table(actual_table.name):
+            is_custom_table = self._is_custom_table(actual_table.name)
+            if (
+                desired_table is None
+                and is_custom_table
+                and not any(
+                    preserved.removes_foreign_key(actual_table.name, item.name)
+                    for item in actual_table.foreign_keys
+                )
+            ):
                 continue
             for foreign_key in sorted(
                 actual_table.foreign_keys, key=lambda item: item.name
@@ -193,14 +226,24 @@ class PostgresSchemaPlanService:
                     if desired_table is None
                     else desired_table.get_foreign_key(foreign_key.name)
                 )
-                if (
-                    desired_table is None
-                    or desired_foreign_key is None
-                    or desired_foreign_key != foreign_key
+                should_remove = preserved.removes_foreign_key(
+                    actual_table.name,
+                    foreign_key.name,
+                )
+                if should_remove or (
+                    not is_custom_table
+                    and (
+                        desired_table is None
+                        or desired_foreign_key is None
+                        or desired_foreign_key != foreign_key
+                    )
                 ):
-                    if preserved.has_foreign_key(
-                        actual_table.name,
-                        foreign_key.name,
+                    if (
+                        preserved.has_foreign_key(
+                            actual_table.name,
+                            foreign_key.name,
+                        )
+                        and not should_remove
                     ):
                         continue
                     plan.add_destructive(
@@ -213,7 +256,14 @@ class PostgresSchemaPlanService:
 
         for actual_table in sorted(actual_schema.tables, key=lambda item: item.name):
             desired_table = desired_tables.get(actual_table.name)
-            if desired_table is None and self._is_custom_table(actual_table.name):
+            is_custom_table = self._is_custom_table(actual_table.name)
+            if (
+                desired_table is None
+                and is_custom_table
+                and not any(
+                    preserved.removes_index(item.name) for item in actual_table.indexes
+                )
+            ):
                 continue
             for index in sorted(actual_table.indexes, key=lambda item: item.name):
                 desired_index = (
@@ -221,12 +271,16 @@ class PostgresSchemaPlanService:
                     if desired_table is None
                     else desired_table.get_index(index.name)
                 )
-                if (
-                    desired_table is None
-                    or desired_index is None
-                    or desired_index != index
+                should_remove = preserved.removes_index(index.name)
+                if should_remove or (
+                    not is_custom_table
+                    and (
+                        desired_table is None
+                        or desired_index is None
+                        or desired_index != index
+                    )
                 ):
-                    if preserved.has_index(index.name):
+                    if preserved.has_index(index.name) and not should_remove:
                         continue
                     plan.add_destructive(
                         DropIndexOperation(
@@ -261,10 +315,25 @@ class PostgresSchemaPlanService:
         for actual_table in sorted(actual_schema.tables, key=lambda item: item.name):
             desired_table = desired_tables.get(actual_table.name)
             if desired_table is None:
+                for column in sorted(actual_table.columns, key=lambda item: item.name):
+                    if not preserved.removes_column(
+                        actual_table.name,
+                        column.name,
+                    ):
+                        continue
+                    plan.add_destructive(
+                        DropColumnOperation(
+                            schema_name=schema_name,
+                            table_name=actual_table.name,
+                            column_name=column.name,
+                        )
+                    )
                 continue
             for column in sorted(actual_table.columns, key=lambda item: item.name):
                 desired_column = desired_table.get_column(column.name)
                 if desired_column is None:
+                    if preserved.has_column(actual_table.name, column.name):
+                        continue
                     plan.add_destructive(
                         DropColumnOperation(
                             schema_name=schema_name,
@@ -320,8 +389,10 @@ class PostgresSchemaPlanService:
 
         for actual_table in sorted(actual_schema.tables, key=lambda item: item.name):
             if actual_table.name not in desired_tables:
-                if self._is_custom_table(actual_table.name) or preserved.has_table(
-                    actual_table.name
+                should_remove = preserved.removes_table(actual_table.name)
+                if not should_remove and (
+                    self._is_custom_table(actual_table.name)
+                    or preserved.has_table(actual_table.name)
                 ):
                     continue
                 plan.add_destructive(

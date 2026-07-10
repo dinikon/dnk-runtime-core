@@ -203,7 +203,6 @@ class ArchitectureBoundariesTests(unittest.TestCase):
 
     def test_client_data_wiring_does_not_resolve_tenant_id(self) -> None:
         paths = [
-            PROJECT_ROOT / "src/modules/crm/presentation/depends/infrastructure.py",
             PROJECT_ROOT
             / "src/modules/custom_object/presentation/depends/infrastructure.py",
         ]

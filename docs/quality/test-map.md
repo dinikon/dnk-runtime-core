@@ -81,16 +81,11 @@ This page maps current tests to the behaviors they protect.
 - `test/test_jobs_management_command.py`
     - scheduled jobs management command parsing and handler behavior
 
-## CRM
-
-- `test_crm_*`
-    - CRM endpoints and domain/use case behavior around contacts and companies
-
 ## Schema Seed Cleanup
 
 - `test/test_inventory_schema_seed.py`
     - current default seed core objects
-    - absence of removed inventory, segmentation and broadcast runtime objects
+    - absence of removed CRM, inventory, segmentation and broadcast runtime objects
     - destructive diff operations for legacy removed runtime tables
 
 ## Communication

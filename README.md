@@ -1,7 +1,7 @@
 # dnk-runtime-core
 
-`dnk-runtime-core` is a modular FastAPI backend that combines tenant onboarding, console authentication, tenant runtime
-schema management, and a small CRM surface for contacts.
+`dnk-runtime-core` is a modular FastAPI backend that combines tenant onboarding, console authentication and tenant
+runtime schema management.
 
 ## What Is In The Service
 
@@ -9,7 +9,6 @@ schema management, and a small CRM surface for contacts.
 - `identity`: email OTP + session-based console authentication
 - `schema_registry`: runtime schema bootstrap and diff for tenant PostgreSQL schemas
 - `runtime_data`: tenant-scoped runtime object persistence and querying
-- `crm`: CRUD operations for contacts
 - `communication`: provider connectors, templates, outbound messages and delivery state
 - `workflow`: workflow application and definition/runtime foundations
 - `shared`: database, unit of work, request context, auth and infrastructure helpers
