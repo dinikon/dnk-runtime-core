@@ -1,0 +1,36 @@
+global:
+  environment: ""
+
+image:
+  repository: ghcr.io/example/dnk-control-plane
+  tag: ""
+  pullPolicy: IfNotPresent
+
+api:
+  replicas: 1
+
+worker:
+  replicas: 1
+
+cabinet:
+  image:
+    repository: ghcr.io/example/dnk-control-plane-web
+    tag: ""
+  replicas: 1
+
+ingress:
+  enabled: true
+  host: ""
+
+externalSecrets:
+  enabled: true
+  applicationSecretName: dnk-control-plane-secrets
+
+certManager:
+  issuerKind: ClusterIssuer
+  issuerName: ""
+
+dns:
+  provider: cloudflare
+  platformZone: ""
+  secretRef: dnk-control-plane-cloudflare

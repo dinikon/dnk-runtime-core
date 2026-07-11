@@ -38,6 +38,13 @@ runtime schema management.
 - [HTTP API](docs/interfaces/http-api.md)
 - [Management CLI](docs/interfaces/management-cli.md)
 
+## Control Plane
+
+The independent Control Plane application scaffold lives under
+[`control-plane/`](control-plane/README.md). Its target architecture and ordered
+implementation backlog are documented in
+[`control-plane/docs/IMPLEMENTATION_PLAN.md`](control-plane/docs/IMPLEMENTATION_PLAN.md).
+
 ## Source Of Truth
 
 - `src/app_factory.py`

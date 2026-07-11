@@ -1,0 +1,21 @@
+global:
+  environment: preprod
+
+api:
+  replicas: 1
+
+worker:
+  replicas: 1
+
+cabinet:
+  replicas: 1
+
+ingress:
+  host: control-preprod.example.com
+
+certManager:
+  issuerKind: ClusterIssuer
+  issuerName: letsencrypt-staging
+
+dns:
+  platformZone: preprod.example.com
