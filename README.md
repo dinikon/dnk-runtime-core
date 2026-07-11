@@ -41,9 +41,9 @@ runtime schema management.
 ## Control Plane
 
 The independent Control Plane application scaffold lives under
-[`control-plane/`](control-plane/README.md). Its target architecture and ordered
-implementation backlog are documented in
-[`control-plane/docs/IMPLEMENTATION_PLAN.md`](control-plane/docs/IMPLEMENTATION_PLAN.md).
+[`control_plane/`](control_plane/). Its target architecture and ordered
+implementation backlog are documented in the
+[Control Plane implementation plan](control_plane/docs/IMPLEMENTATION_PLAN.md).
 
 ## Source Of Truth
 

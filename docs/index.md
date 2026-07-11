@@ -28,6 +28,10 @@ This documentation describes the current implementation of `dnk-runtime-core` as
 - [Campaigns](modules/campaigns.md)
 - [External Events](modules/external-events.md)
 
+## Implementation Plans
+
+- [Control Plane](../control_plane/docs/IMPLEMENTATION_PLAN.md)
+
 ## Interfaces
 
 - [HTTP API](interfaces/http-api.md)
