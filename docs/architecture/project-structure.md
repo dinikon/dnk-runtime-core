@@ -55,9 +55,6 @@ src/modules/
 ├── tenancy/
 ├── identity/
 ├── runtime_data/
-├── custom_object/
-├── crm/
-├── contact_point/
 ├── communication/
 ├── workflow/
 ├── schema_registry/

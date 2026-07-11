@@ -26,6 +26,13 @@ from src.modules.schema_registry.application.service.postgres_schema_service imp
 from src.modules.schema_registry.application.service.schema_seed_service import (
     SchemaSeedService,
 )
+from src.modules.schema_registry.domain.field.value_object.field_kind import FieldKind
+from src.modules.schema_registry.domain.object.value_object.object_kind import (
+    ObjectKind,
+)
+from src.modules.schema_registry.domain.seed.validated_schema_spec import (
+    ValidatedSchemaSpec,
+)
 
 
 class DiffSchemaUseCase:
@@ -67,7 +74,10 @@ class DiffSchemaUseCase:
             "schema_name": metadata_snapshot.datasource.schema_name.value,
             "seed": seed,
             "actual_schema": actual_schema,
-            "preserved_artifacts": self._build_preserved_artifacts(metadata_snapshot),
+            "preserved_artifacts": self._build_preserved_artifacts(
+                metadata_snapshot,
+                schema_spec=seed,
+            ),
         }
         try:
             plan = self._schema_plan_service.build_diff_plan(**plan_kwargs)
@@ -97,8 +107,10 @@ class DiffSchemaUseCase:
     @staticmethod
     def _build_preserved_artifacts(
         metadata_snapshot: SchemaRegistryMetadataSnapshot,
+        *,
+        schema_spec: ValidatedSchemaSpec | None = None,
     ) -> PreservedSchemaArtifacts:
-        """Собирает physical relation artifacts, которые seed diff не удаляет."""
+        """Классифицирует custom artifacts как сохраняемые или retired."""
         if not hasattr(metadata_snapshot, "objects") or not hasattr(
             metadata_snapshot,
             "relations",
@@ -113,15 +125,69 @@ class DiffSchemaUseCase:
             for object_entity in metadata_snapshot.objects
             for field_entity in object_entity.fields
         }
+        specs_by_plural_name = {
+            object_spec.plural_name: object_spec
+            for object_spec in (() if schema_spec is None else schema_spec.objects)
+        }
+        retained_object_ids = set()
+        retained_field_ids = set()
         table_names: set[str] = set()
+        column_names: set[tuple[str, str]] = set()
         index_names: set[str] = set()
         foreign_keys: set[tuple[str, str]] = set()
+        removed_table_names: set[str] = set()
+        removed_column_names: set[tuple[str, str]] = set()
+        removed_index_names: set[str] = set()
+        removed_foreign_keys: set[tuple[str, str]] = set()
+
+        for object_entity in metadata_snapshot.objects:
+            object_spec = specs_by_plural_name.get(object_entity.object_name.plural)
+            if object_entity.kind == ObjectKind.CUSTOM:
+                retained_object_ids.add(object_entity.id)
+                retained_field_ids.update(
+                    field_entity.id for field_entity in object_entity.fields
+                )
+                continue
+            if schema_spec is None or object_spec is None:
+                continue
+            retained_object_ids.add(object_entity.id)
+            spec_field_names = {field_spec.name for field_spec in object_spec.fields}
+            for field_entity in object_entity.fields:
+                if (
+                    field_entity.kind != FieldKind.CUSTOM
+                    and field_entity.field_name.value not in spec_field_names
+                ):
+                    continue
+                retained_field_ids.add(field_entity.id)
+                if field_entity.kind == FieldKind.CUSTOM:
+                    column_names.add(
+                        (
+                            object_entity.object_name.plural,
+                            field_entity.field_name.value,
+                        )
+                    )
 
         for relation in metadata_snapshot.relations:
+            if relation.kind != "custom":
+                continue
             source_object = objects_by_id.get(relation.source_object_id)
             target_object = objects_by_id.get(relation.target_object_id)
             if source_object is None or target_object is None:
                 continue
+            relation_object_ids = {
+                relation.source_object_id,
+                relation.target_object_id,
+                relation.owning_object_id,
+                relation.referenced_object_id,
+            } - {None}
+            relation_field_ids = {
+                relation.fk_field_id,
+                relation.referenced_field_id,
+            } - {None}
+            should_preserve = not (
+                relation_object_ids - retained_object_ids
+                or relation_field_ids - retained_field_ids
+            )
 
             if not relation.relation_type.is_fk_based():
                 table_name = relation.relation_table_name
@@ -129,27 +195,32 @@ class DiffSchemaUseCase:
                 target_column = relation.target_join_column_name
                 if table_name is None or source_column is None or target_column is None:
                     continue
-                table_names.add(table_name)
-                index_names.add(
+                target_tables = table_names if should_preserve else removed_table_names
+                target_indexes = index_names if should_preserve else removed_index_names
+                target_foreign_keys = (
+                    foreign_keys if should_preserve else removed_foreign_keys
+                )
+                target_tables.add(table_name)
+                target_indexes.add(
                     SchemaNamingStrategy.many_to_many_unique_index_name(
                         table_name=table_name,
                         source_column_name=source_column,
                         target_column_name=target_column,
                     )
                 )
-                index_names.add(
+                target_indexes.add(
                     SchemaNamingStrategy.foreign_key_index_name(
                         table_name=table_name,
                         column_name=source_column,
                     )
                 )
-                index_names.add(
+                target_indexes.add(
                     SchemaNamingStrategy.foreign_key_index_name(
                         table_name=table_name,
                         column_name=target_column,
                     )
                 )
-                foreign_keys.add(
+                target_foreign_keys.add(
                     (
                         table_name,
                         SchemaNamingStrategy.foreign_key_name(
@@ -159,7 +230,7 @@ class DiffSchemaUseCase:
                         ),
                     )
                 )
-                foreign_keys.add(
+                target_foreign_keys.add(
                     (
                         table_name,
                         SchemaNamingStrategy.foreign_key_name(
@@ -187,21 +258,25 @@ class DiffSchemaUseCase:
                 continue
             table_name = owning_object.object_name.plural
             column_name = fk_field.field_name.value
+            target_indexes = index_names if should_preserve else removed_index_names
+            target_foreign_keys = (
+                foreign_keys if should_preserve else removed_foreign_keys
+            )
             if relation.is_unique:
-                index_names.add(
+                target_indexes.add(
                     SchemaNamingStrategy.one_to_one_unique_index_name(
                         table_name=table_name,
                         column_name=column_name,
                     )
                 )
             else:
-                index_names.add(
+                target_indexes.add(
                     SchemaNamingStrategy.foreign_key_index_name(
                         table_name=table_name,
                         column_name=column_name,
                     )
                 )
-            foreign_keys.add(
+            target_foreign_keys.add(
                 (
                     table_name,
                     SchemaNamingStrategy.foreign_key_name(
@@ -211,9 +286,20 @@ class DiffSchemaUseCase:
                     ),
                 )
             )
+            if (
+                not should_preserve
+                and owning_object.id in retained_object_ids
+                and fk_field.kind == FieldKind.CUSTOM
+            ):
+                removed_column_names.add((table_name, column_name))
 
         return PreservedSchemaArtifacts(
             table_names=frozenset(table_names),
+            column_names=frozenset(column_names),
             index_names=frozenset(index_names),
             foreign_keys=frozenset(foreign_keys),
+            removed_table_names=frozenset(removed_table_names),
+            removed_column_names=frozenset(removed_column_names),
+            removed_index_names=frozenset(removed_index_names),
+            removed_foreign_keys=frozenset(removed_foreign_keys),
         )

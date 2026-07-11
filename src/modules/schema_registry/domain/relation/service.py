@@ -6,6 +6,7 @@ from datetime import datetime
 from src.modules.schema_registry.domain.datasource.value_object import DataSourceIdVO
 from src.modules.schema_registry.domain.error import UnsupportedSchemaChangeError
 from src.modules.schema_registry.domain.field.entity import FieldEntity
+from src.modules.schema_registry.domain.field.value_object import RuntimeFieldIdVO
 from src.modules.schema_registry.domain.object.entity import ObjectEntity
 from src.modules.schema_registry.domain.object.value_object import RuntimeObjectIdVO
 from src.modules.schema_registry.domain.relation.entity import RelationEntity
@@ -97,6 +98,41 @@ class RelationService:
             relations=relations,
         )
         return relations
+
+    async def prune_for_retained_members(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        retained_object_ids: set[RuntimeObjectIdVO],
+        retained_field_ids: set[RuntimeFieldIdVO],
+    ) -> list[RelationEntity]:
+        """Удаляет relations до удаления referenced object/field metadata."""
+        existing_relations = await self._relation_repository.list_by_tenant_id(
+            tenant_id=tenant_id
+        )
+        retained_relations: list[RelationEntity] = []
+        for relation in existing_relations:
+            relation_object_ids = {
+                relation.source_object_id,
+                relation.target_object_id,
+                relation.owning_object_id,
+                relation.referenced_object_id,
+            } - {None}
+            relation_field_ids = {
+                relation.fk_field_id,
+                relation.referenced_field_id,
+            } - {None}
+            if relation_object_ids - retained_object_ids:
+                continue
+            if relation_field_ids - retained_field_ids:
+                continue
+            retained_relations.append(relation)
+
+        await self._relation_repository.reconcile_for_tenant(
+            tenant_id=tenant_id,
+            relations=retained_relations,
+        )
+        return retained_relations
 
     async def list_by_tenant_id(
         self,

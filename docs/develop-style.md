@@ -1,7 +1,7 @@
 # Develop Style
 
-Эталонная форма backend-модуля описана ниже; для живых примеров смотрите `src/modules/crm`,
-`src/modules/communication` и `src/modules/workflow`.
+Эталонная форма backend-модуля описана ниже; для живых примеров смотрите `src/modules/communication` и
+`src/modules/workflow`.
 
 Этот документ фиксирует правила структуры и стиля разработки backend-модулей.
 Если новый код не имеет отдельного архитектурного решения, его нужно писать по этой структуре.
@@ -55,7 +55,7 @@ src/modules/<module>/
 ```
 
 Если модуль владеет несколькими близкими понятиями, разделяйте их по поддоменам
-как `crm/contact` и `crm/company`. Не смешивайте сущности,
+как `tenancy/tenant` и `tenancy/tenant_domain`. Не смешивайте сущности,
 команды, use case и HTTP-схемы разных поддоменов в одном большом файле.
 
 ## Domain Layer
@@ -77,8 +77,8 @@ Domain layer отвечает за бизнес-инварианты.
 
 Пример:
 
-- `ContactEntity.create(...)` создает запись с едиными `created_at/updated_at`.
-- `ContactEntity.update(...)` меняет поля и обновляет `updated_at` только при
+- Factory-метод entity создает запись с едиными `created_at/updated_at`.
+- Метод изменения entity обновляет `updated_at` только при
   реальном изменении.
 - Value object нормализует входную строку и запрещает невалидное значение.
 - Domain service координирует несколько repository/aggregate, если сценарий этого требует.
@@ -157,8 +157,8 @@ Presentation layer отвечает только за протокол вход�
 Префиксы должны быть предметными и стабильными. Например:
 
 ```text
-/crm/contacts
-/crm/companies
+/workflows
+/communication/templates
 ```
 
 ## Dependency Injection
@@ -279,9 +279,9 @@ DI собирается только в `presentation/depends`.
 
 ## Source Of Truth
 
-- `src/modules/crm/domain/contact/entity.py`
-- `src/modules/crm/application/contact/use_case/create_contact.py`
-- `src/modules/crm/infrastructure/contact_runtime_repository.py`
-- `src/modules/crm/presentation/depends/application.py`
-- `src/modules/crm/presentation/depends/infrastructure.py`
-- `src/modules/crm/presentation/http/router.py`
+- `src/modules/workflow/domain/workflow_application/entity.py`
+- `src/modules/workflow/application/workflow_application/use_case/create_workflow.py`
+- `src/modules/workflow/infrastructure/workflow_application_runtime_repository.py`
+- `src/modules/workflow/presentation/depends/application.py`
+- `src/modules/workflow/presentation/depends/infrastructure.py`
+- `src/modules/workflow/presentation/http/router.py`

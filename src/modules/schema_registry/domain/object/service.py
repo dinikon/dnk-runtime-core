@@ -8,6 +8,7 @@ from src.modules.schema_registry.domain.datasource.value_object.data_source_id i
     DataSourceIdVO,
 )
 from src.modules.schema_registry.domain.field.entity import FieldEntity
+from src.modules.schema_registry.domain.field.value_object.field_kind import FieldKind
 from src.modules.schema_registry.domain.field.type_catalog import FieldTypeCatalog
 from src.modules.schema_registry.domain.field.value_object.field_label import (
     FieldLabelVO,
@@ -242,7 +243,8 @@ class ObjectService:
             field.field_name.value: field for field in object_entity.fields
         }
         reconciled_fields: list[FieldEntity] = []
-        changed = len(existing_by_name) != len(field_specs)
+        spec_field_names = {field_spec.name for field_spec in field_specs}
+        changed = False
 
         for field_spec in field_specs:
             field_entity = existing_by_name.get(field_spec.name)
@@ -279,6 +281,13 @@ class ObjectService:
                     or changed
                 )
             reconciled_fields.append(field_entity)
+
+        reconciled_fields.extend(
+            field_entity
+            for field_entity in object_entity.fields
+            if field_entity.kind == FieldKind.CUSTOM
+            and field_entity.field_name.value not in spec_field_names
+        )
 
         if object_entity.fields != reconciled_fields:
             object_entity.fields = reconciled_fields

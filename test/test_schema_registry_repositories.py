@@ -319,6 +319,36 @@ class SchemaRegistryRepositoryTests(unittest.IsolatedAsyncioTestCase):
             any(isinstance(model, FieldORM) for model in session.added_models)
         )
 
+    async def test_reconcile_deletes_fields_before_retired_object(self) -> None:
+        tenant_id = EntityIdVO.from_value(uuid4())
+        retired_object_id = uuid4()
+
+        class SessionSpy:
+            def __init__(self) -> None:
+                self.deleted_tables: list[str] = []
+
+            async def scalars(self, *_args, **_kwargs):
+                return ScalarsResult([retired_object_id])
+
+            async def execute(self, statement) -> None:
+                self.deleted_tables.append(statement.table.name)
+
+            async def flush(self) -> None:
+                return None
+
+        session = SessionSpy()
+        repository = SqlAlchemyObjectRepository(session)  # type: ignore[arg-type]
+
+        await repository.reconcile_for_tenant(
+            tenant_id=tenant_id,
+            objects=[],
+        )
+
+        self.assertEqual(
+            session.deleted_tables,
+            ["fields", "objects"],
+        )
+
     async def test_relation_repository_replace_all_maps_entity_to_orm_model(
         self,
     ) -> None:

@@ -36,8 +36,8 @@ class EventBusManagementCommandTests(unittest.IsolatedAsyncioTestCase):
     def test_parser_registers_console_worker_command(self) -> None:
         args = build_parser().parse_args(["events", "console-worker"])
 
-        self.assertEqual(args.queue_name, "crm.contact.events")
-        self.assertEqual(args.routing_key, "crm.contact.#")
+        self.assertEqual(args.queue_name, "dnk.integration.events.console")
+        self.assertEqual(args.routing_key, "#")
         self.assertIs(args.handler, events_command.handle_console_worker)
 
     def test_parser_registers_console_worker_custom_topology(self) -> None:
@@ -258,8 +258,8 @@ class EventBusManagementCommandTests(unittest.IsolatedAsyncioTestCase):
             return AppStub()
 
         args = argparse.Namespace(
-            queue_name="crm.contact.events",
-            routing_key="crm.contact.#",
+            queue_name="analytics.events",
+            routing_key="analytics.#",
         )
 
         with (
@@ -291,11 +291,11 @@ class EventBusManagementCommandTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(
             recorded["build_app_kwargs"]["queue_name"],
-            "crm.contact.events",
+            "analytics.events",
         )
         self.assertEqual(
             recorded["build_app_kwargs"]["routing_key"],
-            "crm.contact.#",
+            "analytics.#",
         )
 
 

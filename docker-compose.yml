@@ -85,9 +85,9 @@ services:
       - events
       - console-worker
       - --queue-name
-      - ${EVENTS_CONSOLE_QUEUE_NAME:-crm.contact.events}
+      - ${EVENTS_CONSOLE_QUEUE_NAME:-dnk.integration.events.console}
       - --routing-key
-      - ${EVENTS_CONSOLE_ROUTING_KEY:-crm.contact.#}
+      - ${EVENTS_CONSOLE_ROUTING_KEY:-#}
     depends_on:
       rabbitmq:
         condition: service_healthy

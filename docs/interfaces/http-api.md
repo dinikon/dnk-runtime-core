@@ -11,23 +11,6 @@ All public HTTP routes are mounted under `/api`.
 
 `ResolveTenantResponseSchema` includes `tenant_id`, `tenant_name`, `status`, and `api_host` when a tenant is found; missing tenants return nullable tenant fields.
 
-## CRM
-
-| Method   | Path                              | Module | Request                        | Response                      | Auth                          | Main errors         |
-|----------|-----------------------------------|--------|--------------------------------|-------------------------------|-------------------------------|---------------------|
-| `POST`   | `/api/crm/contacts`               | `crm`  | `CreateContactRequestSchema`   | `ContactResponseSchema`       | authenticated request context | `401`, `422`        |
-| `POST`   | `/api/crm/contacts/fields`        | `crm`  | none                           | `ContactFieldsResponseSchema` | authenticated request context | `401`, `409`, `422` |
-| `GET`    | `/api/crm/contacts`               | `crm`  | query params `limit`, `offset` | `ListContactsResponseSchema`  | authenticated request context | `401`, `422`        |
-| `GET`    | `/api/crm/contacts/{contact_id}`  | `crm`  | path `contact_id`              | `ContactResponseSchema`       | authenticated request context | `401`, `404`, `422` |
-| `PUT`    | `/api/crm/contacts/{contact_id}`  | `crm`  | `UpdateContactRequestSchema`   | `ContactResponseSchema`       | authenticated request context | `401`, `404`, `422` |
-| `DELETE` | `/api/crm/contacts/{contact_id}`  | `crm`  | path `contact_id`              | empty `204`                   | authenticated request context | `401`, `404`, `422` |
-| `POST`   | `/api/crm/companies`              | `crm`  | `CreateCompanyRequestSchema`   | `CompanyResponseSchema`       | authenticated request context | `401`, `422`        |
-| `POST`   | `/api/crm/companies/fields`       | `crm`  | none                           | `CompanyFieldsResponseSchema` | authenticated request context | `401`, `409`, `422` |
-| `GET`    | `/api/crm/companies`              | `crm`  | query params `limit`, `offset` | `ListCompaniesResponseSchema` | authenticated request context | `401`, `422`        |
-| `GET`    | `/api/crm/companies/{company_id}` | `crm`  | path `company_id`              | `CompanyResponseSchema`       | authenticated request context | `401`, `404`, `422` |
-| `PUT`    | `/api/crm/companies/{company_id}` | `crm`  | `UpdateCompanyRequestSchema`   | `CompanyResponseSchema`       | authenticated request context | `401`, `404`, `422` |
-| `DELETE` | `/api/crm/companies/{company_id}` | `crm`  | path `company_id`              | empty `204`                   | authenticated request context | `401`, `404`, `422` |
-
 ## Communication
 
 | Method   | Path                                                                        | Module          | Request / Params                              | Response                                | Auth                          | Main errors                |
@@ -61,11 +44,6 @@ Schema config read routes use `POST` bodies instead of `GET`.
 | `POST`   | `/api/config/objects/schema`           | `schema_registry` | body `object_id`                           | `CustomObjectResponseSchema`             | authenticated request context | `401`, `404`, `409`, `422` |
 | `POST`   | `/api/config/objects/fields/create`    | `schema_registry` | `CreateCustomFieldRequestSchema`           | `CustomObjectResponseSchema`             | authenticated request context | `401`, `404`, `409`, `422` |
 | `DELETE` | `/api/config/objects/fields/delete`    | `schema_registry` | body `object_id`, `field_id`               | `CustomObjectResponseSchema`             | authenticated request context | `401`, `404`, `409`, `422` |
-| `POST`   | `/api/config/objects/features/enable`  | `schema_registry` | body `object_id`, `feature_code`, `config` | `ObjectFeatureConfigResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
-| `POST`   | `/api/config/objects/features/disable` | `schema_registry` | body `object_id`, `feature_code`           | `ObjectFeatureConfigResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
-| `POST`   | `/api/config/objects/features/update`  | `schema_registry` | body `object_id`, `feature_code`, `config` | `ObjectFeatureConfigResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
-| `POST`   | `/api/config/objects/features/schema`  | `schema_registry` | body `object_id`, `feature_code`           | `ObjectFeatureConfigResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
-| `POST`   | `/api/config/objects/features/list`    | `schema_registry` | body `object_id`                           | `ListObjectFeatureConfigsResponseSchema` | authenticated request context | `401`, `409`, `422`        |
 
 Config rules:
 
@@ -74,20 +52,6 @@ Config rules:
 - `custom` objects can be created, deleted and extended with `custom` fields.
 - `custom` object names are saved and returned with the `c_` prefix; create requests may omit it.
 - `system` fields are hidden in config responses; `standard` fields are visible but not deletable.
-- Object feature config supports canonical feature code `CONTACT_POINT`; presentation calls application use cases only.
-
-## Custom Object
-
-Custom object read routes use `POST` bodies instead of `GET`. The module owns only custom-object record CRUD.
-
-| Method   | Path                                 | Module          | Request / Params                     | Response                          | Auth                          | Main errors                |
-|----------|--------------------------------------|-----------------|--------------------------------------|-----------------------------------|-------------------------------|----------------------------|
-| `POST`   | `/api/custom-objects/records/create` | `custom_object` | body `object_id`, `values`           | `CustomRecordResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
-| `POST`   | `/api/custom-objects/records/detail` | `custom_object` | body `object_id`, `row_id`           | `CustomRecordResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
-| `POST`   | `/api/custom-objects/records/list`   | `custom_object` | body `object_id`, `filter`, `sort`   | `ListCustomRecordsResponseSchema` | authenticated request context | `401`, `404`, `409`, `422` |
-| `PATCH`  | `/api/custom-objects/records/update` | `custom_object` | body `object_id`, `row_id`, `values` | `CustomRecordResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
-| `PUT`    | `/api/custom-objects/records/update` | `custom_object` | body `object_id`, `row_id`, `values` | `CustomRecordResponseSchema`      | authenticated request context | `401`, `404`, `409`, `422` |
-| `DELETE` | `/api/custom-objects/records/delete` | `custom_object` | body `object_id`, `row_id`           | empty `204`                       | authenticated request context | `401`, `404`, `409`, `422` |
 
 ## Identity / Console Auth
 
@@ -106,13 +70,10 @@ Mounted under `/api/console/auth`.
 - Session cookie name comes from auth config and defaults to `dnk_session`.
 - Identity routes are tenant-host aware, so host extraction is part of the authentication flow.
 - Identity controllers map domain/tenancy errors directly inside controller files.
-- CRM, schema registry config and custom object routes do not accept `tenant_id` from the client. Controllers derive it
+- Schema registry config routes do not accept `tenant_id` from the client. Controllers derive it
   from the request domain/auth context and pass it internally through commands/queries and use cases.
-- `schema_registry` config routes and `custom_object` record routes follow the same tenant rule and accept runtime
-  `object_id` / `row_id` in request bodies.
 - `PATCH /api/console/auth/me` requires `interface_theme` and does not accept `null`.
 - `GET /api/console/auth/me` and `PATCH /api/console/auth/me` always return `interface_theme` as a string.
-- schema metadata/DDL changes are exposed only through `/api/config/...`; `custom_object` does not proxy those routes.
 - communication routes return standard FastAPI error bodies with readable string `detail`; provider secrets are never
   returned by connection responses.
 
@@ -122,7 +83,6 @@ Mounted under `/api/console/auth`.
 - [Tenancy module](../modules/tenancy.md)
 - [Identity module](../modules/identity.md)
 - [Communication module](../modules/communication.md)
-- [CRM module](../modules/crm.md)
 
 ## Source Of Truth
 
@@ -130,6 +90,4 @@ Mounted under `/api/console/auth`.
 - `src/modules/tenancy/presentation/http/admin_tenant/controller/`
 - `src/modules/tenancy/presentation/http/console_tenant/controller/`
 - `src/modules/identity/presentation/http/console_auth/controller/`
-- `src/modules/crm/presentation/http/contact/controller/`
 - `src/modules/schema_registry/presentation/http/config/`
-- `src/modules/custom_object/presentation/http/record/controller/`

@@ -7,7 +7,7 @@
 отдает runtime descriptors потребителям runtime data.
 
 Модуль управляет структурой runtime objects, но не выполняет CRUD runtime-записей. Чтение и запись строк находятся в
-`runtime_data`, `custom_object`, `crm`, `communication` и других потребителях descriptors.
+`runtime_data`, `communication` и других потребителях descriptors.
 
 ## Current Scope
 
@@ -17,7 +17,6 @@
 - diff существующей tenant schema против seed/spec через `DiffSchemaUseCase`;
 - metadata storage для `data_sources`, `objects`, `fields`, `relations`;
 - config API для custom objects, custom fields и custom relations;
-- object feature config API для включения, выключения, обновления и чтения feature metadata runtime-объектов;
 - runtime descriptor resolver для gateway/use case потребителей;
 - adapter для `tenancy` onboarding через `SchemaRegistryTenantSchemaBootstrapAdapter`;
 - management CLI `dnk-manage schema-registry diff`.
@@ -37,7 +36,6 @@
 - создать, описать, перечислить и удалить custom object;
 - добавить и удалить custom field у `standard` или `custom` object;
 - создать, удалить и перечислить custom relations для object;
-- включить, выключить, обновить, получить и перечислить object feature configs для runtime object;
 - проинспектировать PostgreSQL schema и применить migration plan;
 - запустить schema diff из management CLI.
 
@@ -57,11 +55,6 @@
 | `CreateRelationUseCase`            | `CreateRelationCommand`            | `RelationDTO`                 | Создает custom FK-based или M2M relation, сначала применяя targeted DDL.                                                                                      |
 | `DeleteRelationUseCase`            | `DeleteRelationCommand`            | `None`                        | Удаляет custom relation и physical artifacts после safety checks по данным.                                                                                   |
 | `ListObjectRelationsUseCase`       | `ListObjectRelationsQuery`         | `list[RelationDTO]`           | Возвращает relations, где object является source или target.                                                                                                  |
-| `EnableObjectFeatureUseCase`       | `EnableObjectFeatureCommand`       | `ObjectFeatureConfigDTO`      | Создает или обновляет custom feature config runtime object, затем переводит его в `enabled`.                                                                  |
-| `DisableObjectFeatureUseCase`      | `DisableObjectFeatureCommand`      | `ObjectFeatureConfigDTO`      | Переводит custom feature config runtime object в `disabled`.                                                                                                  |
-| `UpdateObjectFeatureConfigUseCase` | `UpdateObjectFeatureConfigCommand` | `ObjectFeatureConfigDTO`      | Заменяет JSON config существующей custom feature metadata.                                                                                                    |
-| `GetObjectFeatureConfigUseCase`    | `GetObjectFeatureQuery`            | `ObjectFeatureConfigDTO`      | Возвращает feature config по tenant/object/feature.                                                                                                           |
-| `ListObjectFeaturesUseCase`        | `ListObjectFeaturesQuery`          | `ObjectFeatureConfigListDTO`  | Возвращает все feature configs runtime object tenant.                                                                                                         |
 
 ## Domain Model
 
@@ -142,16 +135,12 @@
 - `DeleteCustomFieldCommand`: `tenant_id`, `object_id`, `field_id`;
 - `CreateRelationCommand`: `tenant_id`, `RelationInput`;
 - `DeleteRelationCommand`: `tenant_id`, `relation_id`.
-- `EnableObjectFeatureCommand`, `DisableObjectFeatureCommand`, `UpdateObjectFeatureConfigCommand`: tenant/object id,
-  `FeatureCodeVO`, optional JSON config.
 
 ### Queries
 
 - `ListCustomObjectsQuery`: `tenant_id`.
 - `CustomObjectByIdQuery`: `tenant_id`, `object_id`.
 - `ListObjectRelationsQuery`: `tenant_id`, `object_id`.
-- `GetObjectFeatureQuery`: `tenant_id`, `object_id`, `feature_code`.
-- `ListObjectFeaturesQuery`: `tenant_id`, `object_id`.
 
 ### DTOs
 
@@ -160,7 +149,6 @@
   model/schema descriptions.
 - `CustomObjectDTO`, `CustomFieldDTO`: config API object/field result.
 - `RelationDTO`: config API relation result with object/field ids, physical names and settings.
-- `ObjectFeatureConfigDTO`, `ObjectFeatureConfigListDTO`: object feature config result DTOs.
 
 ### Services
 
@@ -198,7 +186,9 @@
 - `SchemaNamingStrategy` validates PostgreSQL identifiers with `^[a-z][a-z0-9_]*$`, max length 63, and shortens
   generated identifiers with deterministic hash suffix.
 - Create plan order: create schema, create tables, add columns, add primary keys, create indexes, add foreign keys.
-- Diff plan protects custom `c_` tables and preserved relation artifacts; retained column type changes and unsafe
+- Diff plan protects custom `c_` tables and custom relation artifacts while all referenced objects/fields survive.
+  Relations that reference retired seed objects are removed before those objects, including join tables and custom FK
+  columns. Retained column type changes and unsafe
   `nullable -> not null` changes are rejected.
 - FK-based relations require `reference` FK field and referenced field `id` or another unique field in seed planning.
 - `many_to_many` relations create join table with `id`, `created_at`, two UUID join columns, primary key, unique pair
@@ -214,7 +204,6 @@
 - `SchemaConfigRepositoryProtocol`: config object list/describe/create/delete.
 - `SchemaConfigFieldRepositoryProtocol`: config field add/delete.
 - `SchemaConfigRelationRepositoryProtocol`: config relation create/delete/list.
-- `ObjectFeatureConfigRepositoryProtocol`: get/save/list object feature configs.
 - `SeedReaderPort`, `TenantSchemaInspectorPort`, `TenantSchemaExecutorPort`.
 
 ## Infrastructure / Persistence
@@ -268,16 +257,6 @@
   - required field without default запрещен для existing object;
   - delete relation запрещен, если M2M table has rows или FK column has non-null values;
   - config-created FK relations в MVP могут ссылаться только на referenced field `id`.
-
-### `SqlAlchemyObjectFeatureConfigRepository`
-
-- File: `src/modules/schema_registry/infrastructure/repository/object_feature_config_repository.py`.
-- Implements: `ObjectFeatureConfigRepositoryProtocol`.
-- Storage: SQLAlchemy ORM table `object_feature_config`.
-- Runtime object: хранит metadata feature configs для runtime object, но не работает с runtime rows.
-- Tenant handling: каждый метод получает `tenant_id`.
-- Mapping: `_to_model`, `_update_model`, `_map_model` являются private methods внутри repository.
-- Errors: not-found возвращается как `None`; application use cases поднимают `ObjectFeatureConfigNotFoundError`.
 
 ### `PythonModuleSeedReader`
 
@@ -356,8 +335,6 @@ HTTP error mapping:
 | `shared`        | all layers                                               | `EntityIdVO`, `DomainError`, clock ports, UoW/session, DB base/types, authentication dependency.               |
 | `tenancy`       | infrastructure/presentation DI                           | `TenantSchemaBootstrapPort` and `TenantSchemaBootstrapContext` adapter for tenant onboarding.                  |
 | `runtime_data`  | consumer dependency, not imported by module code for DDL | Consumers use `RuntimeObjectDescriptor`; schema_registry itself does not do runtime row CRUD.                  |
-| `custom_object` | consumer dependency                                      | Record APIs use `RuntimeObjectIdVO` and descriptors; metadata/DDL remains in schema_registry config API.       |
-| `crm`           | consumer dependency                                      | CRM model description/runtime repositories resolve descriptors and rely on default seed objects.               |
 | `communication` | consumer dependency                                      | Communication runtime repositories/management wiring use schema_registry descriptors and default seed objects. |
 | `config`        | management/bootstrap                                     | `dnk_config.DEFAULT_SEED_MODULE` and `SCHEMA_PREFIX`.                                                          |
 
@@ -404,7 +381,7 @@ Command зарегистрирован в `src/management/commands/schema_regist
   - `test/test_tenant_schema_bootstrap_boundary.py`;
   - `test/test_architecture_boundaries.py`;
   - `test/test_inventory_schema_seed.py` covers current default seed objects and removed-model cleanup behavior;
-  - runtime descriptor usage is also covered by CRM, custom_object, communication and runtime_data tests.
+  - runtime descriptor usage is also covered by communication and runtime_data tests.
 
 Important gaps:
 

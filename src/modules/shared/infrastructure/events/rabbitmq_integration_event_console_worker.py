@@ -25,8 +25,8 @@ from src.modules.shared.infrastructure.messaging import (
     to_rabbit_queue,
 )
 
-DEFAULT_CONSOLE_WORKER_QUEUE_NAME = "crm.contact.events"
-DEFAULT_CONSOLE_WORKER_ROUTING_KEY = "crm.contact.#"
+DEFAULT_CONSOLE_WORKER_QUEUE_NAME = "dnk.integration.events.console"
+DEFAULT_CONSOLE_WORKER_ROUTING_KEY = "#"
 
 
 def build_integration_event_console_queue(

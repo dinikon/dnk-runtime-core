@@ -3,8 +3,7 @@ from __future__ import annotations
 import unittest
 from uuid import uuid4
 
-from src.modules.crm.domain.company.value_object import CompanyIdVO
-from src.modules.crm.domain.contact.value_object import ContactIdVO
+from src.modules.identity.domain.user.value_object import UserIdVO
 from src.modules.shared import EntityIdTypeError, EntityIdVO
 from src.modules.tenancy.domain.tenant.value_object import TenantIdVO
 
@@ -22,13 +21,13 @@ class EntityIdVOTests(unittest.TestCase):
     def test_concrete_ids_inherit_entity_id_behavior(self) -> None:
         raw_id = uuid4()
         base_id = EntityIdVO.from_value(raw_id)
-        contact_id = ContactIdVO.from_value(base_id)
+        user_id = UserIdVO.from_value(base_id)
         tenant_id = TenantIdVO.from_value(base_id)
 
-        self.assertEqual(contact_id.uuid, raw_id)
-        self.assertEqual(ContactIdVO.from_value(raw_id), contact_id)
-        self.assertEqual(ContactIdVO.from_value(str(raw_id)), contact_id)
-        self.assertIs(ContactIdVO.from_value(contact_id), contact_id)
+        self.assertEqual(user_id.uuid, raw_id)
+        self.assertEqual(UserIdVO.from_value(raw_id), user_id)
+        self.assertEqual(UserIdVO.from_value(str(raw_id)), user_id)
+        self.assertIs(UserIdVO.from_value(user_id), user_id)
         self.assertEqual(tenant_id.uuid, raw_id)
         self.assertIs(TenantIdVO.from_value(tenant_id), tenant_id)
 
@@ -36,19 +35,15 @@ class EntityIdVOTests(unittest.TestCase):
         raw_id = uuid4()
 
         self.assertNotEqual(
-            ContactIdVO.from_value(raw_id),
-            CompanyIdVO.from_value(raw_id),
-        )
-        self.assertNotEqual(
             TenantIdVO.from_value(raw_id),
-            CompanyIdVO.from_value(raw_id),
+            UserIdVO.from_value(raw_id),
         )
 
     def test_concrete_ids_are_not_interchangeable_in_from_value(self) -> None:
-        contact_id = ContactIdVO.from_value(uuid4())
+        user_id = UserIdVO.from_value(uuid4())
 
         with self.assertRaises(EntityIdTypeError):
-            CompanyIdVO.from_value(contact_id)
+            TenantIdVO.from_value(user_id)
 
 
 __all__ = ["EntityIdVOTests"]

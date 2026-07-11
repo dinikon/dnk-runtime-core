@@ -170,9 +170,9 @@ class SharedEventsTests(unittest.IsolatedAsyncioTestCase):
         self.event = IntegrationEvent(
             event_id=uuid4(),
             tenant_id=uuid4(),
-            event_type="crm.contact.created",
+            event_type="workflow.run.started",
             event_version=1,
-            aggregate_type="contact",
+            aggregate_type="workflow.run",
             aggregate_id=uuid4(),
             payload={"name": "Ada"},
             occurred_at=self.now,
@@ -348,20 +348,20 @@ class SharedEventsTests(unittest.IsolatedAsyncioTestCase):
         await ensure_integration_event_console_topology(
             topology=topology,
             settings=settings,
-            queue_name="crm.contact.events",
-            routing_key="crm.contact.#",
+            queue_name="analytics.events",
+            routing_key="analytics.#",
         )
 
         self.assertEqual(len(topology.exchanges), 1)
         self.assertEqual(topology.exchanges[0].name, settings.exchange_name)
         self.assertEqual(topology.exchanges[0].type, "topic")
         self.assertEqual(len(topology.queues), 1)
-        self.assertEqual(topology.queues[0].name, "crm.contact.events")
-        self.assertEqual(topology.queues[0].routing_key, "crm.contact.#")
+        self.assertEqual(topology.queues[0].name, "analytics.events")
+        self.assertEqual(topology.queues[0].routing_key, "analytics.#")
         self.assertEqual(len(topology.bindings), 1)
         self.assertIs(topology.bindings[0]["queue"], topology.queues[0])
         self.assertIs(topology.bindings[0]["exchange"], topology.exchanges[0])
-        self.assertEqual(topology.bindings[0]["routing_key"], "crm.contact.#")
+        self.assertEqual(topology.bindings[0]["routing_key"], "analytics.#")
 
     async def test_console_worker_handler_prints_and_acks_valid_event(self) -> None:
         output = io.StringIO()

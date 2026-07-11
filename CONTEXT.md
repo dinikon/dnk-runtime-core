@@ -21,15 +21,13 @@
     - diff tenant runtime schema через `dnk-manage schema-registry diff`
 4. `runtime_data`
     - tenant-scoped доступ к runtime-таблицам и данным
-5. `crm`
-    - CRUD операций над `contact` поверх runtime data
-6. `inventory`
+5. `inventory`
     - CRUD операций над товарами и категориями поверх runtime data
 
 Ключевая бизнес-идея приложения:
 
 - tenant всегда определяется по `host`;
-- клиентские runtime-data модули (`crm`, `inventory`) не принимают `tenant_id` от клиента в payload/query/path;
+- клиентские runtime-data модули, например `inventory`, не принимают `tenant_id` от клиента в payload/query/path;
 - контроллер берет `tenant_id` из request context и прокидывает его через command/query DTO, use case, service и
   repository method API; wiring-файлы tenant не резолвят и не биндуют;
 - `tenancy` владеет `Tenant` и `TenantDomain`;
@@ -156,7 +154,6 @@ src/
             controller/
             requests/
             responses/
-    crm/
     runtime_data/
     schema_registry/
 test/
@@ -167,10 +164,9 @@ test/
   test_tenant_schema_bootstrap_boundary.py
   test_tenancy_http_router.py
   test_schema_registry_*.py
-  test_crm_*.py
 ```
 
-`crm`, `runtime_data`, `schema_registry`, `identity` и `tenancy` содержат текущую рабочую прикладную логику проекта.
+`runtime_data`, `schema_registry`, `identity` и `tenancy` содержат текущую рабочую прикладную логику проекта.
 
 ---
 
@@ -495,7 +491,7 @@ Application-слой разделен на:
 
 ### Presentation
 
-HTTP-слой разложен по CRM-подобной структуре:
+HTTP-слой разложен по единой controller/request/response структуре:
 
 - `presentation/http/console_auth/controller/*`
 - `presentation/http/console_auth/requests/*`

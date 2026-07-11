@@ -12,7 +12,7 @@ modules.
 - Resolves the current tenant before showing the login flow.
 - Authenticates console users through email OTP.
 - Loads and stores the current console user session.
-- Displays runtime objects and object records in the main console.
+- Displays runtime objects in the main console.
 - Provides settings screens for the current user profile and workspace data model.
 - Allows custom object and custom field creation and deletion through the schema registry API.
 
@@ -25,7 +25,8 @@ before redirecting to the console home page.
 The console home page renders the main application layout. The sidebar exposes
 the current workspace navigation and keeps unavailable sections visible as
 disabled entries. The page content shows the object browser, which loads
-available runtime objects and then lists records for the selected object.
+available runtime objects. Shared runtime-record components remain available, but no generic custom-record API client
+is currently wired.
 
 The settings pages render their own settings layout. Profile settings update the
 current user's profile through the identity API. Data model settings list runtime
@@ -56,7 +57,6 @@ Current API modules:
 
 - `authApi`: tenant resolve, email OTP request and confirmation, current user load and profile update.
 - `schemaRegistryApi`: runtime object listing, object schema loading, custom object mutation and custom field mutation.
-- `objectRecordsApi`: object record listing for custom objects and configured standard objects.
 - `crmContactsApi`: contact field description and contact CRUD helpers.
 
 ## Layout And UI System

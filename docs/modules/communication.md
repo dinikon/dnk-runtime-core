@@ -534,7 +534,6 @@ but already committed send row remains queued for later publishing.
 | `runtime_data`    | infrastructure/presentation                    | Runtime command/query gateways, type policy, runtime validation/filter/persistence errors.                              |
 | `schema_registry` | infrastructure/presentation/management         | Runtime object resolver, object descriptors, schema seed, SQLAlchemy repositories in management builders.               |
 | `config`          | presentation/infrastructure/management         | `dnk_config.COMMUNICATION_QUEUE`, RabbitMQ settings.                                                                    |
-| `contact_point`   | none direct                                    | Direct use cases/repositories не используются; source refs допускаются только внутри `recipient_snapshot`.              |
 
 External library dependencies found in module code: FastAPI, `uuid6`, PyYAML, `jsonschema`, Jinja2, JSONPath parser,
 httpx client adapter, FastStream/RabbitMQ, SQLAlchemy session factory for management builders.
@@ -622,8 +621,8 @@ uv run python -m unittest test.test_communication_services test.test_communicati
   use case возвращает `ProviderConnectionDTO`.
 - В `ProcessOutboundMessageUseCase` batch processing ловит broad `Exception` для каждого message, считает failure и
   продолжает обработку следующего message.
-- `communication` не хранит source-specific recipient columns вроде `contact_id`, `contact_point_id`, owner/context ids
-  или identity/device refs. Caller должен сохранить provenance только внутри JSON `recipient_snapshot`.
+- `communication` не хранит source-specific recipient columns вроде `contact_id`, owner/context ids или
+  identity/device refs. Caller должен сохранить provenance только внутри JSON `recipient_snapshot`.
 - Есть raw `dict[str, Any]` payloads в domain/application DTOs для schemas, rendered payloads, provider request/response
   payloads и webhook raw payloads; это отражает текущий transport/runtime contract.
 

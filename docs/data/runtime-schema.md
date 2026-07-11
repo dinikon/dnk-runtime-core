@@ -19,8 +19,7 @@ Default seed module:
 - `src.modules.schema_registry.seed.schema_seed`
 
 The default seed module aggregates context seed declarations from
-`src/modules/schema_registry/seed/contexts/`. It currently declares CRM, contact point, workflow and communication
-runtime objects.
+`src/modules/schema_registry/seed/contexts/`. It currently declares workflow and communication runtime objects.
 
 ## 2. Metadata Snapshot
 

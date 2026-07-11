@@ -3,8 +3,8 @@
 This page maps the main business entities that currently appear in the service.
 
 Identifier convention: `EntityIdVO` is the single shared UUID primitive and the base class for concrete ids. Tenant
-scope uses `EntityIdVO` directly; concrete entities expose concrete subclasses such as `UserIdVO`, `ContactIdVO`,
-`CompanyIdVO`, `DataSourceIdVO`, `RuntimeObjectIdVO` and `RuntimeFieldIdVO`.
+scope uses `EntityIdVO` directly; concrete entities expose concrete subclasses such as `UserIdVO`, `DataSourceIdVO`,
+`RuntimeObjectIdVO` and `RuntimeFieldIdVO`.
 
 ## Tenancy
 
@@ -63,26 +63,6 @@ scope uses `EntityIdVO` directly; concrete entities expose concrete subclasses s
     - `is_primary`
     - `is_verified`
     - `is_deleted`
-
-## CRM
-
-### `ContactEntity`
-
-- Module owner: `crm`
-- Business meaning: CRM contact record
-- Key fields:
-    - `id` as `ContactIdVO`
-    - timestamps
-    - `contact_name` with last/first/middle name
-
-### `CompanyEntity`
-
-- Module owner: `crm`
-- Business meaning: CRM company record
-- Key fields:
-    - `id` as `CompanyIdVO`
-    - timestamps
-    - `legal_name`
 
 ## Communication
 
@@ -182,14 +162,14 @@ scope uses `EntityIdVO` directly; concrete entities expose concrete subclasses s
     - `options`
     - `settings`
 
-## Custom Object
+## Custom Runtime Objects
 
-`custom_object` does not define a separate persistence entity for object metadata. It manages only runtime record rows
-for descriptors whose `ObjectEntity.kind` is `custom`.
-
-Schema metadata and DDL for custom objects and custom fields are managed by `schema_registry` config APIs.
-
-Each custom object has system fields `id`, `created_at` and `updated_at`.
+- Module owner: `schema_registry`.
+- `ObjectKind.CUSTOM` identifies tenant-defined runtime objects.
+- Names and physical tables use the reserved `c_` prefix.
+- Schema metadata, DDL, custom fields and relations are managed by `schema_registry` config APIs.
+- Each custom object has system fields `id`, `created_at` and `updated_at`.
+- No generic public record CRUD API is currently exposed for custom objects.
 
 ## Shared Kernel Concepts
 
@@ -208,7 +188,6 @@ Each custom object has system fields `id`, `created_at` and `updated_at`.
 - [Runtime schema](runtime-schema.md)
 - [Tenancy module](../modules/tenancy.md)
 - [Identity module](../modules/identity.md)
-- [CRM module](../modules/crm.md)
 - [Communication module](../modules/communication.md)
 - [Schema Registry module](../modules/schema-registry.md)
 
@@ -218,8 +197,6 @@ Each custom object has system fields `id`, `created_at` and `updated_at`.
 - `src/modules/tenancy/domain/tenant_domain/entity.py`
 - `src/modules/identity/domain/user/entity.py`
 - `src/modules/identity/domain/auth/error.py`
-- `src/modules/crm/domain/contact/entity.py`
-- `src/modules/crm/domain/company/entity.py`
 - `src/modules/communication/domain/models.py`
 - `src/modules/schema_registry/domain/datasource/entity.py`
 - `src/modules/schema_registry/domain/object/entity.py`
