@@ -19,17 +19,34 @@ Helm templates are intentionally scheduled in the implementation plan.
 
 ```text
 control-plane/
-├── backend/                   # FastAPI API, worker and scheduler codebase
+├── src/                       # FastAPI API, worker and scheduler package
+├── test/                      # Backend tests
 ├── frontend/                  # Separate Vue cabinet
 ├── contracts/                 # Versioned Control Plane ↔ Runtime contracts
 ├── deploy/helm/               # One chart with preprod/prod values
+├── pyproject.toml              # Python project and dependencies
 └── docs/
     └── IMPLEMENTATION_PLAN.md
 ```
 
-Backend API and asynchronous workers should use the same Python package and
+Backend API and asynchronous workers use the same Python package and
 container image, but run as separate processes. Control Plane uses its own
 PostgreSQL, Redis and messaging resources.
+
+Every business module evolves toward this shape:
+
+```text
+<module>/
+├── domain/            # entities, value objects, errors, repository contracts
+├── application/       # commands, queries, DTOs, use cases, ports
+├── infrastructure/    # PostgreSQL repositories and external adapters
+└── presentation/      # HTTP, worker and management composition
+```
+
+The backend does not import Runtime Core's `src/` package or share its
+database. Domain and application layers do not import infrastructure or
+presentation code. External calls are kept behind application-owned ports,
+and distributed mutations are idempotent operations.
 
 ## Start here
 
@@ -39,9 +56,15 @@ environment topology and acceptance criteria for every implementation phase.
 
 ## Minimal backend smoke test
 
-From the repository root, after installing the backend dependencies:
+From the Runtime Core repository root:
 
 ```bash
-PYTHONPATH=control-plane/backend/src \
-  python -m unittest discover -s control-plane/backend/test -p "test_*.py" -v
+uv run --project control-plane python -m unittest discover \
+  -s control-plane/test -p "test_*.py" -v
+```
+
+Start the development API server with:
+
+```bash
+uv run --project control-plane fastapi dev control-plane/src/control_plane/app.py
 ```
