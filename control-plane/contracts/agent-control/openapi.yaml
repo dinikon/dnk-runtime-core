@@ -1,0 +1,460 @@
+openapi: 3.1.0
+info:
+  title: DNK Agent Control API
+  version: 1.0.0
+  description: |
+    Outbound pull contract used by Cluster and Single/Box installation agents.
+    Bootstrap is protected by a one-time token; every other operation requires
+    installation-bound mutual TLS.
+servers:
+  - url: https://control.example.com
+    description: Production placeholder
+tags:
+  - name: Agent lifecycle
+  - name: Agent commands
+paths:
+  /agent/v1/bootstrap:
+    post:
+      tags: [Agent lifecycle]
+      operationId: bootstrapAgent
+      summary: Exchange a one-time bootstrap token and CSR for an agent certificate
+      security:
+        - BootstrapToken: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BootstrapRequest'
+            example:
+              installation_id: 0190f7e2-8000-7000-8000-000000000001
+              csr_pem: |-
+                -----BEGIN CERTIFICATE REQUEST-----
+                MIIBexample
+                -----END CERTIFICATE REQUEST-----
+              agent_version: 0.1.0
+      responses:
+        '201':
+          description: Certificate issued and bootstrap token consumed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentCertificate'
+              example:
+                installation_id: 0190f7e2-8000-7000-8000-000000000001
+                certificate_chain_pem: |-
+                  -----BEGIN CERTIFICATE-----
+                  MIIBexample
+                  -----END CERTIFICATE-----
+                issued_at: '2026-07-11T12:00:00Z'
+                expires_at: '2026-08-10T12:00:00Z'
+                rotate_after: '2026-07-31T12:00:00Z'
+                agent_endpoint: https://control.example.com/agent/v1
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+      x-error-codes:
+        - BOOTSTRAP_TOKEN_INVALID
+        - BOOTSTRAP_TOKEN_EXPIRED
+        - BOOTSTRAP_TOKEN_CONSUMED
+        - IDEMPOTENCY_CONFLICT
+
+  /agent/v1/certificates/rotate:
+    post:
+      tags: [Agent lifecycle]
+      operationId: rotateAgentCertificate
+      summary: Rotate the current installation-bound agent certificate
+      security:
+        - AgentMtls: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CertificateRotationRequest'
+      responses:
+        '200':
+          description: Replacement certificate issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentCertificate'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /agent/v1/heartbeats:
+    post:
+      tags: [Agent lifecycle]
+      operationId: reportAgentHeartbeat
+      summary: Report installation health, versions and observed generation
+      security:
+        - AgentMtls: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HeartbeatRequest'
+            example:
+              installation_id: 0190f7e2-8000-7000-8000-000000000001
+              agent_boot_id: 0190f7e2-8000-7000-8000-000000000002
+              sequence: 42
+              reported_at: '2026-07-11T12:00:00Z'
+              health: ONLINE
+              agent_version: 0.1.0
+              runtime_version: 1.0.0
+              observed_generation: 12
+      responses:
+        '202':
+          description: Heartbeat accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptedResponse'
+              example:
+                accepted: true
+                request_id: 0190f7e2-8000-7000-8000-000000000010
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /agent/v1/commands:
+    get:
+      tags: [Agent commands]
+      operationId: pullAgentCommands
+      summary: Long-poll commands after a durable cursor
+      description: Returns at most 50 commands and waits no longer than 30 seconds.
+      security:
+        - AgentMtls: []
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+            default: 0
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 50
+        - name: wait_seconds
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 30
+            default: 30
+      responses:
+        '200':
+          description: Command batch, which may be empty
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandBatch'
+              example:
+                commands:
+                  - cursor: 41
+                    command_id: 0190f7e2-8000-7000-8000-000000000101
+                    envelope_jws: eyJhbGciOiJFZERTQSJ9.eyJjb21tYW5kX2lkIjoiLi4uIn0.signature
+                    expires_at: '2026-07-11T12:05:00Z'
+                next_cursor: 41
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /agent/v1/commands/{command_id}/ack:
+    post:
+      tags: [Agent commands]
+      operationId: acknowledgeAgentCommand
+      summary: Acknowledge that an immutable command was received
+      security:
+        - AgentMtls: []
+      parameters:
+        - $ref: '#/components/parameters/CommandId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommandAckRequest'
+      responses:
+        '200':
+          description: Command acknowledged or prior acknowledgement replayed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcknowledgementResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /agent/v1/commands/{command_id}/result:
+    post:
+      tags: [Agent commands]
+      operationId: reportAgentCommandResult
+      summary: Report the terminal command result
+      security:
+        - AgentMtls: []
+      parameters:
+        - $ref: '#/components/parameters/CommandId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommandResultRequest'
+      responses:
+        '200':
+          description: Result stored or the identical result replayed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcknowledgementResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+      x-error-codes:
+        - COMMAND_RESULT_CONFLICT
+        - COMMAND_NOT_ACKNOWLEDGED
+        - INSTALLATION_MISMATCH
+
+components:
+  securitySchemes:
+    BootstrapToken:
+      type: apiKey
+      in: header
+      name: X-DNK-Bootstrap-Token
+      description: One-time installation-bound token with a 15-minute TTL.
+    AgentMtls:
+      type: mutualTLS
+      description: Installation identity from the verified client certificate SAN.
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+      description: Reuse only for a byte-equivalent logical mutation.
+    CommandId:
+      name: command_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Malformed request
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetails' }
+    Unauthorized:
+      description: Authentication failed
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetails' }
+    Forbidden:
+      description: Authenticated installation cannot access this resource
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetails' }
+    NotFound:
+      description: Resource not found
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetails' }
+    Conflict:
+      description: Idempotency, lifecycle or result conflict
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetails' }
+    UnprocessableEntity:
+      description: Request schema or semantic validation failed
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetails' }
+
+  schemas:
+    ProblemDetails:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, code, retryable]
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer, minimum: 400, maximum: 599 }
+        detail: { type: string }
+        instance: { type: string, format: uri-reference }
+        code: { type: string, pattern: '^[A-Z][A-Z0-9_]+$' }
+        request_id: { type: string, format: uuid }
+        operation_id: { type: string, format: uuid }
+        command_id: { type: string, format: uuid }
+        retryable: { type: boolean }
+
+    BootstrapRequest:
+      type: object
+      additionalProperties: false
+      required: [installation_id, csr_pem, agent_version]
+      properties:
+        installation_id: { type: string, format: uuid }
+        csr_pem: { type: string, minLength: 64 }
+        agent_version: { type: string, minLength: 1 }
+
+    CertificateRotationRequest:
+      type: object
+      additionalProperties: false
+      required: [installation_id, csr_pem, current_certificate_fingerprint]
+      properties:
+        installation_id: { type: string, format: uuid }
+        csr_pem: { type: string, minLength: 64 }
+        current_certificate_fingerprint: { type: string, minLength: 32 }
+
+    AgentCertificate:
+      type: object
+      additionalProperties: false
+      required:
+        - installation_id
+        - certificate_chain_pem
+        - issued_at
+        - expires_at
+        - rotate_after
+        - agent_endpoint
+      properties:
+        installation_id: { type: string, format: uuid }
+        certificate_chain_pem: { type: string }
+        issued_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        rotate_after: { type: string, format: date-time }
+        agent_endpoint: { type: string, format: uri }
+
+    HeartbeatRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - installation_id
+        - agent_boot_id
+        - sequence
+        - reported_at
+        - health
+        - agent_version
+        - runtime_version
+      properties:
+        installation_id: { type: string, format: uuid }
+        agent_boot_id: { type: string, format: uuid }
+        sequence: { type: integer, format: int64, minimum: 0 }
+        reported_at: { type: string, format: date-time }
+        health:
+          type: string
+          enum: [REGISTERING, ONLINE, DEGRADED, OFFLINE, DECOMMISSIONED]
+        agent_version: { type: string }
+        runtime_version: { type: string }
+        observed_generation: { type: integer, format: int64, minimum: 0 }
+        capacity_total: { type: integer, format: int64, minimum: 0 }
+        capacity_used: { type: integer, format: int64, minimum: 0 }
+
+    LeasedCommand:
+      type: object
+      additionalProperties: false
+      required: [cursor, command_id, envelope_jws, expires_at]
+      properties:
+        cursor: { type: integer, format: int64, minimum: 1 }
+        command_id: { type: string, format: uuid }
+        envelope_jws:
+          type: string
+          minLength: 32
+          description: Compact JWS transported unchanged to Runtime.
+        expires_at: { type: string, format: date-time }
+
+    CommandBatch:
+      type: object
+      additionalProperties: false
+      required: [commands, next_cursor]
+      properties:
+        commands:
+          type: array
+          maxItems: 50
+          items: { $ref: '#/components/schemas/LeasedCommand' }
+        next_cursor: { type: integer, format: int64, minimum: 0 }
+
+    CommandAckRequest:
+      type: object
+      additionalProperties: false
+      required: [installation_id, lease_cursor, envelope_sha256, acknowledged_at]
+      properties:
+        installation_id: { type: string, format: uuid }
+        lease_cursor: { type: integer, format: int64, minimum: 1 }
+        envelope_sha256: { type: string, pattern: '^[a-f0-9]{64}$' }
+        acknowledged_at: { type: string, format: date-time }
+
+    CommandResultRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - installation_id
+        - result_message_id
+        - result_sha256
+        - status
+        - completed_at
+      properties:
+        installation_id: { type: string, format: uuid }
+        result_message_id: { type: string, minLength: 1, maxLength: 128 }
+        result_sha256: { type: string, pattern: '^[a-f0-9]{64}$' }
+        status: { type: string, enum: [SUCCEEDED, FAILED] }
+        completed_at: { type: string, format: date-time }
+        result:
+          type: object
+          additionalProperties: true
+        error:
+          $ref: '#/components/schemas/CommandError'
+
+    CommandError:
+      type: object
+      additionalProperties: false
+      required: [code, retryable]
+      properties:
+        code: { type: string, pattern: '^[A-Z][A-Z0-9_]+$' }
+        message: { type: string }
+        retryable: { type: boolean }
+
+    AcceptedResponse:
+      type: object
+      additionalProperties: false
+      required: [accepted, request_id]
+      properties:
+        accepted: { type: boolean, const: true }
+        request_id: { type: string, format: uuid }
+
+    AcknowledgementResponse:
+      type: object
+      additionalProperties: false
+      required: [accepted, replayed]
+      properties:
+        accepted: { type: boolean, const: true }
+        replayed: { type: boolean }

@@ -1,0 +1,162 @@
+version: 1
+machines:
+  tenant:
+    initial: DRAFT
+    terminal: [DELETED]
+    states:
+      - DRAFT
+      - PROVISIONING
+      - ACTIVE
+      - FAILED
+      - SUSPENDING
+      - SUSPENDED
+      - RESUMING
+      - DELETION_PENDING
+      - DELETING
+      - DELETED
+    transitions:
+      - { from: DRAFT, event: START_PROVISIONING, to: PROVISIONING }
+      - { from: PROVISIONING, event: PROVISIONING_SUCCEEDED, to: ACTIVE }
+      - { from: PROVISIONING, event: PROVISIONING_FAILED, to: FAILED }
+      - { from: FAILED, event: RETRY_PROVISIONING, to: PROVISIONING }
+      - { from: ACTIVE, event: REQUEST_SUSPEND, to: SUSPENDING }
+      - { from: SUSPENDING, event: SUSPEND_SUCCEEDED, to: SUSPENDED }
+      - { from: SUSPENDING, event: SUSPEND_FAILED, to: ACTIVE }
+      - { from: SUSPENDED, event: REQUEST_RESUME, to: RESUMING }
+      - { from: RESUMING, event: RESUME_SUCCEEDED, to: ACTIVE }
+      - { from: RESUMING, event: RESUME_FAILED, to: SUSPENDED }
+      - { from: DRAFT, event: REQUEST_DELETE, to: DELETION_PENDING }
+      - { from: FAILED, event: REQUEST_DELETE, to: DELETION_PENDING }
+      - { from: ACTIVE, event: REQUEST_DELETE, to: DELETION_PENDING }
+      - { from: SUSPENDED, event: REQUEST_DELETE, to: DELETION_PENDING }
+      - { from: DELETION_PENDING, event: CANCEL_DELETE_TO_DRAFT, to: DRAFT }
+      - { from: DELETION_PENDING, event: CANCEL_DELETE_TO_FAILED, to: FAILED }
+      - { from: DELETION_PENDING, event: CANCEL_DELETE_TO_ACTIVE, to: ACTIVE }
+      - { from: DELETION_PENDING, event: CANCEL_DELETE_TO_SUSPENDED, to: SUSPENDED }
+      - { from: DELETION_PENDING, event: RETENTION_EXPIRED, to: DELETING }
+      - { from: DELETING, event: CLEANUP_SUCCEEDED, to: DELETED }
+
+  operation:
+    initial: PENDING
+    terminal: [SUCCEEDED, FAILED, CANCELLED]
+    states: [PENDING, RUNNING, RETRY_SCHEDULED, SUCCEEDED, FAILED, CANCELLED]
+    transitions:
+      - { from: PENDING, event: CLAIM, to: RUNNING }
+      - { from: PENDING, event: CANCEL, to: CANCELLED }
+      - { from: RUNNING, event: SUCCEED, to: SUCCEEDED }
+      - { from: RUNNING, event: RETRY, to: RETRY_SCHEDULED }
+      - { from: RUNNING, event: FAIL, to: FAILED }
+      - { from: RUNNING, event: CANCEL, to: CANCELLED }
+      - { from: RETRY_SCHEDULED, event: CLAIM, to: RUNNING }
+      - { from: RETRY_SCHEDULED, event: CANCEL, to: CANCELLED }
+
+  placement:
+    initial: REQUESTED
+    terminal: [DELETED]
+    states:
+      - REQUESTED
+      - PROVISIONING
+      - ACTIVE
+      - SUSPENDING
+      - SUSPENDED
+      - DELETING
+      - DELETED
+      - FAILED
+    transitions:
+      - { from: REQUESTED, event: START_PROVISIONING, to: PROVISIONING }
+      - { from: PROVISIONING, event: PROVISIONED, to: ACTIVE }
+      - { from: PROVISIONING, event: FAIL, to: FAILED }
+      - { from: FAILED, event: RETRY_PROVISIONING, to: PROVISIONING }
+      - { from: ACTIVE, event: START_SUSPEND, to: SUSPENDING }
+      - { from: SUSPENDING, event: SUSPENDED, to: SUSPENDED }
+      - { from: SUSPENDING, event: FAIL, to: FAILED }
+      - { from: SUSPENDED, event: START_RESUME, to: PROVISIONING }
+      - { from: ACTIVE, event: START_DELETE, to: DELETING }
+      - { from: SUSPENDED, event: START_DELETE, to: DELETING }
+      - { from: FAILED, event: START_DELETE, to: DELETING }
+      - { from: DELETING, event: DELETED, to: DELETED }
+      - { from: DELETING, event: FAIL, to: FAILED }
+
+  domain:
+    initial: PENDING
+    terminal: [DELETED]
+    states:
+      - PENDING
+      - VERIFYING
+      - VERIFIED
+      - DNS_CONFIGURING
+      - ROUTE_CONFIGURING
+      - TLS_PROVISIONING
+      - ACTIVE
+      - FAILED
+      - DELETING
+      - DELETED
+    transitions:
+      - { from: PENDING, event: START_VERIFICATION, to: VERIFYING }
+      - { from: VERIFYING, event: VERIFIED, to: VERIFIED }
+      - { from: VERIFYING, event: FAIL, to: FAILED }
+      - { from: VERIFIED, event: CONFIGURE_DNS, to: DNS_CONFIGURING }
+      - { from: DNS_CONFIGURING, event: DNS_READY, to: ROUTE_CONFIGURING }
+      - { from: DNS_CONFIGURING, event: FAIL, to: FAILED }
+      - { from: ROUTE_CONFIGURING, event: ROUTE_READY, to: TLS_PROVISIONING }
+      - { from: ROUTE_CONFIGURING, event: FAIL, to: FAILED }
+      - { from: TLS_PROVISIONING, event: TLS_READY, to: ACTIVE }
+      - { from: TLS_PROVISIONING, event: FAIL, to: FAILED }
+      - { from: FAILED, event: RETRY_VERIFICATION, to: VERIFYING }
+      - { from: FAILED, event: RETRY_DNS, to: DNS_CONFIGURING }
+      - { from: FAILED, event: RETRY_ROUTE, to: ROUTE_CONFIGURING }
+      - { from: FAILED, event: RETRY_TLS, to: TLS_PROVISIONING }
+      - { from: PENDING, event: START_DELETE, to: DELETING }
+      - { from: FAILED, event: START_DELETE, to: DELETING }
+      - { from: ACTIVE, event: START_DELETE, to: DELETING }
+      - { from: DELETING, event: DELETED, to: DELETED }
+      - { from: DELETING, event: FAIL, to: FAILED }
+
+  installation_actual:
+    initial: REGISTERING
+    terminal: [DECOMMISSIONED]
+    states: [REGISTERING, ONLINE, DEGRADED, OFFLINE, DECOMMISSIONED]
+    transitions:
+      - { from: REGISTERING, event: REGISTERED, to: ONLINE }
+      - { from: REGISTERING, event: HEALTH_DEGRADED, to: DEGRADED }
+      - { from: ONLINE, event: HEALTH_DEGRADED, to: DEGRADED }
+      - { from: ONLINE, event: HEARTBEAT_EXPIRED, to: OFFLINE }
+      - { from: DEGRADED, event: HEALTH_RECOVERED, to: ONLINE }
+      - { from: DEGRADED, event: HEARTBEAT_EXPIRED, to: OFFLINE }
+      - { from: OFFLINE, event: HEARTBEAT_RECOVERED, to: ONLINE }
+      - { from: REGISTERING, event: DECOMMISSION, to: DECOMMISSIONED }
+      - { from: ONLINE, event: DECOMMISSION, to: DECOMMISSIONED }
+      - { from: DEGRADED, event: DECOMMISSION, to: DECOMMISSIONED }
+      - { from: OFFLINE, event: DECOMMISSION, to: DECOMMISSIONED }
+
+  owner_transfer:
+    initial: PENDING
+    terminal: [ACCEPTED, REJECTED, CANCELLED, EXPIRED]
+    states: [PENDING, ACCEPTED, REJECTED, CANCELLED, EXPIRED]
+    transitions:
+      - { from: PENDING, event: ACCEPT, to: ACCEPTED }
+      - { from: PENDING, event: REJECT, to: REJECTED }
+      - { from: PENDING, event: CANCEL, to: CANCELLED }
+      - { from: PENDING, event: EXPIRE, to: EXPIRED }
+
+  agent_command:
+    initial: PENDING
+    terminal: [SUCCEEDED, FAILED, EXPIRED, CANCELLED]
+    states:
+      - PENDING
+      - LEASED
+      - ACKNOWLEDGED
+      - SUCCEEDED
+      - FAILED
+      - EXPIRED
+      - CANCELLED
+    transitions:
+      - { from: PENDING, event: LEASE, to: LEASED }
+      - { from: PENDING, event: CANCEL, to: CANCELLED }
+      - { from: PENDING, event: EXPIRE, to: EXPIRED }
+      - { from: LEASED, event: ACKNOWLEDGE, to: ACKNOWLEDGED }
+      - { from: LEASED, event: LEASE_EXPIRED, to: PENDING }
+      - { from: LEASED, event: EXPIRE, to: EXPIRED }
+      - { from: ACKNOWLEDGED, event: SUCCEED, to: SUCCEEDED }
+      - { from: ACKNOWLEDGED, event: FAIL, to: FAILED }
+      - { from: ACKNOWLEDGED, event: EXPIRE, to: EXPIRED }

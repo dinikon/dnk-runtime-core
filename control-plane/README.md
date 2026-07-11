@@ -54,6 +54,14 @@ Follow [the ordered implementation plan](docs/IMPLEMENTATION_PLAN.md). It
 contains domain boundaries, state machines, API drafts, security requirements,
 environment topology and acceptance criteria for every implementation phase.
 
+The accepted stage-0 baseline is documented in:
+
+- [architecture decision records](docs/adr/);
+- [domain glossary](docs/architecture/domain-glossary.md);
+- [state machines](docs/architecture/state-machines.md);
+- [threat model](docs/security/threat-model.md);
+- [versioned contracts](contracts/README.md).
+
 ## Minimal backend smoke test
 
 From the Runtime Core repository root:

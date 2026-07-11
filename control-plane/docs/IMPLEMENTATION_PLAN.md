@@ -25,7 +25,7 @@
 Control Plane должен позволять:
 
 1. Зарегистрировать глобального пользователя.
-2. Войти по email OTP, Telegram OTP для заранее связанного номера, Google или
+2. Войти по email OTP, phone OTP через официальный Telegram Gateway, Google или
    GitHub.
 3. Хранить глобальный профиль пользователя и глобальный профиль платформы.
 4. Создавать клиентов и tenants, видеть состояние provisioning.
@@ -57,7 +57,7 @@ flowchart TB
     Outbox --> Worker["Control Plane worker"]
 
     Worker --> Email["Email provider"]
-    Worker --> Telegram["Telegram bot / gateway"]
+    Worker --> Telegram["Official Telegram Gateway"]
     Worker --> Cloudflare["Cloudflare API"]
     Worker --> AgentA["Cluster agent: preprod"]
     Worker --> AgentB["Cluster agent: prod"]
@@ -119,7 +119,7 @@ API, worker и scheduler используют один backend package и оди
 - `UserAccount`: глобальная учётная запись, status, timestamps.
 - `UserProfile`: display name, avatar, locale, timezone.
 - `AccountEmail`: normalized email, primary/verified flags.
-- `AccountPhone`: номер в E.164, primary/verified flags, Telegram link state.
+- `AccountPhone`: номер в E.164, primary/verified/login flags.
 - `ExternalIdentity`: provider, provider subject, provider metadata.
 - `OtpChallenge`: purpose, target hash, code hash, TTL, attempts, consumed time.
 - `Session`: user, token hash, expiry, last activity, revocation.
@@ -166,11 +166,12 @@ OWNER > ADMIN > MEMBER > VIEWER
 Инварианты:
 
 - у каждого не удалённого tenant ровно один active `OWNER`;
-- owner одновременно является active member;
+- `Tenant.owner_membership_id` указывает на active membership, а `OWNER`
+  является effective role; fallback role membership — `ADMIN`;
 - передача выполняется транзакционно с блокировкой tenant/membership;
 - recipient должен иметь подтверждённый глобальный account;
 - операция требует recent authentication/OTP;
-- прежний owner становится `ADMIN`, если явно не выбран другой результат;
+- прежний owner становится `ADMIN`;
 - transfer и delete всегда записываются в audit.
 
 ### 4.5. `installations`
@@ -247,6 +248,9 @@ Billing не блокирует создание базовой архитект
 
 ## 5. State machines
 
+Канонический каталог состояний и переходов хранится в
+`contracts/lifecycle/state-machines.yaml` и проверяется тестами контрактов.
+
 ### 5.1. Tenant
 
 ```mermaid
@@ -258,16 +262,26 @@ stateDiagram-v2
     FAILED --> PROVISIONING: retry
     ACTIVE --> SUSPENDING: suspend requested
     SUSPENDING --> SUSPENDED: runtime confirmed
-    SUSPENDED --> PROVISIONING: resume requested
-    ACTIVE --> DELETING: delete confirmed
-    SUSPENDED --> DELETING: delete confirmed
-    DELETING --> DELETED: retention and cleanup complete
-    DELETING --> FAILED: cleanup failed
+    SUSPENDING --> ACTIVE: suspend failed
+    SUSPENDED --> RESUMING: resume requested
+    RESUMING --> ACTIVE: runtime confirmed
+    RESUMING --> SUSPENDED: resume failed
+    DRAFT --> DELETION_PENDING: delete confirmed
+    FAILED --> DELETION_PENDING: delete confirmed
+    ACTIVE --> DELETION_PENDING: delete confirmed
+    SUSPENDED --> DELETION_PENDING: delete confirmed
+    DELETION_PENDING --> DELETING: retention expired
+    DELETION_PENDING --> ACTIVE: cancellation restores previous stable state
+    DELETING --> DELETED: all cleanup confirmed
 ```
 
 `FAILED` обязательно хранит machine-readable `error_code`, безопасное сообщение
 для UI и ссылку на последнюю operation. Фактическое состояние installation не
 перезаписывается optimistic предположением Control Plane.
+
+Во время `DELETION_PENDING` login/write заблокированы. Ошибка необратимого
+cleanup оставляет tenant в `DELETING`; retry отражается состоянием operation, а
+не ложным возвратом tenant в `FAILED`.
 
 ### 5.2. Provisioning operation
 
@@ -350,28 +364,11 @@ Flow:
 
 ### 6.3. Phone OTP через Telegram
 
-Обычный Telegram Bot API не умеет отправлять сообщение на произвольный номер
-телефона. Поэтому нельзя реализовать безопасный flow «ввёл любой номер — бот
-отправил туда OTP» без предварительной связи номера с Telegram account либо
-отдельного Telegram Gateway/SMS provider.
-
-Целевой bot-link flow:
-
-1. Пользователь вводит телефон в E.164 в cabinet.
-2. Backend создаёт короткоживущий link token.
-3. UI открывает `t.me/<bot>?start=<token>`.
-4. Бот просит пользователя поделиться собственным contact.
-5. Webhook проверяет token, `contact.user_id == message.from.id` и совпадение
-   нормализованного номера.
-6. Backend сохраняет `telegram_user_id/chat_id` как связанную delivery identity.
-7. Для login бот отправляет OTP в связанный chat.
-8. Web UI подтверждает OTP обычным challenge endpoint.
-
-До реализации необходимо принять одно из решений:
-
-- использовать предварительно связанный Telegram bot flow;
-- подключить Telegram Gateway с отдельно проверенной моделью доставки;
-- добавить SMS provider как fallback для произвольного номера.
+Phone OTP отправляется через официальный Telegram Gateway API. Номер
+нормализуется в E.164; challenge хранит только keyed hashes и encrypted delivery
+envelope. TTL кода — 5 минут, максимум 5 попыток, resend cooldown — 60 секунд.
+Provider response/status проверяется по официальному контракту и защищается от
+повторной обработки. SMS и Telegram Bot не являются неявными fallback в v1.
 
 ### 6.4. Google и GitHub
 
@@ -416,17 +413,14 @@ UI показывает progression по operation steps. Повтор client re
 
 ### 7.2. Передача owner
 
-Предпочтительный target flow двухфазный:
+Owner transfer всегда двухфазный:
 
 1. Owner выбирает active tenant member.
 2. Повторно подтверждает sensitive action OTP/OAuth re-auth.
-3. Создаётся `OwnershipTransfer(PENDING, expires_at)`.
+3. Создаётся `OwnershipTransfer(PENDING, expires_at=24h)`.
 4. Recipient принимает передачу.
 5. В одной транзакции recipient становится OWNER, предыдущий owner — ADMIN.
 6. Записываются audit и notification events.
-
-MVP может выполнить transfer сразу после re-auth, но модель и API должны
-позволять добавить acceptance без миграции основного инварианта.
 
 ```text
 POST /api/v1/tenants/{id}/owner-transfers
@@ -439,30 +433,24 @@ POST /api/v1/tenants/{id}/owner-transfers/{transfer_id}/cancel
 Удаление является saga, а не `DELETE FROM tenants`:
 
 1. Re-auth и явное подтверждение tenant name.
-2. Tenant получает `DELETING`, новые login/write operations блокируются.
-3. Runtime подтверждает suspend.
-4. Route отключается.
-5. После retention window удаляются runtime data согласно политике.
-6. Удаляются Certificate/Ingress/HTTPRoute и управляемые DNS records.
-7. Tenant становится `DELETED`; audit и минимальный tombstone сохраняются.
+2. Tenant получает `DELETION_PENDING`, сохраняет предыдущее стабильное состояние,
+   а новые login/write operations блокируются.
+3. В течение 30 дней удаление можно отменить с восстановлением состояния.
+4. После retention tenant получает `DELETING`, Runtime подтверждает suspend/purge.
+5. Удаляются управляемые DNS records, Certificate и Ingress.
+6. Tenant становится `DELETED` только после подтверждения всего cleanup; audit и
+   минимальный tombstone сохраняются.
 
-До истечения retention пользователь может запросить cancel, только если runtime
-cleanup ещё не стал необратимым.
+Ошибка cleanup оставляет tenant в `DELETING`, а operation переходит в retry flow.
 
 ## 8. Runtime Management API
 
-Существующий Runtime endpoint создания tenant является полезной отправной
-точкой, но целевой contract должен быть versioned и idempotent.
+Существующий Runtime endpoint создания tenant остаётся legacy отправной точкой.
+Целевой command contract версионирован, подписан и идемпотентен.
 
 ```text
-POST   /management/v1/tenants
-GET    /management/v1/tenants/{external_id}
-PATCH  /management/v1/tenants/{external_id}/status
-DELETE /management/v1/tenants/{external_id}
-
-PUT    /management/v1/tenants/{external_id}/domains/{external_domain_id}
-DELETE /management/v1/tenants/{external_id}/domains/{external_domain_id}
-
+POST   /management/v1/commands/{command_id}/execute
+GET    /management/v1/commands/{command_id}
 GET    /management/v1/installation/capabilities
 GET    /management/v1/installation/health
 GET    /management/v1/installation/version
@@ -472,17 +460,21 @@ GET    /management/v1/installation/version
 
 - `Idempotency-Key` и `operation_id` для mutation;
 - stable `external_id` из Control Plane;
-- per-installation credentials вместо одного общего API key;
+- compact JWS `EdDSA/Ed25519` с обязательным `kid`, audience, installation ID и
+  TTL 5 минут;
+- agent доставляет signed command без изменения payload;
 - deadlines, retry-safe responses и machine-readable errors;
 - contract tests в обоих приложениях;
 - backward-compatible evolution через версию API/payload.
 
-Для Box за NAT предпочтителен agent pull protocol:
+Cluster и Box используют единый mTLS agent pull protocol:
 
 ```text
-POST /agent/v1/register
-POST /agent/v1/heartbeat
-GET  /agent/v1/commands?after=<cursor>
+POST /agent/v1/bootstrap
+POST /agent/v1/certificates/rotate
+POST /agent/v1/heartbeats
+GET  /agent/v1/commands?cursor=<cursor>&limit=50&wait_seconds=30
+POST /agent/v1/commands/{command_id}/ack
 POST /agent/v1/commands/{command_id}/result
 ```
 
@@ -539,19 +531,18 @@ domain без делегированного provider credential.
 
 ## 10. Kubernetes manager и SSL
 
-### 10.1. Рекомендуемая модель доступа
+### 10.1. Модель доступа
 
 API pod не получает `cluster-admin`. Для каждого управляемого кластера
 разворачивается agent/controller с ограниченным ServiceAccount. Он получает
 desired commands, применяет разрешённые ресурсы и возвращает snapshots/status.
 
-Для первого собственного кластера допустим in-cluster adapter в worker, если
-его RBAC уже ограничен нужными namespace и resource kinds. Application port
-должен позволять без изменения use cases заменить adapter на отдельный agent.
+Control Plane не хранит kubeconfig и не вызывает Kubernetes API напрямую.
+Preprod/prod agents имеют разные mTLS identities и namespace-scoped RBAC.
 
 Разрешённые ресурсы первой версии:
 
-- `Ingress` либо Gateway API `HTTPRoute` — выбрать один основной механизм;
+- `networking.k8s.io/v1` `Ingress` через `ingress-nginx`;
 - `Certificate` cert-manager;
 - чтение `CertificateRequest`, `Order`, `Challenge` для диагностики;
 - чтение Service/Endpoint readiness;
@@ -629,18 +620,20 @@ control-plane/deploy/helm/dnk-control-plane/
 
 | Ресурс | Preprod | Prod |
 | --- | --- | --- |
-| Kubernetes | отдельный cluster предпочтительно | отдельный production cluster |
+| Kubernetes | общий cluster, изолированный namespace/controller | общий cluster, изолированный namespace/controller |
 | Namespace | `dnk-control-plane-preprod` | `dnk-control-plane-prod` |
+| IngressClass | `nginx-preprod` | `nginx-prod` |
 | PostgreSQL | отдельная DB/instance | отдельная HA DB/instance |
 | Redis/broker | отдельные credentials/resources | отдельные credentials/resources |
 | Domain/zone | `control-preprod...` | `control...` |
 | OAuth apps | отдельные redirect URIs/secrets | production apps/secrets |
 | Cloudflare token | ограничен preprod zone | ограничен prod zone |
 | cert-manager | staging issuer | production issuer |
-| Email/Telegram | test sender/bot | production sender/bot |
+| Email/Telegram | test sender/Gateway credentials | production sender/Gateway credentials |
 
-Если используется один Kubernetes cluster, разные namespaces не считаются
-полной production-изоляцией; это временный компромисс, который фиксируется ADR.
+Один Kubernetes cluster является принятым риском: namespaces, отдельные
+ingress-nginx controllers/LB, RBAC, NetworkPolicy и credentials уменьшают, но не
+устраняют blast radius cluster-level compromise.
 
 ### 11.2. Promotion
 
@@ -697,19 +690,18 @@ Kubernetes mutation до появления operations, idempotency и audit.
 
 Задачи:
 
-- [ ] Принять ADR: отдельная Control Plane DB и запрет cross-import с Runtime.
-- [ ] Принять ADR: API + workers как modular monolith, один backend image.
-- [ ] Утвердить термины `UserAccount`, `Customer`, `Tenant`, `Installation`,
+- [x] Принять ADR: отдельная Control Plane DB и запрет cross-import с Runtime.
+- [x] Принять ADR: API + workers как modular monolith, один backend image.
+- [x] Утвердить термины `UserAccount`, `Customer`, `Tenant`, `Installation`,
   `TenantPlacement`.
-- [ ] Утвердить state machines из этого документа.
-- [ ] Решить Telegram transport: linked bot, Gateway или SMS fallback.
-- [ ] Выбрать Ingress или Gateway API как основной route resource.
-- [ ] Выбрать cluster access model: target agent; временный in-cluster adapter
-  разрешить только отдельным ADR.
-- [ ] Зафиксировать retention tenant deletion и audit retention.
-- [ ] Создать threat model для auth, owner transfer, provider credentials и
+- [x] Утвердить state machines из этого документа.
+- [x] Зафиксировать официальный Telegram Gateway как phone OTP transport.
+- [x] Выбрать `Ingress` + `ingress-nginx` как основной route resource.
+- [x] Выбрать environment-scoped agent с mTLS и единым pull protocol.
+- [x] Зафиксировать 30-дневный tenant deletion retention и 365-дневный audit retention.
+- [x] Создать threat model для auth, owner transfer, provider credentials и
   cluster access.
-- [ ] Создать первую версию OpenAPI runtime-management contract.
+- [x] Создать OpenAPI 3.1 contracts для Agent Control и Runtime Management.
 
 Готово, когда:
 
@@ -808,8 +800,8 @@ Kubernetes mutation до появления operations, idempotency и audit.
   scopes.
 - [ ] Реализовать explicit identity link/unlink и запрет удаления последнего
   login method.
-- [ ] Реализовать выбранный Telegram link/delivery flow.
-- [ ] Реализовать Telegram webhook signature/secret validation и replay guard.
+- [ ] Реализовать официальный Telegram Gateway adapter и OTP delivery flow.
+- [ ] Реализовать проверку provider response/status и replay guard.
 - [ ] Добавить UI buttons, linking settings и recovery/error states.
 - [ ] Создать отдельные provider applications/secrets для preprod и prod.
 
@@ -817,7 +809,7 @@ Kubernetes mutation до появления operations, idempotency и audit.
 
 - один account безопасно использует несколько identities;
 - collision по email не объединяет accounts неявно;
-- linked Telegram contact невозможно подменить чужим contact payload;
+- Telegram Gateway request/response нельзя подменить или повторно обработать;
 - callback/replay/expired state negative tests проходят.
 
 ### Этап 5. System profile и customers
@@ -984,9 +976,9 @@ Kubernetes mutation до появления operations, idempotency и audit.
 Задачи:
 
 - [ ] Реализовать cluster target и resource snapshot tables.
-- [ ] Реализовать agent/controller либо утверждённый in-cluster adapter.
+- [ ] Реализовать environment-scoped agent с mTLS pull protocol.
 - [ ] Создать least-privilege RBAC и NetworkPolicy.
-- [ ] Реализовать route intent через выбранный Ingress/Gateway API.
+- [ ] Реализовать `networking.k8s.io/v1` Ingress через `ingress-nginx`.
 - [ ] Реализовать Certificate intent с environment issuer ref.
 - [ ] Реализовать readiness/watch и понятную диагностику cert-manager.
 - [ ] Реализовать HTTPS/SNI health check до Domain `ACTIVE`.

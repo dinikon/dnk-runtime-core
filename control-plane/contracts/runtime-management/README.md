@@ -1,22 +1,9 @@
-# Runtime management contract
+# Runtime Management API
 
-This directory will contain the versioned OpenAPI/JSON Schema contract between
-Control Plane and Runtime Core. Neither application may import the other's
-domain or persistence code.
+[`openapi.yaml`](openapi.yaml) is the target OpenAPI 3.1 contract between an
+installation agent and Runtime Core. Mutations are compact Ed25519 JWS commands
+and are independent from the current legacy `/api/admin/create-tenant` route.
 
-Initial contract surface:
-
-```text
-POST   /management/v1/tenants
-GET    /management/v1/tenants/{external_id}
-PATCH  /management/v1/tenants/{external_id}/status
-DELETE /management/v1/tenants/{external_id}
-PUT    /management/v1/tenants/{external_id}/domains/{external_domain_id}
-DELETE /management/v1/tenants/{external_id}/domains/{external_domain_id}
-GET    /management/v1/installation/capabilities
-GET    /management/v1/installation/health
-```
-
-Mutations require `Idempotency-Key`, installation-scoped authentication and a
-stable operation ID. The generated client belongs here; handwritten imports
-between applications are forbidden.
+The decoded JWS payload must match one of the typed schemas in the contract.
+Runtime stores the command digest and result so identical retries are safe and
+a reused idempotency key with a different digest is rejected.
