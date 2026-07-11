@@ -1,1 +1,0 @@
-"""Control Plane bounded contexts."""

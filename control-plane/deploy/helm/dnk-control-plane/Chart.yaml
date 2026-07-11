@@ -1,6 +1,0 @@
-apiVersion: v2
-name: dnk-control-plane
-description: DNK Control Plane API, workers and cabinet
-type: application
-version: 0.1.0
-appVersion: "0.1.0"

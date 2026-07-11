@@ -1,2 +1,0 @@
-This chart is currently an architectural scaffold.
-Implement and verify Kubernetes resource templates in implementation plan stage 2.
