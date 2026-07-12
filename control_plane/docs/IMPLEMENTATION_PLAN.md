@@ -10,7 +10,8 @@
 ## 1. Назначение
 
 Документ описывает поэтапное создание production-ready Control Plane на Django
-для управления глобальными пользователями SaaS-продукта, tenants, изолированными
+для управления сотрудниками технической поддержки, клиентами SaaS-продукта,
+tenants, изолированными
 Runtime Instance, доменами, Kubernetes routing, единой авторизацией и billing.
 
 Control Plane находится в одном monorepo с `dnk-runtime-core`, но является
@@ -21,9 +22,23 @@ image, Helm chart и release lifecycle. После каждого этапа с�
 
 ## 2. Терминология
 
-### 2.1. Customer
+### 2.1. User и Customer
 
-`Customer` — глобальный пользователь SaaS-продукта. Это человек, который может:
+`User` — системный пользователь Control Plane: сотрудник технической поддержки
+или администратор платформы. Только `User` является custom user model Django:
+
+```python
+AUTH_USER_MODEL = "users.User"
+```
+
+`User` входит в служебный интерфейс и Django Admin, использует MFA и получает
+staff permissions через группы `Support`, `Operations`, `Billing` и `Security`.
+Служебный доступ всегда аудитируется. `User` не является участником Tenant, не
+получает tenant-scoped OIDC tokens и не проецируется в Runtime.
+
+`Customer` — самостоятельная бизнес-модель клиента SaaS-продукта, которая не
+наследует Django authentication user и не является `AUTH_USER_MODEL`. Это
+человек, который может:
 
 - зарегистрироваться и войти в Control Plane;
 - владеть одним или несколькими Tenant;
@@ -31,15 +46,10 @@ image, Helm chart и release lifecycle. После каждого этапа с�
 - иметь несколько подтвержденных способов входа;
 - оплачивать услуги через один или несколько Billing Account.
 
-В Django `Customer` является custom user model:
-
-```python
-AUTH_USER_MODEL = "customers.Customer"
-```
-
-Все внешние ключи на глобального пользователя объявляются через
-`settings.AUTH_USER_MODEL`. Стабильный UUID Customer используется как OIDC
-`sub`.
+Ссылки на системного пользователя объявляются через `settings.AUTH_USER_MODEL`.
+Связи бизнес-домена, включая `TenantMembership`, ссылаются непосредственно на
+`customers.Customer`. Customer использует отдельные identity/session models, а
+его стабильный UUID используется как OIDC `sub`.
 
 Слово `client` в проекте используется только технически: OAuth/OIDC client,
 HTTP client или generated API client. Техническая модель OAuth/OIDC называется
@@ -49,6 +59,8 @@ HTTP client или generated API client. Техническая модель OAu
 
 | Понятие | Значение |
 | --- | --- |
+| `User` | Системный пользователь технической поддержки/администратор Control Plane. |
+| `Customer` | Бизнес-сущность клиента SaaS и субъект tenant-scoped OIDC. |
 | `Tenant` | Изолированное SaaS-пространство с данными и бизнес-логикой. |
 | `TenantMembership` | Участие Customer в Tenant с ролью `OWNER` или `MEMBER`. |
 | `Owner` | Customer, который управляет Tenant, участниками, доменами и billing. |
@@ -58,7 +70,7 @@ HTTP client или generated API client. Техническая модель OAu
 | `TenantPlacement` | Связь глобального Tenant с Instance и runtime tenant ID. |
 | `Operation` | Долговременная операция: create, freeze, delete, domain attach, migration. |
 | `BillingAccount` | Финансовый контур и плательщик; не authentication principal. |
-| `OidcClientApplication` | Технический OIDC relying party с `client_id`. |
+| `OidcClientApplication` | Единственный технический OIDC relying party конкретного Tenant с `client_id`. |
 | `ServicePrincipal` | Машинная identity конкретной Instance/Agent. |
 
 Если позже потребуется компания или юридическое лицо, модель должна называться
@@ -73,7 +85,7 @@ HTTP client или generated API client. Техническая модель OAu
 
 - SQLite;
 - `DEBUG=True` и hardcoded `SECRET_KEY`;
-- нет custom user model;
+- нет custom системной user model и бизнес-модели Customer;
 - нет domain apps, REST API, workers и бизнес-migrations;
 - нет отдельного Dockerfile и Helm chart.
 
@@ -90,7 +102,6 @@ HTTP client или generated API client. Техническая модель OAu
 - защищает management-вызов одним общим `CONTROL_PLANE_API_KEY`;
 - не имеет idempotent create, delete, export/import, migration и observed-state
   management API;
-- хранит tenant-local `User`, а не глобального Customer;
 - использует allow-all authorization service по умолчанию.
 
 Фактический create endpoint собирается как:
@@ -145,7 +156,8 @@ HTTP client или generated API client. Техническая модель OAu
 
 ```mermaid
 flowchart LR
-    Customer["Customer"] --> CP["Django Control Plane<br/>API + Admin + OIDC"]
+    User["Support User"] -->|"staff login + MFA"| CP["Django Control Plane<br/>API + Admin + OIDC"]
+    Customer["Customer"] -->|"customer auth + tenant OIDC"| CP
     CP --> CPDB[("Control Plane PostgreSQL")]
     CP --> Redis[("Redis")]
     CP --> Outbox["Transactional outbox"]
@@ -172,7 +184,8 @@ API, workers и scheduler используют один backend package/image, �
 
 | Данные | Источник истины | Проекции/потребители |
 | --- | --- | --- |
-| Customer/profile/identities | Control Plane | Admin, API, OIDC |
+| User/staff permissions | Control Plane | Admin, support API, audit |
+| Customer/profile/identities | Control Plane | Customer API, OIDC, Runtime projection |
 | Tenant и membership | Control Plane | Runtime projection |
 | Tenant placement | Control Plane | Agent, Runtime |
 | Tenant business data | Runtime Instance | Tenant applications |
@@ -221,20 +234,33 @@ Operation; распределенную работу выполняет worker/r
 
 ## 8. Доменные модели
 
-### 8.1. Customers и identity
+### 8.1. Users, Customers и identity
+
+#### `User`
+
+- UUID primary key;
+- единственная модель `AUTH_USER_MODEL = "users.User"`;
+- служебные login identifier и MFA/recovery metadata;
+- Django `is_active`, `is_staff`, `is_superuser`;
+- группы `Support`, `Operations`, `Billing`, `Security`;
+- timestamps и security/session revocation metadata.
+
+User предназначен только для служебного Control Plane и Django Admin. Его
+permissions не создают скрытый `TenantMembership`. Любое действие User над
+Customer или Tenant требует явного support permission, reason и audit event.
 
 #### `Customer`
 
 - UUID primary key;
 - status: `PENDING`, `ACTIVE`, `SUSPENDED`, `DELETION_PENDING`, `DELETED`;
-- Django `is_active`, `is_staff`, `is_superuser`;
 - display name, locale, timezone;
 - `security_version` для глобальной инвалидизации sessions/tokens;
 - last login/activity и timestamps;
 - unusable password по умолчанию.
 
-Email/phone не являются identity key. Suspend Customer не удаляет memberships.
-Platform staff permission не превращает Customer в Tenant Owner.
+Customer не является Django User. Email/phone не являются identity key.
+Suspend Customer не удаляет memberships. Служебные permissions User не
+превращают его или Customer в Tenant Owner.
 Списки «участвует в Tenant» и «владеет Tenant» вычисляются из active
 `TenantMembership`; отдельные дублирующие связи в Customer не создаются.
 
@@ -252,13 +278,17 @@ Platform staff permission не превращает Customer в Tenant Owner.
 
 #### `OidcClientApplication`
 
+- обязательная уникальная one-to-one связь с Tenant;
 - технический `client_id`;
 - exact redirect URIs;
 - grants, scopes, audiences;
 - secret hash/public JWKS;
-- assigned Instance и rotation metadata.
+- assigned Instance и rotation metadata;
+- создается атомарно вместе с Tenant и initial Owner membership.
 
-`client_id` никогда не является Customer ID.
+Для Tenant существует ровно один OIDC client. Авторизация разрешена только
+Customer с active `TenantMembership` этого Tenant. `client_id` никогда не
+является Customer ID, а системный User не может быть OIDC subject.
 
 #### `ServicePrincipal`
 
@@ -487,6 +517,10 @@ PLANNED -> PRECHECKING -> SOURCE_FREEZING -> EXPORTING -> IMPORTING
 
 ### 10.1. Public Control Plane API
 
+Customer endpoints аутентифицируются через отдельную Customer session, а не
+через `AUTH_USER_MODEL`. Служебные staff/admin endpoints используют только
+`users.User`, MFA и отдельную permission matrix.
+
 ```text
 POST /api/v1/auth/email/start
 POST /api/v1/auth/email/confirm
@@ -599,6 +633,9 @@ DELETE_TENANT
 ### 10.5. OIDC claims и events
 
 Issuer: `https://auth.dniko.net`. Разрешен Authorization Code Flow + PKCE S256.
+OIDC authorization request однозначно определяет Tenant через его единственный
+`OidcClientApplication`. До выдачи кода проверяются active Customer, active
+membership и соответствие Customer, OIDC client и `tenant_id` одному Tenant.
 
 ```json
 {
@@ -618,12 +655,17 @@ Issuer: `https://auth.dniko.net`. Разрешен Authorization Code Flow + PKC
 
 Полный список memberships в token не помещается.
 
+Системный `users.User` никогда не является OIDC `sub`. Запрос отклоняется, если
+Customer не состоит в Tenant, membership не active, client принадлежит другому
+Tenant или запрошенный/host-resolved `tenant_id` не совпадает с Tenant клиента.
+
 Event envelope содержит event ID/type/version, tenant/aggregate IDs, payload,
 occurred time и correlation/causation IDs. Минимальный каталог:
 
 ```text
 customer.created.v1
 customer.identity_linked.v1
+staff.support_action_recorded.v1
 tenant.created.v1
 tenant.access_changed.v1
 membership.upserted.v1
@@ -691,7 +733,8 @@ Ingress API frozen, поэтому выбор поддерживаемого con
 
 ### 12.1. Регистрация Customer
 
-1. Customer выбирает Google, GitHub или email OTP.
+1. Customer выбирает Google, GitHub или email OTP в отдельном customer auth
+   contour, не использующем Django `AUTH_USER_MODEL`.
 2. Control Plane создает/находит Customer по immutable provider subject либо
    подтвержденному email flow.
 3. Создается secure session.
@@ -705,7 +748,8 @@ Ingress API frozen, поэтому выбор поддерживаемого con
 
 ### 12.2. Создание Tenant
 
-1. Создать Tenant `DRAFT`, initial Owner membership и Operation.
+1. В одной транзакции создать Tenant `DRAFT`, initial Customer Owner
+   membership, единственный `OidcClientApplication` и Operation.
 2. Создать/выбрать Billing Account.
 3. Зарезервировать slug и platform domains.
 4. Выбрать `ACTIVE + HEALTHY` совместимую Instance с capacity.
@@ -726,6 +770,8 @@ Failure любого шага оставляет наблюдаемую Operatio
 - Runtime projection хранит global Customer ID, role/status/version.
 - Revoke/role change инвалидирует runtime sessions.
 - Last Owner нельзя удалить/понизить; change требует recent auth и audit reason.
+- Системный User может выполнять только явно разрешенные и audited support
+  operations; это не создает membership и не дает tenant-scoped OIDC token.
 - Freeze создается как source-specific TenantAccessHold.
 - Runtime блокирует writes/workflows/jobs и возвращает observed access.
 - Payment снимает только billing hold; `ACTIVATION_PENDING` сохраняется до
@@ -789,7 +835,8 @@ references и manifest. Redis OTP/session state лучше инвалидиро�
 
 Задачи:
 
-- [ ] Утвердить glossary Customer/OidcClientApplication/BillingAccount.
+- [ ] Утвердить glossary User/Customer/OidcClientApplication/BillingAccount.
+- [ ] Утвердить раздельные staff и Customer authentication/permission matrices.
 - [ ] Решить: несколько Owner с last-owner invariant или строго один Owner.
 - [ ] Утвердить обязательность phone и recovery/fallback flow.
 - [ ] Утвердить V1 billable Node policy.
@@ -824,7 +871,10 @@ references и manifest. Redis OTP/session state лучше инвалидиро�
 - [ ] Создать отдельный non-root Docker image.
 - [ ] Разнести settings на development/test/production.
 - [ ] Перевести database на отдельную PostgreSQL.
-- [ ] Создать `customers.Customer` до первой production migration.
+- [ ] Создать `users.User` и установить `AUTH_USER_MODEL = "users.User"` до
+  первой production migration.
+- [ ] Создать базовую `customers.Customer` как самостоятельную бизнес-модель
+  без наследования Django authentication user.
 - [ ] Подключить DRF и OpenAPI generation.
 - [ ] Подключить Redis sessions/cache/rate limits.
 - [ ] Подключить Celery и отдельный RabbitMQ vhost.
@@ -852,7 +902,10 @@ references и manifest. Redis OTP/session state лучше инвалидиро�
 
 Задачи:
 
-- [ ] Создать Customer/Profile/Email/Phone/ExternalIdentity/AuthChallenge.
+- [ ] Расширить Customer моделями
+  Profile/Email/Phone/ExternalIdentity/AuthChallenge/CustomerSession.
+- [ ] Реализовать Customer authentication/session backend отдельно от Django
+  `AUTH_USER_MODEL`.
 - [ ] Реализовать email normalization и DB constraints.
 - [ ] Реализовать email OTP start/confirm с одинаковыми внешними ответами.
 - [ ] Добавить cooldown, attempts и IP/email/device limits.
@@ -867,6 +920,8 @@ references и manifest. Redis OTP/session state лучше инвалидиро�
 - [ ] Добавить Telegram cost/rate circuit breaker.
 - [ ] Реализовать Customer suspend/delete request.
 - [ ] Добавить redacted Customer/security Django Admin.
+- [ ] Реализовать staff login/MFA и группы Support/Operations/Billing/Security
+  для `users.User`.
 
 Критерии приемки:
 
@@ -876,6 +931,8 @@ references и manifest. Redis OTP/session state лучше инвалидиро�
 - [ ] Provider token не хранится без необходимости.
 - [ ] Full phone, OTP и secrets отсутствуют в logs/audit.
 - [ ] Session revocation немедленно блокирует CP requests.
+- [ ] User session не принимается Customer API и не может получить tenant OIDC
+  token; Customer session не дает доступ к staff/Admin endpoints.
 
 ### Этап 3. Tenant registry, Owner/Member и Admin MVP
 
@@ -885,17 +942,20 @@ references и manifest. Redis OTP/session state лучше инвалидиро�
 
 Задачи:
 
-- [ ] Создать Tenant/Membership/Invitation/AccessHold models.
+- [ ] Создать Tenant/Membership/Invitation/AccessHold models и one-to-one
+  `OidcClientApplication`.
 - [ ] Добавить unique normalized slug и reserved names.
 - [ ] Реализовать Owner/Member permission matrix.
 - [ ] Реализовать create/list/detail/update Tenant.
-- [ ] При create атомарно создавать initial Owner membership.
+- [ ] При create атомарно создавать initial Customer Owner membership и
+  единственный OIDC client Tenant.
 - [ ] Реализовать invite/accept/revoke/leave.
 - [ ] Реализовать role change с step-up authentication.
 - [ ] Защитить last-owner invariant locking/constraints.
 - [ ] Реализовать logical freeze/delete intents как Operation.
 - [ ] Создать Tenant/membership/hold Admin.
-- [ ] Создать staff groups Support/Operations/Billing/Security.
+- [ ] Применить staff groups Support/Operations/Billing/Security из этапа 2 к
+  audited support operations без создания membership.
 - [ ] Реализовать deny-by-default tenant querysets/permissions.
 - [ ] Добавить idempotency create/invite/role changes.
 
@@ -906,6 +966,7 @@ references и manifest. Redis OTP/session state лучше инвалидиро�
 - [ ] Нельзя оставить Tenant без active Owner.
 - [ ] Concurrent role changes не нарушают invariant.
 - [ ] Staff permission не создает скрытый membership.
+- [ ] Tenant не может иметь ноль или более одного OIDC client.
 - [ ] Duplicate request возвращает исходный результат.
 
 ### Этап 4. OIDC provider и Runtime SSO pilot
@@ -920,9 +981,12 @@ references и manifest. Redis OTP/session state лучше инвалидиро�
 - [ ] Реализовать issuer `auth.dniko.net`.
 - [ ] Реализовать discovery/JWKS/authorize/token/userinfo/revoke/logout.
 - [ ] Разрешить только Authorization Code + PKCE S256.
-- [ ] Реализовать OidcClientApplication management.
+- [ ] Реализовать управление единственным tenant-bound
+  `OidcClientApplication` без переноса клиента между Tenant.
 - [ ] Реализовать asymmetric keys и overlapping rotation.
 - [ ] Реализовать tenant selection и tenant-scoped claims.
+- [ ] Проверять active Customer membership и принадлежность OIDC client тому же
+  Tenant до выдачи authorization code/token.
 - [ ] Добавить в Runtime OIDC authentication adapter.
 - [ ] Сверять host-resolved tenant с token `tenant_id`.
 - [ ] Создать Runtime Customer/membership projection.
@@ -934,6 +998,8 @@ references и manifest. Redis OTP/session state лучше инвалидиро�
 
 - [ ] Runtime проверяет issuer/audience/tenant/signature/expiry.
 - [ ] Token другого Tenant отвергается для того же Customer.
+- [ ] Customer без active membership, системный User и запрос через client
+  другого Tenant не получают OIDC token.
 - [ ] Signing-key rotation проходит без downtime.
 - [ ] Согласованный OpenID conformance profile проходит.
 - [ ] Недоступность CP не обрывает существующий runtime traffic.
@@ -1221,16 +1287,20 @@ DB rollout использует expand/contract:
 
 ## 15. Security requirements
 
-### 15.1. Customer authentication
+### 15.1. User и Customer authentication
 
 - Secure, HttpOnly, host-only cookies без `Domain=.dniko.net`;
+- отдельные session namespaces/backends и endpoints для системного User и
+  Customer, без взаимозаменяемости credentials;
+- MFA/passkey для системного User до доступа к staff API/Django Admin;
 - CSRF для browser mutations, CSP и strict CORS allowlist;
 - OTP hash, TTL, attempts, atomic consume и anti-enumeration;
 - rate limits по contact/IP/device/provider budget;
 - OAuth state, nonce, PKCE и exact callbacks;
 - explicit identity linking;
 - recent-auth/step-up для role/domain/billing/migration/delete;
-- passkey/WebAuthn или MFA для staff/admin до GA.
+- deny-by-default staff permission matrix и обязательные reason/audit для
+  support-действий над Customer/Tenant.
 
 ### 15.2. OIDC
 
@@ -1241,6 +1311,9 @@ DB rollout использует expand/contract:
 - short access-token TTL;
 - refresh rotation/reuse detection;
 - tenant-specific token без membership list.
+- OIDC client жестко связан ровно с одним Tenant;
+- active Customer membership проверяется до выдачи authorization code/token;
+- системный User запрещен как OIDC subject.
 
 ### 15.3. Machine identity
 
@@ -1274,6 +1347,10 @@ DB rollout использует expand/contract:
 6. Worker tests: duplicate delivery, crash/restart, retry и DLQ.
 7. Provider adapter tests: Cloudflare, Telegram, email, payment.
 8. OIDC conformance и negative security tests.
+   Обязательны сценарии: системный User не может стать OIDC subject; Customer
+   без active membership получает отказ; client другого Tenant и несовпадающий
+   `tenant_id` отклоняются; unique constraint запрещает второй OIDC client, а
+   transactional create/invariant — Tenant без клиента после завершения create.
 9. Kind/k3d E2E: Agent, Runtime, route provider, cert-manager.
 10. Helm: lint, template, schema, install, upgrade, rollback.
 11. Synthetic full E2E:
@@ -1334,6 +1411,8 @@ command_id
 tenant_id
 instance_id
 customer_id
+user_id
+actor_type
 ```
 
 Alerts:
@@ -1358,7 +1437,9 @@ Alerts:
 2. Использовать current `external_id` как bridge для global Tenant UUID.
 3. Добавить idempotency/command result storage.
 4. Добавить freeze/activate/observed state.
-5. Добавить `global_customer_id` и membership projection к tenant-local User.
+5. Добавить `global_customer_id` и Customer membership projection к
+   tenant-local legacy User; системный `users.User` Control Plane в Runtime не
+   передается.
 6. Включить OIDC pilot feature flag для одной Instance/Tenant.
 7. Backfill/link users через подтвержденный flow.
 8. Перевести новые Tenant на OIDC-only provisioning.
@@ -1367,8 +1448,9 @@ Alerts:
 11. Deprecate Runtime email OTP для managed Tenant.
 12. Удалить legacy endpoint после telemetry-confirmed zero usage.
 
-Legacy User нельзя автоматически связывать с Customer только по совпадению
-email без доказанного владения учетными записями.
+Runtime legacy User нельзя автоматически связывать с Customer только по
+совпадению email без доказанного владения учетными записями. Системный User
+Control Plane никогда не участвует в таком linking.
 
 Отдельно Runtime должен перейти от startup `create_all()` к versioned database
 migrations до production multi-instance эксплуатации.
@@ -1400,6 +1482,7 @@ migrations до production multi-instance эксплуатации.
 
 ### Registry MVP — после этапа 3
 
+- системные User для технической поддержки и Django Admin;
 - Customer registration/authentication;
 - Tenant registry и Owner/Member;
 - Django Admin, audit и baseline Helm deploy.
@@ -1434,11 +1517,16 @@ Identity, Agent/Runtime management, Helm и metering можно частично
 - Customer регистрируется через Google, GitHub или email OTP и подтверждает
   phone через Telegram Gateway.
 - Customer имеет глобальный профиль и независимые memberships.
+- User технической поддержки имеет отдельную MFA-защищенную staff identity, не
+  является участником Tenant и не проецируется в Runtime.
 - Tenant использует только Owner/Member и last-owner invariant.
+- Tenant имеет ровно один OIDC client, созданный атомарно с Tenant и initial
+  Customer Owner membership.
 - Create/freeze/activate/delete выполняются идемпотентными Operations.
 - Instance имеют отдельные credentials, heartbeat и capabilities.
 - Placement и stale-command fencing работают.
-- Runtime принимает tenant-scoped OIDC identity global Customer.
+- Runtime принимает tenant-scoped OIDC identity Customer только при active
+  membership и совпадении Tenant/client/token context.
 - `dniko.net` domains автоматически получают DNS, route и TLS.
 - Custom domain требует ownership verification.
 - Billing quantity воспроизводится из immutable usage ledger.
@@ -1457,12 +1545,14 @@ Identity, Agent/Runtime management, Helm и metering можно частично
 
 1. отдельный `control_plane/pyproject.toml`;
 2. PostgreSQL/environment settings;
-3. custom `customers.Customer`;
-4. audit/outbox/idempotency base models;
-5. health endpoints;
-6. baseline Dockerfile и Helm chart;
-7. contract/state-machine skeleton;
-8. CI для Django checks, migrations и Helm template.
+3. custom `users.User` и `AUTH_USER_MODEL = "users.User"`;
+4. самостоятельную бизнес-модель `customers.Customer` без наследования Django
+   authentication user;
+5. audit/outbox/idempotency base models;
+6. health endpoints;
+7. baseline Dockerfile и Helm chart;
+8. contract/state-machine skeleton;
+9. CI для Django checks, migrations и Helm template.
 
 Identity providers, Cloudflare и billing integrations не следует начинать до
 утверждения этапа 0 и создания стабильного фундамента.
