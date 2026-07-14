@@ -1,0 +1,25 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+
+    <title>{% block title %}DNK{% endblock %}</title>
+    <meta name="description" content="{% block description %}DNK — платформа визуальной автоматизации бизнес-процессов.{% endblock %}">
+    <link rel="canonical" href="{% block canonical_url %}https://dniko.net/{% endblock %}">
+
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="DNK">
+    <meta property="og:title" content="{% block og_title %}DNK{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}Визуальная автоматизация бизнес-процессов.{% endblock %}">
+    <meta property="og:url" content="https://dniko.net/">
+
+    <link rel="icon" href="{% static 'marketing/favicon.svg' %}" type="image/svg+xml">
+    <link rel="stylesheet" href="{% static 'marketing/css/app.css' %}">
+  </head>
+  <body>
+    {% block body %}{% endblock %}
+  </body>
+</html>
