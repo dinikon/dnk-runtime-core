@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useRouter } from "vue-router";
 import { toast } from "vue-sonner";
 
 import { getApiErrorMessage } from "@/app/providers/http";
@@ -19,6 +20,7 @@ import WorkflowApplicationsPageHeader from "@/modules/workflow/applications/ui/p
 import WorkflowApplicationsViewState from "@/modules/workflow/applications/ui/view-state/WorkflowApplicationsViewState.vue";
 
 const pageState = useWorkflowApplicationsPageState();
+const router = useRouter();
 const workflowApplicationsQuery = useWorkflowApplicationsQuery(pageState.limit);
 const createWorkflowApplicationMutation = useCreateWorkflowApplication();
 const updateWorkflowApplicationMutation = useUpdateWorkflowApplication();
@@ -64,6 +66,13 @@ async function createWorkflowApplication(
 function editWorkflowApplication(application: WorkflowApplicationListItem) {
   selectedApplication.value = application;
   updateOpen.value = true;
+}
+
+function openWorkflowApplication(application: WorkflowApplicationListItem) {
+  void router.push({
+    name: "workflow-editor",
+    params: { id: application.id },
+  });
 }
 
 function setUpdateOpen(open: boolean) {
@@ -112,6 +121,7 @@ async function updateWorkflowApplication(
         :fetching="backgroundFetching"
         :view-mode="pageState.viewMode.value"
         :skeleton-count="pageState.limit.value"
+        @open="openWorkflowApplication"
         @edit="editWorkflowApplication"
       />
 

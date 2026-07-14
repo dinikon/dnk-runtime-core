@@ -1,1 +1,1 @@
-export { workflowRoutes } from "./routes";
+export { workflowEditorRoutes, workflowRoutes } from "./routes";

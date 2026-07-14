@@ -22,6 +22,7 @@ withDefaults(
 );
 
 const emit = defineEmits<{
+  (event: "open", value: WorkflowApplicationListItem): void;
   (event: "edit", value: WorkflowApplicationListItem): void;
 }>();
 </script>
@@ -49,6 +50,7 @@ const emit = defineEmits<{
         v-else
         :items="items"
         :view-mode="viewMode"
+        @open="emit('open', $event)"
         @edit="emit('edit', $event)"
       />
     </template>

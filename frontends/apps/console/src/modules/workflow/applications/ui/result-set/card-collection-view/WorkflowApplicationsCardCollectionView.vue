@@ -7,6 +7,7 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
+  (event: "open", value: WorkflowApplicationListItem): void;
   (event: "edit", value: WorkflowApplicationListItem): void;
 }>();
 </script>
@@ -19,6 +20,7 @@ const emit = defineEmits<{
       v-for="application in items"
       :key="application.id"
       :application="application"
+      @open="emit('open', $event)"
       @edit="emit('edit', $event)"
     />
   </div>

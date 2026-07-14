@@ -15,14 +15,14 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <CardFooter class="mt-auto justify-end px-4 pt-2 pb-4">
+  <CardFooter class="relative z-20 mt-auto justify-end px-4 pt-2 pb-4">
     <div class="flex items-center border-l pl-4">
       <Button
         type="button"
         variant="ghost"
         size="icon-sm"
         aria-label="Edit workflow application"
-        @click="emit('edit', application)"
+        @click.stop="emit('edit', application)"
       >
         <Pencil data-icon="inline-start" />
         <span class="sr-only">Edit</span>

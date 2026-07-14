@@ -1,10 +1,10 @@
 import { createRouter, createWebHistory } from "vue-router";
 
-import { AppLayout } from "@/layouts";
+import { AppLayout, WorkflowEditorLayout } from "@/layouts";
 import { authRoutes } from "@/modules/auth/routes";
 import { communicationRoutes } from "@/modules/communication";
 import { dashboardRoutes } from "@/modules/dashboard";
-import { workflowRoutes } from "@/modules/workflow";
+import { workflowEditorRoutes, workflowRoutes } from "@/modules/workflow";
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -22,6 +22,11 @@ export const router = createRouter({
         ...workflowRoutes,
         ...communicationRoutes,
       ],
+    },
+    {
+      path: "/workflows/:id/editor",
+      component: WorkflowEditorLayout,
+      children: workflowEditorRoutes,
     },
     {
       path: "/:pathMatch(.*)*",
