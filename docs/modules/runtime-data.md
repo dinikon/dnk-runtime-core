@@ -218,8 +218,8 @@ Base prefix:
 |----------------------------------|----------------------------------|----------------------------------|----------------------------------|----------------------------------|----------------------------------|
 | В текущей реализации не найдено. | В текущей реализации не найдено. | В текущей реализации не найдено. | В текущей реализации не найдено. | В текущей реализации не найдено. | В текущей реализации не найдено. |
 
-В модуле отсутствует `src/modules/runtime_data/presentation/`. HTTP endpoints, которые используют `runtime_data`,
-находятся в потребляющих модулях, например `communication`.
+В модуле отсутствует `src/modules/runtime_data/presentation/`. В текущей реализации production HTTP-потребители
+runtime gateways не зарегистрированы.
 
 ## Dependency Injection
 
@@ -228,11 +228,7 @@ Base prefix:
   тестами.
 - Shared dependencies: `AsyncSession` поступает через `UoWDep` в DI потребителей.
 
-Фактическая wiring-точка находится вне `runtime_data`:
-
-- `src/modules/communication/presentation/depends/infrastructure.py` и
-  `src/modules/communication/presentation/depends/management.py` создают runtime gateways для communication
-  repositories/management flows.
+Будущие потребители должны собирать runtime gateways в собственном presentation/management DI.
 
 ## Dependencies On Other Modules
 
@@ -240,9 +236,6 @@ Base prefix:
 |---------------------------|---------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
 | `shared`                  | `domain`, `application`         | `DomainError` для runtime errors; `EntityIdVO` для tenant scope в queries/relation use cases.                                         |
 | `schema_registry.runtime` | `application`, `infrastructure` | `RuntimeObjectDescriptor`, `RuntimeFieldDescriptor`, `RuntimeRelationDescriptor`, `RuntimeObjectResolverProtocol`.                    |
-| `communication`           | внешний потребитель             | Использует runtime gateways, `RuntimeTypedFilterBuilder`, runtime errors и type policy для runtime-backed communication repositories. |
-
-Внутри `runtime_data` нет зависимости на `communication`; зависимость направлена от потребителя к `runtime_data`.
 
 ## Events / Background Processing
 
@@ -273,12 +266,11 @@ queue adapters.
 - Integration:
     - `test/test_architecture_boundaries.py` проверяет отсутствие legacy runtime_data import surfaces, legacy filter
       spec names и удаление старых compatibility shims.
-    - Потребляющие modules имеют собственные tests runtime repositories/controllers, где `runtime_data` используется как
-      dependency.
+    - `test/test_schema_registry_runtime_resolver.py` проверяет descriptor boundary, используемую runtime gateways.
 
 ## Known Gaps / Technical Debt
 
-- Текущая структура намеренно отличается от aggregate-модулей вроде `workflow`: нет `domain/<aggregate>/entity.py`,
+- Текущая структура намеренно отличается от обычных aggregate-модулей: нет `domain/<aggregate>/entity.py`,
   `repository.py`, `service.py` и нет `application/<aggregate>/use_case/`.
 - Между application ports и infrastructure проходят raw runtime rows как `Mapping[str, Any]`; это осознанная форма
   runtime gateway, но она отличается от project style “DTO вместо raw dict” для бизнес-модулей.
@@ -293,7 +285,6 @@ queue adapters.
 
 - [Develop Style](../develop-style.md)
 - [Schema Registry Module](./schema-registry.md)
-- [Communication Module](./communication.md)
 
 ## Source Of Truth
 

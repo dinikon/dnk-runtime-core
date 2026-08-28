@@ -55,8 +55,6 @@ src/modules/
 ├── tenancy/
 ├── identity/
 ├── runtime_data/
-├── communication/
-├── workflow/
 ├── schema_registry/
 └── shared/
 ```

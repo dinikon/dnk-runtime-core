@@ -64,61 +64,6 @@ scope uses `EntityIdVO` directly; concrete entities expose concrete subclasses s
     - `is_verified`
     - `is_deleted`
 
-## Communication
-
-### `ProviderConnector`
-
-- Module owner: `communication`
-- Business meaning: tenant-local provider YAML connector definition
-- Key fields:
-    - `provider_connector_id` as `ProviderConnectorIdVO`
-    - provider code/name/version/type
-    - YAML spec/checksum
-  - status (`ACTIVE`, `DISABLED`, `ARCHIVED`) and timestamps
-
-### `ProviderConnection`
-
-- Module owner: `communication`
-- Business meaning: tenant provider configuration and write-only credentials
-- Key fields:
-    - `provider_connection_id` as `ProviderConnectionIdVO`
-    - `tenant_id` as `EntityIdVO`
-    - `provider_connector_id` as `ProviderConnectorIdVO`
-    - connection code/name/channel
-  - config, secret ref, encoded secrets and status (`ACTIVE`, `DISABLED`, `ARCHIVED`)
-
-### `MessageTemplate` And `TemplateVersion`
-
-- Module owner: `communication`
-- Business meaning: provider-bound message template and versioned payload
-- Key fields:
-    - `template_id` as `MessageTemplateIdVO`
-    - `template_version_id` as `TemplateVersionIdVO`
-    - provider connector/message type ids
-    - channel, message class, status and active version metadata
-    - template payload and variables schema
-
-### `CommunicationRequest` And `OutboundMessage`
-
-- Module owner: `communication`
-- Business meaning: accepted send command and concrete provider outbound message
-- Key fields:
-    - `communication_request_id` as `CommunicationRequestIdVO`
-    - `outbound_message_id` as `OutboundMessageIdVO`
-    - tenant, template/version, connection and optional contact ids
-    - recipient, variables, rendered payload and provider request snapshot
-    - internal/external statuses, errors, queue/processing timestamps and retry state
-
-### `DeliveryAttempt` And `DeliveryEvent`
-
-- Module owner: `communication`
-- Business meaning: provider send attempt history and webhook/status events
-- Key fields:
-    - `delivery_attempt_id` as `DeliveryAttemptIdVO`
-    - `delivery_event_id` as `DeliveryEventIdVO`
-    - outbound/connection ids
-    - request/response snapshots, HTTP status, provider ids/statuses and event timestamps
-
 ## Schema Registry
 
 ### `DataSourceEntity`
@@ -188,7 +133,6 @@ scope uses `EntityIdVO` directly; concrete entities expose concrete subclasses s
 - [Runtime schema](runtime-schema.md)
 - [Tenancy module](../modules/tenancy.md)
 - [Identity module](../modules/identity.md)
-- [Communication module](../modules/communication.md)
 - [Schema Registry module](../modules/schema-registry.md)
 
 ## Source Of Truth
@@ -197,6 +141,5 @@ scope uses `EntityIdVO` directly; concrete entities expose concrete subclasses s
 - `src/modules/tenancy/domain/tenant_domain/entity.py`
 - `src/modules/identity/domain/user/entity.py`
 - `src/modules/identity/domain/auth/error.py`
-- `src/modules/communication/domain/models.py`
 - `src/modules/schema_registry/domain/datasource/entity.py`
 - `src/modules/schema_registry/domain/object/entity.py`

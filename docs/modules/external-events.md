@@ -37,9 +37,9 @@ external payload + source config -> normalized tenant event
 `external_events` не владеет:
 
 - campaign goals или metrics;
-- выполнением workflow graph;
+- выполнением business orchestration;
 - future bulk recipient dispatch;
-- communication provider delivery webhooks, которые принадлежат `communication`;
+- provider delivery webhooks;
 - CRM record mutation policies;
 - provider-specific outbound send adapters.
 
@@ -78,22 +78,21 @@ external payload + source config -> normalized tenant event
 
 Разрешенные входящие consumers:
 
-- `workflow` может запускать runs из normalized event triggers.
 - `campaigns` может обновлять business metrics из normalized events.
+- future orchestration modules могут запускать execution из normalized event triggers.
 - другие business modules могут реагировать на normalized events через shared event consumers.
 
 Запрещенные исходящие зависимости:
 
 - `campaigns`;
-- `workflow`;
 - future bulk-send orchestration modules;
-- `communication` provider sender internals;
+- provider sender internals;
 - CRM/business modules, которые потребляют normalized events.
 
 Особый случай:
 
-- Provider delivery webhooks остаются в `communication`, потому что они обновляют outbound delivery state.
-  `external_events` предназначен для external business/product events, а не provider delivery lifecycle callbacks.
+- Provider delivery lifecycle callbacks не входят в `external_events`; их должен владеть отдельный provider integration
+  boundary, если он будет добавлен.
 
 ## Межмодульный контракт
 
@@ -129,9 +128,7 @@ Consumers должны использовать этот normalized contract. О
 
 ## Связанная документация
 
-- [Workflow Module](./workflow.md)
 - [Campaigns Module](./campaigns.md)
-- [Communication Module](./communication.md)
 - [Runtime Data Module](./runtime-data.md)
 - [Schema Registry Module](./schema-registry.md)
 

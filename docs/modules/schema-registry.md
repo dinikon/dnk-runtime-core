@@ -7,7 +7,7 @@
 отдает runtime descriptors потребителям runtime data.
 
 Модуль управляет структурой runtime objects, но не выполняет CRUD runtime-записей. Чтение и запись строк находятся в
-`runtime_data`, `communication` и других потребителях descriptors.
+`runtime_data` и будущих потребителях descriptors.
 
 ## Current Scope
 
@@ -335,7 +335,6 @@ HTTP error mapping:
 | `shared`        | all layers                                               | `EntityIdVO`, `DomainError`, clock ports, UoW/session, DB base/types, authentication dependency.               |
 | `tenancy`       | infrastructure/presentation DI                           | `TenantSchemaBootstrapPort` and `TenantSchemaBootstrapContext` adapter for tenant onboarding.                  |
 | `runtime_data`  | consumer dependency, not imported by module code for DDL | Consumers use `RuntimeObjectDescriptor`; schema_registry itself does not do runtime row CRUD.                  |
-| `communication` | consumer dependency                                      | Communication runtime repositories/management wiring use schema_registry descriptors and default seed objects. |
 | `config`        | management/bootstrap                                     | `dnk_config.DEFAULT_SEED_MODULE` and `SCHEMA_PREFIX`.                                                          |
 
 ## Events / Background Processing
@@ -380,8 +379,8 @@ Command зарегистрирован в `src/management/commands/schema_regist
 - Integration / boundary:
   - `test/test_tenant_schema_bootstrap_boundary.py`;
   - `test/test_architecture_boundaries.py`;
-  - `test/test_inventory_schema_seed.py` covers current default seed objects and removed-model cleanup behavior;
-  - runtime descriptor usage is also covered by communication and runtime_data tests.
+  - `test/test_default_schema_seed.py` covers the empty default runtime manifest;
+  - runtime descriptor usage is also covered by runtime_data tests.
 
 Important gaps:
 

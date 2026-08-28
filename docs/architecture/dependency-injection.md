@@ -56,8 +56,5 @@ The project uses explicit composition functions instead of a large global contai
 - `src/modules/tenancy/application/tenant_domain/use_case/`
 - `src/modules/identity/presentation/depends/application.py`
 - `src/modules/identity/presentation/depends/infrastructure.py`
-- `src/modules/communication/presentation/depends/application.py`
-- `src/modules/communication/presentation/depends/infrastructure.py`
-- `src/modules/communication/presentation/depends/management.py`
 - `src/modules/schema_registry/presentation/depends/application.py`
 - `src/modules/schema_registry/presentation/depends/management.py`

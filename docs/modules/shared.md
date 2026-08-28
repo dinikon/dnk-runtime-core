@@ -60,7 +60,7 @@ as `events`, `jobs`, `persistence`, `identity_context`, `email`, `tokens`, `time
 - `ScheduledJob`
     - shared scheduled work contract persisted through PostgreSQL and processed by at-least-once workers
 - `ScheduledJobHandlerPort`
-    - handler contract implemented by future workflow, bulk-send or polling modules
+    - handler contract implemented by future orchestration, bulk-send or polling modules
 
 ## Event Bus, Outbox And Inbox
 
@@ -73,7 +73,7 @@ Shared integration events use at-least-once delivery:
 - consumers use `SqlAlchemyInboxRepository` before invoking handlers, keyed by `(tenant_id, source, message_id)`, so a
   repeated broker delivery does not rerun business logic
 
-Concrete module event schemas, campaign goal matching and workflow events are intentionally outside the shared
+Concrete module event schemas, campaign goal matching and business automation events are intentionally outside the shared
 foundation.
 
 ## Messaging
@@ -84,8 +84,8 @@ Shared messaging provides broker-neutral primitives below module-specific ports:
 - `MessagePublisherPort` publishes a broker message to an exchange and routing key
 - `RabbitMQMessagePublisher` owns shared RabbitMQ lifecycle and publish mechanics
 
-`shared.events` and `communication` use this foundation through their own adapters. Queue names, exchanges, routing keys
-and payload semantics remain owned by each module.
+`shared.events` uses this foundation through its adapter. Queue names, exchanges, routing keys and payload semantics
+remain owned by each consuming module.
 
 ## Scheduled Jobs
 
@@ -99,7 +99,7 @@ Shared scheduled jobs provide at-least-once execution for deferred, timer and po
 - `dnk-manage jobs recover-stuck` returns expired `running` jobs to `scheduled` or marks exhausted jobs `failed`
 - `cancel` moves only non-terminal jobs to `canceled`
 
-No concrete workflow, campaign, bulk-send or external polling handlers live in this foundation. Business modules should
+No concrete orchestration, campaign, bulk-send or external polling handlers live in this foundation. Business modules should
 depend on the application ports and presentation wiring, not on `shared.infrastructure.jobs`.
 
 ## Why It Matters

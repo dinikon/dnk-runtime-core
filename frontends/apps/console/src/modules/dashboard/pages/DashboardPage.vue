@@ -1,23 +1,14 @@
 <script setup lang="ts">
-import { Settings, ShieldCheck, Workflow } from "@lucide/vue";
-import { RouterLink } from "vue-router";
+import { Settings, ShieldCheck } from "@lucide/vue";
 
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 
 const dashboardSections = [
-  {
-    title: "Workflows",
-    description: "Create and manage workflow apps.",
-    to: "/workflows",
-    icon: Workflow,
-  },
   {
     title: "Access",
     description: "Current session is active and protected by workspace auth.",
@@ -40,7 +31,7 @@ const dashboardSections = [
       </p>
     </section>
 
-    <section class="grid gap-3 md:grid-cols-3">
+    <section class="grid gap-3 md:grid-cols-2">
       <Card v-for="section in dashboardSections" :key="section.title">
         <CardHeader class="gap-2">
           <component
@@ -51,11 +42,6 @@ const dashboardSections = [
           <CardTitle class="text-sm">{{ section.title }}</CardTitle>
           <CardDescription>{{ section.description }}</CardDescription>
         </CardHeader>
-        <CardContent v-if="section.to">
-          <Button as-child variant="outline" size="sm">
-            <RouterLink :to="section.to">Open</RouterLink>
-          </Button>
-        </CardContent>
       </Card>
     </section>
   </div>

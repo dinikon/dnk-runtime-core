@@ -83,32 +83,13 @@ This page maps current tests to the behaviors they protect.
 
 ## Schema Seed Cleanup
 
-- `test/test_inventory_schema_seed.py`
-    - current default seed core objects
-    - absence of removed CRM, inventory, segmentation and broadcast runtime objects
-    - destructive diff operations for legacy removed runtime tables
-
-## Communication
-
-- `test/test_communication_services.py`
-  - provider YAML validation
-  - template/provider payload rendering
-  - JSONPath and status mapping
-  - secret encoding and DTO secret omission
-- `test/test_communication_use_cases.py`
-  - outbound processing for HTTP/SMTP providers
-  - idempotent send behavior
-  - retryable provider failure backoff
-  - webhook matched/unmatched behavior
-  - compatibility re-exports for legacy application import paths
-- `test/test_communication_http_router.py`
-  - public communication route registration
-  - controller-local HTTP error mapping
-  - publish-after-commit behavior for send requests
-- `test/test_communication_management_command.py`
-  - communication management command parsing and handler behavior
-- `test/test_communication_queue.py`
-  - queue settings-derived RabbitMQ topology names
+- `test/test_default_schema_seed.py`
+  - empty runtime default seed normalization
+  - schema-only tenant bootstrap plan without predefined system tables
+  - tenant bootstrap forwards the empty runtime seed to metadata creation
+- `test/test_removed_module_boundaries.py`
+  - removed module directories and HTTP surfaces remain absent
+  - removed CLI/configuration surfaces remain unavailable
 
 ## Runtime Data
 

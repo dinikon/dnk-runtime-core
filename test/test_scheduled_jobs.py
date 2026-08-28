@@ -173,8 +173,8 @@ def _job(
     return ScheduledJob(
         id=job_id or uuid4(),
         tenant_id=tenant_id or uuid4(),
-        job_type="workflow.timer",
-        payload={"workflow_id": "wf_1"},
+        job_type="system.timer",
+        payload={"resource_id": "resource_1"},
         run_at=now,
         status=status.value,
         attempts=attempts,
@@ -198,8 +198,8 @@ def _model(
     return ScheduledJobModel(
         id=job_id or uuid4(),
         tenant_id=tenant_id or uuid4(),
-        job_type="workflow.timer",
-        payload={"workflow_id": "wf_1"},
+        job_type="system.timer",
+        payload={"resource_id": "resource_1"},
         run_at=run_at,
         status=status.value,
         attempts=attempts,

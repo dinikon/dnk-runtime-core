@@ -16,14 +16,9 @@ dnk-manage
 │   └── diff [<tenant_id> | --all] [--seed-path ...]
 ├── events
 │   └── publish-outbox [--limit ...] [--max-attempts ...]
-├── jobs
+└── jobs
 │   ├── process-due [--limit ...] [--max-attempts ...] [--lock-ttl-seconds ...]
 │   └── recover-stuck [--limit ...] [--max-attempts ...]
-└── communication
-    ├── process-queued --tenant-id <uuid> [--limit ...]
-    ├── publish-queued --tenant-id <uuid> [--limit ...]
-    ├── recover-stuck --tenant-id <uuid> [--older-than-seconds ...] [--limit ...]
-    └── worker
 ```
 
 ## Current Supported Command
@@ -62,23 +57,9 @@ On expected `SchemaRegistryError`:
 
 Unexpected exceptions are not swallowed, so traceback remains visible for debugging.
 
-### `dnk-manage communication process-queued`
-
-Claims and processes queued outbound communication messages for one tenant without RabbitMQ.
-
-Arguments:
-
-- `--tenant-id`: UUID of the tenant
-- `--limit`: maximum queued messages to process, defaults to `100`
-
-On expected `CommunicationError`, prints the error to `stderr` and exits with code `2`.
-
 ### `dnk-manage events publish-outbox`
 
 Publishes due shared integration events from PostgreSQL outbox to RabbitMQ.
-Communication delivery status facts such as `communication.outbound_message.sent.v1`,
-`communication.outbound_message.failed.v1`, `communication.outbound_message.delivered.v1` and
-`communication.delivery_status.changed.v1` use this path after they are written to the shared outbox.
 
 Arguments:
 
@@ -116,31 +97,6 @@ On success prints:
 
 - `OK scanned=... recovered=... failed=...`
 
-### `dnk-manage communication publish-queued`
-
-Publishes queued outbound communication messages to RabbitMQ for worker processing.
-This is an operational delivery queue path, separate from `events publish-outbox`.
-
-Arguments:
-
-- `--tenant-id`: UUID of the tenant
-- `--limit`: maximum queued messages to publish, defaults to `100`
-
-### `dnk-manage communication recover-stuck`
-
-Marks expired `SENDING` outbound messages as failed/unknown so they can be inspected or retried manually.
-
-Arguments:
-
-- `--tenant-id`: UUID of the tenant
-- `--older-than-seconds`: stuck threshold, defaults to `300`
-- `--limit`: maximum messages to recover, defaults to `100`
-
-### `dnk-manage communication worker`
-
-Runs the FastStream RabbitMQ communication worker. The worker parses outbound jobs, claims one outbound message with a
-processing lease, sends it through the configured provider sender and persists the result in short transactions.
-
 ## Transaction Model
 
 - CLI handler opens one `UnitOfWork`
@@ -151,13 +107,11 @@ processing lease, sends it through the configured provider sender and persists t
   `shared.presentation.jobs`
 - `schema-registry diff --all` uses one outer `UnitOfWork` and per-tenant savepoints; any expected tenant failure rolls
   back the whole outer transaction after all tenants are attempted
-- communication worker-by-id opens short `UnitOfWork` scopes around claim/build and result persistence
 
 ## Related
 
 - [Schema Registry module](../modules/schema-registry.md)
 - [Shared module](../modules/shared.md)
-- [Communication module](../modules/communication.md)
 - [Request lifecycle](../architecture/request-lifecycle.md)
 - [Persistence and Unit of Work](../architecture/persistence-and-uow.md)
 

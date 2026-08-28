@@ -15,10 +15,8 @@ This documentation describes the current implementation of `dnk-runtime-core` as
 
 - [Tenancy](modules/tenancy.md)
 - [Identity](modules/identity.md)
-- [Communication](modules/communication.md)
 - [Schema Registry](modules/schema-registry.md)
 - [Shared](modules/shared.md)
-- [Workflow](modules/workflow.md)
 
 ## Roadmap-границы модулей
 
@@ -57,6 +55,7 @@ This documentation describes the current implementation of `dnk-runtime-core` as
 
 - [CRM removal runbook](operations/remove-crm.md)
 - [Custom object module removal](operations/remove-custom-object.md)
+- [Workflow and communication removal](operations/remove-workflow-communication.md)
 
 ## Related
 
