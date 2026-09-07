@@ -6,6 +6,8 @@ from pathlib import Path
 import httpx
 
 from src.app_factory import create_app
+from src.config import dnk_config
+from src.management.cli import build_parser
 from src.modules.schema_registry.domain.object.value_object import ObjectKind
 from src.modules.shared.infrastructure.persistence import Base
 
@@ -13,6 +15,44 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_workflow_and_communication_are_absent(self) -> None:
+        removed_paths = (
+            "src/modules/workflow",
+            "src/modules/communication",
+            "src/management/commands/communication.py",
+            "src/config/infrastructure/communication_queue_config.py",
+            "src/modules/schema_registry/seed/contexts/workflow.py",
+            "src/modules/schema_registry/seed/contexts/communication.py",
+            "frontends/apps/console/src/modules/workflow",
+            "frontends/apps/console/src/modules/communication",
+        )
+        for relative_path in removed_paths:
+            self.assertFalse((PROJECT_ROOT / relative_path).exists())
+
+        app = create_app()
+        openapi_paths = set(app.openapi()["paths"])
+        removed_route_prefixes = (
+            "/api/console/workflows",
+            "/api/console/communication",
+        )
+        for prefix in removed_route_prefixes:
+            self.assertFalse(any(path.startswith(prefix) for path in openapi_paths))
+
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://testserver",
+        ) as client:
+            workflow_response = await client.get("/api/console/workflows")
+            communication_response = await client.get(
+                "/api/console/communication/messages"
+            )
+
+        self.assertEqual(workflow_response.status_code, 404)
+        self.assertEqual(communication_response.status_code, 404)
+        self.assertFalse(hasattr(dnk_config, "COMMUNICATION_QUEUE"))
+        self.assertNotIn("communication", build_parser().format_help())
+
     async def test_custom_object_module_is_absent_but_custom_kind_remains(
         self,
     ) -> None:

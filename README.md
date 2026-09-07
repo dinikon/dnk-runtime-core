@@ -9,8 +9,6 @@ runtime schema management.
 - `identity`: email OTP + session-based console authentication
 - `schema_registry`: runtime schema bootstrap and diff for tenant PostgreSQL schemas
 - `runtime_data`: tenant-scoped runtime object persistence and querying
-- `communication`: provider connectors, templates, outbound messages and delivery state
-- `workflow`: workflow application and definition/runtime foundations
 - `shared`: database, unit of work, request context, auth and infrastructure helpers
 
 ## Quick Start
@@ -20,16 +18,15 @@ runtime schema management.
 - Run app: `uv run fastapi dev src/app.py`
 - Run tests: `./.venv/bin/python -m unittest discover -s test -p 'test_*.py' -v`
 - Docker:
-    - `cp temaplate.env .env`
-    - `docker compose up --build`
-    - API docs: `http://localhost:8000/docs`
-    - RabbitMQ management UI: `http://localhost:15672`
-  - Communication worker logs: `docker compose logs -f communication-worker`
+  - `cp temaplate.env .env`
+  - `docker compose up --build`
+  - API docs: `http://localhost:8000/docs`
+  - RabbitMQ management UI: `http://localhost:15672`
   - Debug integration events: `docker compose logs -f events-console-worker`
 - Run schema diff command:
-    - `dnk-manage schema-registry diff <tenant_id>`
+  - `dnk-manage schema-registry diff <tenant_id>`
   - `dnk-manage schema-registry diff --all`
-    - `dnk-manage schema-registry diff <tenant_id> --seed-path src.modules.schema_registry.seed.schema_seed`
+  - `dnk-manage schema-registry diff <tenant_id> --seed-path src.modules.schema_registry.seed.schema_seed`
 
 ## Documentation
 
@@ -41,9 +38,9 @@ runtime schema management.
 ## Control Plane
 
 The independent Control Plane application scaffold lives under
-[`control-plane/`](control-plane/README.md). Its target architecture and ordered
-implementation backlog are documented in
-[`control-plane/docs/IMPLEMENTATION_PLAN.md`](control-plane/docs/IMPLEMENTATION_PLAN.md).
+[`control_plane/`](control_plane/). Its target architecture and ordered
+implementation backlog are documented in the
+[Control Plane implementation plan](control_plane/docs/IMPLEMENTATION_PLAN.md).
 
 ## Source Of Truth
 

@@ -2,10 +2,6 @@ from contextlib import asynccontextmanager
 
 from src.config import dnk_config
 from src.dnk_app import DnkApp
-from src.modules.communication.infrastructure.rabbitmq import (
-    RabbitMQOutboundMessagePublisher,
-    ensure_communication_topology,
-)
 from src.modules.router import router as api_router
 from src.modules.shared.infrastructure.events import ensure_event_bus_topology
 from src.modules.shared.infrastructure.messaging import (
@@ -22,7 +18,6 @@ async def lifespan(app: DnkApp):
     app.state.db_helper = db_helper
     rabbitmq_provider = None
     broker_publisher = None
-    communication_publisher = None
     try:
         await db_helper.initialize_for_startup()
         if dnk_config.RABBITMQ.enabled:
@@ -32,16 +27,6 @@ async def lifespan(app: DnkApp):
             broker_publisher = RabbitMQBrokerPublisher(rabbitmq_provider)
             topology = RabbitMQTopologyManager(rabbitmq_provider)
 
-            if dnk_config.COMMUNICATION_QUEUE.enabled:
-                await ensure_communication_topology(
-                    topology,
-                    dnk_config.COMMUNICATION_QUEUE,
-                )
-                communication_publisher = RabbitMQOutboundMessagePublisher(
-                    broker_publisher=broker_publisher,
-                    settings=dnk_config.COMMUNICATION_QUEUE,
-                )
-
             await ensure_event_bus_topology(
                 topology,
                 dnk_config.EVENT_BUS,
@@ -50,7 +35,6 @@ async def lifespan(app: DnkApp):
             app.state.rabbitmq_provider = rabbitmq_provider
             app.state.broker_publisher = broker_publisher
             app.state.broker_topology = topology
-            app.state.communication_outbound_publisher = communication_publisher
     except Exception:
         if rabbitmq_provider is not None:
             await rabbitmq_provider.close()

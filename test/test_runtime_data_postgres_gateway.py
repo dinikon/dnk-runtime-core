@@ -316,12 +316,12 @@ class PostgresRuntimePersistenceGatewayTests(unittest.IsolatedAsyncioTestCase):
         session = _SessionSpy([_MappingsResult([])])
         gateway = self._command_gateway(session)
 
-        await gateway.acquire_advisory_xact_lock("communication:key")
+        await gateway.acquire_advisory_xact_lock("runtime:key")
 
         sql, params = session.calls[0]
         self.assertIn("pg_advisory_xact_lock", sql)
         self.assertIn("hashtextextended(:lock_key, 0)", sql)
-        self.assertEqual(params, {"lock_key": "communication:key"})
+        self.assertEqual(params, {"lock_key": "runtime:key"})
         self.assertEqual(session.commit_calls, 0)
         self.assertEqual(session.rollback_calls, 0)
 

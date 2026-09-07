@@ -140,3 +140,72 @@ class DatabaseStartupTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(app.state.db_helper, helper_stub)
         helper_stub.initialize_for_startup.assert_awaited_once()
         helper_stub.dispose.assert_awaited_once()
+
+    async def test_lifespan_initializes_only_shared_event_bus_topology(self) -> None:
+        helper_stub = type(
+            "HelperStub",
+            (),
+            {
+                "session_factory": object(),
+                "initialize_for_startup": AsyncMock(return_value=None),
+                "dispose": AsyncMock(return_value=None),
+            },
+        )()
+        provider_stub = type(
+            "ProviderStub",
+            (),
+            {
+                "start": AsyncMock(return_value=None),
+                "close": AsyncMock(return_value=None),
+            },
+        )()
+        publisher_stub = object()
+        topology_stub = object()
+        config_stub = type(
+            "ConfigStub",
+            (),
+            {
+                "RABBITMQ": type("RabbitSettingsStub", (), {"enabled": True})(),
+                "EVENT_BUS": object(),
+            },
+        )()
+        ensure_topology_mock = AsyncMock(return_value=None)
+        app = DnkApp()
+
+        with (
+            patch.object(app_factory, "db_helper", helper_stub),
+            patch.object(app_factory, "dnk_config", config_stub),
+            patch.object(
+                app_factory,
+                "RabbitMQBrokerProvider",
+                return_value=provider_stub,
+            ),
+            patch.object(
+                app_factory,
+                "RabbitMQBrokerPublisher",
+                return_value=publisher_stub,
+            ),
+            patch.object(
+                app_factory,
+                "RabbitMQTopologyManager",
+                return_value=topology_stub,
+            ),
+            patch.object(
+                app_factory,
+                "ensure_event_bus_topology",
+                ensure_topology_mock,
+            ),
+        ):
+            async with app_factory.lifespan(app):
+                self.assertIs(app.state.rabbitmq_provider, provider_stub)
+                self.assertIs(app.state.broker_publisher, publisher_stub)
+                self.assertIs(app.state.broker_topology, topology_stub)
+                self.assertFalse(hasattr(app.state, "communication_outbound_publisher"))
+
+        ensure_topology_mock.assert_awaited_once_with(
+            topology_stub,
+            config_stub.EVENT_BUS,
+        )
+        provider_stub.start.assert_awaited_once()
+        provider_stub.close.assert_awaited_once()
+        helper_stub.dispose.assert_awaited_once()

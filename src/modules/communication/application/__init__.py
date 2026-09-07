@@ -1,1 +1,0 @@
-"""Communication application layer."""

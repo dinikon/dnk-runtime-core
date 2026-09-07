@@ -17,9 +17,6 @@ from src.config.deploy.control_plane import ControlPlaneConfig
 from src.config.deploy import DeploymentConfig
 from src.config.feature import FeatureConfig
 from src.config.infrastructure import DatabaseConfig
-from src.config.infrastructure.communication_queue_config import (
-    CommunicationQueueConfig,
-)
 from src.config.infrastructure.email_config import EmailConfig
 from src.config.infrastructure.event_bus_config import EventBusConfig
 from src.config.infrastructure.rabbitmq_config import RabbitMQConfig
@@ -99,7 +96,6 @@ class DnkConfig(
     # Infra config
     DatabaseConfig,
     RabbitMQConfig,
-    CommunicationQueueConfig,
     EventBusConfig,
     ScheduledJobsConfig,
     EmailConfig,

@@ -201,41 +201,11 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                 msg=f"{path} still uses removed email wiring pattern",
             )
 
-    def test_communication_does_not_use_public_persistence_models(self) -> None:
-        persistence_path = (
-            PROJECT_ROOT / "src/modules/communication/infrastructure/persistence.py"
-        )
-        self.assertFalse(
-            persistence_path.exists(),
-            msg="Communication public SQLAlchemy persistence models still exist.",
-        )
-        forbidden_import = "src.modules.communication.infrastructure.persistence"
-        for root in ("src", "test"):
-            for path in iter_python_files(root):
-                for module_name in iter_imports(path):
-                    self.assertNotEqual(
-                        module_name,
-                        forbidden_import,
-                        msg=f"{path} imports removed communication persistence",
-                    )
-
-    def test_communication_application_does_not_import_infrastructure(self) -> None:
-        forbidden_prefix = "src.modules.communication.infrastructure"
-        for path in iter_python_files("src/modules/communication/application"):
-            for module_name in iter_imports(path):
-                self.assertFalse(
-                    module_name.startswith(forbidden_prefix),
-                    msg=f"{path} imports forbidden infrastructure module {module_name}",
-                )
-
     def test_business_modules_do_not_import_shared_event_bus_rabbitmq_adapter(
         self,
     ) -> None:
         forbidden_shared_adapter = "src.modules.shared.infrastructure.events.rabbitmq_integration_event_publisher"
         allowed_faststream_paths = {
-            (
-                PROJECT_ROOT / "src/modules/communication/infrastructure/rabbitmq.py"
-            ).resolve(),
             (
                 PROJECT_ROOT
                 / "src/modules/shared/infrastructure/events/rabbitmq_integration_event_publisher.py"
@@ -344,7 +314,6 @@ class ArchitectureBoundariesTests(unittest.TestCase):
         checked_roots = (
             "src/modules/shared/application/messaging",
             "src/modules/shared/application/events",
-            "src/modules/communication/application",
         )
         forbidden_prefixes = (
             "faststream",
@@ -396,142 +365,6 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                     module_name.startswith(forbidden_prefix),
                     msg=f"{path} imports shared jobs infrastructure directly",
                 )
-
-    def test_communication_http_root_router_is_composition_only(self) -> None:
-        path = PROJECT_ROOT / "src/modules/communication/presentation/http/router.py"
-        content = path.read_text(encoding="utf-8")
-        self.assertNotIn("_raise_http_error", content)
-        self.assertNotIn("asdict(", content)
-        self.assertIn("include_router", content)
-
-    def test_communication_controllers_map_responses_explicitly(self) -> None:
-        forbidden_patterns = (
-            ".__dict__",
-            "ResponseSchema(**",
-            "outbound_message_response(",
-        )
-        for path in iter_python_files("src/modules/communication/presentation/http"):
-            is_controller = "/controller/" in path.as_posix()
-            is_legacy_router_controller = (
-                path.name == "router.py"
-                and not path.as_posix().endswith("/presentation/http/router.py")
-            )
-            if not is_controller and not is_legacy_router_controller:
-                continue
-            content = path.read_text(encoding="utf-8")
-            for pattern in forbidden_patterns:
-                self.assertNotIn(
-                    pattern,
-                    content,
-                    msg=f"{path} should map HTTP responses explicitly in return blocks",
-                )
-
-    def test_communication_controller_files_have_one_top_level_function(self) -> None:
-        for path in iter_python_files("src/modules/communication/presentation/http"):
-            if "/controller/" not in path.as_posix() or path.name == "__init__.py":
-                continue
-            tree = ast.parse(path.read_text(encoding="utf-8"))
-            function_count = sum(
-                isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef))
-                for node in tree.body
-            )
-            self.assertLessEqual(
-                function_count,
-                1,
-                msg=f"{path} should contain at most one top-level function",
-            )
-
-    def test_communication_request_schema_files_have_one_pydantic_model(self) -> None:
-        for path in iter_python_files("src/modules/communication/presentation/http"):
-            if "/requests/" not in path.as_posix() or path.name == "__init__.py":
-                continue
-            tree = ast.parse(path.read_text(encoding="utf-8"))
-            model_count = 0
-            for node in tree.body:
-                if not isinstance(node, ast.ClassDef):
-                    continue
-                for base in node.bases:
-                    if isinstance(base, ast.Name) and base.id == "BaseModel":
-                        model_count += 1
-                    elif isinstance(base, ast.Attribute) and base.attr == "BaseModel":
-                        model_count += 1
-            self.assertLessEqual(
-                model_count,
-                1,
-                msg=f"{path} should contain at most one Pydantic request schema",
-            )
-
-    def test_communication_cleanup_removed_legacy_files(self) -> None:
-        removed_files = (
-            "src/modules/communication/application/dto.py",
-            "src/modules/communication/application/use_cases.py",
-            "src/modules/communication/application/ports.py",
-            "src/modules/communication/infrastructure/repository.py",
-            "src/modules/communication/infrastructure/message_template_runtime_repository.py",
-        )
-        for relative_path in removed_files:
-            path = PROJECT_ROOT / relative_path
-            self.assertFalse(
-                path.exists(),
-                msg=f"{path} should be removed after communication cleanup",
-            )
-
-    def test_communication_has_no_import_aliases(self) -> None:
-        failures: list[str] = []
-        for path in iter_python_files("src/modules/communication"):
-            tree = ast.parse(path.read_text(encoding="utf-8"))
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Import):
-                    for alias in node.names:
-                        if alias.asname:
-                            failures.append(
-                                f"{path}:{node.lineno} imports {alias.name} as {alias.asname}"
-                            )
-                if isinstance(node, ast.ImportFrom):
-                    for alias in node.names:
-                        if alias.asname:
-                            failures.append(
-                                f"{path}:{node.lineno} imports {alias.name} as {alias.asname}"
-                            )
-
-        self.assertEqual(failures, [])
-
-    def test_communication_has_no_forbidden_alias_assignments(self) -> None:
-        forbidden_names = {
-            "CommunicationRepositoryFactory",
-            "ProviderConnection",
-            "ProviderConnectorEntity",
-            "ProviderMessageTypeEntity",
-            "ProviderWebhookRepositoryProtocol",
-            "SendCommunicationRepositoryProtocol",
-        }
-        failures: list[str] = []
-        for path in iter_python_files("src/modules/communication"):
-            tree = ast.parse(path.read_text(encoding="utf-8"))
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Assign) and isinstance(node.value, ast.Name):
-                    for target in node.targets:
-                        if (
-                            isinstance(target, ast.Name)
-                            and target.id in forbidden_names
-                        ):
-                            failures.append(f"{path}:{node.lineno} assigns {target.id}")
-                if (
-                    isinstance(node, ast.AnnAssign)
-                    and isinstance(node.target, ast.Name)
-                    and isinstance(node.value, ast.Name)
-                    and node.target.id in forbidden_names
-                ):
-                    failures.append(f"{path}:{node.lineno} assigns {node.target.id}")
-
-        self.assertEqual(failures, [])
-
-    def test_communication_repository_does_not_export_dto_mappers(self) -> None:
-        path = PROJECT_ROOT / "src/modules/communication/infrastructure/repository.py"
-        self.assertFalse(
-            path.exists(),
-            msg="Communication legacy runtime repository should be removed.",
-        )
 
     def test_shared_exports_only_generic_entity_id_vo(self) -> None:
         paths = [

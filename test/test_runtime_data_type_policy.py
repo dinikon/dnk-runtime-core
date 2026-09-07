@@ -161,7 +161,7 @@ class RuntimeFieldTypePolicyTests(unittest.TestCase):
             fields=base_descriptor.fields
             + (
                 RuntimeFieldDescriptor(
-                    name="workflow_state",
+                    name="lifecycle_state",
                     type_code="text",
                     is_nullable=True,
                     default_value=None,
@@ -177,7 +177,7 @@ class RuntimeFieldTypePolicyTests(unittest.TestCase):
         with self.assertRaises(RuntimeDataValidationError):
             policy.coerce_patch_payload(
                 descriptor=descriptor,
-                patch={"workflow_state": "locked"},
+                patch={"lifecycle_state": "locked"},
             )
 
     def test_decimal_float_is_rejected(self) -> None:

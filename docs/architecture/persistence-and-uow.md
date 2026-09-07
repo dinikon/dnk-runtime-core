@@ -37,7 +37,7 @@ Behavior:
 
 Examples:
 
-- SQLAlchemy repositories in `identity`, `tenancy`, `communication`, `schema_registry`
+- SQLAlchemy repositories in `identity`, `tenancy` and `schema_registry`
 - PostgreSQL schema inspector and executor in `schema_registry`
 - nested schema bootstrap adapter used from tenant creation flow
 

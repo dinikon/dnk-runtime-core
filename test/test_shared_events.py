@@ -170,9 +170,9 @@ class SharedEventsTests(unittest.IsolatedAsyncioTestCase):
         self.event = IntegrationEvent(
             event_id=uuid4(),
             tenant_id=uuid4(),
-            event_type="workflow.run.started",
+            event_type="example.record.created",
             event_version=1,
-            aggregate_type="workflow.run",
+            aggregate_type="example.record",
             aggregate_id=uuid4(),
             payload={"name": "Ada"},
             occurred_at=self.now,

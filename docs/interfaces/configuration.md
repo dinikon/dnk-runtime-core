@@ -70,20 +70,6 @@ Project configuration is assembled by `DnkConfig`, which combines multiple setti
     - Redis host, port, username, password, db, SSL mode
 - Used by token/session related infrastructure paths
 
-## Communication Queue Config
-
-- Group: `config/infrastructure/communication_queue_config.py`
-- Responsibilities:
-    - enable or disable RabbitMQ-backed outbound delivery
-    - queue, exchange, routing key, DLQ and DLX naming
-    - worker prefetch and recommended worker count
-    - processing lease and queued-message republish timing
-- Critical values:
-    - `COMMUNICATION_QUEUE.enabled`
-    - `COMMUNICATION_QUEUE.rabbitmq_url`
-    - `COMMUNICATION_QUEUE.processing_lease_seconds`
-    - `COMMUNICATION_QUEUE.republish_after_seconds`
-
 ## Event Bus Config
 
 - Group: `config/infrastructure/event_bus_config.py`
@@ -135,7 +121,6 @@ Project configuration is assembled by `DnkConfig`, which combines multiple setti
 - [HTTP API](http-api.md)
 - [Management CLI](management-cli.md)
 - [Identity module](../modules/identity.md)
-- [Communication module](../modules/communication.md)
 - [Schema Registry module](../modules/schema-registry.md)
 
 ## Source Of Truth

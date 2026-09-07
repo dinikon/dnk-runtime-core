@@ -8,8 +8,6 @@ exposes HTTP endpoints through FastAPI and management commands through `dnk-mana
 - `tenancy`: creates tenants, creates primary console domains, resolves tenant by host, and owns tenant onboarding flow.
 - `identity`: handles email OTP request/confirmation, session authentication, current user profile and logout.
 - `runtime_data`: provides tenant-scoped persistence/query primitives for runtime objects described by metadata.
-- `communication`: owns provider connectors, message templates, outbound messages and delivery state.
-- `workflow`: owns workflow application/definition/run foundations.
 - `schema_registry`: loads seed manifests, creates or diffs tenant runtime schemas in PostgreSQL, stores metadata
   snapshots and manages custom object configuration.
 - `shared`: cross-cutting infrastructure such as database helper, unit of work, request context, authentication,

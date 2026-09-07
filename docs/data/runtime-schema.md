@@ -18,8 +18,8 @@ Default seed module:
 
 - `src.modules.schema_registry.seed.schema_seed`
 
-The default seed module aggregates context seed declarations from
-`src/modules/schema_registry/seed/contexts/`. It currently declares workflow and communication runtime objects.
+The default seed is an empty runtime manifest. It creates the tenant PostgreSQL schema and metadata datasource without
+predefined system objects; tenant-defined custom objects can be added later through schema config APIs.
 
 ## 2. Metadata Snapshot
 
