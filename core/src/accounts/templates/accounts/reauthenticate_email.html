@@ -1,0 +1,23 @@
+{% extends "account/base_manage.html" %}
+{% block head_title %}Подтверждение действия{% endblock %}
+{% block content %}
+  <h1>Подтвердите действие кодом из email</h1>
+  <p>Чтобы изменить настройки безопасности, подтвердите, что это вы.</p>
+  {% if code_sent %}
+    <p>Код отправлен на {{ masked_email }}.</p>
+    <form method="post" action="{% url 'core_email_reauthenticate' %}">
+      {% csrf_token %}
+      {{ redirect_field }}
+      {{ form.as_p }}
+      <button class="button" type="submit" name="action" value="verify">Подтвердить</button>
+    </form>
+  {% else %}
+    {{ form.errors }}
+    <p>Мы отправим одноразовый код на {{ masked_email }}.</p>
+  {% endif %}
+  <form method="post" action="{% url 'core_email_reauthenticate' %}">
+    {% csrf_token %}
+    {{ redirect_field }}
+    <button class="button{% if code_sent %} button-outline{% endif %}" type="submit" name="action" value="request">{% if code_sent %}Отправить новый код{% else %}Получить код{% endif %}</button>
+  </form>
+{% endblock %}

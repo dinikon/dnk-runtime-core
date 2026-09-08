@@ -66,3 +66,85 @@ jobs:
 
       - name: Run tests
         run: uv run python -m unittest discover -s test -p "test_*.py" -v
+
+  core:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: core_test
+          POSTGRES_PASSWORD: core_test
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U core_test -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: core
+    env:
+      PYTHONPATH: src:.
+      CORE_SECRET_KEY: ci-only-not-a-deployment-secret
+      CORE_DEBUG: "true"
+      TEST_CORE_POSTGRES_URL: postgresql://core_test:core_test@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13.9"
+      - uses: astral-sh/setup-uv@v8.2.0
+        with:
+          version: "0.10.4"
+          enable-cache: true
+          cache-dependency-glob: core/uv.lock
+      - name: Install Core dependencies
+        run: uv sync --frozen
+      - name: Check Django and migrations
+        run: |
+          uv run --frozen python src/manage.py check
+          uv run --frozen python src/manage.py makemigrations --check --dry-run --settings=tests.settings
+      - name: Test account flows and PostgreSQL schema isolation
+        run: uv run --frozen python src/manage.py test tests --settings=tests.settings --verbosity=2
+
+  core-frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontends
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontends/package-lock.json
+      - run: npm ci
+      - run: npm run lint:core
+      - run: npm run typecheck:core
+      - run: npm run build:core
+      - name: Install browser for WebAuthn integration tests
+        run: npm --workspace @dnk/core exec -- playwright install --with-deps chromium
+      - name: Start isolated local Core stack
+        working-directory: .
+        run: |
+          cp temaplate.dev.env .env
+          python - <<'PY'
+          import secrets
+          from pathlib import Path
+          Path("core/.env").write_text("CORE_SECRET_KEY=" + secrets.token_urlsafe(48) + "\n")
+          PY
+          docker compose up -d --build --wait core-frontend
+      - name: Test browser passkeys and session recovery
+        run: npm run test:e2e:core
+      - name: Show Core diagnostics on failure
+        if: failure()
+        working-directory: .
+        run: docker compose logs --tail=100 core core-web core-frontend
+      - name: Stop the CI stack
+        if: always()
+        working-directory: .
+        run: docker compose down --volumes

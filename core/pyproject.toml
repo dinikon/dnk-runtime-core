@@ -1,14 +1,19 @@
 [project]
 name = "dnk-core"
 version = "0.1.0"
-description = "Django scaffold for the DNK tenant control plane"
+description = "Django identity, account security and session API for dNiko Alpha"
 readme = "README.md"
 requires-python = "==3.13.9"
 dependencies = [
     "django>=6.0.7,<6.1",
-    "django-allauth[socialaccount]>=65.19.2,<66",
+    "django-allauth[socialaccount,mfa]>=65.19.2,<66",
     "django-oauth-toolkit>=3.4.1,<4",
+    "cryptography>=50,<51",
+    "fido2>=2,<3",
+    "gunicorn>=23,<24",
     "psycopg[binary]>=3.2,<4",
+    "redis>=6,<8",
+    "whitenoise>=6.9,<7",
 ]
 
 [tool.uv]

@@ -1,0 +1,67 @@
+{% load static i18n %}
+<!doctype html>
+<html lang="{{ LANGUAGE_CODE|default:'ru' }}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#ffffff">
+    <meta name="robots" content="noindex, nofollow">
+    <title>{% block head_title %}Аккаунт и безопасность{% endblock %} · dNiko Alpha</title>
+    <link rel="icon" type="image/svg+xml" href="{% static 'core/favicon.svg' %}">
+    <link rel="stylesheet" href="{% static 'core/theme.css' %}">
+    {% block extra_head %}{% endblock %}
+  </head>
+  <body class="{% block body_class %}account-manage{% endblock %}">
+    <div class="site-shell">
+      <a class="skip-link" href="#main-content">К содержимому</a>
+      <header class="site-header">
+        <a class="brand" href="/" aria-label="dNiko Alpha — главная">dNiko <span>Alpha</span></a>
+        <nav class="header-nav" aria-label="Основная навигация">
+          {% if user.is_authenticated %}
+            <a class="nav-link" href="{% url 'core_account_overview' %}">Аккаунт и безопасность</a>
+            <a class="button button-small button-outline" href="/app/">Мой аккаунт</a>
+          {% else %}
+            <a class="button button-small button-outline" href="{% url 'account_login' %}">Войти</a>
+          {% endif %}
+        </nav>
+      </header>
+      <main id="main-content" class="site-main">
+        {% block body %}
+          <div class="account-frame">
+            {% if user.is_authenticated %}
+              <nav class="account-navigation" aria-label="Настройки аккаунта">
+                <p>Аккаунт и безопасность</p>
+                <ul>
+                  <li><a href="{% url 'core_account_overview' %}" {% if request.resolver_match.url_name == 'core_account_overview' %}aria-current="page"{% endif %}>Обзор аккаунта</a></li>
+                  <li><a href="{% url 'account_email' %}" {% if request.resolver_match.url_name == 'account_email' %}aria-current="page"{% endif %}>Email</a></li>
+                  {% if phone_login_enabled %}
+                    {% url 'account_change_phone' as phone_url %}
+                    {% if phone_url %}<li><a href="{{ phone_url }}" {% if request.resolver_match.url_name == 'account_change_phone' %}aria-current="page"{% endif %}>Телефон</a></li>{% endif %}
+                  {% endif %}
+                  <li><a href="{% url 'account_change_password' %}" {% if request.resolver_match.url_name == 'account_change_password' %}aria-current="page"{% endif %}>Пароль</a></li>
+                  <li><a href="{% url 'socialaccount_connections' %}" {% if request.resolver_match.url_name == 'socialaccount_connections' %}aria-current="page"{% endif %}>Связанные аккаунты</a></li>
+                  <li><a href="{% url 'mfa_index' %}" {% if request.resolver_match.url_name == 'mfa_index' %}aria-current="page"{% endif %}>Двухфакторная защита</a></li>
+                  <li><a href="{% url 'mfa_list_webauthn' %}" {% if request.resolver_match.url_name == 'mfa_list_webauthn' %}aria-current="page"{% endif %}>Passkeys</a></li>
+                  <li><a href="{% url 'usersessions_list' %}" {% if request.resolver_match.url_name == 'usersessions_list' %}aria-current="page"{% endif %}>Активные сессии</a></li>
+                  <li><a href="{% url 'account_logout' %}">Выйти</a></li>
+                </ul>
+              </nav>
+            {% endif %}
+            <div class="account-content">
+              <div id="webauthn-feedback" class="alert" role="alert" hidden></div>
+              {% if messages %}
+                <ul class="messages" aria-live="polite">
+                  {% for message in messages %}<li>{{ message }}</li>{% endfor %}
+                </ul>
+              {% endif %}
+              {% block content %}{% endblock %}
+            </div>
+          </div>
+        {% endblock %}
+      </main>
+      <footer class="site-footer"><span>dNiko Alpha</span><span>Ваш аккаунт. Под вашим контролем.</span></footer>
+    </div>
+    <script src="{% static 'core/webauthn-feedback.js' %}" defer></script>
+    {% block extra_body %}{% endblock %}
+  </body>
+</html>

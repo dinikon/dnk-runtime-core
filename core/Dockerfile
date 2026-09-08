@@ -16,10 +16,15 @@ RUN uv sync --frozen --no-dev --no-install-project --no-cache
 
 RUN groupadd --system core && useradd --system --gid core --home-dir /app core
 COPY --chown=core:core src ./src
+RUN mkdir -p /app/staticfiles && chown core:core /app/staticfiles
 
 USER core
 
+# Collect only public assets. These temporary build settings are not runtime secrets.
+RUN CORE_SECRET_KEY=static-build-only CORE_DEBUG=true \
+    python src/manage.py collectstatic --noinput
+
 EXPOSE 8001
 
-# Local Compose creates the core schema and migrates before starting this server.
-CMD ["python", "src/manage.py", "runserver", "0.0.0.0:8001", "--noreload"]
+# Schema preparation/migrations are explicit deployment steps; Compose runs them locally.
+CMD ["gunicorn", "--chdir", "src", "dnk_core.wsgi:application", "--bind", "0.0.0.0:8001", "--workers", "2", "--access-logfile", "-", "--error-logfile", "-"]

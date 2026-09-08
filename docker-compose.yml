@@ -37,17 +37,26 @@ services:
       CORE_DB_NAME: ${DB_DATABASE:-dniko}
       CORE_DB_USER: ${DB_USERNAME:-postgres}
       CORE_DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      CORE_PUBLIC_ORIGIN: http://localhost:${CORE_FRONTEND_PORT:-8080}
+      CORE_TRUSTED_PROXY_COUNT: "1"
+      CORE_REDIS_HOST: redis
+      CORE_REDIS_PORT: "6379"
+      CORE_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      CORE_REDIS_DB: "1"
     command:
       - sh
       - -c
       - >-
         python src/prepare_database.py &&
         python src/manage.py migrate --noinput &&
-        exec python src/manage.py runserver 0.0.0.0:8001 --noreload
+        exec gunicorn --chdir src dnk_core.wsgi:application --bind 0.0.0.0:8001
+        --workers 2 --access-logfile - --error-logfile -
     ports:
       - "127.0.0.1:${CORE_PORT:-8001}:8001"
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test:
@@ -55,12 +64,46 @@ services:
           "CMD",
           "python",
           "-c",
-          "from urllib.request import urlopen; urlopen('http://127.0.0.1:8001/admin/login/', timeout=2).read()",
+          "from urllib.request import urlopen; urlopen('http://127.0.0.1:8001/api/session/', timeout=2).read()",
         ]
       interval: 10s
       timeout: 5s
       start_period: 30s
       retries: 5
+
+  core-web:
+    build:
+      context: ./frontends
+      dockerfile: apps/core/Dockerfile
+      target: runtime
+    image: dnk-core-web:local
+    restart: unless-stopped
+    environment:
+      HOST: 0.0.0.0
+      PORT: "3000"
+      NUXT_PUBLIC_SITE_URL: http://localhost:${CORE_FRONTEND_PORT:-8080}
+    healthcheck:
+      test:
+        ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+
+  core-frontend:
+    build:
+      context: ./frontends
+      dockerfile: apps/core/Dockerfile
+      target: gateway
+    image: dnk-core-frontend:local
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${CORE_FRONTEND_PORT:-8080}:80"
+    depends_on:
+      core:
+        condition: service_healthy
+      core-web:
+        condition: service_healthy
 
   api:
     <<: *backend-common

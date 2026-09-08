@@ -1,214 +1,288 @@
-# DNK Core
+# dNiko Alpha Core
 
-Самостоятельный Django-каркас будущего сервиса управления тенантами.
-У приложения свои зависимости и виртуальное окружение. PostgreSQL и база общие
-с runtime; таблицы Django находятся в отдельной схеме `core`.
+Отдельное Django-приложение с глобальными аккаунтами и Nuxt/Vue-интерфейсом.
+Главная страница рендерится на сервере для поисковых систем. Защищённая часть
+использует серверную сессию Django, без JWT или токенов в браузерном хранилище.
 
-Сейчас доступны стандартные Django-приложения и `/admin/`. Библиотеки
-`django-allauth[socialaccount]` и Django OAuth Toolkit установлены как зависимости,
-но не подключены к приложениям, middleware или маршрутам. Google login, глобальные
-учетные записи клиентов, Tenant, Membership, OIDC, DNS и отправка писем пока
-не реализованы. Их устройство и порядок реализации описаны в
+| Маршрут | Ответственность |
+| --- | --- |
+| `/` | Публичная главная Nuxt: Hero, SEO title/description, canonical и Open Graph |
+| `/app/` | Защищённый обзор текущего пользователя, исключённый из индексации |
+| `/api/session/` | GET: `{authenticated, csrfToken}`, доступен гостям |
+| `/api/me/` | GET: `{id, username, email, first_name, last_name}`; гостям JSON 401 |
+| `/accounts/` | Django: аккаунт, способы входа, MFA и управление сессиями |
+| `/admin/` | Django admin; вход проходит через allauth |
+
+Core использует схему `core` в существующей PostgreSQL-базе. Runtime продолжает
+работать отдельно со своими tenant-пользователями и консолью. Tenant registry,
+Membership, OIDC, DNS и provisioning описаны как будущая работа в
 [ARCHITECTURE.md](ARCHITECTURE.md).
-
-## Структура
-
-```text
-core/
-├── pyproject.toml
-├── uv.lock
-├── .python-version
-├── .env.example
-├── .gitignore
-├── Dockerfile
-├── .dockerignore
-├── README.md
-├── ARCHITECTURE.md
-├── tests/
-│   └── test_database_schema.py
-└── src/
-    ├── manage.py
-    ├── prepare_database.py
-    └── dnk_core/
-        ├── __init__.py
-        ├── settings.py
-        ├── urls.py
-        ├── asgi.py
-        └── wsgi.py
-```
 
 ## Локальный стенд в Docker Compose
 
-В корневом [docker-compose.yml](../docker-compose.yml) сервис `core` подключается
-к существующему сервису `postgres`. Django входит в общий локальный запуск
-`docker compose up`; отдельный профиль не требуется.
-Для него нужен Docker Compose версии 2.24 или новее.
-
-Команды этого раздела выполняются из корня репозитория. Корневой Compose также
-использует файл `.env` для runtime: если его еще нет, выполните
-`cp temaplate.env .env`. Запущенные сервисы runtime для Core не требуются.
-Если `core/.env` еще нет, создайте его из примера, затем соберите образ:
+Нужны Docker Compose 2.24+ и корневой `.env` runtime. Из корня репозитория:
 
 ```sh
 cp core/.env.example core/.env
-docker compose build core
 ```
 
-Сгенерировать ключ можно непосредственно в образе, без локальной установки Python:
+Заполните `CORE_SECRET_KEY` случайным постоянным значением. Для генерации после
+локального `uv sync` можно использовать:
 
 ```sh
-docker compose run --rm --no-deps core \
-  python -c 'import secrets; print(secrets.token_urlsafe(64))'
+cd core
+uv run --frozen python -c 'import secrets; print(secrets.token_urlsafe(64))'
 ```
 
-Запишите результат в `CORE_SECRET_KEY` в `core/.env`. Остальные параметры базы
-из этого файла для Compose менять не нужно: Compose направляет Django на
-`postgres:5432` и берет имя базы, пользователя и пароль из корневых
-`DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD`, как и runtime. По умолчанию это база
-`dniko` и пользователь `postgres`. Для Django задается `search_path=core`
-без `public`, включая таблицу истории миграций `core.django_migrations`.
-
-Запустить весь локальный стенд одной командой, затем создать администратора:
+Затем из корня репозитория:
 
 ```sh
-docker compose up --build -d
+docker compose build core core-web core-frontend
+```
+
+Если старый каркас уже мигрировал `auth.User`, сначала выполните переход из
+следующего раздела. Для новой схемы этот шаг не нужен.
+
+```sh
+docker compose up --build -d core-frontend
 docker compose exec core python src/manage.py createsuperuser
 ```
 
-При запуске Compose дожидается PostgreSQL, выполняет `prepare_database.py`
-(`CREATE SCHEMA IF NOT EXISTS core`), применяет стандартные миграции и запускает
-Django. Это работает и на существующем PostgreSQL volume: подготовка схемы
-не зависит от init-скриптов первого запуска пустой базы.
-Админка доступна на [127.0.0.1:8001/admin/](http://127.0.0.1:8001/admin/).
-Порт публикуется только на loopback; `CORE_PORT` в окружении Compose или корневом
-`.env` позволяет выбрать другой порт. Используются общие сеть Compose и volume
-`postgres_data`; отдельные PostgreSQL, volume и сеть для Core не создаются.
+Откройте [dNiko Alpha](http://localhost:8080/).
+`core-frontend` — Nginx с единым origin, `core-web` — сервер Nuxt/Nitro,
+`core` — Django/Gunicorn. Существующий frontend runtime сохраняет свой порт.
+`CORE_FRONTEND_PORT` в корневом окружении Compose меняет порт 8080.
 
-Чтобы запустить только Django и его зависимость `postgres`, используйте
-`docker compose up --build -d --wait core`.
-Настройка runtime описана в [основном README](../README.md#development).
-Файл `core/.env` необязателен при разборе конфигурации Compose;
-сам Django без `CORE_SECRET_KEY` завершится с понятной ошибкой.
+Compose использует уже существующие PostgreSQL и Redis. Он передаёт Core
+корневые `DB_*` и `REDIS_PASSWORD`, поэтому параметры подключения из `core/.env`
+не должны задавать другую базу при запуске без Docker. Миграции и подготовка
+схемы выполняются в локальной команде запуска; удаления данных при старте нет.
 
-Проверить и остановить только Django:
+Письма в режиме разработки выводятся в `docker compose logs core`. Для входа
+созданного администратора тоже требуется подтвердить email. Телефонный вход,
+Google и GitHub появляются после настройки их ключей. Интерфейс passkeys нужно
+открывать через `localhost`, а не IP-адрес: локальный HTTP origin localhost
+разрешён проверкой WebAuthn без отключения безопасности.
+
+## Переход с временного каркаса
+
+Ранний каркас использовал `auth.User`. Просто поменять `AUTH_USER_MODEL` поверх
+его истории миграций нельзя. Согласованный переход удаляет только временную
+схему `core`; общая база, `public` и tenant-схемы сохраняются.
+
+Команда ниже предназначена только для прежнего каркаса, данные которого
+не требуется переносить. Она требует `CORE_DEBUG=true` и отказывается работать,
+если найдёт таблицы сверх стандартного каркаса, включая новый `accounts_user`.
 
 ```sh
-docker compose exec core python src/manage.py check
-docker compose logs -f core
 docker compose stop core
+docker compose run --rm --no-deps core python src/prepare_database.py --reset-scaffold
+docker compose up -d core-frontend
 ```
 
-Общий PostgreSQL продолжает работать для runtime. Локальный стенд использует Django `runserver`
-с локальным HTTP и `CORE_DEBUG=true`. Код копируется в образ, поэтому после его
-изменения повторите команду запуска с `--build`. Образ работает от пользователя
-`core`, зависимости устанавливаются из lock-файла; `.env`, локальное окружение
-и файлы runtime не входят в контекст сборки Core.
+Обычный `prepare_database.py` только создаёт отсутствующую схему.
+Новая `accounts.User(AbstractUser)` с UUID находится в начальной миграции,
+а все связи allauth/admin используют `AUTH_USER_MODEL`. Django подключается
+с `search_path=core` без fallback в `public`.
 
-При прямом использовании [Dockerfile](Dockerfile) подготовку схемы и миграции
-нужно выполнить отдельно: автоматические шаги находятся в команде Compose. Продакшен-запуск и
-публичный staging требуют отдельной конфигурации сервера, HTTPS и static files.
+## Разработка без Docker
 
-## Установка без Docker
-
-Нужны `uv`, Python `3.13.9` и PostgreSQL `16`. Команды следующих разделов выполняются
-из каталога `core/`; это отдельный uv-проект, не участник общего uv workspace.
-Окружение создается в `core/.venv`.
+Core — отдельный uv-проект. Нужны Python 3.13.9, PostgreSQL 16 и Redis.
 
 ```sh
 cd core
 uv sync --frozen
-cp .env.example .env
-uv run --frozen python -c 'import secrets; print(secrets.token_urlsafe(64))'
-```
-
-Запишите выведенный ключ в `CORE_SECRET_KEY` в `.env`. Этот ключ нужен только Core.
-Секреты не коммитятся. Настройки не ищут `.env` самостоятельно: файл передается
-явно через `uv run --env-file .env`. Общий `.env` runtime не используется.
-
-## Общая база и схема core
-
-Для запуска без Docker заполните `CORE_DB_*` в `core/.env` значениями существующей
-базы runtime: `CORE_DB_NAME` соответствует `DB_DATABASE`, `CORE_DB_USER` —
-`DB_USERNAME`, пароль — `DB_PASSWORD`. Укажите адрес и опубликованный порт
-PostgreSQL, доступные с хоста. Создавать еще одну базу не нужно.
-
-Перед первыми миграциями выполните `prepare_database.py`, как в командах ниже.
-Роль подключения должна иметь право создать схему в этой базе либо уже иметь
-доступ к заранее подготовленной схеме `core`. Повтор подготовки сохраняет ее
-таблицы и данные. `search_path` задается только соединениям Django; настройки
-базы, роли PostgreSQL и соединений runtime не меняются.
-
-Все Django-таблицы, индексы, sequences и история миграций относятся к `core`.
-Если схема еще не создана, миграции завершаются ошибкой, а не создают таблицы
-в `public`. Общая роль локального стенда обеспечивает разделение имен таблиц;
-раздельные права сервисов при необходимости настраиваются отдельными ролями.
-
-| Переменная | Назначение / значение по умолчанию |
-| --- | --- |
-| `CORE_SECRET_KEY` | Обязательный ключ Django; запуск без него завершается ошибкой |
-| `CORE_DEBUG` | По умолчанию `false`; `true`, `1`, `yes` включают debug |
-| `CORE_ALLOWED_HOSTS` | Разделенные запятыми хосты; `localhost,127.0.0.1,[::1]` |
-| `CORE_DB_NAME` | Существующая общая база; `dniko` |
-| `CORE_DB_USER` | Пользователь общей базы; `postgres` |
-| `CORE_DB_PASSWORD` | Пароль роли; по умолчанию пустой, заполнить для подключения |
-| `CORE_DB_HOST` | `127.0.0.1` |
-| `CORE_DB_PORT` | `5432` |
-
-## Проверка и запуск
-
-```sh
-uv run --frozen --env-file .env python src/manage.py check
 uv run --frozen --env-file .env python src/prepare_database.py
 uv run --frozen --env-file .env python src/manage.py migrate
-uv run --frozen --env-file .env python src/manage.py createsuperuser
 uv run --frozen --env-file .env python src/manage.py runserver 127.0.0.1:8001
 ```
 
-Откройте [Django admin](http://127.0.0.1:8001/admin/).
-Пустой корневой маршрут `/` не является API или страницей продукта.
-Стандартный пользователь Django admin служит для проверки каркаса; это еще
-не глобальная учетная запись клиента.
+Настройки не ищут `.env` автоматически: передавайте его явно.
+Заполните `CORE_DB_*` и `CORE_REDIS_*` для существующих сервисов.
+Для изолированной разработки без Redis удалите `CORE_REDIS_HOST`/`CORE_REDIS_URL`:
+при `CORE_DEBUG=true` используется локальный cache одного процесса.
 
-Миграции этого каркаса предназначены для схемы `core` на стенде разработки. До появления
-постоянных клиентских данных нужно определить собственную модель пользователя
-и `AUTH_USER_MODEL`, как описано в [плане реализации](ARCHITECTURE.md#порядок-реализации).
-На том этапе пересоздание временных данных каркаса ограничивается схемой `core`;
-общая база и схемы runtime сохраняются. Перенос постоянных пользователей
-с `auth.User` в каркас не закладывается.
-
-Для локального HTTP в `.env.example` включен `CORE_DEBUG=true`. При выключенном
-debug cookies требуют HTTPS. Имена cookies Core отличаются от стандартных,
-чтобы локальные приложения на одном хосте и разных портах не перезаписывали их.
-Настройки не доверяют заголовкам reverse proxy автоматически.
-
-ASGI/WSGI entrypoints: `dnk_core.asgi:application` и `dnk_core.wsgi:application`.
-При внешнем запуске добавьте `core/src` в путь импорта Python, например работайте
-из этого каталога, и передайте переменные окружения отдельно. Продакшен-сервер,
-TLS, reverse proxy и настройка отдачи `staticfiles/` в каркас не включены.
-
-## Проверки каркаса
-
-- `uv sync --frozen` устанавливает зависимости только из собственного lock-файла.
-- `check` проверяет конфигурацию, `migrate --check` — отсутствие непримененных миграций.
-- На одноразовой PostgreSQL-базе миграции проверяются при уже существующих
-  таблицах в `public` и tenant-схеме: таблицы Django создаются только в `core`.
-- Повтор подготовки схемы/миграций сохраняет данные и настройки других соединений.
-- `/admin/` перенаправляет на стандартный login, `/admin/login/` открывается.
-- ASGI/WSGI загружаются из `src`, импортов FastAPI runtime нет.
-- `/accounts/` и tenant OIDC маршруты не зарегистрированы.
-
-Проверка разделения схем запускается на PostgreSQL с правом `CREATEDB`:
+В другом терминале из `frontends/`:
 
 ```sh
-TEST_CORE_POSTGRES_URL=postgresql://postgres:postgres@127.0.0.1:5432/postgres \
-  uv run --frozen python -m unittest discover -s tests -v
+npm ci
+npm run dev:core
 ```
 
-Укажите параметры своего тестового сервера. Тест создает отдельную базу со
-случайным именем и удаляет только ее после проверки. Проверяются отсутствие
-fallback в `public`, сохранение существующих одноименных таблиц и истории
-миграций, повторный запуск подготовки и неизменность чужого `search_path`.
-Без `TEST_CORE_POSTGRES_URL` интеграционный тест пропускается.
+Откройте `http://localhost:5174`. Nuxt проксирует Django-маршруты с сохранением
+Host, поэтому формы allauth и API используют тот же origin. Общие CSS-токены
+и локальные Inter-шрифты находятся в Django static `/static/core/`.
 
-Существующий runtime остается отдельным приложением:
-[корневой README](../README.md).
+## Вход и безопасность
+
+- Email/username с паролем, обязательное подтверждение email кодом,
+  восстановление и смена пароля, вход по email-коду.
+- Google/GitHub: привязка к уже авторизованному аккаунту; совпадение email
+  не объединяет пользователей автоматически. OAuth начинается через POST с CSRF.
+- Необязательный уникальный телефон в E.164. Telegram Gateway отправляет
+  шестизначный код в **Telegram, не SMS**. Код действует 5 минут, допускает
+  3 попытки; лимиты отправки и повторов обеспечивает allauth через cache.
+- MFA добровольна для всех: TOTP, passkeys и резервные коды. Включённая MFA
+  проверяется после остальных способов входа. Создание passkey и вход без пароля
+  требуют проверки владельца (PIN/биометрия) на стороне сервера.
+- Чувствительные изменения требуют свежего подтверждения. Аккаунты без локального
+  пароля и MFA подтверждают действие email-кодом; срок 5 минут, 3 попытки,
+  новый запрос не чаще раза в 30 секунд и не более 5 в час.
+- Все новые WebAuthn-ключи Core — discoverable passkeys. Регистрации нового
+  аккаунта только через passkey нет; ключ добавляется в существующем аккаунте.
+- Резервные коды одноразовые и показываются один раз. Секреты MFA шифруются Fernet.
+  Сохраняйте `CORE_MFA_ENCRYPTION_KEY` вместе с резервной копией базы:
+  произвольная замена ключа сделает существующие MFA-секреты недоступными.
+- Список устройств поддерживает выход из остальных сессий и завершение выбранной.
+  Чужую сессию завершить нельзя; завершение текущей возвращает на главную.
+
+Cookies `dnk_core_sessionid` и `dnk_core_csrftoken` имеют HttpOnly и SameSite=Lax;
+в production также Secure. Cookie domain не расширяется на поддомены.
+Vue получает CSRF-токен через `/api/session/` и передаёт его в `X-CSRFToken`
+для изменяющих запросов. API и приватные страницы не кэшируются публично.
+
+## Настройка провайдеров
+
+Секреты задаются окружением, не Django admin и не frontend-конфигурацией.
+
+| Переменные | Назначение |
+| --- | --- |
+| `CORE_GOOGLE_CLIENT_ID`, `CORE_GOOGLE_CLIENT_SECRET` | Google OAuth, scopes profile/email |
+| `CORE_GITHUB_CLIENT_ID`, `CORE_GITHUB_CLIENT_SECRET` | GitHub OAuth, scope user:email |
+| `CORE_TELEGRAM_GATEWAY_TOKEN` | Включает доставку кодов через Gateway |
+| `CORE_TELEGRAM_GATEWAY_ENABLED=false` | Явно отключает телефонный вход при наличии токена |
+| `CORE_TELEGRAM_GATEWAY_TIMEOUT` | Таймаут запроса, по умолчанию 5 секунд |
+| `CORE_EMAIL_BACKEND` | Явно выбирает backend; без переменной — SMTP в production, console в debug |
+| `CORE_EMAIL_HOST`, `CORE_EMAIL_PORT` | SMTP сервер и порт |
+| `CORE_EMAIL_HOST_USER`, `CORE_EMAIL_HOST_PASSWORD` | SMTP credentials |
+| `CORE_EMAIL_USE_TLS`, `CORE_EMAIL_USE_SSL` | Выберите TLS или SSL согласно SMTP-провайдеру |
+| `CORE_EMAIL_VERIFY_CERTIFICATE` | Проверка сертификата в `accounts.mail.SMTPEmailBackend`; по умолчанию true |
+| `CORE_DEFAULT_FROM_EMAIL` | Подтверждённый у почтового провайдера адрес отправителя |
+
+Для реальной отправки, включая локальный стенд, задайте
+`CORE_EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend`.
+Значение `console.EmailBackend` из примера только выводит письма в логи,
+даже если SMTP-хост, логин и пароль заполнены.
+Для порта 465 обычно нужны `CORE_EMAIL_USE_SSL=true` и `CORE_EMAIL_USE_TLS=false`;
+для STARTTLS на порту 587 — наоборот. Одновременно включать их нельзя.
+Адрес `CORE_DEFAULT_FROM_EMAIL` должен совпадать с почтовым ящиком либо быть
+разрешённым у провайдера адресом отправителя.
+После изменения `core/.env` примените настройки:
+
+```sh
+docker compose up -d --no-deps --force-recreate core
+```
+
+Обычный `docker compose restart` не перечитывает окружение контейнера.
+Если подключение возвращает `CERTIFICATE_VERIFY_FAILED`, проверьте сертификат
+именно SMTP-службы: он должен включать имя из `CORE_EMAIL_HOST`, а сервер должен
+передавать полную цепочку с промежуточными сертификатами (`fullchain.pem`).
+Сертификат только для основного домена не покрывает его почтовый поддомен.
+
+Для локальной совместимости с прежним SMTP-клиентом runtime доступен отдельный
+backend. Он поддерживает шифрование без проверки сертификата сервера:
+
+```dotenv
+CORE_EMAIL_BACKEND=accounts.mail.SMTPEmailBackend
+CORE_EMAIL_PORT=587
+CORE_EMAIL_USE_TLS=true
+CORE_EMAIL_USE_SSL=false
+CORE_EMAIL_VERIFY_CERTIFICATE=false
+```
+
+Этот режим разрешён только при `CORE_DEBUG=true`. TLS обязателен: при отказе
+STARTTLS соединение прерывается до авторизации, перехода к незашифрованной
+отправке нет. Без проверки сертификата клиент не удостоверяет подлинность
+сервера, поэтому в production значение false запрещено. После исправления
+сертификата верните `CORE_EMAIL_VERIFY_CERTIFICATE=true`.
+В runtime `USE_TLS=true` обозначает implicit TLS (обычно порт 465), что
+соответствует `CORE_EMAIL_USE_SSL=true`; его `USE_STARTTLS=true` соответствует
+`CORE_EMAIL_USE_TLS=true` (обычно порт 587).
+
+Зарегистрируйте точные redirect URI для публичного origin:
+`https://example.com/accounts/google/login/callback/` и
+`https://example.com/accounts/github/login/callback/`.
+Для локального OAuth используйте соответствующий callback на `http://localhost:8080`.
+
+Код генерирует и проверяет allauth; Gateway занимается только доставкой.
+Проверка `checkSendAbility` и SMS fallback не используются. Для неизвестных
+аккаунтов не отправляются платные фиктивные коды. Ошибки провайдера логируются
+без номера, кода, токена или полного ответа. Не повторяем автоматически платный
+запрос после сетевого таймаута: результат доставки мог оказаться неопределённым.
+
+Первичные справочники: [allauth](https://docs.allauth.org/en/latest/),
+[Telegram Gateway](https://core.telegram.org/gateway/api),
+[Nuxt deployment](https://nuxt.com/docs/4.x/getting-started/deployment).
+
+## Production и HTTPS
+
+`core/Dockerfile` собирает static files и запускает Gunicorn. Dockerfile frontend
+имеет target `runtime` для Nuxt и `gateway` для Nginx. Django и Nuxt должны быть
+доступны только через доверенный reverse proxy; наружу публикуется gateway.
+Production-миграции выполняйте отдельным шагом перед запуском Gunicorn.
+
+Минимальная конфигурация окружения:
+
+- `CORE_DEBUG=false`, случайный `CORE_SECRET_KEY` и отдельный
+  `CORE_MFA_ENCRYPTION_KEY` (`Fernet.generate_key()`).
+- `CORE_PUBLIC_ORIGIN=https://example.com`, `CORE_ALLOWED_HOSTS=example.com`,
+  `NUXT_PUBLIC_SITE_URL=https://example.com`.
+- `CORE_TRUST_PROXY=true` только за proxy, который заменяет входящие forwarded headers.
+- `CORE_TRUSTED_PROXY_COUNT=1` для одного такого gateway; при прямом доступе — 0.
+- `CORE_DB_*` для общей PostgreSQL-базы и `CORE_REDIS_HOST/PORT/PASSWORD/DB`
+  либо `CORE_REDIS_URL` для общего cache с префиксом `dnk:core`.
+- Рабочие SMTP-настройки и адрес отправителя. Удалите development console backend.
+
+[deploy/nginx.https.conf.template](deploy/nginx.https.conf.template) содержит
+готовую маршрутизацию HTTPS и HTTP → HTTPS. В контейнере gateway смонтируйте
+его как `/etc/nginx/templates/default.conf.template`, задайте `CORE_DOMAIN`,
+а сертификаты смонтируйте read-only в `/etc/nginx/tls/fullchain.pem` и
+`/etc/nginx/tls/privkey.pem`. Имена внутренних upstream: `core:8001` и `core-web:3000`.
+На общей машине существующий runtime gateway и Core должны иметь согласованные
+виртуальные хосты/адреса; локальный Compose намеренно сохраняет прежний порт runtime.
+
+HSTS включается для origin Core без распространения на поддомены.
+Не включайте `MFA_WEBAUTHN_ALLOW_INSECURE_ORIGIN`: это отключает проверку origin.
+При смене публичного домена пользователям потребуется заново добавить passkeys.
+
+## Проверки
+
+Из `core/`:
+
+```sh
+uv sync --frozen
+PYTHONPATH=src:. uv run --frozen python src/manage.py test tests --settings=tests.settings
+```
+
+Быстрые сценарии используют отдельную SQLite in-memory базу, локальную почту,
+cache и тестовые ответы провайдеров. WebAuthn-проверки используют подписанные
+запросы виртуального аутентификатора, включая отрицательные проверки UV,
+challenge, origin, подписи и повторного использования.
+
+PostgreSQL-тест создаёт новую временную базу и удаляет только её. Роли тестового
+сервера нужно право CREATEDB:
+
+```sh
+TEST_CORE_POSTGRES_URL=postgresql://user:password@localhost:5432/postgres \
+  uv run --frozen python -m unittest tests.test_database_schema -v
+```
+
+Frontend: `npm run lint:core`, `npm run typecheck:core`, `npm run build:core`.
+На запущенном локальном Compose-стенде из `frontends/`:
+
+```sh
+npm --workspace @dnk/core exec -- playwright install chromium
+npm run test:e2e:core
+```
+
+Браузерный тест использует Chromium с виртуальным WebAuthn-аутентификатором:
+добавление passkey, вход с проверкой владельца, отказ без UV, отмена и повтор
+после сетевой ошибки. Он создаёт отдельную явно помеченную тестовую учётную
+запись и удаляет её вместе с её сессиями; production-окружение не допускается.
+
+Дополнительно проверяйте HTML главной без JavaScript, SEO-метаданные, desktop/mobile,
+переход на allauth с `next` и возвращение в защищённую часть. Живые OAuth и доставка
+писем/Telegram требуют настоящих настроек и не подменяются результатами mock-тестов.
+
+CI запускает runtime, Core с PostgreSQL-проверкой изоляции, сборку Nuxt и браузерный
+сценарий на отдельном Compose-стенде.

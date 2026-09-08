@@ -1,0 +1,26 @@
+{% extends "usersessions/base_manage.html" %}
+{% load i18n humanize core_accounts %}
+{% block head_title %}Активные сессии{% endblock %}
+{% block content %}
+  <h1>Активные сессии</h1>
+  <p>Здесь показаны устройства, на которых выполнен вход в ваш аккаунт.</p>
+  <ul class="session-list">
+    {% for session in sessions %}
+      <li>
+        <div class="session-info">
+          <p>{{ session.user_agent|device_label }}{% if session.is_current %} <span class="status">· Текущая сессия</span>{% endif %}</p>
+          <p>IP: {{ session.ip }} · Вход: <time datetime="{{ session.created_at|date:'c' }}">{{ session.created_at|naturaltime }}</time></p>
+          {% if show_last_seen_at %}<p>Последняя активность: <time datetime="{{ session.last_seen_at|date:'c' }}">{{ session.last_seen_at|naturaltime }}</time></p>{% endif %}
+        </div>
+        {% if not session.is_current %}
+          <form method="post" action="{% url 'core_revoke_session' session.pk %}">{% csrf_token %}<button class="button button-small button-outline" type="submit">Завершить сессию</button></form>
+        {% endif %}
+      </li>
+    {% empty %}<li>Других активных сессий нет.</li>{% endfor %}
+  </ul>
+  {% if session_count > 1 %}
+    <form method="post" action="{% url 'usersessions_list' %}">{% csrf_token %}<button class="button button-outline" type="submit">Завершить все остальные сессии</button></form>
+  {% else %}
+    <a class="button button-outline" href="{% url 'account_logout' %}">Выйти из аккаунта</a>
+  {% endif %}
+{% endblock %}

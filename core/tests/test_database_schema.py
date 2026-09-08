@@ -1,6 +1,7 @@
 """PostgreSQL regression check using a newly created, disposable database."""
 
 import os
+import base64
 from pathlib import Path
 import subprocess
 import sys
@@ -34,6 +35,7 @@ class CoreSchemaTests(unittest.TestCase):
             **os.environ,
             "DJANGO_SETTINGS_MODULE": "dnk_core.settings",
             "CORE_SECRET_KEY": "temporary-schema-integration-test-key",
+            "CORE_DEBUG": "true",
             "CORE_DB_NAME": cls.database,
             "CORE_DB_USER": cls.admin.info.user,
             "CORE_DB_PASSWORD": params.get("password", ""),
@@ -47,11 +49,11 @@ class CoreSchemaTests(unittest.TestCase):
             sql.SQL("DROP DATABASE {}").format(sql.Identifier(cls.database))
         )
 
-    def run_command(self, script, *arguments, succeeds=True):
+    def run_command(self, script, *arguments, succeeds=True, environment=None):
         result = subprocess.run(
             [sys.executable, str(CORE_DIR / "src" / script), *arguments],
             cwd=CORE_DIR,
-            env=self.environment,
+            env=environment or self.environment,
             capture_output=True,
             text=True,
         )
@@ -81,6 +83,35 @@ class CoreSchemaTests(unittest.TestCase):
             )
             self.assertIn("no schema has been selected", missing.stderr)
 
+            database.execute("CREATE SCHEMA core")
+            database.execute("CREATE TABLE core.auth_user (marker text)")
+            database.execute("INSERT INTO core.auth_user VALUES ('temporary user')")
+            production = {
+                **self.environment,
+                "CORE_DEBUG": "false",
+                "CORE_PUBLIC_ORIGIN": "https://example.com",
+                "CORE_ALLOWED_HOSTS": "example.com",
+                "CORE_MFA_ENCRYPTION_KEY": base64.urlsafe_b64encode(b"x" * 32).decode(),
+                "CORE_REDIS_URL": "redis://127.0.0.1:6379/2",
+            }
+            refused = self.run_command(
+                "prepare_database.py",
+                "--reset-scaffold",
+                succeeds=False,
+                environment=production,
+            )
+            self.assertIn("requires CORE_DEBUG=true", refused.stderr)
+            self.assertEqual(
+                database.execute("SELECT COUNT(*) FROM core.auth_user").fetchone(),
+                (1,),
+            )
+            self.run_command("prepare_database.py", "--reset-scaffold")
+            self.assertEqual(
+                database.execute(
+                    "SELECT tablename FROM pg_tables WHERE schemaname = 'core'"
+                ).fetchall(),
+                [],
+            )
             self.run_command("prepare_database.py")
             self.run_command("manage.py", "migrate", "--noinput")
             history = database.execute(
@@ -90,6 +121,10 @@ class CoreSchemaTests(unittest.TestCase):
             self.run_command("prepare_database.py")
             self.run_command("manage.py", "migrate", "--noinput")
             self.run_command("manage.py", "migrate", "--check")
+            refused = self.run_command(
+                "prepare_database.py", "--reset-scaffold", succeeds=False
+            )
+            self.assertIn("refusing to reset", refused.stderr)
             self.assertEqual(
                 history,
                 database.execute(
@@ -99,7 +134,8 @@ class CoreSchemaTests(unittest.TestCase):
             tables = database.execute(
                 "SELECT tablename FROM pg_tables WHERE schemaname = 'core'"
             ).fetchall()
-            self.assertIn(("auth_user",), tables)
+            self.assertIn(("accounts_user",), tables)
+            self.assertNotIn(("auth_user",), tables)
             self.assertIn(("django_session",), tables)
             self.assertEqual(
                 database.execute("SELECT * FROM public.auth_user").fetchall(),

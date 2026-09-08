@@ -1,0 +1,46 @@
+{% extends "account/base_manage.html" %}
+{% block head_title %}Аккаунт и безопасность{% endblock %}
+{% block content %}
+  <h1>Аккаунт и безопасность</h1>
+  <p>Ваш профиль, способы входа и настройки защиты в одном месте.</p>
+  <section class="overview-section" aria-labelledby="profile-title">
+    <h2 id="profile-title">Профиль</h2>
+    <dl class="detail-list">
+      <div><dt>Имя пользователя</dt><dd>{{ user.username }}</dd></div>
+      <div><dt>Имя</dt><dd>{{ user.get_full_name|default:'Не указано' }}</dd></div>
+    </dl>
+  </section>
+  <section class="overview-section" aria-labelledby="email-title">
+    <div class="overview-heading"><h2 id="email-title">Email</h2><a class="button button-small button-outline" href="{% url 'account_email' %}">Управлять email</a></div>
+    {% for address in email_addresses %}
+      <p>{{ address.email }} <span class="status{% if address.verified %} status-verified{% endif %}">· {% if address.verified %}Подтверждён{% else %}Не подтверждён{% endif %}{% if address.primary %} · Основной{% endif %}</span></p>
+    {% empty %}<p>Email не добавлен.</p>{% endfor %}
+  </section>
+  {% if phone_login_enabled %}
+    <section class="overview-section" aria-labelledby="phone-title">
+      <div class="overview-heading"><h2 id="phone-title">Телефон</h2><a class="button button-small button-outline" href="{% url 'account_change_phone' %}">Управлять телефоном</a></div>
+      <p>{% if phone %}{{ phone }} · {% if phone_verified %}Подтверждён{% else %}Не подтверждён{% endif %}{% else %}Телефон не добавлен.{% endif %}</p>
+      <p>Коды для входа и подтверждения приходят в Telegram.</p>
+    </section>
+  {% endif %}
+  <section class="overview-section" aria-labelledby="password-title">
+    <div class="overview-heading"><h2 id="password-title">Пароль</h2><a class="button button-small button-outline" href="{% if user.has_usable_password %}{% url 'account_change_password' %}{% else %}{% url 'account_set_password' %}{% endif %}">{% if user.has_usable_password %}Изменить пароль{% else %}Создать пароль{% endif %}</a></div>
+    <p>{% if user.has_usable_password %}Вы можете входить с email или именем пользователя и паролем.{% else %}Пароль пока не установлен.{% endif %}</p>
+  </section>
+  <section class="overview-section" aria-labelledby="social-title">
+    <div class="overview-heading"><h2 id="social-title">Связанные аккаунты</h2><a class="button button-small button-outline" href="{% url 'socialaccount_connections' %}">Управлять</a></div>
+    {% for account in social_accounts %}<p>{{ account.get_provider.name }} · {{ account }}</p>{% empty %}<p>Внешние аккаунты не подключены.</p>{% endfor %}
+  </section>
+  <section class="overview-section" aria-labelledby="mfa-title">
+    <div class="overview-heading"><h2 id="mfa-title">Двухфакторная защита</h2><a class="button button-small button-outline" href="{% url 'mfa_index' %}">Настроить защиту</a></div>
+    <p>{% if mfa_enabled %}Двухфакторная аутентификация включена.{% else %}Добавьте дополнительную проверку при входе.{% endif %} Здесь же доступны резервные коды.</p>
+  </section>
+  <section class="overview-section" aria-labelledby="passkeys-title">
+    <div class="overview-heading"><h2 id="passkeys-title">Passkeys</h2><a class="button button-small button-outline" href="{% url 'mfa_list_webauthn' %}">Управлять passkeys</a></div>
+    <p>{% if passkey_count %}Добавлено: {{ passkey_count }}.{% else %}Passkeys ещё не добавлены.{% endif %} Используйте встроенную защиту вашего устройства для входа.</p>
+  </section>
+  <section class="overview-section" aria-labelledby="sessions-title">
+    <div class="overview-heading"><h2 id="sessions-title">Активные сессии</h2><a class="button button-small button-outline" href="{% url 'usersessions_list' %}">Управлять сессиями</a></div>
+    <p>Проверьте устройства, с которых выполнен вход, и завершите ненужные сессии.</p>
+  </section>
+{% endblock %}

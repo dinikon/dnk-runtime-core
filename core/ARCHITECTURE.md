@@ -1,13 +1,14 @@
-# Core: проектируемая архитектура и порядок реализации
+# Core: текущая identity и развитие управляющего сервиса
 
-**Статус: план будущей реализации.** Сейчас в `core/src` есть только стандартный
-Django-каркас и admin. Сущности, сценарии, endpoints и интеграции ниже еще
-не существуют. Инструкции запуска реализованного каркаса находятся в
-[README](README.md).
+**Реализовано:** глобальная `User(AbstractUser)` с UUID, allauth account/social/MFA,
+email и Telegram OTP, passkeys, управление сессиями, сессионный Django API и
+Nuxt-приложение с публичной SSR-главной. Инструкции запуска находятся в
+[README](README.md). **Далее описана целевая архитектура:** Tenant/Membership,
+OIDC, DNS и lifecycle/provisioning пока не реализованы. Runtime остаётся независимым.
 
 ## Назначение и границы
 
-Core — единый управляющий сервис платформы. Он владеет глобальными учетными
+В целевой архитектуре Core — единый управляющий сервис платформы. Он владеет глобальными учетными
 записями, реестром тенантов, доступом пользователей, доменами, конфигурацией
 OIDC и операциями жизненного цикла. Runtime исполняет бизнес-операции тенанта
 и хранит его прикладные данные.
@@ -30,7 +31,7 @@ Core и runtime используют существующую общую Postgre
 Для раздельных прав в последующем развертывании можно назначить Core отдельную
 роль с доступом к схеме `core` в этой же базе.
 
-Будущие Django apps разделяются по предметным областям: `accounts`, `tenancy`,
+Реализован app `accounts`; будущие Django apps разделяются по предметным областям: `tenancy`,
 `oidc`, `domains`, `notifications`, `operations`. Это отдельное архитектурное
 решение для Django-приложения: Django ORM хранит состояние, явные сервисы
 реализуют сценарии, views/admin остаются тонкими, внешние вызовы идут через
@@ -39,7 +40,7 @@ Core и runtime используют существующую общую Postgre
 
 ## Глобальный пользователь и доступ
 
-| Будущая сущность | Назначение и связи |
+| Сущность | Назначение и связи |
 | --- | --- |
 | `User` | Глобальная учетная запись с неизменяемым UUID, профилем и состоянием |
 | `SocialAccount` / `EmailAddress` allauth | Внешняя identity и статус подтверждения email, связанные с User |
@@ -61,19 +62,24 @@ Core и runtime используют существующую общую Postgre
 UUID пользователя стабилен; email может измениться и не используется как
 первичный идентификатор или единственное основание для объединения аккаунтов.
 
-Собственную модель User и `AUTH_USER_MODEL` нужно ввести **до первых миграций
-постоянной системы**, до подключения allauth и Toolkit. Сейчас `auth.User`
-оставлен для временной проверки admin. Поздняя замена пользовательской модели
-затрагивает связи и миграции; подготовительный этап должен начинаться с чистой
-схемы `core`, пока клиентских данных еще нет. Общую базу и данные runtime
-при этом сохраняем.
+`accounts.User(AbstractUser)` и `AUTH_USER_MODEL` введены в начальной миграции
+до allauth. UUID задан явно, стандартный тип автоидентификатора остальных моделей —
+BigAutoField. Прежний временный каркас с `auth.User` переводится через отдельный
+`prepare_database.py --reset-scaffold`, только в development и только при отсутствии
+новых таблиц. Автоматического удаления при запуске нет. Общая база и runtime сохраняются.
 [Рекомендации Django](https://docs.djangoproject.com/en/6.0/topics/auth/customizing/#using-a-custom-user-model-when-starting-a-project).
 
 ## Вход через Google и другие провайдеры
 
-Allauth отвечает за вход в глобальную учетную запись, Toolkit — за выдачу
-OIDC credentials клиентам тенантов. Встроенный OIDC provider allauth одновременно
-с Toolkit не включается.
+Allauth отвечает за вход в глобальную учетную запись. Nuxt и Django работают на
+одном origin: `/` и `/app/` обслуживает Nuxt, `/api/` и `/accounts/` — Django.
+Браузер использует host-only HttpOnly session cookie и CSRF, без JWT.
+Google/GitHub подключаются при наличии credentials; доступны также пароль,
+email OTP, телефонный OTP через Telegram, TOTP и passkeys.
+
+Toolkit установлен как зависимость для будущей выдачи OIDC credentials клиентам
+тенантов, но не подключён. Следующий tenant flow относится к дальнейшему этапу;
+встроенный OIDC provider allauth одновременно с Toolkit не включается.
 
 1. Пользователь открывает tenant-приложение, которое начинает OIDC flow своего issuer.
 2. Если глобальной сессии Core нет, Core переводит пользователя на вход Google.
@@ -83,12 +89,11 @@ OIDC credentials клиентам тенантов. Встроенный OIDC pr
    авторизационной операции. Проверяются активность User, Tenant и Membership.
 5. После успешной проверки tenant-приложение получает authorization code.
 
-На этапе реализации подключить приложения allauth/account/socialaccount/Google,
-рекомендованные backend и middleware, маршруты `/accounts/`, Google client ID
-и secret. Зарегистрировать точный callback вида
-`https://auth.example.com/accounts/google/login/callback/` у Google.
-Запрашивать только необходимые для входа scopes; доступ к Google API и хранение
-его refresh tokens для этого сценария не нужны.
+Приложения allauth/account/socialaccount/MFA/usersessions, backend и middleware
+подключены. Google и GitHub используют client ID/secret из окружения и точные
+callback `/accounts/google/login/callback/` и `/accounts/github/login/callback/`
+на публичном origin Core. Запрашиваются только scopes для входа; provider tokens
+не сохраняются. Для production требуются HTTPS и настроенные credentials.
 [Подключение allauth](https://docs.allauth.org/en/latest/installation/quickstart.html),
 [Google provider](https://docs.allauth.org/en/latest/socialaccount/providers/google.html).
 
@@ -299,9 +304,9 @@ SPF/DKIM/DMARC записи. Секреты SMTP и подписи хранят�
 Сейчас [tenancy](../docs/modules/tenancy.md) создает tenant/domain и физическую
 схему с Alembic в одной runtime-транзакции, а
 [identity](../docs/modules/identity.md) хранит пользователей тенантов и выполняет
-вход по email OTP. Это текущее поведение не меняется добавлением каркаса Core.
+вход по email OTP. Это поведение не меняется добавлением глобальных аккаунтов Core.
 
-1. Ввести Core registry и отдельную глобальную identity без переключения
+1. Глобальная identity уже отдельная. Ввести Core registry без переключения
    существующего входа. Импортируемым тенантам сохранить их UUID; для новых
    UUID будет назначать Core. Инвентаризацию и перенос проводить отдельной миграцией.
 2. Определить новую версию внутреннего provisioning-контракта runtime:
@@ -329,8 +334,8 @@ SPF/DKIM/DMARC записи. Секреты SMTP и подписи хранят�
 
 ## Порядок реализации
 
-1. Custom User, initial migrations, Tenant/Membership и правила доступа.
-2. Allauth + Google, контролируемое связывание аккаунтов и глобальная сессия.
+1. Custom User, initial migrations и глобальная сессия реализованы; далее Tenant/Membership и правила доступа.
+2. Allauth + Google/GitHub, MFA/passkeys и контролируемое связывание реализованы; далее tenant-доступ.
 3. Прототип tenant-aware Toolkit; затем модели issuer/application, ключи,
    tenant endpoints, validator и negative tests до подключения клиентов.
 4. Lifecycle operations/outbox, версионированный runtime provisioning и аудит.

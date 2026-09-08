@@ -4,18 +4,22 @@ Modular FastAPI backend with tenant onboarding, console authentication, and stat
 
 ## Django Core
 
-[Core](core/README.md) is a separate Django scaffold with its own dependencies
-and environment. It uses the `core` schema in the existing PostgreSQL database.
-The planned tenant control plane, global
-identity, tenant OIDC, DNS and system email flows are described in its
-[architecture proposal](core/ARCHITECTURE.md); those flows are not implemented yet.
+[Core](core/README.md) is a separate Django application with global accounts,
+django-allauth authentication and a Nuxt/Vue frontend with server-rendered public pages. It uses the `core` schema in
+the existing PostgreSQL database and has its own dependencies and environment.
+Runtime users, tenant authentication and the existing console remain independent.
+Tenant control-plane operations, tenant OIDC and DNS remain future work in the
+[architecture proposal](core/ARCHITECTURE.md).
 
 For the local Docker stack, configure Core as described in its
 [Docker instructions](core/README.md#локальный-стенд-в-docker-compose), then run
 `docker compose up --build -d`.
-Django starts with the existing stack and shares its PostgreSQL service;
-admin is available
-at [127.0.0.1:8001/admin/](http://127.0.0.1:8001/admin/).
+Django starts with the existing stack and shares PostgreSQL and Redis.
+Open [dNiko Alpha](http://localhost:8080/),
+[Account and security](http://localhost:8080/accounts/) or
+[Django admin](http://localhost:8080/admin/).
+If the old Django scaffold was already migrated, follow the explicit
+[scaffold transition](core/README.md#переход-с-временного-каркаса) before starting the new Core.
 
 ## Modules
 
