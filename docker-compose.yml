@@ -19,6 +19,49 @@ x-backend-common: &backend-common
     EVENT_BUS__PUBLISHER_WORKER_ENABLED: "true"
 
 services:
+  core:
+    build:
+      context: ./core
+      dockerfile: Dockerfile
+    image: dnk-core:local
+    restart: unless-stopped
+    env_file:
+      - path: ./core/.env
+        # Allow config inspection before Core's environment is prepared.
+        required: false
+    environment:
+      CORE_DEBUG: "true"
+      CORE_ALLOWED_HOSTS: localhost,127.0.0.1,[::1]
+      CORE_DB_HOST: postgres
+      CORE_DB_PORT: "5432"
+      CORE_DB_NAME: ${DB_DATABASE:-dniko}
+      CORE_DB_USER: ${DB_USERNAME:-postgres}
+      CORE_DB_PASSWORD: ${DB_PASSWORD:-postgres}
+    command:
+      - sh
+      - -c
+      - >-
+        python src/prepare_database.py &&
+        python src/manage.py migrate --noinput &&
+        exec python src/manage.py runserver 0.0.0.0:8001 --noreload
+    ports:
+      - "127.0.0.1:${CORE_PORT:-8001}:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "from urllib.request import urlopen; urlopen('http://127.0.0.1:8001/admin/login/', timeout=2).read()",
+        ]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
   api:
     <<: *backend-common
     container_name: dnk-api

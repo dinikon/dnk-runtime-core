@@ -7,6 +7,7 @@
 ├── README.md
 ├── docs/
 ├── frontends/
+├── migrations/tenant/
 ├── manage.py
 ├── pyproject.toml
 ├── src/
@@ -54,8 +55,7 @@ frontends/
 src/modules/
 ├── tenancy/
 ├── identity/
-├── runtime_data/
-├── schema_registry/
+├── inventory/
 └── shared/
 ```
 
@@ -83,10 +83,7 @@ Its infrastructure uses repositories, adapters and persistence models without a
 separate mapper layer; ORM -> domain mapping is performed explicitly in the
 repository return paths.
 
-`schema_registry` also has:
-
-- `application/migration/`: physical PostgreSQL planning model and canonicalization.
-- `seed/`: default and test seed modules used by create/diff flows.
+`inventory` currently defines Warehouse domain/persistence and a repository protocol. Static tenant revision files live in `migrations/tenant/versions/`.
 
 ## Management Layout
 

@@ -27,8 +27,8 @@ def build_parser() -> argparse.ArgumentParser:
     from src.management.commands.jobs import (
         register as register_jobs,
     )
-    from src.management.commands.schema_registry import (
-        register as register_schema_registry,
+    from src.management.commands.tenant_migrations import (
+        register as register_tenant_migrations,
     )
 
     parser = argparse.ArgumentParser(
@@ -38,7 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="commands")
     register_events(subparsers)
     register_jobs(subparsers)
-    register_schema_registry(subparsers)
+    register_tenant_migrations(subparsers)
     return parser
 
 

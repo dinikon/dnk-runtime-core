@@ -129,8 +129,8 @@ Consumers должны использовать этот normalized contract. О
 ## Связанная документация
 
 - [Campaigns Module](./campaigns.md)
-- [Runtime Data Module](./runtime-data.md)
-- [Schema Registry Module](./schema-registry.md)
+- [Runtime Data Module](../history/modules/runtime-data.md)
+- [Schema Registry Module](../history/modules/schema-registry.md)
 
 ## Источник истины
 

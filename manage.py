@@ -11,3 +11,4 @@ from management.cli import main
 
 if __name__ == "__main__":
     main()
+import secrets; print(secrets.token_urlsafe(64))

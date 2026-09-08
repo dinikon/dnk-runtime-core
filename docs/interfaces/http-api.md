@@ -11,26 +11,9 @@ All public HTTP routes are mounted under `/api`.
 
 `ResolveTenantResponseSchema` includes `tenant_id`, `tenant_name`, `status`, and `api_host` when a tenant is found; missing tenants return nullable tenant fields.
 
-## Schema Config
+## Inventory
 
-Schema config read routes use `POST` bodies instead of `GET`.
-
-| Method   | Path                                   | Module            | Request / Params                           | Response                                 | Auth                          | Main errors                |
-|----------|----------------------------------------|-------------------|--------------------------------------------|------------------------------------------|-------------------------------|----------------------------|
-| `POST`   | `/api/config/objects/list`             | `schema_registry` | none                                       | `ListCustomObjectsResponseSchema`        | authenticated request context | `401`, `409`, `422`        |
-| `POST`   | `/api/config/objects/create`           | `schema_registry` | `CreateCustomObjectRequestSchema`          | `CustomObjectResponseSchema`             | authenticated request context | `401`, `409`, `422`        |
-| `DELETE` | `/api/config/objects/delete`           | `schema_registry` | body `object_id`                           | empty `204`                              | authenticated request context | `401`, `404`, `409`, `422` |
-| `POST`   | `/api/config/objects/schema`           | `schema_registry` | body `object_id`                           | `CustomObjectResponseSchema`             | authenticated request context | `401`, `404`, `409`, `422` |
-| `POST`   | `/api/config/objects/fields/create`    | `schema_registry` | `CreateCustomFieldRequestSchema`           | `CustomObjectResponseSchema`             | authenticated request context | `401`, `404`, `409`, `422` |
-| `DELETE` | `/api/config/objects/fields/delete`    | `schema_registry` | body `object_id`, `field_id`               | `CustomObjectResponseSchema`             | authenticated request context | `401`, `404`, `409`, `422` |
-
-Config rules:
-
-- `system` and `view` objects are read-only.
-- `standard` objects can receive/delete `custom` fields but cannot be deleted.
-- `custom` objects can be created, deleted and extended with `custom` fields.
-- `custom` object names are saved and returned with the `c_` prefix; create requests may omit it.
-- `system` fields are hidden in config responses; `standard` fields are visible but not deletable.
+Inventory currently exposes no HTTP routes. Dynamic schema configuration routes were removed.
 
 ## Identity / Console Auth
 
@@ -49,8 +32,6 @@ Mounted under `/api/console/auth`.
 - Session cookie name comes from auth config and defaults to `dnk_session`.
 - Identity routes are tenant-host aware, so host extraction is part of the authentication flow.
 - Identity controllers map domain/tenancy errors directly inside controller files.
-- Schema registry config routes do not accept `tenant_id` from the client. Controllers derive it
-  from the request domain/auth context and pass it internally through commands/queries and use cases.
 - `PATCH /api/console/auth/me` requires `interface_theme` and does not accept `null`.
 - `GET /api/console/auth/me` and `PATCH /api/console/auth/me` always return `interface_theme` as a string.
 
@@ -66,4 +47,3 @@ Mounted under `/api/console/auth`.
 - `src/modules/tenancy/presentation/http/admin_tenant/controller/`
 - `src/modules/tenancy/presentation/http/console_tenant/controller/`
 - `src/modules/identity/presentation/http/console_auth/controller/`
-- `src/modules/schema_registry/presentation/http/config/`

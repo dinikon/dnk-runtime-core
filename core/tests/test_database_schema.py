@@ -1,0 +1,133 @@
+"""PostgreSQL regression check using a newly created, disposable database."""
+
+import os
+from pathlib import Path
+import subprocess
+import sys
+import unittest
+from uuid import uuid4
+
+import psycopg
+from psycopg import sql
+from psycopg.conninfo import conninfo_to_dict, make_conninfo
+
+CORE_DIR = Path(__file__).resolve().parents[1]
+POSTGRES_URL = os.environ.get("TEST_CORE_POSTGRES_URL")
+
+
+@unittest.skipUnless(
+    POSTGRES_URL, "Set TEST_CORE_POSTGRES_URL with CREATEDB privileges"
+)
+class CoreSchemaTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.admin = psycopg.connect(POSTGRES_URL, autocommit=True)
+        cls.addClassCleanup(cls.admin.close)
+        cls.database = "dnk_core_test_" + uuid4().hex
+        cls.admin.execute(
+            sql.SQL("CREATE DATABASE {}").format(sql.Identifier(cls.database))
+        )
+        cls.addClassCleanup(cls.drop_database)
+        cls.dsn = make_conninfo(POSTGRES_URL, dbname=cls.database)
+        params = conninfo_to_dict(POSTGRES_URL)
+        cls.environment = {
+            **os.environ,
+            "DJANGO_SETTINGS_MODULE": "dnk_core.settings",
+            "CORE_SECRET_KEY": "temporary-schema-integration-test-key",
+            "CORE_DB_NAME": cls.database,
+            "CORE_DB_USER": cls.admin.info.user,
+            "CORE_DB_PASSWORD": params.get("password", ""),
+            "CORE_DB_HOST": cls.admin.info.host,
+            "CORE_DB_PORT": str(cls.admin.info.port),
+        }
+
+    @classmethod
+    def drop_database(cls):
+        cls.admin.execute(
+            sql.SQL("DROP DATABASE {}").format(sql.Identifier(cls.database))
+        )
+
+    def run_command(self, script, *arguments, succeeds=True):
+        result = subprocess.run(
+            [sys.executable, str(CORE_DIR / "src" / script), *arguments],
+            cwd=CORE_DIR,
+            env=self.environment,
+            capture_output=True,
+            text=True,
+        )
+        if succeeds:
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        else:
+            self.assertNotEqual(result.returncode, 0)
+        return result
+
+    def test_existing_runtime_data_and_migration_history_are_untouched(self):
+        with psycopg.connect(self.dsn, autocommit=True) as database:
+            original_path = database.execute("SHOW search_path").fetchone()
+            database.execute("CREATE TABLE public.auth_user (marker text)")
+            database.execute("INSERT INTO public.auth_user VALUES ('runtime user')")
+            database.execute("CREATE TABLE public.django_migrations (marker text)")
+            database.execute(
+                "INSERT INTO public.django_migrations VALUES ('runtime history')"
+            )
+            database.execute("CREATE SCHEMA tenant_probe")
+            database.execute("CREATE TABLE tenant_probe.inventory (marker text)")
+            database.execute(
+                "INSERT INTO tenant_probe.inventory VALUES ('tenant data')"
+            )
+
+            missing = self.run_command(
+                "manage.py", "migrate", "--noinput", succeeds=False
+            )
+            self.assertIn("no schema has been selected", missing.stderr)
+
+            self.run_command("prepare_database.py")
+            self.run_command("manage.py", "migrate", "--noinput")
+            history = database.execute(
+                "SELECT app, name, applied FROM core.django_migrations ORDER BY id"
+            ).fetchall()
+            self.assertTrue(history)
+            self.run_command("prepare_database.py")
+            self.run_command("manage.py", "migrate", "--noinput")
+            self.run_command("manage.py", "migrate", "--check")
+            self.assertEqual(
+                history,
+                database.execute(
+                    "SELECT app, name, applied FROM core.django_migrations ORDER BY id"
+                ).fetchall(),
+            )
+            tables = database.execute(
+                "SELECT tablename FROM pg_tables WHERE schemaname = 'core'"
+            ).fetchall()
+            self.assertIn(("auth_user",), tables)
+            self.assertIn(("django_session",), tables)
+            self.assertEqual(
+                database.execute("SELECT * FROM public.auth_user").fetchall(),
+                [("runtime user",)],
+            )
+            self.assertEqual(
+                database.execute("SELECT * FROM public.django_migrations").fetchall(),
+                [("runtime history",)],
+            )
+            self.assertEqual(
+                database.execute("SELECT * FROM tenant_probe.inventory").fetchall(),
+                [("tenant data",)],
+            )
+            self.assertEqual(
+                database.execute(
+                    "SELECT tablename FROM pg_tables WHERE schemaname = 'public' "
+                    "ORDER BY tablename"
+                ).fetchall(),
+                [("auth_user",), ("django_migrations",)],
+            )
+            self.assertEqual(
+                database.execute("SHOW search_path").fetchone(), original_path
+            )
+        with psycopg.connect(self.dsn) as fresh_connection:
+            self.assertEqual(
+                fresh_connection.execute("SHOW search_path").fetchone(), original_path
+            )
+
+
+if __name__ == "__main__":
+    unittest.main()

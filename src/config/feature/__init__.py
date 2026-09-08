@@ -1,6 +1,6 @@
-from src.config.feature.runtime_schema import RuntimeSchema
+from src.config.feature.tenant_schema import TenantSchema
 
 
 class FeatureConfig(
-    RuntimeSchema,
+    TenantSchema,
 ): ...

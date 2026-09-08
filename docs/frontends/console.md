@@ -1,3 +1,5 @@
+> Backend update: dynamic schema/object APIs have been removed. Any descriptions below of runtime-object or data-model screens are historical and those capabilities are unavailable. Inventory has no HTTP API or UI in this version; frontend implementation is outside this change.
+
 # Console Frontend
 
 ## Purpose
@@ -233,8 +235,8 @@ code changes.
 - [Console app README](../../frontends/apps/console/README.md)
 - [HTTP API](../interfaces/http-api.md)
 - [Identity module](../modules/identity.md)
-- [Schema Registry module](../modules/schema-registry.md)
-- [Runtime schema](../data/runtime-schema.md)
+- [Schema Registry module](../history/modules/schema-registry.md)
+- [Runtime schema](../history/data/runtime-schema.md)
 
 ## Source Of Truth
 

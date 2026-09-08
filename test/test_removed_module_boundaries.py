@@ -8,13 +8,21 @@ import httpx
 from src.app_factory import create_app
 from src.config import dnk_config
 from src.management.cli import build_parser
-from src.modules.schema_registry.domain.object.value_object import ObjectKind
 from src.modules.shared.infrastructure.persistence import Base
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
+    def test_dynamic_modules_and_surfaces_are_absent(self) -> None:
+        self.assertFalse((PROJECT_ROOT / "src/modules/schema_registry").exists())
+        self.assertFalse((PROJECT_ROOT / "src/modules/runtime_data").exists())
+        self.assertNotIn("schema-registry", build_parser().format_help())
+        self.assertFalse(hasattr(dnk_config, "DEFAULT_SEED_MODULE"))
+        paths = create_app().openapi()["paths"]
+        self.assertFalse(any(path.startswith("/api/console/config/") for path in paths))
+        self.assertNotIn("data_sources", Base.metadata.tables)
+
     async def test_workflow_and_communication_are_absent(self) -> None:
         removed_paths = (
             "src/modules/workflow",
@@ -53,7 +61,7 @@ class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(hasattr(dnk_config, "COMMUNICATION_QUEUE"))
         self.assertNotIn("communication", build_parser().format_help())
 
-    async def test_custom_object_module_is_absent_but_custom_kind_remains(
+    async def test_custom_object_and_configuration_routes_are_absent(
         self,
     ) -> None:
         self.assertFalse((PROJECT_ROOT / "src/modules/custom_object").exists())
@@ -66,7 +74,7 @@ class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
                 for path in openapi_paths
             )
         )
-        self.assertTrue(
+        self.assertFalse(
             {
                 "/api/console/config/objects/list",
                 "/api/console/config/objects/create",
@@ -86,7 +94,6 @@ class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(response.status_code, 404)
-        self.assertEqual(ObjectKind.CUSTOM.value, "custom")
 
     async def test_contact_point_and_object_feature_are_absent(self) -> None:
         removed_paths = (

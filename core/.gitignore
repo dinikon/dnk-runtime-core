@@ -1,0 +1,12 @@
+.venv/
+.env
+.env.*
+!.env.example
+!.python-version
+__pycache__/
+*.py[cod]
+.cache/
+.pytest_cache/
+.ruff_cache/
+staticfiles/
+*.log

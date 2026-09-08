@@ -5,43 +5,43 @@ from typing import Protocol
 from uuid import UUID
 
 from src.modules.shared import EntityIdVO
+from src.modules.shared.application.persistence.tenant_schema_naming import (
+    TenantSchemaNaming,
+)
 
 
 @dataclass(frozen=True, slots=True)
 class TenantSchemaBootstrapContext:
-    """Контекст bootstrap runtime-схемы tenant."""
+    """Контекст создания tenant-схемы и применения статических миграций."""
 
     tenant_id: UUID
     schema_name: str
-    seed_path: str
 
 
 class TenantSchemaBootstrapPort(Protocol):
-    """Порт bootstrap физической runtime-схемы tenant."""
+    """Порт создания физической tenant-схемы и применения миграций."""
 
     async def bootstrap(
         self,
         *,
         context: TenantSchemaBootstrapContext,
     ) -> None:
-        """Создает или подготавливает runtime-схему tenant по контексту."""
+        """Создает или подготавливает tenant-схему tenant по контексту."""
         ...
 
 
 class TenantSchemaBootstrapContextFactory:
     """Фабрика контекста bootstrap tenant schema из конфигурации."""
 
-    def __init__(self, *, schema_prefix: str, default_seed_path: str) -> None:
-        """Сохраняет префикс схемы и seed path по умолчанию."""
-        self._schema_prefix = schema_prefix
-        self._default_seed_path = default_seed_path
+    def __init__(self, *, schema_prefix: str) -> None:
+        """Сохраняет общую стратегию именования схем."""
+        self._naming = TenantSchemaNaming(schema_prefix)
 
     def build(self, *, tenant_id: EntityIdVO) -> TenantSchemaBootstrapContext:
         """Создает bootstrap context с именем схемы на базе tenant UUID hex."""
         return TenantSchemaBootstrapContext(
             tenant_id=tenant_id.uuid,
-            schema_name=f"{self._schema_prefix}{tenant_id.uuid.hex}",
-            seed_path=self._default_seed_path,
+            schema_name=self._naming.schema_name(tenant_id),
         )
 
 

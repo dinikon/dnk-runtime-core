@@ -1,3 +1,5 @@
+> Historical architecture snapshot. For the active static tenant architecture use [the documentation index](docs/index.md) and [tenant migrations](docs/data/tenant-migrations.md). Dynamic modules described below have been removed.
+
 # CONTEXT
 
 ## Назначение проекта

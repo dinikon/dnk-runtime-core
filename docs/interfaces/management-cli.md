@@ -8,54 +8,23 @@ The project exposes one Python script entry point:
 
 Parser bootstrap happens in `src/management/cli.py`.
 
-## Current Command Tree
+## Tenant migrations
 
-```text
-dnk-manage
-├── schema-registry
-│   └── diff [<tenant_id> | --all] [--seed-path ...]
-├── events
-│   └── publish-outbox [--limit ...] [--max-attempts ...]
-└── jobs
-│   ├── process-due [--limit ...] [--max-attempts ...] [--lock-ttl-seconds ...]
-│   └── recover-stuck [--limit ...] [--max-attempts ...]
+```sh
+dnk-manage tenant-migrations upgrade <tenant_id>
+dnk-manage tenant-migrations upgrade --all
+dnk-manage tenant-migrations current <tenant_id>
+dnk-manage tenant-migrations current --all
+dnk-manage tenant-migrations revision --autogenerate --tenant-id <tenant_id> -m "Describe the change"
 ```
 
-## Current Supported Command
+`upgrade` and `current` require exactly one target: a tenant UUID or `--all`. Unknown tenants and absent schemas are errors. `current` reports `base` if no version exists and does not create version tables.
 
-### `dnk-manage schema-registry diff`
+Each tenant runs in its own transaction. Batches continue after failures and preserve successful upgrades. Output contains per-tenant `OK` or `ERROR` lines and `tenants=... succeeded=... failed=...`. Exit status is 0 on success, 2 on command/target failure; invalid arguments also return 2.
 
-Runs `DiffSchemaUseCase` for a tenant runtime schema.
+`revision` uses one tenant at the current head to generate a draft through a separate reflection engine. Review the generated revision before applying it. See [tenant migrations](../data/tenant-migrations.md).
 
-Arguments:
-
-- `tenant_id`: UUID of the tenant; mutually exclusive with `--all`
-- `--all`: runs diff for every tenant without status filtering
-- `--seed-path`: optional Python module path that exports `SCHEMA_SEED`
-
-Default seed path:
-
-- `src.modules.schema_registry.seed.schema_seed`
-
-## Output
-
-On success:
-
-- for a single tenant, prints one summary line:
-    - `OK tenant_id=... schema_name=... seed_path=... operations=... destructive=... non_destructive=...`
-- for `--all`, prints one `OK ...` line per successful tenant and a final summary:
-  - `SUMMARY tenants=... succeeded=... failed=... operations=... destructive=... non_destructive=... rolled_back=false`
-- exits with code `0`
-
-On expected `SchemaRegistryError`:
-
-- for a single tenant, prints short error text to `stderr`
-- for `--all`, prints `ERROR tenant_id=... error=...` per failed tenant, continues the remaining tenants, rolls back the
-  whole batch and prints:
-  - `SUMMARY tenants=... succeeded=... failed=... operations=... destructive=... non_destructive=... rolled_back=true`
-- exits with code `2`
-
-Unexpected exceptions are not swallowed, so traceback remains visible for debugging.
+## Other commands
 
 ### `dnk-manage events publish-outbox`
 
@@ -105,12 +74,11 @@ On success prints:
 - `events publish-outbox` publishes already-committed outbox rows and stores publish status in a new `UnitOfWork`
 - `jobs process-due` and `jobs recover-stuck` use one `UnitOfWork` and compose shared jobs use cases through
   `shared.presentation.jobs`
-- `schema-registry diff --all` uses one outer `UnitOfWork` and per-tenant savepoints; any expected tenant failure rolls
-  back the whole outer transaction after all tenants are attempted
+- `tenant-migrations upgrade --all` uses one UoW per tenant; failures do not roll back successful tenants.
 
 ## Related
 
-- [Schema Registry module](../modules/schema-registry.md)
+- [Inventory module](../modules/inventory.md)
 - [Shared module](../modules/shared.md)
 - [Request lifecycle](../architecture/request-lifecycle.md)
 - [Persistence and Unit of Work](../architecture/persistence-and-uow.md)
@@ -120,5 +88,5 @@ On success prints:
 - `src/management/cli.py`
 - `src/management/commands/events.py`
 - `src/management/commands/jobs.py`
-- `src/management/commands/schema_registry.py`
-- `src/modules/schema_registry/presentation/depends/management.py`
+- `src/management/commands/tenant_migrations.py`
+- `src/modules/tenancy/presentation/depends/management.py`

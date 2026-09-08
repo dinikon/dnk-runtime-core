@@ -6,7 +6,7 @@
 2. Root router from `src/modules/router.py` is mounted under `/api`.
 3. Module router selects the concrete controller function.
 4. `presentation/depends/*` resolves use case and infrastructure dependencies.
-5. Controller reads tenant from authenticated request context when the route works with client runtime data.
+5. Controller reads tenant from authenticated request context when the route works with tenant business data.
 6. Controller maps request schema to command/query DTO and adds internal `tenant_id` from the request context.
 7. Controller calls the use case as `await use_case(...)` and maps domain errors to HTTP status codes.
 8. Application use case orchestrates services.
@@ -31,7 +31,7 @@
 
 1. User runs `dnk-manage ...`.
 2. `src/management/cli.py` builds parser and selects handler.
-3. Handler opens one `UnitOfWork`.
+3. Handler or management composition opens a `UnitOfWork` (one per tenant for migration batches).
 4. Command-specific builder assembles use case graph from the same `uow.session`.
 5. Use case runs and returns result or raises domain/application error.
 6. `UnitOfWork.__aexit__` commits on success or rolls back on exception.

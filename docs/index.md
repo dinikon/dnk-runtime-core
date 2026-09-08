@@ -15,7 +15,7 @@ This documentation describes the current implementation of `dnk-runtime-core` as
 
 - [Tenancy](modules/tenancy.md)
 - [Identity](modules/identity.md)
-- [Schema Registry](modules/schema-registry.md)
+- [Inventory](modules/inventory.md)
 - [Shared](modules/shared.md)
 
 ## Roadmap-границы модулей
@@ -25,10 +25,6 @@ This documentation describes the current implementation of `dnk-runtime-core` as
 
 - [Campaigns](modules/campaigns.md)
 - [External Events](modules/external-events.md)
-
-## Implementation Plans
-
-- [Control Plane](../control_plane/docs/IMPLEMENTATION_PLAN.md)
 
 ## Interfaces
 
@@ -40,10 +36,11 @@ This documentation describes the current implementation of `dnk-runtime-core` as
 
 - [Console frontend](frontends/console.md)
 
-## Data And Runtime Model
+## Data Model
 
 - [Domain models](data/domain-models.md)
-- [Runtime schema](data/runtime-schema.md)
+- [Tenant migrations](data/tenant-migrations.md)
+- [Historical dynamic modules](history/index.md)
 
 ## Quality And Constraints
 

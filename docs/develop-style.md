@@ -1,7 +1,7 @@
 # Develop Style
 
 Эталонная форма backend-модуля описана ниже; для живых примеров смотрите `src/modules/identity` и
-`src/modules/schema_registry`.
+`src/modules/inventory`.
 
 Этот документ фиксирует правила структуры и стиля разработки backend-модулей.
 Если новый код не имеет отдельного архитектурного решения, его нужно писать по этой структуре.
@@ -12,7 +12,7 @@
 
 - `domain` содержит бизнес-модель и правила.
 - `application` содержит сценарии использования и DTO/command/query контракты.
-- `infrastructure` содержит адаптеры к runtime data, БД и внешним сервисам.
+- `infrastructure` содержит адаптеры к БД и внешним сервисам.
 - `presentation` содержит HTTP entrypoints и сборку зависимостей.
 
 Зависимости направлены внутрь:
@@ -118,22 +118,21 @@ Infrastructure layer реализует порты domain/application.
 
 - Реализация repository находится в `infrastructure`.
 - Repository реализует нужные `Protocol`: command, query или оба.
-- Runtime object name хранится константой класса, например `_OBJECT_NAME`.
+- Tenant SQLAlchemy models наследуют общие TenantBase и подходящие mixin; структурой управляет Alembic.
 - Tenant scope всегда передается параметром метода, repository не хранит tenant
   в состоянии объекта.
-- Runtime row мапится в domain entity или DTO внутри repository.
+- Строка persistence мапится в domain entity или DTO внутри repository.
 - Преобразования `UUID`, `datetime`, optional/string значений делаются явно и с
   проверкой типов.
 - Ошибки not found поднимаются как domain errors.
-- Инфраструктура не должна возвращать сырые runtime rows в application layer.
+- Инфраструктура не должна возвращать сырые строки БД в application layer.
 
-Для runtime-backed моделей повторяйте подход существующих runtime repositories:
+Для статических моделей:
 
-- `_resolve_descriptor(tenant_id)` получает descriptor через
-  `RuntimeObjectResolverProtocol`.
-- `save` сам выбирает insert/update по наличию строки.
-- `list` задает явные filters, sorting и page spec.
-- `_row_to_entity` и `_row_to_dto` разделены.
+- Repository получает текущую UoW session и явно учитывает tenant_id в каждой операции.
+- ORM-данные преобразуются в domain entity или DTO до возврата из infrastructure.
+- Runtime descriptor/resolver отсутствует; tenant schema определяется общей стратегией именования.
+- Миграции tenant-моделей проходят через Alembic и проверяются на PostgreSQL.
 
 ## Presentation Layer
 

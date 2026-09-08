@@ -53,15 +53,13 @@ Project configuration is assembled by `DnkConfig`, which combines multiple setti
   - `EMAIL.smtp.use_tls`
   - `EMAIL.smtp.use_starttls`
 
-## Runtime Schema Config
+## Tenant Schema Config
 
-- Group: `config/feature/runtime_schema/__init__.py`
+- Group: `config/feature/tenant_schema/__init__.py`
 - Responsibilities:
-    - runtime schema name prefix
-    - default seed module for bootstrap and diff
+    - stable tenant schema name prefix used by onboarding and migration commands
 - Critical values:
     - `SCHEMA_PREFIX`
-    - `DEFAULT_SEED_MODULE`
 
 ## Redis Config
 
@@ -121,15 +119,17 @@ Project configuration is assembled by `DnkConfig`, which combines multiple setti
 - [HTTP API](http-api.md)
 - [Management CLI](management-cli.md)
 - [Identity module](../modules/identity.md)
-- [Schema Registry module](../modules/schema-registry.md)
+- [Schema Registry module](../history/modules/schema-registry.md)
 
 ## Source Of Truth
 
 - `src/config/app_config.py`
 - `src/config/feature/identity/auth_config.py`
-- `src/config/feature/runtime_schema/__init__.py`
+- `src/config/feature/tenant_schema/__init__.py`
 - `src/config/infrastructure/__init__.py`
 - `src/config/infrastructure/email_config.py`
 - `src/config/infrastructure/event_bus_config.py`
 - `src/config/infrastructure/redis_config.py`
 - `src/config/infrastructure/scheduled_jobs_config.py`
+
+`SCHEMA_PREFIX` remains stable for existing tenants. Seed-module settings are removed.

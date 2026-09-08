@@ -15,8 +15,7 @@
 - `presentation` may depend on `application`.
 - `application` may depend on `domain` and ports.
 - `infrastructure` implements ports and repositories used by `application`.
-- `tenancy.application` must not import concrete `schema_registry.application` types; schema bootstrap goes through
-  tenancy-owned port.
+- `tenancy.application` must not import Alembic or SQLAlchemy implementations; schema bootstrap goes through a tenancy-owned port.
 
 ## Persistence Rules
 
@@ -33,7 +32,7 @@
   query params or
   path
   params. Controllers read tenant from the authenticated request context, put it into application command/query DTOs and
-  pass it through use cases, services and repository method calls where runtime metadata/data access needs it. Wiring
+  pass it through use cases, services and repository method calls where tenant data access needs it. Wiring
   files must stay tenant-agnostic and must not resolve or bind repositories to a tenant.
 
 ## Identifier Rules
@@ -45,16 +44,14 @@
   concrete id subclass before entering domain/application behavior and converted back with `.uuid` when leaving it.
 - Concrete id classes are intentionally not interchangeable, even when they wrap the same UUID.
 
-## Schema Registry Rules
+## Tenant Migration Rules
 
-- seed describes desired runtime structure
-- seed must be semantically validated and normalized before physical planning
-- all seed errors that do not require live database inspection should fail before planner/executor
-- `one_to_one` relations require a physical uniqueness guarantee on the owning/source field
-- required columns must not be added to existing tables without an explicit safe strategy or compatible default
-- diff metadata sync must preserve matching object and field ids; rename is not inferred heuristically
-- PostgreSQL planning and canonicalization belong outside `schema_registry.domain`
-- metadata snapshot in MVP stores only datasource, objects and fields
+- Static tenant models inherit shared TenantBase and use Alembic revisions.
+- Global Base models retain startup create_all.
+- Bootstrap DDL shares the onboarding transaction and never commits internally.
+- Schema names use the shared naming strategy and a stable SCHEMA_PREFIX.
+- Autogenerate uses a separate engine and a metadata copy; shared engine state is not changed.
+- Legacy unregistered tables are excluded from generated changes.
 
 ## Documentation Rules
 

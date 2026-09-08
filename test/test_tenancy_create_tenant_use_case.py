@@ -57,7 +57,6 @@ class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):
             identity_provisioning_service=IdentityProvisioningServiceStub(),
             tenant_schema_bootstrap_context_factory=TenantSchemaBootstrapContextFactory(
                 schema_prefix="dnk_",
-                default_seed_path="seed.module",
             ),
             tenant_schema_bootstrap_port=TenantSchemaBootstrapPortStub(),
         )
@@ -78,6 +77,5 @@ class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):
             recorded_context.schema_name,
             f"dnk_{tenant.id.uuid.hex}",
         )
-        self.assertEqual(recorded_context.seed_path, "seed.module")
         self.assertEqual(result.tenant_id, tenant.id.uuid)
         self.assertEqual(result.user_id, created_user_id)

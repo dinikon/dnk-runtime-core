@@ -23,6 +23,34 @@ def iter_imports(path: Path) -> list[str]:
 
 
 class ArchitectureBoundariesTests(unittest.TestCase):
+    def test_removed_dynamic_modules_have_no_imports(self) -> None:
+        for root in ("src", "test"):
+            for path in iter_python_files(root):
+                for module_name in iter_imports(path):
+                    self.assertFalse(
+                        module_name.startswith(
+                            ("src.modules.schema_registry", "src.modules.runtime_data")
+                        ),
+                        msg=f"{path} imports removed module {module_name}",
+                    )
+
+    def test_inventory_domain_dependencies_point_inward(self) -> None:
+        forbidden = (
+            "sqlalchemy",
+            "alembic",
+            "fastapi",
+            "pydantic",
+            "src.modules.inventory.infrastructure",
+            "src.modules.inventory.presentation",
+            "src.modules.inventory.application",
+            "src.modules.shared.infrastructure",
+            "src.modules.shared.presentation",
+            "src.modules.shared.application",
+        )
+        for path in iter_python_files("src/modules/inventory/domain"):
+            for name in iter_imports(path):
+                self.assertFalse(name.startswith(forbidden), f"{path} imports {name}")
+
     def test_no_modules_namespace_imports_are_used(self) -> None:
         forbidden_prefix = "modules."
         for root in ("src", "test"):
@@ -41,23 +69,6 @@ class ArchitectureBoundariesTests(unittest.TestCase):
             for module_name in iter_imports(path):
                 self.assertFalse(
                     module_name.startswith(forbidden_prefix),
-                    msg=f"{path} imports forbidden module {module_name}",
-                )
-
-    def test_schema_registry_domain_stays_free_of_postgres_and_migration_impl(
-        self,
-    ) -> None:
-        forbidden_prefixes = (
-            "sqlalchemy",
-            "src.modules.schema_registry.infrastructure.postgres",
-            "src.modules.schema_registry.application.migration",
-        )
-        for path in iter_python_files("src/modules/schema_registry/domain"):
-            for module_name in iter_imports(path):
-                self.assertFalse(
-                    any(
-                        module_name.startswith(prefix) for prefix in forbidden_prefixes
-                    ),
                     msg=f"{path} imports forbidden module {module_name}",
                 )
 
@@ -120,63 +131,6 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                         ),
                         msg=f"{path} still uses legacy path {module_name}",
                     )
-
-    def test_runtime_data_root_import_surface_is_not_used_in_source(self) -> None:
-        forbidden_modules = {
-            "src.modules.runtime_data",
-            "src.modules.runtime_data.application",
-            "src.modules.runtime_data.infrastructure",
-            "src.modules.runtime_data.infrastructure.postgres",
-            "src.modules.runtime_data.infrastructure.persistence.postgres",
-            "src.modules.runtime_data.infrastructure.persistence.postgres.gateway",
-        }
-        for path in iter_python_files("src"):
-            if path == PROJECT_ROOT / "src/modules/runtime_data/__init__.py":
-                continue
-            for module_name in iter_imports(path):
-                self.assertNotIn(
-                    module_name,
-                    forbidden_modules,
-                    msg=f"{path} imports runtime_data compatibility surface {module_name}",
-                )
-
-    def test_runtime_data_legacy_filter_specs_are_removed(self) -> None:
-        forbidden_names = {
-            "FilterSpec",
-            "FilterGroupSpec",
-            "FilterExpression",
-            "PostgresRuntimeGateway",
-        }
-        for path in iter_python_files("src"):
-            tree = ast.parse(path.read_text(encoding="utf-8"))
-            for node in ast.walk(tree):
-                if isinstance(node, ast.ImportFrom):
-                    imported_names = {alias.name for alias in node.names}
-                    self.assertFalse(
-                        imported_names & forbidden_names,
-                        msg=f"{path} imports removed runtime_data names {imported_names & forbidden_names}",
-                    )
-                elif isinstance(node, ast.ClassDef):
-                    self.assertNotIn(
-                        node.name,
-                        forbidden_names,
-                        msg=f"{path} defines removed runtime_data class {node.name}",
-                    )
-
-    def test_runtime_data_postgres_compatibility_shim_is_removed(self) -> None:
-        self.assertFalse(
-            (
-                PROJECT_ROOT / "src/modules/runtime_data/infrastructure/postgres.py"
-            ).exists(),
-            msg="runtime_data PostgreSQL compatibility shim still exists.",
-        )
-        self.assertFalse(
-            (
-                PROJECT_ROOT
-                / "src/modules/runtime_data/infrastructure/persistence/postgres/gateway/runtime_gateway.py"
-            ).exists(),
-            msg="PostgresRuntimeGateway facade still exists.",
-        )
 
     def test_email_delivery_does_not_use_app_state_or_identity_template_paths(
         self,

@@ -13,7 +13,7 @@ from src.modules.tenancy.domain.service import TenantOnboardingService
 
 
 class CreateTenantUseCase:
-    """Use case создания tenant, администратора и runtime-схемы."""
+    """Use case создания tenant, администратора и tenant-схемы."""
 
     def __init__(
         self,
@@ -34,7 +34,7 @@ class CreateTenantUseCase:
         """Выполняет onboarding tenant, identity provisioning и bootstrap schema.
 
         Сначала создается tenant и primary domain, затем tenant admin в identity,
-        после этого запускается bootstrap runtime-схемы через внешний порт.
+        после этого запускается bootstrap tenant-схемы через внешний порт.
         """
         onboarding = (
             await self._tenant_onboarding_service.create_tenant_with_primary_domain(

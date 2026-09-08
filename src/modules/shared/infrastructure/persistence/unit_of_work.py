@@ -21,12 +21,14 @@ class UnitOfWork:
     async def __aexit__(self, exc_type, exc, tb) -> None:
         """Коммитит успешный context или откатывает при исключении."""
         assert self.session is not None
-        if exc_type:
-            log.debug("UoW exit with exception -> rollback", exc_info=True)
-            await self.rollback()
-        else:
-            await self.commit()
-        await self.session.close()
+        try:
+            if exc_type:
+                log.debug("UoW exit with exception -> rollback", exc_info=True)
+                await self.rollback()
+            else:
+                await self.commit()
+        finally:
+            await self.session.close()
 
     async def commit(self) -> None:
         """Коммитит текущую async session."""
