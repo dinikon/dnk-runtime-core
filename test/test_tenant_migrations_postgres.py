@@ -23,7 +23,6 @@ from src.management.cli import build_parser
 from src.management.commands.tenant_migrations import handle
 from src.modules.identity.application.user import UserService
 from src.modules.identity.infrastructure.persistence.user import UserModel
-from src.modules.identity.infrastructure.persistence.user_email import UserEmailModel
 from src.modules.identity.infrastructure.repository import SqlAlchemyUserRepository
 from src.modules.inventory.infrastructure.persistence import WarehouseModel
 from src.modules.shared.application.persistence.tenant_schema_naming import (
@@ -92,13 +91,6 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 ids = select(TenantModel.id).where(
                     TenantModel.external_id.like(f"{self.tag}%")
                 )
-                users = select(UserModel.id).where(UserModel.tenant_id.in_(ids))
-                await connection.execute(
-                    delete(UserEmailModel).where(UserEmailModel.user_id.in_(users))
-                )
-                await connection.execute(
-                    delete(UserModel).where(UserModel.tenant_id.in_(ids))
-                )
                 await connection.execute(
                     delete(TenantDomainModel).where(
                         TenantDomainModel.tenant_id.in_(ids)
@@ -150,7 +142,8 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 await connection.scalar(text("SHOW search_path")), original_path
             )
             self.assertEqual(
-                await self.migrator.current(connection, schema), ("0001_warehouses",)
+                await self.migrator.current(connection, schema),
+                ("0002_identity_users",),
             )
             indexes = await connection.run_sync(
                 lambda conn: inspect(conn).get_indexes("warehouses", schema=schema)
@@ -226,7 +219,7 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
             await self.migrator.downgrade(connection, right, "base")
             self.assertEqual(
-                await self.migrator.current(connection, left), ("0001_warehouses",)
+                await self.migrator.current(connection, left), ("0002_identity_users",)
             )
 
     async def onboard(self, *, fail=False, existing_schema=False):
@@ -256,7 +249,11 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                     SqlAlchemyTenantDomainRepository(uow.session),
                 ),
                 identity_provisioning_service=IdentityProvisioningServiceAdapter(
-                    UserService(SqlAlchemyUserRepository(uow.session))
+                    UserService(
+                        SqlAlchemyUserRepository(
+                            uow.session, TenantSchemaNaming("dnk_")
+                        )
+                    )
                 ),
                 tenant_schema_bootstrap_context_factory=TenantSchemaBootstrapContextFactory(
                     schema_prefix="dnk_"
@@ -281,7 +278,8 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
         schema = f"dnk_{result.tenant_id.hex}"
         async with self.engine.begin() as connection:
             self.assertEqual(
-                await self.migrator.current(connection, schema), ("0001_warehouses",)
+                await self.migrator.current(connection, schema),
+                ("0002_identity_users",),
             )
             self.assertEqual(
                 await connection.scalar(
@@ -291,9 +289,11 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(
                 await connection.scalar(
-                    select(UserModel.tenant_id).where(UserModel.id == result.user_id)
+                    select(UserModel.__table__.c.id)
+                    .where(UserModel.__table__.c.id == result.user_id)
+                    .execution_options(schema_translate_map={"tenant": schema})
                 ),
-                result.tenant_id,
+                result.user_id,
             )
             self.assertEqual(
                 await connection.scalar(
@@ -313,14 +313,6 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                     select(func.count())
                     .select_from(TenantModel)
                     .where(TenantModel.external_id == self.tag)
-                ),
-                0,
-            )
-            self.assertEqual(
-                await connection.scalar(
-                    select(func.count())
-                    .select_from(UserEmailModel)
-                    .where(UserEmailModel.email == f"{self.tag}@example.com")
                 ),
                 0,
             )
@@ -396,7 +388,7 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
             for schema in self.schemas:
                 self.assertEqual(
                     await self.migrator.current(connection, schema),
-                    ("0001_warehouses",),
+                    ("0002_identity_users",),
                 )
             self.assertFalse(
                 await schema_exists(connection, f"dnk_{tenants[1].id.uuid.hex}")
@@ -491,7 +483,7 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 await self.migrator.upgrade(connection, schema)
                 self.assertEqual(
                     await self.migrator.current(connection, schema),
-                    ("0001_warehouses",),
+                    ("0002_identity_users",),
                 )
 
         await asyncio.wait_for(

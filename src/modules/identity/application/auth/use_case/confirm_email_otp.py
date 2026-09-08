@@ -119,7 +119,9 @@ class ConfirmEmailOtpUseCase:
             )
             if not primary_email.is_verified:
                 user.mark_email_verified(primary_email.id)
-                await self._users_repository.mark_email_verified(primary_email.id)
+                await self._users_repository.mark_email_verified(
+                    primary_email.id, tenant_id=tenant_id
+                )
             await self._uow.commit()
         except Exception:
             await self._uow.rollback()

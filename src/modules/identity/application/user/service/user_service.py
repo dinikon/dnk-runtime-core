@@ -55,7 +55,7 @@ class UserService:
             last_name=normalized_last_name,
         )
         primary_email = user.add_email(normalized_email, is_primary=True)
-        await self._users_repository.add(user)
+        await self._users_repository.add(user, tenant_id=tenant_id)
         return CreatedTenantAdmin(
             user_id=user.id.uuid,
             user_email_id=primary_email.id.uuid,

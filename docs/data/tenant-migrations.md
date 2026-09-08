@@ -12,17 +12,21 @@ Tenant models use `TenantBase` with logical schema `tenant`. `src/modules/tenant
 
 ## New tenants
 
-`CreateTenantUseCase` creates the tenant, primary domain and administrator, then invokes the tenancy-owned bootstrap port. `AlembicTenantSchemaBootstrapAdapter` uses the same UoW session to acquire a schema lock, reject an existing schema, create it and upgrade to `head`.
+`CreateTenantUseCase` creates the tenant and primary domain, invokes the tenancy-owned bootstrap port, then provisions the administrator and email in the migrated schema. `AlembicTenantSchemaBootstrapAdapter` uses the same UoW session to acquire a schema lock, reject an existing schema, create it and upgrade to `head`.
 
 The adapter and migrator never commit. PostgreSQL DDL, Alembic version writes, tenant, domain and user writes commit together. Any failure rolls everything back. Existing-schema conflicts return HTTP 409; migration failures are server errors.
 
 ## Revisions
 
-Files live in `migrations/tenant/versions/`; each tenant schema has its own `alembic_version`. The first revision is `0001_warehouses`. Revisions contain no fixed tenant names and do not import current ORM models.
+Files live in `migrations/tenant/versions/`; each tenant schema has its own `alembic_version`. The first revision is `0001_warehouses`; `0002_identity_users` adds tenant-local `users` and `user_emails` with a same-schema foreign key. Revisions contain no fixed tenant names and do not import current ORM models.
 
 The migration environment uses transaction-local `search_path` (through PostgreSQL `set_config(..., true)`) and explicitly sets `version_table_schema`. Successful execution restores the previous path. Failed transactions are rolled back by the owner. Migration files must preserve transactional execution: no internal commit, autocommit block or nontransactional DDL in onboarding revisions.
 
 An in-process lock protects Alembic's global context proxies; a schema-specific advisory transaction lock serializes separate workers/processes. The database lock is acquired before the process lock to avoid holding the latter while waiting for another transaction's commit.
+
+## Transition from shared identity tables
+
+The shared-users transition requires recreating development/test databases and repeating tenant onboarding. `0002_identity_users` creates empty tables; it does not migrate or delete records in `public.users` or `public.user_emails`. Startup no longer creates those shared tables, and runtime identity access has no legacy fallback. Running `upgrade --all` on an old installation creates the new tables but does not make its old users available.
 
 ## Existing tenants
 
@@ -53,7 +57,7 @@ Review renames, destructive changes and CHECK expressions manually. Longer wareh
 
 CI starts PostgreSQL 16 and sets `TEST_POSTGRES_URL` to a disposable database. Tests cover full onboarding, rollback, two tenants, constraints, upgrades/downgrades, generated revision execution and concurrency across processes. Local integration tests skip only when this variable is absent; they do not fall back to the application's database URL.
 
-Deploy code including `migrations/` (the Dockerfile copies it), then run `upgrade --all` against existing tenants and inspect the summary. New tenants use the deployed head automatically.
+For installations already using tenant-local identity, deploy code including `migrations/` (the Dockerfile copies it), then run `upgrade --all` against existing tenants and inspect the summary. For the initial transition from shared users, follow the database recreation procedure above. New tenants use the deployed head automatically.
 
 ## Related
 

@@ -10,11 +10,13 @@ from src.modules.shared import EntityIdVO
 class UserRepositoryProtocol(Protocol):
     """Порт хранения и чтения пользователей identity."""
 
-    async def add(self, user: User) -> None:
+    async def add(self, user: User, *, tenant_id: EntityIdVO) -> None:
         """Добавляет пользователя и связанные email-адреса."""
         ...
 
-    async def get_by_id(self, user_id: UserIdVO) -> User | None:
+    async def get_by_id(
+        self, user_id: UserIdVO, *, tenant_id: EntityIdVO
+    ) -> User | None:
         """Возвращает пользователя по id или None."""
         ...
 
@@ -26,11 +28,13 @@ class UserRepositoryProtocol(Protocol):
         """Возвращает пользователя tenant по primary email или None."""
         ...
 
-    async def update_profile(self, user: User) -> None:
+    async def update_profile(self, user: User, *, tenant_id: EntityIdVO) -> None:
         """Сохраняет изменения профиля пользователя."""
         ...
 
-    async def mark_email_verified(self, user_email_id: UserEmailIdVO) -> None:
+    async def mark_email_verified(
+        self, user_email_id: UserEmailIdVO, *, tenant_id: EntityIdVO
+    ) -> None:
         """Помечает email пользователя как verified."""
         ...
 

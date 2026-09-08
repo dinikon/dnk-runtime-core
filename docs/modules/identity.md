@@ -46,8 +46,14 @@ read/update flows, and tenant admin provisioning during onboarding.
 
 ## Infrastructure / Persistence
 
-- SQLAlchemy repositories store users and user emails
-- `SqlAlchemyUserRepository` explicitly maps ORM models to domain entities in its `return`
+- `UserModel` and `UserEmailModel` inherit `TenantBase`; Alembic owns `users` and `user_emails` in each tenant schema
+- `users` has no SQL `tenant_id` column; `user_emails.user_id` references `users.id` in the same schema without cascading deletion
+- `SqlAlchemyUserRepository` receives the active UoW session and `TenantSchemaNaming`; every operation requires an explicit tenant identifier
+- Core statements use the models' `__table__` definitions and a per-statement `schema_translate_map`, preserving connection state and avoiding ORM identity collisions across tenants
+- repository results are explicitly mapped to domain entities; `User.tenant_id` comes from the operation context
+- add/profile writes reject a mismatch between the supplied tenant and `User.tenant_id` before executing SQL
+- missing tenant schemas/tables produce infrastructure errors; there is no fallback to shared users
+- startup global `create_all` does not create identity tables; onboarding migrates the tenant schema before creating its administrator
 - token/session implementations use shared `TokenManager`
 - tenant context is resolved through a tenancy-owned use case adapter
 - request OTP delegates typed email sending to shared `EmailService`
@@ -83,8 +89,16 @@ The default theme is `system`, and `PATCH /me` requires an explicit non-null the
 - uses `shared` request context, UoW and token abstractions
 - is consumed by `tenancy` through `UserService` provisioning adapter
 
+## Transition from shared users
+
+This change requires recreating development/test databases and repeating tenant onboarding. Revision `0002_identity_users` creates empty tenant identity tables; it neither copies nor deletes legacy `public.users` and `public.user_emails`. Existing shared-user databases are not compatible with the new repository. HTTP contracts, OTP/session formats and email uniqueness behavior remain unchanged.
+
 ## Tests Covering This Module
 
+- `test/test_identity_tenant_postgres.py`
+    - identical IDs/emails in separate tenant schemas and isolated profile/email writes
+    - local foreign keys, migration transitions and onboarding rollback after administrator insertion
+    - HTTP login, profile updates, cross-tenant session rejection and logout with real repository/DI
 - `test/test_identity_use_cases.py`
     - auth use cases and tenant admin provisioning service
 - `test/test_identity_http_router.py`

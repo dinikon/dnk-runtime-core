@@ -66,7 +66,7 @@ class UpdateCurrentUserProfileUseCase:
             raise InvalidSessionError()
 
         user = await self._users_repository.get_by_id(
-            UserIdVO.from_value(session.user_id)
+            UserIdVO.from_value(session.user_id), tenant_id=tenant_id
         )
         if user is None or user.tenant_id != tenant_id:
             raise InvalidSessionError()
@@ -83,7 +83,7 @@ class UpdateCurrentUserProfileUseCase:
         )
 
         try:
-            await self._users_repository.update_profile(user)
+            await self._users_repository.update_profile(user, tenant_id=tenant_id)
             await self._uow.commit()
         except Exception:
             await self._uow.rollback()

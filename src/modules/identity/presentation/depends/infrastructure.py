@@ -34,6 +34,9 @@ from src.modules.shared.presentation.tokens.depends import (
     get_token_manager,
 )
 from src.modules.shared.presentation.persistence.depends import UoWDep
+from src.modules.shared.application.persistence.tenant_schema_naming import (
+    TenantSchemaNaming,
+)
 from src.modules.tenancy.presentation.depends.application import (
     TenantRequestContextByHostUseCaseDep,
 )
@@ -41,7 +44,9 @@ from src.modules.tenancy.presentation.depends.application import (
 
 def get_users_repository(uow: UoWDep) -> UserRepositoryProtocol:
     """Создает SQLAlchemy user repository для текущей UoW."""
-    return SqlAlchemyUserRepository(uow.session)
+    return SqlAlchemyUserRepository(
+        uow.session, TenantSchemaNaming(dnk_config.SCHEMA_PREFIX)
+    )
 
 
 UsersRepositoryDep = Annotated[

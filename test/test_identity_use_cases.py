@@ -111,11 +111,14 @@ class _UserRepositoryStub:
         self.marked_email_ids: list[object] = []
         self.added_users: list[User] = []
         self.exists = False
+        self.tenant_calls = []
 
-    async def add(self, user: User) -> None:
+    async def add(self, user: User, *, tenant_id: EntityIdVO) -> None:
+        self.tenant_calls.append(tenant_id)
         self.added_users.append(user)
 
-    async def get_by_id(self, user_id):
+    async def get_by_id(self, user_id, *, tenant_id: EntityIdVO):
+        self.tenant_calls.append(tenant_id)
         if self.user is not None and self.user.id == user_id:
             return self.user
         return self.user
@@ -127,10 +130,14 @@ class _UserRepositoryStub:
             return None
         return self.user if self.user.get_primary_email(email) is not None else None
 
-    async def update_profile(self, user: User) -> None:
+    async def update_profile(self, user: User, *, tenant_id: EntityIdVO) -> None:
+        self.tenant_calls.append(tenant_id)
         self.updated_profile = user
 
-    async def mark_email_verified(self, user_email_id) -> None:
+    async def mark_email_verified(
+        self, user_email_id, *, tenant_id: EntityIdVO
+    ) -> None:
+        self.tenant_calls.append(tenant_id)
         self.marked_email_ids.append(user_email_id)
 
     async def exists_by_tenant_and_email(self, tenant_id, email: str) -> bool:
@@ -271,6 +278,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(uow.rolled_back)
         self.assertTrue(primary_email.is_verified)
         self.assertEqual(users_repository.marked_email_ids, [primary_email.id])
+        self.assertEqual(users_repository.tenant_calls, [self.tenant_id_vo])
         self.assertEqual(
             challenge_store.invalidated, [(self.tenant_id, generated.token)]
         )
@@ -371,9 +379,10 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
             expires_at=now + timedelta(hours=1),
         )
 
+        users_repository = _UserRepositoryStub(user)
         use_case = AuthenticateBySessionUseCase(
             tenant_context_reader=_TenantContextReaderStub(self.context),
-            users_repository=_UserRepositoryStub(user),
+            users_repository=users_repository,
             session_store=session_store,
         )
 
@@ -390,6 +399,8 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.user_id, str(user.id.uuid))
         self.assertEqual(result.tenant_id, str(self.tenant_id))
         self.assertEqual(result.session_id, "session-id")
+
+        self.assertEqual(users_repository.tenant_calls, [self.tenant_id_vo])
 
     async def test_get_current_user_raises_for_missing_session_token(self) -> None:
         use_case = GetCurrentUserUseCase(
@@ -454,6 +465,9 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.interface_language, "en")
         self.assertEqual(result.interface_theme, "dark")
         self.assertIs(users_repository.updated_profile, user)
+        self.assertEqual(
+            users_repository.tenant_calls, [self.tenant_id_vo, self.tenant_id_vo]
+        )
 
     async def test_update_current_user_profile_rejects_none_interface_theme(
         self,
@@ -543,6 +557,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(len(users_repository.added_users), 1)
+        self.assertEqual(users_repository.tenant_calls, [self.tenant_id_vo])
         created_user = users_repository.added_users[0]
         self.assertEqual(created_user.first_name, "John")
         self.assertEqual(created_user.last_name, "Doe")

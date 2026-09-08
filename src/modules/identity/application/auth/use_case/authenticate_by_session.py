@@ -86,7 +86,7 @@ class AuthenticateBySessionUseCase:
             return None
 
         user = await self._users_repository.get_by_id(
-            UserIdVO.from_value(session.user_id)
+            UserIdVO.from_value(session.user_id), tenant_id=tenant_id
         )
         if user is None or user.tenant_id != tenant_id:
             return None

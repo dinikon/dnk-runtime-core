@@ -33,8 +33,8 @@ class CreateTenantUseCase:
     async def execute(self, command: CreateTenantCommand) -> CreateTenantResultDTO:
         """Выполняет onboarding tenant, identity provisioning и bootstrap schema.
 
-        Сначала создается tenant и primary domain, затем tenant admin в identity,
-        после этого запускается bootstrap tenant-схемы через внешний порт.
+        Сначала создается tenant и primary domain, затем bootstrap tenant-схемы
+        через внешний порт, после этого tenant admin в готовой схеме.
         """
         onboarding = (
             await self._tenant_onboarding_service.create_tenant_with_primary_domain(
@@ -44,16 +44,16 @@ class CreateTenantUseCase:
             )
         )
 
+        await self._tenant_schema_bootstrap_port.bootstrap(
+            context=self._tenant_schema_bootstrap_context_factory.build(
+                tenant_id=onboarding.tenant.id,
+            )
+        )
         user = await self._identity_provisioning_service.create_tenant_admin(
             tenant_id=onboarding.tenant.id,
             first_name=command.user_first_name,
             last_name=command.user_last_name,
             email=command.user_email,
-        )
-        await self._tenant_schema_bootstrap_port.bootstrap(
-            context=self._tenant_schema_bootstrap_context_factory.build(
-                tenant_id=onboarding.tenant.id,
-            )
         )
 
         return CreateTenantResultDTO(

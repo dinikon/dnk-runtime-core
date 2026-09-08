@@ -25,11 +25,13 @@ class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):
         created_user_id = uuid4()
         created_user_email_id = uuid4()
         recorded_context = None
+        steps = []
 
         class TenantOnboardingServiceStub:
             async def create_tenant_with_primary_domain(
                 self, **kwargs
             ) -> TenantOnboardingDraft:
+                steps.append("tenant")
                 return TenantOnboardingDraft(
                     tenant=tenant,
                     tenant_domain=tenant_domain,
@@ -37,6 +39,7 @@ class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
         class IdentityProvisioningServiceStub:
             async def create_tenant_admin(self, **kwargs):
+                steps.append("admin")
                 return type(
                     "Provisioned",
                     (),
@@ -51,6 +54,7 @@ class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):
             async def bootstrap(self, *, context):
                 nonlocal recorded_context
                 recorded_context = context
+                steps.append("schema")
 
         use_case = CreateTenantUseCase(
             tenant_onboarding_service=TenantOnboardingServiceStub(),
@@ -72,6 +76,7 @@ class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):
             )
         )
 
+        self.assertEqual(steps, ["tenant", "schema", "admin"])
         self.assertIsNotNone(recorded_context)
         self.assertEqual(
             recorded_context.schema_name,

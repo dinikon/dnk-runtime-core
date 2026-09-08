@@ -3,17 +3,21 @@ from uuid import UUID
 
 import sqlalchemy as sa
 import uuid6
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import DateTime, Index, PrimaryKeyConstraint, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.modules.shared.infrastructure.persistence import Base
+from src.modules.shared.infrastructure.persistence.tenant_base import TenantBase
 from src.modules.shared.infrastructure.persistence import StringUUID
 
 
-class UserModel(Base):
-    """SQLAlchemy-модель пользователя identity."""
+class UserModel(TenantBase):
+    """Пользователь tenant; структура таблицы управляется Alembic."""
 
     __tablename__ = "users"
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_users"),
+        Index("ix_users_status", "status"),
+    )
 
     id: Mapped[UUID] = mapped_column(
         StringUUID,
@@ -32,17 +36,10 @@ class UserModel(Base):
         onupdate=func.current_timestamp(),
         nullable=False,
     )
-    tenant_id: Mapped[UUID] = mapped_column(
-        StringUUID,
-        ForeignKey("tenants.id"),
-        nullable=False,
-        index=True,
-    )
     status: Mapped[str] = mapped_column(
         String(255),
         server_default=sa.text("'active'"),
         nullable=False,
-        index=True,
     )
     user_type: Mapped[str] = mapped_column(String(255))
     last_name: Mapped[str] = mapped_column(String(255), nullable=False)

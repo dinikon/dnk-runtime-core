@@ -48,7 +48,7 @@ dnk-manage tenant-migrations current --all
 dnk-manage tenant-migrations revision --autogenerate --tenant-id <tenant_id> -m "Describe the change"
 ```
 
-Review generated revisions before applying them. Global tables still use startup `create_all`.
+Review generated revisions before applying them. Global tables still use startup `create_all`. Users and emails are tenant-local from revision `0002_identity_users`; the transition from shared users requires recreating test databases and repeating onboarding, without copying existing user data.
 
 ## Documentation
 

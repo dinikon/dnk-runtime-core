@@ -4,10 +4,15 @@ from typing import Annotated
 
 from fastapi import Depends
 
+from src.config import dnk_config
+
 from src.modules.identity.application.user import UserService
 from src.modules.identity.infrastructure.repository import SqlAlchemyUserRepository
 
 from src.modules.shared.presentation.persistence.depends import UoWDep
+from src.modules.shared.application.persistence.tenant_schema_naming import (
+    TenantSchemaNaming,
+)
 from src.modules.tenancy.application.ports.identity import (
     IdentityProvisioningServiceProtocol,
 )
@@ -52,7 +57,11 @@ def get_identity_provisioning_service(
     uow: UoWDep,
 ) -> IdentityProvisioningServiceProtocol:
     """Создает tenancy adapter к identity provisioning сервису."""
-    user_service = UserService(SqlAlchemyUserRepository(uow.session))
+    user_service = UserService(
+        SqlAlchemyUserRepository(
+            uow.session, TenantSchemaNaming(dnk_config.SCHEMA_PREFIX)
+        )
+    )
     return IdentityProvisioningServiceAdapter(user_service)
 
 
