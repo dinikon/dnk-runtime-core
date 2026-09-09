@@ -1,8 +1,0 @@
-{% extends "account/base_entrance.html" %}
-{% load allauth %}
-{% block head_title %}Не удалось войти{% endblock %}
-{% block content %}
-<h1>Не удалось завершить вход</h1>
-<p>Авторизация отменена или сервис временно недоступен. Попробуйте ещё раз либо выберите другой способ входа.</p>
-{% url 'account_login' as login_url %}{% element button href=login_url %}Вернуться ко входу{% endelement %}
-{% endblock %}

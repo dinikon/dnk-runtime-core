@@ -1,5 +1,5 @@
 {
-  "name": "@dnk/frontends",
+  "name": "@dnk/runtime-frontends",
   "version": "0.1.0",
   "private": true,
   "workspaces": [
@@ -8,29 +8,14 @@
   ],
   "scripts": {
     "dev:console": "npm --workspace @dnk/console run dev",
-    "dev:landing": "npm --workspace @dnk/landing run dev",
     "build:console": "npm --workspace @dnk/console run build",
-    "build:landing": "npm --workspace @dnk/landing run build",
     "lint:console": "npm --workspace @dnk/console run lint",
     "preview:console": "npm --workspace @dnk/console run preview",
-    "preview:landing": "npm --workspace @dnk/landing run preview",
-    "typecheck:console": "npm --workspace @dnk/console run typecheck",
-    "typecheck:landing": "npm --workspace @dnk/landing run typecheck",
-    "dev:core": "npm --workspace @dnk/core run dev",
-    "build:core": "npm --workspace @dnk/core run build",
-    "preview:core": "npm --workspace @dnk/core run preview",
-    "typecheck:core": "npm --workspace @dnk/core run typecheck",
-    "lint:core": "npm --workspace @dnk/core run lint",
-    "test:e2e:core": "npm --workspace @dnk/core run test:e2e",
-    "build:accounts": "npm --workspace @dnk/ui run build:django",
-    "typecheck:ui": "npm --workspace @dnk/ui run typecheck",
-    "lint:ui": "npm --workspace @dnk/ui run lint"
+    "typecheck:console": "npm --workspace @dnk/console run typecheck"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
     "eslint": "^10.4.0",
     "eslint-plugin-vue": "^10.9.1",
-    "globals": "^17.6.0",
     "typescript-eslint": "^8.59.3"
   },
   "allowScripts": {

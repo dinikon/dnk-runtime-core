@@ -12,7 +12,7 @@ const props = withDefaults(
     nameKey?: string;
     labelKey?: string;
     labelFormatter?: (d: number | Date) => string;
-    payload?: Record<string, any>;
+    payload?: Record<string, string | number | Date | null | undefined> & { fill?: string };
     config?: ChartConfig;
     class?: HTMLAttributes["class"];
     color?: string;

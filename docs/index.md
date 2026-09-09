@@ -50,6 +50,9 @@ This documentation describes the current implementation of `dnk-runtime-core` as
 
 ## Operations
 
+- [Repository split and local transition](repository-split.md)
+- [Standalone Helm deployment](../helm/README.md)
+
 - [CRM removal runbook](operations/remove-crm.md)
 - [Custom object module removal](operations/remove-custom-object.md)
 - [Workflow and communication removal](operations/remove-workflow-communication.md)

@@ -1,5 +1,0 @@
-apiVersion: v2
-name: dnk-common
-description: Shared migration coordination for DNK application charts
-type: library
-version: 0.3.0

@@ -78,7 +78,7 @@ function hydrate(filter: RuntimeFilter | null) {
   if ("and" in filter || "or" in filter) {
     const groupLogic = "and" in filter ? "and" : "or";
     logic.value = groupLogic;
-    const groupItems = groupLogic === "and" ? filter.and : filter.or;
+    const groupItems = "and" in filter ? filter.and : filter.or;
     conditions.value = groupItems
       .filter(isCondition)
       .map((condition) => conditionToDraft(condition));
