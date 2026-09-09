@@ -159,46 +159,6 @@ frontend:
     affinity: {}
     imagePullSecrets: []
 # Official Nginx routes /api to FastAPI and everything else to the Vue frontend.
-gateway:
-  image:
-    repository: nginx
-    tag: 1.27-alpine
-    pullPolicy: IfNotPresent
-  replicas: 1
-  service:
-    type: ClusterIP
-    port: 80
-  resources:
-    requests:
-      cpu: 100m
-      memory: 128Mi
-    limits:
-      memory: 512Mi
-  probes:
-    startup:
-      periodSeconds: 5
-      timeoutSeconds: 3
-      failureThreshold: 60
-    readiness:
-      periodSeconds: 10
-      timeoutSeconds: 3
-      failureThreshold: 3
-    liveness:
-      periodSeconds: 20
-      timeoutSeconds: 3
-      failureThreshold: 3
-  pod:
-    annotations: {}
-    labels: {}
-    securityContext: {}
-    containerSecurityContext:
-      allowPrivilegeEscalation: false
-    nodeSelector: {}
-    tolerations: []
-    affinity: {}
-    imagePullSecrets: []
-# Workers inherit the backend environment; each has independent image/resources/placement.
-# Console worker is an optional event diagnostic consumer. No scheduled CronJobs are deployed.
 workers:
   publisher:
     image:
@@ -256,12 +216,16 @@ workers:
     enabled: false
     queueName: dnk.integration.console
     routingKey: '#'
-# Supply the ingress controller and an existing TLS Secret. Host is derived from publicOrigin.
+# Existing system Ingress; cert-manager requests the certificate from this ClusterIssuer.
+# Routes point directly to backend/frontend Services. No application gateway is deployed.
 ingress:
-  enabled: false
-  className: ''
+  enabled: true
+  className: nginx
   annotations: {}
   tls:
+    clusterIssuer: letsencrypt-production
+    # Empty: use <application-fullname>-tls, created and renewed by cert-manager.
+    # For a pre-created TLS Secret, set its name and set clusterIssuer: ''.
     secretName: ''
 # A retained Sync Job runs before workloads; every workload waits for all coordinator Jobs.
 # Disable only when migrations are managed outside this chart.

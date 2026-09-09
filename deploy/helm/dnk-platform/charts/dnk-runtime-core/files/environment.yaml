@@ -1,3 +1,4 @@
+DNK_PUBLIC_ORIGIN: application.server.publicOrigin
 DEPLOY_ENV: application.server.environment
 SCHEMA_PREFIX: application.tenancy.schemaPrefix
 AUTH__OTP_CODE_LENGTH: application.auth.otpCodeLength

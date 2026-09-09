@@ -11,6 +11,12 @@ global:
 
 
 controlPlane:
+  # Control Plane values: this file is also usable without the umbrella chart.
+  # Required before install: publicOrigin, signing/Fernet keys, DB/Redis passwords.
+  # Secrets: supply value OR existingSecret.name/key, never both. Never commit real credentials.
+  # Production expects an existing HTTPS ingress/proxy and external SMTP.
+  # Each workload has its own image, scaling, resources, probes and pod scheduling.
+  # Existing Secrets are not watched: restart the affected workloads after external rotation.
   enabled: true
   nameOverride: dnk-control-plane
   fullnameOverride: ''
@@ -21,7 +27,7 @@ controlPlane:
       debug: false
       allowedHosts: []
       trustProxy: true
-      trustedProxyCount: 2
+      trustedProxyCount: 1
       languageCode: ru
       timeZone: UTC
     security:
@@ -201,51 +207,16 @@ controlPlane:
       tolerations: []
       affinity: {}
       imagePullSecrets: []
-  # Official Nginx; proxy configuration is supplied by this chart.
-  gateway:
-    image:
-      repository: nginx
-      tag: 1.27-alpine
-      pullPolicy: IfNotPresent
-    replicas: 1
-    service:
-      type: ClusterIP
-      port: 80
-    resources:
-      requests:
-        cpu: 100m
-        memory: 128Mi
-      limits:
-        memory: 512Mi
-    probes:
-      startup:
-        periodSeconds: 5
-        timeoutSeconds: 3
-        failureThreshold: 60
-      readiness:
-        periodSeconds: 10
-        timeoutSeconds: 3
-        failureThreshold: 3
-      liveness:
-        periodSeconds: 20
-        timeoutSeconds: 3
-        failureThreshold: 3
-    pod:
-      annotations: {}
-      labels: {}
-      securityContext: {}
-      containerSecurityContext:
-        allowPrivilegeEscalation: false
-      nodeSelector: {}
-      tolerations: []
-      affinity: {}
-      imagePullSecrets: []
-  # Existing controller and TLS Secret. Host comes from application.server.publicOrigin.
+  # Existing system Ingress; cert-manager requests the certificate from this ClusterIssuer.
+  # Routes point directly to backend/frontend Services. No application gateway is deployed.
   ingress:
-    enabled: false
-    className: ''
+    enabled: true
+    className: nginx
     annotations: {}
     tls:
+      clusterIssuer: letsencrypt-production
+      # Empty: use <application-fullname>-tls, created and renewed by cert-manager.
+      # For a pre-created TLS Secret, set its name and set clusterIssuer: ''.
       secretName: ''
   # A retained Job runs on each Helm install/upgrade or full ArgoCD Sync.
   # Disable only when migrations are managed externally; enabled sibling Jobs are still awaited.
@@ -385,8 +356,10 @@ controlPlane:
       tolerations: []
       affinity: {}
       imagePullSecrets: []
-
 runtime:
+  # Standalone dnk-runtime-core values; umbrella places these settings under runtime.
+  # No credentials are generated. Never commit actual credentials.
+  # Shared deployment revision triggers a rollout after a new Git revision; registry Secrets are namespace-local.
   enabled: true
   nameOverride: dnk-runtime-core
   fullnameOverride: ''
@@ -539,46 +512,6 @@ runtime:
       affinity: {}
       imagePullSecrets: []
   # Official Nginx routes /api to FastAPI and everything else to the Vue frontend.
-  gateway:
-    image:
-      repository: nginx
-      tag: 1.27-alpine
-      pullPolicy: IfNotPresent
-    replicas: 1
-    service:
-      type: ClusterIP
-      port: 80
-    resources:
-      requests:
-        cpu: 100m
-        memory: 128Mi
-      limits:
-        memory: 512Mi
-    probes:
-      startup:
-        periodSeconds: 5
-        timeoutSeconds: 3
-        failureThreshold: 60
-      readiness:
-        periodSeconds: 10
-        timeoutSeconds: 3
-        failureThreshold: 3
-      liveness:
-        periodSeconds: 20
-        timeoutSeconds: 3
-        failureThreshold: 3
-    pod:
-      annotations: {}
-      labels: {}
-      securityContext: {}
-      containerSecurityContext:
-        allowPrivilegeEscalation: false
-      nodeSelector: {}
-      tolerations: []
-      affinity: {}
-      imagePullSecrets: []
-  # Workers inherit the backend environment; each has independent image/resources/placement.
-  # Console worker is an optional event diagnostic consumer. No scheduled CronJobs are deployed.
   workers:
     publisher:
       image:
@@ -636,12 +569,16 @@ runtime:
       enabled: false
       queueName: dnk.integration.console
       routingKey: '#'
-  # Supply the ingress controller and an existing TLS Secret. Host is derived from publicOrigin.
+  # Existing system Ingress; cert-manager requests the certificate from this ClusterIssuer.
+  # Routes point directly to backend/frontend Services. No application gateway is deployed.
   ingress:
-    enabled: false
-    className: ''
+    enabled: true
+    className: nginx
     annotations: {}
     tls:
+      clusterIssuer: letsencrypt-production
+      # Empty: use <application-fullname>-tls, created and renewed by cert-manager.
+      # For a pre-created TLS Secret, set its name and set clusterIssuer: ''.
       secretName: ''
   # A retained Sync Job runs before workloads; every workload waits for all coordinator Jobs.
   # Disable only when migrations are managed outside this chart.
@@ -813,4 +750,3 @@ runtime:
       tolerations: []
       affinity: {}
       imagePullSecrets: []
-

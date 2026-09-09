@@ -21,7 +21,7 @@ application:
     debug: false
     allowedHosts: []
     trustProxy: true
-    trustedProxyCount: 2
+    trustedProxyCount: 1
     languageCode: ru
     timeZone: UTC
   security:
@@ -201,51 +201,16 @@ frontend:
     tolerations: []
     affinity: {}
     imagePullSecrets: []
-# Official Nginx; proxy configuration is supplied by this chart.
-gateway:
-  image:
-    repository: nginx
-    tag: 1.27-alpine
-    pullPolicy: IfNotPresent
-  replicas: 1
-  service:
-    type: ClusterIP
-    port: 80
-  resources:
-    requests:
-      cpu: 100m
-      memory: 128Mi
-    limits:
-      memory: 512Mi
-  probes:
-    startup:
-      periodSeconds: 5
-      timeoutSeconds: 3
-      failureThreshold: 60
-    readiness:
-      periodSeconds: 10
-      timeoutSeconds: 3
-      failureThreshold: 3
-    liveness:
-      periodSeconds: 20
-      timeoutSeconds: 3
-      failureThreshold: 3
-  pod:
-    annotations: {}
-    labels: {}
-    securityContext: {}
-    containerSecurityContext:
-      allowPrivilegeEscalation: false
-    nodeSelector: {}
-    tolerations: []
-    affinity: {}
-    imagePullSecrets: []
-# Existing controller and TLS Secret. Host comes from application.server.publicOrigin.
+# Existing system Ingress; cert-manager requests the certificate from this ClusterIssuer.
+# Routes point directly to backend/frontend Services. No application gateway is deployed.
 ingress:
-  enabled: false
-  className: ''
+  enabled: true
+  className: nginx
   annotations: {}
   tls:
+    clusterIssuer: letsencrypt-production
+    # Empty: use <application-fullname>-tls, created and renewed by cert-manager.
+    # For a pre-created TLS Secret, set its name and set clusterIssuer: ''.
     secretName: ''
 # A retained Job runs on each Helm install/upgrade or full ArgoCD Sync.
 # Disable only when migrations are managed externally; enabled sibling Jobs are still awaited.

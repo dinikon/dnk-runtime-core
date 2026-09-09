@@ -107,7 +107,7 @@ CORE_REDIS_DB: {{ .Values.redis.database | quote }}
 {{- fail "application.server.publicOrigin must be an HTTP(S) origin without path, credentials, query or fragment" -}}
 {{- end -}}
 {{- if and (not $app.server.debug) (ne $parsed.scheme "https") -}}{{- fail "production application.server.publicOrigin requires HTTPS" -}}{{- end -}}
-{{- if and (not $app.server.debug) (not $app.server.trustProxy) -}}{{- fail "production gateway requires application.server.trustProxy=true" -}}{{- end -}}
+{{- if and (not $app.server.debug) (not $app.server.trustProxy) -}}{{- fail "production reverse proxy requires application.server.trustProxy=true" -}}{{- end -}}
 {{- if and (not $app.server.debug) $app.server.allowedHosts (or (has "*" $app.server.allowedHosts) (not (has (include "dnk.controlPlane.hostname" .) $app.server.allowedHosts))) -}}
 {{- fail "application.server.allowedHosts must include the public hostname and exclude '*'" -}}{{- end -}}
 {{- range $env, $path := (.Files.Get "files/secrets.yaml" | fromYaml) -}}
@@ -149,7 +149,7 @@ CORE_REDIS_DB: {{ .Values.redis.database | quote }}
 {{- end -}}
 {{- include "dnk.controlPlane.validatePort" (dict "host" $redisUrl.host "path" "redis.external.url") -}}
 {{- end -}}
-{{- range $name := list "backend" "frontend" "gateway" -}}
+{{- range $name := list "backend" "frontend" -}}
 {{- $w := index $.Values $name -}}
 {{- $_ := required (printf "%s.image.repository is required" $name) $w.image.repository -}}
 {{- $_ := required (printf "%s.image.tag is required" $name) $w.image.tag -}}
@@ -166,10 +166,9 @@ CORE_REDIS_DB: {{ .Values.redis.database | quote }}
 {{- if hasKey $reserved .name -}}{{- fail (printf "backend.extraEnv duplicates managed variable %s" .name) -}}{{- end -}}
 {{- $_ := set $reserved .name true -}}
 {{- end -}}
-{{- if hasKey .Values.ingress.annotations "argocd.argoproj.io/sync-wave" -}}{{- fail "ingress.annotations cannot override managed sync-wave" -}}{{- end -}}
+{{- include "dnk.ingress.validate" . -}}
 {{- if .Values.ingress.enabled -}}
 {{- if ne $parsed.scheme "https" -}}{{- fail "Ingress requires an HTTPS publicOrigin" -}}{{- end -}}
 {{- if contains ":" $parsed.host -}}{{- fail "Ingress publicOrigin must use a DNS hostname without explicit port" -}}{{- end -}}
-{{- $_ := required "ingress.tls.secretName is required" .Values.ingress.tls.secretName -}}
 {{- end -}}
 {{- end -}}

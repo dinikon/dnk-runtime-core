@@ -1,5 +1,6 @@
 Control Plane: {{ .Values.application.server.publicOrigin }}
-Gateway Service: {{ include "dnk.controlPlane.fullname" . }}-gateway
+Ingress class: {{ .Values.ingress.className }}
+TLS Secret: {{ include "dnk.ingress.tlsSecretName" . }}
 
 Check rollout:
   kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}

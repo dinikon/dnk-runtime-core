@@ -1,7 +1,7 @@
 dependencies:
 - name: dnk-common
   repository: file://../dnk-common
-  version: 0.2.0
+  version: 0.3.0
 - name: postgresql
   repository: ""
   version: 0.1.0
@@ -11,5 +11,5 @@ dependencies:
 - name: rabbitmq
   repository: ""
   version: 0.1.0
-digest: sha256:60de118745a371263da1e4cb059bf999bbef29e866f446c3d6f76ae4d5e37b26
-generated: "2026-09-09T17:48:39.494475+03:00"
+digest: sha256:06e081139056ee6c7829184079467d26d4609eae89dc4e0719b4f538038bb8d3
+generated: "2026-09-09T19:44:52.658913+03:00"

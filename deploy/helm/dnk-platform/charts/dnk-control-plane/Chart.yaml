@@ -2,7 +2,7 @@ apiVersion: v2
 name: dnk-control-plane
 description: Django Control Plane, Nuxt, gateway and optional PostgreSQL/Redis
 type: application
-version: 0.2.0
+version: 0.3.0
 appVersion: "0.0.1"
 annotations:
   dnk.io/application-name: dnk-control-plane
@@ -15,5 +15,5 @@ dependencies:
   version: 0.1.0
   condition: redis.enabled
 - name: dnk-common
-  version: 0.2.0
+  version: 0.3.0
   repository: file://../dnk-common

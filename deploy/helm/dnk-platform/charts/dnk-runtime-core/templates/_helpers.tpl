@@ -104,7 +104,7 @@ EVENT_BUS__PUBLISHER_WORKER_ENABLED: {{ .Values.workers.publisher.enabled | quot
 {{- if and (eq $dep "redis") (not (regexMatch "^(|/|/[0-9]+)$" $u.path)) -}}{{- fail "redis.external.url must use an integer database path" -}}{{- end -}}
 {{- end -}}
 {{- end -}}
-{{- $workloads := dict "backend" .Values.backend "frontend" .Values.frontend "gateway" .Values.gateway "publisher" .Values.workers.publisher "console" .Values.workers.console -}}
+{{- $workloads := dict "backend" .Values.backend "frontend" .Values.frontend "publisher" .Values.workers.publisher "console" .Values.workers.console -}}
 {{- range $name, $w := $workloads -}}
 {{- $_ := required (printf "%s.image.repository is required" $name) $w.image.repository -}}{{- $_ := required (printf "%s.image.tag is required" $name) $w.image.tag -}}
 {{- range $key := list "app.kubernetes.io/name" "app.kubernetes.io/instance" "app.kubernetes.io/component" -}}{{- if hasKey $w.pod.labels $key -}}{{- fail (printf "%s.pod.labels cannot override selector %s" $name $key) -}}{{- end -}}{{- end -}}
@@ -116,9 +116,8 @@ EVENT_BUS__PUBLISHER_WORKER_ENABLED: {{ .Values.workers.publisher.enabled | quot
 {{- range .Values.backend.extraEnv -}}
 {{- if hasKey $reserved .name -}}{{- fail (printf "backend.extraEnv duplicates managed variable %s" .name) -}}{{- end -}}{{- $_ := set $reserved .name true -}}
 {{- end -}}
-{{- if hasKey .Values.ingress.annotations "argocd.argoproj.io/sync-wave" -}}{{- fail "ingress.annotations cannot override managed sync-wave" -}}{{- end -}}
+{{- include "dnk.ingress.validate" . -}}
 {{- if .Values.ingress.enabled -}}
 {{- if or (ne $url.scheme "https") (contains ":" $url.host) -}}{{- fail "Ingress requires an HTTPS publicOrigin with a DNS hostname and no explicit port" -}}{{- end -}}
-{{- $_ := required "ingress.tls.secretName is required" .Values.ingress.tls.secretName -}}
 {{- end -}}
 {{- end -}}

@@ -11,3 +11,5 @@ data:
     {{- .Files.Get "files/entrypoint.py" | nindent 4 }}
   migrate.py: |
     {{- .Files.Get "files/migrate.py" | nindent 4 }}
+  http_app.py: |
+    {{- .Files.Get "files/http_app.py" | nindent 4 }}

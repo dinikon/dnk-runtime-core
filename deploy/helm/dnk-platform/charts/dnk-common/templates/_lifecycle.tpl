@@ -134,14 +134,18 @@ subjects:
 {{- $fullname := include "dnk.lifecycle.fullname" $app -}}
 {{- $owner := $app.Chart.Name -}}
 {{- $runtime := hasKey $app.Values "rabbitmq" -}}
-{{- $configmaps := list "config" "gateway" -}}
+{{- $configmaps := list "config" -}}
 {{- if $runtime -}}{{- $configmaps = concat $configmaps (list "frontend" "scripts") -}}{{- end -}}
 {{- range $suffix := $configmaps -}}
 {{- include "dnk.lifecycle.reserveName" (dict "names" $names "kind" "ConfigMap" "name" (printf "%s-%s" $fullname $suffix) "owner" $owner) -}}
 {{- end -}}
 {{/* Credential names are reserved even when all sources are existing Secrets. */}}
 {{- include "dnk.lifecycle.reserveName" (dict "names" $names "kind" "Secret" "name" (printf "%s-credentials" $fullname) "owner" $owner) -}}
-{{- range $component := list "backend" "frontend" "gateway" -}}
+{{- if and $app.Values.ingress.enabled $app.Values.ingress.tls.clusterIssuer -}}
+{{/* Each cert-manager managed certificate must own its own Secret. */}}
+{{- include "dnk.lifecycle.reserveName" (dict "names" $names "kind" "Secret" "name" (include "dnk.ingress.tlsSecretName" $app) "owner" (printf "%s TLS certificate" $owner)) -}}
+{{- end -}}
+{{- range $component := list "backend" "frontend" -}}
 {{- range $kind := list "Deployment" "Service" -}}
 {{- include "dnk.lifecycle.reserveName" (dict "names" $names "kind" $kind "name" (printf "%s-%s" $fullname $component) "owner" $owner) -}}
 {{- end -}}

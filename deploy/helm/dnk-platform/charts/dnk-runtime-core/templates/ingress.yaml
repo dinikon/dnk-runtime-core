@@ -1,32 +1,37 @@
 {{- if .Values.ingress.enabled }}
+{{- $fullname := include "dnk.runtime.fullname" . }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "dnk.runtime.fullname" . }}
+  name: {{ $fullname }}
   labels:
     {{- include "dnk.runtime.labels" . | nindent 4 }}
   annotations:
-    {{- with .Values.ingress.annotations }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
-    argocd.argoproj.io/sync-wave: "0"
+    {{- include "dnk.ingress.annotations" . | nindent 4 }}
 spec:
-  {{- with .Values.ingress.className }}
-  ingressClassName: {{ . | quote }}
-  {{- end }}
+  ingressClassName: {{ .Values.ingress.className | quote }}
   tls:
-    - secretName: {{ .Values.ingress.tls.secretName | quote }}
+    - secretName: {{ include "dnk.ingress.tlsSecretName" . | quote }}
       hosts:
         - {{ include "dnk.runtime.hostname" . | quote }}
   rules:
     - host: {{ include "dnk.runtime.hostname" . | quote }}
       http:
         paths:
+          {{- range $path := list "/api" }}
+          - path: {{ $path }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullname }}-backend
+                port:
+                  number: {{ $.Values.backend.service.port }}
+          {{- end }}
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: {{ include "dnk.runtime.fullname" . }}-gateway
+                name: {{ $fullname }}-frontend
                 port:
-                  number: {{ .Values.gateway.service.port }}
+                  number: {{ .Values.frontend.service.port }}
 {{- end }}

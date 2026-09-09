@@ -1,8 +1,8 @@
 {{- $root := . -}}
 {{- $fullname := include "dnk.controlPlane.fullname" . -}}
-{{- range $component := list "backend" "frontend" "gateway" -}}
+{{- range $component := list "backend" "frontend" -}}
 {{- $workload := index $root.Values $component -}}
-{{- $port := index (dict "backend" 8001 "frontend" 3000 "gateway" 80) $component }}
+{{- $port := index (dict "backend" 8001 "frontend" 3000) $component }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -39,8 +39,6 @@ spec:
         {{- if eq $component "backend" }}
         checksum/config: {{ include "dnk.controlPlane.config" $root | sha256sum }}
         checksum/credentials: {{ include "dnk.controlPlane.secretBindings" $root | sha256sum }}
-        {{- else if eq $component "gateway" }}
-        checksum/config: {{ include (print $root.Template.BasePath "/gateway-configmap.yaml") $root | sha256sum }}
         {{- else }}
         checksum/config: {{ $root.Values.application.server.publicOrigin | sha256sum }}
         {{- end }}
@@ -101,7 +99,7 @@ spec:
           {{- range $probe := list "startup" "readiness" "liveness" }}
           {{ $probe }}Probe:
             httpGet:
-              path: {{ index (dict "backend" "/api/capabilities/" "frontend" "/" "gateway" "/_healthz") $component }}
+              path: {{ index (dict "backend" "/api/capabilities/" "frontend" "/") $component }}
               port: http
               {{- if eq $component "backend" }}
               httpHeaders:
@@ -121,21 +119,10 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
-            {{- if eq $component "gateway" }}
-            - name: gateway-config
-              mountPath: /etc/nginx/conf.d/default.conf
-              subPath: default.conf
-              readOnly: true
-            {{- end }}
       volumes:
         {{- include "dnk.lifecycle.gateVolumes" $root | nindent 8 }}
         - name: tmp
           emptyDir: {}
-        {{- if eq $component "gateway" }}
-        - name: gateway-config
-          configMap:
-            name: {{ $fullname }}-gateway
-        {{- end }}
 ---
 apiVersion: v1
 kind: Service

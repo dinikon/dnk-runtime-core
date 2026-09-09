@@ -706,166 +706,6 @@
         }
       }
     },
-    "gateway": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "image": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "repository": {
-              "type": "string",
-              "pattern": "^$|^[^\\s@:]+(?::[0-9]+)?(?:/[^\\s@:]+)*$",
-              "minLength": 1
-            },
-            "tag": {
-              "type": "string",
-              "pattern": "^$|^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$",
-              "minLength": 1
-            },
-            "pullPolicy": {
-              "type": "string",
-              "enum": [
-                "Always",
-                "IfNotPresent",
-                "Never"
-              ]
-            }
-          }
-        },
-        "replicas": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "service": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "type": {
-              "type": "string",
-              "enum": [
-                "ClusterIP",
-                "NodePort",
-                "LoadBalancer"
-              ]
-            },
-            "port": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 65535
-            }
-          }
-        },
-        "resources": {
-          "type": "object"
-        },
-        "probes": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "startup": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "periodSeconds": {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                "timeoutSeconds": {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                "failureThreshold": {
-                  "type": "integer",
-                  "minimum": 1
-                }
-              }
-            },
-            "readiness": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "periodSeconds": {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                "timeoutSeconds": {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                "failureThreshold": {
-                  "type": "integer",
-                  "minimum": 1
-                }
-              }
-            },
-            "liveness": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "periodSeconds": {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                "timeoutSeconds": {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                "failureThreshold": {
-                  "type": "integer",
-                  "minimum": 1
-                }
-              }
-            }
-          }
-        },
-        "pod": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "annotations": {
-              "type": "object"
-            },
-            "labels": {
-              "type": "object"
-            },
-            "securityContext": {
-              "type": "object"
-            },
-            "containerSecurityContext": {
-              "type": "object"
-            },
-            "nodeSelector": {
-              "type": "object"
-            },
-            "tolerations": {
-              "type": "array",
-              "items": {}
-            },
-            "affinity": {
-              "type": "object"
-            },
-            "imagePullSecrets": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "required": [
-                  "name"
-                ],
-                "properties": {
-                  "name": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                },
-                "additionalProperties": false
-              }
-            }
-          }
-        }
-      }
-    },
     "workers": {
       "type": "object",
       "additionalProperties": false,
@@ -1056,17 +896,29 @@
           "type": "boolean"
         },
         "className": {
-          "type": "string"
+          "type": "string",
+          "maxLength": 253,
+          "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$"
         },
         "annotations": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
         },
         "tls": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "secretName": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 253,
+              "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$"
+            },
+            "clusterIssuer": {
+              "type": "string",
+              "maxLength": 253,
+              "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$"
             }
           }
         }

@@ -30,7 +30,8 @@ controlPlane:
     enabled: true
     className: nginx
     tls:
-      secretName: replace-me-control-plane-tls
+      clusterIssuer: letsencrypt-production
+      secretName: ""
   postgresql:
     auth:
       password:
@@ -65,7 +66,8 @@ runtime:
     enabled: true
     className: nginx
     tls:
-      secretName: replace-me-runtime-tls
+      clusterIssuer: letsencrypt-production
+      secretName: ""
   postgresql:
     auth:
       password:

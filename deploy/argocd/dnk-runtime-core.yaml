@@ -52,7 +52,8 @@ spec:
           enabled: true
           className: nginx
           tls:
-            secretName: replace-me-runtime-tls
+            clusterIssuer: letsencrypt-production
+            secretName: ""
         postgresql:
           auth:
             password:

@@ -188,10 +188,11 @@ class HelmContractTests(unittest.TestCase):
         ingress=False,
         rabbit=True,
     ):
+        self.assertFalse(any(r["metadata"]["name"].endswith("-gateway") for r in manifests))
         counts = len(packages)
         deployments = [r for r in manifests if r["kind"] == "Deployment"]
         jobs = [r for r in manifests if r["kind"] == "Job"]
-        self.assertEqual(len(deployments), 3 * counts + int("runtime" in packages))
+        self.assertEqual(len(deployments), 2 * counts + int("runtime" in packages))
         self.assertEqual(len(jobs), counts)
         statefulsets = [r for r in manifests if r["kind"] == "StatefulSet"]
         self.assertEqual(
@@ -319,7 +320,7 @@ class HelmContractTests(unittest.TestCase):
                     & {v["name"] for v in container.get("volumeMounts", [])}
                 )
                 env = resolve_env(container)
-                if component(deployment) in {"backend", "frontend", "gateway"}:
+                if component(deployment) in {"backend", "frontend"}:
                     for probe in ("startupProbe", "readinessProbe", "livenessProbe"):
                         self.assertIn(probe, container)
                 if "CORE_PUBLIC_ORIGIN" in env:
@@ -425,15 +426,63 @@ class HelmContractTests(unittest.TestCase):
             for deployment in (r for r in manifests if r["kind"] == "Deployment"):
                 name = component(deployment)
                 container = podspec(deployment)["containers"][0]
-                if name == "gateway":
-                    self.assertEqual(container["image"], "nginx:1.27-alpine")
-                else:
-                    suffix = "frontend-" + expected if name == "frontend" else expected
-                    self.assertEqual(
-                        container["image"],
-                        "ghcr.io/dinikon/runtime/" + suffix + ":latest",
-                    )
-                    self.assertEqual(container["imagePullPolicy"], "Always")
+                suffix = "frontend-" + expected if name == "frontend" else expected
+                self.assertEqual(
+                    container["image"],
+                    "ghcr.io/dinikon/runtime/" + suffix + ":latest",
+                )
+                self.assertEqual(container["imagePullPolicy"], "Always")
+
+    def test_direct_ingress_and_certificate_defaults(self):
+        for chart, fixture, backend_paths in [
+            (CORE, core_values, {"/api", "/accounts", "/admin", "/static"}),
+            (RUNTIME, runtime_values, {"/api"}),
+        ]:
+            values = fixture()
+            del values["ingress"]
+            values.setdefault("backend", {})["service"] = {"port": 8101}
+            values.setdefault("frontend", {})["service"] = {"port": 3101}
+            manifests = self.render(values, chart)
+            ingress = next(r for r in manifests if r["kind"] == "Ingress")
+            fullname = ingress["metadata"]["name"]
+            self.assertEqual(ingress["spec"]["ingressClassName"], "nginx")
+            self.assertEqual(
+                ingress["metadata"]["annotations"]["cert-manager.io/cluster-issuer"],
+                "letsencrypt-production",
+            )
+            self.assertEqual(ingress["spec"]["tls"][0]["secretName"], fullname + "-tls")
+            paths = ingress["spec"]["rules"][0]["http"]["paths"]
+            self.assertEqual({p["path"] for p in paths}, backend_paths | {"/"})
+            for path in paths:
+                self.assertEqual(path["pathType"], "Prefix")
+                backend = path["path"] in backend_paths
+                self.assertEqual(
+                    path["backend"]["service"],
+                    {"name": fullname + ("-backend" if backend else "-frontend"),
+                     "port": {"number": 8101 if backend else 3101}},
+                )
+            self.assertFalse(any(r["metadata"]["name"].endswith("-gateway") for r in manifests))
+            self.assertFalse(any(r["kind"] == "Secret" and r["metadata"]["name"] == fullname + "-tls" for r in manifests))
+
+    def test_ingress_existing_certificate_and_invalid_settings(self):
+        for chart, fixture in [(CORE, core_values), (RUNTIME, runtime_values)]:
+            values = fixture(ingress=True)
+            values["ingress"]["tls"] = {"clusterIssuer": "", "secretName": "existing-tls"}
+            ingress = next(r for r in self.render(values, chart) if r["kind"] == "Ingress")
+            self.assertNotIn("cert-manager.io/cluster-issuer", ingress["metadata"]["annotations"])
+            self.assertEqual(ingress["spec"]["tls"][0]["secretName"], "existing-tls")
+            for override in [
+                {"className": ""},
+                {"tls": {"clusterIssuer": "Invalid Issuer"}},
+                {"tls": {"secretName": "Invalid Secret"}},
+                {"annotations": {"cert-manager.io/cluster-issuer": "conflicting"}},
+                {"annotations": {"kubernetes.io/ingress.class": "conflicting"}},
+                {"annotations": {"argocd.argoproj.io/sync-wave": "-50"}},
+                {"annotations": {"invalid-type": True}},
+            ]:
+                invalid = fixture(ingress=True)
+                invalid["ingress"].update(override)
+                self.run_helm(chart, invalid, success=False)
 
     def test_lint_and_package_all_entrypoints(self):
         for chart, fixture in [
@@ -581,7 +630,7 @@ class HelmContractTests(unittest.TestCase):
         values["runtime"]["workers"] = {"console": {"enabled": True}}
         manifests = self.render(values, UMBRELLA)
         deployments = [r for r in manifests if r["kind"] == "Deployment"]
-        self.assertEqual(len(deployments), 8)
+        self.assertEqual(len(deployments), 6)
         for resource in manifests:
             if resource["kind"] in {"Deployment", "Job", "StatefulSet"}:
                 self.assertIn(
@@ -690,7 +739,7 @@ class HelmContractTests(unittest.TestCase):
                     values[service]["external"].update(invalid)
                     cases.append(("invalid external " + service, values))
             values = fixture(ingress=True)
-            values["ingress"]["tls"]["secretName"] = ""
+            values["ingress"]["tls"] = {"secretName": "", "clusterIssuer": ""}
             cases.append(("missing TLS secret", values))
             for label, values in cases:
                 with self.subTest(chart=chart.name, case=label):

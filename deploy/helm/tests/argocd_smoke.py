@@ -306,7 +306,7 @@ def argocd_smoke(published=False, reuse_test_images=False):
                 p["metadata"]["uid"]
                 for p in cluster.get("pods")
                 if p["metadata"].get("labels", {}).get("app.kubernetes.io/component")
-                in {"backend", "frontend", "gateway", "publisher"}
+                in {"backend", "frontend", "publisher"}
                 and not p["metadata"].get("deletionTimestamp")
             }
 

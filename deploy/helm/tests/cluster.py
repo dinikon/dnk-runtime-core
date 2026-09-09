@@ -240,7 +240,6 @@ class Cluster(AbstractContextManager):
                     "tag": "latest" if self.published else "helm-test",
                     "pullPolicy": "Never",
                 }
-            values[app]["gateway"] = {"image": {"pullPolicy": "Never"}}
             values[app]["backend"]["replicas"] = 2
             for dependency in ["postgresql", "redis"] + (
                 ["rabbitmq"] if app == "runtime" else []

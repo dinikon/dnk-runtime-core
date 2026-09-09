@@ -1,7 +1,7 @@
 {{- $root := . -}}
 {{- $fullname := include "dnk.runtime.fullname" . -}}
-{{- $workloads := dict "backend" .Values.backend "frontend" .Values.frontend "gateway" .Values.gateway "publisher" .Values.workers.publisher "console" .Values.workers.console -}}
-{{- range $component := list "backend" "frontend" "gateway" "publisher" "console" -}}
+{{- $workloads := dict "backend" .Values.backend "frontend" .Values.frontend "publisher" .Values.workers.publisher "console" .Values.workers.console -}}
+{{- range $component := list "backend" "frontend" "publisher" "console" -}}
 {{- $w := index $workloads $component -}}
 {{- $worker := has $component (list "publisher" "console") -}}
 {{- if or (not $worker) $w.enabled -}}
@@ -41,10 +41,10 @@ spec:
         dnk.io/deployment-revision: {{ $root.Values.global.deployment.revision | quote }}
         checksum/migration-gate: {{ include "dnk.lifecycle.gateScript" $root | sha256sum }}
         {{- if $python }}
-        checksum/config: {{ printf "%s\n%s\n%s" (include "dnk.runtime.config" $root) ($root.Files.Get "files/entrypoint.py") ($root.Files.Get "files/migrate.py") | sha256sum }}
+        checksum/config: {{ printf "%s\n%s\n%s\n%s" (include "dnk.runtime.config" $root) ($root.Files.Get "files/entrypoint.py") ($root.Files.Get "files/migrate.py") ($root.Files.Get "files/http_app.py") | sha256sum }}
         checksum/credentials: {{ include "dnk.runtime.secretBindings" $root | sha256sum }}
         {{- else }}
-        checksum/config: {{ include (print $root.Template.BasePath "/gateway-configmap.yaml") $root | sha256sum }}
+        checksum/config: {{ include (print $root.Template.BasePath "/frontend-configmap.yaml") $root | sha256sum }}
         {{- end }}
     spec:
       automountServiceAccountToken: false
@@ -82,7 +82,7 @@ spec:
           {{- if $python }}
           command: [python, /opt/dnk-runtime/entrypoint.py]
           {{- if eq $component "backend" }}
-          args: [uvicorn, src.app:app, --host, 0.0.0.0, --port, "8000", --proxy-headers, --forwarded-allow-ips, "*"]
+          args: [uvicorn, --app-dir, /opt/dnk-runtime, --factory, http_app:create_app, --host, 0.0.0.0, --port, "8000", --proxy-headers, --forwarded-allow-ips, "*"]
           {{- else if eq $component "publisher" }}
           args: [dnk-manage, events, publisher-worker]
           {{- else }}
@@ -104,7 +104,7 @@ spec:
           {{- range $probe := list "startup" "readiness" "liveness" }}
           {{ $probe }}Probe:
             httpGet:
-              path: {{ index (dict "backend" "/docs" "frontend" "/" "gateway" "/_healthz") $component }}
+              path: {{ index (dict "backend" "/docs" "frontend" "/") $component }}
               port: http
               httpHeaders:
                 - name: Host
