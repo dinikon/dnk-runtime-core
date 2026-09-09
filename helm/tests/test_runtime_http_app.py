@@ -4,7 +4,7 @@ import importlib.util
 from pathlib import Path
 import unittest
 
-PATH = Path(__file__).resolve().parents[1] / "dnk-runtime-core/files/http_app.py"
+PATH = Path(__file__).resolve().parents[1] / "files/http_app.py"
 spec = importlib.util.spec_from_file_location("runtime_http_app", PATH)
 http_app = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(http_app)

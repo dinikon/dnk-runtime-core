@@ -1,35 +1,32 @@
-# Проверка Runtime после разделения
+# Проверка корневого Helm chart 0.3.2
 
-Проверено локально 2026-09-09: Helm 3.19.0, Kind 0.29.0, Kubernetes 1.33.1,
-Python 3.13.9, PyYAML 6.0.3 и SQLAlchemy 2.0.48.
+Проверка структуры от 2026-09-09. Результаты версии 0.3.1 сохранены отдельно:
+[исторический отчёт](../docs/history/helm-validation-0.3.1.md).
+
+Среда: Helm 3.19.0, Python 3.13.9, PyYAML 6.0.3.
+Исходное состояние этого изменения: commit `4295b05f171d1f9413b14e41511a97740c075471`; приложение и образы не менялись.
 
 | Проверка | Результат |
 | --- | --- |
-| `python -m unittest discover -s helm/tests -p 'test_*.py' -v` | 43 теста прошли |
-| `python helm/build.py --destination dist/helm` | `dnk-runtime-core-0.3.1.tgz` успешно собран |
-| `python helm/tests/runtime_migrations_integration.py --runtime-image dnk-test/runtime:helm-test` | 9 PostgreSQL/container тестов прошли |
-| `python helm/tests/smoke.py --reuse-test-images` | Standalone Kind smoke прошел; кластер удален |
+| Offline unittest discovery в `helm/tests` | 42 тестов прошли |
+| Прямые `helm lint`, `helm template`, `helm package helm` | Прошли, подготовка chart не требуется |
+| `python helm/build.py --destination dist/helm` | Собран `dnk-runtime-core-0.3.2.tgz` |
+| Состав пакета | Собственные templates и локальные infrastructure charts; без tooling, тестов, wrappers и common archive |
+| Отсутствие изменений исходников при упаковке | Проверено сравнением содержимого файлов до/после |
+| Black для Helm tooling/tests | Пройден |
 
-Офлайн проверки охватывают YAML/schema/render, версии и SHA256 зависимостей,
-совпадение common-library, отказ при измененном архиве или дублирующем subchart,
-а также отсутствие изменений исходников после упаковки.
+Сопоставлены по 16 вариантов прежнего самостоятельного chart 0.3.1 и корневого 0.3.2
+(всего 32 для пары репозиториев): PostgreSQL/Redis embedded или external,
+inline/existing Secrets и включённый/выключенный Ingress. Допустимые отличия —
+`helm.sh/chart` и производный checksum frontend ConfigMap runtime. При выравнивании
+версии во временной копии результаты совпадают полностью, включая имена, selectors,
+PVC, окружение, миграции и доступ к Kubernetes API.
 
-В изолированном Kind проверены настоящий nginx Ingress и cert-manager с тестовым CA,
-OTP-вход, session cookie Secure/HttpOnly/SameSite, logout, барьер отсутствующей или
-устаревшей migration Job, upgrade, перезапуск StatefulSet и повторная установка
-с прежними PVC и сохраненными данными PostgreSQL, Redis и RabbitMQ.
+Офлайн проверки также проверяют неверные настройки/schema, отсутствие конфликтов
+Secrets и имён, миграционный барьер и актуальность путей ArgoCD. Текущие проверки
+относятся к двум самостоятельным packages; umbrella удалена.
 
-Проверка транзакций охватывает конкурирующие batches/CLI, advisory locks, потерю
-соединения, откат всей пачки при сбое второго tenant, повторный bootstrap и
-сохранение существующих данных. Все БД и контейнеры этой проверки были временными.
-
-Для Kind использованы локальные образы из разделенного проекта, заранее помеченные
-`dnk-test/runtime:helm-test` и `dnk-test/frontend-runtime:helm-test`.
-Обычный запуск без `--reuse-test-images` собирает их из текущего репозитория.
-Текущий Kubernetes context и работающий локальный Compose-стенд не изменялись.
-
-Дополнительно сопоставлены 48 вариантов рендера прежней и новой структуры
-(16 Runtime, 16 Control Plane, 16 umbrella). После ожидаемого повышения версии
-app/platform charts до 0.3.1 результаты совпадают: имена, selectors, PVC,
-миграции и контракты конфигурации сохранены. Проверка общего ArgoCD принадлежит
-репозиторию Control Plane и здесь не заявляется.
+Kubernetes smoke и PostgreSQL migration integration runtime в этом изменении
+повторно не запускались: deployment-шаблоны и исполняемые скрипты перенесены без
+изменения поведения, что подтверждено сравнением рендера и unit-тестами скриптов.
+Результаты интеграционных прогонов 0.3.1 доступны в историческом отчёте выше.

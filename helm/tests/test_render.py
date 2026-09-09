@@ -17,7 +17,7 @@ import unittest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-RUNTIME = ROOT / "helm/dnk-runtime-core"
+RUNTIME = ROOT / "helm"
 HELM = os.environ.get("HELM", "helm")
 SECRET_KEY = "render-test-signing-key-0123456789-abcdefghijklmnopqrstuvwxyz"
 FERNET_KEY = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="

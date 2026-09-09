@@ -4,7 +4,7 @@
 control-plane scaffold `ebcfd913ddde22c435bb994f2186874e388e9cb2`.
 [Инвентаризация](repository-split.json) фиксирует исходные пути и SHA-256 переносимых файлов.
 
-Control Plane владеет Django, Core Nuxt, `@dnk/ui`, своим deployment и umbrella chart.
+Control Plane владеет Django, Core Nuxt, `@dnk/ui`, своим самостоятельным deployment.
 Runtime владеет FastAPI, Console/Shortlink, tenant migrations, workers и своим chart.
 Исходники и lockfiles репозиториев независимы; установленные зависимости и результаты
 сборки не переносятся. Python остаётся 3.13.9. `accounts`, `dnk_core`, `CORE_*`,
@@ -78,16 +78,17 @@ docker compose --project-directory "$PWD" -p dnk-runtime-core -f /tmp/dnk-before
 
 ## Helm и ArgoCD
 
-Порядок обновления: неизменённая common 0.3.0 → runtime chart 0.3.1 → umbrella
-с зафиксированным runtime `.tgz`. Исходниками common владеет control-plane;
-runtime получает библиотеку архивом. Проверяйте версии, контрольные суммы и
-совпадение общей библиотеки, используя инструкции `helm/README.md` каждого репозитория.
-Архив зависимости обновляется отдельным изменением; обычная сборка его не обновляет.
+После упрощения структуры каждый `helm/` — корень собственного chart 0.3.2.
+Остаются два самостоятельных пакета: `dnk-control-plane` и `dnk-runtime-core`.
+Umbrella `dnk-platform` удалена; общие helpers включены непосредственно в `templates/`
+каждого сервиса. В `charts/` остаются только его инфраструктурные зависимости.
+Обычная упаковка не обновляет зависимости и не меняет исходники.
 
-Control-plane и platform ArgoCD Applications читают control-plane repo, runtime
-Application — runtime repo. Для действующей установки сохраняйте release name,
-namespace, values, Secret references и PVC; меняются только repo/path и закреплённые
-версии. Не устанавливайте standalone charts поверх ресурсов umbrella и наоборот.
+Каждый ArgoCD Application читает свой репозиторий с `path: helm`. Для действующего
+самостоятельного релиза сохраняйте release name, namespace, values, Secret references
+и PVC. Прежняя umbrella-установка требует отдельного переноса владения ресурсами;
+до него используйте её сохранённую версию. Не устанавливайте standalone charts
+поверх ресурсов umbrella.
 
 До обновления сохраните текущие ArgoCD source/revision и image/chart versions.
 После проверки пакетов и публикации нужных образов переключайте источник deployment.
@@ -97,7 +98,7 @@ namespace, values, Secret references и PVC; меняются только repo/
 ## Проверки
 
 Каждый репозиторий проверяет свой backend, frontend, Docker build и самостоятельный
-chart. Control-plane дополнительно проверяет umbrella и ArgoCD с runtime-образами,
-закреплёнными по digest; для приватных GHCR-пакетов CI нужен доступ на чтение.
+chart. Control-plane дополнительно проверяет свой ArgoCD sync/selfHeal и миграции;
+для этих проверок собираются только его собственные образы.
 Локальные browser-тесты используют отдельный Compose project `dnk-control-plane-e2e`
 с собственными PostgreSQL, Redis и сетью. Они не должны использовать общую dev-БД.

@@ -16,7 +16,7 @@ import time
 import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_RELATIVE = Path("helm/dnk-runtime-core/files")
+RUNTIME_RELATIVE = Path("helm/files")
 
 
 def docker(*args, check=True):

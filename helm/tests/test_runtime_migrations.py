@@ -6,7 +6,7 @@ from pathlib import Path
 import unittest
 from unittest.mock import AsyncMock
 
-SCRIPT = Path(__file__).resolve().parents[1] / "dnk-runtime-core/files/migrate.py"
+SCRIPT = Path(__file__).resolve().parents[1] / "files/migrate.py"
 spec = importlib.util.spec_from_file_location("runtime_migrations", SCRIPT)
 migrations = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(migrations)

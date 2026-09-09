@@ -49,7 +49,7 @@ class Cluster(AbstractContextManager):
     def __init__(
         self, published=False, namespace="platform-smoke", reuse_test_images=False
     ):
-        self.temporary = tempfile.TemporaryDirectory(prefix="dnk-platform-test-")
+        self.temporary = tempfile.TemporaryDirectory(prefix="dnk-runtime-test-")
         self.work = Path(self.temporary.name)
         self.name = "dnk-test-" + uuid.uuid4().hex[:8]
         self.namespace = namespace

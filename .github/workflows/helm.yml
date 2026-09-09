@@ -42,7 +42,7 @@ jobs:
         with:
           version: v3.19.0
       - run: python -m pip install PyYAML==6.0.3 SQLAlchemy==2.0.48
-      - name: Verify pinned dependencies and package owned charts
+      - name: Verify local dependencies and package root chart
         run: python helm/build.py --destination dist/helm
       - name: Lint, strict YAML, schemas, lifecycle and runtime script contracts
         run: python -m unittest discover -s helm/tests -p 'test_*.py' -v

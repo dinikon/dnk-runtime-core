@@ -1,4 +1,4 @@
-# Standalone dnk-runtime-core values; umbrella places these settings under runtime.
+# Standalone dnk-runtime-core values for the root helm/ chart.
 # No credentials are generated. Never commit actual credentials.
 # Shared deployment revision triggers a rollout after a new Git revision; registry Secrets are namespace-local.
 global:

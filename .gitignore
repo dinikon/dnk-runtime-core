@@ -147,8 +147,8 @@ rabbitmq/
 rabbitmq-data/
 !src/modules/shared/infrastructure/messaging/rabbitmq/
 !src/modules/shared/infrastructure/messaging/rabbitmq/*.py
-!helm/dnk-runtime-core/charts/rabbitmq/
-!helm/dnk-runtime-core/charts/rabbitmq/**
+!helm/charts/rabbitmq/
+!helm/charts/rabbitmq/**
 
 # ActiveMQ
 activemq-data/

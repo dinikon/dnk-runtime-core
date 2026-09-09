@@ -21,7 +21,7 @@ spec:
       - CreateNamespace=true
   source:
     repoURL: git@github.com:dinikon/dnk-runtime-core.git
-    path: helm/dnk-runtime-core
+    path: helm
     targetRevision: main
     helm:
       parameters:

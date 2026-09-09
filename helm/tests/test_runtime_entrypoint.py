@@ -8,7 +8,7 @@ import sys
 import unittest
 from urllib.parse import urlsplit, unquote
 
-SCRIPT = Path(__file__).resolve().parents[1] / "dnk-runtime-core/files/entrypoint.py"
+SCRIPT = Path(__file__).resolve().parents[1] / "files/entrypoint.py"
 spec = importlib.util.spec_from_file_location("runtime_entrypoint", SCRIPT)
 entrypoint = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(entrypoint)

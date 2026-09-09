@@ -10,8 +10,8 @@ Django accounts and the Nuxt Core frontend live in
 Both projects build independently. Local PostgreSQL and Redis remain in this Compose
 project; Control Plane connects through its external Docker network.
 
-The standalone [Helm chart](helm/README.md) deploys Runtime. The platform umbrella
-chart belongs to Control Plane and vendors a released Runtime chart archive.
+The standalone [Helm chart](helm/README.md) deploys Runtime directly from `helm/`.
+Control Plane has its own independent root chart; there is no platform umbrella.
 See the [repository transition guide](docs/repository-split.md) before switching an
 existing local stack.
 
