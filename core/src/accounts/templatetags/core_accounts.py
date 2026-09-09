@@ -1,6 +1,12 @@
+"""Thin template bindings for account presentation and versioned UI assets."""
+
 from django import template
 
+from accounts.presentation.fields import serialize_field
+from accounts.presentation.social_accounts import social_account_label
+
 register = template.Library()
+register.filter("social_account_label", social_account_label)
 
 
 @register.filter
@@ -45,6 +51,7 @@ def device_label(user_agent):
 
 @register.inclusion_tag("accounts/ui/fields.html")
 def core_fields(form, exclude=""):
+    """Render visible form fields while preserving the native HTML fallback."""
     return {
         "form": form,
         "fields": [field for field in form.visible_fields() if field.name != exclude],
@@ -53,64 +60,14 @@ def core_fields(form, exclude=""):
 
 @register.inclusion_tag("accounts/ui/field.html")
 def core_field(field):
+    """Render one bound field with its native errors and optional Vue enhancement."""
     return {"field": field}
 
 
 @register.filter
 def field_schema(field):
-    """JSON data, never executable markup. Passwords remain exclusively in DOM."""
-    from django.utils.html import strip_tags
-
-    widget = field.field.widget
-    attrs = field.build_widget_attrs(widget.attrs.copy())
-    kind = getattr(widget, "input_type", "text")
-    if widget.__class__.__name__ == "Textarea":
-        kind = "textarea"
-    if widget.__class__.__name__ in {"Select", "RadioSelect"}:
-        kind = "radio-group" if widget.__class__.__name__ == "RadioSelect" else "select"
-    attrs = {
-        key: value
-        for key, value in attrs.items()
-        if key
-        in {
-            "autocomplete",
-            "inputmode",
-            "placeholder",
-            "minlength",
-            "maxlength",
-            "min",
-            "max",
-            "step",
-            "pattern",
-            "rows",
-            "readonly",
-            "disabled",
-            "required",
-            "autofocus",
-        }
-    }
-    attrs.update({"id": field.auto_id, "name": field.html_name})
-    value = "" if kind == "password" else field.value()
-    if value is None:
-        value = ""
-    return {
-        "type": kind,
-        "attrs": attrs,
-        "label": str(field.label or field.name),
-        "value": (
-            value if isinstance(value, (str, bool, int, float, list)) else str(value)
-        ),
-        "help": strip_tags(str(field.help_text)),
-        "errors": [str(error) for error in field.errors],
-        "options": (
-            [
-                {"value": str(value), "label": str(label)}
-                for value, label in getattr(widget, "choices", [])
-            ]
-            if kind in {"select", "radio-group"}
-            else []
-        ),
-    }
+    """Adapt a bound field for the safe json_script payload used by Vue."""
+    return serialize_field(field)
 
 
 @register.simple_tag

@@ -20,8 +20,11 @@ POSTGRES_URL = os.environ.get("TEST_CORE_POSTGRES_URL")
     POSTGRES_URL, "Set TEST_CORE_POSTGRES_URL with CREATEDB privileges"
 )
 class CoreSchemaTests(unittest.TestCase):
+    """Verify CORE migrations are isolated inside a disposable PostgreSQL database."""
+
     @classmethod
     def setUpClass(cls):
+        """Create a fresh database and disable all deployment dotenv sources."""
         cls.admin = psycopg.connect(POSTGRES_URL, autocommit=True)
         cls.addClassCleanup(cls.admin.close)
         cls.database = "dnk_core_test_" + uuid4().hex
@@ -32,7 +35,12 @@ class CoreSchemaTests(unittest.TestCase):
         cls.dsn = make_conninfo(POSTGRES_URL, dbname=cls.database)
         params = conninfo_to_dict(POSTGRES_URL)
         cls.environment = {
-            **os.environ,
+            **{
+                key: value
+                for key, value in os.environ.items()
+                if not key.startswith("CORE_")
+            },
+            "CORE_ENV_FILE": "",
             "DJANGO_SETTINGS_MODULE": "dnk_core.settings",
             "CORE_SECRET_KEY": "temporary-schema-integration-test-key",
             "CORE_DEBUG": "true",
@@ -45,11 +53,13 @@ class CoreSchemaTests(unittest.TestCase):
 
     @classmethod
     def drop_database(cls):
+        """Drop only the uniquely named database created by this test class."""
         cls.admin.execute(
             sql.SQL("DROP DATABASE {}").format(sql.Identifier(cls.database))
         )
 
     def run_command(self, script, *arguments, succeeds=True, environment=None):
+        """Execute a Django command against the disposable CORE configuration."""
         result = subprocess.run(
             [sys.executable, str(CORE_DIR / "src" / script), *arguments],
             cwd=CORE_DIR,
@@ -64,6 +74,7 @@ class CoreSchemaTests(unittest.TestCase):
         return result
 
     def test_existing_runtime_data_and_migration_history_are_untouched(self):
+        """Repeated migrations preserve public/tenant data and refuse scaffold resets."""
         with psycopg.connect(self.dsn, autocommit=True) as database:
             original_path = database.execute("SHOW search_path").fetchone()
             database.execute("CREATE TABLE public.auth_user (marker text)")

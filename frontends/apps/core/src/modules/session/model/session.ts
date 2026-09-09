@@ -11,6 +11,7 @@ export interface CoreUser {
 
 interface SessionState {
   authenticated: boolean | null;
+  showAdminLink: boolean;
   user: CoreUser | null;
   loading: boolean;
   error: boolean;
@@ -20,6 +21,7 @@ let pending: Promise<void> | null = null;
 export function useCoreSession() {
   const session = useState<SessionState>("core-session", () => ({
     authenticated: null,
+    showAdminLink: false,
     user: null,
     loading: false,
     error: false,
@@ -34,9 +36,10 @@ export function useCoreSession() {
     state.error = false;
     pending = (async () => {
       try {
-        const result = await apiRequest<{ authenticated: boolean; csrfToken: string }>("/api/session/");
+        const result = await apiRequest<{ authenticated: boolean; csrfToken: string; showAdminLink?: boolean }>("/api/session/");
         setCsrfToken(result.csrfToken);
         state.authenticated = result.authenticated;
+        state.showAdminLink = result.authenticated && result.showAdminLink === true;
         if (result.authenticated) {
           state.user = await apiRequest<CoreUser>("/api/me/");
         } else {
@@ -45,6 +48,7 @@ export function useCoreSession() {
       } catch (error) {
         if (error instanceof ApiError && error.status === 401) {
           state.authenticated = false;
+          state.showAdminLink = false;
           state.user = null;
         } else {
           // A failed connection does not prove that the session has expired.

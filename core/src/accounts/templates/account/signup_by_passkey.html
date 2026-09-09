@@ -11,5 +11,5 @@
 {% endelement %}
 <p class="delivery-hint">Сначала подтвердим email, затем создадим ключ доступа на вашем устройстве.</p>
 <div class="entrance-secondary">Уже есть аккаунт? <a href="{{ login_url }}">Войти</a></div>
-<div class="entrance-secondary"><a href="{{ signup_url }}">Другие способы регистрации</a></div>
+{% if registration_enabled %}<div class="entrance-secondary"><a href="{{ signup_url }}">Другие способы регистрации</a></div>{% endif %}
 {% endblock %}

@@ -4,6 +4,17 @@ from . import views, oidc
 
 urlpatterns = [
     path(
+        "2fa/recovery-codes/",
+        views.RecoveryCodesView.as_view(),
+        name="mfa_view_recovery_codes",
+    ),
+    path("email/", views.EmailView.as_view(), name="account_email"),
+    path(
+        "2fa/webauthn/keys/<int:pk>/remove/",
+        views.RemovePasskeyView.as_view(),
+        name="mfa_remove_webauthn",
+    ),
+    path(
         "login/code/",
         views.RequestLoginCodeView.as_view(),
         name="account_request_login_code",

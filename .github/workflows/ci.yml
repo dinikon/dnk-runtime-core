@@ -62,7 +62,7 @@ jobs:
         run: uv run python -m compileall src migrations
 
       - name: Check formatting
-        run: uv run black --check src test migrations
+        run: uv run black --check src test migrations core/src core/tests
 
       - name: Run tests
         run: uv run python -m unittest discover -s test -p "test_*.py" -v
@@ -90,6 +90,7 @@ jobs:
       PYTHONPATH: src:.
       CORE_SECRET_KEY: ci-only-not-a-deployment-secret
       CORE_DEBUG: "true"
+      CORE_ENV_FILE: ""
       TEST_CORE_POSTGRES_URL: postgresql://core_test:core_test@127.0.0.1:5432/postgres
     steps:
       - uses: actions/checkout@v7
@@ -143,6 +144,16 @@ jobs:
           docker compose -f docker-compose.yml -f core/deploy/compose.e2e.yml up -d --build --wait core-frontend
       - name: Test browser passkeys and session recovery
         run: npm run test:e2e:core
+      - name: Test optional and passwordless server modes in the browser
+        working-directory: .
+        run: |
+          for mode in optional passwordless; do
+            export CORE_E2E_AUTH_PASSWORD_MODE="$mode"
+            docker compose -f docker-compose.yml -f core/deploy/compose.e2e.yml up -d --wait --no-build --no-deps --force-recreate core
+            cd frontends
+            npm --workspace @dnk/core exec -- playwright test e2e/auth-modes.spec.ts
+            cd ..
+          done
       - name: Show Core diagnostics on failure
         if: failure()
         working-directory: .

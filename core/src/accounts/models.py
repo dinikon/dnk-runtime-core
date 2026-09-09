@@ -26,6 +26,8 @@ class User(AbstractUser):
     phone_verified = models.BooleanField("Телефон подтвержден", default=False)
 
     class Meta(AbstractUser.Meta):
+        """Keep persisted identity constraints independent of authentication switches."""
+
         constraints = [
             models.CheckConstraint(
                 condition=models.Q(phone_verified=False)

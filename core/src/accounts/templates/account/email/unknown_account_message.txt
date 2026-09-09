@@ -1,0 +1,7 @@
+{% extends "account/email/base_message.txt" %}
+{% block content %}{% autoescape off %}Кто-то запросил вход с адресом {{ email }}, но аккаунт с таким email не найден.
+
+Если вы не запрашивали вход, просто проигнорируйте это письмо.
+
+{% if registration_enabled %}Вы можете создать аккаунт по ссылке:
+{{ signup_url }}{% else %}Проверьте адрес email, указанный при регистрации. Создание новых аккаунтов сейчас недоступно.{% endif %}{% endautoescape %}{% endblock content %}

@@ -19,7 +19,7 @@ from tests.helpers import AccountTestCase, LOGIN_CODE, PASSWORD, TOTP_SECRET
 
 
 class TelegramGatewayTests(SimpleTestCase):
-    @patch("accounts.telegram.requests.post")
+    @patch("accounts.integrations.telegram_gateway.requests.post")
     def test_exact_gateway_payload_and_timeout(self, post):
         post.return_value.json.return_value = {
             "ok": True,
@@ -37,7 +37,7 @@ class TelegramGatewayTests(SimpleTestCase):
             allow_redirects=False,
         )
 
-    @patch("accounts.telegram.requests.post")
+    @patch("accounts.integrations.telegram_gateway.requests.post")
     def test_provider_network_http_and_bad_json_fail_closed_without_secrets(self, post):
         failures = [
             requests.Timeout("secret-token +12025550123 834719"),
@@ -68,7 +68,7 @@ class TelegramGatewayTests(SimpleTestCase):
                         "+12025550123", LOGIN_CODE
                     )
 
-    @patch("accounts.telegram.requests.post")
+    @patch("accounts.integrations.telegram_gateway.requests.post")
     def test_disabled_gateway_and_invalid_codes_do_not_send(self, post):
         with override_settings(PHONE_LOGIN_ENABLED=False):
             with self.assertRaises(TelegramDeliveryError):

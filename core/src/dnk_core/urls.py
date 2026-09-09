@@ -9,6 +9,7 @@ from . import api
 admin.site.login = secure_admin_login(admin.site.login)
 
 urlpatterns = [
+    path("api/capabilities/", api.capabilities, name="core_api_capabilities"),
     path("api/session/", api.session, name="core_api_session"),
     path("api/me/", api.me, name="core_api_me"),
     # Overrides precede allauth's identical paths; the normal flow is retained.

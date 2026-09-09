@@ -13,7 +13,10 @@ CORE_DIR = Path(__file__).resolve().parents[1]
 
 
 class ProductionSettingsTests(SimpleTestCase):
+    """Exercise production settings without loading the developer's dotenv file."""
+
     def environment(self, **overrides):
+        """Build a fresh isolated environment using only synthetic credentials."""
         return {
             **{
                 key: value
@@ -21,6 +24,7 @@ class ProductionSettingsTests(SimpleTestCase):
                 if not key.startswith("CORE_")
             },
             "PYTHONPATH": str(CORE_DIR / "src"),
+            "CORE_ENV_FILE": "",
             "CORE_SECRET_KEY": "settings-validation-test-secret",
             "CORE_DEBUG": "false",
             "CORE_PUBLIC_ORIGIN": "https://example.com",
@@ -30,6 +34,7 @@ class ProductionSettingsTests(SimpleTestCase):
         }
 
     def load(self, environment, code="import dnk_core.settings"):
+        """Import settings in a subprocess to avoid Django's settings cache."""
         return subprocess.run(
             [sys.executable, "-c", code],
             cwd=CORE_DIR,
@@ -42,6 +47,7 @@ class ProductionSettingsTests(SimpleTestCase):
     def test_production_requires_https_persistent_encryption_and_shared_rate_limits(
         self,
     ):
+        """Reject production configurations that weaken mandatory protections."""
         for name, value, message in (
             ("CORE_PUBLIC_ORIGIN", "http://example.com", "CORE_PUBLIC_ORIGIN"),
             ("CORE_MFA_ENCRYPTION_KEY", "", "CORE_MFA_ENCRYPTION_KEY"),
@@ -58,6 +64,7 @@ class ProductionSettingsTests(SimpleTestCase):
                 self.assertIn(message, result.stderr)
 
     def test_secure_host_only_session_cookie_csrf_and_database_isolation(self):
+        """Retain cookie, origin and database isolation across config projection."""
         code = """import json
 import dnk_core.settings as s
 print(json.dumps({

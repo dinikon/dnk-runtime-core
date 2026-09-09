@@ -28,6 +28,10 @@ Run `npm ci`, then `npm run dev:core` and open `http://localhost:5174`.
 Django must run on `localhost:8001`. Nuxt proxies `/api/`, `/accounts/`, `/admin/`
 and `/static/` without changing the browser's Host header. The Core frontend
 uses Django's session and CSRF protection; it does not use runtime console authentication.
+At startup it fetches `/api/capabilities/` to show only enabled registration and
+login actions. Before the response, the login link remains available. A failed
+capabilities request offers a retry and never changes authentication state.
+The hero copy and SEO metadata remain server-rendered.
 
 Other commands: `npm run build:core`, `npm run typecheck:core`, `npm run lint:core`.
 The shared theme and self-hosted Inter fonts are served by Django at `/static/core/`;

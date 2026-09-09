@@ -2,9 +2,15 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-export function runFixture(operation: "setup" | "cleanup" | "mail" | "reset") {
+type FixtureRole = "member" | "staff" | "superuser";
+
+export function runFixture(
+  operation: "setup" | "cleanup" | "mail" | "login-mail" | "reset" | "navigation" | "inspect",
+  options: { role?: FixtureRole } = {},
+) {
   const args = ["compose", "exec", "-T", "-e", `CORE_E2E_OPERATION=${operation}`];
   args.push("-e", "CORE_E2E_SIGNUP_USERNAME");
+  if (options.role) args.push("-e", `CORE_E2E_ROLE=${options.role}`);
   if (operation === "setup" || operation === "reset") args.push("-e", "CORE_E2E_PASSWORD");
   args.push("core", "python", "src/manage.py", "shell", "--no-imports");
   const output = execFileSync("docker", args, {

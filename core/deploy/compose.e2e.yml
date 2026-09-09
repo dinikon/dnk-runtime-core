@@ -2,5 +2,7 @@
 services:
   core:
     environment:
+      # Existing password/WebAuthn browser flows also cover passwordless via overrides.
+      CORE_AUTH_PASSWORD_MODE: ${CORE_E2E_AUTH_PASSWORD_MODE:-required}
       CORE_EMAIL_BACKEND: django.core.mail.backends.filebased.EmailBackend
       CORE_EMAIL_FILE_PATH: /tmp/core-e2e-mail

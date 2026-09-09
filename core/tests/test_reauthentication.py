@@ -118,7 +118,8 @@ class SocialOnlyReauthenticationTests(AccountTestCase):
     def test_expired_code_is_removed_without_resuming_action(self):
         self.send_code()
         with patch(
-            "accounts.reauthentication.time.time", return_value=time.time() + 301
+            "accounts.services.reauthentication.time.time",
+            return_value=time.time() + 301,
         ):
             response = self.verify()
         self.assertEqual(response.status_code, 200)

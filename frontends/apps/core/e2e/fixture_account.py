@@ -20,7 +20,15 @@ if not settings.DEBUG:
 username = "core_e2e_qa"
 email = "core_e2e_qa@example.invalid"
 operation = os.environ["CORE_E2E_OPERATION"]
-if operation not in {"setup", "cleanup", "mail", "reset"}:
+if operation not in {
+    "setup",
+    "cleanup",
+    "mail",
+    "login-mail",
+    "reset",
+    "navigation",
+    "inspect",
+}:
     raise RuntimeError("Unsupported fixture operation.")
 
 if settings.EMAIL_BACKEND not in {
@@ -36,10 +44,10 @@ if not re.fullmatch(r"core_e2e_passkey_[a-f0-9]{12}", signup_username):
     raise RuntimeError("Expected a unique, marked passkey signup fixture.")
 signup_email = signup_username + "@example.invalid"
 
-if operation == "mail":
+if operation in {"mail", "login-mail"}:
     if settings.EMAIL_BACKEND != "django.core.mail.backends.filebased.EmailBackend":
         raise RuntimeError(
-            "Signup browser tests require the isolated file email backend."
+            "Browser code verification requires the isolated file email backend."
         )
     messages = sorted(
         Path(settings.EMAIL_FILE_PATH).glob("*.log"),
@@ -48,7 +56,7 @@ if operation == "mail":
     )
     for path in messages:
         message = Parser(policy=policy.default).parsestr(path.read_text())
-        if message.get("To") == signup_email:
+        if message.get("To") == (email if operation == "login-mail" else signup_email):
             match = re.search(
                 r"\b[0-9]{6}\b",
                 (
@@ -61,7 +69,49 @@ if operation == "mail":
                 print(json.dumps({"code": match.group()}))
                 break
     else:
-        raise RuntimeError("No verification code for the marked signup fixture.")
+        raise RuntimeError("No verification code for the marked browser fixture.")
+elif operation in {"navigation", "inspect"}:
+    from allauth.mfa.models import Authenticator
+    from allauth.socialaccount.models import SocialAccount
+
+    with transaction.atomic():
+        user = get_user_model().objects.select_for_update().get(username=username)
+        if user.email != email or user.first_name != "Core E2E Fixture":
+            raise RuntimeError("Refusing to modify an unmarked browser account.")
+        if operation == "navigation":
+            role = os.environ.get("CORE_E2E_ROLE", "member")
+            if role not in {"member", "staff", "superuser"}:
+                raise RuntimeError("Unsupported browser fixture role.")
+            # The superuser-only case exercises the UI's staff OR superuser rule.
+            # Django admin keeps its own is_staff authorization requirement.
+            user.is_staff = role == "staff"
+            user.is_superuser = role == "superuser"
+            user.save(update_fields=["is_staff", "is_superuser"])
+            profiles = {
+                "github": {"login": "core_qa_github"},
+                "telegram": {"preferred_username": "core_qa_telegram"},
+                "google": {"email": "core_qa_google@example.invalid"},
+            }
+            for provider, extra_data in profiles.items():
+                SocialAccount.objects.get_or_create(
+                    user=user,
+                    provider=provider,
+                    uid=f"core-e2e-{provider}-{user.pk}",
+                    defaults={"extra_data": extra_data},
+                )
+        print(
+            json.dumps(
+                {
+                    "fixture": username,
+                    "operation": operation,
+                    "is_staff": user.is_staff,
+                    "is_superuser": user.is_superuser,
+                    "recovery_authenticators": Authenticator.objects.filter(
+                        user=user, type=Authenticator.Type.RECOVERY_CODES
+                    ).count(),
+                }
+            )
+        )
 else:
     User = get_user_model()
     with transaction.atomic():

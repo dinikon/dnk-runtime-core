@@ -1,6 +1,4 @@
 from django.contrib import messages
-from django.conf import settings
-from django.http import Http404
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.cache import add_never_cache_headers
@@ -10,7 +8,11 @@ from allauth.account.internal.flows.reauthentication import suspend_request
 from allauth.account.internal.stagekit import clear_login
 
 from .exceptions import PhoneConflictError
-from .reauthentication import recently_authenticated, uses_email_reauthentication
+from .services.reauthentication import (
+    recently_authenticated,
+    uses_email_reauthentication,
+)
+from .services.feature_access import enforce_feature_access
 
 
 class SocialOnlyReauthenticationMiddleware(MiddlewareMixin):
@@ -30,21 +32,10 @@ class SocialOnlyReauthenticationMiddleware(MiddlewareMixin):
     }
 
     def process_view(self, request, view_func, view_args, view_kwargs):
-        if (
-            (
-                request.path.startswith("/accounts/google/")
-                and not settings.GOOGLE_LOGIN_ENABLED
-            )
-            or (
-                request.path.startswith("/accounts/github/")
-                and not settings.GITHUB_LOGIN_ENABLED
-            )
-            or (
-                request.path.startswith("/accounts/oidc/telegram/")
-                and not settings.TELEGRAM_LOGIN_ENABLED
-            )
-        ):
-            raise Http404()
+        """Apply feature switches and require fresh authentication for sensitive actions."""
+        response = enforce_feature_access(request)
+        if response is not None:
+            return response
         name = request.resolver_match.url_name if request.resolver_match else None
         if (
             not name
@@ -64,11 +55,13 @@ class SocialOnlyReauthenticationMiddleware(MiddlewareMixin):
         return None
 
     def process_response(self, request, response):
+        """Prevent account pages and form responses from being cached."""
         if request.path.startswith("/accounts/"):
             add_never_cache_headers(response)
         return response
 
     def process_exception(self, request, exception):
+        """Recover from a concurrent phone claim without exposing its current owner."""
         if not isinstance(exception, PhoneConflictError):
             return None
         clear_login(request)

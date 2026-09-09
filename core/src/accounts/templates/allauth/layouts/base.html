@@ -16,13 +16,14 @@
   <body class="{% block body_class %}account-manage{% endblock %}">
     <div class="site-shell">
       <a class="skip-link" href="#main-content">К содержимому</a>
-      <header class="site-header">
+      <header class="site-header{% if show_admin_link %} site-header--admin{% endif %}">
         <a class="brand" href="/" aria-label="dNiko Alpha — главная">dNiko <span>Alpha</span></a>
         <nav class="header-nav" aria-label="Основная навигация">
           {% if user.is_authenticated %}
             <a class="nav-link" href="{% url 'core_account_overview' %}">Аккаунт и безопасность</a>
             <a class="button button-small button-outline" href="/app/">Мой аккаунт</a>
-          {% elif request.resolver_match.url_name == 'account_login' %}
+            {% if show_admin_link %}<a class="button button-small button-outline" href="{% url 'admin:index' %}">Django admin</a>{% endif %}
+          {% elif request.resolver_match.url_name == 'account_login' and registration_enabled %}
             <span class="nav-link muted">Нет аккаунта?</span><a class="button button-outline" href="{% url 'account_signup' %}">Создать аккаунт</a>
           {% else %}
             <a class="button button-small button-outline" href="{% url 'account_login' %}">Войти</a>
