@@ -75,6 +75,33 @@ class ResourceNameTests(unittest.TestCase):
             if item["kind"] == "ConfigMap" and "CORE_DB_HOST" in item.get("data", {}):
                 self.assertIn(item["data"]["CORE_DB_HOST"], services)
 
+    def test_empty_name_overrides_preserve_canonical_names_under_aliases(self):
+        values = contracts.platform_values()
+        values["controlPlane"]["nameOverride"] = ""
+        values["runtime"]["nameOverride"] = ""
+        umbrella = self.helm.render(values, chart=contracts.UMBRELLA)
+        deployments = {
+            item["metadata"]["name"]
+            for item in umbrella
+            if item["kind"] == "Deployment"
+        }
+        for alias, chart, canonical in (
+            ("controlPlane", contracts.CORE, "dnk-control-plane"),
+            ("runtime", contracts.RUNTIME, "dnk-runtime-core"),
+        ):
+            standalone = self.helm.render(values[alias], chart=chart)
+            standalone_deployments = {
+                item["metadata"]["name"]
+                for item in standalone
+                if item["kind"] == "Deployment"
+            }
+            self.assertIn("contract-" + canonical + "-backend", deployments)
+            self.assertTrue(standalone_deployments.issubset(deployments))
+        for resource in umbrella:
+            self.assertRegex(
+                resource["metadata"]["name"], r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

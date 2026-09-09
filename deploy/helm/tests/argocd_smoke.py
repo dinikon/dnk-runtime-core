@@ -1,23 +1,21 @@
 #!/usr/bin/env python3
 """Real ArgoCD Sync/wave/selfHeal contracts in an owned, disposable kind cluster.
 
-A temporary copy of the working chart is served by a local Git HTTP Service.
+A temporary copy of the working chart is served by a local Git Service.
 Nothing is pushed to GitHub and no user kubeconfig or existing cluster is used.
 """
 
 from __future__ import annotations
 
 import argparse
-import copy
 import json
 import os
 import shutil
-import subprocess
 import time
 
 import yaml
 
-from cluster import Cluster, run, eventually, KIND
+from cluster import Cluster, run, eventually
 from test_render import UMBRELLA
 from smoke import check_https, tls_proxy, wait_for_gate
 
@@ -106,13 +104,30 @@ def serve_git(cluster):
                 "spec": {
                     "containers": [
                         {
-                            "name": "nginx",
-                            "image": "nginx:1.27-alpine",
-                            "imagePullPolicy": "Never",
+                            "name": "git",
+                            "image": "quay.io/argoproj/argocd:" + ARGOCD_VERSION,
+                            "imagePullPolicy": "IfNotPresent",
+                            "command": [
+                                "git",
+                                "-c",
+                                "safe.directory=*",
+                                "daemon",
+                                "--reuseaddr",
+                                "--export-all",
+                                "--base-path=/repository",
+                                "--listen=0.0.0.0",
+                                "--port=9418",
+                                "--verbose",
+                                "--informative-errors",
+                            ],
+                            "readinessProbe": {
+                                "tcpSocket": {"port": 9418},
+                                "periodSeconds": 1,
+                            },
                             "volumeMounts": [
                                 {
                                     "name": "repository",
-                                    "mountPath": "/usr/share/nginx/html",
+                                    "mountPath": "/repository",
                                     "readOnly": True,
                                 }
                             ],
@@ -132,7 +147,7 @@ def serve_git(cluster):
                 "metadata": {"name": "test-git"},
                 "spec": {
                     "selector": {"app": "test-git"},
-                    "ports": [{"port": 80, "targetPort": 80}],
+                    "ports": [{"port": 9418, "targetPort": 9418}],
                 },
             },
         ],
@@ -168,7 +183,7 @@ def argocd_smoke(published=False, reuse_test_images=False):
                     "namespace": cluster.namespace,
                 },
                 "source": {
-                    "repoURL": "http://test-git.argocd.svc.cluster.local/repo.git",
+                    "repoURL": "git://test-git.argocd.svc.cluster.local:9418/repo.git",
                     "path": "deploy/helm/dnk-platform",
                     "targetRevision": "main",
                     "helm": {
@@ -195,7 +210,7 @@ def argocd_smoke(published=False, reuse_test_images=False):
                     "metadata": {"name": "default", "namespace": "argocd"},
                     "spec": {
                         "sourceRepos": [
-                            "http://test-git.argocd.svc.cluster.local/repo.git"
+                            "git://test-git.argocd.svc.cluster.local:9418/repo.git"
                         ],
                         "destinations": [
                             {
@@ -217,6 +232,16 @@ def argocd_smoke(published=False, reuse_test_images=False):
             return cluster.get("application", "dnk-test", namespace="argocd")
 
         def sync(revision, success=True):
+            eventually(
+                lambda: "status" in app(),
+                timeout=60,
+                description="initial ArgoCD Application status",
+            )
+            eventually(
+                lambda: not app().get("operation"),
+                timeout=90,
+                description="previous ArgoCD operation cleanup",
+            )
             cluster.kubectl(
                 "annotate",
                 "application/dnk-test",
@@ -224,28 +249,37 @@ def argocd_smoke(published=False, reuse_test_images=False):
                 "--overwrite",
                 namespace="argocd",
             )
-            previous = (
-                app().get("status", {}).get("operationState", {}).get("startedAt")
-            )
+            marker = "disposable-test-" + os.urandom(8).hex()
+            # Match ArgoCD util/argo.SetAppOperation: clear OperationState when
+            # starting an operation, or stale selfHeal resource filters can survive.
+            # https://github.com/argoproj/argo-cd/blob/v3.1.8/util/argo/argo.go#L876
             cluster.kubectl(
                 "patch",
                 "application/dnk-test",
-                "--type=merge",
+                "--type=json",
                 "-p",
                 json.dumps(
-                    {
-                        "operation": {
-                            "initiatedBy": {"username": "disposable-test"},
-                            "sync": {"revision": revision, "prune": True},
-                        }
-                    }
+                    [
+                        {"op": "add", "path": "/status/operationState", "value": None},
+                        {
+                            "op": "add",
+                            "path": "/operation",
+                            "value": {
+                                "initiatedBy": {"username": marker},
+                                "sync": {"revision": revision, "prune": True},
+                            },
+                        },
+                    ]
                 ),
                 namespace="argocd",
             )
 
             def finished():
                 state = app().get("status", {}).get("operationState", {})
-                if state.get("startedAt") == previous:
+                if (
+                    state.get("operation", {}).get("initiatedBy", {}).get("username")
+                    != marker
+                ):
                     return False
                 if state.get("phase") in {"Succeeded", "Failed", "Error"}:
                     return state
@@ -273,6 +307,7 @@ def argocd_smoke(published=False, reuse_test_images=False):
                 for p in cluster.get("pods")
                 if p["metadata"].get("labels", {}).get("app.kubernetes.io/component")
                 in {"backend", "frontend", "gateway", "publisher"}
+                and not p["metadata"].get("deletionTimestamp")
             }
 
         print(
@@ -334,6 +369,11 @@ def argocd_smoke(published=False, reuse_test_images=False):
             description="selfHeal replica drift",
         )
         assert before_jobs == job_uids(), "selfHeal reran migration hooks"
+        eventually(
+            lambda: not app().get("operation"),
+            timeout=90,
+            description="selfHeal operation completion",
+        )
         cluster.kubectl(
             "patch",
             "application/dnk-test",
@@ -344,35 +384,57 @@ def argocd_smoke(published=False, reuse_test_images=False):
         )
         cluster.rollout()
 
-        def hold_lock(seconds):
+        def hold_lock():
             database = next(
                 s
                 for s in cluster.get("statefulsets")
                 if s["metadata"]["name"].endswith("control-plane-postgresql")
             )
-            process = subprocess.Popen(
+            password = next(
+                e
+                for e in database["spec"]["template"]["spec"]["containers"][0]["env"]
+                if e["name"] == "POSTGRES_PASSWORD"
+            )
+            name = "test-migration-lock-" + os.urandom(4).hex()
+            cluster.apply(
+                name,
                 [
-                    "kubectl",
-                    "--context",
-                    "kind-" + cluster.name,
-                    "--namespace",
-                    cluster.namespace,
-                    "exec",
-                    "statefulset/" + database["metadata"]["name"],
-                    "--",
-                    "psql",
-                    "-U",
-                    "core",
-                    "-d",
-                    "dniko",
-                    "-v",
-                    "ON_ERROR_STOP=1",
-                    "-c",
-                    f"SELECT pg_advisory_lock({CORE_LOCK_ID}); SELECT pg_sleep({seconds});",
+                    {
+                        "apiVersion": "v1",
+                        "kind": "Pod",
+                        "metadata": {"name": name},
+                        "spec": {
+                            "restartPolicy": "Never",
+                            "automountServiceAccountToken": False,
+                            "containers": [
+                                {
+                                    "name": "lock",
+                                    "image": "postgres:16-alpine",
+                                    "imagePullPolicy": "Never",
+                                    "env": [
+                                        {
+                                            "name": "PGPASSWORD",
+                                            "valueFrom": password["valueFrom"],
+                                        }
+                                    ],
+                                    "command": [
+                                        "psql",
+                                        "-h",
+                                        database["metadata"]["name"],
+                                        "-U",
+                                        "core",
+                                        "-d",
+                                        "dniko",
+                                        "-v",
+                                        "ON_ERROR_STOP=1",
+                                        "-c",
+                                        f"SELECT pg_advisory_lock({CORE_LOCK_ID}); SELECT pg_sleep(600);",
+                                    ],
+                                }
+                            ],
+                        },
+                    }
                 ],
-                env=cluster.environment,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
             )
             eventually(
                 lambda: cluster.database(
@@ -380,16 +442,19 @@ def argocd_smoke(published=False, reuse_test_images=False):
                     "SELECT count(*) FROM pg_locks WHERE locktype='advisory' AND granted",
                 )
                 != "0",
-                timeout=30,
+                timeout=60,
                 description="test database lock",
             )
-            return process
+            return name
+
+        def release_lock(name):
+            cluster.kubectl("delete", "pod/" + name, "--wait=true", "--grace-period=1")
 
         print(
             "ArgoCD delayed migration holds wave 0 and both packages' new pods",
             flush=True,
         )
-        lock = hold_lock(45)
+        lock = hold_lock()
         before_jobs = job_uids()
         finished = sync(revision)
         eventually(
@@ -410,7 +475,7 @@ def argocd_smoke(published=False, reuse_test_images=False):
             timeout=35,
             description="shared gate during delayed migration",
         )
-        lock.wait(timeout=60)
+        release_lock(lock)
         wait_sync(finished)
         cluster.rollout()
 
@@ -434,7 +499,7 @@ def argocd_smoke(published=False, reuse_test_images=False):
             namespace="argocd",
         )
         revision = commit("Fail a test migration while the advisory lock is held")
-        lock = hold_lock(45)
+        lock = hold_lock()
         templates = {
             d["metadata"]["name"]: d["spec"]["template"]
             for d in cluster.get("deployments")
@@ -451,7 +516,7 @@ def argocd_smoke(published=False, reuse_test_images=False):
             d["metadata"]["name"]: d["spec"]["template"]
             for d in cluster.get("deployments")
         }, "failed migration applied new app templates"
-        lock.wait(timeout=60)
+        release_lock(lock)
         values["controlPlane"]["migrations"] = {
             "waitTimeoutSeconds": 300,
             "activeDeadlineSeconds": 600,

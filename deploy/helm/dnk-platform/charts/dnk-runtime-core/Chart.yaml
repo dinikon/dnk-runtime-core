@@ -4,6 +4,8 @@ description: DNK runtime API, Vue frontend, gateway and integration workers
 type: application
 version: 0.2.0
 appVersion: 0.0.1
+annotations:
+  dnk.io/application-name: dnk-runtime-core
 dependencies:
 - name: dnk-common
   version: 0.2.0

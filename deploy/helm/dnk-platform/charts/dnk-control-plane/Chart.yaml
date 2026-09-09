@@ -4,6 +4,8 @@ description: Django Control Plane, Nuxt, gateway and optional PostgreSQL/Redis
 type: application
 version: 0.2.0
 appVersion: "0.0.1"
+annotations:
+  dnk.io/application-name: dnk-control-plane
 kubeVersion: '>=1.25.0-0'
 dependencies:
 - name: postgresql

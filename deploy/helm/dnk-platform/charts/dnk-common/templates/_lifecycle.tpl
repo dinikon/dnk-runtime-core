@@ -6,7 +6,10 @@
 {{- end -}}
 
 {{- define "dnk.lifecycle.fullname" -}}
-{{- default (printf "%s-%s" .Release.Name (default .Chart.Name .Values.nameOverride)) .Values.fullnameOverride | include "dnk.lifecycle.shortName" -}}
+{{/* Dependency aliases change Chart.Name; keep canonical names in both install modes. */}}
+{{- $annotations := default dict .Chart.Annotations -}}
+{{- $applicationName := default .Chart.Name (index $annotations "dnk.io/application-name") -}}
+{{- default (printf "%s-%s" .Release.Name (default $applicationName .Values.nameOverride)) .Values.fullnameOverride | include "dnk.lifecycle.shortName" -}}
 {{- end -}}
 
 {{- define "dnk.lifecycle.jobName" -}}

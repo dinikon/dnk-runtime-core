@@ -71,12 +71,15 @@ docker build -f frontends/Dockerfile -t my-registry/frontend-runtime:my-tag fron
 ```
 
 Публикация образов не выполняется этим chart. Для приватного GHCR создайте
-namespace и registry Secret в нём, используя credentials с правом чтения пакетов:
+namespace и registry Secret в нём. Подготовьте закрытый файл
+`ghcr-dockerconfig.json` с Docker `auths` для `ghcr.io` и credentials с правом чтения
+пакетов (файл со ссылкой только на локальный credential helper не подходит):
 
 ```sh
 kubectl create namespace dnk-platform
-kubectl -n dnk-platform create secret docker-registry ghcr-pull \
-  --docker-server=ghcr.io --docker-username="$GHCR_USER" --docker-password="$GHCR_TOKEN"
+kubectl -n dnk-platform create secret generic ghcr-pull \
+  --type=kubernetes.io/dockerconfigjson \
+  --from-file=.dockerconfigjson="$SECRETS_DIR/ghcr-dockerconfig.json"
 ```
 
 Укажите `global.imagePullSecrets: [{name: ghcr-pull}]`. При самостоятельных установках
@@ -231,7 +234,9 @@ Job, `backoffLimit` — повторы после ошибки. Старые р�
 Замените domains, SMTP, ingress class и все `replace-me-*` ссылки в `helm.values`.
 Создайте Secrets в целевом namespace до полного Sync. Настройте ArgoCD доступ к
 приватному SSH repository и AppProject `productions`, разрешающий repository и
-целевой namespace. Затем примените выбранный Application обычным процессом GitOps.
+целевой namespace. Сохраните charts и вложенные библиотечные архивы в Git на
+`targetRevision`: ArgoCD читает удалённый repository. Затем примените выбранный
+Application обычным процессом GitOps.
 
 Helm parameter передаёт `$ARGOCD_APP_REVISION` в `global.deployment.revision`.
 Новая Git revision меняет token и pod annotations: новые pods подтягивают `latest`.
