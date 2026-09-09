@@ -1,19 +1,13 @@
 {% extends "account/base_entrance.html" %}
 {% load allauth %}
-{% block head_title %}Войти по коду{% endblock %}
+{% block head_title %}{% if code_channel == 'telegram' %}Код в Telegram{% else %}Код из email{% endif %}{% endblock %}
 {% block content %}
-  {% element h1 %}Войти по коду{% endelement %}
-  {% element p %}Получите одноразовый код, чтобы войти без пароля.{% endelement %}
-  {% element form form=form method="post" action=request_login_code_url tags="entrance,login" %}
-    {% slot body %}
-      {% csrf_token %}
-      {% element fields form=form unlabeled=True %}{% endelement %}
-      {{ redirect_field }}
-    {% endslot %}
-    {% slot actions %}
-      {% element button type="submit" tags="prominent,login" %}Получить код{% endelement %}
-    {% endslot %}
-  {% endelement %}
-  {% element button href=login_url tags="outline,secondary" %}Другие способы входа{% endelement %}
-  {% if phone_login_enabled %}<p class="delivery-hint">Код на номер телефона придёт в Telegram. Номер должен быть связан с вашим аккаунтом Telegram.</p>{% endif %}
+<h1>{% if code_channel == 'telegram' %}Код в Telegram{% else %}Войти по коду из email{% endif %}</h1>
+<p>Получите одноразовый код, чтобы войти без пароля.</p>
+{% element form form=form method='post' action=request_login_code_url %}
+ {% slot body %}{% csrf_token %}<input type="hidden" name="channel" value="{{ code_channel }}">{% element fields form=form %}{% endelement %}{{ redirect_field }}{% endslot %}
+ {% slot actions %}{% element button type='submit' %}Получить код{% endelement %}{% endslot %}
+{% endelement %}
+{% if code_channel == 'telegram' %}<p class="delivery-hint">Код придёт в Telegram на подтверждённый номер вашего аккаунта.</p>{% endif %}
+<div class="entrance-secondary"><a href="{{ login_url }}">Другие способы входа</a></div>
 {% endblock %}

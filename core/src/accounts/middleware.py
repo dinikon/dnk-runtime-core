@@ -31,11 +31,18 @@ class SocialOnlyReauthenticationMiddleware(MiddlewareMixin):
 
     def process_view(self, request, view_func, view_args, view_kwargs):
         if (
-            request.path.startswith("/accounts/google/")
-            and not settings.GOOGLE_LOGIN_ENABLED
-        ) or (
-            request.path.startswith("/accounts/github/")
-            and not settings.GITHUB_LOGIN_ENABLED
+            (
+                request.path.startswith("/accounts/google/")
+                and not settings.GOOGLE_LOGIN_ENABLED
+            )
+            or (
+                request.path.startswith("/accounts/github/")
+                and not settings.GITHUB_LOGIN_ENABLED
+            )
+            or (
+                request.path.startswith("/accounts/oidc/telegram/")
+                and not settings.TELEGRAM_LOGIN_ENABLED
+            )
         ):
             raise Http404()
         name = request.resolver_match.url_name if request.resolver_match else None

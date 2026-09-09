@@ -1,4 +1,9 @@
 <script setup lang="ts">
+import { Button } from "@dnk/ui/components/button";
+import { Alert, AlertTitle, AlertDescription } from "@dnk/ui/components/alert";
+import { Avatar, AvatarFallback } from "@dnk/ui/components/avatar";
+import { Skeleton } from "@dnk/ui/components/skeleton";
+import { Spinner } from "@dnk/ui/components/spinner";
 import { computed } from "vue";
 import { useRoute } from "#imports";
 import { loginUrl, useCoreSession } from "../session/model/session";
@@ -20,17 +25,18 @@ async function retry() {
   <section class="workspace" aria-labelledby="workspace-title">
     <header class="page-heading">
       <p class="muted">Мой аккаунт</p>
+      <Avatar class="mb-5 size-14"><AvatarFallback>{{ displayName.slice(0, 2).toUpperCase() }}</AvatarFallback></Avatar>
       <h1 id="workspace-title">{{ displayName }}</h1>
       <p class="muted">Профиль и настройки вашего аккаунта dNiko Alpha.</p>
     </header>
-    <div v-if="session.error" class="alert" role="alert">
-      <h2>Не удалось загрузить аккаунт</h2>
-      <p>Проверьте соединение и попробуйте ещё раз.</p>
-      <button class="button button-outline" :disabled="session.loading" @click="retry">
-        {{ session.loading ? "Загружаем…" : "Попробовать снова" }}
-      </button>
-    </div>
-    <p v-else-if="!session.user" role="status" class="muted">Загружаем ваш аккаунт…</p>
+    <Alert v-if="session.error" role="alert">
+      <AlertTitle><h2>Не удалось загрузить аккаунт</h2></AlertTitle>
+      <AlertDescription><p>Проверьте соединение и попробуйте ещё раз.</p>
+      <Button variant="outline" class="mt-4" :disabled="session.loading" @click="retry">
+        <Spinner v-if="session.loading" />{{ session.loading ? "Загружаем…" : "Попробовать снова" }}
+      </Button></AlertDescription>
+    </Alert>
+    <div v-else-if="!session.user" role="status" class="flex flex-col gap-4"><span class="sr-only">Загружаем ваш аккаунт…</span><Skeleton v-for="row in 4" :key="row" class="h-12 w-full" /></div>
     <template v-else>
       <ProfileOverview :user="session.user" />
       <section class="security-callout" aria-labelledby="security-title">
@@ -38,7 +44,7 @@ async function retry() {
           <h2 id="security-title">Аккаунт и безопасность</h2>
           <p>Настройте способы входа, двухфакторную аутентификацию и passkeys. Управляйте активными сессиями.</p>
         </div>
-        <a href="/accounts/" class="button">Открыть настройки</a>
+        <Button as="a" href="/accounts/">Открыть настройки</Button>
       </section>
       <a href="/accounts/logout/" class="muted logout-link">Выйти из аккаунта</a>
     </template>

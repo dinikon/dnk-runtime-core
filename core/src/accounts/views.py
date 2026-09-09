@@ -22,10 +22,14 @@ from allauth.account.mixins import NextRedirectMixin
 from allauth.account.models import EmailAddress, Login
 from allauth.account.utils import get_next_redirect_url
 from allauth.account.views import ConfirmLoginCodeView as AllauthConfirmLoginCodeView
+from allauth.account.views import RequestLoginCodeView as AllauthRequestLoginCodeView
 from allauth.mfa.models import Authenticator
 from allauth.mfa.utils import is_mfa_enabled
 from allauth.mfa.webauthn.internal import auth, flows
 from allauth.mfa.webauthn.views import AddWebAuthnView, LoginWebAuthnView
+from allauth.mfa.webauthn.views import SignupWebAuthnView
+from allauth.mfa.base.internal.flows import post_authentication
+from allauth.mfa.recovery_codes.internal.flows import auto_generate_recovery_codes
 from allauth.socialaccount.models import SocialAccount
 from allauth.core import ratelimit
 from allauth.usersessions.internal.flows.sessions import end_sessions
@@ -37,6 +41,27 @@ from .forms import EmailReauthenticationForm
 from .models import User
 
 logger = logging.getLogger(__name__)
+
+
+class RequestLoginCodeView(AllauthRequestLoginCodeView):
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["channel"] = (
+            self.request.POST.get("channel")
+            if self.request.method == "POST"
+            else self.request.GET.get("channel", "email")
+        )
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        channel = self.request.POST.get("channel") or self.request.GET.get("channel")
+        context["code_channel"] = (
+            "telegram"
+            if channel == "telegram" and settings.PHONE_LOGIN_ENABLED
+            else "email"
+        )
+        return context
 
 
 class ConfirmLoginCodeView(AllauthConfirmLoginCodeView):
@@ -235,3 +260,44 @@ class LoginPasskeyView(LoginWebAuthnView):
             redirect_url=get_next_redirect_url(self.request),
         )
         return flows.perform_passwordless_login(self.request, authenticator, login)
+
+
+class SignupPasskeyView(SignupWebAuthnView):
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Upstream drops the bound form when building a fresh challenge.
+        if "form" in kwargs:
+            context["form"] = kwargs["form"]
+        return context
+
+    @transaction.atomic
+    def form_valid(self, form):
+        stage = self._login_stage
+        authenticator = flows.signup_authenticator(
+            self.request,
+            user=stage.login.user,
+            name=form.cleaned_data["name"],
+            credential=form.cleaned_data["credential"],
+        )
+        post_authentication(self.request, authenticator, passwordless=True)
+        response = stage.exit()
+        if self.request.user.is_authenticated:
+            auto_generate_recovery_codes(self.request)
+            # Save only a host-validated redirect; never trust the posted next.
+            target = stage.login.redirect_url or settings.LOGIN_REDIRECT_URL
+            if not get_adapter().is_safe_url(target):
+                target = settings.LOGIN_REDIRECT_URL
+            self.request.session["core_passkey_signup_next"] = target
+            return redirect("mfa_view_recovery_codes")
+        return response
+
+
+@login_required
+@require_POST
+def continue_passkey_signup(request):
+    target = request.session.pop(
+        "core_passkey_signup_next", settings.LOGIN_REDIRECT_URL
+    )
+    if not get_adapter().is_safe_url(target):
+        target = settings.LOGIN_REDIRECT_URL
+    return redirect(target)

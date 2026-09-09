@@ -1,8 +1,25 @@
 from django.urls import path
 
-from . import views
+from . import views, oidc
 
 urlpatterns = [
+    path(
+        "login/code/",
+        views.RequestLoginCodeView.as_view(),
+        name="account_request_login_code",
+    ),
+    path("oidc/telegram/login/", oidc.login, name="core_telegram_login"),
+    path("oidc/telegram/login/callback/", oidc.callback, name="core_telegram_callback"),
+    path(
+        "2fa/webauthn/signup/",
+        views.SignupPasskeyView.as_view(),
+        name="mfa_signup_webauthn",
+    ),
+    path(
+        "signup/passkey/continue/",
+        views.continue_passkey_signup,
+        name="core_passkey_signup_continue",
+    ),
     path("", views.account_overview, name="core_account_overview"),
     path(
         "login/code/confirm/",

@@ -1,0 +1,10 @@
+{% load core_accounts %}
+  <div data-core-field class="native-field" {% if field.errors %}data-invalid="true"{% endif %}>
+    {{ field|field_schema|json_script }}
+    <div data-field-fallback>
+      {{ field.label_tag }}
+      {{ field }}
+      {% if field.help_text %}<div class="helptext" id="{{ field.auto_id }}_helptext">{{ field.help_text|safe }}</div>{% endif %}
+      {% if field.errors %}<div class="field-errors" id="{{ field.auto_id }}_error" role="alert">{{ field.errors }}</div>{% endif %}
+    </div>
+  </div>

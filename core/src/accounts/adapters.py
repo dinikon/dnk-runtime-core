@@ -129,7 +129,9 @@ class DisabledSocialProvider(Provider):
     def __init__(self, request, provider):
         super().__init__(request)
         self.id = provider
-        self.name = {"google": "Google", "github": "GitHub"}[provider]
+        self.name = {"google": "Google", "github": "GitHub", "telegram": "Telegram"}[
+            provider
+        ]
 
 
 class SocialAccountAdapter(DefaultSocialAccountAdapter):
@@ -137,10 +139,21 @@ class SocialAccountAdapter(DefaultSocialAccountAdapter):
         enabled = {
             "google": settings.GOOGLE_LOGIN_ENABLED,
             "github": settings.GITHUB_LOGIN_ENABLED,
+            "telegram": settings.TELEGRAM_LOGIN_ENABLED,
         }
         if provider in enabled and not enabled[provider]:
             return DisabledSocialProvider(request, provider)
-        return super().get_provider(request, provider, client_id=client_id)
+        result = super().get_provider(request, provider, client_id=client_id)
+        if getattr(result, "sub_id", None) == "telegram":
+            from .oidc import TelegramProvider
+
+            result = TelegramProvider(request, app=result.app)
+        return result
+
+    def is_auto_signup_allowed(self, request, sociallogin):
+        if sociallogin.account.provider == "telegram":
+            return False
+        return super().is_auto_signup_allowed(request, sociallogin)
 
     def pre_social_login(self, request, sociallogin):
         super().pre_social_login(request, sociallogin)

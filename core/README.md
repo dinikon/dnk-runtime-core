@@ -60,7 +60,7 @@ Compose использует уже существующие PostgreSQL и Redis
 
 Письма в режиме разработки выводятся в `docker compose logs core`. Для входа
 созданного администратора тоже требуется подтвердить email. Телефонный вход,
-Google и GitHub появляются после настройки их ключей. Интерфейс passkeys нужно
+Google, GitHub и Telegram Login появляются после настройки их ключей. Интерфейс passkeys нужно
 открывать через `localhost`, а не IP-адрес: локальный HTTP origin localhost
 разрешён проверкой WebAuthn без отключения безопасности.
 
@@ -128,8 +128,8 @@ Host, поэтому формы allauth и API используют тот же 
 - Чувствительные изменения требуют свежего подтверждения. Аккаунты без локального
   пароля и MFA подтверждают действие email-кодом; срок 5 минут, 3 попытки,
   новый запрос не чаще раза в 30 секунд и не более 5 в час.
-- Все новые WebAuthn-ключи Core — discoverable passkeys. Регистрации нового
-  аккаунта только через passkey нет; ключ добавляется в существующем аккаунте.
+- Все новые WebAuthn-ключи Core — discoverable passkeys. Доступна регистрация
+  без пароля: username/email → подтверждение email → passkey → резервные коды.
 - Резервные коды одноразовые и показываются один раз. Секреты MFA шифруются Fernet.
   Сохраняйте `CORE_MFA_ENCRYPTION_KEY` вместе с резервной копией базы:
   произвольная замена ключа сделает существующие MFA-секреты недоступными.
@@ -149,6 +149,7 @@ Vue получает CSRF-токен через `/api/session/` и переда�
 | --- | --- |
 | `CORE_GOOGLE_CLIENT_ID`, `CORE_GOOGLE_CLIENT_SECRET` | Google OAuth, scopes profile/email |
 | `CORE_GITHUB_CLIENT_ID`, `CORE_GITHUB_CLIENT_SECRET` | GitHub OAuth, scope user:email |
+| `CORE_TELEGRAM_LOGIN_CLIENT_ID`, `CORE_TELEGRAM_LOGIN_CLIENT_SECRET` | Telegram OIDC, scopes openid/profile; оба значения обязательны |
 | `CORE_TELEGRAM_GATEWAY_TOKEN` | Включает доставку кодов через Gateway |
 | `CORE_TELEGRAM_GATEWAY_ENABLED=false` | Явно отключает телефонный вход при наличии токена |
 | `CORE_TELEGRAM_GATEWAY_TIMEOUT` | Таймаут запроса, по умолчанию 5 секунд |
@@ -216,7 +217,8 @@ STARTTLS соединение прерывается до авторизации
 
 ## Production и HTTPS
 
-`core/Dockerfile` собирает static files и запускает Gunicorn. Dockerfile frontend
+`core/Dockerfile` собирается из корня репозитория: Node собирает Vue-компоненты
+для Django, затем Python выполняет collectstatic и запускает Gunicorn. Dockerfile frontend
 имеет target `runtime` для Nuxt и `gateway` для Nginx. Django и Nuxt должны быть
 доступны только через доверенный reverse proxy; наружу публикуется gateway.
 Production-миграции выполняйте отдельным шагом перед запуском Gunicorn.
@@ -268,7 +270,9 @@ TEST_CORE_POSTGRES_URL=postgresql://user:password@localhost:5432/postgres \
 ```
 
 Frontend: `npm run lint:core`, `npm run typecheck:core`, `npm run build:core`.
-На запущенном локальном Compose-стенде из `frontends/`:
+Перед браузерными тестами включите изолированную почту из корня репозитория:
+`docker compose -f docker-compose.yml -f core/deploy/compose.e2e.yml up -d --build --wait core-frontend`.
+Затем из `frontends/`:
 
 ```sh
 npm --workspace @dnk/core exec -- playwright install chromium
@@ -278,7 +282,9 @@ npm run test:e2e:core
 Браузерный тест использует Chromium с виртуальным WebAuthn-аутентификатором:
 добавление passkey, вход с проверкой владельца, отказ без UV, отмена и повтор
 после сетевой ошибки. Он создаёт отдельную явно помеченную тестовую учётную
-запись и удаляет её вместе с её сессиями; production-окружение не допускается.
+запись и отдельного пользователя регистрации с passkey, затем удаляет их вместе с сессиями.
+Production и реальная SMTP-доставка в браузерных тестах запрещены. После тестов
+восстановите обычную конфигурацию: `docker compose up -d --no-build --no-deps --force-recreate core`.
 
 Дополнительно проверяйте HTML главной без JavaScript, SEO-метаданные, desktop/mobile,
 переход на allauth с `next` и возвращение в защищённую часть. Живые OAuth и доставка
@@ -286,3 +292,58 @@ npm run test:e2e:core
 
 CI запускает runtime, Core с PostgreSQL-проверкой изоляции, сборку Nuxt и браузерный
 сценарий на отдельном Compose-стенде.
+
+
+## Telegram Login и регистрация с passkey
+
+Telegram Login — отдельное действие от «Код в Telegram». В BotFather задайте
+публичный origin и точный callback `/accounts/oidc/telegram/login/callback/`,
+скопируйте Client ID/Secret в окружение и оставьте RS256. Настройки описаны в
+[официальной документации Telegram](https://core.telegram.org/bots/telegram-login).
+Приложение использует POST + CSRF, Authorization Code, PKCE S256 и одноразовый
+state текущей сессии. Оно не запрашивает номер телефона, доступ боту к переписке
+или UserInfo. ID token всегда проверяется по JWKS: подпись RS256, issuer,
+audience, срок действия и обязательный subject. Токены не сохраняются в БД.
+
+Новый Telegram-пользователь выбирает username и подтверждает email. Совпавший
+email не объединяет аккаунты: сначала войдите в существующий аккаунт и
+подключите Telegram через настройки. Отключение требует недавнего подтверждения
+личности и оставшегося рабочего способа входа. Сохранённая связь видна и после
+выключения провайдера. Подключённая MFA остаётся обязательной.
+
+Регистрация `/accounts/signup/passkey/` создаёт аккаунт без рабочего пароля.
+После подтверждения email `/accounts/2fa/webauthn/signup/` требует resident key
+и UV; криптографическую проверку выполняют allauth/FIDO2. Резервные коды создаются
+штатным механизмом allauth и показываются один раз. «Продолжить» возвращает к
+проверенному локальному next или `/app/`. Отмена не входит в аккаунт и не удаляет
+его: восстановить незавершённую регистрацию можно входом по подтверждённому email.
+Для локальной проверки используйте `http://localhost:8080`.
+
+## Общий интерфейс
+
+Компоненты официального Shadcn Vue (New York, neutral) находятся в
+`frontends/packages/ui`. Nuxt импортирует их напрямую, Django подключает отдельную
+Vite-сборку через manifest. Inter и семантические CSS-токены находятся в
+`accounts/static/core/theme.css`; внешних запросов к Google Fonts нет.
+
+Для запуска без Docker сначала выполните из `frontends/`:
+
+```sh
+npm ci
+npm run build:accounts
+npm run dev:core
+```
+
+После изменений общих компонентов пересоберите `build:accounts`; после изменений
+шаблонов с новыми Tailwind-классами также нужна пересборка. Сборка создаёт
+игнорируемую директорию `core/src/accounts/static/core/ui/`. В Docker она
+создаётся автоматически до collectstatic. Миграции или пересоздание схемы
+для этого обновления не требуются.
+
+Обычные формы имеют серверный HTML. Vue получает данные через `json_script`,
+сохраняет значения/фокус при подключении и отправляет обычные формы Django.
+Пароли не попадают в JSON. CSRF, hidden/next и выбранное submit-действие остаются
+в форме. WebAuthn и обработчик резервных кодов запускаются после готовности UI.
+При недоступном JavaScript обычные формы продолжают работать. Смотрите также
+[устройство UI Kit](../frontends/packages/ui/README.md) и
+[согласованные макеты](../docs/core-ui/README.md).

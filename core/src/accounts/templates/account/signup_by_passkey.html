@@ -1,0 +1,15 @@
+{% extends "account/base_entrance.html" %}
+{% load allauth %}
+{% block head_title %}Регистрация с ключом доступа{% endblock %}
+{% block content %}
+<h1>Создать аккаунт с passkey</h1>
+<p>Вход с помощью устройства — без пароля.</p>
+{% url 'account_signup_by_passkey' as action_url %}
+{% element form form=form method='post' action=action_url %}
+ {% slot body %}{% csrf_token %}{% element fields form=form %}{% endelement %}{{ redirect_field }}{% endslot %}
+ {% slot actions %}{% element button type='submit' %}Продолжить{% endelement %}{% endslot %}
+{% endelement %}
+<p class="delivery-hint">Сначала подтвердим email, затем создадим ключ доступа на вашем устройстве.</p>
+<div class="entrance-secondary">Уже есть аккаунт? <a href="{{ login_url }}">Войти</a></div>
+<div class="entrance-secondary"><a href="{{ signup_url }}">Другие способы регистрации</a></div>
+{% endblock %}

@@ -1,0 +1,11 @@
+{% load socialaccount %}
+{% get_providers as providers %}
+<div class="login-options">
+{% for provider in providers %}
+ {% provider_login_url provider process=process as href %}
+ <form class="provider-form" method="post" action="{{ href }}">
+   {% csrf_token %}{{ redirect_field }}
+   <button type="submit" class="button button-outline" {% if provider.sub_id == 'telegram' %}data-icon="telegram"{% endif %}>{% if process == 'connect' %}Подключить{% else %}Войти через{% endif %} {{ provider.name }}</button>
+ </form>
+{% endfor %}
+</div>

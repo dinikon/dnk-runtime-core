@@ -1,0 +1,6 @@
+# Apply only to a local browser-test run; restore the regular Compose configuration afterwards.
+services:
+  core:
+    environment:
+      CORE_EMAIL_BACKEND: django.core.mail.backends.filebased.EmailBackend
+      CORE_EMAIL_FILE_PATH: /tmp/core-e2e-mail

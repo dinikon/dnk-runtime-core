@@ -21,8 +21,8 @@ x-backend-common: &backend-common
 services:
   core:
     build:
-      context: ./core
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: core/Dockerfile
     image: dnk-core:local
     restart: unless-stopped
     env_file:

@@ -1,0 +1,12 @@
+{% extends "mfa/recovery_codes/index.html" %}
+{% load allauth %}
+{% block content %}
+{{ block.super }}
+{% if passkey_signup_continue %}
+  <p>Ключ доступа готов. Сохраните резервные коды в надёжном месте: повторно они не показываются.</p>
+  <form method="post" action="{% url 'core_passkey_signup_continue' %}">
+    {% csrf_token %}
+    {% element button type="submit" %}Продолжить{% endelement %}
+  </form>
+{% endif %}
+{% endblock %}

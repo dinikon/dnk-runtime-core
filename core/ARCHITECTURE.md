@@ -372,3 +372,24 @@ Core, runtime и провайдеров. Логи не содержат credenti
   пользователей; сценарий отката проверяется вместе с блокировкой доступа.
 
 Текущие smoke-проверки каркаса описаны в [README](README.md#проверки-каркаса).
+
+
+## Реализованный CORE UI и новые способы входа
+
+Nuxt продолжает SSR публичной главной и SEO, Django остаётся владельцем
+account-форм. Общие Shadcn Vue компоненты находятся в `@dnk/ui`; отдельная
+Vite-сборка подключает их к HTML Django. Браузерные формы используют обычный
+POST/CSRF и серверную сессию, контракты `/api/session/` и `/api/me/` не меняются.
+
+Telegram Login использует allauth OpenID Connect с небольшим адаптером,
+обязательно проверяющим RS256 по Telegram JWKS даже при серверном обмене кода.
+`sub` служит идентификатором связи, scopes ограничены `openid profile`, PKCE S256
+и session state остаются в allauth. Gateway не участвует в этом сценарии.
+
+Passkey signup использует штатные login stages: email verification затем
+WebAuthn с UV/resident key. После успешного stage exit создаются резервные коды
+allauth и показываются однократно. Пользователь до окончания WebAuthn остаётся
+неавторизованным. Пользовательские таблицы и схема БД не изменяются.
+
+Подробнее: [реализация и запуск](README.md#telegram-login-и-регистрация-с-passkey),
+[UI Kit](../frontends/packages/ui/README.md).

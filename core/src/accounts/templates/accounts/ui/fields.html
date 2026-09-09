@@ -1,0 +1,8 @@
+{% load core_accounts %}
+{% if form.non_field_errors %}<div class="form-errors" role="alert" data-ui-alert>{{ form.non_field_errors }}</div>{% endif %}
+{% for field in form.hidden_fields %}{{ field }}{% if field.errors %}<div class="form-errors" role="alert">{{ field.errors }}</div>{% endif %}{% endfor %}
+<div class="field-group">
+{% for field in fields %}
+{% include "accounts/ui/field.html" %}
+{% endfor %}
+</div>

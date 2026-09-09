@@ -21,7 +21,10 @@
     "preview:core": "npm --workspace @dnk/core run preview",
     "typecheck:core": "npm --workspace @dnk/core run typecheck",
     "lint:core": "npm --workspace @dnk/core run lint",
-    "test:e2e:core": "npm --workspace @dnk/core run test:e2e"
+    "test:e2e:core": "npm --workspace @dnk/core run test:e2e",
+    "build:accounts": "npm --workspace @dnk/ui run build:django",
+    "typecheck:ui": "npm --workspace @dnk/ui run typecheck",
+    "lint:ui": "npm --workspace @dnk/ui run lint"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

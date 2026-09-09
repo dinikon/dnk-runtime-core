@@ -71,7 +71,7 @@ test("real passkey enrollment, UV enforcement, cancellation and recovery", async
       };
     });
     await page.locator("#passkey_login").click();
-    await expect(page.getByRole("alert")).toContainText("отменено или не подтверждено");
+    await expect(page.locator("#webauthn-feedback")).toContainText("отменено или не подтверждено");
     await assertGuest(page);
     await cdp.send("WebAuthn.setAutomaticPresenceSimulation", { authenticatorId, enabled: true });
   });
@@ -79,7 +79,7 @@ test("real passkey enrollment, UV enforcement, cancellation and recovery", async
   await test.step("a failed challenge request can be retried without reloading", async () => {
     await page.route(`**${passkeyPath}`, (route) => route.fulfill({ status: 503, body: "temporarily unavailable" }), { times: 1 });
     await page.locator("#passkey_login").click();
-    await expect(page.getByRole("alert")).toContainText("Проверьте соединение");
+    await expect(page.locator("#webauthn-feedback")).toContainText("Проверьте соединение");
     await assertGuest(page);
     await page.screenshot({ path: testInfo.outputPath("passkey-network-feedback.png") });
     await page.locator("#passkey_login").click();

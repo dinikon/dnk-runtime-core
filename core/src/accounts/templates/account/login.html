@@ -1,0 +1,28 @@
+{% extends "account/base_entrance.html" %}
+{% load allauth socialaccount core_accounts %}
+{% block head_title %}Войти{% endblock %}
+{% block content %}
+<h1>Войти в аккаунт</h1>
+<p>Выберите удобный способ входа</p>
+<div class="login-options">
+  {% if PASSKEY_LOGIN_ENABLED %}<button class="button button-outline" type="submit" form="mfa_login" id="passkey_login" disabled data-webauthn-pending data-icon="key">Войти с ключом доступа</button>{% endif %}
+  {% if telegram_login_enabled %}
+    {% provider_login_url 'telegram' process='login' as telegram_url %}
+    <form class="provider-form" method="post" action="{{ telegram_url }}">{% csrf_token %}{{ redirect_field }}<button class="button button-outline" type="submit" data-icon="telegram">Войти через Telegram</button></form>
+  {% endif %}
+  <div class="provider-pair">
+    {% if google_enabled %}{% provider_login_url 'google' process='login' as google_url %}<form class="provider-form" method="post" action="{{ google_url }}">{% csrf_token %}{{ redirect_field }}<button class="button button-outline" type="submit">Google</button></form>{% endif %}
+    {% if github_enabled %}{% provider_login_url 'github' process='login' as github_url %}<form class="provider-form" method="post" action="{{ github_url }}">{% csrf_token %}{{ redirect_field }}<button class="button button-outline" type="submit">GitHub</button></form>{% endif %}
+  </div>
+</div>
+<div class="login-divider">или с паролем</div>
+{% url 'account_login' as login_action %}
+<form method="post" action="{{ login_action }}" class="login-password-form">
+ {% csrf_token %}{% core_fields form exclude='remember' %}{{ redirect_field }}
+ <div class="login-extras">{% core_field form.remember %}<a href="{% url 'account_reset_password' %}">Забыли пароль?</a></div>
+ {% element button type='submit' tags='prominent' %}Войти{% endelement %}
+</form>
+<div class="code-links"><a href="{{ request_login_code_url }}{% if '?' in request_login_code_url %}&amp;{% else %}?{% endif %}channel=email">Код из email</a>{% if phone_login_enabled %}<a href="{{ request_login_code_url }}{% if '?' in request_login_code_url %}&amp;{% else %}?{% endif %}channel=telegram">Код в Telegram</a>{% endif %}</div>
+<div class="entrance-secondary">Нет аккаунта? <a href="{{ signup_url }}">Создать аккаунт</a></div>
+{% endblock %}
+{% block extra_body %}{{ block.super }}{% if PASSKEY_LOGIN_ENABLED %}{% include "mfa/webauthn/snippets/login_script.html" with button_id="passkey_login" %}{% endif %}{% endblock %}

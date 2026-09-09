@@ -75,6 +75,9 @@ GITHUB_CLIENT_ID = os.environ.get("CORE_GITHUB_CLIENT_ID", "")
 GITHUB_CLIENT_SECRET = os.environ.get("CORE_GITHUB_CLIENT_SECRET", "")
 GOOGLE_LOGIN_ENABLED = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
 GITHUB_LOGIN_ENABLED = bool(GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET)
+TELEGRAM_LOGIN_CLIENT_ID = os.environ.get("CORE_TELEGRAM_LOGIN_CLIENT_ID", "")
+TELEGRAM_LOGIN_CLIENT_SECRET = os.environ.get("CORE_TELEGRAM_LOGIN_CLIENT_SECRET", "")
+TELEGRAM_LOGIN_ENABLED = bool(TELEGRAM_LOGIN_CLIENT_ID and TELEGRAM_LOGIN_CLIENT_SECRET)
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -90,6 +93,7 @@ INSTALLED_APPS = [
     "allauth.socialaccount",
     "allauth.mfa",
     "allauth.usersessions",
+    "allauth.socialaccount.providers.openid_connect",
 ]
 if GOOGLE_LOGIN_ENABLED:
     INSTALLED_APPS.append("allauth.socialaccount.providers.google")
@@ -150,9 +154,18 @@ AUTHENTICATION_BACKENDS = [
     "allauth.account.auth_backends.AuthenticationBackend",
 ]
 ACCOUNT_ADAPTER = "accounts.adapters.AccountAdapter"
-ACCOUNT_FORMS = {"request_login_code": "accounts.forms.RequestLoginCodeForm"}
+ACCOUNT_FORMS = {
+    "request_login_code": "accounts.forms.RequestLoginCodeForm",
+    "login": "accounts.forms.LoginForm",
+    "signup": "accounts.forms.SignupForm",
+}
 ACCOUNT_LOGIN_METHODS = {"username", "email"}
-ACCOUNT_SIGNUP_FIELDS = ["username*", "email*", "password1*", "password2*"]
+ACCOUNT_SIGNUP_FIELDS = [
+    "username*",
+    "email*",
+    "password1*",
+    "password2*"
+]
 if PHONE_LOGIN_ENABLED:
     ACCOUNT_LOGIN_METHODS.add("phone")
     ACCOUNT_SIGNUP_FIELDS.append("phone")
@@ -190,7 +203,7 @@ LOGOUT_REDIRECT_URL = "/"
 MFA_ADAPTER = "accounts.adapters.MFAAdapter"
 MFA_SUPPORTED_TYPES = ["totp", "webauthn", "recovery_codes"]
 MFA_PASSKEY_LOGIN_ENABLED = True
-MFA_PASSKEY_SIGNUP_ENABLED = False
+MFA_PASSKEY_SIGNUP_ENABLED = True
 MFA_ALLOW_UNVERIFIED_EMAIL = False
 MFA_RECOVERY_CODES_SHOW_ONCE = True
 MFA_TOTP_ISSUER = "dNiko Alpha"
@@ -199,6 +212,7 @@ MFA_WEBAUTHN_ALLOW_INSECURE_ORIGIN = False
 MFA_FORMS = {
     "add_webauthn": "accounts.forms.AddPasskeyForm",
     "login_webauthn": "accounts.forms.LoginPasskeyForm",
+    "signup_webauthn": "accounts.forms.SignupPasskeyForm",
 }
 USERSESSIONS_TRACK_ACTIVITY = True
 ALLAUTH_TRUSTED_PROXY_COUNT = int(os.environ.get("CORE_TRUSTED_PROXY_COUNT", "0"))
@@ -206,11 +220,30 @@ if ALLAUTH_TRUSTED_PROXY_COUNT < 0:
     raise ImproperlyConfigured("CORE_TRUSTED_PROXY_COUNT cannot be negative.")
 
 SOCIALACCOUNT_LOGIN_ON_GET = False
+SOCIALACCOUNT_FORMS = {"disconnect": "accounts.forms.DisconnectForm"}
 SOCIALACCOUNT_ADAPTER = "accounts.adapters.SocialAccountAdapter"
 SOCIALACCOUNT_EMAIL_AUTHENTICATION = False
 SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = False
 SOCIALACCOUNT_STORE_TOKENS = False
 SOCIALACCOUNT_PROVIDERS = {}
+if TELEGRAM_LOGIN_ENABLED:
+    SOCIALACCOUNT_PROVIDERS["openid_connect"] = {
+        "APPS": [
+            {
+                "provider_id": "telegram",
+                "name": "Telegram",
+                "client_id": TELEGRAM_LOGIN_CLIENT_ID,
+                "secret": TELEGRAM_LOGIN_CLIENT_SECRET,
+                "settings": {
+                    "server_url": "https://oauth.telegram.org",
+                    "token_auth_method": "client_secret_basic",
+                    "scope": ["openid", "profile"],
+                    "oauth_pkce_enabled": True,
+                    "fetch_userinfo": False,
+                },
+            }
+        ],
+    }
 if GOOGLE_LOGIN_ENABLED:
     SOCIALACCOUNT_PROVIDERS["google"] = {
         "APPS": [
@@ -280,6 +313,7 @@ if not EMAIL_VERIFY_CERTIFICATE and not DEBUG:
     raise ImproperlyConfigured(
         "CORE_EMAIL_VERIFY_CERTIFICATE=false is allowed only with CORE_DEBUG=true."
     )
+EMAIL_FILE_PATH = os.environ.get("CORE_EMAIL_FILE_PATH", str(BASE_DIR / "mail-outbox"))
 EMAIL_TIMEOUT = 10
 DEFAULT_FROM_EMAIL = os.environ.get(
     "CORE_DEFAULT_FROM_EMAIL", "dNiko Alpha <noreply@localhost>"

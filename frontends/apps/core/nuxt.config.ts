@@ -1,3 +1,4 @@
+import tailwindcss from "@tailwindcss/vite";
 import { defineNuxtConfig } from "nuxt/config";
 
 const backend = process.env.CORE_PROXY_TARGET ?? "http://127.0.0.1:8001";
@@ -7,7 +8,9 @@ export default defineNuxtConfig({
   srcDir: "src",
   ssr: true,
   devtools: { enabled: false },
-  css: ["~/style.css"],
+  css: ["@dnk/ui/style.css", "~/style.css"],
+  vite: { plugins: [tailwindcss()] },
+  build: { transpile: ["@dnk/ui"] },
   runtimeConfig: {
     public: { siteUrl: "http://localhost:8080" },
   },

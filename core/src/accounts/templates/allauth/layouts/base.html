@@ -1,4 +1,4 @@
-{% load static i18n %}
+{% load static i18n core_accounts %}
 <!doctype html>
 <html lang="{{ LANGUAGE_CODE|default:'ru' }}">
   <head>
@@ -9,6 +9,8 @@
     <title>{% block head_title %}Аккаунт и безопасность{% endblock %} · dNiko Alpha</title>
     <link rel="icon" type="image/svg+xml" href="{% static 'core/favicon.svg' %}">
     <link rel="stylesheet" href="{% static 'core/theme.css' %}">
+    {% accounts_assets %}
+    <script>window.coreUIState = "pending"; window.coreUIReady = new Promise(function(resolve) { window.resolveCoreUI = resolve; setTimeout(function() { if (window.coreUIState === "pending") { window.coreUIState = "fallback"; resolve(); } }, 5000); });</script>
     {% block extra_head %}{% endblock %}
   </head>
   <body class="{% block body_class %}account-manage{% endblock %}">
@@ -20,6 +22,8 @@
           {% if user.is_authenticated %}
             <a class="nav-link" href="{% url 'core_account_overview' %}">Аккаунт и безопасность</a>
             <a class="button button-small button-outline" href="/app/">Мой аккаунт</a>
+          {% elif request.resolver_match.url_name == 'account_login' %}
+            <span class="nav-link muted">Нет аккаунта?</span><a class="button button-outline" href="{% url 'account_signup' %}">Создать аккаунт</a>
           {% else %}
             <a class="button button-small button-outline" href="{% url 'account_login' %}">Войти</a>
           {% endif %}
@@ -42,6 +46,7 @@
                   <li><a href="{% url 'socialaccount_connections' %}" {% if request.resolver_match.url_name == 'socialaccount_connections' %}aria-current="page"{% endif %}>Связанные аккаунты</a></li>
                   <li><a href="{% url 'mfa_index' %}" {% if request.resolver_match.url_name == 'mfa_index' %}aria-current="page"{% endif %}>Двухфакторная защита</a></li>
                   <li><a href="{% url 'mfa_list_webauthn' %}" {% if request.resolver_match.url_name == 'mfa_list_webauthn' %}aria-current="page"{% endif %}>Passkeys</a></li>
+                  <li><a href="{% url 'mfa_view_recovery_codes' %}">Резервные коды</a></li>
                   <li><a href="{% url 'usersessions_list' %}" {% if request.resolver_match.url_name == 'usersessions_list' %}aria-current="page"{% endif %}>Активные сессии</a></li>
                   <li><a href="{% url 'account_logout' %}">Выйти</a></li>
                 </ul>
@@ -51,7 +56,7 @@
               <div id="webauthn-feedback" class="alert" role="alert" hidden></div>
               {% if messages %}
                 <ul class="messages" aria-live="polite">
-                  {% for message in messages %}<li>{{ message }}</li>{% endfor %}
+                  {% for message in messages %}<li data-ui-alert>{{ message }}</li>{% endfor %}
                 </ul>
               {% endif %}
               {% block content %}{% endblock %}

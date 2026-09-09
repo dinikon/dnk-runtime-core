@@ -1,3 +1,9 @@
+FROM node:24-alpine AS accounts-ui
+WORKDIR /build
+COPY frontends ./frontends
+COPY core/src/accounts/templates ./core/src/accounts/templates
+RUN cd frontends && npm ci --ignore-scripts && npm run build:accounts
+
 FROM python:3.13.9-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -11,11 +17,12 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir uv==0.10.4
 
-COPY pyproject.toml uv.lock README.md ./
+COPY core/pyproject.toml core/uv.lock core/README.md ./
 RUN uv sync --frozen --no-dev --no-install-project --no-cache
 
 RUN groupadd --system core && useradd --system --gid core --home-dir /app core
-COPY --chown=core:core src ./src
+COPY --chown=core:core core/src ./src
+COPY --from=accounts-ui --chown=core:core /build/core/src/accounts/static/core/ui ./src/accounts/static/core/ui
 RUN mkdir -p /app/staticfiles && chown core:core /app/staticfiles
 
 USER core

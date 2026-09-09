@@ -2,6 +2,7 @@
   const actionIds = new Set([
     "passkey_login",
     "mfa_webauthn_add",
+    "mfa_webauthn_signup",
     "mfa_webauthn_authenticate",
     "mfa_webauthn_reauthenticate",
   ]);

@@ -123,6 +123,9 @@ jobs:
           cache: npm
           cache-dependency-path: frontends/package-lock.json
       - run: npm ci
+      - run: npm run lint:ui
+      - run: npm run typecheck:ui
+      - run: npm run build:accounts
       - run: npm run lint:core
       - run: npm run typecheck:core
       - run: npm run build:core
@@ -137,7 +140,7 @@ jobs:
           from pathlib import Path
           Path("core/.env").write_text("CORE_SECRET_KEY=" + secrets.token_urlsafe(48) + "\n")
           PY
-          docker compose up -d --build --wait core-frontend
+          docker compose -f docker-compose.yml -f core/deploy/compose.e2e.yml up -d --build --wait core-frontend
       - name: Test browser passkeys and session recovery
         run: npm run test:e2e:core
       - name: Show Core diagnostics on failure

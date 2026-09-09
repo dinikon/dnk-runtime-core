@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Button } from "@dnk/ui/components/button";
 defineProps<{ authenticated: boolean | null }>();
 </script>
 
@@ -8,9 +9,9 @@ defineProps<{ authenticated: boolean | null }>();
     <nav class="header-nav" aria-label="Основная навигация">
       <template v-if="authenticated">
         <a href="/accounts/" class="nav-link">Аккаунт и безопасность</a>
-        <NuxtLink to="/app/" class="button button-small button-outline">Мой аккаунт</NuxtLink>
+        <Button as-child variant="outline"><NuxtLink to="/app/">Мой аккаунт</NuxtLink></Button>
       </template>
-      <a v-else href="/accounts/login/?next=/app/" class="button button-small button-outline">Войти</a>
+      <Button v-else as="a" href="/accounts/login/?next=/app/" variant="outline">Войти</Button>
     </nav>
   </header>
 </template>
