@@ -12,8 +12,11 @@ __pycache__
 *.pyd
 
 docs
-core
 frontends
 test
 
 docker-compose.yml
+
+helm
+deploy
+dist

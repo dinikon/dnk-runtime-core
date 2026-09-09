@@ -7,15 +7,15 @@ import { h, render } from "vue";
 const cache = new Map<string, string>();
 
 // Convert object to a consistent string key
-function serializeKey(key: Record<string, any>): string {
+function serializeKey(key: Record<string, unknown>): string {
   return JSON.stringify(key, Object.keys(key).sort());
 }
 
-interface Constructor<P = any> {
+interface Constructor<P = Record<string, unknown>> {
   __isFragment?: never;
   __isTeleport?: never;
   __isSuspense?: never;
-  new (...args: any[]): {
+  new (...args: never[]): {
     $props: P;
   };
 }
@@ -31,8 +31,8 @@ export function componentToString<P>(
   const id = useId();
 
   // https://unovis.dev/docs/auxiliary/Crosshair#component-props
-  return (_data: any, x: number | Date) => {
-    const data = "data" in _data ? _data.data : _data;
+  return (_data: Record<string, unknown>, x: number | Date) => {
+    const data = ("data" in _data ? _data.data : _data) as Record<string, unknown>;
     const serializedKey = `${id}-${serializeKey(data)}`;
     const cachedContent = cache.get(serializedKey);
     if (cachedContent) return cachedContent;

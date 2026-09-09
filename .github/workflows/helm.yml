@@ -3,9 +3,8 @@ name: helm
 on:
   pull_request:
     paths:
-      - 'deploy/helm/**'
+      - 'helm/**'
       - 'deploy/argocd/**'
-      - 'core/**'
       - 'src/**'
       - 'migrations/**'
       - 'frontends/**'
@@ -16,9 +15,8 @@ on:
   push:
     branches: [develop, pre-release, release, main, 'feature/**', 'bug-fix/**']
     paths:
-      - 'deploy/helm/**'
+      - 'helm/**'
       - 'deploy/argocd/**'
-      - 'core/**'
       - 'src/**'
       - 'migrations/**'
       - 'frontends/**'
@@ -44,13 +42,13 @@ jobs:
         with:
           version: v3.19.0
       - run: python -m pip install PyYAML==6.0.3 SQLAlchemy==2.0.48
-      - name: Prepare local dependencies and package all three entrypoints
-        run: python deploy/helm/build.py --destination dist/helm
+      - name: Verify pinned dependencies and package owned charts
+        run: python helm/build.py --destination dist/helm
       - name: Lint, strict YAML, schemas, lifecycle and runtime script contracts
-        run: python -m unittest discover -s deploy/helm/tests -p 'test_*.py' -v
+        run: python -m unittest discover -s helm/tests -p 'test_*.py' -v
       - uses: actions/upload-artifact@v4
         with:
-          name: dnk-platform-helm
+          name: dnk-runtime-core-helm
           path: dist/helm/*.tgz
           if-no-files-found: error
 
@@ -75,10 +73,8 @@ jobs:
           chmod +x /tmp/kind
           sudo mv /tmp/kind /usr/local/bin/kind
       - run: python -m pip install PyYAML==6.0.3 SQLAlchemy==2.0.48
-      - run: python deploy/helm/build.py
+      - run: python helm/build.py
       - name: Build local images and verify Helm, Ingress, certificates, Jobs, HTTPS and persistence in disposable Kubernetes
-        run: python deploy/helm/tests/smoke.py --system-ingress
+        run: python helm/tests/smoke.py
       - name: Runtime transactional migration integration
-        run: python deploy/helm/tests/runtime_migrations_integration.py --runtime-image dnk-test/runtime:helm-test
-      - name: Verify real ArgoCD waves, full Sync, selfHeal and migration failures
-        run: python deploy/helm/tests/argocd_smoke.py --reuse-test-images
+        run: python helm/tests/runtime_migrations_integration.py --runtime-image dnk-test/runtime:helm-test

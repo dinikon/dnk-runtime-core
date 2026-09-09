@@ -39,15 +39,13 @@ frontends/
 │   └── shortlink/
 └── packages/
     ├── api-client/
-    ├── config/
-    └── ui/
+    └── config/
 ```
 
 - `frontends/apps/console/`: Vue 3 administrative and operator console application.
 - `frontends/apps/shortlink/`: short link frontend experience.
 - `frontends/packages/api-client/`: shared backend HTTP API client package.
 - `frontends/packages/config/`: shared frontend configuration package.
-- `frontends/packages/ui/`: shared frontend UI package.
 
 ## Modules Layout
 
@@ -103,3 +101,5 @@ repository return paths.
 - `src/management/`
 - `test/`
 - `frontends/`
+
+Control Plane Django, Nuxt Core and its UI package live in the separate [control-plane repository](https://github.com/dinikon/dnk-control-plane).

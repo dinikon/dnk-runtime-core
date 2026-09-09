@@ -29,7 +29,7 @@ uv run python -m compileall src
 
 - `pyproject.toml` currently requires `Python ==3.13.9`, but `Dockerfile` uses `python:3.12-slim-bookworm`.
   This must be aligned before Docker image build becomes a required CI gate.
-- Helm charts and ArgoCD Applications are implemented under `deploy/helm/dnk-platform` and `deploy/argocd`. The current installation and migration contract is documented in [the Helm guide](../../deploy/helm/README.md); the pipeline sketches below are historical planning context.
+- Helm charts and ArgoCD Applications are implemented under `helm/dnk-runtime-core` and `deploy/argocd`. The current installation and migration contract is documented in [the Helm guide](../../helm/README.md); the pipeline sketches below are historical planning context.
 
 ## Branch strategy
 
@@ -346,14 +346,14 @@ Purpose: make the service deployable in Kubernetes before adding ArgoCD automati
 Files to add:
 
 ```text
-deploy/helm/dnk-platform/Chart.yaml
-deploy/helm/dnk-platform/values.yaml
-deploy/helm/dnk-platform/values-test.yaml
-deploy/helm/dnk-platform/values-prod.yaml
-deploy/helm/dnk-platform/templates/deployment.yaml
-deploy/helm/dnk-platform/templates/service.yaml
-deploy/helm/dnk-platform/templates/ingress.yaml
-deploy/helm/dnk-platform/templates/configmap.yaml
+helm/dnk-runtime-core/Chart.yaml
+helm/dnk-runtime-core/values.yaml
+helm/dnk-runtime-core/values-test.yaml
+helm/dnk-runtime-core/values-prod.yaml
+helm/dnk-runtime-core/templates/deployment.yaml
+helm/dnk-runtime-core/templates/service.yaml
+helm/dnk-runtime-core/templates/ingress.yaml
+helm/dnk-runtime-core/templates/configmap.yaml
 ```
 
 Base values pseudocode:
@@ -409,9 +409,9 @@ replicaCount: 3
 Immediate test:
 
 ```bash
-helm lint deploy/helm/dnk-platform
-helm template dnk-runtime-core deploy/helm/dnk-platform -f deploy/helm/dnk-platform/values-test.yaml
-helm template dnk-runtime-core deploy/helm/dnk-platform -f deploy/helm/dnk-platform/values-prod.yaml
+helm lint helm/dnk-runtime-core
+helm template dnk-runtime-core helm/dnk-runtime-core -f helm/dnk-runtime-core/values-test.yaml
+helm template dnk-runtime-core helm/dnk-runtime-core -f helm/dnk-runtime-core/values-prod.yaml
 ```
 
 Acceptance criteria:
@@ -445,13 +445,13 @@ Job pseudocode:
       - uses: azure/setup-helm@v4
 
       - name: Helm lint
-        run: helm lint deploy/helm/dnk-platform
+        run: helm lint helm/dnk-runtime-core
 
       - name: Render test manifests
-        run: helm template dnk-runtime-core deploy/helm/dnk-platform -f deploy/helm/dnk-platform/values-test.yaml
+        run: helm template dnk-runtime-core helm/dnk-runtime-core -f helm/dnk-runtime-core/values-test.yaml
 
       - name: Render prod manifests
-        run: helm template dnk-runtime-core deploy/helm/dnk-platform -f deploy/helm/dnk-platform/values-prod.yaml
+        run: helm template dnk-runtime-core helm/dnk-runtime-core -f helm/dnk-runtime-core/values-prod.yaml
 ```
 
 Immediate test:

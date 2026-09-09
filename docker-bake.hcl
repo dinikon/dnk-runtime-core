@@ -19,7 +19,7 @@ variable "PLATFORMS" {
 }
 
 group "default" {
-  targets = ["core", "runtime", "frontend-core", "frontend-runtime"]
+  targets = ["runtime", "frontend-runtime"]
 }
 
 target "_common" {
@@ -35,16 +35,6 @@ target "_common" {
   }
 }
 
-target "core" {
-  inherits = ["_common"]
-  context = "."
-  dockerfile = "core/Dockerfile"
-  tags = ["${REGISTRY_PREFIX}/core:${VERSION}", "${REGISTRY_PREFIX}/core:latest"]
-  labels = {
-    "org.opencontainers.image.title" = "core"
-    "org.opencontainers.image.description" = "Django Core identity and account API"
-  }
-}
 
 target "runtime" {
   inherits = ["_common"]
@@ -58,17 +48,6 @@ target "runtime" {
   }
 }
 
-target "frontend-core" {
-  inherits = ["_common"]
-  context = "frontends"
-  dockerfile = "apps/core/Dockerfile"
-  target = "runtime"
-  tags = ["${REGISTRY_PREFIX}/frontend-core:${VERSION}", "${REGISTRY_PREFIX}/frontend-core:latest"]
-  labels = {
-    "org.opencontainers.image.title" = "frontend-core"
-    "org.opencontainers.image.description" = "Core Nuxt frontend with server-side rendering"
-  }
-}
 
 target "frontend-runtime" {
   inherits = ["_common"]

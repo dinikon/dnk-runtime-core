@@ -2,28 +2,18 @@
 
 Modular FastAPI backend with tenant onboarding, console authentication, and static tenant data models.
 
-## Django Control Plane
+## Repository boundaries
 
-[Control Plane](core/README.md) is a separate Django application with global accounts,
-django-allauth authentication and a Nuxt/Vue frontend with server-rendered public pages. It uses the `core` schema in
-the existing PostgreSQL database and has its own dependencies and environment.
-Runtime users, tenant authentication and the existing console remain independent.
-Tenant control-plane operations, tenant OIDC and DNS remain future work in the
-[architecture proposal](core/ARCHITECTURE.md).
+This repository owns the FastAPI runtime, tenant data, workers, Console and Shortlink.
+Django accounts and the Nuxt Core frontend live in
+[dnk-control-plane](https://github.com/dinikon/dnk-control-plane).
+Both projects build independently. Local PostgreSQL and Redis remain in this Compose
+project; Control Plane connects through its external Docker network.
 
-For Kubernetes, the [Helm package](deploy/helm/README.md) deploys Control Plane and Runtime with
-independently selectable embedded or external infrastructure. Each package can be
-installed through the umbrella chart or as a standalone subchart.
-
-For the local Docker stack, configure Core as described in its
-[Docker instructions](core/README.md#локальный-стенд-в-docker-compose), then run
-`docker compose up --build -d`.
-Django starts with the existing stack and shares PostgreSQL and Redis.
-Open [dNiko Alpha](http://localhost:8080/),
-[Account and security](http://localhost:8080/accounts/) or
-[Django admin](http://localhost:8080/admin/).
-If the old Django scaffold was already migrated, follow the explicit
-[scaffold transition](core/README.md#переход-с-временного-каркаса) before starting the new Core.
+The standalone [Helm chart](helm/README.md) deploys Runtime. The platform umbrella
+chart belongs to Control Plane and vendors a released Runtime chart archive.
+See the [repository transition guide](docs/repository-split.md) before switching an
+existing local stack.
 
 ## Modules
 
@@ -42,8 +32,7 @@ Dynamic object modules are removed. Their earlier documentation is in [history](
 - Tests: `uv run python -m unittest discover -s test -p 'test_*.py' -v`.
 - For PostgreSQL integration tests set `TEST_POSTGRES_URL` to a **disposable** PostgreSQL database URL using `postgresql+asyncpg://`.
 - Format: `uv run black --check src test migrations`.
-- Docker: copy `temaplate.env` to `.env`, configure `core/.env` using the
-  [Core instructions](core/README.md#локальный-стенд-в-docker-compose), then `docker compose up --build`.
+- Docker: copy `temaplate.env` to `.env`, then `docker compose up --build`.
 
 ## Tenant migrations
 
