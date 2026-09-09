@@ -82,7 +82,7 @@ spec:
           {{- if $python }}
           command: [python, /opt/dnk-runtime/entrypoint.py]
           {{- if eq $component "backend" }}
-          args: [uvicorn, --app-dir, /opt/dnk-runtime, --factory, http_app:create_app, --host, 0.0.0.0, --port, "8000", --proxy-headers, --forwarded-allow-ips, "*"]
+          args: [python, -m, uvicorn, --app-dir, /opt/dnk-runtime, --factory, http_app:create_app, --host, 0.0.0.0, --port, "8000", --proxy-headers, --forwarded-allow-ips, "*"]
           {{- else if eq $component "publisher" }}
           args: [dnk-manage, events, publisher-worker]
           {{- else }}
