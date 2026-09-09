@@ -33,7 +33,9 @@ class SessionCookieFlags:
                                 if part.strip().split(b"=", 1)[0].lower()
                                 not in {b"secure", b"httponly", b"samesite"}
                             ]
-                            value = b";".join(parts) + b"; Secure; HttpOnly; SameSite=Lax"
+                            value = (
+                                b";".join(parts) + b"; Secure; HttpOnly; SameSite=Lax"
+                            )
                     headers.append((name, value))
                 message = {**message, "headers": headers}
             await send(message)

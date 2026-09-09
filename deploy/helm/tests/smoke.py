@@ -289,6 +289,7 @@ def smoke(published=False, system_ingress=False):
         values = cluster.values()
         if system_ingress:
             from system_ingress import setup_system_ingress, certificate_endpoint
+
             authority = setup_system_ingress(cluster)
             for app in ["controlPlane", "runtime"]:
                 values[app]["ingress"] = {"enabled": True, "className": "nginx"}
@@ -348,7 +349,11 @@ def smoke(published=False, system_ingress=False):
         for app in ["controlPlane", "runtime"]:
             assert cluster.redis(app, "SET", "helm:persistence", app) == "OK"
         cluster.rabbitmq("add_vhost", "helm-persistence")
-        proxy = certificate_endpoint(cluster, authority) if system_ingress else tls_proxy(cluster)
+        proxy = (
+            certificate_endpoint(cluster, authority)
+            if system_ingress
+            else tls_proxy(cluster)
+        )
         check_https(cluster, proxy)
         check_gate_api_failures(cluster)
         print(
@@ -437,6 +442,10 @@ if __name__ == "__main__":
         dest="published",
         help="Use existing published image tags instead of building local test images",
     )
-    parser.add_argument("--system-ingress", action="store_true", help="Verify the actual nginx controller and cert-manager using an isolated test CA")
+    parser.add_argument(
+        "--system-ingress",
+        action="store_true",
+        help="Verify the actual nginx controller and cert-manager using an isolated test CA",
+    )
     args = parser.parse_args()
     smoke(published=args.published, system_ingress=args.system_ingress)
