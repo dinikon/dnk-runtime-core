@@ -1,16 +1,19 @@
 {% extends "account/base_entrance.html" %}
-{% load allauth %}
+{% load allauth core_accounts %}
 {% block head_title %}Создать аккаунт{% endblock %}
+{% block auth_card_class %}auth-card-signup{% endblock %}
 {% block content %}
 <h1>Создать аккаунт</h1>
 <p>{% if form.password1 %}Заполните данные профиля.{% if not form.password1.field.required %} Пароль можно добавить сейчас или позже.{% endif %}{% else %}Укажите имя пользователя и email. Пароль не нужен.{% endif %}</p>
+{% if available_providers %}{% include "socialaccount/snippets/provider_list.html" with process='login' %}<div class="login-divider">или заполните данные</div>{% endif %}
+<div class="auth-signup-fields">
 {% url 'account_signup' as action_url %}
 {% element form form=form method='post' action=action_url tags='entrance,signup' %}
- {% slot body %}{% csrf_token %}{% element fields form=form %}{% endelement %}{{ redirect_field }}{% endslot %}
+ {% slot body %}{% csrf_token %}{% core_signup_fields form %}{{ redirect_field }}{% endslot %}
  {% slot actions %}{% element button type='submit' tags='prominent,signup' %}Создать аккаунт{% endelement %}{% endslot %}
 {% endelement %}
+</div>
 <p class="delivery-hint">Подтвердите email одноразовым кодом, чтобы завершить регистрацию.</p>
 {% if passkey_signup_enabled %}<div class="entrance-secondary"><a class="button button-outline" href="{{ signup_by_passkey_url }}">Регистрация с ключом доступа</a></div>{% endif %}
-{% if available_providers %}<div class="login-divider">или через аккаунт</div>{% include "socialaccount/snippets/provider_list.html" with process='login' %}{% endif %}
 <div class="entrance-secondary">Уже есть аккаунт? <a href="{{ login_url }}">Войти</a></div>
 {% endblock %}

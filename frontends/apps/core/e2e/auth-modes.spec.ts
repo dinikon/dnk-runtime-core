@@ -69,7 +69,7 @@ test("anonymous server forms follow enabled methods even without JavaScript", as
   await page.goto("/accounts/login/");
   expect(await page.getByRole("link", { name: "Создать аккаунт" }).count() > 0).toBe(capabilities.registrationEnabled);
   expect(await page.locator("#passkey_login").count() > 0).toBe(capabilities.passkeyLoginEnabled);
-  expect(await page.getByRole("link", { name: "Код в Telegram", exact: true }).count() > 0).toBe(capabilities.phoneCodeLoginEnabled);
+  expect(await page.getByRole("link", { name: "Телефон Telegram", exact: true }).count() > 0).toBe(capabilities.phoneCodeLoginEnabled);
   expect(await page.getByRole("link", { name: "Код из email", exact: true }).count() > 0).toBe(capabilities.emailCodeLoginEnabled && capabilities.passwordLoginEnabled);
   for (const provider of ["google", "github", "telegram"]) {
     expect(await page.locator(`.provider-form[action*="/${provider}/login/"]`).count() > 0).toBe(capabilities.providers.includes(provider));

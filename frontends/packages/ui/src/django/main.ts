@@ -8,6 +8,7 @@ import { Spinner } from "@dnk/ui/components/spinner";
 import { Separator } from "@dnk/ui/components/separator";
 import FieldControl from "./FieldControl.vue";
 import AccountMenu from "./AccountMenu.vue";
+import LoginChannels from "./LoginChannels.vue";
 import type { FieldSchema } from "./types";
 import "../style.css";
 
@@ -127,6 +128,13 @@ function enhance() {
       });
     });
     document.querySelectorAll<HTMLElement>("[data-core-field]").forEach(mountField);
+    document.querySelectorAll<HTMLElement>("[data-channel-selector]").forEach(host => {
+      const links = Array.from(host.querySelectorAll<HTMLAnchorElement>("a[data-channel]"));
+      const channels = links.map(link => ({ value: link.dataset.channel!, label: link.textContent!.trim(), href: link.href, panelId: link.getAttribute("aria-controls")! }));
+      const initial = links.find(link => link.hasAttribute("aria-current"))!.dataset.channel!;
+      const focused = links.find(link => link === document.activeElement)?.dataset.channel;
+      createApp(LoginChannels, { channels, initial, focused }).mount(host);
+    });
     document.querySelectorAll<HTMLElement>("[data-ui-alert]").forEach(host => {
       const text = host.textContent?.trim();
       createApp({ render: () => h(Alert, { variant: host.classList.contains("form-errors") ? "destructive" : "default" }, () => h(AlertDescription, () => text)) }).mount(host);

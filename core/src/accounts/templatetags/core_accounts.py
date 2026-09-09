@@ -4,6 +4,7 @@ from django import template
 
 from accounts.presentation.fields import serialize_field
 from accounts.presentation.social_accounts import social_account_label
+from accounts.presentation.login import channel_url, login_panels
 
 register = template.Library()
 register.filter("social_account_label", social_account_label)
@@ -65,9 +66,24 @@ def core_field(field):
 
 
 @register.filter
-def field_schema(field):
+def field_schema(field, suppress_help=False):
     """Adapt a bound field for the safe json_script payload used by Vue."""
-    return serialize_field(field)
+    return serialize_field(field, suppress_help=bool(suppress_help))
+
+
+@register.inclusion_tag("accounts/ui/fields.html")
+def core_signup_fields(form):
+    """Group existing signup fields in visual and keyboard order without rebinding."""
+    data = core_fields(form)
+    order = {
+        name: index
+        for index, name in enumerate(
+            ("username", "email", "password1", "password2", "phone")
+        )
+    }
+    data["fields"].sort(key=lambda field: order.get(field.name, len(order)))
+    data["signup_layout"] = True
+    return data
 
 
 @register.simple_tag
@@ -95,3 +111,15 @@ def accounts_assets():
         styles,
         static("core/ui/" + entry["file"]),
     )
+
+
+@register.inclusion_tag("accounts/ui/login_panels.html", takes_context=True)
+def core_login_panels(context, form, mode="login"):
+    """Render channel alternatives around the active view's native bound form."""
+    data = context.flatten()
+    code_url = context.get("request_login_code_url", "")
+    data["login_panels"] = login_panels(
+        context["request"], form, mode, context["login_url"], code_url
+    )
+    data["email_code_url"] = channel_url(code_url, "email")
+    return data

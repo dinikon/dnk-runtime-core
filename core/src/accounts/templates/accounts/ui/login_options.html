@@ -1,0 +1,3 @@
+{% if available_providers %}{% include "socialaccount/snippets/provider_list.html" with process='login' %}{% endif %}
+{% if passkey_login_enabled %}<div class="auth-passkey"><button class="button button-outline" type="submit" form="mfa_login" id="passkey_login" disabled data-webauthn-pending data-icon="key">Войти с ключом доступа</button></div>{% endif %}
+{% if passkey_login_enabled or available_providers %}<div class="login-divider">или продолжить через</div>{% endif %}

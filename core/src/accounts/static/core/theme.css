@@ -242,3 +242,65 @@ button[aria-busy=true] .core-button-spinner { display: block; }
  .account-content td { border: 0; padding: 6px 0; }
  .account-content td:last-child { display: flex; flex-wrap: wrap; gap: 8px; }
 }
+
+/* Authentication has its own card shell; account management keeps the site layout. */
+body.account-entrance { background: var(--muted); }
+.account-entrance .site-main { width: calc(100% - 32px); }
+.auth-shell { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; padding-block: 48px; }
+.auth-brand { align-items: center; }
+.auth-brand img { margin-right: 4px; border-radius: 8px; }
+.account-entrance .auth-card { max-width: 480px; padding: 32px; background: var(--background); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 2px 4px #00000008, 0 8px 24px #00000003; }
+.account-entrance .auth-card-signup { max-width: 560px; }
+.account-entrance .auth-card > h1 { font-size: 1.75rem; line-height: 1.25; letter-spacing: -.04em; margin-bottom: 10px; }
+.account-entrance .auth-card > p { text-align: center; margin-bottom: 24px; overflow-wrap: anywhere; }
+.auth-card .login-options { gap: 10px; margin-block: 24px 12px; }
+.auth-card .auth-passkey, .auth-card .auth-passkey > .button-island, .auth-card .auth-passkey button { display: flex; width: 100%; }
+.auth-card .auth-passkey { margin-block: 12px; }
+.auth-card .login-divider { margin-block: 22px; }
+.auth-card .field-group { gap: 18px; margin-block: 20px; }
+.auth-card [data-core-field] { min-width: 0; }
+.auth-card [data-slot=field-description] { margin-block: 0; }
+.auth-card .delivery-hint { text-align: center; font-size: .8125rem; line-height: 1.6; color: var(--muted-foreground); margin: 14px 0 0; }
+.auth-card .entrance-secondary { margin: 24px 0 0; }
+.auth-card .entrance-secondary > .button, .auth-card .entrance-secondary > .button-island, .auth-card .entrance-secondary > .button-island > a { width: 100%; text-decoration: none; }
+.auth-card .login-extras { margin: -2px 0 18px; gap: 8px; flex-wrap: wrap; }
+.auth-card .login-extras a { margin-left: auto; }
+.auth-card .code-links { margin-top: 16px; }
+.auth-card .code-links:empty { display: none; }
+.auth-channel-selector, .auth-channel-group { width: 100%; display: flex; gap: 4px; padding: 4px; background: var(--muted); border: 1px solid var(--border); border-radius: 10px; }
+.auth-channel-selector > a, .auth-channel-group > button { flex: 1; min-width: 0; min-height: 44px; padding: 8px 6px; border-radius: 6px; text-align: center; font-size: .8125rem; font-weight: 500; text-decoration: none; line-height: 1.4; color: var(--muted-foreground); }
+.auth-channel-selector > a[aria-current], .auth-channel-group > button[data-state=on] { color: var(--foreground); background: var(--background); box-shadow: 0 1px 3px #00000016; }
+.auth-channel-selector:has(.auth-channel-group) { display: block; border: 0; padding: 0; }
+.auth-signup-fields .field-group { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 16px; }
+.auth-signup-fields [data-core-field] { grid-column: span 2; }
+.auth-signup-fields [data-field-name=username], .auth-signup-fields [data-field-name=email], .auth-signup-fields [data-field-name=password1], .auth-signup-fields [data-field-name=password2] { grid-column: span 1; }
+.auth-signup-fields form > .button-island, .auth-signup-fields form > .button { width: 100%; }
+.auth-provider-identity { padding: 12px 16px; background: var(--muted); border: 1px solid var(--border); border-radius: 8px; text-align: center; font-size: .875rem; overflow-wrap: anywhere; }
+.auth-card-code [data-slot=input-otp] { width: 100%; }
+.auth-card-code [data-slot=input-otp-group] { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; width: 100%; max-width: 338px; margin-inline: auto; }
+.auth-card-code [data-slot=input-otp-slot] { width: 100%; height: 48px; border: 1px solid var(--input); border-radius: 8px; font-size: 1.125rem; }
+.auth-card-code .auth-code-form .field-group { margin-block: 28px 24px; }
+.auth-card-code .auth-code-form [data-slot=field-label], .auth-card-code .auth-code-form [data-slot=field-description], .auth-card-code .auth-code-form [data-slot=field-error] { text-align: center; justify-content: center; }
+.auth-card .auth-resend, .auth-card .auth-cancel { text-align: center; margin: 20px 0 0; color: var(--muted-foreground); font-size: .8125rem; }
+.auth-text-action { min-height: 44px; padding: 8px 0; color: var(--foreground); background: transparent; border: 0; font-size: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 4px; }
+.auth-cancel a { display: inline-flex; align-items: center; min-height: 44px; }
+.auth-card .auth-cancel { margin-top: 4px; }
+.auth-card .auth-change-contact { padding: 12px 0 0; margin-top: 12px; border-top: 1px solid var(--border); font-size: .875rem; }
+.auth-change-contact summary { min-height: 44px; padding-block: 10px; }
+.auth-card .button-group { justify-content: center; }
+.auth-card .form-errors { margin-block: 16px; }
+@media (max-width: 600px) {
+  .auth-shell { padding-block: 28px; gap: 24px; }
+  .account-entrance .auth-card { padding: 24px 20px; }
+  .account-entrance .auth-card > h1 { font-size: 1.5rem; }
+  .auth-signup-fields .field-group { grid-template-columns: minmax(0, 1fr); }
+  .auth-signup-fields [data-core-field] { grid-column: auto; }
+  .auth-card-code [data-slot=input-otp-group] { gap: 4px; }
+  .auth-card-code [data-slot=input-otp-slot] { height: 44px; }
+}
+.auth-signup-fields .auth-password-help { grid-column: 1 / -1; margin-top: -6px; font-size: .8125rem; line-height: 1.6; color: var(--muted-foreground); }
+.auth-signup-fields .auth-password-help ul { margin: 0; padding-left: 18px; }
+.auth-signup-fields .auth-password-help li { margin-bottom: 2px; }
+.auth-card .messages { padding: 0; background: none; border: 0; }
+.auth-card .messages [data-slot=alert] { padding: 12px 16px; font-size: .8125rem; background: var(--subtle); }
+.auth-card-code .messages { margin: 12px 0; }

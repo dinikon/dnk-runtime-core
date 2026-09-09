@@ -21,7 +21,7 @@ const id = String(props.field.attrs.id);
 const controlId = checkbox ? `${id}_control` : id;
 const attrs = computed(() => ({ ...props.field.attrs, id: controlId,
   "aria-invalid": invalid.value || undefined,
-  "aria-describedby": [props.field.help && `${id}_helptext`, invalid.value && `${id}_error`].filter(Boolean).join(" ") || undefined,
+  "aria-describedby": [props.field.attrs["aria-describedby"], props.field.help && `${id}_helptext`, invalid.value && `${id}_error`].filter(Boolean).join(" ") || undefined,
 }));
 const otp = props.field.type === "otp";
 watch(checked, async () => {

@@ -1,13 +1,11 @@
 {% extends "account/base_entrance.html" %}
-{% load allauth %}
+{% load core_accounts %}
 {% block head_title %}{% if code_channel == 'telegram' %}Код в Telegram{% else %}Код из email{% endif %}{% endblock %}
 {% block content %}
-<h1>{% if code_channel == 'telegram' %}Код в Telegram{% else %}Войти по коду из email{% endif %}</h1>
-<p>Получите одноразовый код, чтобы войти без пароля.</p>
-{% element form form=form method='post' action=request_login_code_url %}
- {% slot body %}{% csrf_token %}<input type="hidden" name="channel" value="{{ code_channel }}">{% element fields form=form %}{% endelement %}{{ redirect_field }}{% endslot %}
- {% slot actions %}{% element button type='submit' %}Получить код{% endelement %}{% endslot %}
-{% endelement %}
-{% if code_channel == 'telegram' %}<p class="delivery-hint">Код придёт в Telegram на подтверждённый номер вашего аккаунта.</p>{% endif %}
-<div class="entrance-secondary"><a href="{{ login_url }}">Другие способы входа</a></div>
+<h1>Войти в аккаунт</h1>
+<p>Получите одноразовый код для входа</p>
+{% include "accounts/ui/login_options.html" %}
+{% core_login_panels form code_channel %}
+{% if registration_enabled %}<div class="entrance-secondary">Нет аккаунта? <a href="{{ signup_url }}">Создать аккаунт</a></div>{% endif %}
 {% endblock %}
+{% block extra_body %}{{ block.super }}{% if passkey_login_enabled %}{% include "mfa/webauthn/snippets/login_script.html" with button_id="passkey_login" %}{% endif %}{% endblock %}

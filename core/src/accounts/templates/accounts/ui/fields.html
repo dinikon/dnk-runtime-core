@@ -3,6 +3,11 @@
 {% for field in form.hidden_fields %}{{ field }}{% if field.errors %}<div class="form-errors" role="alert">{{ field.errors }}</div>{% endif %}{% endfor %}
 <div class="field-group">
 {% for field in fields %}
-{% include "accounts/ui/field.html" %}
+{% if signup_layout and field.name == 'password1' %}
+  {% include "accounts/ui/field.html" with suppress_help=True %}
+{% else %}
+  {% include "accounts/ui/field.html" with suppress_help=False %}
+{% endif %}
+{% if signup_layout and field.name == 'password2' and form.password1.help_text %}<div class="auth-password-help" id="{{ form.password1.auto_id }}_helptext">{{ form.password1.help_text|safe }}</div>{% endif %}
 {% endfor %}
 </div>

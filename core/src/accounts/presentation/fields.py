@@ -1,7 +1,7 @@
 """Serialize bound Django fields without exposing passwords or executable HTML."""
 
 
-def serialize_field(field):
+def serialize_field(field, suppress_help=False):
     """JSON data, never executable markup. Passwords remain exclusively in DOM."""
     from django.utils.html import strip_tags
 
@@ -34,6 +34,8 @@ def serialize_field(field):
         }
     }
     attrs.update({"id": field.auto_id, "name": field.html_name})
+    if suppress_help and field.help_text:
+        attrs["aria-describedby"] = f"{field.auto_id}_helptext"
     value = "" if kind == "password" else field.value()
     if value is None:
         value = ""
@@ -44,7 +46,7 @@ def serialize_field(field):
         "value": (
             value if isinstance(value, (str, bool, int, float, list)) else str(value)
         ),
-        "help": strip_tags(str(field.help_text)),
+        "help": "" if suppress_help else strip_tags(str(field.help_text)),
         "errors": [str(error) for error in field.errors],
         "options": (
             [

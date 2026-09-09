@@ -16,7 +16,7 @@
   <body class="{% block body_class %}account-manage{% endblock %}">
     <div class="site-shell">
       <a class="skip-link" href="#main-content">К содержимому</a>
-      <header class="site-header{% if show_admin_link %} site-header--admin{% endif %}">
+      {% block site_header %}<header class="site-header{% if show_admin_link %} site-header--admin{% endif %}">
         <a class="brand" href="/" aria-label="dNiko Alpha — главная">dNiko <span>Alpha</span></a>
         <nav class="header-nav" aria-label="Основная навигация">
           {% if user.is_authenticated %}
@@ -29,7 +29,7 @@
             <a class="button button-small button-outline" href="{% url 'account_login' %}">Войти</a>
           {% endif %}
         </nav>
-      </header>
+      </header>{% endblock %}
       <main id="main-content" class="site-main">
         {% block body %}
           <div class="account-frame">
@@ -65,7 +65,7 @@
           </div>
         {% endblock %}
       </main>
-      <footer class="site-footer"><span>dNiko Alpha</span><span>Ваш аккаунт. Под вашим контролем.</span></footer>
+      {% block site_footer %}<footer class="site-footer"><span>dNiko Alpha</span><span>Ваш аккаунт. Под вашим контролем.</span></footer>{% endblock %}
     </div>
     <script src="{% static 'core/webauthn-feedback.js' %}" defer></script>
     {% block extra_body %}{% endblock %}
