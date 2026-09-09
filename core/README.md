@@ -21,7 +21,7 @@ Membership, OIDC, DNS и provisioning описаны как будущая ра�
 [ARCHITECTURE.md](ARCHITECTURE.md).
 
 Для Kubernetes используйте [Helm-пакет Control Plane](../deploy/helm/README.md): Django,
-Nuxt и gateway с независимым выбором встроенных или внешних PostgreSQL/Redis.
+Nuxt с системным Ingress и независимым выбором встроенных или внешних PostgreSQL/Redis.
 Инструкция включает подготовку Secrets, миграции, установку и обновление.
 
 ## Локальный стенд в Docker Compose

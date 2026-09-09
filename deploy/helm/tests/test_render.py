@@ -188,7 +188,9 @@ class HelmContractTests(unittest.TestCase):
         ingress=False,
         rabbit=True,
     ):
-        self.assertFalse(any(r["metadata"]["name"].endswith("-gateway") for r in manifests))
+        self.assertFalse(
+            any(r["metadata"]["name"].endswith("-gateway") for r in manifests)
+        )
         counts = len(packages)
         deployments = [r for r in manifests if r["kind"] == "Deployment"]
         jobs = [r for r in manifests if r["kind"] == "Job"]
@@ -458,18 +460,34 @@ class HelmContractTests(unittest.TestCase):
                 backend = path["path"] in backend_paths
                 self.assertEqual(
                     path["backend"]["service"],
-                    {"name": fullname + ("-backend" if backend else "-frontend"),
-                     "port": {"number": 8101 if backend else 3101}},
+                    {
+                        "name": fullname + ("-backend" if backend else "-frontend"),
+                        "port": {"number": 8101 if backend else 3101},
+                    },
                 )
-            self.assertFalse(any(r["metadata"]["name"].endswith("-gateway") for r in manifests))
-            self.assertFalse(any(r["kind"] == "Secret" and r["metadata"]["name"] == fullname + "-tls" for r in manifests))
+            self.assertFalse(
+                any(r["metadata"]["name"].endswith("-gateway") for r in manifests)
+            )
+            self.assertFalse(
+                any(
+                    r["kind"] == "Secret" and r["metadata"]["name"] == fullname + "-tls"
+                    for r in manifests
+                )
+            )
 
     def test_ingress_existing_certificate_and_invalid_settings(self):
         for chart, fixture in [(CORE, core_values), (RUNTIME, runtime_values)]:
             values = fixture(ingress=True)
-            values["ingress"]["tls"] = {"clusterIssuer": "", "secretName": "existing-tls"}
-            ingress = next(r for r in self.render(values, chart) if r["kind"] == "Ingress")
-            self.assertNotIn("cert-manager.io/cluster-issuer", ingress["metadata"]["annotations"])
+            values["ingress"]["tls"] = {
+                "clusterIssuer": "",
+                "secretName": "existing-tls",
+            }
+            ingress = next(
+                r for r in self.render(values, chart) if r["kind"] == "Ingress"
+            )
+            self.assertNotIn(
+                "cert-manager.io/cluster-issuer", ingress["metadata"]["annotations"]
+            )
             self.assertEqual(ingress["spec"]["tls"][0]["secretName"], "existing-tls")
             for override in [
                 {"className": ""},

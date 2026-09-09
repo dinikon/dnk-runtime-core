@@ -1,6 +1,6 @@
 # DNK Runtime Core
 
-Самостоятельный пакет FastAPI, Vue, Nginx gateway и publisher worker. По умолчанию включены собственные PostgreSQL 16, Redis 7 и RabbitMQ 3.13. Console worker включается через `workers.console.enabled`; CronJobs не создаются.
+Самостоятельный пакет FastAPI, Vue и publisher worker с системным Ingress. По умолчанию включены собственные PostgreSQL 16, Redis 7 и RabbitMQ 3.13. Console worker включается через `workers.console.enabled`; CronJobs не создаются.
 
 При установке этого каталога настройки из `values.yaml` передаются без префикса. В общем пакете `dnk-platform` они находятся под `runtime`. Общие инструкции, примеры и подготовка Secrets: [Helm README](../../../README.md).
 
@@ -19,6 +19,8 @@ PVC, созданные StatefulSet, сохраняются после удал�
 
 Job сохраняется после успешного выполнения. Все workload pods ожидают `Complete=True` у Jobs текущего развёртывания; в umbrella они ждут обе миграции. Только initContainer ожидания получает токен с правом `get` конкретных Jobs. Настройки таймаутов и повторов находятся в `migrations`.
 
-FastAPI и workers используют опубликованный runtime-образ без пересборки: ConfigMap содержит запускающий Python-скрипт и migration runner. В `backend.extraEnv` можно добавить `valueFrom`; управляемые переменные переопределять запрещено. Workers имеют независимые настройки image/replicas/resources/pod и необязательные `probes.startup/readiness/liveness` с полным Kubernetes probe. Frontend получает статическую Nginx-конфигурацию, gateway направляет `/api` в backend и добавляет `Secure` к session cookie при HTTPS.
+FastAPI и workers используют опубликованный runtime-образ без пересборки: ConfigMap содержит запускающий Python-скрипт и migration runner. В `backend.extraEnv` можно добавить `valueFrom`; управляемые переменные переопределять запрещено. Workers имеют независимые настройки image/replicas/resources/pod и необязательные `probes.startup/readiness/liveness` с полным Kubernetes probe. Frontend получает статическую Nginx-конфигурацию для SPA. Системный Ingress направляет `/api` в backend; ASGI adapter из ConfigMap сохраняет Secure/HttpOnly/SameSite session cookie при HTTPS без пересборки опубликованного образа.
 
 ArgoCD использует Sync waves и сохраняемую Sync Job с `BeforeHookCreation`. Новый Git revision передаётся через `global.deployment.revision` и меняет pod template. Один только push образа `latest` не запускает обновление. Полный Sync повторяет Job; selfHeal той же версии использует сохранённый успех. Для диагностики смотрите состояние Job и логи контейнера `migrations`; credentials в ошибках runner не выводятся.
+
+По умолчанию: `ingress.className: nginx`, `ingress.tls.clusterIssuer: letsencrypt-production`. Cert-manager создаёт TLS Secret; gateway pods не создаются.

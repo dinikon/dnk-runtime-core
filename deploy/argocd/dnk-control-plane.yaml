@@ -1,4 +1,6 @@
 # Replace the example domains, SMTP settings and replace-me-* Secret references below.
+# System IngressClass nginx and cert-manager ClusterIssuer letsencrypt-production must exist.
+# TLS Secrets are created by cert-manager using the application domains.
 # AppProject productions must allow this repository and destination namespace.
 # For a private GHCR package, create the registry Secret in the destination namespace.
 apiVersion: argoproj.io/v1alpha1

@@ -1,8 +1,9 @@
 # DNK Platform — Helm и ArgoCD
 
 `dnk-platform` устанавливает два независимых приложения: Django/Nuxt Control Plane
-и FastAPI/Vue Runtime. В обоих пакетах есть backend, frontend, Nginx gateway,
-PostgreSQL, Redis и отдельная Job миграций. Runtime также включает RabbitMQ и
+и FastAPI/Vue Runtime. В обоих пакетах есть backend, frontend, PostgreSQL, Redis
+и отдельная Job миграций. Внешний трафик обслуживает системный Ingress класса `nginx`;
+отдельные gateway Deployment и Service не создаются. Runtime также включает RabbitMQ и
 publisher worker; console worker выключен по умолчанию.
 
 Это новая установка. Старые имена Helm-релиза не переносятся автоматически.
@@ -37,7 +38,7 @@ deploy/argocd/
 revision задаются в `global`. Внутренний `global.migrations.coordinator` оставьте
 равным значению по умолчанию соответствующего chart.
 
-`application` содержит настройки продукта; `backend`, `frontend`, `gateway` —
+`application` содержит настройки продукта; `backend`, `frontend` —
 образы, реплики, ресурсы, probes и размещение pods. У runtime добавлена группа
 `workers`; publisher включён, console включается отдельно. `migrations` управляет
 ожиданием БД и блокировки, ожиданием Jobs, сроком выполнения Job и повторами.
@@ -57,11 +58,9 @@ revision задаются в `global`. Внутренний `global.migrations.c
 | Control Plane frontend | `ghcr.io/dinikon/runtime/frontend-core:latest` |
 | Runtime backend и workers | `ghcr.io/dinikon/runtime/runtime:latest` |
 | Runtime frontend | `ghcr.io/dinikon/runtime/frontend-runtime:latest` |
-| Оба gateway | `nginx:1.27-alpine` |
 
-У опубликованных образов `pullPolicy: Always`. Gateway использует конфигурацию
-из chart, отдельный gateway-образ собирать не нужно. Для своей сборки из корня
-репозитория:
+У опубликованных образов `pullPolicy: Always`. Системный Ingress Controller
+устанавливается отдельно от приложения. Для своей сборки из корня репозитория:
 
 ```sh
 docker build -f core/Dockerfile -t my-registry/dnk-control-plane:my-tag .
@@ -84,7 +83,7 @@ kubectl -n dnk-platform create secret generic ghcr-pull \
 
 Укажите `global.imagePullSecrets: [{name: ghcr-pull}]`. При самостоятельных установках
 Secrets должны находиться в namespace каждого релиза. Registry credentials
-используются также Jobs и ожидающими initContainer у frontend/gateway.
+используются также Jobs и ожидающими initContainer у frontend.
 
 ## Secrets, HTTPS и почта
 
@@ -113,20 +112,52 @@ kubectl -n dnk-platform create secret generic runtime-credentials \
   --from-file=smtp-password="$SECRETS_DIR/smtp-password"
 ```
 
-Не добавляйте перевод строки в файлы ключей/паролей. Настройки примеров содержат
-имена `replace-me-*`: замените их созданными именами, включая TLS и registry Secret.
-Внешний Ingress controller, TLS certificate Secret, DNS и рабочий SMTP предоставляет
-оператор. `application.server.publicOrigin` — один источник URL и hostname для
-Ingress, gateway и Control Plane Nuxt; production требует HTTPS.
+Не добавляйте перевод строки в файлы ключей/паролей. Замените `replace-me-*`
+именами созданных application/registry Secrets. DNS и рабочий SMTP предоставляет
+оператор. `application.server.publicOrigin` задаёт домен Ingress, имя в сертификате
+и публичный URL Control Plane Nuxt; production требует HTTPS.
 
-Gateway доверяет `X-Forwarded-Proto` входящего Ingress и сохраняет Host/forwarded
-headers; прямой публичный обход доверенного proxy следует исключить сетевой
-конфигурацией кластера. Control Plane направляет `/api`, `/accounts`, `/admin`,
-`/static` в Django; остальные маршруты в Nuxt. Django-статика включена в образ.
-Runtime направляет `/api` в FastAPI, остальные пути в статический Vue frontend.
-Chart заменяет встроенную frontend-конфигурацию с Compose-host `api`. Для HTTPS
-runtime gateway добавляет `Secure`, `HttpOnly`, `SameSite=Lax` к session cookie
-текущего опубликованного образа.
+Оба charts по умолчанию используют системный `IngressClass nginx` и существующий
+`ClusterIssuer letsencrypt-production`. Выпуском и продлением сертификатов
+занимается **cert-manager** через аннотацию `cert-manager.io/cluster-issuer`.
+TLS Secret создаётся автоматически с именем `<application-fullname>-tls` в namespace
+приложения. Отдельно запускать Certbot и создавать TLS Secret вручную не требуется.
+
+```yaml
+ingress:
+  enabled: true
+  className: nginx
+  annotations: {}
+  tls:
+    clusterIssuer: letsencrypt-production
+    secretName: ""  # Автоматическое имя; можно задать своё.
+```
+
+В общем values эти настройки находятся в `controlPlane.ingress` и `runtime.ingress`.
+Для готового сертификата задайте `tls.clusterIssuer: ""` и `tls.secretName: my-tls`.
+Chart не устанавливает и не меняет системный контроллер или ClusterIssuer. Проверьте,
+что issuer готов, DNS указывает на Ingress и настроенный в issuer ACME challenge
+доступен. [Механизм ingress-shim cert-manager](https://cert-manager.io/docs/usage/ingress/).
+
+Ingress направляет запросы напрямую в Services, сохраняя исходный путь:
+
+| Пакет | Пути backend | Остальные пути |
+| --- | --- | --- |
+| Control Plane | `/api`, `/accounts`, `/admin`, `/static` → Django | `/` → Nuxt |
+| Runtime | `/api` → FastAPI | `/` → Vue |
+
+Используется `pathType: Prefix` с границами сегментов: `/apiary` не попадает в `/api`.
+Не добавляйте `rewrite-target` для этих маршрутов. Runtime frontend сохраняет
+статический Nginx внутри своего образа для раздачи файлов и SPA fallback; отдельного
+прокси перед приложением больше нет. Django-статика включена в backend-образ.
+
+Backend доверяет Host/forwarded headers системного Ingress. Для Control Plane
+`trustedProxyCount: 1`; при дополнительных доверенных proxy настройте это число
+в соответствии с вашей сетью. Backend Services по умолчанию внутренние (ClusterIP).
+Runtime запускается через ASGI adapter из ConfigMap: при HTTPS он сохраняет
+`Secure`, `HttpOnly`, `SameSite=Lax` у session cookie, включая logout. Опубликованный
+образ не требует пересборки. Adapter не меняет другие cookies; Nginx snippets
+и глобальные настройки контроллера для этого не нужны.
 
 ConfigMap содержит несекретные настройки и скрипты. Значения секретов поступают
 через `secretKeyRef`; Redis/RabbitMQ URL преобразуются в окружении Python wrapper
@@ -185,6 +216,15 @@ PostgreSQL 16, Redis 7 (AOF), RabbitMQ 3.13 используют StatefulSets и
 имя релиза/ресурса и исходные credentials. Автоматическая смена пароля уже
 инициализированного PostgreSQL/RabbitMQ не поддерживается.
 
+## Обновление с 0.2.x на 0.3.0
+
+Удалите группы `controlPlane.gateway`, `runtime.gateway` (или `gateway` в standalone)
+из собственных values: схема 0.3.0 больше их не принимает. Обновите параметры Ingress
+по примеру выше. Для Helm передавайте актуальный values и `--reset-values`, чтобы
+не переносить удалённые параметры старого релиза. Helm upgrade или ArgoCD Sync
+с `prune: true` удалит старые gateway ресурсы и перенаправит Ingress в backend/frontend.
+Имена приложений, БД, PVC и механизм миграций сохраняются.
+
 ## Миграции и обновления
 
 | ArgoCD wave | Ресурсы |
@@ -192,7 +232,7 @@ PostgreSQL 16, Redis 7 (AOF), RabbitMQ 3.13 используют StatefulSets и
 | -30 | ConfigMap, Secrets, ограниченный RBAC |
 | -20 | Встроенные БД, Redis, RabbitMQ и их Services |
 | -10 | Migration Jobs: `Sync`, `BeforeHookCreation` |
-| 0 | Приложения, workers, frontend, gateway, Ingress |
+| 0 | Приложения, workers, frontend, Ingress |
 
 Это `Sync` hooks: `PreSync` не позволил бы подготовить встроенную БД при первой
 установке. В Helm Job является обычным ресурсом, имя включает `.Release.Revision`;
@@ -259,7 +299,9 @@ Git revision. Для воспроизводимых обновлений мож�
 ## Диагностика и проверки
 
 ```sh
-kubectl -n dnk-platform get pods,jobs,pvc
+kubectl -n dnk-platform get pods,jobs,pvc,ingress
+kubectl get clusterissuer letsencrypt-production
+kubectl -n dnk-platform get certificates,certificaterequests,orders,challenges
 kubectl -n dnk-platform logs job/dnk-platform-dnk-control-plane-migrate-r1
 kubectl -n dnk-platform logs job/dnk-platform-dnk-runtime-core-migrate-r1
 kubectl -n dnk-platform logs deploy/dnk-platform-dnk-control-plane-backend -c wait-migrations
@@ -281,5 +323,7 @@ python deploy/helm/build.py --destination dist/helm
 CI выполняет строгий YAML/schema/render contract, lint и упаковку всех трёх charts.
 Интеграционные scripts в `deploy/helm/tests/` используют отдельные disposable kind
 и PostgreSQL окружения, проверяют Helm/ArgoCD и атомарность runtime migration batch.
+Режим `smoke.py --system-ingress` проверяет настоящий Nginx Ingress и cert-manager
+с изолированным тестовым CA; запросы к публичному ACME не отправляются.
 Они не должны использовать рабочий Kubernetes context. Результаты фактического
 локального прогона фиксируются в `deploy/helm/VALIDATION.md`.
