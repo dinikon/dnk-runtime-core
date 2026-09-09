@@ -1,0 +1,18 @@
+apiVersion: v2
+name: dnk-platform
+description: DNK Control Plane and Runtime with coordinated deployment migrations
+type: application
+version: 0.2.0
+appVersion: "0.0.1"
+kubeVersion: '>=1.25.0-0'
+dependencies:
+- name: dnk-control-plane
+  alias: controlPlane
+  version: 0.2.0
+  condition: controlPlane.enabled
+- name: dnk-runtime-core
+  alias: runtime
+  version: 0.2.0
+  condition: runtime.enabled
+- name: dnk-common
+  version: 0.2.0

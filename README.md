@@ -2,17 +2,17 @@
 
 Modular FastAPI backend with tenant onboarding, console authentication, and static tenant data models.
 
-## Django Core
+## Django Control Plane
 
-[Core](core/README.md) is a separate Django application with global accounts,
+[Control Plane](core/README.md) is a separate Django application with global accounts,
 django-allauth authentication and a Nuxt/Vue frontend with server-rendered public pages. It uses the `core` schema in
 the existing PostgreSQL database and has its own dependencies and environment.
 Runtime users, tenant authentication and the existing console remain independent.
 Tenant control-plane operations, tenant OIDC and DNS remain future work in the
 [architecture proposal](core/ARCHITECTURE.md).
 
-For Kubernetes, the [Helm package](deploy/helm/README.md) deploys full Core with
-independently selectable embedded or external PostgreSQL and Redis. Core can be
+For Kubernetes, the [Helm package](deploy/helm/README.md) deploys Control Plane and Runtime with
+independently selectable embedded or external infrastructure. Each package can be
 installed through the umbrella chart or as a standalone subchart.
 
 For the local Docker stack, configure Core as described in its

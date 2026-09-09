@@ -1,0 +1,7 @@
+apiVersion: v2
+name: rabbitmq
+description: Single-instance RabbitMQ using the official image.
+type: application
+version: 0.1.0
+appVersion: "3.13"
+kubeVersion: ">=1.25.0-0"

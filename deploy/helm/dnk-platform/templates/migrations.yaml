@@ -1,0 +1,25 @@
+{{- $targets := list -}}
+{{- $enabled := false -}}
+{{- $contexts := list -}}
+{{- if ne .Values.global.migrations.coordinator "dnk-platform" -}}
+{{- fail "global.migrations.coordinator must remain dnk-platform in the umbrella chart" -}}
+{{- end -}}
+{{- range $alias := list "controlPlane" "runtime" -}}
+{{- if (index $.Values $alias).enabled -}}
+{{- $enabled = true -}}
+{{- $chart := index $.Subcharts $alias -}}
+{{- $contexts = append $contexts $chart -}}
+{{- if $chart.Values.migrations.enabled -}}
+{{- $targets = append $targets (dict "name" (include "dnk.lifecycle.jobName" $chart) "token" (include "dnk.lifecycle.token" $chart)) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if $enabled -}}
+{{- include "dnk.lifecycle.validateNames" $contexts -}}
+{{- $names := list -}}
+{{- range $targets -}}
+{{- if has .name $names -}}{{- fail "enabled packages must have distinct migration Job names" -}}{{- end -}}
+{{- $names = append $names .name -}}
+{{- end -}}
+{{- include "dnk.lifecycle.coordinator" (dict "root" . "targets" $targets) -}}
+{{- end -}}

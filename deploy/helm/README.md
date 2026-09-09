@@ -1,247 +1,280 @@
-# Helm: Core
+# DNK Platform — Helm и ArgoCD
 
-Chart `dnk-runtime-core` разворачивает полный Core: Django/Gunicorn, Nuxt/Nitro,
-Nginx gateway и, по выбору, PostgreSQL и Redis. Runtime будет добавлен следующим
-подпакетом. RabbitMQ и MinIO текущему Core не нужны и этим chart не создаются.
+`dnk-platform` устанавливает два независимых приложения: Django/Nuxt Control Plane
+и FastAPI/Vue Runtime. В обоих пакетах есть backend, frontend, Nginx gateway,
+PostgreSQL, Redis и отдельная Job миграций. Runtime также включает RabbitMQ и
+publisher worker; console worker выключен по умолчанию.
 
-Требуются Helm 3.19+ (chart API v2), Kubernetes 1.25+, доступные кластеру образы,
-StorageClass либо подготовленные PVC. Для публичного доступа нужны существующий
-Ingress-контроллер, DNS и TLS Secret. Chart не устанавливает контроллер,
-cert-manager или SMTP-сервер.
+Это новая установка. Старые имена Helm-релиза не переносятся автоматически.
+Python-проект Core теперь называется `dnk-control-plane`; каталог `core`, импорты
+`dnk_core`, настройки `CORE_*`, схема `core` и адреса опубликованных образов сохранены.
 
-## Пакеты и настройки
+## Структура
 
 ```text
-deploy/helm/dnk-runtime-core/                 # общий пакет
-  charts/core/                              # самостоятельный Core
-    charts/postgresql/                      # один PostgreSQL 16
-    charts/redis/                           # один Redis 7 с AOF
+deploy/helm/dnk-platform/
+  values.yaml                         # global, controlPlane, runtime
+  charts/
+    dnk-common/                       # общая библиотека барьера миграций
+    dnk-control-plane/                # самостоятельно устанавливаемый chart
+      charts/postgresql/
+      charts/redis/
+    dnk-runtime-core/                 # самостоятельно устанавливаемый chart
+      charts/postgresql/
+      charts/redis/
+      charts/rabbitmq/
+deploy/argocd/
+  dnk-platform.yaml
+  dnk-control-plane.yaml
+  dnk-runtime-core.yaml
 ```
 
-Все defaults и комментарии есть в `dnk-runtime-core/values.yaml`, а также в
-`dnk-runtime-core/charts/core/values.yaml`. Они одинаковы, кроме префикса `core`
-в общем пакете. `core.enabled=false` отключает Core и всю его инфраструктуру
-при установке общего пакета. Defaults сами по себе намеренно не устанавливаются:
-нужно заполнить публичный origin, теги образов, постоянные ключи и пароли.
+Все настройки доступны в [общем values.yaml](dnk-platform/values.yaml).
+При самостоятельной установке используются
+[Control Plane values](dnk-platform/charts/dnk-control-plane/values.yaml) или
+[Runtime values](dnk-platform/charts/dnk-runtime-core/values.yaml), без внешнего
+ключа `controlPlane` или `runtime`. Глобальные registry credentials и deployment
+revision задаются в `global`. Внутренний `global.migrations.coordinator` оставьте
+равным значению по умолчанию соответствующего chart.
 
-| Группа | Назначение |
+`application` содержит настройки продукта; `backend`, `frontend`, `gateway` —
+образы, реплики, ресурсы, probes и размещение pods. У runtime добавлена группа
+`workers`; publisher включён, console включается отдельно. `migrations` управляет
+ожиданием БД и блокировки, ожиданием Jobs, сроком выполнения Job и повторами.
+`postgresql`, `redis`, `rabbitmq` независимо переключаются на внешние сервисы
+через `enabled: false`. Отключение встроенного RabbitMQ означает внешнее подключение;
+отключение событий задаётся `application.events.enabled` вместе с workers.
+
+Неизвестные поля и некорректные сочетания проверяются JSON Schema и шаблонами.
+`backend.extraEnv` поддерживает `valueFrom`; дублировать управляемые переменные
+нельзя. Секретные дополнительные переменные также задавайте через `secretKeyRef`.
+
+## Образы
+
+| Компонент | Образ по умолчанию |
 | --- | --- |
-| `application.server` | Единый публичный origin, Host, proxy, язык/часовой пояс |
-| `application.security`, `application.mfa` | Постоянные ключи и политика факторов |
-| `application.auth`, `application.sessions` | Регистрация, способы входа, лимиты, сессии |
-| `application.email`, `application.providers` | SMTP и внешние провайдеры авторизации |
-| `backend`, `frontend`, `gateway` | Образы, replicas, Services, ресурсы, probes, pod-настройки |
-| `ingress` | Существующий controller class, annotations, TLS Secret |
-| `migrations` | Автоматическая подготовка схемы и время ожидания БД/блокировки |
-| `postgresql`, `redis` | Встроенный сервис или внешнее подключение, credentials и диски |
+| Control Plane backend | `ghcr.io/dinikon/runtime/core:latest` |
+| Control Plane frontend | `ghcr.io/dinikon/runtime/frontend-core:latest` |
+| Runtime backend и workers | `ghcr.io/dinikon/runtime/runtime:latest` |
+| Runtime frontend | `ghcr.io/dinikon/runtime/frontend-runtime:latest` |
+| Оба gateway | `nginx:1.27-alpine` |
 
-Для каждого компонента `pod` содержит `annotations`, `labels`,
-`securityContext`, `containerSecurityContext`, `imagePullSecrets`, `nodeSelector`,
-`tolerations`, `affinity`. Не переопределяйте selector labels. Backend и frontend
-публикуются только как ClusterIP; gateway также поддерживает NodePort/LoadBalancer.
-Обычные annotations и probes настраиваются отдельно для каждого Deployment.
-
-Дополнительное окружение Django задаётся в `backend.extraEnv` в формате
-Kubernetes `EnvVar`, включая `valueFrom`. Переменные, которыми управляет chart,
-повторять нельзя. Эти же дополнительные переменные получает initContainer
-миграций. Пример TLS для внешнего PostgreSQL с системными корневыми сертификатами:
-
-```yaml
-core:
-  backend:
-    extraEnv:
-      - name: PGSSLMODE
-        value: verify-full
-      - name: PGSSLROOTCERT
-        value: system
-```
-
-Настройки приложения преобразуются в существующие `CORE_*`; Nuxt получает только
-`NUXT_PUBLIC_SITE_URL`. Значения не загружаются из `.env`: chart задаёт
-`CORE_ENV_FILE=""`. Полный контракт приложения описан в `core/.env.example`.
-
-## Сборка образов
-
-Команды выполняются из корня репозитория. Замените registry и tag своими:
+У опубликованных образов `pullPolicy: Always`. Gateway использует конфигурацию
+из chart, отдельный gateway-образ собирать не нужно. Для своей сборки из корня
+репозитория:
 
 ```sh
-docker build -f core/Dockerfile -t registry.example.com/dnk-core:0.1.0 .
-docker build -f frontends/apps/core/Dockerfile --target runtime -t registry.example.com/dnk-core-web:0.1.0 frontends
-docker build -f frontends/apps/core/Dockerfile --target gateway -t registry.example.com/dnk-core-frontend:0.1.0 frontends
+docker build -f core/Dockerfile -t my-registry/dnk-control-plane:my-tag .
+docker build -f frontends/apps/core/Dockerfile --target runtime -t my-registry/frontend-core:my-tag frontends
+docker build -f Dockerfile -t my-registry/dnk-runtime-core:my-tag .
+docker build -f frontends/Dockerfile -t my-registry/frontend-runtime:my-tag frontends
 ```
 
-Образы должны быть опубликованы в registry либо заранее загружены в тестовый
-кластер. Для приватного registry задайте `pod.imagePullSecrets` нужных компонентов.
-Django-образ уже содержит static; запуск `collectstatic` и общий диск для static
-не требуются. Образ должен включать новую команду `prepare_deployment`.
-
-## Secrets
-
-Каждое секретное поле имеет единую форму:
-
-```yaml
-secretKey:
-  value: ""                  # явное значение для создаваемого chart Secret
-  existingSecret:
-    name: core-credentials   # либо имя существующего Secret
-    key: django-secret-key   # и ключ внутри него
-```
-
-Нельзя одновременно задавать `value` и `existingSecret`. Chart не генерирует ключи
-или пароли. В production обязательны постоянный Django secret и отдельный
-Fernet key для MFA. Потеря/замена Fernet key лишает доступа к сохранённым факторам.
-Секреты из `value` входят в состояние Helm-релиза; для рабочих установок удобнее
-передавать ссылки на существующие Secrets. Все Secrets находятся в namespace релиза.
-
-Пример создания Secret для подготовленных values. Пароли ниже генерируются
-однократно в приватном временном файле; для настоящего SMTP подставьте пароль
-провайдера. Сохраните рабочие ключи в используемом менеджере секретов до удаления
-временного файла:
+Публикация образов не выполняется этим chart. Для приватного GHCR создайте
+namespace и registry Secret в нём, используя credentials с правом чтения пакетов:
 
 ```sh
-kubectl create namespace dniko
-umask 077
-python3 - <<'PY'
-import base64
-import os
-import secrets
-from pathlib import Path
-
-Path('/tmp/dniko-core-secrets.env').write_text('\n'.join([
-    'django-secret-key=' + secrets.token_urlsafe(64),
-    'mfa-encryption-key=' + base64.urlsafe_b64encode(os.urandom(32)).decode(),
-    'postgres-password=' + secrets.token_urlsafe(32),
-    'redis-password=' + secrets.token_urlsafe(32),
-    'smtp-password=REPLACE_WITH_SMTP_PASSWORD',
-]) + '\n')
-PY
-# Замените SMTP-пароль перед следующей командой.
-kubectl -n dniko create secret generic core-credentials --from-env-file=/tmp/dniko-core-secrets.env
-rm /tmp/dniko-core-secrets.env
+kubectl create namespace dnk-platform
+kubectl -n dnk-platform create secret docker-registry ghcr-pull \
+  --docker-server=ghcr.io --docker-username="$GHCR_USER" --docker-password="$GHCR_TOKEN"
 ```
 
-TLS Secret `core-tls` создайте из сертификата выбранного публичного домена или
-предоставьте через уже используемую автоматизацию сертификатов.
+Укажите `global.imagePullSecrets: [{name: ghcr-pull}]`. При самостоятельных установках
+Secrets должны находиться в namespace каждого релиза. Registry credentials
+используются также Jobs и ожидающими initContainer у frontend/gateway.
 
-## Установка
+## Secrets, HTTPS и почта
 
-Скопируйте подходящий пример и заполните реальные registry, теги, origin,
-SMTP-параметры и ссылки на Secrets:
+Поддерживается единый формат: `value` **либо** `existingSecret: {name, key}`.
+Одновременно задавать оба источника нельзя. Пустые поля по умолчанию не являются
+готовыми паролями; chart ничего не генерирует. Для production используйте Secrets
+и не коммитьте их значения в Git или values.
 
-- `examples/values-embedded.yaml`: оба сервиса внутри релиза.
-- `examples/values-external.yaml`: оба сервиса внешние.
-- `examples/values-mixed.yaml`: внешняя PostgreSQL, встроенный Redis.
-
-Каждый пример самодостаточен поверх defaults. Четвёртая комбинация получается
-из embedded-примера через `redis.enabled=false` и `redis.external.host`.
+Подготовьте файлы с постоянными значениями в закрытом каталоге, например `$SECRETS_DIR`.
+Django key можно получить через `secrets.token_urlsafe(64)`, Fernet key — через
+`cryptography.fernet.Fernet.generate_key()`. Сохраните результат один раз. Команды
+создания Secrets ниже читают файлы, чтобы значения не попадали в аргументы:
 
 ```sh
-helm lint deploy/helm/dnk-runtime-core -f my-values.yaml
-helm upgrade --install dniko deploy/helm/dnk-runtime-core \
-  --namespace dniko --create-namespace -f my-values.yaml --wait --timeout 10m
+kubectl -n dnk-platform create secret generic control-plane-credentials \
+  --from-file=django-secret-key="$SECRETS_DIR/django-secret-key" \
+  --from-file=mfa-encryption-key="$SECRETS_DIR/mfa-encryption-key" \
+  --from-file=postgres-password="$SECRETS_DIR/control-plane-postgres-password" \
+  --from-file=redis-password="$SECRETS_DIR/control-plane-redis-password" \
+  --from-file=smtp-password="$SECRETS_DIR/smtp-password"
+kubectl -n dnk-platform create secret generic runtime-credentials \
+  --from-file=control-plane-api-key="$SECRETS_DIR/control-plane-api-key" \
+  --from-file=postgres-password="$SECRETS_DIR/runtime-postgres-password" \
+  --from-file=redis-password="$SECRETS_DIR/runtime-redis-password" \
+  --from-file=rabbitmq-password="$SECRETS_DIR/rabbitmq-password" \
+  --from-file=smtp-password="$SECRETS_DIR/smtp-password"
 ```
 
-Подпакет устанавливается независимо:
+Не добавляйте перевод строки в файлы ключей/паролей. Настройки примеров содержат
+имена `replace-me-*`: замените их созданными именами, включая TLS и registry Secret.
+Внешний Ingress controller, TLS certificate Secret, DNS и рабочий SMTP предоставляет
+оператор. `application.server.publicOrigin` — один источник URL и hostname для
+Ingress, gateway и Control Plane Nuxt; production требует HTTPS.
+
+Gateway доверяет `X-Forwarded-Proto` входящего Ingress и сохраняет Host/forwarded
+headers; прямой публичный обход доверенного proxy следует исключить сетевой
+конфигурацией кластера. Control Plane направляет `/api`, `/accounts`, `/admin`,
+`/static` в Django; остальные маршруты в Nuxt. Django-статика включена в образ.
+Runtime направляет `/api` в FastAPI, остальные пути в статический Vue frontend.
+Chart заменяет встроенную frontend-конфигурацию с Compose-host `api`. Для HTTPS
+runtime gateway добавляет `Secure`, `HttpOnly`, `SameSite=Lax` к session cookie
+текущего опубликованного образа.
+
+ConfigMap содержит несекретные настройки и скрипты. Значения секретов поступают
+через `secretKeyRef`; Redis/RabbitMQ URL преобразуются в окружении Python wrapper
+без вывода credentials и без передачи их в command/args. Изменение конфигураций
+chart обновляет соответствующие pods. Изменение содержимого внешнего Secret
+не отслеживается: выполните явный rollout после ротации.
+
+## Установка целиком или отдельно
+
+Примеры values:
+
+- [Всё встроено](examples/values-embedded.yaml).
+- [Вся инфраструктура внешняя](examples/values-external.yaml).
+- [Смешанный режим](examples/values-mixed.yaml).
+
+Скопируйте пример в собственный файл и замените placeholders. PostgreSQL, Redis
+и RabbitMQ каждого пакета по умолчанию имеют отдельные Services и диски. Чтобы
+использовать общий внешний сервер, явно настройте оба пакета, желательно с разными
+БД/пользователями и Redis logical databases. Для внешнего Redis можно передать
+полный `redis://` или `rediss://` URL из Secret, для RabbitMQ — `amqp://` или
+`amqps://` URL либо host/port/auth. При использовании URL удалите отдельно заданные
+host/password. В runtime URL определяет Redis DB и SSL.
 
 ```sh
-# core-values.yaml содержит те же настройки без внешнего ключа core.
-helm upgrade --install dniko-core deploy/helm/dnk-runtime-core/charts/core \
-  --namespace dniko --create-namespace -f core-values.yaml --wait --timeout 10m
+python deploy/helm/build.py
+helm lint deploy/helm/dnk-platform -f my-values.yaml
+helm upgrade --install dnk-platform deploy/helm/dnk-platform \
+  --namespace dnk-platform --create-namespace -f my-values.yaml \
+  --wait --wait-for-jobs --timeout 20m
 ```
 
-Все зависимости локальные и включены в исходный chart. Внешние Helm-репозитории
-и загрузка сторонних subcharts не требуются. Упаковка обоих вариантов:
+Установить только Control Plane через общий chart:
 
 ```sh
-helm package deploy/helm/dnk-runtime-core --destination /tmp
-helm package deploy/helm/dnk-runtime-core/charts/core --destination /tmp
+helm upgrade --install dnk-control deploy/helm/dnk-platform \
+  --namespace dnk-control --create-namespace -f my-values.yaml \
+  --set runtime.enabled=false --wait --wait-for-jobs --timeout 20m
 ```
 
-Для проверки origin и отправки писем production использует `debug=false`, HTTPS
-и SMTP. Для изолированного теста допустимо явно выбрать console email backend;
-тогда письма доступны в логах, а не доставляются адресатам.
+Либо напрямую, с отдельным values без внешнего ключа:
 
-## Внешние подключения и хранение
+```sh
+helm upgrade --install dnk-control deploy/helm/dnk-platform/charts/dnk-control-plane \
+  --namespace dnk-control --create-namespace -f control-plane-values.yaml \
+  --wait --wait-for-jobs --timeout 20m
+helm upgrade --install dnk-runtime deploy/helm/dnk-platform/charts/dnk-runtime-core \
+  --namespace dnk-runtime --create-namespace -f runtime-values.yaml \
+  --wait --wait-for-jobs --timeout 20m
+```
 
-`postgresql.enabled=false` выбирает `postgresql.external.host/port`. Имя базы,
-пользователь и пароль остаются в `postgresql.auth`. Пользователю нужны права на
-создание/использование схемы `core` и миграции. Остальные схемы не изменяются.
-Миграции требуют прямого подключения или session pooling; transaction pooling
-(PgBouncer) несовместим с session advisory lock.
+Встроенная инфраструктура рассчитана на одну реплику, без автоматической HA.
+PostgreSQL 16, Redis 7 (AOF), RabbitMQ 3.13 используют StatefulSets и PVC.
+`persistence.storageClass: null` выбирает default StorageClass; `""` отключает выбор
+класса. `existingClaim` использует существующий writable PVC. Созданные через
+`volumeClaimTemplates` PVC сохраняются после uninstall; для переустановки сохраните
+имя релиза/ресурса и исходные credentials. Автоматическая смена пароля уже
+инициализированного PostgreSQL/RabbitMQ не поддерживается.
 
-`redis.enabled=false` выбирает `redis.external.host/port` и `redis.auth.password`.
-Для ACL/TLS вместо них задайте `redis.external.url.value` либо
-`redis.external.url.existingSecret`; URL вида `rediss://user:password@host:6379/1`
-хранится в Secret. URL нельзя одновременно задавать с host/password; его DB index
-имеет приоритет над `redis.database`. Встроенный Redis имеет 16 logical databases.
+## Миграции и обновления
 
-Каждый встроенный сервис работает в одном StatefulSet с отдельным PVC.
-`persistence.storageClass: null` использует default StorageClass, `""` отключает
-динамический provisioning. `existingClaim` подключает подготовленный PVC и не
-создаёт новый; в этом случае настройки размера и StorageClass не применяются.
-`persistence.enabled=false` использует временный `emptyDir` для тестов.
+| ArgoCD wave | Ресурсы |
+| --- | --- |
+| -30 | ConfigMap, Secrets, ограниченный RBAC |
+| -20 | Встроенные БД, Redis, RabbitMQ и их Services |
+| -10 | Migration Jobs: `Sync`, `BeforeHookCreation` |
+| 0 | Приложения, workers, frontend, gateway, Ingress |
 
-PVC из `volumeClaimTemplates` сохраняется при uninstall. Повторная установка
-с теми же namespace/release/names использует прежние данные; сохраните прежние
-credentials. Chart не увеличивает существующие PVC автоматически, не выполняет
-major upgrade PostgreSQL, backup или HA. Изменение `auth.password` не меняет пароль
-в уже инициализированной PostgreSQL — ротация выполняется отдельно согласованно
-с Secret. Для существующих PVC требуются подходящие права файлов: PostgreSQL
-Alpine UID/GID 70, Redis Alpine UID 999/GID 1000; настройки доступны в `pod`.
+Это `Sync` hooks: `PreSync` не позволил бы подготовить встроенную БД при первой
+установке. В Helm Job является обычным ресурсом, имя включает `.Release.Revision`;
+Helm hook-аннотаций нет. Job остаётся после успеха, без TTL и `HookSucceeded`.
 
-## HTTPS, миграции и обновления
+Каждое приложение имеет initContainer ожидания. Общий chart автоматически задаёт
+ему Jobs всех включённых пакетов; standalone ждёт только свою Job. Допуск требует
+`Complete=True`, отсутствия `deletionTimestamp` и совпадения deployment token.
+Отсутствие Job или другая revision вызывает ожидание; `Failed=True` блокирует запуск.
+ServiceAccount может только `get` конкретных Jobs, а API token смонтирован только
+в ожидающий initContainer. Основные контейнеры не получают этот token.
 
-Маршрутизация: Ingress → gateway → Django/Nuxt. Ingress должен перезаписывать
-поступающие извне `X-Forwarded-Proto`/`X-Forwarded-For`; gateway сохраняет схему
-HTTPS и добавляет свой proxy hop. `trustedProxyCount=2` соответствует этой цепочке;
-если цепочка другая, измените значение. Не открывайте backend в обход доверенного
-proxy. При отключённом Ingress настройте свой доверенный HTTPS proxy перед gateway.
+Control Plane выполняет имеющуюся в опубликованном образе `prepare_deployment`:
+ожидание PostgreSQL, session advisory lock, создание отсутствующей схемы `core`,
+миграции Django на соединении, удерживающем lock. Сброса схем нет.
 
-Перед каждым backend pod запускается initContainer `migrate` из того же образа.
-Он ждёт PostgreSQL, получает стабильный session advisory lock для `core`, создаёт
-отсутствующую схему и выполняет Django migrations на том же соединении. Основной
-контейнер стартует только после успеха. `waitTimeoutSeconds` ограничивает ожидание
-подключения и lock, а не длительность самой миграции. При потере соединения
-команда завершается ошибкой; Kubernetes может повторить initContainer.
+Runtime выполняет runner из ConfigMap: одна транзакция и одно соединение, advisory
+lock, создание отсутствующих общих таблиц, затем Alembic для всех tenant-схем.
+Ошибка откатывает всю пачку; после получения блокировки переподключений нет.
+Отсутствующая tenant-схема считается ошибкой. Версионируемых миграций существующих
+`public`-таблиц пока нет: bootstrap создаёт отсутствующие таблицы, но не изменяет
+структуру уже существующих.
 
-Для миграций, управляемых снаружи, задайте `migrations.enabled=false` и заранее
-выполните ту же команду с production-настройками. Нельзя включать reset-scaffold,
-fake migrations или автоматический downgrade в процедуру установки.
+`waitTimeoutSeconds` ограничивает ожидание PostgreSQL/lock,
+`gateTimeoutSeconds` — ожидание Jobs, `activeDeadlineSeconds` — полную длительность
+Job, `backoffLimit` — повторы после ошибки. Старые работающие pods при ошибке новых
+миграций специально не останавливаются. Для безопасного rolling upgrade миграции
+должны быть совместимы с предыдущей версией приложения. Helm rollback не откатывает
+схему БД; перед обновлением сделайте резервную копию. Для обычного Helm failed release
+повторите через `helm upgrade`, чтобы получить новую revision/Job.
 
-Обновляйте теги образов и повторяйте `helm upgrade --install ... --wait`.
-Изменения создаваемых ConfigMap/Secrets обновляют checksum в pod template.
-Изменение содержимого существующего внешнего Secret требует перезапуска затронутых
-workloads. При PostgreSQL-ротации сначала согласуйте пароль в самой БД.
-Rolling update предполагает совместимость миграций с предыдущим приложением.
-`helm rollback` возвращает манифесты/образы, но не откатывает данные и схему БД.
+## ArgoCD
+
+Основной файл: [dnk-platform.yaml](../argocd/dnk-platform.yaml).
+Самостоятельные варианты: [Control Plane](../argocd/dnk-control-plane.yaml),
+[Runtime](../argocd/dnk-runtime-core.yaml). Установите один подходящий вариант;
+не направляйте одновременно несколько Applications на одни ресурсы.
+
+Замените domains, SMTP, ingress class и все `replace-me-*` ссылки в `helm.values`.
+Создайте Secrets в целевом namespace до полного Sync. Настройте ArgoCD доступ к
+приватному SSH repository и AppProject `productions`, разрешающий repository и
+целевой namespace. Затем примените выбранный Application обычным процессом GitOps.
+
+Helm parameter передаёт `$ARGOCD_APP_REVISION` в `global.deployment.revision`.
+Новая Git revision меняет token и pod annotations: новые pods подтягивают `latest`.
+Публикация только нового `latest` не запускает deployment автоматически; обновите
+Git revision. Для воспроизводимых обновлений можно задать неизменяемые теги.
+
+Контракт синхронизации (интеграционный стенд закреплён на ArgoCD v3.1.8):
+
+- Полный Sync, новая Git revision, Helm install/upgrade запускают миграции заново.
+- Полный Sync той же revision повторяет Job, но не перезапускает pods, если их
+  шаблон не изменился.
+- SelfHeal той же revision — частичная синхронизация без hooks; использует сохранённую
+  успешную Job. Если Job удалена вручную, выполните полный Sync для восстановления.
+- Selective Sync не запускает hooks. Для установки и миграций нужен полный Sync;
+  `ApplyOutOfSyncOnly=true` не задавайте.
+
+См. [phases и waves](https://argo-cd.readthedocs.io/en/stable/user-guide/sync-waves/)
+и [build environment](https://argo-cd.readthedocs.io/en/stable/user-guide/build-environment/).
 
 ## Диагностика и проверки
 
 ```sh
-kubectl -n dniko get pods,pvc
-kubectl -n dniko logs deploy/dniko-core-backend -c migrate
-kubectl -n dniko logs deploy/dniko-core-backend -c backend
-kubectl -n dniko describe pod <pod-name>
-kubectl -n dniko exec -it deploy/dniko-core-backend -c backend -- python src/manage.py createsuperuser
+kubectl -n dnk-platform get pods,jobs,pvc
+kubectl -n dnk-platform logs job/dnk-platform-dnk-control-plane-migrate-r1
+kubectl -n dnk-platform logs job/dnk-platform-dnk-runtime-core-migrate-r1
+kubectl -n dnk-platform logs deploy/dnk-platform-dnk-control-plane-backend -c wait-migrations
+kubectl -n dnk-platform describe job dnk-platform-dnk-runtime-core-migrate-r1
+kubectl -n dnk-platform exec -it deploy/dnk-platform-dnk-control-plane-backend -c backend -- \
+  python src/manage.py createsuperuser
 ```
 
-Readiness/liveness Django обращаются к `/api/capabilities/` с публичным Host и
-HTTPS-заголовком; это проверка HTTP-приложения, а не мониторинг PostgreSQL/Redis.
-Nuxt проверяется через `/`, gateway — через `/_healthz`. Для операционного контроля
-зависимостей используйте существующий мониторинг кластера.
-
-CI проверяет матрицу встроенных/внешних подключений, типы и обязательные values,
-Secret references, Ingress, отключение Core, lint и package обоих entrypoints.
-Отдельный smoke-тест создаёт собственный kind-кластер и приватный kubeconfig,
-проверяет первую установку, HTTPS через тестовый TLS proxy, обновление, несколько
-реплик, persistence и удаляет свой кластер. Манифест Ingress проверяется отдельно;
-smoke не устанавливает production Ingress-контроллер.
+Для Helm upgrades подставьте текущую release revision в имя Job. При ошибке проверьте
+наличие Secrets, доступность БД, полномочия пользователя на схему, статусы Jobs,
+deployment token и timeout. Не удаляйте успешную Job для обычного масштабирования.
 
 ```sh
-python3 -m pip install PyYAML
-python3 -m unittest discover -s deploy/helm/tests -p 'test_*.py' -v
-python3 deploy/helm/tests/smoke.py --help
+python -m pip install PyYAML==6.0.3 SQLAlchemy==2.0.48
+python -m unittest discover -s deploy/helm/tests -p 'test_*.py' -v
+python deploy/helm/build.py --destination dist/helm
 ```
 
-Тесты новой команды миграций включены в стандартный Django suite. PostgreSQL-тесты
-используют только новую disposable базу через `TEST_CORE_POSTGRES_URL` с CREATEDB.
+CI выполняет строгий YAML/schema/render contract, lint и упаковку всех трёх charts.
+Интеграционные scripts в `deploy/helm/tests/` используют отдельные disposable kind
+и PostgreSQL окружения, проверяют Helm/ArgoCD и атомарность runtime migration batch.
+Они не должны использовать рабочий Kubernetes context. Результаты фактического
+локального прогона фиксируются в `deploy/helm/VALIDATION.md`.

@@ -1,0 +1,54 @@
+global:
+  imagePullSecrets: []
+enabled: true
+nameOverride: runtime-redis
+fullnameOverride: ''
+image:
+  repository: redis
+  tag: 7-alpine
+  pullPolicy: IfNotPresent
+database: 1
+auth:
+  password:
+    value: ''
+    existingSecret:
+      name: ''
+      key: ''
+external:
+  host: ''
+  port: 6379
+  url:
+    value: ''
+    existingSecret:
+      name: ''
+      key: ''
+persistence:
+  enabled: true
+  size: 1Gi
+  storageClass: null
+  existingClaim: ''
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 256Mi
+pod:
+  annotations: {}
+  labels: {}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 1000
+    fsGroup: 1000
+    fsGroupChangePolicy: OnRootMismatch
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+      - ALL
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  imagePullSecrets: []

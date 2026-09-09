@@ -1,0 +1,50 @@
+enabled: true
+nameOverride: runtime-rabbitmq
+fullnameOverride: ''
+image:
+  repository: rabbitmq
+  tag: 3.13-management-alpine
+  pullPolicy: IfNotPresent
+auth:
+  username: runtime
+  vhost: /
+  password:
+    value: ''
+    existingSecret:
+      name: ''
+      key: ''
+external:
+  host: ''
+  port: 5672
+  useSsl: false
+  url:
+    value: ''
+    existingSecret:
+      name: ''
+      key: ''
+persistence:
+  enabled: true
+  size: 4Gi
+  storageClass: null
+  existingClaim: ''
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 1Gi
+pod:
+  annotations: {}
+  labels: {}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 100
+    runAsGroup: 101
+    fsGroup: 101
+    fsGroupChangePolicy: OnRootMismatch
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  imagePullSecrets: []

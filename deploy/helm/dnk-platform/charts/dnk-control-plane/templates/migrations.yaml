@@ -1,0 +1,75 @@
+{{- include "dnk.lifecycle.localCoordinator" . }}
+{{- if .Values.migrations.enabled }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "dnk.lifecycle.jobName" . }}
+  labels:
+    {{- include "dnk.controlPlane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrations
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "-10"
+    dnk.io/deployment-token: {{ include "dnk.lifecycle.token" . | quote }}
+spec:
+  backoffLimit: {{ .Values.migrations.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.migrations.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "dnk.controlPlane.labels" . | nindent 8 }}
+        app.kubernetes.io/component: migrations
+      annotations:
+        dnk.io/deployment-token: {{ include "dnk.lifecycle.token" . | quote }}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      {{- with concat .Values.global.imagePullSecrets .Values.backend.pod.imagePullSecrets | uniq }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backend.pod.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backend.pod.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backend.pod.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backend.pod.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: migrate
+          image: {{ printf "%s:%s" .Values.backend.image.repository .Values.backend.image.tag | quote }}
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          command: [python, src/manage.py, prepare_deployment]
+          args: ["--wait-timeout", {{ .Values.migrations.waitTimeoutSeconds | quote }}]
+          envFrom:
+            - configMapRef:
+                name: {{ include "dnk.controlPlane.fullname" . }}-config
+          env:
+            {{- include "dnk.controlPlane.secretEnv" . | nindent 12 }}
+            {{- with .Values.backend.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml (default .Values.backend.resources .Values.migrations.resources) | nindent 12 }}
+          {{- with .Values.backend.pod.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

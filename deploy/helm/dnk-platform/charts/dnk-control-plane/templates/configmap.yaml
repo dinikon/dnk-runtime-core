@@ -1,0 +1,11 @@
+{{- include "dnk.controlPlane.validate" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dnk.controlPlane.fullname" . }}-config
+  annotations:
+    argocd.argoproj.io/sync-wave: "-30"
+  labels:
+    {{- include "dnk.controlPlane.labels" . | nindent 4 }}
+data:
+  {{- include "dnk.controlPlane.config" . | nindent 2 }}

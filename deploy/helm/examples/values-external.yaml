@@ -1,60 +1,102 @@
-# Umbrella values. Replace example domain, registry, tags and Secret references.
-core:
+# EXAMPLE: replace example.com, SMTP, ingress class and all replace-me-* Secret names.
+# Create the referenced Secrets in the destination namespace before deploying.
+# Never store actual credentials in this file.
+# URL keys contain complete redis(s):// and amqp(s):// connection URLs.
+global:
+  imagePullSecrets:
+  - name: replace-me-ghcr
+controlPlane:
   application:
     server:
-      publicOrigin: https://core.example.com
+      publicOrigin: https://control-plane.example.com
     security:
       secretKey:
         existingSecret:
-          name: core-credentials
+          name: replace-me-control-plane
           key: django-secret-key
     mfa:
       encryptionKey:
         existingSecret:
-          name: core-credentials
+          name: replace-me-control-plane
           key: mfa-encryption-key
     email:
       host: smtp.example.com
-      from: dNiko <noreply@example.com>
+      from: DNK <noreply@example.com>
       username: noreply@example.com
       password:
         existingSecret:
-          name: core-credentials
+          name: replace-me-control-plane
           key: smtp-password
-  backend:
-    image:
-      repository: registry.example.com/dnk-core
-      tag: 0.1.0
-  frontend:
-    image:
-      repository: registry.example.com/dnk-core-web
-      tag: 0.1.0
-  gateway:
-    image:
-      repository: registry.example.com/dnk-core-frontend
-      tag: 0.1.0
   ingress:
     enabled: true
     className: nginx
     tls:
-      secretName: core-tls
+      secretName: replace-me-control-plane-tls
   postgresql:
     auth:
+      database: control_plane
+      username: control_plane
       password:
         existingSecret:
-          name: core-credentials
+          name: replace-me-control-plane
           key: postgres-password
     enabled: false
     external:
-      host: postgres.example.internal
+      host: postgres.example.com
       port: 5432
   redis:
-    auth:
-      password:
-        existingSecret:
-          name: core-credentials
-          key: redis-password
     enabled: false
     external:
-      host: redis.example.internal
-      port: 6379
+      url:
+        existingSecret:
+          name: replace-me-control-plane
+          key: redis-url
+runtime:
+  application:
+    server:
+      publicOrigin: https://runtime.example.com
+    security:
+      controlPlaneApiKey:
+        existingSecret:
+          name: replace-me-runtime
+          key: control-plane-api-key
+    email:
+      fromAddress: noreply@example.com
+      smtp:
+        host: smtp.example.com
+        username: noreply@example.com
+        password:
+          existingSecret:
+            name: replace-me-runtime
+            key: smtp-password
+  ingress:
+    enabled: true
+    className: nginx
+    tls:
+      secretName: replace-me-runtime-tls
+  postgresql:
+    auth:
+      database: runtime
+      username: runtime
+      password:
+        existingSecret:
+          name: replace-me-runtime
+          key: postgres-password
+    enabled: false
+    external:
+      host: postgres.example.com
+      port: 5432
+  redis:
+    enabled: false
+    external:
+      url:
+        existingSecret:
+          name: replace-me-runtime
+          key: redis-url
+  rabbitmq:
+    enabled: false
+    external:
+      url:
+        existingSecret:
+          name: replace-me-runtime
+          key: rabbitmq-url

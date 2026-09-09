@@ -1,0 +1,67 @@
+# Проверка DNK Platform 0.2.0
+
+Локальный прогон 2026-09-09: Helm 3.19.0, kind 0.29.0, Kubernetes 1.33.1,
+Python 3.13, опубликованные образы `ghcr.io/dinikon/runtime/{core,runtime,frontend-core,frontend-runtime}:latest`.
+Интеграционные стенды используют временные kubeconfig, собственные kind-кластеры
+и тестовые credentials. Рабочий кластер и опубликованные образы не изменяются.
+
+## Автоматические проверки
+
+Прошли 53 теста: 48 комбинаций рендеринга для трёх installable charts,
+включение/отключение пакетов и инфраструктуры, inline/existing Secrets,
+внешние Redis/AMQP(S) URL, Ingress, scopes RBAC, токены и состояния migration gate,
+негативные конфигурации, коллизии длинных имён и совпадение umbrella/standalone defaults.
+Проверены строгий YAML без повторяющихся ключей, JSON Schema, Helm lint и
+автономная установка из каждого архива без загрузки зависимостей.
+`uv lock --check --offline --directory core` подтвердил переименование Python-проекта.
+
+В отдельном PostgreSQL с опубликованным runtime-образом прошли 9 интеграционных
+проверок runner: bootstrap и повторный запуск, настоящие Alembic tenant migrations,
+параллельные процессы, один backend PID/transaction/lock, откат всей пачки при
+ошибке второго tenant, таймауты глобальной/tenant-блокировок, утрата соединения
+без переподключения. Тестовые контейнеры и сеть удалены.
+
+## Kubernetes / Helm
+
+Полный smoke-прогон завершился успешно:
+
+- Первый install обоих пакетов: семь Deployment, пять StatefulSet, две Job;
+  по две backend-реплики у каждого приложения.
+- Настоящий OTP-вход runtime через тестовый TLS proxy: Secure/HttpOnly/SameSite
+  cookie, авторизованный `/me`, logout и отклонение завершённой сессии.
+- HTTPS-маршруты Nuxt/Vue, Control Plane API, login, admin и static.
+- Неверный token и отсутствующая runtime Job удерживают новые pods всех семи
+  workloads; восстановленный успешный Job разрешает запуск.
+- Helm upgrade создаёт две Job revision 2 и увеличивает backend до трёх реплик.
+- После перезапуска пяти инфраструктурных pods сохранились PostgreSQL public/
+  tenant-сентинелы, ключи обеих Redis и тестовый RabbitMQ vhost.
+- После uninstall сохранились UID всех пяти PVC. Оба самостоятельных charts
+  переустановлены с этими дисками; данные и HTTPS-вход проверены повторно.
+
+## Воспроизведение
+
+Установите Docker, Helm, kind, kubectl, Python, curl и openssl. Скрипты сами
+создают и удаляют тестовые окружения; текущий Kubernetes context не используется.
+
+```sh
+python -m pip install PyYAML==6.0.3 SQLAlchemy==2.0.48
+python deploy/helm/build.py
+python -m unittest discover -s deploy/helm/tests -p 'test_*.py' -v
+python deploy/helm/tests/smoke.py --published-images
+python deploy/helm/tests/runtime_migrations_integration.py
+python deploy/helm/tests/argocd_smoke.py --published-images
+python deploy/helm/build.py --destination dist/helm
+```
+
+`--published-images` использует уже доступные опубликованные образы; для приватного
+GHCR нужен предварительный Docker login. Без этого флага smoke скрипты собирают
+локальные тестовые образы. CI использует локальную сборку и не публикует её.
+ArgoCD-стенд закреплён на v3.1.8; repository для него — временная локальная Git-копия,
+доступная через тестовый HTTP Service, без push в GitHub.
+
+## Границы проверки
+
+TLS проверяется через отдельный тестовый proxy, имитирующий доверенный Ingress;
+выбор production Ingress controller, DNS, сертификатов и SMTP остаётся настройкой
+окружения. Проверка не отправляет реальную почту. Версионирование существующих
+runtime public-таблиц и обратные миграции схем не входят в этот этап.

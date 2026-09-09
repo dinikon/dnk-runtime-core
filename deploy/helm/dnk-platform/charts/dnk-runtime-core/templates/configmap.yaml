@@ -1,0 +1,11 @@
+{{- include "dnk.runtime.validate" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dnk.runtime.fullname" . }}-config
+  annotations:
+    argocd.argoproj.io/sync-wave: "-30"
+  labels:
+    {{- include "dnk.runtime.labels" . | nindent 4 }}
+data:
+  {{- include "dnk.runtime.config" . | nindent 2 }}

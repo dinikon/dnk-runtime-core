@@ -1,0 +1,173 @@
+{{- $root := . -}}
+{{- $fullname := include "dnk.runtime.fullname" . -}}
+{{- $workloads := dict "backend" .Values.backend "frontend" .Values.frontend "gateway" .Values.gateway "publisher" .Values.workers.publisher "console" .Values.workers.console -}}
+{{- range $component := list "backend" "frontend" "gateway" "publisher" "console" -}}
+{{- $w := index $workloads $component -}}
+{{- $worker := has $component (list "publisher" "console") -}}
+{{- if or (not $worker) $w.enabled -}}
+{{- $python := or $worker (eq $component "backend") -}}
+{{- $port := ternary 8000 80 (eq $component "backend") }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-{{ $component }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    {{- include "dnk.runtime.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ $component }}
+spec:
+  replicas: {{ $w.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dnk-runtime-core
+      app.kubernetes.io/instance: {{ $root.Release.Name | quote }}
+      app.kubernetes.io/component: {{ $component }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dnk-runtime-core
+        app.kubernetes.io/instance: {{ $root.Release.Name | quote }}
+        app.kubernetes.io/component: {{ $component }}
+        {{- with $w.pod.labels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        {{- with $w.pod.annotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        dnk.io/deployment-token: {{ include "dnk.lifecycle.token" $root | quote }}
+        dnk.io/deployment-revision: {{ $root.Values.global.deployment.revision | quote }}
+        checksum/migration-gate: {{ include "dnk.lifecycle.gateScript" $root | sha256sum }}
+        {{- if $python }}
+        checksum/config: {{ printf "%s\n%s\n%s" (include "dnk.runtime.config" $root) ($root.Files.Get "files/entrypoint.py") ($root.Files.Get "files/migrate.py") | sha256sum }}
+        checksum/credentials: {{ include "dnk.runtime.secretBindings" $root | sha256sum }}
+        {{- else }}
+        checksum/config: {{ include (print $root.Template.BasePath "/gateway-configmap.yaml") $root | sha256sum }}
+        {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      {{- if include "dnk.lifecycle.gateEnabled" $root }}
+      serviceAccountName: {{ include "dnk.lifecycle.serviceAccountName" $root }}
+      {{- end }}
+      {{- with concat $root.Values.global.imagePullSecrets $root.Values.backend.pod.imagePullSecrets $w.pod.imagePullSecrets | uniq }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $w.pod.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $w.pod.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $w.pod.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $w.pod.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if include "dnk.lifecycle.gateEnabled" $root }}
+      initContainers:
+        {{- include "dnk.lifecycle.gate" $root | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ $component }}
+          image: {{ printf "%s:%s" $w.image.repository $w.image.tag | quote }}
+          imagePullPolicy: {{ $w.image.pullPolicy }}
+          {{- if $python }}
+          command: [python, /opt/dnk-runtime/entrypoint.py]
+          {{- if eq $component "backend" }}
+          args: [uvicorn, src.app:app, --host, 0.0.0.0, --port, "8000", --proxy-headers, --forwarded-allow-ips, "*"]
+          {{- else if eq $component "publisher" }}
+          args: [dnk-manage, events, publisher-worker]
+          {{- else }}
+          args: [dnk-manage, events, console-worker, --queue-name, {{ $w.queueName | quote }}, --routing-key, {{ $w.routingKey | quote }}]
+          {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ $fullname }}-config
+          env:
+            {{- include "dnk.runtime.secretEnv" $root | nindent 12 }}
+            {{- with $root.Values.backend.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+          {{- if not $worker }}
+          ports:
+            - name: http
+              containerPort: {{ $port }}
+          {{- range $probe := list "startup" "readiness" "liveness" }}
+          {{ $probe }}Probe:
+            httpGet:
+              path: {{ index (dict "backend" "/docs" "frontend" "/" "gateway" "/_healthz") $component }}
+              port: http
+              httpHeaders:
+                - name: Host
+                  value: {{ include "dnk.runtime.hostname" $root | quote }}
+            {{- toYaml (index $w.probes $probe) | nindent 12 }}
+          {{- end }}
+          {{- else }}
+          {{- range $name, $probe := $w.probes }}
+          {{ $name }}Probe:
+            {{- toYaml $probe | nindent 12 }}
+          {{- end }}
+          {{- end }}
+          resources:
+            {{- toYaml $w.resources | nindent 12 }}
+          {{- with $w.pod.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if $python }}
+            - name: runtime-scripts
+              mountPath: /opt/dnk-runtime
+              readOnly: true
+            {{- else }}
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+              readOnly: true
+            {{- end }}
+      volumes:
+        {{- include "dnk.lifecycle.gateVolumes" $root | nindent 8 }}
+        - name: tmp
+          emptyDir: {}
+        {{- if $python }}
+        - name: runtime-scripts
+          configMap:
+            name: {{ $fullname }}-scripts
+        {{- else }}
+        - name: nginx-config
+          configMap:
+            name: {{ $fullname }}-{{ $component }}
+        {{- end }}
+{{- if not $worker }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-{{ $component }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    {{- include "dnk.runtime.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ $component }}
+spec:
+  type: {{ $w.service.type }}
+  ports:
+    - name: http
+      port: {{ $w.service.port }}
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: dnk-runtime-core
+    app.kubernetes.io/instance: {{ $root.Release.Name | quote }}
+    app.kubernetes.io/component: {{ $component }}
+{{- end -}}{{- end -}}{{- end }}

@@ -1,0 +1,15 @@
+dependencies:
+- name: dnk-common
+  repository: file://../dnk-common
+  version: 0.2.0
+- name: postgresql
+  repository: ""
+  version: 0.1.0
+- name: redis
+  repository: ""
+  version: 0.1.0
+- name: rabbitmq
+  repository: ""
+  version: 0.1.0
+digest: sha256:60de118745a371263da1e4cb059bf999bbef29e866f446c3d6f76ae4d5e37b26
+generated: "2026-09-09T17:48:39.494475+03:00"

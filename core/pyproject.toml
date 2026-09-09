@@ -1,5 +1,5 @@
 [project]
-name = "dnk-core"
+name = "dnk-control-plane"
 version = "0.1.0"
 description = "Django identity, account security and session API for dNiko Alpha"
 readme = "README.md"

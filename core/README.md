@@ -1,4 +1,4 @@
-# dNiko Alpha Core
+# DNK Control Plane (`dnk-control-plane`)
 
 Отдельное Django-приложение с глобальными аккаунтами и Nuxt/Vue-интерфейсом.
 Главная страница рендерится на сервере для поисковых систем. Защищённая часть
@@ -20,7 +20,7 @@ Core использует схему `core` в существующей PostgreS
 Membership, OIDC, DNS и provisioning описаны как будущая работа в
 [ARCHITECTURE.md](ARCHITECTURE.md).
 
-Для Kubernetes используйте [Helm-пакет Core](../deploy/helm/README.md): Django,
+Для Kubernetes используйте [Helm-пакет Control Plane](../deploy/helm/README.md): Django,
 Nuxt и gateway с независимым выбором встроенных или внешних PostgreSQL/Redis.
 Инструкция включает подготовку Secrets, миграции, установку и обновление.
 

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dnk.runtime.fullname" . }}-scripts
+  annotations:
+    argocd.argoproj.io/sync-wave: "-30"
+  labels:
+    {{- include "dnk.runtime.labels" . | nindent 4 }}
+data:
+  entrypoint.py: |
+    {{- .Files.Get "files/entrypoint.py" | nindent 4 }}
+  migrate.py: |
+    {{- .Files.Get "files/migrate.py" | nindent 4 }}

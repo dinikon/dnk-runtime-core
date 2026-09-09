@@ -1,9 +1,0 @@
-apiVersion: v2
-name: dnk-runtime-core
-description: dNiko platform umbrella chart (Core first)
-type: application
-version: 0.1.0
-dependencies:
-- name: core
-  version: 0.1.0
-  condition: core.enabled

@@ -1,0 +1,32 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "dnk.controlPlane.fullname" . }}
+  labels:
+    {{- include "dnk.controlPlane.labels" . | nindent 4 }}
+  annotations:
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . | quote }}
+  {{- end }}
+  tls:
+    - secretName: {{ .Values.ingress.tls.secretName | quote }}
+      hosts:
+        - {{ include "dnk.controlPlane.hostname" . | quote }}
+  rules:
+    - host: {{ include "dnk.controlPlane.hostname" . | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "dnk.controlPlane.fullname" . }}-gateway
+                port:
+                  number: {{ .Values.gateway.service.port }}
+{{- end }}

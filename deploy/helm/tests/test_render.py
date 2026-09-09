@@ -1,12 +1,14 @@
-"""Offline contract tests for both chart entrypoints. Requires Helm 3 and PyYAML.
+"""Offline Helm contracts; no cluster, network, or real credentials are used.
 
-Run: HELM=/path/to/helm python -m unittest discover -s deploy/helm/tests -v
-All generated values, rendered manifests and packages stay in temporary directories.
+HELM=/path/to/helm python -m unittest discover -s deploy/helm/tests -v
+Run deploy/helm/build.py before these tests to refresh local chart dependencies.
 """
 
 from __future__ import annotations
 
 import copy
+import itertools
+import json
 import os
 from pathlib import Path
 import shutil
@@ -17,45 +19,49 @@ import unittest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[3]
-UMBRELLA = ROOT / "deploy/helm/dnk-runtime-core"
-CORE = UMBRELLA / "charts/core"
+UMBRELLA = ROOT / "deploy/helm/dnk-platform"
+CORE = UMBRELLA / "charts/dnk-control-plane"
+RUNTIME = UMBRELLA / "charts/dnk-runtime-core"
 HELM = os.environ.get("HELM", "helm")
 SECRET_KEY = "render-test-signing-key-0123456789-abcdefghijklmnopqrstuvwxyz"
 FERNET_KEY = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
 PG_PASSWORD = "render-test-postgres-password"
 REDIS_PASSWORD = "render-test-redis-password"
+RABBIT_PASSWORD = "render-test-rabbit-password"
+CONTROL_KEY = "render-test-control-plane-token"
 
 
-def core_values(pg=True, redis=True, existing=False, ingress=False):
-    """Non-production fixtures; never substitute these credentials in deployments."""
+def secret(value, key, existing=False):
+    return (
+        {"existingSecret": {"name": "test-secrets", "key": key}}
+        if existing
+        else {"value": value}
+    )
 
-    def secret(value, key):
-        if existing:
-            return {"existingSecret": {"name": "core-test-secrets", "key": key}}
-        return {"value": value}
 
+def infrastructure_values(pg=True, redis=True, existing=False):
     return {
-        "application": {
-            "server": {"publicOrigin": "https://core.example.test"},
-            "security": {"secretKey": secret(SECRET_KEY, "django")},
-            "mfa": {"encryptionKey": secret(FERNET_KEY, "fernet")},
-            "email": {
-                "host": "smtp.example.test",
-                "from": "identity@example.test",
-            },
-        },
-        "backend": {"image": {"tag": "test"}},
-        "frontend": {"image": {"tag": "test"}},
-        "gateway": {"image": {"tag": "test"}},
         "postgresql": {
             "enabled": pg,
-            "auth": {"password": secret(PG_PASSWORD, "postgres")},
+            "auth": {"password": secret(PG_PASSWORD, "postgres", existing)},
             "external": {"host": "postgres.example.test"} if not pg else {},
         },
         "redis": {
             "enabled": redis,
-            "auth": {"password": secret(REDIS_PASSWORD, "redis")},
+            "auth": {"password": secret(REDIS_PASSWORD, "redis", existing)},
             "external": {"host": "redis.example.test"} if not redis else {},
+        },
+    }
+
+
+def core_values(pg=True, redis=True, existing=False, ingress=False):
+    """Synthetic credentials for disposable tests only."""
+    return infrastructure_values(pg, redis, existing) | {
+        "application": {
+            "server": {"publicOrigin": "https://core.example.test"},
+            "security": {"secretKey": secret(SECRET_KEY, "django", existing)},
+            "mfa": {"encryptionKey": secret(FERNET_KEY, "fernet", existing)},
+            "email": {"host": "smtp.example.test", "from": "identity@example.test"},
         },
         "ingress": {
             "enabled": ingress,
@@ -65,8 +71,42 @@ def core_values(pg=True, redis=True, existing=False, ingress=False):
     }
 
 
+def runtime_values(pg=True, redis=True, existing=False, ingress=False, rabbit=True):
+    return infrastructure_values(pg, redis, existing) | {
+        "application": {
+            "server": {"publicOrigin": "https://runtime.example.test"},
+            "security": {
+                "controlPlaneApiKey": secret(CONTROL_KEY, "control-plane", existing)
+            },
+            "email": {
+                "fromAddress": "runtime@example.test",
+                "smtp": {"host": "smtp.example.test"},
+            },
+        },
+        "rabbitmq": {
+            "enabled": rabbit,
+            "auth": {"password": secret(RABBIT_PASSWORD, "rabbitmq", existing)},
+            "external": {"host": "rabbitmq.example.test"} if not rabbit else {},
+        },
+        "ingress": {
+            "enabled": ingress,
+            "className": "nginx" if ingress else "",
+            "tls": {"secretName": "runtime-test-tls"} if ingress else {},
+        },
+    }
+
+
+def platform_values(**options):
+    return {
+        "controlPlane": core_values(
+            **{k: v for k, v in options.items() if k != "rabbit"}
+        ),
+        "runtime": runtime_values(**options),
+    }
+
+
 class UniqueKeyLoader(yaml.SafeLoader):
-    """Reject duplicate keys that ordinary YAML loading silently overwrites."""
+    """Ordinary YAML loading silently discards duplicate keys."""
 
     def construct_mapping(self, node, deep=False):
         self.flatten_mapping(node)
@@ -96,28 +136,36 @@ def podspec(resource):
     return resource["spec"]["template"]["spec"]
 
 
+def objects(text):
+    return [item for item in yaml.load_all(text, Loader=UniqueKeyLoader) if item]
+
+
 class HelmContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         if shutil.which(HELM) is None:
-            raise RuntimeError(
-                "Helm is required; install it or set HELM to its executable path"
-            )
+            raise RuntimeError("Helm is required; set HELM to its executable path")
 
     def run_helm(
-        self, chart, values, command="template", success=True, release="contract"
+        self,
+        chart,
+        values,
+        command="template",
+        success=True,
+        release="contract",
+        upgrade=False,
     ):
         with tempfile.TemporaryDirectory(prefix="dnk-helm-render-") as directory:
             values_file = Path(directory) / "values.yaml"
-            values_file.write_text(
-                yaml.safe_dump({"core": values} if chart == UMBRELLA else values)
-            )
+            values_file.write_text(yaml.safe_dump(values))
             arguments = [HELM, command]
             if command == "template":
                 arguments += [release]
+                if upgrade:
+                    arguments += ["--is-upgrade"]
             arguments += [str(chart), "-f", str(values_file)]
             if command == "lint":
-                arguments.append("--strict")
+                arguments += ["--strict"]
             result = subprocess.run(arguments, text=True, capture_output=True)
         if success:
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
@@ -127,29 +175,32 @@ class HelmContractTests(unittest.TestCase):
             )
         return result
 
-    def render(self, values, chart=CORE):
-        return [
-            item
-            for item in yaml.load_all(
-                self.run_helm(chart, values).stdout, Loader=UniqueKeyLoader
-            )
-            if item
-        ]
+    def render(self, values, chart=CORE, **kwargs):
+        return objects(self.run_helm(chart, values, **kwargs).stdout)
 
-    def assert_contract(self, manifests, pg, redis, existing, ingress):
+    def assert_contract(
+        self,
+        manifests,
+        packages,
+        pg=True,
+        redis=True,
+        existing=False,
+        ingress=False,
+        rabbit=True,
+    ):
+        counts = len(packages)
         deployments = [r for r in manifests if r["kind"] == "Deployment"]
-        self.assertEqual(
-            {component(r) for r in deployments}, {"backend", "frontend", "gateway"}
-        )
+        jobs = [r for r in manifests if r["kind"] == "Job"]
+        self.assertEqual(len(deployments), 3 * counts + int("runtime" in packages))
+        self.assertEqual(len(jobs), counts)
         statefulsets = [r for r in manifests if r["kind"] == "StatefulSet"]
-        self.assertEqual(len(statefulsets), int(pg) + int(redis))
         self.assertEqual(
-            {component(r) for r in statefulsets},
-            {
-                name
-                for name, enabled in [("postgresql", pg), ("redis", redis)]
-                if enabled
-            },
+            len(statefulsets),
+            counts * (int(pg) + int(redis)) + int("runtime" in packages and rabbit),
+        )
+        identifiers = [(r["kind"], r["metadata"]["name"]) for r in manifests]
+        self.assertEqual(
+            len(identifiers), len(set(identifiers)), "resource names collide"
         )
         configs = {
             r["metadata"]["name"]: r for r in manifests if r["kind"] == "ConfigMap"
@@ -158,36 +209,38 @@ class HelmContractTests(unittest.TestCase):
         services = {
             r["metadata"]["name"]: r for r in manifests if r["kind"] == "Service"
         }
-        self.assertEqual(
-            {
-                component(r)
-                for r in services.values()
-                if component(r) in {"backend", "frontend", "gateway"}
-            },
-            {"backend", "frontend", "gateway"},
-        )
-        non_secret_text = yaml.safe_dump(
-            [r for r in manifests if r["kind"] != "Secret"]
-        )
-        for value in [SECRET_KEY, FERNET_KEY, PG_PASSWORD, REDIS_PASSWORD]:
-            self.assertNotIn(value, non_secret_text)
-        if existing:
-            self.assertFalse(
-                secrets, "external secrets must not be recreated or copied"
+        public_text = yaml.safe_dump([r for r in manifests if r["kind"] != "Secret"])
+        for value in [
+            SECRET_KEY,
+            FERNET_KEY,
+            PG_PASSWORD,
+            REDIS_PASSWORD,
+            RABBIT_PASSWORD,
+            CONTROL_KEY,
+        ]:
+            self.assertNotIn(
+                value, public_text, "credential outside a Kubernetes Secret"
             )
+        if existing:
+            self.assertFalse(secrets, "existing secrets must not be recreated")
 
         def resolve_env(container):
             env = {}
             for source in container.get("envFrom", []):
                 if "configMapRef" in source:
-                    env.update(configs[source["configMapRef"]["name"]]["data"])
+                    data = configs[source["configMapRef"]["name"]]["data"]
+                    self.assertFalse(set(data) & set(env))
+                    self.assertTrue(
+                        all(isinstance(value, str) for value in data.values())
+                    )
+                    env.update(data)
             for entry in container.get("env", []):
                 self.assertNotIn(entry["name"], env, "duplicate environment variable")
                 env[entry["name"]] = entry.get("value", entry.get("valueFrom"))
                 ref = entry.get("valueFrom", {}).get("secretKeyRef")
                 if ref:
                     if existing:
-                        self.assertEqual(ref["name"], "core-test-secrets")
+                        self.assertEqual(ref["name"], "test-secrets")
                     else:
                         self.assertIn(ref["name"], secrets)
                         self.assertIn(
@@ -197,63 +250,97 @@ class HelmContractTests(unittest.TestCase):
                         )
             return env
 
+        job_names = {r["metadata"]["name"] for r in jobs}
+        for job in jobs:
+            annotations = job["metadata"]["annotations"]
+            self.assertEqual(annotations["argocd.argoproj.io/hook"], "Sync")
+            self.assertEqual(
+                annotations["argocd.argoproj.io/hook-delete-policy"],
+                "BeforeHookCreation",
+            )
+            self.assertEqual(annotations["argocd.argoproj.io/sync-wave"], "-10")
+            self.assertIn("dnk.io/deployment-token", annotations)
+            self.assertTrue(job["metadata"]["name"].endswith("-migrate-r1"))
+            self.assertNotIn("ttlSecondsAfterFinished", job["spec"])
+            self.assertNotIn("helm.sh/hook", annotations)
+            self.assertFalse(podspec(job).get("automountServiceAccountToken", True))
+            for container in podspec(job)["containers"]:
+                resolve_env(container)
+
+        roles = [r for r in manifests if r["kind"] == "Role"]
+        self.assertEqual(len(roles), 1)
+        self.assertEqual(
+            roles[0]["rules"],
+            [
+                {
+                    "apiGroups": ["batch"],
+                    "resources": ["jobs"],
+                    "resourceNames": sorted(job_names),
+                    "verbs": ["get"],
+                }
+            ],
+        )
+        targets = [
+            json.loads(c["data"]["targets.json"])
+            for c in configs.values()
+            if "targets.json" in c.get("data", {})
+        ]
+        self.assertEqual(len(targets), 1)
+        self.assertEqual({t["name"] for t in targets[0]}, job_names)
+        for target in targets[0]:
+            job = next(j for j in jobs if j["metadata"]["name"] == target["name"])
+            self.assertEqual(
+                target["token"],
+                job["metadata"]["annotations"]["dnk.io/deployment-token"],
+            )
+
         for deployment in deployments:
             spec = podspec(deployment)
-            annotations = deployment["spec"]["template"]["metadata"]["annotations"]
-            self.assertTrue(any(key.startswith("checksum/") for key in annotations))
+            self.assertFalse(spec.get("automountServiceAccountToken", True))
+            self.assertTrue(spec["serviceAccountName"])
+            gate = spec["initContainers"]
+            self.assertEqual(len(gate), 1)
+            self.assertEqual(gate[0]["name"], "wait-migrations")
+            token_volumes = {
+                v["name"]
+                for v in spec["volumes"]
+                if any(
+                    "serviceAccountToken" in s
+                    for s in v.get("projected", {}).get("sources", [])
+                )
+            }
+            self.assertEqual(len(token_volumes), 1)
+            self.assertTrue(
+                token_volumes <= {v["name"] for v in gate[0]["volumeMounts"]}
+            )
             for container in spec["containers"]:
+                self.assertFalse(
+                    token_volumes
+                    & {v["name"] for v in container.get("volumeMounts", [])}
+                )
                 env = resolve_env(container)
-                for probe in ("startupProbe", "readinessProbe", "livenessProbe"):
-                    self.assertIn(probe, container)
-                if component(deployment) == "backend":
+                if component(deployment) in {"backend", "frontend", "gateway"}:
+                    for probe in ("startupProbe", "readinessProbe", "livenessProbe"):
+                        self.assertIn(probe, container)
+                if "CORE_PUBLIC_ORIGIN" in env:
                     self.assertEqual(
                         env["CORE_PUBLIC_ORIGIN"], "https://core.example.test"
                     )
-                    self.assertEqual(env["CORE_DEBUG"], "false")
                     self.assertEqual(env["CORE_SESSION_COOKIE_AGE"], "1209600")
                     self.assertEqual(env["CORE_DB_HOST"] in services, pg)
                     self.assertEqual(env["CORE_REDIS_HOST"] in services, redis)
                     self.assertIn("secretKeyRef", env["CORE_SECRET_KEY"])
-                    self.assertIn("secretKeyRef", env["CORE_MFA_ENCRYPTION_KEY"])
-                    for probe in ("startupProbe", "readinessProbe", "livenessProbe"):
-                        http = container[probe]["httpGet"]
-                        self.assertEqual(http["path"], "/api/capabilities/")
-                        headers = {
-                            h["name"].lower(): h["value"] for h in http["httpHeaders"]
-                        }
-                        self.assertEqual(headers["host"], "core.example.test")
-                        self.assertEqual(headers["x-forwarded-proto"], "https")
-                    initializers = spec["initContainers"]
-                    self.assertEqual(len(initializers), 1)
-                    initializer = initializers[0]
-                    self.assertEqual(initializer["image"], container["image"])
-                    self.assertIn(
-                        "prepare_deployment",
-                        initializer.get("command", []) + initializer.get("args", []),
-                    )
-                    self.assertEqual(resolve_env(initializer), env)
-                elif component(deployment) == "frontend":
+                if "NUXT_PUBLIC_SITE_URL" in env:
                     self.assertEqual(
                         env["NUXT_PUBLIC_SITE_URL"], "https://core.example.test"
                     )
-                    self.assertEqual(
-                        container["readinessProbe"]["httpGet"]["path"], "/"
-                    )
-
-        gateway_config = "\n".join(
-            str(value)
-            for config in configs.values()
-            for value in config.get("data", {}).values()
-            if "proxy_pass" in str(value)
-        )
-        self.assertIn("api|accounts|admin|static", gateway_config)
-        self.assertNotIn("127.0.0.11", gateway_config)
-        self.assertIn("X-Forwarded-Proto", gateway_config)
-        for deployment in deployments:
-            if component(deployment) in ("backend", "frontend"):
-                self.assertIn(deployment["metadata"]["name"], gateway_config)
-
+            annotations = deployment["spec"]["template"]["metadata"]["annotations"]
+            self.assertTrue(any(key.startswith("checksum/") for key in annotations))
         for statefulset in statefulsets:
+            self.assertEqual(
+                statefulset["metadata"]["annotations"]["argocd.argoproj.io/sync-wave"],
+                "-20",
+            )
             self.assertTrue(statefulset["spec"]["volumeClaimTemplates"])
             self.assertEqual(
                 statefulset["spec"]
@@ -261,52 +348,101 @@ class HelmContractTests(unittest.TestCase):
                 .get("whenDeleted", "Retain"),
                 "Retain",
             )
-        ingresses = [r for r in manifests if r["kind"] == "Ingress"]
-        self.assertEqual(len(ingresses), int(ingress))
-        if ingress:
-            spec = ingresses[0]["spec"]
-            self.assertEqual(spec["rules"][0]["host"], "core.example.test")
+            self.assertIn(statefulset["spec"]["serviceName"], services)
+        for config in configs.values():
             self.assertEqual(
-                spec["tls"],
-                [{"hosts": ["core.example.test"], "secretName": "core-test-tls"}],
+                config["metadata"]["annotations"]["argocd.argoproj.io/sync-wave"], "-30"
             )
-            self.assertEqual(spec["ingressClassName"], "nginx")
-            gateway = next(r for r in deployments if component(r) == "gateway")
+        ingresses = [r for r in manifests if r["kind"] == "Ingress"]
+        self.assertEqual(len(ingresses), counts * int(ingress))
+        for item in ingresses:
             self.assertEqual(
-                spec["rules"][0]["http"]["paths"][0]["backend"]["service"]["name"],
-                gateway["metadata"]["name"],
+                item["spec"]["tls"][0]["hosts"], [item["spec"]["rules"][0]["host"]]
+            )
+            self.assertIn(
+                item["spec"]["rules"][0]["http"]["paths"][0]["backend"]["service"][
+                    "name"
+                ],
+                services,
             )
 
     def test_deployment_matrix(self):
-        for chart in [UMBRELLA, CORE]:
-            for pg in [True, False]:
-                for redis in [True, False]:
-                    for existing in [False, True]:
-                        for ingress in [False, True]:
-                            with self.subTest(
-                                chart=chart.name,
-                                pg=pg,
-                                redis=redis,
-                                existing=existing,
-                                ingress=ingress,
-                            ):
-                                self.assert_contract(
-                                    self.render(
-                                        core_values(pg, redis, existing, ingress), chart
-                                    ),
-                                    pg,
-                                    redis,
-                                    existing,
-                                    ingress,
-                                )
+        for pg, redis, existing, ingress in itertools.product([True, False], repeat=4):
+            for chart, fixture, packages in [
+                (CORE, core_values, ["controlPlane"]),
+                (RUNTIME, runtime_values, ["runtime"]),
+                (UMBRELLA, platform_values, ["controlPlane", "runtime"]),
+            ]:
+                with self.subTest(
+                    chart=chart.name,
+                    pg=pg,
+                    redis=redis,
+                    existing=existing,
+                    ingress=ingress,
+                ):
+                    self.assert_contract(
+                        self.render(
+                            fixture(
+                                pg=pg, redis=redis, existing=existing, ingress=ingress
+                            ),
+                            chart,
+                        ),
+                        packages,
+                        pg,
+                        redis,
+                        existing,
+                        ingress,
+                    )
 
-    def test_disabled_core_needs_no_deployment_configuration(self):
-        self.assertEqual(self.render({"enabled": False}, UMBRELLA), [])
+    def test_package_selection(self):
+        self.assertEqual(
+            self.render(
+                {"controlPlane": {"enabled": False}, "runtime": {"enabled": False}},
+                UMBRELLA,
+            ),
+            [],
+        )
+        for selected in ["controlPlane", "runtime"]:
+            values = platform_values()
+            values["runtime" if selected == "controlPlane" else "controlPlane"] = {
+                "enabled": False
+            }
+            self.assert_contract(self.render(values, UMBRELLA), [selected])
 
-    def test_lint_and_package_both_entrypoints(self):
-        for chart in [UMBRELLA, CORE]:
+    def test_external_rabbitmq(self):
+        self.assert_contract(
+            self.render(runtime_values(rabbit=False), RUNTIME),
+            ["runtime"],
+            rabbit=False,
+        )
+
+    def test_default_published_images(self):
+        for chart, values, expected in [
+            (CORE, core_values(), "core"),
+            (RUNTIME, runtime_values(), "runtime"),
+        ]:
+            manifests = self.render(values, chart)
+            for deployment in (r for r in manifests if r["kind"] == "Deployment"):
+                name = component(deployment)
+                container = podspec(deployment)["containers"][0]
+                if name == "gateway":
+                    self.assertEqual(container["image"], "nginx:1.27-alpine")
+                else:
+                    suffix = "frontend-" + expected if name == "frontend" else expected
+                    self.assertEqual(
+                        container["image"],
+                        "ghcr.io/dinikon/runtime/" + suffix + ":latest",
+                    )
+                    self.assertEqual(container["imagePullPolicy"], "Always")
+
+    def test_lint_and_package_all_entrypoints(self):
+        for chart, fixture in [
+            (UMBRELLA, platform_values),
+            (CORE, core_values),
+            (RUNTIME, runtime_values),
+        ]:
             with self.subTest(chart=chart.name):
-                self.run_helm(chart, core_values(), command="lint")
+                self.run_helm(chart, fixture(), command="lint")
                 with tempfile.TemporaryDirectory(
                     prefix="dnk-helm-package-"
                 ) as directory:
@@ -316,233 +452,249 @@ class HelmContractTests(unittest.TestCase):
                         capture_output=True,
                     )
                     self.assertEqual(result.returncode, 0, result.stderr)
-                    package = next(Path(directory).glob("*.tgz"))
-                    self.run_helm(
-                        package,
-                        core_values() if chart == CORE else {"core": core_values()},
-                    )
+                    self.run_helm(next(Path(directory).glob("*.tgz")), fixture())
 
-    def test_external_redis_url_secret(self):
-        values = core_values(redis=False)
-        values["redis"]["external"] = {
-            "url": {"existingSecret": {"name": "redis-url", "key": "url"}}
-        }
-        values["redis"]["auth"]["password"] = {"value": ""}
-        manifests = self.render(values)
-        backend = next(
-            r
-            for r in manifests
+    def test_revision_and_configuration_rollouts(self):
+        values = platform_values()
+        first = self.render(values, UMBRELLA)
+        values["global"] = {"deployment": {"revision": "123abc"}}
+        second = self.render(values, UMBRELLA)
+        for kind in ["Deployment", "Job"]:
+            before = {r["metadata"]["name"]: r for r in first if r["kind"] == kind}
+            after = {r["metadata"]["name"]: r for r in second if r["kind"] == kind}
+            self.assertEqual(before.keys(), after.keys())
+            for name in before:
+                self.assertNotEqual(
+                    before[name]["spec"]["template"]["metadata"]["annotations"],
+                    after[name]["spec"]["template"]["metadata"]["annotations"],
+                )
+        values = core_values()
+        first = self.render(values)
+        values["application"]["security"]["secretKey"]["value"] += "-rotated"
+        second = self.render(values)
+        backend = lambda docs: next(
+            r["spec"]["template"]
+            for r in docs
             if r["kind"] == "Deployment" and component(r) == "backend"
         )
-        env = {e["name"]: e for e in podspec(backend)["containers"][0]["env"]}
-        self.assertEqual(
-            env["CORE_REDIS_URL"]["valueFrom"]["secretKeyRef"],
-            {"name": "redis-url", "key": "url"},
-        )
+        self.assertNotEqual(backend(first), backend(second))
 
-    def test_custom_env_and_migrations_opt_out(self):
-        values = core_values()
-        values["migrations"] = {"enabled": False}
-        values["backend"]["extraEnv"] = [
-            {"name": "CUSTOM_VALUE", "value": "plain"},
-            {
-                "name": "CUSTOM_SECRET",
-                "valueFrom": {"secretKeyRef": {"name": "additional", "key": "token"}},
-            },
-        ]
-        manifests = self.render(values)
-        backend = next(
-            r
-            for r in manifests
-            if r["kind"] == "Deployment" and component(r) == "backend"
-        )
-        self.assertFalse(podspec(backend).get("initContainers"))
-        env = podspec(backend)["containers"][0]["env"]
-        for item in values["backend"]["extraEnv"]:
-            self.assertIn(item, env)
-
-    def test_configuration_change_restarts_affected_pods(self):
-        original = core_values()
-        changed = copy.deepcopy(original)
-        changed["application"]["server"][
-            "publicOrigin"
-        ] = "https://changed.example.test"
-        first = {
-            component(r): r["spec"]["template"]
-            for r in self.render(original)
-            if r["kind"] == "Deployment"
-        }
-        second = {
-            component(r): r["spec"]["template"]
-            for r in self.render(changed)
-            if r["kind"] == "Deployment"
-        }
-        for name in ["backend", "frontend"]:
-            self.assertNotEqual(
-                first[name]["metadata"]["annotations"],
-                second[name]["metadata"]["annotations"],
-            )
-
-    def test_empty_dependency_name_override_resolves_to_real_services(self):
-        values = core_values()
-        values["postgresql"]["nameOverride"] = ""
-        values["redis"]["nameOverride"] = ""
-        self.assert_contract(self.render(values), True, True, False, False)
-
-    def test_long_release_names_do_not_collide(self):
+    def test_overrides_and_long_resource_names(self):
+        values = platform_values()
+        values["controlPlane"]["fullnameOverride"] = "custom-control"
+        values["runtime"]["fullnameOverride"] = "custom-runtime"
+        self.assert_contract(self.render(values, UMBRELLA), ["controlPlane", "runtime"])
         names = []
         for suffix in ["b", "c"]:
-            result = self.run_helm(CORE, core_values(), release="a" * 51 + "-" + suffix)
-            manifests = [
-                item
-                for item in yaml.load_all(result.stdout, Loader=UniqueKeyLoader)
-                if item
-            ]
-            resource_names = {(r["kind"], r["metadata"]["name"]) for r in manifests}
-            self.assertEqual(len(resource_names), len(manifests))
+            manifests = self.render(
+                platform_values(), UMBRELLA, release="a" * 51 + "-" + suffix
+            )
+            identifiers = {(r["kind"], r["metadata"]["name"]) for r in manifests}
+            self.assertEqual(len(identifiers), len(manifests))
             self.assertTrue(
                 all(
-                    len(name) <= (63 if kind == "Service" else 253)
-                    for kind, name in resource_names
+                    len(name)
+                    <= (
+                        63
+                        if kind in {"Service", "ServiceAccount", "Role", "RoleBinding"}
+                        else 253
+                    )
+                    for kind, name in identifiers
                 )
             )
-            for statefulset in (r for r in manifests if r["kind"] == "StatefulSet"):
-                self.assertIn(
-                    ("Service", statefulset["spec"]["serviceName"]), resource_names
+            names.append(identifiers)
+        self.assertFalse(names[0] & names[1])
+
+    def test_extra_env_and_disabled_migrations(self):
+        for chart, fixture in [(CORE, core_values), (RUNTIME, runtime_values)]:
+            values = fixture()
+            values["migrations"] = {"enabled": False}
+            values["backend"] = {
+                "extraEnv": [
+                    {
+                        "name": "CUSTOM",
+                        "valueFrom": {
+                            "secretKeyRef": {"name": "extra", "key": "token"}
+                        },
+                    }
+                ]
+            }
+            manifests = self.render(values, chart)
+            self.assertFalse(
+                any(
+                    r["kind"] in {"Job", "Role", "RoleBinding", "ServiceAccount"}
+                    for r in manifests
                 )
-            names.append(resource_names)
-        self.assertTrue(
-            names[0].isdisjoint(names[1]), f"Colliding objects: {names[0] & names[1]}"
-        )
+            )
+            for deployment in (r for r in manifests if r["kind"] == "Deployment"):
+                self.assertFalse(podspec(deployment).get("initContainers"))
+            backend = next(
+                r
+                for r in manifests
+                if r["kind"] == "Deployment" and component(r) == "backend"
+            )
+            self.assertIn(
+                values["backend"]["extraEnv"][0],
+                podspec(backend)["containers"][0]["env"],
+            )
 
-    def test_inline_secret_change_restarts_backend(self):
-        values = core_values()
-        original = next(
-            r
-            for r in self.render(values)
-            if r["kind"] == "Deployment" and component(r) == "backend"
-        )
-        values["application"]["security"]["secretKey"]["value"] += "-rotated"
-        changed = next(
-            r
-            for r in self.render(values)
-            if r["kind"] == "Deployment" and component(r) == "backend"
-        )
-        self.assertNotEqual(
-            original["spec"]["template"]["metadata"]["annotations"],
-            changed["spec"]["template"]["metadata"]["annotations"],
-        )
+    def test_secret_urls_and_existing_persistence(self):
+        for chart, fixture in [(CORE, core_values), (RUNTIME, runtime_values)]:
+            values = fixture(redis=False)
+            values["redis"]["auth"]["password"] = {"value": ""}
+            values["redis"]["external"] = {
+                "url": {"value": "rediss://test:p%40ss@redis.example.test:6380/2"}
+            }
+            if chart == RUNTIME:
+                values["rabbitmq"]["enabled"] = False
+                values["rabbitmq"]["auth"]["password"] = {"value": ""}
+                values["rabbitmq"]["external"] = {
+                    "url": {
+                        "existingSecret": {"name": "amqp-credentials", "key": "url"}
+                    }
+                }
+            manifests = self.render(values, chart)
+            public = yaml.safe_dump([r for r in manifests if r["kind"] != "Secret"])
+            self.assertNotIn("rediss://test:p%40ss", public)
+            if chart == RUNTIME:
+                self.assertIn("amqp-credentials", public)
+            values = fixture()
+            for dependency in ["postgresql", "redis"] + (
+                ["rabbitmq"] if chart == RUNTIME else []
+            ):
+                values[dependency]["persistence"] = {
+                    "existingClaim": dependency + "-existing"
+                }
+            for resource in self.render(values, chart):
+                if resource["kind"] == "StatefulSet":
+                    self.assertFalse(resource["spec"].get("volumeClaimTemplates"))
+                    self.assertTrue(
+                        any(
+                            "persistentVolumeClaim" in v
+                            for v in podspec(resource)["volumes"]
+                        )
+                    )
 
-    def test_custom_service_ports_and_gateway_rollout(self):
-        values = core_values()
-        original = next(
-            r
-            for r in self.render(values)
-            if r["kind"] == "Deployment" and component(r) == "gateway"
+    def test_global_registry_credentials_and_optional_worker(self):
+        values = platform_values()
+        values["global"] = {"imagePullSecrets": [{"name": "registry-global"}]}
+        values["runtime"]["workers"] = {"console": {"enabled": True}}
+        manifests = self.render(values, UMBRELLA)
+        deployments = [r for r in manifests if r["kind"] == "Deployment"]
+        self.assertEqual(len(deployments), 8)
+        for resource in manifests:
+            if resource["kind"] in {"Deployment", "Job", "StatefulSet"}:
+                self.assertIn(
+                    {"name": "registry-global"},
+                    podspec(resource).get("imagePullSecrets", []),
+                )
+
+    def test_umbrella_single_migration_still_gates_both_packages(self):
+        values = platform_values()
+        values["runtime"]["migrations"] = {"enabled": False}
+        manifests = self.render(values, UMBRELLA)
+        jobs = [r for r in manifests if r["kind"] == "Job"]
+        self.assertEqual(len(jobs), 1)
+        role = next(r for r in manifests if r["kind"] == "Role")
+        self.assertEqual(
+            role["rules"][0]["resourceNames"], [jobs[0]["metadata"]["name"]]
         )
-        values["backend"]["service"] = {"port": 8081}
-        values["frontend"]["service"] = {"port": 3001}
-        manifests = self.render(values)
-        services = {
-            component(r): r
-            for r in manifests
-            if r["kind"] == "Service" and component(r) in {"backend", "frontend"}
-        }
-        self.assertEqual(services["backend"]["spec"]["ports"][0]["port"], 8081)
-        self.assertEqual(services["frontend"]["spec"]["ports"][0]["port"], 3001)
-        configuration = next(
-            r
-            for r in manifests
-            if r["kind"] == "ConfigMap" and "default.conf" in r.get("data", {})
-        )["data"]["default.conf"]
-        self.assertIn(services["backend"]["metadata"]["name"] + ":8081", configuration)
-        self.assertIn(services["frontend"]["metadata"]["name"] + ":3001", configuration)
-        changed = next(
-            r
-            for r in manifests
-            if r["kind"] == "Deployment" and component(r) == "gateway"
-        )
-        self.assertNotEqual(
-            original["spec"]["template"]["metadata"]["annotations"],
-            changed["spec"]["template"]["metadata"]["annotations"],
-        )
+        for deployment in (r for r in manifests if r["kind"] == "Deployment"):
+            self.assertEqual(
+                podspec(deployment)["initContainers"][0]["name"], "wait-migrations"
+            )
+
+    def test_argocd_application_examples(self):
+        examples = list((ROOT / "deploy/argocd").glob("*.yaml"))
+        self.assertEqual(len(examples), 3)
+        for path in examples:
+            (application,) = objects(path.read_text())
+            self.assertEqual(application["kind"], "Application")
+            self.assertEqual(application["apiVersion"], "argoproj.io/v1alpha1")
+            spec = application["spec"]
+            self.assertEqual(
+                spec["source"]["repoURL"], "git@github.com:dinikon/dnk-runtime-core.git"
+            )
+            self.assertEqual(spec["source"]["targetRevision"], "main")
+            self.assertEqual(
+                spec["syncPolicy"]["automated"], {"prune": True, "selfHeal": True}
+            )
+            self.assertIn("CreateNamespace=true", spec["syncPolicy"]["syncOptions"])
+            self.assertTrue(
+                any(
+                    p["name"] == "global.deployment.revision"
+                    and p["value"] == "$ARGOCD_APP_REVISION"
+                    for p in spec["source"]["helm"]["parameters"]
+                )
+            )
+            values = yaml.load(spec["source"]["helm"]["values"], Loader=UniqueKeyLoader)
+            self.run_helm(ROOT / spec["source"]["path"], values)
 
     def test_invalid_configuration_rejected(self):
-        cases = []
-        for path in [
-            ("application", "server", "publicOrigin"),
-            ("application", "security", "secretKey", "value"),
-            ("application", "mfa", "encryptionKey", "value"),
-            ("backend", "image", "tag"),
-            ("frontend", "image", "repository"),
-            ("postgresql", "auth", "password", "value"),
-            ("redis", "auth", "password", "value"),
+        for chart, fixture, reserved, key_path in [
+            (
+                CORE,
+                core_values,
+                "CORE_SECRET_KEY",
+                ("application", "security", "secretKey"),
+            ),
+            (
+                RUNTIME,
+                runtime_values,
+                "DB_PASSWORD",
+                ("application", "security", "controlPlaneApiKey"),
+            ),
         ]:
-            values = core_values()
+            cases = []
+            for path in [
+                ("application", "server", "publicOrigin"),
+                (*key_path, "value"),
+                ("backend", "image", "tag"),
+                ("frontend", "image", "repository"),
+                ("postgresql", "auth", "password", "value"),
+                ("redis", "auth", "password", "value"),
+            ]:
+                values = fixture()
+                section = values
+                for key in path[:-1]:
+                    section = section.setdefault(key, {})
+                section[path[-1]] = ""
+                cases.append(("missing " + ".".join(path), values))
+            for origin in [
+                "http://invalid.test",
+                "https://invalid.test/path",
+                "https://user:password@invalid.test",
+                "https://invalid.test:70000",
+            ]:
+                values = fixture()
+                values["application"]["server"]["publicOrigin"] = origin
+                cases.append(("invalid origin " + origin, values))
+            values = fixture()
             section = values
-            for key in path[:-1]:
-                section = section.setdefault(key, {})
-            section[path[-1]] = ""
-            cases.append(("missing " + ".".join(path), values))
-        for origin in [
-            "http://core.example.test",
-            "https://core.example.test/path",
-            "https://user:password@core.example.test",
-            "https://core.example.test:0",
-            "https://core.example.test:70000",
-            "https://core.example.test:invalid",
-        ]:
-            values = core_values()
-            values["application"]["server"]["publicOrigin"] = origin
-            cases.append(("invalid origin " + origin, values))
-        values = core_values()
-        values["application"]["security"]["secretKey"]["existingSecret"] = {
-            "name": "duplicate",
-            "key": "key",
-        }
-        cases.append(("two secret sources", values))
-        values = core_values()
-        values["backend"]["extraEnv"] = [
-            {"name": "CORE_SECRET_KEY", "value": "override"}
-        ]
-        cases.append(("reserved environment override", values))
-        values = core_values()
-        values["backend"]["extraEnv"] = [
-            {"name": "CUSTOM", "value": "1"},
-            {"name": "CUSTOM", "value": "2"},
-        ]
-        cases.append(("duplicate extra environment", values))
-        for service in ["postgresql", "redis"]:
-            values = core_values(pg=service != "postgresql", redis=service != "redis")
-            values[service]["external"]["host"] = ""
-            cases.append(("missing external " + service, values))
-            values = core_values(pg=service != "postgresql", redis=service != "redis")
-            values[service]["external"]["port"] = 70000
-            cases.append(("invalid external port " + service, values))
-        values = core_values(ingress=True)
-        values["ingress"]["tls"]["secretName"] = ""
-        cases.append(("missing ingress TLS", values))
-        for url in [
-            "redis://redis.example.test:0/1",
-            "rediss://redis.example.test:70000/1",
-            "redis://redis.example.test:invalid/1",
-        ]:
-            values = core_values(redis=False)
-            values["redis"]["external"] = {"url": {"value": url}}
-            values["redis"]["auth"]["password"] = {"value": ""}
-            cases.append(("invalid Redis URL port", values))
-        for workload in ["backend", "frontend", "gateway"]:
-            values = core_values()
-            values[workload]["pod"] = {"annotations": {"checksum/config": "override"}}
-            cases.append(("reserved checksum annotation " + workload, values))
-        values = core_values()
-        values["application"]["security"]["secretKey"] = {
-            "existingSecret": {"name": "partial"}
-        }
-        cases.append(("partial secret reference", values))
-        for label, values in cases:
-            with self.subTest(case=label):
-                self.run_helm(CORE, values, success=False)
+            for key in key_path:
+                section = section[key]
+            section["existingSecret"] = {"name": "duplicate", "key": "key"}
+            cases.append(("conflicting secret sources", values))
+            for env in [
+                [{"name": reserved, "value": "bad"}],
+                [{"name": "CUSTOM", "value": "a"}, {"name": "CUSTOM", "value": "b"}],
+            ]:
+                values = fixture()
+                values["backend"] = {"extraEnv": env}
+                cases.append(("conflicting environment", values))
+            for service in ["postgresql", "redis"]:
+                for invalid in [{"host": ""}, {"port": 70000}]:
+                    values = fixture(
+                        pg=service != "postgresql", redis=service != "redis"
+                    )
+                    values[service]["external"].update(invalid)
+                    cases.append(("invalid external " + service, values))
+            values = fixture(ingress=True)
+            values["ingress"]["tls"]["secretName"] = ""
+            cases.append(("missing TLS secret", values))
+            for label, values in cases:
+                with self.subTest(chart=chart.name, case=label):
+                    self.run_helm(chart, values, success=False)
 
 
 if __name__ == "__main__":

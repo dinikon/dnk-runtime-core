@@ -1,0 +1,12 @@
+dependencies:
+- name: postgresql
+  repository: ""
+  version: 0.1.0
+- name: redis
+  repository: ""
+  version: 0.1.0
+- name: dnk-common
+  repository: file://../dnk-common
+  version: 0.2.0
+digest: sha256:1f9ba7b5111b14e0c706e560a90e9b95c9a927e197f15aae8896049489435dfd
+generated: "2026-09-09T17:44:18.841207+03:00"
