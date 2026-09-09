@@ -5,7 +5,7 @@ import { runFixture } from "./fixture";
 // marked local fixtures and never invoke real OAuth or mail providers.
 async function signIn(page: Page) {
   await page.goto("/accounts/login/?next=/app/");
-  await page.locator('[name="login"]').fill("core_e2e_qa");
+  await page.locator('[name="login"]').fill("core_e2e_qa@example.invalid");
   await page.locator('[name="password"]').fill(process.env.CORE_E2E_PASSWORD!);
   await page.locator('[name="password"]').press("Enter");
   await expect(page).toHaveURL(/\/app\/$/);

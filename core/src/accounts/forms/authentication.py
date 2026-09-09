@@ -2,6 +2,8 @@
 
 from django import forms
 from django.conf import settings
+from .profile import ProfileFields
+from allauth.socialaccount.forms import SignupForm as AllauthSocialSignupForm
 from accounts.services.capabilities import password_login_enabled
 from allauth.account.forms import RequestLoginCodeForm as AllauthRequestLoginCodeForm
 from allauth.account.forms import (
@@ -17,10 +19,13 @@ class LoginForm(AllauthLoginForm):
         """Render only email for passwordless login and retain ordinary labels otherwise."""
         super().__init__(*args, **kwargs)
         if password_login_enabled():
-            self.fields["login"].label = "Email или имя пользователя"
-            self.fields["login"].widget.attrs[
-                "placeholder"
-            ] = "Введите email или username"
+            usernames = "username" in settings.ACCOUNT_LOGIN_METHODS
+            self.fields["login"].label = (
+                "Email или имя пользователя" if usernames else "Email"
+            )
+            self.fields["login"].widget.attrs["placeholder"] = (
+                "Введите email или username" if usernames else "you@example.com"
+            )
             if "password" in self.fields:
                 self.fields["password"].help_text = ""
         else:
@@ -62,7 +67,7 @@ class LoginForm(AllauthLoginForm):
         return self.cleaned_data
 
 
-class SignupForm(AllauthSignupForm):
+class SignupForm(ProfileFields, AllauthSignupForm):
     """Retain allauth signup behavior and omit the optional phone from passkey signup."""
 
     def __init__(self, *args, **kwargs):
@@ -70,6 +75,10 @@ class SignupForm(AllauthSignupForm):
         super().__init__(*args, **kwargs)
         if self.by_passkey:
             self.fields.pop("phone", None)
+
+
+class SocialSignupForm(ProfileFields, AllauthSocialSignupForm):
+    """Complete provider-prefilled names through native allauth social registration."""
 
 
 class RequestLoginCodeForm(AllauthRequestLoginCodeForm):

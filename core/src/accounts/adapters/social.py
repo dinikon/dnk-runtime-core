@@ -42,8 +42,13 @@ class SocialAccountAdapter(DefaultSocialAccountAdapter):
         return result
 
     def is_auto_signup_allowed(self, request, sociallogin):
-        """Require Telegram users to supply a local username and verified email."""
+        """Ask for missing profile names and retain Telegram's explicit signup step."""
         if sociallogin.account.provider == "telegram":
+            return False
+        if not all(
+            0 < len(value.strip()) <= 150
+            for value in (sociallogin.user.first_name, sociallogin.user.last_name)
+        ):
             return False
         return super().is_auto_signup_allowed(request, sociallogin)
 

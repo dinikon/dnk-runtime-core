@@ -10,9 +10,12 @@ def authentication_settings(config: "CoreSettings") -> dict:
     """Derive primary authentication and enrollment without removing stored MFA types."""
     phone_enabled = config.provider_enabled("telegram_gateway")
     login_methods = {"email"}
-    signup_fields = ["username*", "email*"]
+    signup_fields = ["email*"]
+    if config.auth_username_mode == "required":
+        signup_fields.insert(0, "username*")
     if config.auth_password_mode != "passwordless":
-        login_methods.add("username")
+        if config.auth_username_mode == "required":
+            login_methods.add("username")
         suffix = "*" if config.auth_password_mode == "required" else ""
         signup_fields.extend(["password1" + suffix, "password2" + suffix])
     if phone_enabled:
@@ -20,6 +23,7 @@ def authentication_settings(config: "CoreSettings") -> dict:
         signup_fields.append("phone")
     return {
         "AUTH_PASSWORD_MODE": config.auth_password_mode,
+        "AUTH_USERNAME_MODE": config.auth_username_mode,
         "AUTH_SIGNUP_ENABLED": config.auth_signup_enabled,
         "EMAIL_CODE_LOGIN_ENABLED": config.auth_email_code_enabled,
         "PHONE_LOGIN_ENABLED": phone_enabled,

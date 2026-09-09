@@ -1,6 +1,7 @@
 """Bridge allauth account hooks to CORE contact and delivery services."""
 
 import logging
+from uuid import UUID
 from django.conf import settings
 from django.contrib import messages
 from django.db import transaction
@@ -26,7 +27,16 @@ class AccountAdapter(DefaultAccountAdapter):
         # allauth saves the user before assigning their optional phone. Keep both
         # writes atomic when another signup claims the number concurrently.
         """Keep user creation and optional phone assignment in one transaction."""
+        user.middle_name = form.cleaned_data.get("middle_name", "")
         return super().save_user(request, user, form, commit=commit)
+
+    def populate_username(self, request, user):
+        """Generate an opaque login name for new users while retaining existing identities."""
+        if settings.AUTH_USERNAME_MODE == "generated" and user._state.adding:
+            # allauth restores staged social users from JSON with a string UUID.
+            user.username = f"user_{UUID(str(user.pk)).hex}"
+        else:
+            super().populate_username(request, user)
 
     def login(self, request, user):
         """Apply the configured session lifetime to every completed login method."""

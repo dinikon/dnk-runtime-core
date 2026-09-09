@@ -38,6 +38,7 @@ class CoreConfigurationTests(unittest.TestCase):
         """Preserve existing deployment defaults while selecting passwordless primary auth."""
         config = self.configuration()
         self.assertEqual(config.auth_password_mode, "passwordless")
+        self.assertEqual(config.auth_username_mode, "generated")
         self.assertEqual(config.effective_public_origin, "http://localhost:8000")
         self.assertEqual(config.effective_allowed_hosts, ["localhost"])
         self.assertEqual(
@@ -94,6 +95,7 @@ class CoreConfigurationTests(unittest.TestCase):
                 with patch("dnk_core.config.CORE_DIR", core):
                     config = load_config()
                 self.assertEqual(config.auth_password_mode, "passwordless")
+                self.assertEqual(config.auth_username_mode, "generated")
             finally:
                 os.chdir(previous)
 
@@ -170,11 +172,11 @@ class CoreConfigurationTests(unittest.TestCase):
                     self.configuration(auth_password_mode=mode)
                 )
                 self.assertEqual(
-                    values["ACCOUNT_SIGNUP_FIELDS"], ["username*", "email*", *passwords]
+                    values["ACCOUNT_SIGNUP_FIELDS"], ["email*", *passwords]
                 )
                 self.assertEqual(
                     values["ACCOUNT_LOGIN_METHODS"],
-                    {"email"} if mode == "passwordless" else {"email", "username"},
+                    {"email"},
                 )
                 self.assertNotIn("AUTHENTICATION_BACKENDS", values)
 
@@ -322,3 +324,15 @@ class CoreConfigurationTests(unittest.TestCase):
         self.assertTrue(
             all(field.description for field in CoreSettings.model_fields.values())
         )
+
+    def test_username_policy_is_typed_and_restores_legacy_mode(self):
+        """Reject misspelled policies and preserve explicit username signup/login."""
+        with self.assertRaises(ImproperlyConfigured):
+            self.configuration(auth_username_mode="optional")
+        values = authentication_settings(
+            self.configuration(
+                auth_password_mode="required", auth_username_mode="required"
+            )
+        )
+        self.assertIn("username*", values["ACCOUNT_SIGNUP_FIELDS"])
+        self.assertIn("username", values["ACCOUNT_LOGIN_METHODS"])

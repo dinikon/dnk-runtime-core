@@ -18,6 +18,8 @@ class PasskeySignupTests(AccountTestCase):
         response = self.client.post(
             "/accounts/signup/passkey/",
             {
+                "first_name": "Анна",
+                "last_name": "Иванова",
                 "username": "new_passkey",
                 "email": "newpasskey@example.com",
                 "next": next_url,
@@ -25,7 +27,7 @@ class PasskeySignupTests(AccountTestCase):
             secure=True,
         )
         self.assertEqual(response.status_code, 302, response.content)
-        self.new_user = get_user_model().objects.get(username="new_passkey")
+        self.new_user = get_user_model().objects.get(email="newpasskey@example.com")
         self.assertFalse(self.new_user.has_usable_password())
         self.assertFalse(EmailAddress.objects.get(user=self.new_user).verified)
         self.assert_anonymous()

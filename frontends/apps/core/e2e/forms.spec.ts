@@ -16,7 +16,10 @@ test("passkey signup, OTP paste, cancellation, recovery codes and safe return", 
   await expect(page.locator('[name="password1"]')).toHaveCount(0);
   await expect(page.locator('[name="phone"]')).toHaveCount(0);
   const username = process.env.CORE_E2E_SIGNUP_USERNAME!;
-  await page.locator('[name="username"]').fill(username);
+  await expect(page.locator('[name="username"]')).toHaveCount(0);
+  await page.locator('[name="last_name"]').fill("Passkey QA");
+  await page.locator('[name="first_name"]').fill("Core E2E Signup");
+  await page.locator('[name="middle_name"]').fill("Тест");
   await page.locator('[name="email"]').fill(`${username}@example.invalid`);
   await page.locator('[name="email"]').press("Enter");
   await expect(page).toHaveURL(/\/accounts\/confirm-email\//);
@@ -49,6 +52,10 @@ test("passkey signup, OTP paste, cancellation, recovery codes and safe return", 
   await page.getByRole("button", { name: "Продолжить", exact: true }).click();
   await expect(page).toHaveURL(/\/app\/\?source=passkey-signup$/);
   expect(beforeUnloadDialogs).toEqual([]);
+  await expect(page.getByRole("heading", { name: "Passkey QA Core E2E Signup Тест", exact: true })).toBeVisible();
+  const profile = await (await page.request.get("/api/me/")).json();
+  expect(profile.username).toMatch(/^user_[a-f0-9]{32}$/);
+  expect(profile.middle_name).toBe("Тест");
   await page.goto("/accounts/2fa/recovery-codes/");
   await expect(page.locator("#recovery_codes")).toHaveCount(0);
   const { credentials } = await cdp.send("WebAuthn.getCredentials", { authenticatorId });
@@ -69,7 +76,7 @@ test("server fallback, entered values, password reveal and mobile layout", async
   const noJS = await browser.newContext({ javaScriptEnabled: false });
   const fallback = await noJS.newPage();
   await fallback.goto("/accounts/login/?next=/app/?source=no-js");
-  await fallback.locator('[name="login"]').fill("core_e2e_qa");
+  await fallback.locator('[name="login"]').fill("core_e2e_qa@example.invalid");
   await fallback.locator('[name="password"]').fill(process.env.CORE_E2E_PASSWORD!);
   await fallback.locator('form[action="/accounts/login/"] button[type="submit"]').click();
   await expect(fallback).toHaveURL(/\/app\/\?source=no-js$/);
@@ -81,10 +88,10 @@ test("server fallback, entered values, password reveal and mobile layout", async
     await new Promise(resolve => setTimeout(resolve, 1500)); await route.continue();
   }, { times: 1 });
   await page.goto("/accounts/login/?next=/app/?source=forms", { waitUntil: "commit" });
-  await page.locator('[name="login"]').fill("core_e2e_qa");
+  await page.locator('[name="login"]').fill("core_e2e_qa@example.invalid");
   await page.locator('[name="password"]').fill("incorrect password");
   await page.waitForFunction(() => document.querySelector('[data-slot="input-group"]'));
-  await expect(page.locator('[name="login"]')).toHaveValue("core_e2e_qa");
+  await expect(page.locator('[name="login"]')).toHaveValue("core_e2e_qa@example.invalid");
   await expect(page.locator('[name="password"]')).toHaveValue("incorrect password");
   await expect(page.locator('[name="password"]')).toBeFocused();
   await page.getByRole("button", { name: "Показать пароль" }).click();
@@ -92,7 +99,7 @@ test("server fallback, entered values, password reveal and mobile layout", async
   await page.getByRole("button", { name: "Скрыть пароль" }).click();
   await page.locator('[name="password"]').press("Enter");
   await expect(page.locator(".form-errors")).toBeVisible();
-  await expect(page.locator('[name="login"]')).toHaveValue("core_e2e_qa");
+  await expect(page.locator('[name="login"]')).toHaveValue("core_e2e_qa@example.invalid");
   await expect(page.locator('[name="password"]')).toHaveValue("");
   await expect(page.locator('form[action="/accounts/login/"] [name="next"]')).toHaveValue("/app/?source=forms");
   for (const width of [360, 390]) {
@@ -121,7 +128,7 @@ test("security pages keep named actions, keyboard submission and responsive fiel
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.goto("/accounts/login/");
-  await page.locator('[name="login"]').fill("core_e2e_qa");
+  await page.locator('[name="login"]').fill("core_e2e_qa@example.invalid");
   await page.locator('[name="password"]').fill(process.env.CORE_E2E_PASSWORD!);
   await page.locator('[name="password"]').press("Enter");
   await expect(page).toHaveURL(/\/app\/$/);

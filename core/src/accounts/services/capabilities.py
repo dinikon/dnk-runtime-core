@@ -60,11 +60,16 @@ def has_primary_login(
     TOTP and recovery codes cannot start a new login and never count as fallback
     primary methods. Disabled providers and password reauthentication also do not.
     """
-    if password_login_enabled() and user.has_usable_password():
-        return True
     emails = EmailAddress.objects.filter(user=user, verified=True)
     if exclude_email is not None:
         emails = emails.exclude(pk=exclude_email)
+    if (
+        password_login_enabled()
+        and user.has_usable_password()
+        and ("username" in settings.ACCOUNT_LOGIN_METHODS or emails.exists())
+    ):
+        # A generated username cannot replace an email used for primary login.
+        return True
     if settings.EMAIL_CODE_LOGIN_ENABLED and emails.exists():
         return True
     if (

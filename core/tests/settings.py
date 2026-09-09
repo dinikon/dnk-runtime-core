@@ -4,6 +4,8 @@ import os
 
 os.environ["CORE_ENV_FILE"] = ""
 os.environ["CORE_AUTH_PASSWORD_MODE"] = "required"
+# Existing regression cases retain legacy username login; profile tests cover generated mode.
+os.environ["CORE_AUTH_USERNAME_MODE"] = "required"
 os.environ["CORE_DEBUG"] = "true"
 os.environ["CORE_SECRET_KEY"] = "core-tests-only-not-a-deployment-secret"
 os.environ["CORE_PUBLIC_ORIGIN"] = "https://testserver"

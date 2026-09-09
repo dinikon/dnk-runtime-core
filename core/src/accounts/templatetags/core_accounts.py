@@ -78,7 +78,16 @@ def core_signup_fields(form):
     order = {
         name: index
         for index, name in enumerate(
-            ("username", "email", "password1", "password2", "phone")
+            (
+                "last_name",
+                "first_name",
+                "middle_name",
+                "email",
+                "username",
+                "password1",
+                "password2",
+                "phone",
+            )
         )
     }
     data["fields"].sort(key=lambda field: order.get(field.name, len(order)))

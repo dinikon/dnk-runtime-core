@@ -205,7 +205,12 @@ class TelegramLoginTests(AccountTestCase):
         self.callback(self.start()["state"][0])
         self.assert_anonymous()
 
-    def test_signup_asks_username_email_and_never_merges_by_claimed_email(self):
+    @override_settings(
+        AUTH_USERNAME_MODE="generated",
+        ACCOUNT_SIGNUP_FIELDS=["email*"],
+        ACCOUNT_LOGIN_METHODS={"email"},
+    )
+    def test_signup_asks_names_email_and_never_merges_by_claimed_email(self):
         self.claims.update(email=self.user.email, email_verified=True)
         response = self.callback(self.start()["state"][0])
         self.assertEqual(urlparse(response.url).path, "/accounts/3rdparty/signup/")
@@ -216,10 +221,17 @@ class TelegramLoginTests(AccountTestCase):
         self.assertFalse(SocialAccount.objects.exists())
         response = self.client.post(
             response.url,
-            {"username": "new_telegram", "email": "newtelegram@example.com"},
+            {
+                "first_name": "Анна",
+                "last_name": "Иванова",
+                "username": "new_telegram",
+                "email": "newtelegram@example.com",
+            },
         )
         self.assertEqual(response.status_code, 302)
-        new = get_user_model().objects.get(username="new_telegram")
+        new = get_user_model().objects.get(email="newtelegram@example.com")
+        self.assertEqual(new.username, f"user_{new.pk.hex}")
+        self.assertEqual(new.get_full_name(), "Иванова Анна")
         self.assertFalse(new.has_usable_password())
         self.assertFalse(EmailAddress.objects.get(user=new).verified)
         self.assertEqual(SocialAccount.objects.get(user=new).uid, self.claims["sub"])

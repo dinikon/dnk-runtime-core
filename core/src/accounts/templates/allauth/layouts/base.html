@@ -38,6 +38,7 @@
                 <p>Аккаунт и безопасность</p>
                 <ul>
                   <li><a href="{% url 'core_account_overview' %}" {% if request.resolver_match.url_name == 'core_account_overview' %}aria-current="page"{% endif %}>Обзор аккаунта</a></li>
+                  <li><a href="{% url 'core_profile' %}" {% if request.resolver_match.url_name == 'core_profile' %}aria-current="page"{% endif %}>Мой профиль</a></li>
                   <li><a href="{% url 'account_email' %}" {% if request.resolver_match.url_name == 'account_email' %}aria-current="page"{% endif %}>Email</a></li>
                   {% if phone_login_enabled %}
                     {% url 'account_change_phone' as phone_url %}

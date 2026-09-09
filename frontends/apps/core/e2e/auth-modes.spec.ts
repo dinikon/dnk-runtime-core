@@ -10,7 +10,7 @@ if (!["required", "optional", "passwordless"].includes(passwordMode)) {
 
 async function signIn(page: Page, source: string) {
   await page.goto(`/accounts/login/?next=${encodeURIComponent(`/app/?source=${source}`)}`);
-  await page.locator('[name="login"]').fill(passwordMode === "passwordless" ? "core_e2e_qa@example.invalid" : "core_e2e_qa");
+  await page.locator('[name="login"]').fill("core_e2e_qa@example.invalid");
   if (passwordMode === "passwordless") {
     await expect(page.locator('[name="password"]')).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Забыли пароль?" })).toHaveCount(0);
@@ -33,7 +33,7 @@ test(`real ${passwordMode} forms preserve native submission and the return addre
   expect(capabilities.passwordLoginEnabled).toBe(passwordMode !== "passwordless");
   if (capabilities.registrationEnabled) {
     await page.goto("/accounts/signup/");
-    for (const field of ["username", "email"]) {
+    for (const field of ["first_name", "last_name", "email"]) {
       await expect(page.locator(`[name="${field}"]`)).toHaveAttribute("required", "");
     }
     if (passwordMode === "passwordless") {

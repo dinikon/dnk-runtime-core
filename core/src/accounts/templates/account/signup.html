@@ -4,7 +4,7 @@
 {% block auth_card_class %}auth-card-signup{% endblock %}
 {% block content %}
 <h1>Создать аккаунт</h1>
-<p>{% if form.password1 %}Заполните данные профиля.{% if not form.password1.field.required %} Пароль можно добавить сейчас или позже.{% endif %}{% else %}Укажите имя пользователя и email. Пароль не нужен.{% endif %}</p>
+<p>{% if form.password1 %}Заполните данные профиля.{% if not form.password1.field.required %} Пароль можно добавить сейчас или позже.{% endif %}{% else %}Укажите имя, фамилию и email. Пароль не нужен.{% endif %}</p>
 {% if available_providers %}{% include "socialaccount/snippets/provider_list.html" with process='login' %}<div class="login-divider">или заполните данные</div>{% endif %}
 <div class="auth-signup-fields">
 {% url 'account_signup' as action_url %}

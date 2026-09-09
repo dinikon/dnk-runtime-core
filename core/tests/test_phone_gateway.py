@@ -132,6 +132,8 @@ class PhoneOwnershipTests(AccountTestCase):
             response = self.client.post(
                 reverse("account_signup"),
                 {
+                    "first_name": "Анна",
+                    "last_name": "Иванова",
                     "username": "racing-signup",
                     "email": "race@example.com",
                     "password1": PASSWORD,

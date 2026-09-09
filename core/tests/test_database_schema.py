@@ -124,7 +124,25 @@ class CoreSchemaTests(unittest.TestCase):
                 [],
             )
             self.run_command("prepare_database.py")
+            self.run_command("manage.py", "migrate", "accounts", "0001", "--noinput")
+            legacy_id = uuid4()
+            database.execute(
+                "INSERT INTO core.accounts_user "
+                "(id, username, email, password, first_name, last_name, is_staff, "
+                "is_superuser, is_active, date_joined, phone_verified) "
+                "VALUES (%s, 'legacy', 'legacy@example.invalid', 'existing-hash', "
+                "'Анна', 'Иванова', false, false, true, NOW(), false)",
+                (legacy_id,),
+            )
             self.run_command("manage.py", "migrate", "--noinput")
+            self.assertEqual(
+                database.execute(
+                    "SELECT id, username, password, first_name, last_name, middle_name "
+                    "FROM core.accounts_user WHERE id = %s",
+                    (legacy_id,),
+                ).fetchone(),
+                (legacy_id, "legacy", "existing-hash", "Анна", "Иванова", ""),
+            )
             history = database.execute(
                 "SELECT app, name, applied FROM core.django_migrations ORDER BY id"
             ).fetchall()

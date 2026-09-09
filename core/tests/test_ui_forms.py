@@ -46,7 +46,10 @@ class FormRenderingTests(AccountTestCase):
 
     def test_signup_passkey_and_sensitive_forms_keep_native_fields(self):
         response = self.client.get("/accounts/signup/passkey/")
-        self.assertEqual(list(response.context["form"].fields), ["username", "email"])
+        self.assertEqual(
+            set(response.context["form"].fields),
+            {"username", "email", "first_name", "last_name", "middle_name"},
+        )
         self.password_login()
         for path in (
             "/accounts/email/",

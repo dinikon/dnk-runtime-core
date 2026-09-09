@@ -1,0 +1,11 @@
+{% extends "account/base_manage.html" %}
+{% load core_accounts %}
+{% block head_title %}Мой профиль{% endblock %}
+{% block content %}
+<h1>Мой профиль</h1>
+<p>Укажите, как вас представлять в dNiko Alpha. Отчество можно не заполнять.</p>
+<form method="post" action="{% url 'core_profile' %}">
+  {% csrf_token %}{% core_fields form %}
+  <button class="button" type="submit">Сохранить изменения</button>
+</form>
+{% endblock %}

@@ -33,7 +33,7 @@ test("real passkey enrollment, UV enforcement, cancellation and recovery", async
 
   await test.step("password login returns to the protected Nuxt route", async () => {
     await page.goto(loginPath);
-    await page.locator('[name="login"]').fill("core_e2e_qa");
+    await page.locator('[name="login"]').fill("core_e2e_qa@example.invalid");
     await page.locator('[name="password"]').fill(process.env.CORE_E2E_PASSWORD!);
     await page.locator('form[action="/accounts/login/"] button[type="submit"]').click();
     await expect(page).toHaveURL(/\/app\/\?source=webauthn-e2e$/);

@@ -7,11 +7,16 @@ from pydantic_settings import BaseSettings
 
 ProviderSwitch = bool | Literal["auto"]
 PasswordMode = Literal["required", "optional", "passwordless"]
+UsernameMode = Literal["generated", "required"]
 
 
 class AuthenticationSettings(BaseSettings):
     """Expose supported product policies while preserving security invariants."""
 
+    auth_username_mode: UsernameMode = Field(
+        "generated",
+        description="Generate internal usernames or require a public login name.",
+    )
     auth_password_mode: PasswordMode = Field(
         "passwordless",
         description="Password policy for primary login and ordinary signup.",

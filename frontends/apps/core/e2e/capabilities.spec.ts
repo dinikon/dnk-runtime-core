@@ -47,7 +47,7 @@ test("capabilities failure can be retried without clearing a signed-in session",
   page.on("pageerror", (error) => browserErrors.push(error.message));
   await page.route("**/api/session/", (route) => route.fulfill({ json: { authenticated: true, csrfToken: "" } }));
   await page.route("**/api/me/", (route) => route.fulfill({ json: {
-    id: "a6d64c44-2316-4658-8b69-6d650da063a4", username: "capabilities_qa", email: "capabilities@example.test", first_name: "Capabilities", last_name: "QA",
+    id: "a6d64c44-2316-4658-8b69-6d650da063a4", username: "capabilities_qa", email: "capabilities@example.test", first_name: "Capabilities", last_name: "QA", middle_name: "", display_name: "QA Capabilities", initials: "QC",
   } }));
   let attempts = 0;
   await page.route("**/api/capabilities/", (route) => {

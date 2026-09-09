@@ -14,6 +14,23 @@ from django.db import transaction
 from allauth.account.models import EmailAddress
 from allauth.usersessions.models import UserSession
 
+
+def clear_fixture_code_limit():
+    """Reset only the marked fixture's email bucket, retaining all IP and user limits."""
+    from django.test import RequestFactory
+    from allauth.account import app_settings
+    from allauth.core.internal import ratelimit
+
+    action = "request_login_code"
+    rates = app_settings.RATE_LIMITS.get(action) or ""
+    key_rates = ",".join(
+        rate for rate in rates.split(",") if rate.strip().endswith("/key")
+    )
+    ratelimit.clear(
+        RequestFactory().get("/"), config={action: key_rates}, action=action, key=email
+    )
+
+
 if not settings.DEBUG:
     raise RuntimeError("Browser fixtures are limited to DEBUG development settings.")
 
@@ -136,17 +153,21 @@ else:
             EmailAddress.objects.create(
                 user=user, email=email, verified=True, primary=True
             )
+            clear_fixture_code_limit()
 
     if operation == "setup":
         if (
-            User.objects.filter(username=signup_username).exists()
+            User.objects.filter(email__iexact=signup_email).exists()
             or EmailAddress.objects.filter(email__iexact=signup_email).exists()
         ):
             raise RuntimeError("Signup fixture already exists.")
     elif operation == "cleanup":
-        staged = User.objects.filter(username=signup_username).first()
+        staged = User.objects.filter(email=signup_email).first()
         if staged:
-            if staged.email != signup_email:
+            if (
+                staged.first_name != "Core E2E Signup"
+                or staged.last_name != "Passkey QA"
+            ):
                 raise RuntimeError("Refusing to delete an unmarked signup account.")
             for session in UserSession.objects.filter(user=staged):
                 session.end()

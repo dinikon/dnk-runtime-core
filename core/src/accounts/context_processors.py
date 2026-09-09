@@ -14,6 +14,7 @@ def account_features(request):
         "show_admin_link": show_admin_link(request.user),
         "registration_enabled": capabilities["registrationEnabled"],
         "password_login_enabled": capabilities["passwordLoginEnabled"],
+        "username_login_enabled": "username" in settings.ACCOUNT_LOGIN_METHODS,
         "email_code_login_enabled": capabilities["emailCodeLoginEnabled"],
         "phone_login_enabled": capabilities["phoneCodeLoginEnabled"],
         "passkey_login_enabled": capabilities["passkeyLoginEnabled"],

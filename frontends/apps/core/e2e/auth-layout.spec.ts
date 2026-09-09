@@ -81,16 +81,16 @@ test("signup fields stay compact and OTP supports errors, resend and complete pa
   await page.goto("/accounts/signup/");
   await page.waitForFunction("window.coreUIState === 'ready'");
   await expect(page.locator(".auth-card-signup")).toBeVisible();
-  const username = await page.locator('[name="username"]').boundingBox();
-  const email = await page.locator('[name="email"]').boundingBox();
-  expect(Math.abs(username!.y - email!.y)).toBeLessThan(1);
-  expect(email!.x).toBeGreaterThan(username!.x);
+  const surname = await page.locator('[name="last_name"]').boundingBox();
+  const givenName = await page.locator('[name="first_name"]').boundingBox();
+  expect(Math.abs(surname!.y - givenName!.y)).toBeLessThan(1);
+  expect(givenName!.x).toBeGreaterThan(surname!.x);
   await page.screenshot({ path: testInfo.outputPath(`signup-${passwordMode}-desktop.png`), fullPage: true });
   for (const width of [360, 390]) {
     await page.setViewportSize({ width, height: 844 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    const first = await page.locator('[name="username"]').boundingBox();
-    const second = await page.locator('[name="email"]').boundingBox();
+    const first = await page.locator('[name="last_name"]').boundingBox();
+    const second = await page.locator('[name="first_name"]').boundingBox();
     expect(second!.y).toBeGreaterThan(first!.y + first!.height);
     await page.screenshot({ path: testInfo.outputPath(`signup-${passwordMode}-${width}.png`), fullPage: true });
   }

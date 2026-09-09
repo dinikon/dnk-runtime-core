@@ -35,6 +35,9 @@ def me(request):
             "email": user.email,
             "first_name": user.first_name,
             "last_name": user.last_name,
+            "middle_name": user.middle_name,
+            "display_name": user.display_name,
+            "initials": user.initials,
         }
     )
 

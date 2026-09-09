@@ -78,6 +78,7 @@ ACCOUNT_FORMS = {
     "login": "accounts.forms.LoginForm",
     "signup": "accounts.forms.SignupForm",
 }
+ACCOUNT_USER_DISPLAY = "accounts.presentation.profile.user_display"
 
 # Security invariants intentionally have no environment switch.
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
@@ -114,7 +115,10 @@ MFA_FORMS = {
 }
 USERSESSIONS_TRACK_ACTIVITY = True
 SOCIALACCOUNT_LOGIN_ON_GET = False
-SOCIALACCOUNT_FORMS = {"disconnect": "accounts.forms.DisconnectForm"}
+SOCIALACCOUNT_FORMS = {
+    "disconnect": "accounts.forms.DisconnectForm",
+    "signup": "accounts.forms.SocialSignupForm",
+}
 SOCIALACCOUNT_ADAPTER = "accounts.adapters.SocialAccountAdapter"
 SOCIALACCOUNT_EMAIL_AUTHENTICATION = False
 SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = False

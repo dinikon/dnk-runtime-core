@@ -12,7 +12,7 @@ import ProfileOverview from "./ui/ProfileOverview.vue";
 const route = useRoute();
 const { session, refreshSession } = useCoreSession();
 const displayName = computed(() =>
-  [session.value.user?.first_name, session.value.user?.last_name].filter(Boolean).join(" ") || session.value.user?.username || "Ваш аккаунт",
+  session.value.user?.display_name || "Ваш аккаунт",
 );
 
 async function retry() {
@@ -25,7 +25,7 @@ async function retry() {
   <section class="workspace" aria-labelledby="workspace-title">
     <header class="page-heading">
       <p class="muted">Мой аккаунт</p>
-      <Avatar class="mb-5 size-14"><AvatarFallback>{{ displayName.slice(0, 2).toUpperCase() }}</AvatarFallback></Avatar>
+      <Avatar class="mb-5 size-14"><AvatarFallback>{{ session.user?.initials || "АК" }}</AvatarFallback></Avatar>
       <h1 id="workspace-title">{{ displayName }}</h1>
       <p class="muted">Профиль и настройки вашего аккаунта dNiko Alpha.</p>
     </header>

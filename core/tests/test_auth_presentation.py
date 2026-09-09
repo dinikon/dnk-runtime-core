@@ -114,6 +114,8 @@ class AuthPresentationTests(AccountTestCase):
         response = self.client.post(
             "/accounts/signup/",
             {
+                "first_name": "Анна",
+                "last_name": "Иванова",
                 "username": "card_signup",
                 "email": "card@example.invalid",
                 "password1": PASSWORD,

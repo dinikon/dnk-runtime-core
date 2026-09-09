@@ -69,7 +69,13 @@ class PasswordPolicyTests(AccountTestCase):
     def test_passwordless_signup_creates_no_password_and_keeps_mfa_for_code_login(self):
         """Registration creates an unusable password and an enrolled factor stays mandatory."""
         response = self.client.post(
-            reverse("account_signup"), {"username": "new", "email": "new@example.com"}
+            reverse("account_signup"),
+            {
+                "first_name": "Анна",
+                "last_name": "Иванова",
+                "username": "new",
+                "email": "new@example.com",
+            },
         )
         user = get_user_model().objects.get(username="new")
         self.assertFalse(user.has_usable_password())
@@ -98,7 +104,13 @@ class PasswordPolicyTests(AccountTestCase):
             with self.subTest(suffix=suffix):
                 response = self.client.post(
                     reverse("account_signup"),
-                    {"username": suffix, "email": f"{suffix}@example.com", **fields},
+                    {
+                        "first_name": "Анна",
+                        "last_name": "Иванова",
+                        "username": suffix,
+                        "email": f"{suffix}@example.com",
+                        **fields,
+                    },
                 )
                 self.assertEqual(response.status_code, 302)
                 self.assertEqual(
@@ -109,6 +121,8 @@ class PasswordPolicyTests(AccountTestCase):
         response = self.client.post(
             reverse("account_signup"),
             {
+                "first_name": "Анна",
+                "last_name": "Иванова",
                 "username": "mismatch",
                 "email": "bad@example.com",
                 "password1": PASSWORD,
@@ -122,7 +136,12 @@ class PasswordPolicyTests(AccountTestCase):
         """The explicit required mode retains normal mandatory password registration."""
         response = self.client.post(
             reverse("account_signup"),
-            {"username": "missing", "email": "missing@example.com"},
+            {
+                "first_name": "Анна",
+                "last_name": "Иванова",
+                "username": "missing",
+                "email": "missing@example.com",
+            },
         )
         self.assertEqual(response.status_code, 200)
         self.assertFalse(get_user_model().objects.filter(username="missing").exists())
@@ -190,6 +209,8 @@ class FeatureStageTests(AccountTestCase):
         response = self.client.post(
             reverse("account_signup"),
             {
+                "first_name": "Анна",
+                "last_name": "Иванова",
                 "username": "pending",
                 "email": "pending@example.com",
                 "password1": PASSWORD,
@@ -319,7 +340,12 @@ class FeatureStageTests(AccountTestCase):
         """Removing the native optional stage must never authenticate a keyless signup."""
         response = self.client.post(
             "/accounts/signup/passkey/",
-            {"username": "pendingkey", "email": "pendingkey@example.com"},
+            {
+                "first_name": "Анна",
+                "last_name": "Иванова",
+                "username": "pendingkey",
+                "email": "pendingkey@example.com",
+            },
         )
         code = emailed_code()
         with override_settings(MFA_PASSKEY_SIGNUP_ENABLED=False):
@@ -359,7 +385,12 @@ class FeatureStageTests(AccountTestCase):
         with override_settings(GOOGLE_LOGIN_ENABLED=False):
             response = self.client.post(
                 response.url,
-                {"username": "newgoogle", "email": "newgoogle@example.com"},
+                {
+                    "first_name": "Анна",
+                    "last_name": "Иванова",
+                    "username": "newgoogle",
+                    "email": "newgoogle@example.com",
+                },
             )
             self.assertEqual(response.url, reverse("account_login"))
             self.assertNotIn("socialaccount_sociallogin", self.client.session)

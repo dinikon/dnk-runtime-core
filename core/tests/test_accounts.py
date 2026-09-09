@@ -119,6 +119,8 @@ class PasswordAndEmailTests(AccountTestCase):
         response = self.client.post(
             reverse("account_signup"),
             {
+                "first_name": "Анна",
+                "last_name": "Иванова",
                 "username": "new-member",
                 "email": "new@example.com",
                 "password1": PASSWORD,

@@ -3,6 +3,7 @@ from django.urls import path
 from . import views, oidc
 
 urlpatterns = [
+    path("profile/", views.profile, name="core_profile"),
     path(
         "2fa/recovery-codes/",
         views.RecoveryCodesView.as_view(),

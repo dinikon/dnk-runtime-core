@@ -9,11 +9,12 @@ class CoreUserAdmin(UserAdmin):
     """Expose CORE identities in the admin protected by allauth authentication."""
 
     fieldsets = UserAdmin.fieldsets + (
+        ("Дополнительные данные профиля", {"fields": ("middle_name",)}),
         ("Телефон", {"fields": ("phone", "phone_verified")}),
     )
     readonly_fields = ("phone_verified",)
     list_display = UserAdmin.list_display + ("phone", "phone_verified")
-    search_fields = UserAdmin.search_fields + ("phone",)
+    search_fields = UserAdmin.search_fields + ("phone", "middle_name")
 
     def save_model(self, request, obj, form, change):
         """Normalize an empty optional phone before storing the admin edit."""
