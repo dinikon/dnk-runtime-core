@@ -25,6 +25,16 @@ class ResourceNameTests(unittest.TestCase):
             values[alias]["postgresql"]["fullnameOverride"] = "shared-postgresql"
         self.reject(values)
 
+    def test_managed_certificates_cannot_overwrite_each_others_secret(self):
+        values = contracts.platform_values(ingress=True)
+        for alias in ("controlPlane", "runtime"):
+            values[alias]["ingress"]["tls"]["secretName"] = "shared-certificate"
+        self.reject(values)
+        # A manually managed wildcard certificate can be shared deliberately.
+        for alias in ("controlPlane", "runtime"):
+            values[alias]["ingress"]["tls"]["clusterIssuer"] = ""
+        self.helm.render(values, chart=contracts.UMBRELLA)
+
     def test_standalone_dependency_cannot_shadow_application_service(self):
         values = contracts.core_values()
         values["migrations"] = {"enabled": False}

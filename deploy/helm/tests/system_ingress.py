@@ -41,7 +41,20 @@ def setup_system_ingress(cluster):
                 str(manifest),
             ]
         )
-        cluster.kubectl("apply", "--server-side", "-f", str(manifest))
+        # Upstream installers contain resources in several namespaces. Preserve
+        # their metadata.namespace while still pinning our private cluster context.
+        run(
+            [
+                "kubectl",
+                "--context",
+                "kind-" + cluster.name,
+                "apply",
+                "--server-side",
+                "-f",
+                str(manifest),
+            ],
+            env=cluster.environment,
+        )
     cluster.kubectl(
         "label",
         "node",

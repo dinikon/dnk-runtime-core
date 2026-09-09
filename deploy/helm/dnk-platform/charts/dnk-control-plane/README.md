@@ -1,6 +1,6 @@
 # dnk-control-plane
 
-Самостоятельный Django/Nuxt с системным Ingress пакет с PostgreSQL, Redis и Job миграций.
+Самостоятельный пакет Django/Nuxt с системным Ingress, PostgreSQL, Redis и Job миграций.
 Настройки этого chart используются без префикса `controlPlane`.
 
 Полная инструкция: [Helm и ArgoCD](../../../README.md).

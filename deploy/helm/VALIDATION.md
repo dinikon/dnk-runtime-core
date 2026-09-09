@@ -1,4 +1,30 @@
-# Проверка DNK Platform 0.2.0
+# Проверка DNK Platform 0.3.0
+
+Изменение: прямой системный Ingress класса `nginx`, cert-manager ClusterIssuer
+`letsencrypt-production`, отсутствие gateway pods и сохранение HTTPS session cookie
+Runtime через ASGI adapter из chart.
+
+Локально прошёл 61 автоматический тест: строгий YAML, JSON Schema, Helm lint,
+упаковка трёх charts, прямые маршруты с нестандартными портами Services,
+автоматические/существующие TLS Secrets, коллизии имён сертификатов, блокировка
+конфликтующих аннотаций, session/logout cookies и прежние контракты миграций.
+
+Для фактической проверки Ingress и сертификатов:
+
+```sh
+python deploy/helm/tests/smoke.py --published-images --system-ingress
+```
+
+Стенд использует собственный kind-кластер, ingress-nginx 1.13.3 и cert-manager 1.18.2.
+Issuer с именем `letsencrypt-production` в этом стенде подписывает сертификаты
+изолированным тестовым CA: проверяются ingress-shim, Certificate, TLS Secrets,
+маршрутизация и HTTPS. Публичные ACME/DNS и рабочий ClusterIssuer не изменяются.
+Эти версии контроллеров закреплены только для воспроизводимого теста.
+
+## Архив результатов предыдущего этапа 0.2.0
+
+Ниже результаты до удаления gateway; они относятся к версии 0.2.0.
+
 
 Локальный прогон 2026-09-09: Helm 3.19.0, kind 0.29.0, Kubernetes 1.33.1,
 Python 3.13, опубликованные образы `ghcr.io/dinikon/runtime/{core,runtime,frontend-core,frontend-runtime}:latest`.
