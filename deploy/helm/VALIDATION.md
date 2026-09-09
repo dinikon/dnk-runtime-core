@@ -21,6 +21,26 @@ Issuer с именем `letsencrypt-production` в этом стенде под�
 маршрутизация и HTTPS. Публичные ACME/DNS и рабочий ClusterIssuer не изменяются.
 Эти версии контроллеров закреплены только для воспроизводимого теста.
 
+Прогон `--published-images --system-ingress` завершился успешно:
+
+- Nginx направляет трафик напрямую в Services пяти Deployment приложений.
+- Cert-manager создал оба Certificate и TLS Secret; issuer, домены и статус
+  `Ready=True` проверены, HTTPS проверяется с доверенным тестовым CA.
+- Прошли маршруты обоих frontend, Control Plane API/login/admin/static,
+  настоящий Runtime OTP-вход, Secure/HttpOnly/SameSite cookie, `/me` и logout.
+- Опубликованный Runtime запускается через `python -m uvicorn`: это сохраняет
+  путь к исходникам при загрузке ASGI adapter из ConfigMap.
+- Неверная/отсутствующая Job блокирует новые pods обоих пакетов. Upgrade создаёт
+  новые Jobs и запускает по три backend-реплики.
+- После перезапуска инфраструктуры и переустановки самостоятельных пакетов
+  сохранились PostgreSQL public/tenant данные, Redis, RabbitMQ и все пять PVC.
+  Финальная установка standalone использовала исправленную команду запуска;
+  HTTPS/OTP проверены повторно.
+
+Тестовый kind-кластер и временный kubeconfig удалены. Публичный выпуск через
+Let's Encrypt не проверяется без реальных DNS и доступа к рабочему issuer.
+CI обновлён для повторения этого сценария с локально собранными образами.
+
 ## Архив результатов предыдущего этапа 0.2.0
 
 Ниже результаты до удаления gateway; они относятся к версии 0.2.0.
