@@ -48,20 +48,24 @@ def tls_proxy(cluster):
         ("controlPlane", "core.example.test"),
         ("runtime", "runtime.example.test"),
     ]:
-        service = cluster.name_for("service", app, "gateway")
+        backend = cluster.name_for("service", app, "backend")
+        frontend = cluster.name_for("service", app, "frontend")
+        backend_port = 8001 if app == "controlPlane" else 8000
+        frontend_port = 3000 if app == "controlPlane" else 80
+        routes = "api|accounts|admin|static" if app == "controlPlane" else "api"
         configuration += f"""server {{
  listen 8443 ssl;
  server_name {host};
  ssl_certificate /tls/tls.crt;
  ssl_certificate_key /tls/tls.key;
  resolver kube-dns.kube-system.svc.cluster.local valid=1s;
- set $upstream {service}.{cluster.namespace}.svc.cluster.local;
- location / {{
-  proxy_pass http://$upstream:80;
-  proxy_set_header Host $host;
-  proxy_set_header X-Forwarded-Proto https;
-  proxy_set_header X-Forwarded-For $remote_addr;
- }}
+ set $backend {backend}.{cluster.namespace}.svc.cluster.local;
+ set $frontend {frontend}.{cluster.namespace}.svc.cluster.local;
+ proxy_set_header Host $host;
+ proxy_set_header X-Forwarded-Proto https;
+ proxy_set_header X-Forwarded-For $remote_addr;
+ location ~ ^/({routes})(/|$) {{ proxy_pass http://$backend:{backend_port}; }}
+ location / {{ proxy_pass http://$frontend:{frontend_port}; }}
 }}
 """
     cluster.apply(
@@ -119,8 +123,12 @@ def check_https(cluster, proxy):
 
     # Reopen the fixture tunnel per check; a test-node runtime restart can close
     # a long-lived kubectl stream without affecting the healthy TLS proxy pod.
-    _, certificate = proxy
-    port = cluster.port_forward("pod/test-tls-proxy", 8443)
+    if isinstance(proxy, dict):
+        certificate = proxy["certificate"]
+        port = cluster.port_forward(proxy["resource"], 443, namespace="ingress-nginx")
+    else:
+        _, certificate = proxy
+        port = cluster.port_forward("pod/test-tls-proxy", 8443)
     check_runtime_auth(cluster, (port, certificate))
     for host, paths in [
         (
@@ -276,9 +284,14 @@ def check_gate_api_failures(cluster):
     )
 
 
-def smoke(published=False):
+def smoke(published=False, system_ingress=False):
     with Cluster(published=published) as cluster:
         values = cluster.values()
+        if system_ingress:
+            from system_ingress import setup_system_ingress, certificate_endpoint
+            authority = setup_system_ingress(cluster)
+            for app in ["controlPlane", "runtime"]:
+                values[app]["ingress"] = {"enabled": True, "className": "nginx"}
         values_file = cluster.work / "values.yaml"
 
         def install(chart=UMBRELLA, release="smoke", selected=None):
@@ -335,7 +348,7 @@ def smoke(published=False):
         for app in ["controlPlane", "runtime"]:
             assert cluster.redis(app, "SET", "helm:persistence", app) == "OK"
         cluster.rabbitmq("add_vhost", "helm-persistence")
-        proxy = tls_proxy(cluster)
+        proxy = certificate_endpoint(cluster, authority) if system_ingress else tls_proxy(cluster)
         check_https(cluster, proxy)
         check_gate_api_failures(cluster)
         print(
@@ -424,4 +437,6 @@ if __name__ == "__main__":
         dest="published",
         help="Use existing published image tags instead of building local test images",
     )
-    smoke(published=parser.parse_args().published)
+    parser.add_argument("--system-ingress", action="store_true", help="Verify the actual nginx controller and cert-manager using an isolated test CA")
+    args = parser.parse_args()
+    smoke(published=args.published, system_ingress=args.system_ingress)
