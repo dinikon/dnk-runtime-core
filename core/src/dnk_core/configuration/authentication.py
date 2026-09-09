@@ -8,10 +8,19 @@ from pydantic_settings import BaseSettings
 ProviderSwitch = bool | Literal["auto"]
 PasswordMode = Literal["required", "optional", "passwordless"]
 UsernameMode = Literal["generated", "required"]
+PhoneLoginMode = Literal["any_verified", "primary_only"]
 
 
 class AuthenticationSettings(BaseSettings):
     """Expose supported product policies while preserving security invariants."""
+
+    auth_phone_login_mode: PhoneLoginMode = Field(
+        "any_verified",
+        description="Allow all verified phones or only the primary phone to log in.",
+    )
+    auth_max_phone_numbers: int = Field(
+        5, gt=0, description="Maximum owned phones, including unverified contacts."
+    )
 
     auth_username_mode: UsernameMode = Field(
         "generated",

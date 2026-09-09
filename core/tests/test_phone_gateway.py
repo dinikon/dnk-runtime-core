@@ -5,17 +5,18 @@ from unittest.mock import patch
 
 import requests
 from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured, ValidationError
-from django.db import IntegrityError, transaction
+from django.core.exceptions import ImproperlyConfigured
 from django.test import Client, SimpleTestCase, override_settings
 from django.urls import reverse
 
-from accounts.adapters import AccountAdapter, MFAAdapter
+from accounts.adapters import MFAAdapter
+from accounts.models import PhoneNumber
+from accounts.services.phones import set_phone, remove_phone
 from accounts.telegram import TelegramDeliveryError, TelegramGatewayClient
 from allauth.account.models import EmailAddress
 from allauth.mfa.totp.internal.auth import TOTP
 
-from tests.helpers import AccountTestCase, LOGIN_CODE, PASSWORD, TOTP_SECRET
+from tests.helpers import AccountTestCase, LOGIN_CODE, TOTP_SECRET
 
 
 class TelegramGatewayTests(SimpleTestCase):
@@ -83,140 +84,10 @@ class TelegramGatewayTests(SimpleTestCase):
         post.assert_not_called()
 
 
-class PhoneOwnershipTests(AccountTestCase):
-    def setUp(self):
-        super().setUp()
-        self.adapter = AccountAdapter()
-
-    def test_e164_is_trimmed_and_ambiguous_or_invalid_numbers_are_rejected(self):
-        self.assertEqual(self.adapter.clean_phone("  +12025550123  "), "+12025550123")
-        for number in (
-            "2025550123",
-            "+02025550123",
-            "+1 202 555 0123",
-            "+123",
-            "+" + "1" * 16,
-        ):
-            with self.subTest(number=number), self.assertRaises(ValidationError):
-                self.adapter.clean_phone(number)
-
-    def test_duplicate_phone_fails_without_overwriting_existing_owner(self):
-        self.adapter.set_phone(self.user, "+12025550123", True)
-        second = self.create_user(username="bob", email="bob@example.com")
-        self.adapter.set_phone(second, "+12025550124", True)
-        with self.assertRaises(ValidationError):
-            self.adapter.set_phone(second, "+12025550123", True)
-        self.user.refresh_from_db()
-        second.refresh_from_db()
-        self.assertEqual(self.user.phone, "+12025550123")
-        self.assertEqual(second.phone, "+12025550124")
-        self.assertTrue(second.phone_verified)
-        with self.assertRaises(IntegrityError), transaction.atomic():
-            type(self.user).objects.filter(pk=second.pk).update(phone=self.user.phone)
-
-    def test_missing_phone_cannot_be_marked_verified_and_empty_is_not_stored(self):
-        self.adapter.set_phone(self.user, "", True)
-        self.user.refresh_from_db()
-        self.assertIsNone(self.user.phone)
-        self.assertFalse(self.user.phone_verified)
-        with self.assertRaises(IntegrityError), transaction.atomic():
-            type(self.user).objects.filter(pk=self.user.pk).update(phone_verified=True)
-
-    def test_signup_collision_after_form_check_rolls_back_partial_user(self):
-        self.adapter.set_phone(self.user, "+12025550123", True)
-        # Simulate the form's availability check finishing before another request
-        # commits ownership; the real DB uniqueness constraint must stop the write.
-        with patch(
-            "accounts.adapters.AccountAdapter.get_user_by_phone", return_value=None
-        ):
-            response = self.client.post(
-                reverse("account_signup"),
-                {
-                    "first_name": "Анна",
-                    "last_name": "Иванова",
-                    "username": "racing-signup",
-                    "email": "race@example.com",
-                    "password1": PASSWORD,
-                    "password2": PASSWORD,
-                    "phone": self.user.phone,
-                },
-            )
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("account_signup"))
-        self.assertFalse(
-            type(self.user).objects.filter(username="racing-signup").exists()
-        )
-        self.assertFalse(EmailAddress.objects.filter(email="race@example.com").exists())
-        self.user.refresh_from_db()
-        self.assertEqual(self.user.phone, "+12025550123")
-        self.assertTrue(self.user.phone_verified)
-        self.assert_anonymous()
-
-    def test_confirmation_collision_after_form_check_preserves_both_owners(self):
-        self.adapter.set_phone(self.user, "+12025550123", True)
-        self.password_login()
-        with (
-            patch(
-                "accounts.adapters.AccountAdapter.generate_phone_verification_code",
-                return_value=LOGIN_CODE,
-            ),
-            patch(
-                "accounts.telegram.TelegramGatewayClient.send_verification_code",
-                return_value="request-123",
-            ),
-        ):
-            self.client.post(reverse("account_change_phone"), {"phone": "+12025550124"})
-        winner = self.create_user(username="winner", email="winner@example.com")
-        self.adapter.set_phone(winner, "+12025550124", True)
-        with patch(
-            "accounts.adapters.AccountAdapter.get_user_by_phone", return_value=None
-        ):
-            response = self.client.post(
-                reverse("account_verify_phone"), {"code": LOGIN_CODE}
-            )
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("account_change_phone"))
-        self.assertNotIn("account_phone_verification", self.client.session)
-        self.user.refresh_from_db()
-        winner.refresh_from_db()
-        self.assertEqual(self.user.phone, "+12025550123")
-        self.assertEqual(winner.phone, "+12025550124")
-        self.assertTrue(self.user.phone_verified)
-        self.assertTrue(winner.phone_verified)
-
-    @patch(
-        "accounts.adapters.AccountAdapter.generate_phone_verification_code",
-        return_value=LOGIN_CODE,
-    )
-    @patch(
-        "accounts.telegram.TelegramGatewayClient.send_verification_code",
-        return_value="request-123",
-    )
-    def test_phone_replacement_keeps_old_number_until_new_one_is_verified(
-        self, send, generate
-    ):
-        self.adapter.set_phone(self.user, "+12025550123", True)
-        self.password_login()
-        response = self.client.post(
-            reverse("account_change_phone"), {"phone": "+12025550124"}
-        )
-        self.assertEqual(response.status_code, 302)
-        send.assert_called_once_with("+12025550124", LOGIN_CODE, ttl=300)
-        self.user.refresh_from_db()
-        self.assertEqual(self.user.phone, "+12025550123")
-        self.client.post(reverse("account_verify_phone"), {"code": "000000"})
-        self.user.refresh_from_db()
-        self.assertEqual(self.user.phone, "+12025550123")
-        self.client.post(reverse("account_verify_phone"), {"code": LOGIN_CODE})
-        self.user.refresh_from_db()
-        self.assertEqual(self.user.phone, "+12025550124")
-        self.assertTrue(self.user.phone_verified)
-
-
 class PhoneLoginTests(AccountTestCase):
     def setUp(self):
         super().setUp()
-        AccountAdapter().set_phone(self.user, "+12025550123", True)
+        self.contact = set_phone(self.user, "+12025550123", True)
 
     def request_code(self, phone="+12025550123", failure=None):
         with (
@@ -238,34 +109,29 @@ class PhoneLoginTests(AccountTestCase):
     def confirm(self, code=LOGIN_CODE):
         return self.client.post(reverse("account_confirm_login_code"), {"code": code})
 
-    def test_issued_code_cannot_restore_changed_or_removed_phone(self):
-        from django.core.cache import cache
-
-        for replacement in ("+12025550124", None):
-            with self.subTest(replacement=replacement):
-                cache.clear()
-                self.client = Client()
-                AccountAdapter().set_phone(self.user, "+12025550123", True)
-                self.request_code()
-                AccountAdapter().set_phone(self.user, replacement, bool(replacement))
-                self.confirm()
-                self.assert_anonymous()
-                self.user.refresh_from_db()
-                self.assertEqual(self.user.phone, replacement)
+    def test_issued_code_cannot_restore_removed_or_recreated_contact(self):
+        """The same digits cannot restore a deleted contact's UUID proof."""
+        self.request_code()
+        original_pk = self.contact.pk
+        remove_phone(self.user, original_pk)
+        replacement = set_phone(self.user, self.contact.phone, True)
+        self.assertNotEqual(original_pk, replacement.pk)
+        self.confirm()
+        self.assert_anonymous()
+        self.assertFalse(PhoneNumber.objects.filter(pk=original_pk).exists())
 
     def test_issued_code_cannot_reclaim_a_reassigned_phone(self):
+        """A code issued to the former owner cannot enter the new owner's account."""
         self.request_code()
-        AccountAdapter().set_phone(self.user, "+12025550124", True)
+        remove_phone(self.user, self.contact.pk)
         new_owner = self.create_user(
             username="new-owner", email="new-owner@example.com"
         )
-        AccountAdapter().set_phone(new_owner, "+12025550123", True)
+        replacement = set_phone(new_owner, self.contact.phone, True)
         self.confirm()
         self.assert_anonymous()
-        self.user.refresh_from_db()
-        new_owner.refresh_from_db()
-        self.assertEqual(self.user.phone, "+12025550124")
-        self.assertEqual(new_owner.phone, "+12025550123")
+        self.assertEqual(replacement.user_id, new_owner.pk)
+        self.assertFalse(self.user.phone_numbers.exists())
 
     def test_gateway_disabled_after_issuance_blocks_confirmation_and_resend(self):
         from django.core.cache import cache
@@ -290,12 +156,12 @@ class PhoneLoginTests(AccountTestCase):
                 send.assert_not_called()
                 self.assert_anonymous()
                 self.user.refresh_from_db()
-                self.assertEqual(self.user.phone, "+12025550123")
+                self.assertEqual(self.contact.phone, "+12025550123")
 
     def test_valid_phone_otp_enters_session_and_cannot_be_replayed(self):
         response, send = self.request_code()
         self.assertEqual(response.status_code, 302)
-        send.assert_called_once_with(self.user.phone, LOGIN_CODE, ttl=300)
+        send.assert_called_once_with(self.contact.phone, LOGIN_CODE, ttl=300)
         self.assert_anonymous()
         self.confirm()
         self.assertEqual(self.client.get("/api/me/").status_code, 200)
@@ -320,19 +186,16 @@ class PhoneLoginTests(AccountTestCase):
         self.assert_anonymous()
 
     def test_unknown_unverified_and_inactive_numbers_are_not_sent_codes(self):
-        for field, value in (
-            (None, None),
-            ("phone_verified", False),
-            ("is_active", False),
-        ):
-            with self.subTest(field=field):
-                self.user.is_active = True
-                self.user.phone_verified = True
-                if field:
-                    setattr(self.user, field, value)
-                self.user.save(update_fields=["is_active", "phone_verified"])
+        """Only verified contacts of active users receive login messages."""
+        for state in ("unknown", "unverified", "inactive"):
+            with self.subTest(state=state):
+                self.user.is_active = state != "inactive"
+                self.user.save(update_fields=["is_active"])
+                PhoneNumber.objects.filter(pk=self.contact.pk).update(
+                    verified=state != "unverified", primary=state != "unverified"
+                )
                 response, send = self.request_code(
-                    "+12025550999" if field is None else self.user.phone
+                    "+12025550999" if state == "unknown" else self.contact.phone
                 )
                 self.assertEqual(response.status_code, 302)
                 send.assert_not_called()
@@ -347,8 +210,8 @@ class PhoneLoginTests(AccountTestCase):
         self.confirm()
         self.assert_anonymous()
         self.user.refresh_from_db()
-        self.assertEqual(self.user.phone, "+12025550123")
-        self.assertTrue(self.user.phone_verified)
+        self.assertEqual(self.contact.phone, "+12025550123")
+        self.assertTrue(self.contact.verified)
 
     def test_phone_otp_still_requires_email_verification_and_mfa(self):
         EmailAddress.objects.filter(user=self.user).update(verified=False)

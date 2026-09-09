@@ -5,9 +5,13 @@ from django.contrib import messages
 from django.db import transaction
 from django.shortcuts import redirect
 from django.http import Http404
+from django.http import HttpResponseRedirect
 from allauth.account.views import ConfirmLoginCodeView as AllauthConfirmLoginCodeView
 from allauth.account.views import RequestLoginCodeView as AllauthRequestLoginCodeView
 from accounts.services.login_contacts import lock_code_owner
+from accounts.services.phone_flows import PhoneLoginCodeProcess
+from accounts.services.phones import login_phones
+from accounts.models import User
 
 
 class RequestLoginCodeView(AllauthRequestLoginCodeView):
@@ -41,6 +45,19 @@ class RequestLoginCodeView(AllauthRequestLoginCodeView):
             else self.request.GET.get("channel", "email")
         )
         return kwargs
+
+    @transaction.atomic
+    def form_valid(self, form):
+        """Lock the selected contact while creating its UUID-bound code flow."""
+        contact = getattr(form, "phone_contact", None)
+        if contact is not None:
+            user = User.objects.select_for_update().get(pk=contact.user_id)
+            contact = login_phones(user).filter(pk=contact.pk).first()
+            if contact is not None:
+                PhoneLoginCodeProcess.initiate_for_contact(self.request, contact)
+                return HttpResponseRedirect(self.get_success_url())
+            form._user = None
+        return super().form_valid(form)
 
     def get_context_data(self, **kwargs):
         """Build presentation context while preserving bound fields and validation errors."""
@@ -86,4 +103,7 @@ class ConfirmLoginCodeView(AllauthConfirmLoginCodeView):
             return redirect("account_request_login_code")
         process._user = user
         process.stage.login.user = user
+        if process.state.get("phone"):
+            self._process = PhoneLoginCodeProcess(process.stage)
+            self._process._user = user
         return super().form_valid(form)

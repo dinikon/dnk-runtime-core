@@ -21,13 +21,16 @@ from allauth.usersessions.models import UserSession
 @never_cache
 def account_overview(request):
     """Render current account contacts, authenticators and active sessions."""
+    phones = list(request.user.phone_numbers.all())
+    primary_phone = next((contact for contact in phones if contact.primary), None)
     return render(
         request,
         "accounts/overview.html",
         {
             "email_addresses": EmailAddress.objects.filter(user=request.user),
-            "phone": request.user.phone,
-            "phone_verified": request.user.phone_verified,
+            "primary_phone": primary_phone,
+            "phone_count": len(phones),
+            "additional_phone_count": len(phones) - int(primary_phone is not None),
             "mfa_enabled": is_mfa_enabled(request.user),
             "passkey_count": Authenticator.objects.filter(
                 user=request.user,

@@ -16,7 +16,7 @@ from allauth.mfa.models import Authenticator
 from allauth.mfa.totp.internal.auth import TOTP, format_hotp_value, hotp_value
 from allauth.socialaccount.models import SocialAccount
 from accounts.services.capabilities import has_primary_login
-from accounts.services.phones import set_phone
+from accounts.services.phones import set_phone, remove_phone
 from tests.helpers import AccountTestCase, PASSWORD, LOGIN_CODE, TOTP_SECRET
 from tests import test_accounts
 from tests.test_passkeys import VirtualPasskey
@@ -279,8 +279,7 @@ class FeatureStageTests(AccountTestCase):
 
     def test_password_disabled_while_waiting_for_phone_verification_cannot_finish(self):
         """Phone verification cannot complete a password flow disabled after issuance."""
-        self.user.phone, self.user.phone_verified = "+380501234567", False
-        self.user.save(update_fields=["phone", "phone_verified"])
+        set_phone(self.user, "+380501234567", False)
         with (
             patch("accounts.telegram.TelegramGatewayClient.send_verification_code"),
             patch(
@@ -551,23 +550,21 @@ class PrimaryMethodRemovalTests(AccountTestCase):
         with override_settings(AUTH_PASSWORD_MODE="passwordless"):
             address = EmailAddress.objects.get(user=self.user)
             self.assertFalse(get_adapter().can_delete_email(address))
-        self.user.phone, self.user.phone_verified = "+380501234567", True
-        self.user.save(update_fields=["phone", "phone_verified"])
+        contact = set_phone(self.user, "+380501234567", True)
         with override_settings(
             AUTH_PASSWORD_MODE="passwordless", EMAIL_CODE_LOGIN_ENABLED=False
         ):
             with self.assertRaises(ValidationError):
-                set_phone(self.user, None, False)
+                remove_phone(self.user, contact.pk)
             self.user.refresh_from_db()
-            self.assertTrue(self.user.phone_verified)
+            self.assertTrue(self.user.phone_numbers.get(pk=contact.pk).verified)
 
     @override_settings(**PASSWORDLESS)
     def test_email_removal_uses_fresh_contact_state_after_waiting_for_account_lock(
         self,
     ):
         """A concurrent phone removal cannot leave the email guard using a stale user."""
-        self.user.phone, self.user.phone_verified = "+380501234567", True
-        self.user.save(update_fields=["phone", "phone_verified"])
+        contact = set_phone(self.user, "+380501234567", True)
         self.client.force_login(self.user)
         session = self.client.session
         session["account_authentication_methods"] = [
@@ -579,9 +576,7 @@ class PrimaryMethodRemovalTests(AccountTestCase):
 
         def remove_phone_before_acquiring_lock(*args, **kwargs):
             """Model the committed phone removal while this request waits for its lock."""
-            user_model.objects.filter(pk=self.user.pk).update(
-                phone=None, phone_verified=False
-            )
+            self.user.phone_numbers.all().delete()
             return select_for_update(*args, **kwargs)
 
         with patch.object(

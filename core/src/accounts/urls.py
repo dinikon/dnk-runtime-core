@@ -3,6 +3,13 @@ from django.urls import path
 from . import views, oidc
 
 urlpatterns = [
+    path("phone/change/", views.phone_numbers, name="account_change_phone"),
+    path("phone/verify/", views.verify_phone, name="account_verify_phone"),
+    path(
+        "phone/<uuid:pk>/verify/", views.verify_phone_contact, name="core_verify_phone"
+    ),
+    path("phone/<uuid:pk>/primary/", views.primary_phone, name="core_primary_phone"),
+    path("phone/<uuid:pk>/remove/", views.delete_phone, name="core_remove_phone"),
     path("profile/", views.profile, name="core_profile"),
     path(
         "2fa/recovery-codes/",

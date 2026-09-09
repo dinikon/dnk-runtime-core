@@ -7,5 +7,6 @@ from .authentication import (
     RequestLoginCodeForm,
 )
 from .profile import ProfileForm
+from .phones import AddPhoneForm
 from .passkeys import AddPasskeyForm, LoginPasskeyForm, SignupPasskeyForm
 from .security import EmailReauthenticationForm, DisconnectForm

@@ -27,6 +27,8 @@ def authentication_settings(config: "CoreSettings") -> dict:
         "AUTH_SIGNUP_ENABLED": config.auth_signup_enabled,
         "EMAIL_CODE_LOGIN_ENABLED": config.auth_email_code_enabled,
         "PHONE_LOGIN_ENABLED": phone_enabled,
+        "AUTH_PHONE_LOGIN_MODE": config.auth_phone_login_mode,
+        "AUTH_MAX_PHONE_NUMBERS": config.auth_max_phone_numbers,
         "TELEGRAM_GATEWAY_TOKEN": config.telegram_gateway_token.get_secret_value(),
         "TELEGRAM_GATEWAY_TIMEOUT": config.telegram_gateway_timeout,
         "ACCOUNT_LOGIN_METHODS": login_methods,

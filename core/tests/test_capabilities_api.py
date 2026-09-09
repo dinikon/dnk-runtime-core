@@ -29,6 +29,7 @@ class CapabilitiesAPITests(SimpleTestCase):
                 "passwordLoginEnabled": False,
                 "emailCodeLoginEnabled": True,
                 "phoneCodeLoginEnabled": False,
+                "phoneLoginMode": "any_verified",
                 "passkeyLoginEnabled": True,
                 "passkeySignupEnabled": True,
                 "providers": ["github"],

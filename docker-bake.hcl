@@ -1,0 +1,83 @@
+variable "REGISTRY_PREFIX" {
+  default = "ghcr.io/dinikon/runtime"
+}
+
+variable "VERSION" {
+  default = "0.0.1"
+}
+
+variable "SOURCE_URL" {
+  default = "https://github.com/dinikon/dnk-runtime-core"
+}
+
+variable "SOURCE_REVISION" {
+  default = ""
+}
+
+variable "PLATFORMS" {
+  default = "linux/amd64,linux/arm64"
+}
+
+group "default" {
+  targets = ["core", "runtime", "frontend-core", "frontend-runtime"]
+}
+
+target "_common" {
+  platforms = split(",", PLATFORMS)
+  annotations = [
+    "index:org.opencontainers.image.source=${SOURCE_URL}",
+    "index:org.opencontainers.image.version=${VERSION}"
+  ]
+  labels = {
+    "org.opencontainers.image.source" = SOURCE_URL
+    "org.opencontainers.image.version" = VERSION
+    "org.opencontainers.image.revision" = SOURCE_REVISION
+  }
+}
+
+target "core" {
+  inherits = ["_common"]
+  context = "."
+  dockerfile = "core/Dockerfile"
+  tags = ["${REGISTRY_PREFIX}/core:${VERSION}", "${REGISTRY_PREFIX}/core:latest"]
+  labels = {
+    "org.opencontainers.image.title" = "core"
+    "org.opencontainers.image.description" = "Django Core identity and account API"
+  }
+}
+
+target "runtime" {
+  inherits = ["_common"]
+  context = "."
+  dockerfile = "Dockerfile"
+  target = "runtime"
+  tags = ["${REGISTRY_PREFIX}/runtime:${VERSION}", "${REGISTRY_PREFIX}/runtime:latest"]
+  labels = {
+    "org.opencontainers.image.title" = "runtime"
+    "org.opencontainers.image.description" = "FastAPI tenant runtime API and workers"
+  }
+}
+
+target "frontend-core" {
+  inherits = ["_common"]
+  context = "frontends"
+  dockerfile = "apps/core/Dockerfile"
+  target = "runtime"
+  tags = ["${REGISTRY_PREFIX}/frontend-core:${VERSION}", "${REGISTRY_PREFIX}/frontend-core:latest"]
+  labels = {
+    "org.opencontainers.image.title" = "frontend-core"
+    "org.opencontainers.image.description" = "Core Nuxt frontend with server-side rendering"
+  }
+}
+
+target "frontend-runtime" {
+  inherits = ["_common"]
+  context = "frontends"
+  dockerfile = "Dockerfile"
+  target = "runtime"
+  tags = ["${REGISTRY_PREFIX}/frontend-runtime:${VERSION}", "${REGISTRY_PREFIX}/frontend-runtime:latest"]
+  labels = {
+    "org.opencontainers.image.title" = "frontend-runtime"
+    "org.opencontainers.image.description" = "Runtime Vue console served by Nginx"
+  }
+}

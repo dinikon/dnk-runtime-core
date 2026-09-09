@@ -39,6 +39,8 @@ class CoreConfigurationTests(unittest.TestCase):
         config = self.configuration()
         self.assertEqual(config.auth_password_mode, "passwordless")
         self.assertEqual(config.auth_username_mode, "generated")
+        self.assertEqual(config.auth_phone_login_mode, "any_verified")
+        self.assertEqual(config.auth_max_phone_numbers, 5)
         self.assertEqual(config.effective_public_origin, "http://localhost:8000")
         self.assertEqual(config.effective_allowed_hosts, ["localhost"])
         self.assertEqual(
@@ -130,6 +132,13 @@ class CoreConfigurationTests(unittest.TestCase):
             ("trusted_proxy_count", -1, "CORE_TRUSTED_PROXY_COUNT"),
             ("auth_password_mode", "private-invalid-value", "CORE_AUTH_PASSWORD_MODE"),
             (
+                "auth_phone_login_mode",
+                "private-invalid-value",
+                "CORE_AUTH_PHONE_LOGIN_MODE",
+            ),
+            ("auth_max_phone_numbers", 0, "CORE_AUTH_MAX_PHONE_NUMBERS"),
+            ("auth_max_phone_numbers", 1.5, "CORE_AUTH_MAX_PHONE_NUMBERS"),
+            (
                 "public_origin",
                 "http://private-invalid-value:secret@localhost",
                 "CORE_PUBLIC_ORIGIN",
@@ -179,6 +188,30 @@ class CoreConfigurationTests(unittest.TestCase):
                     {"email"},
                 )
                 self.assertNotIn("AUTHENTICATION_BACKENDS", values)
+
+    def test_phone_policy_loads_from_dotenv_and_projects_without_provider_dependency(
+        self,
+    ):
+        """Keep contact policy configurable independently from Gateway availability."""
+        with tempfile.TemporaryDirectory() as temporary:
+            dotenv = Path(temporary) / "phones.env"
+            dotenv.write_text(
+                "CORE_AUTH_PHONE_LOGIN_MODE=primary_only\nCORE_AUTH_MAX_PHONE_NUMBERS=10\n"
+            )
+            config = load_config(
+                dotenv, debug=True, secret_key="isolated-config-secret"
+            )
+            values = authentication_settings(config)
+            self.assertEqual(values["AUTH_PHONE_LOGIN_MODE"], "primary_only")
+            self.assertEqual(values["AUTH_MAX_PHONE_NUMBERS"], 10)
+            self.assertFalse(values["PHONE_LOGIN_ENABLED"])
+            with patch.dict(os.environ, {"CORE_AUTH_MAX_PHONE_NUMBERS": "3"}):
+                self.assertEqual(
+                    load_config(
+                        dotenv, debug=True, secret_key="isolated-config-secret"
+                    ).auth_max_phone_numbers,
+                    3,
+                )
 
     def test_passwordless_and_optional_require_email_code_recovery(self):
         """Reject ordinary signup policies that could create inaccessible accounts."""

@@ -1,0 +1,14 @@
+apiVersion: v2
+name: core
+description: Django Core, Nuxt, gateway and optional PostgreSQL/Redis
+type: application
+version: 0.1.0
+appVersion: 0.1.0
+kubeVersion: '>=1.25.0-0'
+dependencies:
+- name: postgresql
+  version: 0.1.0
+  condition: postgresql.enabled
+- name: redis
+  version: 0.1.0
+  condition: redis.enabled

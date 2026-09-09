@@ -40,10 +40,7 @@
                   <li><a href="{% url 'core_account_overview' %}" {% if request.resolver_match.url_name == 'core_account_overview' %}aria-current="page"{% endif %}>Обзор аккаунта</a></li>
                   <li><a href="{% url 'core_profile' %}" {% if request.resolver_match.url_name == 'core_profile' %}aria-current="page"{% endif %}>Мой профиль</a></li>
                   <li><a href="{% url 'account_email' %}" {% if request.resolver_match.url_name == 'account_email' %}aria-current="page"{% endif %}>Email</a></li>
-                  {% if phone_login_enabled %}
-                    {% url 'account_change_phone' as phone_url %}
-                    {% if phone_url %}<li><a href="{{ phone_url }}" {% if request.resolver_match.url_name == 'account_change_phone' %}aria-current="page"{% endif %}>Телефон</a></li>{% endif %}
-                  {% endif %}
+                  <li><a href="{% url 'account_change_phone' %}" {% if request.resolver_match.url_name == 'account_change_phone' %}aria-current="page"{% endif %}>Телефоны</a></li>
                   <li><a href="{% url 'account_change_password' %}" {% if request.resolver_match.url_name == 'account_change_password' %}aria-current="page"{% endif %}>Пароль</a></li>
                   <li><a href="{% url 'socialaccount_connections' %}" {% if request.resolver_match.url_name == 'socialaccount_connections' %}aria-current="page"{% endif %}>Связанные аккаунты</a></li>
                   <li><a href="{% url 'mfa_index' %}" {% if request.resolver_match.url_name == 'mfa_index' %}aria-current="page"{% endif %}>Двухфакторная защита</a></li>

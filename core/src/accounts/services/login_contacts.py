@@ -3,6 +3,7 @@
 from django.conf import settings
 from allauth.account.models import EmailAddress
 from accounts.models import User
+from .phone_proofs import LOGIN_PURPOSE, proof_contact
 
 
 def lock_code_owner(process):
@@ -23,11 +24,7 @@ def lock_code_owner(process):
     if phone:
         return (
             user
-            if (
-                settings.PHONE_LOGIN_ENABLED
-                and user.phone_verified
-                and user.phone == phone
-            )
+            if proof_contact(process.state, user.pk, LOGIN_PURPOSE, lock=True)
             else None
         )
     if email and settings.EMAIL_CODE_LOGIN_ENABLED:

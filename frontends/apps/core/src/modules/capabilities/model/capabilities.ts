@@ -6,6 +6,7 @@ export interface CoreCapabilities {
   passwordLoginEnabled: boolean;
   emailCodeLoginEnabled: boolean;
   phoneCodeLoginEnabled: boolean;
+  phoneLoginMode: "any_verified" | "primary_only";
   passkeyLoginEnabled: boolean;
   passkeySignupEnabled: boolean;
   providers: Array<"google" | "github" | "telegram">;

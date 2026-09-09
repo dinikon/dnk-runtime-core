@@ -24,8 +24,6 @@ class AccountAdapter(DefaultAccountAdapter):
 
     @transaction.atomic
     def save_user(self, request, user, form, commit=True):
-        # allauth saves the user before assigning their optional phone. Keep both
-        # writes atomic when another signup claims the number concurrently.
         """Keep user creation and optional phone assignment in one transaction."""
         user.middle_name = form.cleaned_data.get("middle_name", "")
         return super().save_user(request, user, form, commit=commit)
@@ -40,7 +38,27 @@ class AccountAdapter(DefaultAccountAdapter):
 
     def login(self, request, user):
         """Apply the configured session lifetime to every completed login method."""
-        result = super().login(request, user)
+        from accounts.models import User
+        from accounts.services.phone_proofs import (
+            LOGIN_PURPOSE,
+            latest_phone_login,
+            proof_contact,
+        )
+        from allauth.account.internal.stagekit import clear_login
+
+        with transaction.atomic():
+            user = User.objects.select_for_update().get(pk=user.pk)
+            proof = latest_phone_login(request)
+            if proof is not None and not proof_contact(
+                proof, user.pk, LOGIN_PURPOSE, lock=True
+            ):
+                clear_login(request)
+                messages.error(
+                    request,
+                    "Номер или способ входа изменился. Запросите новый код или выберите другой способ входа.",
+                )
+                raise ImmediateHttpResponse(redirect("account_login"))
+            result = super().login(request, user)
         remember = settings.ACCOUNT_SESSION_REMEMBER
         if remember is not None:
             request.session.set_expiry(settings.SESSION_COOKIE_AGE if remember else 0)
@@ -54,6 +72,14 @@ class AccountAdapter(DefaultAccountAdapter):
         authentication, then the guarded passkey endpoint aborts the old flow.
         """
         stages = super().get_login_stages()
+        stages = [
+            (
+                "accounts.stages.PhoneVerificationStage"
+                if stage == "allauth.account.stages.PhoneVerificationStage"
+                else stage
+            )
+            for stage in stages
+        ]
         passkey_stage = "allauth.mfa.webauthn.stages.PasskeySignupStage"
         if passkey_stage not in stages:
             stages.append(passkey_stage)
@@ -75,24 +101,22 @@ class AccountAdapter(DefaultAccountAdapter):
         return phones.normalize_phone(phone)
 
     def get_phone(self, user):
-        """Expose the stored normalized phone and its verification status to allauth."""
-        return (user.phone, user.phone_verified) if user.phone else None
+        """Expose the primary contact, falling back to the pending signup contact."""
+        contact = user.phone_numbers.first()
+        return (contact.phone, contact.verified) if contact else None
 
     def get_user_by_phone(self, phone):
-        # Also used by allauth's ownership checks. The login form separately
-        # excludes inactive accounts and numbers that have not been verified.
-        """Find a phone owner without weakening allauth ownership checks."""
-        return User.objects.filter(phone=phone).first()
+        """Find verified ownership even when primary-only policy disallows login."""
+        return phones.verified_owner(phone)
 
     def set_phone(self, user, phone, verified):
         """Keep allauth phone writes behind the atomic ownership service."""
         phones.set_phone(user, phone, verified)
 
     def set_phone_verified(self, user, phone):
-        # ChangePhoneVerificationProcess also calls this for a newly verified
-        # replacement. The old number remains usable until verification succeeds.
-        """Commit a replacement phone only after its verification succeeds."""
-        self.set_phone(user, phone, True)
+        """Confirm an existing, guarded contact without recreating removed records."""
+        contact = user.phone_numbers.get(phone=phone)
+        phones.confirm_phone(user, contact.pk)
 
     def send_verification_code_sms(self, user, phone, code, **kwargs):
         """Send an allauth code through Telegram and present a safe delivery error."""

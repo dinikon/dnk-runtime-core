@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 type FixtureRole = "member" | "staff" | "superuser";
 
 export function runFixture(
-  operation: "setup" | "cleanup" | "mail" | "login-mail" | "reset" | "navigation" | "inspect",
+  operation: "setup" | "cleanup" | "mail" | "login-mail" | "reset" | "navigation" | "inspect" | "phone-code" | "phones",
   options: { role?: FixtureRole } = {},
 ) {
   const args = ["compose", "exec", "-T", "-e", `CORE_E2E_OPERATION=${operation}`];

@@ -52,6 +52,10 @@ def enforce_feature_access(request):
     }:
         if not pending_primary_enabled(request):
             clear_login(request)
+            messages.error(
+                request,
+                "Способ входа или контакт изменился. Запросите новый код или выберите другой способ входа.",
+            )
             return redirect("account_login")
     blocked = (
         (
@@ -66,7 +70,10 @@ def enforce_feature_access(request):
         or (name == "mfa_activate_totp" and not settings.MFA_TOTP_ENROLLMENT_ENABLED)
         or (name == "mfa_login_webauthn" and not settings.MFA_PASSKEY_LOGIN_ENABLED)
         or (
-            name in {"account_change_phone", "account_verify_phone"}
+            (
+                name in {"account_verify_phone", "core_verify_phone"}
+                or (name == "account_change_phone" and request.method == "POST")
+            )
             and not settings.PHONE_LOGIN_ENABLED
         )
     )
@@ -101,7 +108,13 @@ def pending_primary_enabled(request):
         .get("data", {})
     )
     if code_state.get("phone"):
-        return settings.PHONE_LOGIN_ENABLED
+        from .phone_proofs import LOGIN_PURPOSE, proof_contact
+
+        return settings.PHONE_LOGIN_ENABLED and (
+            not code_state.get("user_id")
+            or proof_contact(code_state, code_state["user_id"], LOGIN_PURPOSE)
+            is not None
+        )
     if code_state.get("email"):
         return settings.EMAIL_CODE_LOGIN_ENABLED
     for record in reversed(request.session.get(AUTHENTICATION_METHODS_SESSION_KEY, [])):
@@ -113,11 +126,14 @@ def pending_primary_enabled(request):
         if method == "socialaccount":
             return record.get("provider") in enabled_providers()
         if method == "code":
-            return (
-                settings.PHONE_LOGIN_ENABLED
-                if record.get("phone")
-                else settings.EMAIL_CODE_LOGIN_ENABLED
-            )
+            if record.get("phone"):
+                from .phone_proofs import LOGIN_PURPOSE, proof_contact
+
+                return (
+                    proof_contact(record, login.get("user_pk"), LOGIN_PURPOSE)
+                    is not None
+                )
+            return settings.EMAIL_CODE_LOGIN_ENABLED
         if method == "mfa" and record.get("passwordless"):
             return settings.MFA_PASSKEY_LOGIN_ENABLED
     return True

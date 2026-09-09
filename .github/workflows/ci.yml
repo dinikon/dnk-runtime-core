@@ -104,7 +104,7 @@ jobs:
           cache-dependency-glob: core/uv.lock
       - name: Install Core dependencies
         run: uv sync --frozen
-      - name: Check Django and migrations
+      - name: Check Django, owned UUID models and migrations
         run: |
           uv run --frozen python src/manage.py check
           uv run --frozen python src/manage.py makemigrations --check --dry-run --settings=tests.settings
@@ -151,9 +151,17 @@ jobs:
             export CORE_E2E_AUTH_PASSWORD_MODE="$mode"
             docker compose -f docker-compose.yml -f core/deploy/compose.e2e.yml up -d --wait --no-build --no-deps --force-recreate core
             cd frontends
-            npm --workspace @dnk/core exec -- playwright test e2e/auth-modes.spec.ts
+            npm --workspace @dnk/core exec -- playwright test e2e/auth-modes.spec.ts e2e/phones.spec.ts
             cd ..
           done
+      - name: Test primary-only phone login in the browser
+        working-directory: .
+        env:
+          CORE_E2E_AUTH_PHONE_LOGIN_MODE: primary_only
+        run: |
+          docker compose -f docker-compose.yml -f core/deploy/compose.e2e.yml up -d --wait --no-build --no-deps --force-recreate core
+          cd frontends
+          npm --workspace @dnk/core exec -- playwright test e2e/phones.spec.ts
       - name: Show Core diagnostics on failure
         if: failure()
         working-directory: .

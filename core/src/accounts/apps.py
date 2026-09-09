@@ -7,3 +7,7 @@ class AccountsConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "accounts"
     verbose_name = "Аккаунты"
+
+    def ready(self):
+        """Register the UUID policy as a Django and CI system check."""
+        from . import checks  # noqa: F401

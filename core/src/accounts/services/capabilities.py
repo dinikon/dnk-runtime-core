@@ -41,6 +41,7 @@ def public_capabilities():
         "passwordLoginEnabled": password_login_enabled(),
         "emailCodeLoginEnabled": settings.EMAIL_CODE_LOGIN_ENABLED,
         "phoneCodeLoginEnabled": settings.PHONE_LOGIN_ENABLED,
+        "phoneLoginMode": settings.AUTH_PHONE_LOGIN_MODE,
         "passkeyLoginEnabled": settings.MFA_PASSKEY_LOGIN_ENABLED,
         "passkeySignupEnabled": passkey_signup_enabled(),
         "providers": enabled_providers(),
@@ -53,7 +54,7 @@ def has_primary_login(
     exclude_social=None,
     exclude_passkey=None,
     exclude_email=None,
-    exclude_phone=False,
+    exclude_phone=None,
 ):
     """Check remaining usable primary methods after a proposed account change.
 
@@ -72,12 +73,12 @@ def has_primary_login(
         return True
     if settings.EMAIL_CODE_LOGIN_ENABLED and emails.exists():
         return True
-    if (
-        settings.PHONE_LOGIN_ENABLED
-        and not exclude_phone
-        and user.phone
-        and user.phone_verified
-    ):
+    from .phones import login_phones
+
+    phones = login_phones(user)
+    if exclude_phone is not None:
+        phones = phones.exclude(pk=exclude_phone)
+    if phones.exists():
         return True
     keys = Authenticator.objects.filter(user=user, type=Authenticator.Type.WEBAUTHN)
     if exclude_passkey is not None:

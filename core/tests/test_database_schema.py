@@ -129,12 +129,39 @@ class CoreSchemaTests(unittest.TestCase):
             database.execute(
                 "INSERT INTO core.accounts_user "
                 "(id, username, email, password, first_name, last_name, is_staff, "
-                "is_superuser, is_active, date_joined, phone_verified) "
+                "is_superuser, is_active, date_joined, phone, phone_verified) "
                 "VALUES (%s, 'legacy', 'legacy@example.invalid', 'existing-hash', "
-                "'Анна', 'Иванова', false, false, true, NOW(), false)",
+                "'Анна', 'Иванова', false, false, true, NOW(), '+12025550901', true)",
                 (legacy_id,),
             )
             self.run_command("manage.py", "migrate", "--noinput")
+            self.assertEqual(
+                database.execute(
+                    'SELECT phone, verified, "primary" FROM core.accounts_phonenumber WHERE user_id=%s',
+                    (legacy_id,),
+                ).fetchone(),
+                ("+12025550901", True, True),
+            )
+            for table in (
+                "accounts_user",
+                "accounts_phonenumber",
+                "accounts_usergroupmembership",
+                "accounts_userpermissionmembership",
+            ):
+                self.assertEqual(
+                    database.execute(
+                        "SELECT data_type FROM information_schema.columns WHERE table_schema='core' AND table_name=%s AND column_name='id'",
+                        (table,),
+                    ).fetchone(),
+                    ("uuid",),
+                )
+            self.run_command(
+                "manage.py",
+                "shell",
+                "--no-imports",
+                "-c",
+                "from tests.phone_concurrency_probe import check_concurrent_phones; check_concurrent_phones()",
+            )
             self.assertEqual(
                 database.execute(
                     "SELECT id, username, password, first_name, last_name, middle_name "

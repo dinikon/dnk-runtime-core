@@ -1,0 +1,14 @@
+Core: {{ .Values.application.server.publicOrigin }}
+Gateway Service: {{ include "dnk.core.fullname" . }}-gateway
+
+Check rollout:
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+  kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "dnk.core.fullname" . }}-backend -c migrate
+
+Create the first administrator interactively:
+  kubectl -n {{ .Release.Namespace }} exec -it deploy/{{ include "dnk.core.fullname" . }}-backend -c backend -- python src/manage.py createsuperuser
+
+Migrations run before each backend pod and are serialized with a PostgreSQL lock.
+Helm rollback does not roll back database migrations. Back up the database before upgrades.
+Existing Secrets require a workload restart after external rotation.
+StatefulSet-created PVCs survive uninstall; keep original credentials to reuse their data.

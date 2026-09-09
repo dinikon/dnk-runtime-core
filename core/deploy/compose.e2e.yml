@@ -7,3 +7,11 @@ services:
       CORE_AUTH_USERNAME_MODE: generated
       CORE_EMAIL_BACKEND: django.core.mail.backends.filebased.EmailBackend
       CORE_EMAIL_FILE_PATH: /tmp/core-e2e-mail
+      CORE_TELEGRAM_GATEWAY_ENABLED: "true"
+      CORE_TELEGRAM_GATEWAY_TOKEN: browser-test-token-not-a-provider-credential
+      CORE_AUTH_PHONE_LOGIN_MODE: ${CORE_E2E_AUTH_PHONE_LOGIN_MODE:-any_verified}
+      CORE_AUTH_MAX_PHONE_NUMBERS: "5"
+      DJANGO_SETTINGS_MODULE: tests.browser_settings
+      PYTHONPATH: /app/src:/app
+    volumes:
+      - ./core/tests:/app/tests:ro

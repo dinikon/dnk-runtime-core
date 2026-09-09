@@ -1,0 +1,9 @@
+{{- include "dnk.core.validate" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dnk.core.fullname" . }}-config
+  labels:
+    {{- include "dnk.core.labels" . | nindent 4 }}
+data:
+  {{- include "dnk.core.config" . | nindent 2 }}

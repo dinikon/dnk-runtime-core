@@ -45,6 +45,8 @@ if operation not in {
     "reset",
     "navigation",
     "inspect",
+    "phone-code",
+    "phones",
 }:
     raise RuntimeError("Unsupported fixture operation.")
 
@@ -61,7 +63,31 @@ if not re.fullmatch(r"core_e2e_passkey_[a-f0-9]{12}", signup_username):
     raise RuntimeError("Expected a unique, marked passkey signup fixture.")
 signup_email = signup_username + "@example.invalid"
 
-if operation in {"mail", "login-mail"}:
+if operation in {"phone-code", "phones"}:
+    user = get_user_model().objects.get(username=username)
+    if user.email != email or user.first_name != "Core E2E Fixture":
+        raise RuntimeError("Refusing to inspect an unmarked phone fixture.")
+    if operation == "phone-code":
+        if settings.ACCOUNT_ADAPTER != "tests.browser_adapter.BrowserAccountAdapter":
+            raise RuntimeError("Phone fixtures require the isolated browser adapter.")
+        print((Path(settings.EMAIL_FILE_PATH) / f"phone-{user.pk}.json").read_text())
+    else:
+        print(
+            json.dumps(
+                {
+                    "phones": [
+                        {
+                            "id": str(contact.pk),
+                            "phone": contact.phone,
+                            "primary": contact.primary,
+                            "verified": contact.verified,
+                        }
+                        for contact in user.phone_numbers.all()
+                    ]
+                }
+            )
+        )
+elif operation in {"mail", "login-mail"}:
     if settings.EMAIL_BACKEND != "django.core.mail.backends.filebased.EmailBackend":
         raise RuntimeError(
             "Browser code verification requires the isolated file email backend."

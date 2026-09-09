@@ -304,3 +304,10 @@ body.account-entrance { background: var(--muted); }
 .auth-card .messages { padding: 0; background: none; border: 0; }
 .auth-card .messages [data-slot=alert] { padding: 12px 16px; font-size: .8125rem; background: var(--subtle); }
 .auth-card-code .messages { margin: 12px 0; }
+
+/* Phone actions reuse existing buttons and stay in the account settings layout. */
+.phone-row .phone-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding-left: 0; }
+.phone-actions form { margin: 0; }
+@media (max-width: 640px) {
+  .phone-row .phone-actions { justify-content: flex-start; }
+}

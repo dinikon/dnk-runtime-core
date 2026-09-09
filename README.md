@@ -11,6 +11,10 @@ Runtime users, tenant authentication and the existing console remain independent
 Tenant control-plane operations, tenant OIDC and DNS remain future work in the
 [architecture proposal](core/ARCHITECTURE.md).
 
+For Kubernetes, the [Helm package](deploy/helm/README.md) deploys full Core with
+independently selectable embedded or external PostgreSQL and Redis. Core can be
+installed through the umbrella chart or as a standalone subchart.
+
 For the local Docker stack, configure Core as described in its
 [Docker instructions](core/README.md#локальный-стенд-в-docker-compose), then run
 `docker compose up --build -d`.
@@ -56,6 +60,7 @@ Review generated revisions before applying them. Global tables still use startup
 
 ## Documentation
 
+- [Container images: build and publish to GitHub Packages](docs/container-images.md)
 - [Documentation index](docs/index.md)
 - [Architecture](docs/architecture/overview.md)
 - [Inventory](docs/modules/inventory.md)

@@ -66,6 +66,14 @@ class LoginForm(AllauthLoginForm):
             self.user = form._user
         return self.cleaned_data
 
+    def _clean_with_password(self, credentials):
+        """Keep telephone login on the UUID-bound OTP path, including direct POSTs."""
+        if credentials.get("phone"):
+            raise forms.ValidationError(
+                "Для входа по телефону запросите код в Telegram."
+            )
+        return super()._clean_with_password(credentials)
+
 
 class SignupForm(ProfileFields, AllauthSignupForm):
     """Retain allauth signup behavior and omit the optional phone from passkey signup."""
@@ -111,11 +119,12 @@ class RequestLoginCodeForm(AllauthRequestLoginCodeForm):
 
     def clean_phone(self):
         """Exclude inactive users and unverified phone numbers from code login."""
+        from accounts.services.phones import login_phones
+
         phone = super().clean_phone()
-        if (
-            phone
-            and self._user
-            and (not self._user.is_active or not self._user.phone_verified)
-        ):
-            self._user = None
+        if phone:
+            self.phone_contact = (
+                login_phones().select_related("user").filter(phone=phone).first()
+            )
+            self._user = self.phone_contact.user if self.phone_contact else None
         return phone

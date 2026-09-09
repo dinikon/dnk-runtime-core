@@ -8,3 +8,5 @@ dist
 .git
 .DS_Store
 npm-debug.log*
+**/.env*
+**/.DS_Store
