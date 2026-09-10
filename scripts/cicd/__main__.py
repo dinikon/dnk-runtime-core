@@ -6,10 +6,14 @@ import os
 from pathlib import Path
 import sys
 
-from .artifacts import GitHub, publish_artifacts
+from .artifacts import (
+    GitHub,
+    current_publication,
+    publish_artifacts,
+    publish_channel_aliases,
+)
 from .checks import check
 from .common import Error, ROOT, stable, versions, write_json
-from .delivery import deliver
 from .gitops import Repo, prepare_rc, publish, release_sources, start_release
 
 
@@ -53,7 +57,13 @@ def ci(repo, github, branch, sha, output):
     record = publish_artifacts(repo, sha, branch, source, run_id, attempt)
     write_json(output, record)
     if branch == "main":
-        github.publish(tag, record, repo.git("show", sha + ":CHANGELOG.md").stdout)
+        github.publish(
+            tag,
+            record,
+            repo.git("show", sha + ":CHANGELOG.md").stdout,
+            latest=current_publication(repo, record),
+        )
+    publish_channel_aliases(repo, record)
     print(json.dumps(record, indent=2))
 
 
@@ -68,8 +78,6 @@ def main():
     workflow.add_argument("--branch", required=True)
     workflow.add_argument("--sha", required=True)
     workflow.add_argument("--output", type=Path, required=True)
-    delivery = commands.add_parser("deliver")
-    delivery.add_argument("--publication", type=Path, required=True)
     args = parser.parse_args()
     repo = Repo(ROOT)
     github = GitHub(os.environ.get("GITHUB_REPOSITORY", "dinikon/dnk-runtime-core"))
@@ -82,8 +90,6 @@ def main():
             publish(repo, github, lambda: check(ROOT))
         elif args.command == "ci":
             ci(repo, github, args.branch, args.sha, args.output)
-        else:
-            deliver(repo, json.loads(args.publication.read_text()), github)
     except (Error, OSError, ValueError, KeyError) as error:
         print(f"CI/CD: {error}", file=sys.stderr)
         return 1

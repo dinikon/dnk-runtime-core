@@ -22,10 +22,11 @@ from scripts.cicd.artifacts import (
     package_chart,
     publish_artifacts,
     publish_images,
+    publish_channel_aliases,
     wait_for_manifest,
 )
 from scripts.cicd.common import Error, ROOT, run, versions
-from scripts.cicd.delivery import deliver
+from scripts.cicd.__main__ import ci
 from scripts.cicd.gitops import (
     Repo,
     prepare_rc,
@@ -436,6 +437,91 @@ class ReleaseTests(unittest.TestCase):
                     any("charts/postgresql/" in name for name in tar.getnames())
                 )
 
+    def test_dev_short_tag_is_reused_across_runs_and_pinned_in_chart(self):
+        source = self.repo.sha()
+        expected_tag = "dev-" + source[:8]
+        registry = MemoryRegistry()
+        builds = []
+
+        def builder(root, targets, env):
+            builds.append(tuple(targets))
+            self.assertEqual(env["IMAGE_TAG"], expected_tag)
+            for target in targets:
+                registry.save(
+                    env["REGISTRY_PREFIX"] + "/" + target + ":" + env["IMAGE_TAG"],
+                    {
+                        "annotations": {
+                            "org.opencontainers.image.revision": source,
+                            "org.opencontainers.image.version": env["VERSION"],
+                        }
+                    },
+                )
+
+        first = publish_artifacts(
+            self.repo,
+            source,
+            "develop",
+            source,
+            "123",
+            "1",
+            registry=registry,
+            builder=builder,
+        )
+        again = publish_artifacts(
+            self.repo,
+            source,
+            "develop",
+            source,
+            "124",
+            "2",
+            registry=registry,
+            builder=builder,
+        )
+        self.assertEqual(builds, [("runtime", "frontend-runtime")])
+        self.assertEqual(first["images"], again["images"])
+        self.assertNotEqual(first["chart_version"], again["chart_version"])
+        with tempfile.TemporaryDirectory() as directory:
+            archive, _ = package_chart(self.root, Path(directory), again)
+            with tarfile.open(archive) as tar:
+                values = yaml.safe_load(tar.extractfile("dnk-runtime-core/values.yaml"))
+            for component in [
+                values["backend"],
+                values["frontend"],
+                *values["workers"].values(),
+            ]:
+                self.assertEqual(component["image"]["tag"], expected_tag)
+
+    def test_ci_stable_release_precedes_aliases_and_needs_only_ready_artifacts(self):
+        self.initial_release()
+        head = self.repo.sha("v0.1.0")
+        record = {"channel": "stable", "branch": "main", "build_sha": head}
+        github = Mock()
+        events = Mock()
+        events.attach_mock(github.publish, "release")
+        with (
+            mock_patch.dict(
+                os.environ, {"GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "1"}
+            ),
+            mock_patch(
+                "scripts.cicd.__main__.publish_artifacts", return_value=record
+            ) as artifacts,
+            mock_patch("scripts.cicd.__main__.publish_channel_aliases") as aliases,
+        ):
+            events.attach_mock(aliases, "aliases")
+            ci(self.repo, github, "main", head, self.root / "publication.json")
+            self.assertEqual(
+                [call[0] for call in events.mock_calls], ["release", "aliases"]
+            )
+            self.assertTrue(github.publish.call_args.kwargs["latest"])
+            self.assertEqual(github.publish.call_args.args[0], "v0.1.0")
+            github.reset_mock()
+            aliases.reset_mock()
+            artifacts.side_effect = Error("image publication failed")
+            with self.assertRaisesRegex(Error, "image publication failed"):
+                ci(self.repo, github, "main", head, self.root / "publication.json")
+            github.publish.assert_not_called()
+            aliases.assert_not_called()
+
 
 class MemoryRegistry:
     def __init__(self):
@@ -471,7 +557,7 @@ class MemoryRegistry:
 class ArtifactTests(unittest.TestCase):
     prefix = "registry.example/runtime"
     app = "0.1.0-rc.1"
-    source = "source-sha"
+    source = "12345678" + "a" * 32
 
     def setUp(self):
         self.sleep = self.enterContext(mock_patch("scripts.cicd.artifacts.time.sleep"))
@@ -487,19 +573,18 @@ class ArtifactTests(unittest.TestCase):
             },
         )
 
-    def publish(self, registry, builder, unique="sha-source-123-1"):
+    def publish(self, registry, builder, tag=None, source=None):
         return publish_images(
             ROOT,
             registry,
             self.prefix,
             self.app,
-            self.source,
-            unique,
-            self.app,
+            source or self.source,
+            tag or self.app,
             builder,
         )
 
-    def test_partial_batch_failure_preserves_either_image_for_new_attempt(self):
+    def test_partial_batch_failure_reuses_either_image_on_retry(self):
         for completed, missing in (
             ("runtime", "frontend-runtime"),
             ("frontend-runtime", "runtime"),
@@ -509,49 +594,42 @@ class ArtifactTests(unittest.TestCase):
 
                 def fail_batch(root, targets, env):
                     self.assertEqual(targets, ["runtime", "frontend-runtime"])
+                    self.assertEqual(env["IMAGE_TAG"], self.app)
                     self.save_image(registry, completed, env["IMAGE_TAG"])
                     raise Error("one parallel build failed")
 
                 with self.assertRaisesRegex(Error, "parallel build failed"):
                     self.publish(registry, fail_batch)
-                saved_digest = registry.digest(f"{self.prefix}/{completed}:{self.app}")
+                saved = registry.digest(f"{self.prefix}/{completed}:{self.app}")
 
                 def retry(root, targets, env):
                     self.assertEqual(targets, [missing])
                     self.save_image(registry, missing, env["IMAGE_TAG"])
 
-                result = self.publish(registry, retry, unique="sha-source-123-2")
-                self.assertEqual(set(result), {"runtime", "frontend-runtime"})
-                self.assertEqual(result[completed]["digest"], saved_digest)
-                skipped = Mock(side_effect=AssertionError("Images already exist"))
-                self.assertEqual(self.publish(registry, skipped), result)
-                skipped.assert_not_called()
+                result = self.publish(registry, retry)
+                self.assertEqual(result[completed]["digest"], saved)
+                builder = Mock(side_effect=AssertionError("Images already exist"))
+                self.assertEqual(self.publish(registry, builder), result)
+                builder.assert_not_called()
 
-    def test_wrong_partial_image_cannot_be_promoted(self):
+    def test_short_sha_collision_is_rejected_without_overwrite(self):
         registry = MemoryRegistry()
-        self.save_image(registry, "runtime", "sha-source-123-1", source="wrong-source")
+        tag = "dev-12345678"
+        self.save_image(registry, "runtime", tag)
+        original = registry.digest(f"{self.prefix}/runtime:{tag}")
+        builder = Mock()
+        with self.assertRaisesRegex(Error, "different source/version"):
+            self.publish(registry, builder, tag=tag, source="12345678" + "b" * 32)
+        builder.assert_not_called()
+        self.assertEqual(registry.digest(f"{self.prefix}/runtime:{tag}"), original)
+
+    def test_unrelated_version_tag_prevents_build(self):
+        registry = MemoryRegistry()
+        self.save_image(registry, "runtime", self.app, source="another-source")
         builder = Mock()
         with self.assertRaisesRegex(Error, "different source/version"):
             self.publish(registry, builder)
-        self.assertIsNone(registry.manifest(f"{self.prefix}/runtime:{self.app}"))
         builder.assert_not_called()
-
-    def test_version_created_during_build_is_not_overwritten(self):
-        registry = MemoryRegistry()
-
-        def race(root, targets, env):
-            for target in targets:
-                self.save_image(registry, target, env["IMAGE_TAG"])
-            self.save_image(registry, "runtime", self.app, source="another-source")
-
-        with self.assertRaisesRegex(Error, "different source/version"):
-            self.publish(registry, race)
-        self.assertEqual(
-            registry.manifest(f"{self.prefix}/runtime:{self.app}")["annotations"][
-                "org.opencontainers.image.revision"
-            ],
-            "another-source",
-        )
 
     def test_successful_builder_must_publish_every_requested_image(self):
         registry = MemoryRegistry()
@@ -560,14 +638,14 @@ class ArtifactTests(unittest.TestCase):
             self.save_image(registry, "runtime", env["IMAGE_TAG"])
 
         with self.assertRaisesRegex(
-            Error, "still does not expose .*frontend-runtime:sha-source-123-1"
+            Error, "still does not expose .*frontend-runtime:0.1.0-rc.1"
         ):
             self.publish(registry, incomplete)
 
-    def test_successful_push_waits_for_image_and_version_tag_visibility(self):
+    def test_successful_push_waits_for_tag_visibility(self):
         registry = MemoryRegistry()
         pending = {}
-        manifest, alias = registry.manifest, registry.alias
+        manifest = registry.manifest
 
         def delayed(ref):
             if pending.get(ref, 0):
@@ -575,12 +653,7 @@ class ArtifactTests(unittest.TestCase):
                 return None
             return manifest(ref)
 
-        def publish_alias(repository, digest, tag):
-            alias(repository, digest, tag)
-            pending[f"{repository}:{tag}"] = 2
-
         registry.manifest = delayed
-        registry.alias = publish_alias
 
         def build(root, targets, env):
             for target in targets:
@@ -589,12 +662,7 @@ class ArtifactTests(unittest.TestCase):
 
         result = self.publish(registry, build)
         self.assertEqual(set(result), {"runtime", "frontend-runtime"})
-        self.assertTrue(self.sleep.called)
-        for target in result:
-            self.assertEqual(
-                registry.digest(f"{self.prefix}/{target}:{self.app}"),
-                result[target]["digest"],
-            )
+        self.assertEqual(self.sleep.call_count, 4)
         builder = Mock(side_effect=AssertionError("Images already published"))
         self.assertEqual(self.publish(registry, builder), result)
         builder.assert_not_called()
@@ -605,7 +673,7 @@ class ArtifactTests(unittest.TestCase):
         pending = []
 
         def delayed(ref):
-            if pending and ref.endswith(":sha-source-123-1") and "/runtime:" in ref:
+            if pending and "/runtime:" in ref:
                 pending.pop()
                 return None
             return manifest(ref)
@@ -625,11 +693,18 @@ class ArtifactTests(unittest.TestCase):
     def test_missing_manifest_wait_is_bounded_and_reports_exact_reference(self):
         registry = Mock()
         registry.manifest.return_value = None
-        ref = "registry.example/runtime:sha-source-123-1"
+        ref = "registry.example/runtime:dev-12345678"
         with self.assertRaisesRegex(Error, ref + " after 7 checks"):
             wait_for_manifest(registry, ref)
         self.assertEqual(registry.manifest.call_count, 7)
         self.assertEqual(sum(call.args[0] for call in self.sleep.call_args_list), 60)
+
+    def test_alias_wait_requires_expected_digest(self):
+        registry = Mock()
+        registry.manifest.return_value = {"schemaVersion": 2}
+        registry.digest.side_effect = ["sha256:old", "sha256:old", "sha256:new"]
+        wait_for_manifest(registry, "registry/runtime:latest", digest="sha256:new")
+        self.assertEqual(self.sleep.call_count, 2)
 
     def test_manifest_wait_does_not_retry_registry_auth_failure(self):
         registry = Mock()
@@ -639,13 +714,13 @@ class ArtifactTests(unittest.TestCase):
         registry.manifest.assert_called_once()
         self.sleep.assert_not_called()
 
-    def test_delayed_wrong_image_is_not_promoted(self):
+    def test_delayed_wrong_image_is_rejected(self):
         registry = MemoryRegistry()
         manifest = registry.manifest
         pending = []
 
         def delayed(ref):
-            if pending and ref.endswith(":sha-source-123-1"):
+            if pending:
                 pending.pop()
                 return None
             return manifest(ref)
@@ -658,154 +733,181 @@ class ArtifactTests(unittest.TestCase):
 
         with self.assertRaisesRegex(Error, "different source/version"):
             self.publish(registry, build)
-        self.assertIsNone(manifest(f"{self.prefix}/runtime:{self.app}"))
-
-
-class DeliveryTests(unittest.TestCase):
-    def test_prod_selects_digest_and_finalizes_only_after_success(self):
-        repo, argo, registry, github = Mock(), Mock(), Mock(), Mock()
-        repo.sha.return_value = "head"
-        record = {
-            "channel": "stable",
-            "branch": "main",
-            "chart_digest": "sha256:abc",
-            "build_sha": "head",
-            "chart_repository": "registry/chart",
-            "app_version": "0.1.0",
-        }
-        application = {
-            "spec": {
-                "source": {"repoURL": "oci://registry/chart", "path": "."},
-                "syncPolicy": {},
-            },
-            "status": {
-                "sync": {"revision": "sha256:abc", "status": "Synced"},
-                "health": {"status": "Healthy"},
-                "operationState": {
-                    "phase": "Succeeded",
-                    "syncResult": {"revision": "sha256:abc"},
-                },
-            },
-        }
-        argo.get.return_value = application
-        queued = copy.deepcopy(application)
-        queued["operation"] = {"sync": {}}
-        argo.get.side_effect = [queued, application, application]
-        self.assertTrue(
-            deliver(
-                repo,
-                record,
-                github,
-                enabled="true",
-                registry=registry,
-                argo=argo,
-                run_id="123",
-                attempt="2",
-            )
-        )
-        argo.select.assert_called_once_with("sha256:abc", "prod-head-123-2")
-        argo.sync.assert_called_once()
-        argo.wait_operation.assert_called_once()
-        registry.alias.assert_not_called()
-        github.finalize.assert_called_once_with("v0.1.0")
-        github.reset_mock()
-        argo.get.side_effect = None
-        application["status"]["operationState"]["phase"] = "Failed"
-        with self.assertRaisesRegex(Error, "delivery failed"):
-            deliver(
-                repo,
-                record,
-                github,
-                enabled="true",
-                registry=registry,
-                argo=argo,
-                run_id="123",
-                attempt="3",
-            )
-        github.finalize.assert_not_called()
-
-    def test_disabled_delivery_has_no_calls_even_with_invalid_metadata(self):
-        for enabled in ("", "false", "True", "1"):
-            remote = Mock()
-            self.assertFalse(
-                deliver(
-                    remote, {}, remote, enabled=enabled, registry=remote, argo=remote
-                )
-            )
-            self.assertEqual(remote.mock_calls, [])
-
-    def test_late_build_does_not_touch_registry_or_argo(self):
-        repo, argo, registry = Mock(), Mock(), Mock()
-        repo.sha.return_value = "newer"
-        record = {
-            "channel": "dev",
-            "branch": "develop",
-            "chart_digest": "sha256:abc",
-            "build_sha": "old",
-        }
-        self.assertFalse(
-            deliver(repo, record, Mock(), enabled="true", registry=registry, argo=argo)
-        )
-        self.assertEqual(argo.mock_calls, [])
-        self.assertEqual(registry.mock_calls, [])
-
-    def test_dev_moves_alias_and_waits_for_selected_digest(self):
-        repo, argo, registry = Mock(), Mock(), Mock()
-        repo.sha.return_value = "head"
-        record = {
-            "channel": "dev",
-            "branch": "develop",
-            "chart_digest": "sha256:abc",
-            "build_sha": "head",
-            "chart_repository": "registry/chart",
-        }
-        app = {
-            "spec": {
-                "source": {
-                    "repoURL": "oci://registry/chart",
-                    "path": ".",
-                    "targetRevision": "dev",
-                },
-                "syncPolicy": {"automated": {"enabled": True}},
-            },
-            "status": {
-                "sync": {"revision": "sha256:abc", "status": "Synced"},
-                "health": {"status": "Healthy"},
-                "operationState": {
-                    "phase": "Succeeded",
-                    "syncResult": {"revision": "sha256:abc"},
-                },
-            },
-        }
-        stale = copy.deepcopy(app)
-        stale["status"]["sync"]["revision"] = "sha256:old"
-        argo.get.side_effect = [app, app, stale, app]
-        with mock_patch("scripts.cicd.delivery.time.sleep"):
-            self.assertTrue(
-                deliver(
-                    repo, record, Mock(), enabled="true", registry=registry, argo=argo
-                )
-            )
-        registry.alias.assert_called_once_with("registry/chart", "sha256:abc", "dev")
-        argo.select.assert_not_called()
 
     def test_registry_auth_failure_is_not_treated_as_missing_version(self):
         with mock_patch(
             "scripts.cicd.artifacts.run",
             return_value=Mock(returncode=1, stderr="401 Unauthorized"),
         ):
-            with self.assertRaisesRegex(Error, "Registry lookup failed"):
+            with self.assertRaisesRegex(
+                Error, "Registry lookup failed for registry/chart:0.1.0"
+            ):
                 Registry().manifest("registry/chart:0.1.0")
 
-    def test_workflow_guards_every_delivery_step(self):
-        workflow = yaml.safe_load((ROOT / ".github/workflows/deploy.yml").read_text())
-        for step in workflow["jobs"]["deliver"]["steps"]:
-            if step.get("name", "").startswith("Delivery remains disabled"):
-                continue
-            self.assertEqual(step.get("if"), "env.DEPLOY_ENABLED == 'true'")
-        self.assertFalse(
-            workflow["jobs"]["deliver"]["concurrency"]["cancel-in-progress"]
+
+class GitHubPublicationTests(unittest.TestCase):
+    def setUp(self):
+        self.github = GitHub("owner/repo")
+        self.lookup = self.enterContext(
+            mock_patch.object(self.github, "get_release", return_value=None)
         )
+        self.run = self.enterContext(mock_patch("scripts.cicd.artifacts.run"))
+
+    def test_stable_release_is_created_published_and_latest(self):
+        self.github.publish("v0.1.0", {"channel": "stable"}, "Changes", latest=True)
+        args = self.run.call_args.args
+        self.assertEqual(args[:4], ("gh", "release", "create", "v0.1.0"))
+        self.assertIn("--verify-tag", args)
+        self.assertIn("--draft=false", args)
+        self.assertIn("--latest", args)
+        self.assertNotIn("--prerelease", args)
+
+    def test_rc_is_published_prerelease_and_never_latest(self):
+        self.github.publish("v0.1.0-rc.1", {"channel": "rc"}, "Changes", latest=True)
+        args = self.run.call_args.args
+        self.assertIn("--draft=false", args)
+        self.assertIn("--prerelease", args)
+        self.assertIn("--latest=false", args)
+
+    def test_retry_publishes_existing_stable_draft(self):
+        self.lookup.return_value = {"isDraft": True, "isPrerelease": False}
+        self.github.publish("v0.1.0", {"channel": "stable"}, "Changes", latest=True)
+        args = self.run.call_args.args
+        self.assertEqual(args[:4], ("gh", "release", "edit", "v0.1.0"))
+        self.assertIn("--draft=false", args)
+        self.assertIn("--latest", args)
+
+    def test_old_stable_retry_does_not_become_latest(self):
+        self.github.publish("v0.1.0", {"channel": "stable"}, "Changes", latest=False)
+        self.assertIn("--latest=false", self.run.call_args.args)
+
+    def test_published_release_is_not_rewritten(self):
+        self.lookup.return_value = {"isDraft": False, "isPrerelease": False}
+        self.github.publish("v0.1.0", {"channel": "stable"}, "Changes")
+        self.run.assert_not_called()
+
+
+class ChannelAliasTests(unittest.TestCase):
+    def setUp(self):
+        self.repo = Mock()
+        self.repo.sha.return_value = "head"
+        self.registry = MemoryRegistry()
+        self.record = {
+            "channel": "stable",
+            "branch": "main",
+            "build_sha": "head",
+            "chart_repository": "registry/helm",
+            "chart_digest": "sha256:chart",
+            "images": {},
+        }
+        self.registry.save("registry/helm:0.3.3", {"version": "0.3.3"})
+        self.record["chart_digest"] = self.registry.digest("registry/helm:0.3.3")
+        for target in ("runtime", "frontend-runtime"):
+            repository = "registry/" + target
+            self.registry.save(
+                repository + ":0.1.0", {"image": target, "version": "0.1.0"}
+            )
+            self.record["images"][target] = {
+                "repository": repository,
+                "tag": "0.1.0",
+                "digest": self.registry.digest(repository + ":0.1.0"),
+            }
+        self.alias = self.enterContext(
+            mock_patch.object(self.registry, "alias", wraps=self.registry.alias)
+        )
+        self.enterContext(mock_patch("scripts.cicd.artifacts.time.sleep"))
+
+    def publish(self):
+        return publish_channel_aliases(self.repo, self.record, self.registry)
+
+    def test_current_main_updates_both_latest_tags_idempotently(self):
+        self.assertTrue(self.publish())
+        self.assertEqual(self.alias.call_count, 2)
+        for image in self.record["images"].values():
+            self.assertEqual(
+                self.registry.digest(image["repository"] + ":latest"), image["digest"]
+            )
+            self.assertEqual(
+                self.registry.digest(image["repository"] + ":0.1.0"), image["digest"]
+            )
+        self.assertIsNone(self.registry.manifest("registry/helm:latest"))
+        self.assertTrue(self.publish())
+        self.assertEqual(self.alias.call_count, 2)
+
+    def test_dev_only_updates_chart_dev_alias(self):
+        self.record.update(channel="dev", branch="develop")
+        self.assertTrue(self.publish())
+        self.alias.assert_called_once_with(
+            "registry/helm", self.record["chart_digest"], "dev"
+        )
+        for image in self.record["images"].values():
+            self.assertIsNone(self.registry.manifest(image["repository"] + ":latest"))
+
+    def test_rc_does_not_touch_floating_tags(self):
+        self.record.update(channel="rc", branch="release/0.1.0")
+        self.assertFalse(self.publish())
+        self.alias.assert_not_called()
+        self.repo.fetch.assert_not_called()
+
+    def test_stale_main_and_develop_do_not_move_aliases(self):
+        self.repo.sha.return_value = "newer"
+        for channel, branch in (("stable", "main"), ("dev", "develop")):
+            with self.subTest(channel=channel):
+                self.record.update(channel=channel, branch=branch)
+                self.assertFalse(self.publish())
+        self.alias.assert_not_called()
+
+    def test_head_is_rechecked_before_each_alias(self):
+        self.repo.sha.side_effect = ["head", "newer"]
+        self.assertFalse(self.publish())
+        self.assertEqual(self.alias.call_count, 1)
+
+    def test_retry_completes_partial_latest_update(self):
+        original = self.alias._mock_wraps
+        failed = [False]
+
+        def partial(repository, digest, tag):
+            if repository.endswith("frontend-runtime") and not failed[0]:
+                failed[0] = True
+                raise Error("registry unavailable")
+            original(repository, digest, tag)
+
+        self.alias.side_effect = partial
+        with self.assertRaisesRegex(Error, "registry unavailable"):
+            self.publish()
+        self.assertTrue(self.publish())
+        self.assertEqual(self.alias.call_count, 3)
+
+
+class WorkflowTests(unittest.TestCase):
+    def test_workflow_only_publishes_without_deployment_environment(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/deploy.yml").read_text())
+        self.assertEqual(set(workflow["jobs"]), {"publish"})
+        job = workflow["jobs"]["publish"]
+        self.assertNotIn("environment", job)
+        self.assertNotIn("deployments", workflow["permissions"])
+        commands = "\n".join(step.get("run", "") for step in job["steps"])
+        self.assertNotIn("argocd", commands.lower())
+        self.assertNotIn("kubectl", commands.lower())
+        self.assertNotIn("scripts.cicd deliver", commands)
+        self.assertFalse(job["concurrency"]["cancel-in-progress"])
+
+    def test_failed_artifact_publication_does_not_publish_release_or_aliases(self):
+        github = Mock()
+        with (
+            mock_patch.dict(
+                os.environ, {"GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "1"}
+            ),
+            mock_patch(
+                "scripts.cicd.__main__.publish_artifacts",
+                side_effect=Error("build failed"),
+            ),
+            mock_patch("scripts.cicd.__main__.publish_channel_aliases") as aliases,
+        ):
+            with self.assertRaisesRegex(Error, "build failed"):
+                ci(Mock(), github, "develop", "head", Path("unused.json"))
+        github.publish.assert_not_called()
+        aliases.assert_not_called()
 
 
 if __name__ == "__main__":

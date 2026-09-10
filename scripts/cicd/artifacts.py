@@ -70,7 +70,7 @@ class Registry:
         return self.digest(ref)
 
 
-def wait_for_manifest(registry, ref):
+def wait_for_manifest(registry, ref, *, digest=None):
     """A successful push may become readable later; retry only missing manifests."""
     for number, delay in enumerate((0, *REGISTRY_RETRY_DELAYS), 1):
         if delay:
@@ -80,10 +80,12 @@ def wait_for_manifest(registry, ref):
             )
             time.sleep(delay)
         manifest = registry.manifest(ref)
-        if manifest is not None:
+        if manifest is not None and (digest is None or registry.digest(ref) == digest):
             return manifest
     raise Error(
-        f"Registry still does not expose {ref} after {number} checks; "
+        f"Registry still does not expose {ref}"
+        + (f" at {digest}" if digest else "")
+        + f" after {number} checks; "
         "the push may have succeeded. Retry publication without deleting artifacts"
     )
 
@@ -157,22 +159,10 @@ def build_images(root, targets, environment):
     )
 
 
-def published_image(registry, repository, tag, unique_tag, source, app, *, wait=False):
-    """Find a complete image and, if needed, attach its immutable version tag."""
-    immutable_ref = repository + ":" + tag
-    built_ref = repository + ":" + unique_tag
-    manifest = (
-        wait_for_manifest(registry, immutable_ref)
-        if wait and tag == unique_tag
-        else registry.manifest(immutable_ref)
-    )
-    promote = manifest is None and tag != unique_tag
-    if promote:
-        manifest = (
-            wait_for_manifest(registry, built_ref)
-            if wait
-            else registry.manifest(built_ref)
-        )
+def published_image(registry, repository, tag, source, app, *, wait=False):
+    """Reuse a published tag only when its full source SHA and version match."""
+    ref = repository + ":" + tag
+    manifest = wait_for_manifest(registry, ref) if wait else registry.manifest(ref)
     if manifest is None:
         return None
     annotations = manifest.get("annotations", {})
@@ -181,22 +171,14 @@ def published_image(registry, repository, tag, unique_tag, source, app, *, wait=
         or annotations.get("org.opencontainers.image.version") != app
     ):
         raise Error(
-            f"Image {built_ref if promote else immutable_ref} belongs to a different source/version"
+            f"Image {ref} belongs to a different source/version; refusing to overwrite it"
         )
-    digest = registry.digest(built_ref if promote else immutable_ref)
-    if promote:
-        # Validate before tagging; never replace a version created by another writer.
-        if registry.manifest(immutable_ref) is not None:
-            raise Error("Version appeared during build; retry to validate and reuse it")
-        registry.alias(repository, digest, tag)
-        wait_for_manifest(registry, immutable_ref)
-        if registry.digest(immutable_ref) != digest:
-            raise Error(f"Version {immutable_ref} changed during publication")
-    print(f"Image ready: {immutable_ref} ({digest})", flush=True)
+    digest = registry.digest(ref)
+    print(f"Image ready: {ref} ({digest})", flush=True)
     return {"repository": repository, "tag": tag, "digest": digest}
 
 
-def publish_images(root, registry, image_prefix, app, source, unique_tag, tag, builder):
+def publish_images(root, registry, image_prefix, app, source, tag, builder):
     images, missing = {}, []
 
     def collect(target, *, wait=False):
@@ -204,7 +186,6 @@ def publish_images(root, registry, image_prefix, app, source, unique_tag, tag, b
             registry,
             image_prefix + "/" + target,
             tag,
-            unique_tag,
             source,
             app,
             wait=wait,
@@ -220,15 +201,15 @@ def publish_images(root, registry, image_prefix, app, source, unique_tag, tag, b
     if missing:
         environment = {
             "REGISTRY_PREFIX": image_prefix,
-            "IMAGE_TAG": unique_tag,
+            "IMAGE_TAG": tag,
             "VERSION": app,
             "SOURCE_REVISION": source,
         }
         try:
             builder(root, missing, environment)
         except Error:
-            # Bake may publish one image before another fails. Preserve either
-            # completed image's version tag so the next run attempt can reuse it.
+            # Each image is already pushed under its final tag. A later attempt
+            # reuses either completed image, including one that becomes visible late.
             for target in missing:
                 try:
                     collect(target, wait=True)
@@ -265,7 +246,7 @@ def publish_artifacts(
         if channel == "dev":
             chart = chart.split("-", 1)[0] + f"-dev.{run_id}.{attempt}"
         build_sha = checkout.sha()
-        unique_tag = f"sha-{build_sha}-{run_id}-{attempt}"
+        image_tag = f"dev-{source[:8]}" if channel == "dev" else app
         record = {
             "schema": 1,
             "channel": channel,
@@ -294,8 +275,7 @@ def publish_artifacts(
             image_prefix,
             app,
             source,
-            unique_tag,
-            unique_tag if channel == "dev" else app,
+            image_tag,
             builder or build_images,
         )
         with tempfile.TemporaryDirectory(prefix="dnk-oci-") as temporary:
@@ -310,6 +290,46 @@ def publish_artifacts(
             digest = registry.push_chart(chart_repository, archive, config, record)
         print(f"Chart ready: {chart_ref} ({digest})", flush=True)
         return record | {"chart_digest": digest}
+
+
+def current_publication(repo, record):
+    repo.fetch()
+    return repo.sha("origin/" + record["branch"]) == record["build_sha"]
+
+
+def publish_channel_aliases(repo, record, registry=None):
+    """Publish registry pointers for pull-based consumers, without cluster access."""
+    channel = record["channel"]
+    if channel == "rc":
+        return False
+    if record["branch"] != {"dev": "develop", "stable": "main"}.get(channel):
+        raise Error("Invalid publication channel/branch")
+    registry = registry or Registry()
+    aliases = (
+        [(record["chart_repository"], record["chart_digest"], "dev")]
+        if channel == "dev"
+        else [
+            (
+                record["images"][target]["repository"],
+                record["images"][target]["digest"],
+                "latest",
+            )
+            for target in ("runtime", "frontend-runtime")
+        ]
+    )
+    for repository, digest, tag in aliases:
+        if not current_publication(repo, record):
+            print(
+                "A newer branch HEAD exists; leaving floating tags unchanged",
+                flush=True,
+            )
+            return False
+        ref = repository + ":" + tag
+        if registry.manifest(ref) is None or registry.digest(ref) != digest:
+            registry.alias(repository, digest, tag)
+        wait_for_manifest(registry, ref, digest=digest)
+        print(f"Published alias: {ref} ({digest})", flush=True)
+    return True
 
 
 class GitHub:
@@ -370,7 +390,7 @@ class GitHub:
             "body": release.get("body") or "",
         }
 
-    def publish(self, tag, record, changelog):
+    def publish(self, tag, record, changelog, *, latest=False):
         prerelease = record["channel"] == "rc"
         body = f"{changelog.strip()}\n\n### Artifacts\n\n```json\n{json.dumps(record, indent=2)}\n```\n"
         existing = self.get_release(tag)
@@ -392,6 +412,8 @@ class GitHub:
                     self.repository,
                     "--notes-file",
                     notes,
+                    "--draft=false",
+                    "--latest" if latest and not prerelease else "--latest=false",
                 )
             else:
                 run(
@@ -406,18 +428,7 @@ class GitHub:
                     tag,
                     "--notes-file",
                     notes,
-                    "--latest=false",
-                    *(["--prerelease"] if prerelease else ["--draft"]),
+                    "--latest" if latest and not prerelease else "--latest=false",
+                    "--draft=false",
+                    *(["--prerelease"] if prerelease else []),
                 )
-
-    def finalize(self, tag):
-        run(
-            "gh",
-            "release",
-            "edit",
-            tag,
-            "--repo",
-            self.repository,
-            "--draft=false",
-            "--latest",
-        )

@@ -299,7 +299,8 @@ def publish(repo, github, check):
             release = github.get_release(previous[-1])
             if not release or release["isDraft"] or release["isPrerelease"]:
                 raise Error(
-                    "Finish the previous production release before publishing another"
+                    f"Finish artifact publication for {previous[-1]} first; "
+                    "rerun its main workflow to publish the GitHub Release"
                 )
         if branch.startswith("release/"):
             if source != repo.sha("origin/" + branch):
@@ -405,4 +406,4 @@ def publish(repo, github, check):
         raise Error("Prepared refs changed; refusing to publish")
     repo.git("push", "--atomic", "origin", "main", "develop", "refs/tags/" + tag)
     journal.unlink()
-    print(f"Published {tag}; follow the deployment in GitHub Actions")
+    print(f"Published {tag}; follow artifact publication in GitHub Actions")

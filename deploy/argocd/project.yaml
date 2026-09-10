@@ -18,13 +18,3 @@ spec:
   namespaceResourceWhitelist:
     - group: '*'
       kind: '*'
-  roles:
-    - name: deploy-dev
-      policies:
-        - p, proj:dnk-runtime-core:deploy-dev, applications, get, dnk-runtime-core/dnk-runtime-core-dev, allow
-        - p, proj:dnk-runtime-core:deploy-dev, applications, sync, dnk-runtime-core/dnk-runtime-core-dev, allow
-    - name: deploy-prod
-      policies:
-        - p, proj:dnk-runtime-core:deploy-prod, applications, get, dnk-runtime-core/dnk-runtime-core, allow
-        - p, proj:dnk-runtime-core:deploy-prod, applications, update, dnk-runtime-core/dnk-runtime-core, allow
-        - p, proj:dnk-runtime-core:deploy-prod, applications, sync, dnk-runtime-core/dnk-runtime-core, allow

@@ -1,1 +1,1 @@
-"""Local releases and build/delivery automation."""
+"""Local releases and artifact publication for pull-based GitOps."""
