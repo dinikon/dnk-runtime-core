@@ -1,229 +1,177 @@
-# Минимальный CI/CD для одного разработчика
+# CI/CD для одного разработчика
 
-Статус: согласуемый проект процесса. Команды `make` ниже — предлагаемый интерфейс автоматизации, их ещё нужно реализовать. Текущие workflows пока не изменены.
+**Граница реализации: готовим файлы автоматизации, YAML-манифесты и инструкции. Ничего не применяем в существующий кластер, не изменяем рабочий ArgoCD и не запускаем dev/prod deployment. Разворачивать ресурсы для проверки можно только локально, в отдельном временном Kind-кластере с собственным kubeconfig.**
 
-**Локально:** разработка, линт, тесты, проверки, расчёт номера выпуска через Commitizen и merge.
-**В GitHub Actions:** создание prerelease-версий через Commitizen, публикация GitHub Pre-release/Release, сборка двух образов и OCI Helm-пакета в GHCR, доставка через существующий ArgoCD.
+Описанный ниже процесс работает после отдельного подключения пользователем. В репозитории подготовлены команды и workflow; наличие файлов не означает, что окружения уже настроены. Доставка выключена по умолчанию: только значение `DEPLOY_ENABLED=true` соответствующего GitHub environment разрешает обращения к ArgoCD и перемещение Helm-тега `dev`.
 
-PR не обязателен. Обычный порядок: проверить локально → merge локально → push. Отдельных approve, ботов, расписания релизов и staging-окружения нет.
+## 1. Команды и обычный процесс
 
-## 1. Ветки и триггеры
+| Команда | Действие |
+|---|---|
+| `make check` | Локальные проверки Python/backend с временной PostgreSQL, frontend и Helm |
+| `make check-full` | Базовые проверки, установка/обновление в Kind, миграции и OCI/ArgoCD integration |
+| `make release` | Создание и отправка release-ветки с автоматически рассчитанным номером |
+| `make publish` | Финализация версии на main, локальная проверка, обратный merge в develop и атомарный push |
 
-| Ветка | Назначение | Что запускает push |
-| --- | --- | --- |
-| `feature/*` | Разработка от `develop` | Ничего |
-| `develop` | Рабочая стабильная версия | Сборка образов и dev Helm-пакета, deployment dev |
-| `release/X.Y.Z` | Зафиксированный состав следующего выпуска из `develop`; проверяется локально | Для каждого нового коммита: версия `X.Y.Z-rc.N`, Git-тег Commitizen, образы, Helm-пакет и GitHub Pre-release |
-| `hotfix/*` | Исправление от `main` или конкретной release-ветки | Ничего |
-| `main` | Финальная версия `X.Y.Z` для production | Сборка образов, публикация новой версии Helm-пакета, deployment prod и GitHub Release |
+Для базовых проверок нужны Python **3.13.9**, uv **0.10.4**, Node.js **24** с npm, Docker и Helm **3.19.0**. Для полного набора — также Kind **0.29.0**, kubectl **1.33.1**, ORAS **1.3.0**, OpenSSL и curl. Локальные команды выпуска требуют Git с настроенной личностью автора, GitHub CLI `gh` с авторизацией (`gh auth login`) и права push в репозиторий.
 
-`pull_request` и push Git-тега deployment не запускают. **Локальный merge ничего не разворачивает: запуск происходит после push целевой ветки на GitHub.**
+Подготовка зависимостей: `uv sync --frozen`. Проверки запускают PostgreSQL на случайном локальном порту и удаляют свой контейнер при завершении. Backend проверяется в временной копии исходников с тестовой `.env`; рабочая `.env` не заменяется, рабочие базы не используются. Frontend использует `npm ci` и существующие lint/typecheck/build команды. Kind-тесты создают только собственные кластеры `dnk-test-*`, всегда используют отдельный kubeconfig и явный context; текущий Kubernetes context не переключается.
 
-## 2. Твой обычный процесс
-
-### Разработать фичу
-
-Создаёшь рабочую ветку от свежего develop:
+### Фича
 
 ```sh
 git switch develop
 git pull --ff-only
-git switch -c feature/tenant-export
-```
-
-Пишешь код, фиксируешь изменения через `uv run cz commit`. Перед переносом запускаешь локально `make check`.
-
-Готовую фичу сливаешь сам:
-
-```sh
+git switch -c feature/my-feature
+# Разработка; коммиты через uv run cz commit.
+make check
 git switch develop
 git pull --ff-only
-git merge --no-ff feature/tenant-export
+git merge --no-ff feature/my-feature
 make check
 git push origin develop
 ```
 
-Здесь повторная локальная проверка относится к результату merge. GitHub собирает Runtime и Console, публикует образы и Helm-пакет и обновляет dev через ArgoCD. В интерфейсе dev можно посмотреть результат. Feature-ветку после успешного переноса можно удалить.
+**PR не обязателен.** Обычный merge сохраняет исходные Conventional Commits для расчёта версии. Запуск происходит после push целевой ветки, а не после локального merge. `make check-full` запускается отдельно, когда нужны Kubernetes-проверки; `make publish` автоматически запускает базовый `make check`.
 
-**PR создавать не нужно.** Используем обычный merge с сохранением Conventional Commits, поэтому Commitizen видит исходные `feat:`/`fix:`. Merge можно сделать и через IDE.
+### Выпуск
 
-### Подготовить выпуск
-
-Когда хочешь выпустить текущий develop, запускаешь из него:
+Из чистого, проверенного и отправленного develop, содержащего актуальный main:
 
 ```sh
 make release
-```
-
-Команда обновляет refs, проверяет чистое рабочее дерево и синхронизацию develop с main. Затем Commitizen рассчитывает следующую версию, например `0.2.0`; команда создаёт `release/0.2.0`, переключает тебя в неё и отправляет ветку на GitHub. Номер вручную не вводишь. Первый push создаёт prerelease `v0.2.0-rc.1` для начального состояния ветки.
-
-В этой ветке проверяешь выпуск локально, при необходимости исправляешь баги. После каждого нового коммита и push автоматически появляется следующий prerelease. Новые фичи остаются в develop для следующего выпуска. Prerelease публикуется в GitHub и GHCR; отдельного deployment release-ветки нет.
-
-### Каждый коммит в release — отдельный prerelease
-
-```text
-release/0.2.0: начальный commit → v0.2.0-rc.1 → GitHub Pre-release
-release/0.2.0: следующий commit → v0.2.0-rc.2 → GitHub Pre-release
-release/0.2.0: ещё один commit  → v0.2.0-rc.3 → GitHub Pre-release
-main: публикация выпуска      → v0.2.0      → GitHub Release → prod
-```
-
-Публикация начинается после отправки коммита на GitHub. Если одним push отправлены несколько новых коммитов, каждому создаётся свой prerelease по порядку, включая `docs:`/`test:` commits. При создании release-ветки публикуется только её начальный HEAD, без повторного выпуска всей истории develop. Слияние hotfix также запускает публикацию новых коммитов release.
-
-`X.Y.Z` берётся из имени release-ветки и не меняется на каждом исправлении; увеличивается только `rc.N`. Уже созданные tags и GitHub Pre-releases сохраняются после финального выпуска. Повторная обработка того же исходного SHA использует его существующий prerelease, а не увеличивает номер ещё раз.
-
-### Отправить выпуск в prod
-
-Из готовой release-ветки:
-
-```sh
+# Работа в созданной release/X.Y.Z; исправления, локальные проверки, git push.
 make publish
 ```
 
-Команда выполняет локально:
+`make release` обновляет refs и создаёт `release/X.Y.Z`. Вместе с веткой атомарно отправляется аннотированный служебный тег `release-start/X.Y.Z`: он фиксирует начальный SHA и базовую версию chart и игнорируется Commitizen. Если текущий main ещё не включён в ветку, сначала нужно слить его и проверить результат локально.
 
-1. Обновляет refs и теги, требует чистое рабочее дерево и опубликованный prerelease именно для текущего HEAD release. Все локальные изменения должны быть отправлены; если публикация ещё идёт, команда ждёт её завершения. Текущий main должен входить в историю release.
-2. Сливает в main тег последнего prerelease через merge commit. Он содержит весь текущий код release и подготовленные Commitizen файлы версии.
-3. **На main** формируется финальная версия: помощник финализирует Helm `version`, Commitizen переводит версию приложения и Helm `appVersion` из `0.2.0-rc.N` в `0.2.0`, обновляет `uv.lock` и changelog и создаёт общий release commit с Git-тегом `v0.2.0`. Новое повышение приложения до `0.2.1` здесь не выполняется.
-4. Запускает локальный `make check` для финальной версии.
-5. Сливает main обратно в develop, возвращая туда исправления и версию.
-6. Отправляет main, develop и тег одним атомарным push. При конфликте останавливается до отправки; конфликт решаешь локально.
+Первый выпуск при отсутствии stable-тегов — **приложение `0.1.0`, chart `0.3.3`**. Исходная версия chart `0.3.2`; перед началом `project.version`, `uv.lock` и `appVersion` согласованы на `0.1.0`. Первый тег — `v0.1.0-rc.1`, затем `v0.1.0`. Уже существующие теги не заменяются.
 
-После push автоматически обновляются prod из main и dev из develop. Для `v0.2.0` публикуется обычный GitHub Release; прежние `v0.2.0-rc.N` остаются предрелизными публикациями. В GitHub Actions смотришь результат доставки. Дополнительных кнопок и PR нет. Release-ветку удаляешь после успешного deployment.
+`make publish` из release:
 
-При повторном запуске после локальной ошибки или сбоя push команда продолжает подготовленный выпуск: второй bump и второй тег не создаются.
+1. Обновляет refs, проверяет чистое дерево и опубликованный HEAD; ждёт готовый GitHub Pre-release именно этого SHA.
+2. Сливает соответствующий RC-тег в main. В теге находятся код и версионный commit Commitizen.
+3. Убирает RC-суффикс chart; Commitizen финализирует приложение, `appVersion`, lockfile и changelog и создаёт stable commit/tag.
+4. Запускает `make check` для подготовленного main.
+5. Сливает main обратно в develop.
+6. Отправляет main, develop и stable-тег одним `git push --atomic`.
 
-## 3. Hotfix
+Во время реализации эти команды проверяются на временных локальных репозиториях. Их обычный запуск после внедрения действительно делает push в настроенный `origin`.
 
-### Баг в production
+### Hotfix
 
-Создаёшь ветку от актуального main:
+Для production: создать `hotfix/*` от актуального main, сделать `fix:` commit и выполнить `make publish`. Получается PATCH без RC. Для hotfix от release — обычный merge обратно в release и push; исправление получает RC этой серии.
 
-```sh
-git switch main
-git pull --ff-only
-git switch -c hotfix/tenant-login
-```
+Готовится один обычный выпуск за раз. Если во время release понадобился production-hotfix, после его успешного выпуска включить новый main в release и повторить `make release`. Chart рассчитывается от нового stable main; при занятом номере приложения создаётся release-ветка с новым рассчитанным номером. История изменений сохраняется, прежние теги остаются. В новой серии приложения RC начинается с 1; при изменении только chart счётчик продолжается. Старую ветку после переименования и завершённые release-ветки можно удалить вручную.
 
-Исправляешь баг, делаешь `fix:` commit и запускаешь `make publish` из hotfix-ветки. Для hotfix от main prerelease не требуется: команда сливает исправление в main, где Commitizen формирует только PATCH, например `0.2.0 → 0.2.1`. Локальная проверка, обратное слияние и push выполняются так же. После push публикуется GitHub Release, обновляется prod, а исправление возвращается в develop.
+## 2. Триггеры и GitHub Releases
 
-### Баг в готовящемся release
+Workflow: `.github/workflows/deploy.yml`. Проверки качества выполняются локально; Actions создаёт версии, собирает и публикует артефакты, а после включения доставки управляет ArgoCD.
 
-Создаёшь hotfix от этой release-ветки, исправляешь баг и сливаешь обратно в неё обычным merge. Проверяешь локально и делаешь push release: CI создаёт следующие prerelease-версии. Отдельный patch-релиз не появляется: исправление входит в готовящийся выпуск. `make publish` запускаешь из release-ветки, когда готов весь выпуск.
+| Триггер | Результат |
+|---|---|
+| Push `develop` | Runtime/Console и уникальный dev chart; dev deployment только при включённой доставке |
+| Push `release/**` | На каждый новый commit: RC-тег Commitizen, образы, chart и GitHub Pre-release; без deployment |
+| Push `main` | Stable-образы и chart, GitHub draft; после успешной включённой доставки — обычный GitHub Release |
+| Re-run / workflow_dispatch на поддерживаемой ветке | Возобновление обработки |
+| Feature/hotfix, pull_request, push тегов | Запуска нет |
 
-Для простоты готовь один выпуск за раз. Если срочный prod hotfix понадобился во время подготовки release, после hotfix влей новый main в release и проверь результат локально. Перед следующим push повтори `make release` из текущей release-ветки: команда пересчитывает резерв версии chart от нового main, а при занятом номере приложения переименовывает release-ветку, сохраняя изменения. Для новой серии приложения RC-счёт начинается с 1; если изменилась только версия chart, общий RC-счёт продолжается. Опубликованные теги не перемещаются.
+Первый push release обрабатывает **только начальный HEAD**, без всей прежней истории develop. Далее каждый новый достижимый commit после стартового SHA, включая docs/test и коммиты через merge, получает RC в топологическом порядке. Несколько коммитов одним push дают несколько RC.
 
-## 4. Минимальная автоматизация
+На каждый исходный SHA помощник создаёт отдельный checkout. Commitizen создаёт версионный commit и тег `vX.Y.Z-rc.N`. В remote отправляется **только тег**: служебный commit не попадает обратно в release-ветку. Аннотация содержит версию приложения/chart и исходный SHA; для безопасной передачи через Commitizen JSON кодируется как `dnk-cicd:<base64-json>`.
 
-Нужны всего три локальные команды:
+Повтор того же SHA использует прежний тег. Один обработчик на release-ветку последовательно сверяет актуальную историю с тегами, восстанавливая коммиты из пропущенных запусков. Опубликованные RC сохраняются после финализации. GitHub Pre-release создаётся с `prerelease=true`, без Latest; это отдельная запись Releases, а не только тег Git.
 
-| Команда | Действие |
-| --- | --- |
-| `make check` | Существующие линт, тесты backend/frontend, проверки Helm и миграций — локально; PostgreSQL integration использует отдельную тестовую БД |
-| `make release` | Рассчитать номер, создать release-ветку и отправить её для первого prerelease |
-| `make publish` | Перенести последний prerelease или prod hotfix в main, сформировать финальную версию, проверить локально и отправить выпуск |
+Main должен указывать непосредственно на stable-тег, созданный `make publish`, с соответствующими файлами и метаданными версии. При выключенной доставке выпуск остаётся draft. Следующий `make publish` требует завершить предыдущий production-релиз. Для первого подключения нужно включить доставку и повторить workflow текущего main.
 
-Рабочие feature/hotfix-ветки создаются обычной командой Git. Настройка Commitizen:
+## 3. Версии и артефакты
 
-```toml
-[tool.commitizen]
-name = "cz_conventional_commits"
-version_provider = "uv"
-version_scheme = "semver2"
-tag_format = "v$version"
-major_version_zero = false
-update_changelog_on_bump = true
-changelog_merge_prerelease = true
-version_files = ["helm/Chart.yaml:appVersion"]
-```
+Commitizen настроен в `pyproject.toml`: `cz_conventional_commits`, provider `uv`, `semver2`, `v$version`, changelog, объединение prerelease changelog и точечное обновление `helm/Chart.yaml:appVersion`. `fix/perf/refactor` повышают PATCH, `feat` — MINOR, breaking change — MAJOR. Только docs/test/ci/chore не начинают новую серию, но внутри release каждый commit получает RC.
 
-`fix`, `perf`, `refactor` повышают PATCH; `feat` — MINOR; breaking change — MAJOR. Только docs/test/ci/chore не начинают новую серию выпусков, но в уже созданной release-ветке любой новый commit получает следующий RC. Provider `uv` согласует версию приложения с lockfile: [документация Commitizen](https://commitizen-tools.github.io/commitizen/config/version_provider/).
+Chart имеет отдельный счётчик: PATCH на каждый выпуск приложения, включая hotfix. Помощник меняет только верхнеуровневый `version`; Commitizen включает это изменение в тот же commit. Версии вложенных charts не повышаются.
 
-Для начального расчёта локальная команда использует `cz bump --get-next`. В release номер `X.Y.Z` фиксирован, а CI выбирает следующий свободный `rc.N` и передаёт его Commitizen: например, `cz bump 0.2.0-rc.2 --yes --changelog`. Явная автоматически рассчитанная версия обеспечивает RC даже для docs-only commit. При завершении выпуска на main выполняется `cz bump 0.2.0 --yes --changelog`. В обоих случаях **commit и Git-тег создаёт Commitizen**; примеры номеров подставляет автоматизация. См. [Commitizen bump](https://commitizen-tools.github.io/commitizen/commands/bump/).
+| Публикация | Приложение / appVersion | Chart / OCI tag |
+|---|---|---|
+| Первый RC | `0.1.0-rc.1` | `0.3.3-rc.1` |
+| Второй RC | `0.1.0-rc.2` | `0.3.3-rc.2` |
+| Первый stable | `0.1.0` | `0.3.3` |
+| Следующий hotfix | `0.1.1` | `0.3.4` |
 
-Версия Helm chart повышается автоматически для каждого выпуска, включая hotfix. Она имеет отдельный счётчик; правила публикации описаны ниже.
+Адреса GHCR:
 
-## 5. Версия и публикация Helm-пакета
+- Runtime/API/workers: `ghcr.io/dinikon/runtime/runtime`.
+- Console: `ghcr.io/dinikon/runtime/frontend-runtime`.
+- Helm: **`ghcr.io/dinikon/dnk-runtime-core/helm`**.
 
-В GitHub Packages публикуются три отдельных артефакта:
+Docker Bake собирает `linux/amd64` и `linux/arm64`. Каждая новая сборка получает `sha-<build-sha>-<run>-<attempt>`; RC/stable дополнительно получают тег версии приложения. `latest` автоматически не публикуется. Ручной Docker Bake без параметров использует локальный тег `local`.
 
-| Артефакт | Адрес |
-| --- | --- |
-| Runtime API и workers | `ghcr.io/dinikon/runtime/runtime` |
-| Console | `ghcr.io/dinikon/runtime/frontend-runtime` |
-| Helm-пакет | **`ghcr.io/dinikon/dnk-runtime-core/helm`** |
+Сначала публикуются оба образа. Затем во временной копии chart закрепляются image tags backend/workers/frontend; миграции и initContainers используют тот же Runtime. Там же фиксируется deployment revision. Chart включает локальные зависимости PostgreSQL/Redis/RabbitMQ и `publication.json`, содержащий версии и image digests. Исходный chart при упаковке не меняется; секреты в пакет не добавляются.
 
-Helm-пакет содержит chart `dnk-runtime-core`, его шаблоны, файлы и включённые зависимости PostgreSQL/Redis/RabbitMQ. В его `values.yaml` при упаковке фиксируются опубликованные image tags данного выпуска для backend, workers и frontend; migration Job и initContainer используют тот же runtime image. Секреты и настройки окружения остаются в ArgoCD/Kubernetes.
+Dev получает chart `<текущая-chart-version>-dev.<run>.<attempt>`; `appVersion` соответствует исходному приложению. Дополнительный OCI alias `dev` перемещается **только в разрешённом deployment-этапе**, после публикации полного комплекта.
 
-**`helm/Chart.yaml: version` повышается на PATCH один раз на каждый новый выпуск приложения**, даже если шаблоны не менялись. При создании release автоматически выбирается следующая версия chart от последнего финального main; prerelease меняет только суффикс `-rc.N`, а финализация убирает его. `appVersion` всегда соответствует версии приложения. Например, при нынешних chart `0.3.2` и приложении `0.1.0`:
+Chart сохраняет `name: dnk-runtime-core`. Используются `helm package` и ORAS: Helm config `application/vnd.cncf.helm.config.v1+json`, один слой `.tgz` `application/vnd.cncf.helm.chart.content.v1.tar+gzip`. Это даёт точный адрес `/dnk-runtime-core/helm`; обычный `helm push` добавил бы имя chart к repository.
 
-| Публикация | Приложение / `appVersion` | Chart `version` / OCI tag |
-| --- | --- | --- |
-| Первый prerelease следующего feature-выпуска | `0.2.0-rc.1` | `0.3.3-rc.1` |
-| Следующий prerelease | `0.2.0-rc.2` | `0.3.3-rc.2` |
-| Финальный выпуск из main | `0.2.0` | `0.3.3` |
-| Следующий prod hotfix | `0.2.1` | `0.3.4` |
+Метаданные OCI manifest и GitHub публикации содержат source/build SHA, версии, image digests и chart digest. Версионные теги никогда не перезаписываются: повтор сверяет метаданные, использует существующие образы/chart и завершает недостающие шаги. Ошибка авторизации registry не считается отсутствием артефакта.
 
-Номер chart вручную не вводится. Локальный/CI-помощник меняет **только верхнеуровневый `version`** в `helm/Chart.yaml` перед `cz bump`; файл уже включён в `version_files`, поэтому изменение входит в тот же commit и тег Commitizen, что и версия приложения. Версии вложенных charts автоматически не повышаются.
+## 4. Отдельное подключение пользователем
 
-Для develop CI упаковывает временную копию chart с уникальной SemVer-версией `<текущая-chart-version>-dev.<run>.<attempt>`, например `0.3.3-dev.12345.1`. Это не меняет Git и не занимает номер финального chart; `appVersion` берётся из текущего `project.version`.
+**Этот раздел — инструкция последующего подключения. В рамках реализации не меняются GitHub settings/secrets, существующий ArgoCD и ресурсы рабочего кластера. YAML ниже только подготовлен.**
 
-CI сначала публикует оба application image, затем упаковывает chart и отправляет его как **OCI Helm artifact** в `ghcr.io/dinikon/dnk-runtime-core/helm:<chart-version>`. OCI tag равен `Chart.version`, без префикса `v`; digest сохраняется в GitHub Pre-release/Release вместе с image tags. Опубликованная версия пакета не перезаписывается; повторный запуск использует существующий пакет и закреплённые в нём образы.
+### GitHub
 
-Для точного адреса `/dnk-runtime-core/helm` сохраняем `Chart.name: dnk-runtime-core`, используем `helm package` и публикацию через ORAS с Helm config media type `application/vnd.cncf.helm.config.v1+json` и одним слоем `.tgz` типа `application/vnd.cncf.helm.chart.content.v1.tar+gzip`. Обычный `helm push` дописывает имя chart к адресу и дал бы другой путь. См. [Helm OCI registries](https://helm.sh/docs/topics/registries/) и [ORAS push](https://oras.land/docs/commands/oras_push/).
+Подготовить environments `dev` и `prod` без ручных approvals. В каждом:
 
-## 6. Что делает CI/CD
+| Тип | Имя | Значение |
+|---|---|---|
+| Variable | `DEPLOY_ENABLED` | Отсутствует / `false` до явного включения; затем точное `true` |
+| Variable | `ARGOCD_SERVER` | Доступный runner адрес `host:port`, без `https://`; валидный TLS-сертификат |
+| Variable | `ARGOCD_APP` | `dnk-runtime-core-dev` или `dnk-runtime-core` |
+| Variable | `ARGOCD_VERSION` | Точная версия CLI, соответствующая серверу, например `v3.x.y` с числовыми компонентами |
+| Secret | `ARGOCD_AUTH_TOKEN` | Отдельный токен роли соответствующего Application |
 
-Достаточно одного `deploy.yml`, запускаемого на push в `develop`, `release/**` и `main`:
+GitHub-hosted runner должен иметь HTTPS-доступ к ArgoCD. CLI использует gRPC-Web, без отключения проверки сертификата. Нужна версия сервера с native OCI source (начиная с 3.1); перед подключением проверить установленную версию и совместимость.
 
-```text
-push develop   → образы → dev Helm OCI-пакет → GHCR → ArgoCD dev
-push release/* → Commitizen RC + Git-тег → образы + Helm OCI-пакет → GitHub Pre-release
-push main      → финальные образы + Helm OCI-пакет → GHCR → ArgoCD prod → GitHub Release
-```
+Workflow использует `GITHUB_TOKEN`: `contents: write` для тегов/Releases, `packages: write` для GHCR. Репозиторию Actions нужно предоставить write-доступ ко всем трём пакетам, включая существующие пакеты Runtime/Console. Credentials ORAS берутся из авторизации Docker на runner.
 
-Для `release/*` CI последовательно обрабатывает все ещё не опубликованные коммиты ветки. Для каждого создаёт в отдельном checkout служебный commit с RC-версиями приложения/chart и тегом Commitizen, отправляет **тег**, собирает образы и Helm-пакет из этого тега и создаёт GitHub Pre-release с changelog, исходным SHA и ссылками на все три артефакта. Служебный commit доступен через тег и не отправляется обратно в release-ветку: твоя рабочая история не меняется и цикл новых prerelease не возникает. `make publish` затем переносит выбранный тег в main.
+Разрешить собственные push в main/develop без обязательных PR/review/checks. Не требовать linear history: процесс использует merge commits. Запрет force-push сохранить. Не добавлять отдельные workflows на push тегов: теги и Releases создаются в текущем запуске, без цепочки запусков от `GITHUB_TOKEN`.
 
-На одну release-ветку работает один обработчик; он восстанавливает пропущенные коммиты по истории и соответствию «исходный SHA → RC-тег». Теги и соответствия сохраняются при сбое, поэтому повторный запуск продолжает публикацию того же RC. Создание тега и GitHub публикации выполняется в текущем workflow; отдельного запуска по тегу нет. Для Git-тегов и GitHub Releases достаточно `GITHUB_TOKEN` с `contents: write`, для GHCR — `packages: write`.
+### ArgoCD и Kubernetes YAML
 
-GitHub Pre-release — отдельная запись в Releases с признаком `prerelease: true`, а не только Git-тег. Финальная запись `vX.Y.Z` из main имеет `prerelease: false`. Для публикации используется уже существующий тег (`--verify-tag`); prerelease не помечается Latest. См. [GitHub Release create](https://cli.github.com/manual/gh_release_create).
+- `deploy/argocd/project.yaml`: AppProject, разрешённый OCI repository, два namespace, отдельные роли доставки dev/prod.
+- `deploy/argocd/dnk-runtime-core-dev.yaml`: Application dev, `targetRevision: dev`, auto-sync. Deployment revision берётся из пакета.
+- `deploy/argocd/dnk-runtime-core.yaml`: Application prod, placeholder digest, auto-sync выключен. Реальный digest и deployment revision выбирает включённый workflow.
+- `deploy/argocd/examples/credentials.yaml`: примеры OCI repository credentials, namespace-local `imagePullSecrets` и application Secret. Реальные значения не коммитятся.
 
-Доставка для `develop`/`main`:
+Источник обоих Applications — `oci://ghcr.io/dinikon/dnk-runtime-core/helm`, `path: .`, без поля `chart`. Helm release name — `dnk-runtime-core`; namespaces раздельные. ArgoCD получает OCI-пакет, распаковывает, рендерит Helm и применяет ресурсы. Image version overrides в Applications не задаются.
 
-1. Берёт точный SHA события push и собирает оба образа через существующий Docker Bake.
-2. Публикует их с уникальным тегом `sha-<commit>-<run>-<attempt>`; `latest` не используется. У каждого повтора сборки свой тег. Для RC и финального выпуска оба образа также получают версионный тег, например `0.2.0-rc.2` или `0.2.0`: он присваивается один раз и не перезаписывается. При повторе уже опубликованной версии используются сохранённые образы.
-3. В упаковочной копии chart фиксирует image tags, упаковывает и публикует OCI Helm-пакет. Весь комплект должен быть доступен до начала deployment; source SHA, версия и OCI digest пакета сохраняются в результате запуска.
-4. Обновляет нужный ArgoCD Application: `repoURL` указывает на OCI-пакет, а `targetRevision` — на его digest. `global.deployment.revision` получает уникальный идентификатор этого deployment.
-5. ArgoCD скачивает пакет из GHCR, распаковывает chart, рендерит Helm-шаблоны с настройками окружения и применяет ресурсы. CI запускает полный Sync и ждёт завершения rollout, включая штатный migration Job. Линт, тесты и приёмочные сценарии остаются локальными.
-6. После успешного prod deployment публикует финальный GitHub Release с changelog, версией и digest chart и image tags. До этого запись может оставаться draft; существующий stable Git-тег при сбое не удаляется.
+Перед самостоятельным применением заменить домены, SMTP и Secret references, подготовить нужные namespaces/Secrets, проверить IngressClass `nginx`, ClusterIssuer и storage. Credentials ArgoCD для чтения chart отдельны от Kubernetes image-pull credentials. Примеры используют токен GitHub с правом чтения приватных packages; реальные токены хранятся вне Git.
 
-Достаточно двух Applications — dev и prod. CI выбирает опубликованный пакет и запускает Sync; отдельный GitOps-репозиторий не нужен. Фрагмент нового источника Application:
+Другой GitOps-контроллер не должен возвращать Application к старому source/revision. Существующее отслеживание Git main нужно отключить/заменить в рамках отдельного подключения: флаг GitHub `DEPLOY_ENABLED` не управляет уже работающим ArgoCD Application из прежней схемы.
 
-```yaml
-source:
-  repoURL: oci://ghcr.io/dinikon/dnk-runtime-core/helm
-  targetRevision: "0.3.3" # Для читаемости; CI записывает фактический sha256:... digest.
-  path: .
-  helm:
-    releaseName: dnk-runtime-core
-```
+После настройки пользователь отдельно включает `DEPLOY_ENABLED=true` и повторяет workflow. При выключенном флаге ни CLI, ни registry alias не изменяют окружения; stable GitHub Release остаётся draft. Это постоянная настройка подключения, а не approve для каждого релиза.
 
-Используется native OCI source ArgoCD: `path: .`, без поля `chart`; `targetRevision` принимает tag или digest. ArgoCD сам получает и распаковывает Helm-слой, рендерит chart и управляет ресурсами. При внедрении нужна версия ArgoCD с поддержкой OCI sources. См. [ArgoCD OCI](https://argo-cd.readthedocs.io/en/stable/user-guide/oci/) и [ArgoCD Helm](https://argo-cd.readthedocs.io/en/stable/user-guide/helm/).
+## 5. Доставка и восстановление
 
-Applications закрепляются на **digest Helm-пакета**, auto-sync отключается; новый пакет выбирается перед явным Sync. Прежний Git-источник `path: helm` и отслеживание `main` заменяются OCI-источником. Image overrides в Application убираются, чтобы использовались версии из пакета; параметры окружения, release name, namespace и Secret references сохраняются. Эти настройки не должен перезаписывать другой контроллер.
+Будущая доставка сериализована по окружению, начатый rollout не отменяется новым push. Перед переключением пакета помощник повторно проверяет, что build SHA остаётся текущим HEAD целевой ветки; опоздавшая сборка пропускает delivery.
 
-Для приватного GHCR-пакета ArgoCD repo-server получает отдельные read credentials на OCI repository; Kubernetes `imagePullSecrets` продолжают использоваться для запуска Runtime/Console. CI получает `packages: write` и доступ к новому пакету `dnk-runtime-core/helm`.
+- Dev: переместить alias `dev` → hard refresh → дождаться именно нового digest, успешной миграции и `Synced/Healthy`.
+- Prod: установить digest и новый `global.deployment.revision` → полный Sync → дождаться миграций и rollout → опубликовать GitHub Release из draft.
 
-В одном окружении deployment выполняется последовательно; начатую миграцию новый push не отменяет. Перед обновлением Application job сверяет свой SHA с текущей целевой веткой, чтобы опоздавшая сборка не вернула старый код. Prod-сборка выполняется из main заново: это отдельная сборка от ранее развёрнутой на dev.
+Сохраняются существующие Sync hooks, waves и migration gate. Deployment не начинается при ошибке публикации артефактов. Для повторной production-доставки используется тот же пакет и новый идентификатор операции. Результат dev также проверяется по digest, а не только по имени тега или прежнему Healthy.
 
-Если сборка образов или публикация Helm-пакета не удалась, deployment не начинается. После сбоя доставки повторяешь нужный запуск. Для rollback возвращаешь в ArgoCD **digest предыдущего успешного Helm-пакета**: он уже содержит нужные image tags. Задаёшь новый идентификатор операции `global.deployment.revision` и выполняешь полный Sync. Откат пакета не откатывает БД; старый код должен быть совместим с уже применёнными миграциями. Пока main и фактический prod расходятся после сбоя/rollback, сначала восстанови согласованность, затем начинай следующий выпуск или hotfix.
+При сбое Actions — исправить причину и выполнить Re-run. Можно повторить весь workflow либо только упавший delivery job: `publication.json` хранится в artifact данного run и не зависит от номера попытки delivery. После истечения срока хранения artifact нужно повторить весь workflow.
 
-## 7. Что потребуется внедрить
+Локальный `make publish` хранит этап и SHA в `git rev-parse --git-path cicd-publish.json`. При конфликте решить его, сделать merge commit и повторить `make publish`. После проваленной проверки исправления кода требуют аккуратно пересобрать ещё не отправленную локальную транзакцию: сохранить изменения/ветку, проверить записанные refs, отменить только локальные подготовленные refs и журнал, внести исправление в исходную release/hotfix-ветку и начать заново. Опубликованные теги не удалять и не перемещать. Если удалённый main/develop изменился во время операции, помощник останавливается для согласования истории, а не делает force-push.
 
-- Добавить три локальные команды и конфигурацию Commitizen. Один раз согласовать стартовый stable tag, `project.version`, `uv.lock` и нынешний Helm `appVersion`; сохранить `Chart.version: 0.3.2` как исходную версию отдельного счётчика.
-- Добавить обработку каждого нового release-коммита, создание RC-тегов Commitizen и GitHub Pre-release; из main публиковать финальный GitHub Release.
-- Перенести проверки из `.github/workflows/ci.yml` и `helm.yml` в `make check`; автоматические CI-проверки отключить, сборку и доставку оставить в `deploy.yml`.
-- В Docker Bake убрать автоматическое добавление `latest` и передавать уникальный image tag из workflow.
-- Добавить автоматическое повышение `Chart.version`, упаковку с image tags выпуска и OCI-публикацию по адресу `ghcr.io/dinikon/dnk-runtime-core/helm`. Сборочные файлы версии и содержимое OCI-пакета должны согласовываться.
-- Перевести ArgoCD dev/prod на OCI Helm source, подготовить доступ CI к ArgoCD и GHCR, read credentials для скачивания chart. Секреты приложений остаются в окружениях.
-- Разрешить собственный push в develop/main, без обязательных PR/review/CI checks; запрет force-push можно сохранить.
+Rollback — отдельная операция пользователя: вернуть предыдущий успешный chart digest в ArgoCD, задать новый deployment revision и выполнить полный Sync. Пакет содержит нужные image tags. БД автоматически не откатывается; предыдущий код должен поддерживать уже применённые миграции. После rollback или failed release восстановить согласованность main/prod до следующего выпуска.
+
+## 6. Локальная приёмка
+
+`make check` включает реальные Git/Commitizen-тесты во временных репозиториях и fake GitHub/registry API: первый RC/stable, docs-only, несколько commits одним push, merge, hotfix, пересечение с release, конфликт обратного merge, повтор после проверки/частичной публикации, отсутствие delivery при выключенном флаге.
+
+`make check-full` дополнительно запускает существующий Kind smoke, PostgreSQL migration integration и `python -m scripts.cicd.local_oci`. Последний устанавливает ArgoCD **только в новый временный Kind**, поднимает временный локальный registry, проверяет OCI media types/pull, смену `dev`, миграции/rollout и повтор применения того же digest с новым deployment revision. Для этого теста используются локальные Runtime/Console images, собранные предыдущим smoke-тестом. HTTP registry разрешён только внутри этого локального теста.
+
+Критерий готовности реализации — файлы и инструкции подготовлены, локальные проверки выполнены. Рабочий deployment и первая публикация в реальный GitHub/GHCR не входят в приёмку этой задачи.
+
+Официальные справочники: [Commitizen bump](https://commitizen-tools.github.io/commitizen/commands/bump/), [Helm OCI](https://helm.sh/docs/topics/registries/), [ORAS push](https://oras.land/docs/commands/oras_push/), [ArgoCD OCI source](https://argo-cd.readthedocs.io/en/stable/user-guide/oci/).
