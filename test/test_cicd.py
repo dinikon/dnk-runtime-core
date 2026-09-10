@@ -22,6 +22,7 @@ from scripts.cicd.artifacts import (
     package_chart,
     publish_artifacts,
     publish_images,
+    wait_for_manifest,
 )
 from scripts.cicd.common import Error, ROOT, run, versions
 from scripts.cicd.delivery import deliver
@@ -173,6 +174,7 @@ class GitHubReleaseTests(unittest.TestCase):
 
 class ReleaseTests(unittest.TestCase):
     def setUp(self):
+        self.enterContext(mock_patch("scripts.cicd.artifacts.time.sleep"))
         self.temporary = tempfile.TemporaryDirectory(prefix="dnk-git-test-")
         self.addCleanup(self.temporary.cleanup)
         parent = Path(self.temporary.name)
@@ -471,6 +473,9 @@ class ArtifactTests(unittest.TestCase):
     app = "0.1.0-rc.1"
     source = "source-sha"
 
+    def setUp(self):
+        self.sleep = self.enterContext(mock_patch("scripts.cicd.artifacts.time.sleep"))
+
     def save_image(self, registry, target, tag, source=None):
         registry.save(
             f"{self.prefix}/{target}:{tag}",
@@ -554,8 +559,106 @@ class ArtifactTests(unittest.TestCase):
         def incomplete(root, targets, env):
             self.save_image(registry, "runtime", env["IMAGE_TAG"])
 
-        with self.assertRaisesRegex(Error, "without publishing image frontend-runtime"):
+        with self.assertRaisesRegex(
+            Error, "still does not expose .*frontend-runtime:sha-source-123-1"
+        ):
             self.publish(registry, incomplete)
+
+    def test_successful_push_waits_for_image_and_version_tag_visibility(self):
+        registry = MemoryRegistry()
+        pending = {}
+        manifest, alias = registry.manifest, registry.alias
+
+        def delayed(ref):
+            if pending.get(ref, 0):
+                pending[ref] -= 1
+                return None
+            return manifest(ref)
+
+        def publish_alias(repository, digest, tag):
+            alias(repository, digest, tag)
+            pending[f"{repository}:{tag}"] = 2
+
+        registry.manifest = delayed
+        registry.alias = publish_alias
+
+        def build(root, targets, env):
+            for target in targets:
+                self.save_image(registry, target, env["IMAGE_TAG"])
+                pending[f"{self.prefix}/{target}:{env['IMAGE_TAG']}"] = 2
+
+        result = self.publish(registry, build)
+        self.assertEqual(set(result), {"runtime", "frontend-runtime"})
+        self.assertTrue(self.sleep.called)
+        for target in result:
+            self.assertEqual(
+                registry.digest(f"{self.prefix}/{target}:{self.app}"),
+                result[target]["digest"],
+            )
+        builder = Mock(side_effect=AssertionError("Images already published"))
+        self.assertEqual(self.publish(registry, builder), result)
+        builder.assert_not_called()
+
+    def test_partial_failure_recovers_image_that_is_not_immediately_visible(self):
+        registry = MemoryRegistry()
+        manifest = registry.manifest
+        pending = []
+
+        def delayed(ref):
+            if pending and ref.endswith(":sha-source-123-1") and "/runtime:" in ref:
+                pending.pop()
+                return None
+            return manifest(ref)
+
+        registry.manifest = delayed
+
+        def build(root, targets, env):
+            self.save_image(registry, "runtime", env["IMAGE_TAG"])
+            pending.extend([None, None])
+            raise Error("frontend build failed")
+
+        with self.assertRaisesRegex(Error, "frontend build failed"):
+            self.publish(registry, build)
+        self.assertIsNotNone(manifest(f"{self.prefix}/runtime:{self.app}"))
+        self.assertIsNone(manifest(f"{self.prefix}/frontend-runtime:{self.app}"))
+
+    def test_missing_manifest_wait_is_bounded_and_reports_exact_reference(self):
+        registry = Mock()
+        registry.manifest.return_value = None
+        ref = "registry.example/runtime:sha-source-123-1"
+        with self.assertRaisesRegex(Error, ref + " after 7 checks"):
+            wait_for_manifest(registry, ref)
+        self.assertEqual(registry.manifest.call_count, 7)
+        self.assertEqual(sum(call.args[0] for call in self.sleep.call_args_list), 60)
+
+    def test_manifest_wait_does_not_retry_registry_auth_failure(self):
+        registry = Mock()
+        registry.manifest.side_effect = Error("denied: requested access")
+        with self.assertRaisesRegex(Error, "denied"):
+            wait_for_manifest(registry, "registry.example/runtime:version")
+        registry.manifest.assert_called_once()
+        self.sleep.assert_not_called()
+
+    def test_delayed_wrong_image_is_not_promoted(self):
+        registry = MemoryRegistry()
+        manifest = registry.manifest
+        pending = []
+
+        def delayed(ref):
+            if pending and ref.endswith(":sha-source-123-1"):
+                pending.pop()
+                return None
+            return manifest(ref)
+
+        registry.manifest = delayed
+
+        def build(root, targets, env):
+            self.save_image(registry, "runtime", env["IMAGE_TAG"], source="wrong")
+            pending.append(None)
+
+        with self.assertRaisesRegex(Error, "different source/version"):
+            self.publish(registry, build)
+        self.assertIsNone(manifest(f"{self.prefix}/runtime:{self.app}"))
 
 
 class DeliveryTests(unittest.TestCase):

@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import shutil
 import tempfile
+import time
 from urllib.parse import quote
 
 import httpx
@@ -20,6 +21,7 @@ CHART_REPOSITORY = "ghcr.io/dinikon/dnk-runtime-core/helm"
 HELM_CONFIG = "application/vnd.cncf.helm.config.v1+json"
 HELM_LAYER = "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
 PUBLICATION = "io.dnk.publication"
+REGISTRY_RETRY_DELAYS = (1, 2, 4, 8, 15, 30)
 
 
 class Registry:
@@ -35,7 +37,7 @@ class Registry:
                 for text in ("manifest unknown", "manifest_unknown", "not found", "404")
             ):
                 return None
-            raise Error("Registry lookup failed: " + result.stderr)
+            raise Error(f"Registry lookup failed for {ref}: " + result.stderr)
         return json.loads(result.stdout)
 
     def digest(self, ref):
@@ -64,7 +66,26 @@ class Registry:
             f"{archive.name}:{HELM_LAYER}",
             cwd=archive.parent,
         )
+        wait_for_manifest(self, ref)
         return self.digest(ref)
+
+
+def wait_for_manifest(registry, ref):
+    """A successful push may become readable later; retry only missing manifests."""
+    for number, delay in enumerate((0, *REGISTRY_RETRY_DELAYS), 1):
+        if delay:
+            print(
+                f"Waiting for registry manifest {ref}; retry {number} in {delay}s",
+                flush=True,
+            )
+            time.sleep(delay)
+        manifest = registry.manifest(ref)
+        if manifest is not None:
+            return manifest
+    raise Error(
+        f"Registry still does not expose {ref} after {number} checks; "
+        "the push may have succeeded. Retry publication without deleting artifacts"
+    )
 
 
 def package_chart(root, destination, publication):
@@ -136,14 +157,22 @@ def build_images(root, targets, environment):
     )
 
 
-def published_image(registry, repository, tag, unique_tag, source, app):
+def published_image(registry, repository, tag, unique_tag, source, app, *, wait=False):
     """Find a complete image and, if needed, attach its immutable version tag."""
     immutable_ref = repository + ":" + tag
     built_ref = repository + ":" + unique_tag
-    manifest = registry.manifest(immutable_ref)
+    manifest = (
+        wait_for_manifest(registry, immutable_ref)
+        if wait and tag == unique_tag
+        else registry.manifest(immutable_ref)
+    )
     promote = manifest is None and tag != unique_tag
     if promote:
-        manifest = registry.manifest(built_ref)
+        manifest = (
+            wait_for_manifest(registry, built_ref)
+            if wait
+            else registry.manifest(built_ref)
+        )
     if manifest is None:
         return None
     annotations = manifest.get("annotations", {})
@@ -160,6 +189,9 @@ def published_image(registry, repository, tag, unique_tag, source, app):
         if registry.manifest(immutable_ref) is not None:
             raise Error("Version appeared during build; retry to validate and reuse it")
         registry.alias(repository, digest, tag)
+        wait_for_manifest(registry, immutable_ref)
+        if registry.digest(immutable_ref) != digest:
+            raise Error(f"Version {immutable_ref} changed during publication")
     print(f"Image ready: {immutable_ref} ({digest})", flush=True)
     return {"repository": repository, "tag": tag, "digest": digest}
 
@@ -167,9 +199,15 @@ def published_image(registry, repository, tag, unique_tag, source, app):
 def publish_images(root, registry, image_prefix, app, source, unique_tag, tag, builder):
     images, missing = {}, []
 
-    def collect(target):
+    def collect(target, *, wait=False):
         return published_image(
-            registry, image_prefix + "/" + target, tag, unique_tag, source, app
+            registry,
+            image_prefix + "/" + target,
+            tag,
+            unique_tag,
+            source,
+            app,
+            wait=wait,
         )
 
     for target in ("runtime", "frontend-runtime"):
@@ -193,15 +231,15 @@ def publish_images(root, registry, image_prefix, app, source, unique_tag, tag, b
             # completed image's version tag so the next run attempt can reuse it.
             for target in missing:
                 try:
-                    collect(target)
-                except Error:
+                    collect(target, wait=True)
+                except Error as error:
                     print(
-                        f"Could not recover image {target}; inspect on retry",
+                        f"Could not recover image {target}: {error}",
                         flush=True,
                     )
             raise
         for target in missing:
-            image = collect(target)
+            image = collect(target, wait=True)
             if image is None:
                 raise Error(f"Build completed without publishing image {target}")
             images[target] = image
