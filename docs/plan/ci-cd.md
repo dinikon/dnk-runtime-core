@@ -2,7 +2,7 @@
 
 **Граница реализации: готовим файлы автоматизации, YAML-манифесты и инструкции. Ничего не применяем в существующий кластер, не изменяем рабочий ArgoCD и не запускаем dev/prod deployment. Разворачивать ресурсы для проверки можно только локально, в отдельном временном Kind-кластере с собственным kubeconfig.**
 
-Описанный ниже процесс работает после отдельного подключения пользователем. В репозитории подготовлены команды и workflow; наличие файлов не означает, что окружения уже настроены. Доставка выключена по умолчанию: только значение `DEPLOY_ENABLED=true` соответствующего GitHub environment разрешает обращения к ArgoCD и перемещение Helm-тега `dev`.
+GitHub Actions занимается только публикацией образов, Helm-пакетов и GitHub Releases. GitHub Deployments и environments `dev`/`prod` не используются. Контроллер внутри закрытого контура самостоятельно читает Git/GHCR и применяет нужную версию. У Actions нет команд доступа к кластеру или API ArgoCD.
 
 ## 1. Команды и обычный процесс
 
@@ -17,7 +17,7 @@
 
 Для приватного репозитория перед запуском экспортируйте `GH_TOKEN` или `GITHUB_TOKEN` с доступом к репозиторию и разрешением **Contents: read** (fine-grained personal access token). `GH_TOKEN` имеет приоритет. Авторизация Git для push настраивается отдельно; Python не читает токены из Git credential helper или `.env`. Пример для zsh: `read -rs 'GH_TOKEN?GitHub token: '; export GH_TOKEN`, затем `make publish`. Для опубликованных релизов публичного репозитория токен необязателен, но без него ниже лимит API-запросов. Ошибки доступа и лимитов останавливают команду с подсказкой; отсутствие готового релиза сохраняет ожидание. См. [GitHub Releases API](https://docs.github.com/en/rest/releases/releases#get-a-release-by-tag-name).
 
-Создание и финализация GitHub Releases командами `ci`/`deliver` в GitHub Actions по-прежнему используют `gh`, доступный на runner.
+Команда `ci` создаёт опубликованные GitHub Releases через `gh`, доступный на runner. Stable Release появляется после готовности обоих образов и Helm-пакета; ожидания доставки и этапа draft нет.
 
 Подготовка зависимостей: `uv sync --frozen`. Проверки запускают PostgreSQL на случайном локальном порту и удаляют свой контейнер при завершении. Backend проверяется в временной копии исходников с тестовой `.env`; рабочая `.env` не заменяется, рабочие базы не используются. Frontend использует `npm ci` и существующие lint/typecheck/build команды. Kind-тесты создают только собственные кластеры `dnk-test-*`, всегда используют отдельный kubeconfig и явный context; текущий Kubernetes context не переключается.
 
@@ -71,13 +71,13 @@ make publish
 
 ## 2. Триггеры и GitHub Releases
 
-Workflow: `.github/workflows/deploy.yml`. Проверки качества выполняются локально; Actions создаёт версии, собирает и публикует артефакты, а после включения доставки управляет ArgoCD.
+Workflow: `.github/workflows/deploy.yml`, название **Build and publish**, один job `publish`. Проверки качества выполняются локально; Actions создаёт версии и публикует артефакты. В workflow нет `environment`, deployment job, ArgoCD CLI и Kubernetes-команд.
 
 | Триггер | Результат |
 |---|---|
-| Push `develop` | Runtime/Console и уникальный dev chart; dev deployment только при включённой доставке |
-| Push `release/**` | На каждый новый commit: RC-тег Commitizen, образы, chart и GitHub Pre-release; без deployment |
-| Push `main` | Stable-образы и chart, GitHub draft; после успешной включённой доставки — обычный GitHub Release |
+| Push `develop` | Runtime/Console с тегом `dev-<8 символов SHA>`, dev chart и обновление Helm alias `dev` |
+| Push `release/**` | На каждый новый commit: RC-тег Commitizen, образы, chart и опубликованный GitHub Pre-release |
+| Push `main` | Stable-образы и chart, сразу опубликованный GitHub Release, обновление image alias `latest` |
 | Re-run / workflow_dispatch на поддерживаемой ветке | Возобновление обработки |
 | Feature/hotfix, pull_request, push тегов | Запуска нет |
 
@@ -87,7 +87,7 @@ Workflow: `.github/workflows/deploy.yml`. Проверки качества вы
 
 Повтор того же SHA использует прежний тег. Один обработчик на release-ветку последовательно сверяет актуальную историю с тегами, восстанавливая коммиты из пропущенных запусков. Опубликованные RC сохраняются после финализации. GitHub Pre-release создаётся с `prerelease=true`, без Latest; это отдельная запись Releases, а не только тег Git.
 
-Main должен указывать непосредственно на stable-тег, созданный `make publish`, с соответствующими файлами и метаданными версии. При выключенной доставке выпуск остаётся draft. Следующий `make publish` требует завершить предыдущий production-релиз. Для первого подключения нужно включить доставку и повторить workflow текущего main.
+Main должен указывать непосредственно на stable-тег, созданный `make publish`, с соответствующими файлами и метаданными версии. Stable Release создаётся с `draft=false`; старый draft при повторе обработки публикуется после проверки готовых артефактов. Следующий `make publish` требует готовую публикацию предыдущей версии в GitHub, но не проверяет состояние кластера. Если предыдущая публикация упала, повторить её workflow. GitHub Release означает доступность версии для установки; установленную версию и её здоровье показывает внутренний контроллер.
 
 ## 3. Версии и артефакты
 
@@ -104,75 +104,66 @@ Chart имеет отдельный счётчик: PATCH на каждый вы
 
 Адреса GHCR:
 
-- Runtime/API/workers: `ghcr.io/dinikon/runtime/runtime`.
-- Console: `ghcr.io/dinikon/runtime/frontend-runtime`.
+- Runtime/API/workers: `ghcr.io/dinikon/dnk-runtime-core/runtime`.
+- Console: `ghcr.io/dinikon/dnk-runtime-core/frontend-runtime`.
 - Helm: **`ghcr.io/dinikon/dnk-runtime-core/helm`**.
 
-Docker Bake собирает `linux/amd64` и `linux/arm64`. Каждая новая сборка получает `sha-<build-sha>-<run>-<attempt>`; RC/stable дополнительно получают тег версии приложения. `latest` автоматически не публикуется. Ручной Docker Bake без параметров использует локальный тег `local`.
+Docker Bake собирает `linux/amd64` и `linux/arm64`. Образы Runtime и Console получают одинаковую схему тегов:
 
-Отсутствующие Runtime и Console передаются одному вызову Bake и собираются параллельно. Уже опубликованные образы повторно не собираются; если одна сборка завершилась, а другая упала, готовый RC/stable-образ проверяется и получает тег версии для использования при следующей попытке. Helm-пакет публикуется только после готовности обоих образов.
+| Источник | Тег образа | Плавающий тег |
+|---|---|---|
+| `develop`, SHA `12345678abcdef…` | `dev-12345678` | Нет |
+| `release/X.Y.Z` | `X.Y.Z-rc.N` | Нет |
+| `main` | `X.Y.Z` | `latest` |
+
+Dev использует первые восемь символов исходного commit SHA. Полный SHA сохраняется в OCI annotations и `publication.json`: совпадение короткого префикса у разных коммитов останавливает публикацию, а не перезаписывает образ. Сборка сразу публикует конечный тег; длинные временные `sha-…` теги больше не создаются. Повтор того же коммита или версии использует существующие образы даже при другом run/attempt. Ранее опубликованные теги сохраняются.
+
+`latest` у обоих образов перемещается только после готовности stable-образов, chart и GitHub Release из актуального main. Dev и RC его не изменяют. Перед каждым перемещением помощник обновляет refs и сверяет полный SHA с HEAD удалённой ветки: повтор старого запуска не возвращает alias на старую версию. Частичный сбой перемещения aliases можно повторить без пересборки. Ручной Docker Bake без параметров использует локальный тег `local`.
+
+Отсутствующие Runtime и Console передаются одному вызову Bake и собираются параллельно. Уже опубликованные образы повторно не собираются; если одна сборка завершилась, а другая упала, готовый образ уже имеет конечный тег и после проверки используется при следующей попытке. Helm-пакет публикуется только после готовности обоих образов.
 
 Node-этап Console выполняется на `$BUILDPLATFORM`: статические HTML/JS/CSS собираются на родной архитектуре builder и копируются в Nginx для каждой целевой платформы. Вывод Bake идёт непосредственно в Actions с `--progress=plain`; помощник также выводит этапы проверки образов, упаковки и публикации chart. Эти изменения не добавляют кэш между запусками.
 
 Сначала публикуются оба образа. Затем во временной копии chart закрепляются image tags backend/workers/frontend; миграции и initContainers используют тот же Runtime. Там же фиксируется deployment revision. Chart включает локальные зависимости PostgreSQL/Redis/RabbitMQ и `publication.json`, содержащий версии и image digests. Исходный chart при упаковке не меняется; секреты в пакет не добавляются.
 
-Dev получает chart `<текущая-chart-version>-dev.<run>.<attempt>`; `appVersion` соответствует исходному приложению. Дополнительный OCI alias `dev` перемещается **только в разрешённом deployment-этапе**, после публикации полного комплекта.
+Dev получает chart `<текущая-chart-version>-dev.<run>.<attempt>`; `appVersion` соответствует исходному приложению. Дополнительный OCI alias `dev` перемещается после публикации полного комплекта для актуального HEAD develop. Это публикация указателя в GHCR; обращения к кластеру нет. Старый запуск не перемещает alias назад.
 
 Chart сохраняет `name: dnk-runtime-core`. Используются `helm package` и ORAS: Helm config `application/vnd.cncf.helm.config.v1+json`, один слой `.tgz` `application/vnd.cncf.helm.chart.content.v1.tar+gzip`. Это даёт точный адрес `/dnk-runtime-core/helm`; обычный `helm push` добавил бы имя chart к repository.
 
 Метаданные OCI manifest и GitHub публикации содержат source/build SHA, версии, image digests и chart digest. Версионные теги никогда не перезаписываются: повтор сверяет метаданные, использует существующие образы/chart и завершает недостающие шаги. Ошибка авторизации registry не считается отсутствием артефакта.
 
-После успешной загрузки GHCR может не сразу возвращать манифест при чтении. Помощник ожидает доступность уникального image tag, присвоенного тега версии и опубликованного chart: до семи проверок с задержками `1, 2, 4, 8, 15, 30` секунд. В логе видны полный адрес артефакта и номер попытки. Повторяется только отсутствие манифеста; ошибки авторизации и несовпадение метаданных останавливают публикацию. Истечение ожидания не означает, что загруженный образ нужно удалять.
+После успешной загрузки GHCR может не сразу возвращать манифест при чтении. Помощник ожидает доступность конечного image tag и опубликованного chart: до семи проверок с задержками `1, 2, 4, 8, 15, 30` секунд. В логе видны полный адрес артефакта и номер попытки. При перемещении alias дополнительно ожидается именно выбранный digest, даже если registry пока возвращает старый манифест. Повторяется только отсутствие ожидаемого манифеста; ошибки авторизации и несовпадение метаданных останавливают публикацию. Истечение ожидания не означает, что загруженный образ нужно удалять.
 
-## 4. Отдельное подключение пользователем
+## 4. Настройки GitHub и закрытого контура
 
-**Этот раздел — инструкция последующего подключения. В рамках реализации не меняются GitHub settings/secrets, существующий ArgoCD и ресурсы рабочего кластера. YAML ниже только подготовлен.**
+Workflow использует встроенный `GITHUB_TOKEN` с `contents: write` для тегов/Releases и `packages: write` для GHCR. Репозиторию Actions нужен write-доступ ко всем трём пакетам Runtime/Console/Helm, включая уже существующие. ORAS использует авторизацию Docker на runner.
 
-### GitHub
+GitHub environments `dev`/`prod`, переменные `DEPLOY_ENABLED`, `ARGOCD_SERVER`, `ARGOCD_APP`, `ARGOCD_VERSION` и secret `ARGOCD_AUTH_TOKEN` больше не нужны. Новый workflow не создаёт GitHub Deployments. Старые записи Deployments остаются историей; удаление GitHub settings, секретов и исторических записей не выполняется автоматически.
 
-Подготовить environments `dev` и `prod` без ручных approvals. В каждом:
+Разрешить собственные push в main/develop без обязательных PR/review/checks. Процесс использует merge commits; запрет force-push сохранить. Отдельный workflow на push тегов не нужен: теги и Releases создаются в текущем запуске.
 
-| Тип | Имя | Значение |
-|---|---|---|
-| Variable | `DEPLOY_ENABLED` | Отсутствует / `false` до явного включения; затем точное `true` |
-| Variable | `ARGOCD_SERVER` | Доступный runner адрес `host:port`, без `https://`; валидный TLS-сертификат |
-| Variable | `ARGOCD_APP` | `dnk-runtime-core-dev` или `dnk-runtime-core` |
-| Variable | `ARGOCD_VERSION` | Точная версия CLI, соответствующая серверу, например `v3.x.y` с числовыми компонентами |
-| Secret | `ARGOCD_AUTH_TOKEN` | Отдельный токен роли соответствующего Application |
+Кластер самостоятельно читает источники через разрешённый исходящий доступ к Git/GHCR или их внутреннему зеркалу. Подготовленные YAML остаются примерами для отдельного подключения пользователем:
 
-GitHub-hosted runner должен иметь HTTPS-доступ к ArgoCD. CLI использует gRPC-Web, без отключения проверки сертификата. Нужна версия сервера с native OCI source (начиная с 3.1); перед подключением проверить установленную версию и совместимость.
-
-Workflow использует `GITHUB_TOKEN`: `contents: write` для тегов/Releases, `packages: write` для GHCR. Репозиторию Actions нужно предоставить write-доступ ко всем трём пакетам, включая существующие пакеты Runtime/Console. Credentials ORAS берутся из авторизации Docker на runner.
-
-Разрешить собственные push в main/develop без обязательных PR/review/checks. Не требовать linear history: процесс использует merge commits. Запрет force-push сохранить. Не добавлять отдельные workflows на push тегов: теги и Releases создаются в текущем запуске, без цепочки запусков от `GITHUB_TOKEN`.
-
-### ArgoCD и Kubernetes YAML
-
-- `deploy/argocd/project.yaml`: AppProject, разрешённый OCI repository, два namespace, отдельные роли доставки dev/prod.
+- `deploy/argocd/project.yaml`: AppProject с разрешённым OCI repository и двумя namespace; ролей для токенов GitHub Actions нет.
 - `deploy/argocd/dnk-runtime-core-dev.yaml`: Application dev, `targetRevision: dev`, auto-sync. Deployment revision берётся из пакета.
-- `deploy/argocd/dnk-runtime-core.yaml`: Application prod, placeholder digest, auto-sync выключен. Реальный digest и deployment revision выбирает включённый workflow.
-- `deploy/argocd/examples/credentials.yaml`: примеры OCI repository credentials, namespace-local `imagePullSecrets` и application Secret. Реальные значения не коммитятся.
+- `deploy/argocd/dnk-runtime-core.yaml`: Application prod с placeholder digest. Нужную версию и способ Sync выбирает конфигурация внутри контура.
+- `deploy/argocd/examples/credentials.yaml`: примеры credentials для чтения chart, `imagePullSecrets` и application Secret без реальных значений.
 
-Источник обоих Applications — `oci://ghcr.io/dinikon/dnk-runtime-core/helm`, `path: .`, без поля `chart`. Helm release name — `dnk-runtime-core`; namespaces раздельные. ArgoCD получает OCI-пакет, распаковывает, рендерит Helm и применяет ресурсы. Image version overrides в Applications не задаются.
+Источник OCI Applications — `oci://ghcr.io/dinikon/dnk-runtime-core/helm`, `path: .`, без поля `chart`. Helm release name — `dnk-runtime-core`; namespaces раздельные. ArgoCD внутри контура получает OCI-пакет, рендерит Helm и применяет ресурсы. Нужна версия ArgoCD с поддержкой native OCI source.
 
-Перед самостоятельным применением заменить домены, SMTP и Secret references, подготовить нужные namespaces/Secrets, проверить IngressClass `nginx`, ClusterIssuer и storage. Credentials ArgoCD для чтения chart отдельны от Kubernetes image-pull credentials. Примеры используют токен GitHub с правом чтения приватных packages; реальные токены хранятся вне Git.
+Production Application с фиксированным digest не выбирает новый chart автоматически. После публикации нужно обновить digest в отслеживаемой GitOps-конфигурации и выполнить Sync согласно внутренней политике. Само появление image tag `latest` не меняет выбранный chart: в пакете backend/workers/frontend и миграции закреплены на тегах конкретной версии. Для управления окружениями можно использовать отдельную GitOps-ветку или репозиторий.
 
-Другой GitOps-контроллер не должен возвращать Application к старому source/revision. Существующее отслеживание Git main нужно отключить/заменить в рамках отдельного подключения: флаг GitHub `DEPLOY_ENABLED` не управляет уже работающим ArgoCD Application из прежней схемы.
+Перед самостоятельным применением подготовить namespaces/Secrets, реальные домены, SMTP, IngressClass, ClusterIssuer и storage. Credentials ArgoCD для чтения chart и credentials Kubernetes для чтения образов настраиваются внутри контура; реальные токены в Git не сохраняются. Существующие migration hooks и waves сохраняются.
 
-После настройки пользователь отдельно включает `DEPLOY_ENABLED=true` и повторяет workflow. При выключенном флаге ни CLI, ни registry alias не изменяют окружения; stable GitHub Release остаётся draft. Это постоянная настройка подключения, а не approve для каждого релиза.
+**Ресурсы рабочего кластера и настройки работающего ArgoCD в рамках изменений репозитория не применяются и не изменяются.**
 
-## 5. Доставка и восстановление
+## 5. Повторы и восстановление
 
-Будущая доставка сериализована по окружению, начатый rollout не отменяется новым push. Перед переключением пакета помощник повторно проверяет, что build SHA остаётся текущим HEAD целевой ветки; опоздавшая сборка пропускает delivery.
+При сбое публикации выполнить Re-run. Помощник сверяет версии, полный source/build SHA и использует существующие артефакты. Если один образ уже готов, собирается только недостающий. Если chart готов, повторно используются весь пакет и записанные digests; затем завершается публикация Release и обновление aliases. GitHub Release и floating tags появляются после полного набора артефактов, а не после частично успешной сборки.
 
-- Dev: переместить alias `dev` → hard refresh → дождаться именно нового digest, успешной миграции и `Synced/Healthy`.
-- Prod: установить digest и новый `global.deployment.revision` → полный Sync → дождаться миграций и rollout → опубликовать GitHub Release из draft.
+`publication.json` сохраняется в artifact запуска и внутри Helm-пакета. Run/attempt остаются служебными метаданными и частью версии dev chart, но не входят в новые теги образов. Dev chart также получает уникальный `global.deployment.revision`.
 
-Сохраняются существующие Sync hooks, waves и migration gate. Deployment не начинается при ошибке публикации артефактов. Для повторной production-доставки используется тот же пакет и новый идентификатор операции. Результат dev также проверяется по digest, а не только по имени тега или прежнему Healthy.
-
-При сбое Actions — исправить причину и выполнить Re-run. Можно повторить весь workflow либо только упавший delivery job: `publication.json` хранится в artifact данного run и не зависит от номера попытки delivery. После истечения срока хранения artifact нужно повторить весь workflow.
-
-Re-run выполняет код исходного SHA: изменения помощника на develop не подменяют код уже выпущенного main. При восстановлении старого выпуска сохраняются его stable-тег, исходные SHA и digests. Если образы уже загрузились под уникальными тегами, исправленный помощник может завершить присвоение версионных тегов и упаковку исходного chart; последующий Re-run использует готовый chart и создаёт GitHub Release без пересборки образов.
+Re-run выполняет код исходного SHA. Новая схема начинает действовать в запусках с обновлённым workflow; изменения на develop не подменяют код ранее выпущенного main. Уже опубликованные версионные теги не перемещаются и не удаляются.
 
 Локальный `make publish` хранит этап и SHA в `git rev-parse --git-path cicd-publish.json`. При конфликте решить его, сделать merge commit и повторить `make publish`. Если проверка упала из-за временной проблемы окружения и исходники не менялись, достаточно устранить причину и повторить команду: версия повторно не повышается.
 
@@ -188,11 +179,11 @@ Re-run выполняет код исходного SHA: изменения по
 
 Если исправление уже закоммичено поверх подготовленного main, сначала проверить состав этих дополнительных коммитов. Резервная ветка должна сохранить текущий main целиком; нужные исправления переносятся через cherry-pick в исходную release/hotfix-ветку. Перемещать stable-тег на исправленный main нельзя: исправление release должно сначала получить собственный RC.
 
-Rollback — отдельная операция пользователя: вернуть предыдущий успешный chart digest в ArgoCD, задать новый deployment revision и выполнить полный Sync. Пакет содержит нужные image tags. БД автоматически не откатывается; предыдущий код должен поддерживать уже применённые миграции. После rollback или failed release восстановить согласованность main/prod до следующего выпуска.
+Rollback выполняется внутри контура: вернуть предыдущий chart digest в GitOps-конфигурации, задать новый `global.deployment.revision` и выполнить Sync. Новый revision нужен и для намеренного повторного применения того же пакета с migration hooks. Пакет содержит image tags своей версии. БД автоматически не откатывается; предыдущий код должен поддерживать уже применённые миграции. Состояние установки отслеживается в ArgoCD отдельно от опубликованных GitHub Releases.
 
 ## 6. Локальная приёмка
 
-`make check` включает реальные Git/Commitizen-тесты во временных репозиториях и fake GitHub/registry API: первый RC/stable, docs-only, несколько commits одним push, merge, hotfix, пересечение с release, конфликт обратного merge, повтор после проверки/частичной публикации, отсутствие delivery при выключенном флаге.
+`make check` включает реальные Git/Commitizen-тесты во временных репозиториях и fake GitHub/registry API: первый RC/stable, docs-only, несколько commits одним push, merge, hotfix, пересечение с release, конфликт обратного merge, повтор после проверки/частичной публикации, отсутствие GitHub Deployments и обращения к кластеру, публикация Release без draft, короткие dev-теги, обновление latest только из актуального main и восстановление aliases.
 
 Тестовые репозитории имеют собственные начальные версии: приложение и его запись в `uv.lock` — `0.1.0`, chart — `0.3.2`, `appVersion` — `0.1.0`. Они задаются только во временной копии и не зависят от версии проверяемого release/main. Поэтому финализация рабочего chart в `0.3.3` не сдвигает ожидаемые версии тестовых выпусков.
 
