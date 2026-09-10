@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import shutil
 import tempfile
+from urllib.parse import quote
 
+import httpx
 import yaml
 
 from helm.build import verify
-from .common import Error, run, versions, write_json
+from .common import Error, live, run, versions, write_json
 
 IMAGE_PREFIX = "ghcr.io/dinikon/dnk-runtime-core"
 CHART_REPOSITORY = "ghcr.io/dinikon/dnk-runtime-core/helm"
@@ -43,7 +46,7 @@ class Registry:
 
     def push_chart(self, repository, archive, config, publication):
         ref = repository + ":" + publication["chart_version"]
-        run(
+        live(
             "oras",
             "push",
             *self.flags,
@@ -116,6 +119,95 @@ def validate_publication(record, expected):
             )
 
 
+def build_images(root, targets, environment):
+    """One Bake invocation lets BuildKit schedule independent images in parallel."""
+    print("Building and publishing images: " + ", ".join(targets), flush=True)
+    live(
+        "docker",
+        "buildx",
+        "bake",
+        "-f",
+        "docker-bake.hcl",
+        *targets,
+        "--push",
+        "--progress=plain",
+        cwd=root,
+        env=environment,
+    )
+
+
+def published_image(registry, repository, tag, unique_tag, source, app):
+    """Find a complete image and, if needed, attach its immutable version tag."""
+    immutable_ref = repository + ":" + tag
+    built_ref = repository + ":" + unique_tag
+    manifest = registry.manifest(immutable_ref)
+    promote = manifest is None and tag != unique_tag
+    if promote:
+        manifest = registry.manifest(built_ref)
+    if manifest is None:
+        return None
+    annotations = manifest.get("annotations", {})
+    if (
+        annotations.get("org.opencontainers.image.revision") != source
+        or annotations.get("org.opencontainers.image.version") != app
+    ):
+        raise Error(
+            f"Image {built_ref if promote else immutable_ref} belongs to a different source/version"
+        )
+    digest = registry.digest(built_ref if promote else immutable_ref)
+    if promote:
+        # Validate before tagging; never replace a version created by another writer.
+        if registry.manifest(immutable_ref) is not None:
+            raise Error("Version appeared during build; retry to validate and reuse it")
+        registry.alias(repository, digest, tag)
+    print(f"Image ready: {immutable_ref} ({digest})", flush=True)
+    return {"repository": repository, "tag": tag, "digest": digest}
+
+
+def publish_images(root, registry, image_prefix, app, source, unique_tag, tag, builder):
+    images, missing = {}, []
+
+    def collect(target):
+        return published_image(
+            registry, image_prefix + "/" + target, tag, unique_tag, source, app
+        )
+
+    for target in ("runtime", "frontend-runtime"):
+        print(f"Checking image: {image_prefix}/{target}:{tag}", flush=True)
+        image = collect(target)
+        if image is None:
+            missing.append(target)
+        else:
+            images[target] = image
+    if missing:
+        environment = {
+            "REGISTRY_PREFIX": image_prefix,
+            "IMAGE_TAG": unique_tag,
+            "VERSION": app,
+            "SOURCE_REVISION": source,
+        }
+        try:
+            builder(root, missing, environment)
+        except Error:
+            # Bake may publish one image before another fails. Preserve either
+            # completed image's version tag so the next run attempt can reuse it.
+            for target in missing:
+                try:
+                    collect(target)
+                except Error:
+                    print(
+                        f"Could not recover image {target}; inspect on retry",
+                        flush=True,
+                    )
+            raise
+        for target in missing:
+            image = collect(target)
+            if image is None:
+                raise Error(f"Build completed without publishing image {target}")
+            images[target] = image
+    return images
+
+
 def publish_artifacts(
     repo,
     ref,
@@ -148,6 +240,7 @@ def publish_artifacts(
             "deployment_revision": f"{channel}-{build_sha}-{run_id}-{attempt}",
         }
         chart_ref = chart_repository + ":" + chart
+        print(f"Checking chart: {chart_ref}", flush=True)
         existing = registry.manifest(chart_ref)
         if existing:
             try:
@@ -155,66 +248,29 @@ def publish_artifacts(
             except (KeyError, ValueError) as error:
                 raise Error("Existing chart has no publication metadata") from error
             validate_publication(saved, record)
+            print(f"Reusing published chart: {chart_ref}", flush=True)
             return saved | {"chart_digest": registry.digest(chart_ref)}
-        images = {}
-        for target in ("runtime", "frontend-runtime"):
-            repository = image_prefix + "/" + target
-            tag = unique_tag if channel == "dev" else app
-            immutable_ref = repository + ":" + tag
-            manifest = registry.manifest(immutable_ref)
-            if manifest is None:
-                environment = {
-                    "REGISTRY_PREFIX": image_prefix,
-                    "IMAGE_TAG": unique_tag,
-                    "VERSION": app,
-                    "SOURCE_REVISION": source,
-                }
-                if builder:
-                    builder(checkout.root, target, environment)
-                else:
-                    run(
-                        "docker",
-                        "buildx",
-                        "bake",
-                        "-f",
-                        "docker-bake.hcl",
-                        target,
-                        "--push",
-                        cwd=checkout.root,
-                        env=environment,
-                    )
-                built = repository + ":" + unique_tag
-                digest = registry.digest(built)
-                if tag != unique_tag:
-                    # Publication concurrency serializes the only writers of this version.
-                    if registry.manifest(immutable_ref) is not None:
-                        raise Error(
-                            "Version appeared during build; retry to validate and reuse it"
-                        )
-                    registry.alias(repository, digest, tag)
-                manifest = registry.manifest(immutable_ref)
-            annotations = (manifest or {}).get("annotations", {})
-            if (
-                annotations.get("org.opencontainers.image.revision") != source
-                or annotations.get("org.opencontainers.image.version") != app
-            ):
-                raise Error(
-                    f"Image {immutable_ref} belongs to a different source/version"
-                )
-            images[target] = {
-                "repository": repository,
-                "tag": tag,
-                "digest": registry.digest(immutable_ref),
-            }
-        record["images"] = images
+        record["images"] = publish_images(
+            checkout.root,
+            registry,
+            image_prefix,
+            app,
+            source,
+            unique_tag,
+            unique_tag if channel == "dev" else app,
+            builder or build_images,
+        )
         with tempfile.TemporaryDirectory(prefix="dnk-oci-") as temporary:
+            print(f"Packaging chart: {chart_ref}", flush=True)
             archive, config = package_chart(checkout.root, Path(temporary), record)
             # A second writer must never replace a version that appeared meanwhile.
             if registry.manifest(chart_ref) is not None:
                 raise Error(
                     "Chart version appeared during build; retry to validate and reuse it"
                 )
+            print(f"Publishing chart: {chart_ref}", flush=True)
             digest = registry.push_chart(chart_repository, archive, config, record)
+        print(f"Chart ready: {chart_ref} ({digest})", flush=True)
         return record | {"chart_digest": digest}
 
 
@@ -223,22 +279,58 @@ class GitHub:
         self.repository = repository
 
     def get_release(self, tag):
-        result = run(
-            "gh",
-            "release",
-            "view",
-            tag,
-            "--repo",
-            self.repository,
-            "--json",
-            "isDraft,isPrerelease,tagName,body",
-            check=False,
-        )
-        if result.returncode:
-            if "release not found" in result.stderr.lower() or "404" in result.stderr:
-                return None
-            raise Error("GitHub release lookup failed: " + result.stderr)
-        return json.loads(result.stdout)
+        """Read release readiness without requiring GitHub CLI locally."""
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2026-03-10",
+        }
+        token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+        if token:
+            headers["Authorization"] = "Bearer " + token
+        url = "https://api.github.com/repos/" + self.repository
+        try:
+            with httpx.Client(
+                headers=headers, timeout=30, follow_redirects=True
+            ) as client:
+                result = client.get(url + "/releases/tags/" + quote(tag, safe=""))
+                if result.status_code == 404:
+                    # The tag endpoint only promises published releases. Listing
+                    # also finds drafts and distinguishes missing releases from
+                    # inaccessible repositories, which GitHub also hides as 404.
+                    page = 1
+                    while True:
+                        result = client.get(
+                            url + "/releases", params={"per_page": 100, "page": page}
+                        )
+                        result.raise_for_status()
+                        release = next(
+                            (item for item in result.json() if item["tag_name"] == tag),
+                            None,
+                        )
+                        if release is not None:
+                            break
+                        if "next" not in result.links:
+                            return None
+                        page += 1
+                else:
+                    result.raise_for_status()
+                    release = result.json()
+        except httpx.HTTPStatusError as error:
+            raise Error(
+                f"GitHub release lookup failed (HTTP {error.response.status_code}); "
+                "check GITHUB_REPOSITORY, GH_TOKEN or GITHUB_TOKEN with Contents: read "
+                "access, and GitHub API rate limits"
+            ) from error
+        except httpx.RequestError as error:
+            raise Error(
+                "GitHub release lookup failed; check the network connection and retry"
+            ) from error
+        return {
+            "isDraft": release["draft"],
+            "isPrerelease": release["prerelease"],
+            "tagName": release["tag_name"],
+            "body": release.get("body") or "",
+        }
 
     def publish(self, tag, record, changelog):
         prerelease = record["channel"] == "rc"
