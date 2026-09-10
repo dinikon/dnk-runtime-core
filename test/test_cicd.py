@@ -12,6 +12,7 @@ import unittest
 from unittest.mock import Mock, patch as mock_patch
 
 import httpx
+import tomlkit
 import yaml
 
 from scripts.cicd.artifacts import (
@@ -192,6 +193,25 @@ class ReleaseTests(unittest.TestCase):
             self.root / "helm",
             ignore=shutil.ignore_patterns("__pycache__", ".DS_Store"),
         )
+        # Start from an unreleased fixture, even when checks run on an RC/stable
+        # checkout. Copying its versions would change every expected release.
+        project_path = self.root / "pyproject.toml"
+        project = tomlkit.parse(project_path.read_text())
+        project["project"]["version"] = "0.1.0"
+        project_path.write_text(tomlkit.dumps(project))
+        lock_path = self.root / "uv.lock"
+        lock = tomlkit.parse(lock_path.read_text())
+        for package in lock["package"]:
+            if package["name"] == project["project"]["name"]:
+                package["version"] = "0.1.0"
+                break
+        else:
+            self.fail("Application package is missing from the fixture lockfile")
+        lock_path.write_text(tomlkit.dumps(lock))
+        chart_path = self.root / "helm/Chart.yaml"
+        chart = yaml.safe_load(chart_path.read_text())
+        chart.update(version="0.3.2", appVersion="0.1.0")
+        chart_path.write_text(yaml.safe_dump(chart, sort_keys=False))
         (self.root / ".gitignore").write_text("__pycache__/\n.venv/\n")
         self.commit("chore: initial repository", "base.txt")
         self.repo.git("remote", "add", "origin", remote)
