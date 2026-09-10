@@ -21,9 +21,21 @@ dependencies = [
 [dependency-groups]
 dev = [
     "black>=26.1.0",
+    "pyyaml==6.0.3",
 ]
 [project.scripts]
 dnk-manage = "management.cli:main"
 
 [tool.uv]
 package = true
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version_provider = "uv"
+version_scheme = "semver2"
+tag_format = "v$version"
+ignored_tag_formats = ["release-start/*"]
+major_version_zero = false
+update_changelog_on_bump = true
+changelog_merge_prerelease = true
+version_files = ["helm/Chart.yaml:appVersion"]

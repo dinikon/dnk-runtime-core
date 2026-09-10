@@ -3,25 +3,25 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: dnk-runtime-core
+  name: dnk-runtime-core-dev
   namespace: argocd
 spec:
   project: dnk-runtime-core
   destination:
     server: https://kubernetes.default.svc
-    namespace: dnk-runtime-core
+    namespace: dnk-runtime-core-dev
   syncPolicy:
     syncOptions:
     - CreateNamespace=true
+    automated:
+      enabled: true
+      prune: true
+      selfHeal: true
   source:
     repoURL: oci://ghcr.io/dinikon/dnk-runtime-core/helm
     path: .
-    targetRevision: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    targetRevision: dev
     helm:
-      parameters:
-      - name: global.deployment.revision
-        value: replace-me-initial-deployment
-        forceString: true
       values: |
         # PLACEHOLDERS: replace all example.com domains and replace-me-* names.
         global:
@@ -29,7 +29,7 @@ spec:
           - name: replace-me-ghcr
         application:
           server:
-            publicOrigin: https://runtime.example.com
+            publicOrigin: https://runtime-dev.example.com
           security:
             controlPlaneApiKey:
               existingSecret:

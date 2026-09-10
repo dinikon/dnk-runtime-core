@@ -3,7 +3,11 @@ variable "REGISTRY_PREFIX" {
 }
 
 variable "VERSION" {
-  default = "0.0.1"
+  default = "0.1.0"
+}
+
+variable "IMAGE_TAG" {
+  default = "local"
 }
 
 variable "SOURCE_URL" {
@@ -26,7 +30,8 @@ target "_common" {
   platforms = split(",", PLATFORMS)
   annotations = [
     "index:org.opencontainers.image.source=${SOURCE_URL}",
-    "index:org.opencontainers.image.version=${VERSION}"
+    "index:org.opencontainers.image.version=${VERSION}",
+    "index:org.opencontainers.image.revision=${SOURCE_REVISION}"
   ]
   labels = {
     "org.opencontainers.image.source" = SOURCE_URL
@@ -41,7 +46,7 @@ target "runtime" {
   context = "."
   dockerfile = "Dockerfile"
   target = "runtime"
-  tags = ["${REGISTRY_PREFIX}/runtime:${VERSION}", "${REGISTRY_PREFIX}/runtime:latest"]
+  tags = ["${REGISTRY_PREFIX}/runtime:${IMAGE_TAG}"]
   labels = {
     "org.opencontainers.image.title" = "runtime"
     "org.opencontainers.image.description" = "FastAPI tenant runtime API and workers"
@@ -54,7 +59,7 @@ target "frontend-runtime" {
   context = "frontends"
   dockerfile = "Dockerfile"
   target = "runtime"
-  tags = ["${REGISTRY_PREFIX}/frontend-runtime:${VERSION}", "${REGISTRY_PREFIX}/frontend-runtime:latest"]
+  tags = ["${REGISTRY_PREFIX}/frontend-runtime:${IMAGE_TAG}"]
   labels = {
     "org.opencontainers.image.title" = "frontend-runtime"
     "org.opencontainers.image.description" = "Runtime Vue console served by Nginx"

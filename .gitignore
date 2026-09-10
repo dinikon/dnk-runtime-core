@@ -226,3 +226,5 @@ __marimo__/
 
 # Local planning artifacts
 tasks/
+
+.DS_Store

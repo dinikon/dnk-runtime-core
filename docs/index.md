@@ -50,6 +50,7 @@ This documentation describes the current implementation of `dnk-runtime-core` as
 
 ## Operations
 
+- [Minimal CI/CD: local development and automated deployment](plan/ci-cd.md)
 - [Repository split and local transition](repository-split.md)
 - [Standalone Helm deployment](../helm/README.md)
 

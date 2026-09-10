@@ -542,32 +542,35 @@ class HelmContractTests(unittest.TestCase):
                     )
 
     def test_argocd_application_examples(self):
-        examples = list((ROOT / "deploy/argocd").glob("*.yaml"))
-        self.assertEqual(len(examples), 1)
-        for path in examples:
-            (application,) = objects(path.read_text())
-            self.assertEqual(application["kind"], "Application")
+        examples = [
+            item
+            for path in (ROOT / "deploy/argocd").glob("*.yaml")
+            for item in objects(path.read_text())
+            if item["kind"] == "Application"
+        ]
+        self.assertEqual(len(examples), 2)
+        for application in examples:
             self.assertEqual(application["apiVersion"], "argoproj.io/v1alpha1")
             spec = application["spec"]
             self.assertEqual(
-                spec["source"]["repoURL"], "git@github.com:dinikon/dnk-runtime-core.git"
+                spec["source"]["repoURL"], "oci://ghcr.io/dinikon/dnk-runtime-core/helm"
             )
-            self.assertEqual(spec["source"]["targetRevision"], "main")
-            self.assertEqual(
-                spec["syncPolicy"]["automated"], {"prune": True, "selfHeal": True}
-            )
-            self.assertIn("CreateNamespace=true", spec["syncPolicy"]["syncOptions"])
-            self.assertTrue(
-                any(
-                    (
-                        p["name"] == "global.deployment.revision"
-                        and p["value"] == "$ARGOCD_APP_REVISION"
-                        for p in spec["source"]["helm"]["parameters"]
-                    )
+            self.assertEqual(spec["source"]["path"], ".")
+            self.assertNotIn("chart", spec["source"])
+            if application["metadata"]["name"].endswith("-dev"):
+                self.assertEqual(spec["source"]["targetRevision"], "dev")
+                self.assertTrue(spec["syncPolicy"]["automated"]["enabled"])
+                self.assertNotIn("parameters", spec["source"]["helm"])
+            else:
+                self.assertTrue(spec["source"]["targetRevision"].startswith("sha256:"))
+                self.assertNotIn("automated", spec["syncPolicy"])
+                self.assertEqual(
+                    spec["source"]["helm"]["parameters"][0]["name"],
+                    "global.deployment.revision",
                 )
-            )
+            self.assertIn("CreateNamespace=true", spec["syncPolicy"]["syncOptions"])
             values = yaml.load(spec["source"]["helm"]["values"], Loader=UniqueKeyLoader)
-            self.run_helm(ROOT / spec["source"]["path"], values)
+            self.run_helm(RUNTIME, values)
 
     def test_invalid_configuration_rejected(self):
         for chart, fixture, reserved, key_path in [
