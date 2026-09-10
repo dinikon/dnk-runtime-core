@@ -1,72 +1,17 @@
 # Test Map
 
-This page maps current tests to the behaviors they protect.
+Run `uv run python -m unittest discover -s test -p 'test_*.py' -v`.
 
-## Architecture Boundaries
+| Area | Coverage |
+|---|---|
+| Architecture | `test_architecture_boundaries.py`, `test_removed_module_boundaries.py`: layer directions, no imports/routes for removed dynamic modules |
+| Inventory | `test_inventory_warehouse.py`: ids, title, roots/children, self-parent, tenant-only metadata |
+| Tenancy | `test_tenancy_create_tenant_use_case.py`, `test_tenant_schema_bootstrap_boundary.py`, tenancy repository/resolve tests |
+| Migrations CLI | `test_tenant_migrations_management.py`: target validation, batch failures and schema-name validation |
+| PostgreSQL | `test_tenant_migrations_postgres.py`: migrations, constraints, isolation, onboarding rollback, autogenerate and concurrent processes |
+| Identity | identity use-case/repository tests plus `test_identity_tenant_postgres.py`: tenant metadata, isolated reads/writes, FK constraints, administrator rollback and HTTP/DI login/profile/logout |
+| Shared | database startup, email, messaging, outbox/inbox, jobs, pagination and UUID tests |
 
-- `test/test_architecture_boundaries.py`
-    - protects `tenancy.application -> schema_registry.application` boundary
-    - protects `schema_registry.domain` from PostgreSQL/migration implementation leakage
-    - checks that removed legacy paths are no longer used
+PostgreSQL tests require `TEST_POSTGRES_URL` pointing to a disposable PostgreSQL 16 database. They skip when unset; CI supplies a dedicated PostgreSQL service. Tests never use the application's configured database as a fallback.
 
-## Tenancy And Bootstrap Boundary
-
-- `test/test_tenancy_create_tenant_use_case.py`
-    - tenant creation orchestration
-- `test/test_tenant_schema_bootstrap_boundary.py`
-    - tenancy-owned bootstrap context and adapter contract
-
-## Schema Registry
-
-- `test/test_schema_registry_seed_service.py`
-    - seed loading and validation
-- `test/test_schema_registry_metadata_read_service.py`
-    - metadata snapshot consistency
-- `test/test_schema_registry_metadata_write_service.py`
-    - metadata reconcile identity preservation
-- `test/test_schema_registry_diff_use_case.py`
-    - diff orchestration rules
-- `test/test_schema_registry_planning.py`
-    - create/diff plan building, relation uniqueness, unsafe required-column rejection
-- `test/test_schema_registry_postgres_executor.py`
-    - SQL rendering/execution behavior for migration operations
-- `test/test_schema_registry_repositories.py`
-    - repository mapping and flush ordering
-- `test/test_schema_registry_depends.py`
-    - session-bound dependency composition
-- `test/test_management_schema_registry_command.py`
-    - management CLI behavior for schema diff
-
-## Identity
-
-- `test_console_auth_*`, `test_identity_*`, `test_user_service*`
-    - OTP/session auth and user profile behavior
-- `test_shared_authentication_depends.py`
-    - request-context auth dependency path
-
-## CRM
-
-- `test_crm_*`
-    - CRM endpoints and domain/use case behavior around contacts
-
-## Legacy / Historical Naming
-
-- some old test names still use `runtime_schema_*`
-- these reflect earlier naming/history of the schema subsystem
-- when using the test suite as project map, prefer the newer `schema_registry_*` cluster as the current terminology
-
-## How To Use This Map
-
-- start from module page
-- jump to related tests from here
-- use the tests as executable examples of current behavior and architecture boundaries
-
-## Related
-
-- [Constraints and conventions](constraints-and-conventions.md)
-- [Schema Registry module](../modules/schema-registry.md)
-- [Tenancy module](../modules/tenancy.md)
-
-## Source Of Truth
-
-- `test/`
+Format/compile checks: `uv run black --check src test migrations` and `uv run python -m compileall src migrations`.

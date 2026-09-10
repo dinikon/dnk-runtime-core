@@ -1,0 +1,30 @@
+# Prepared only. Applying this file to an existing ArgoCD is a separate user step.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: dnk-runtime-core
+  namespace: argocd
+spec:
+  sourceRepos:
+    - oci://ghcr.io/dinikon/dnk-runtime-core/helm
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: dnk-runtime-core-dev
+    - server: https://kubernetes.default.svc
+      namespace: dnk-runtime-core
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  roles:
+    - name: deploy-dev
+      policies:
+        - p, proj:dnk-runtime-core:deploy-dev, applications, get, dnk-runtime-core/dnk-runtime-core-dev, allow
+        - p, proj:dnk-runtime-core:deploy-dev, applications, sync, dnk-runtime-core/dnk-runtime-core-dev, allow
+    - name: deploy-prod
+      policies:
+        - p, proj:dnk-runtime-core:deploy-prod, applications, get, dnk-runtime-core/dnk-runtime-core, allow
+        - p, proj:dnk-runtime-core:deploy-prod, applications, update, dnk-runtime-core/dnk-runtime-core, allow
+        - p, proj:dnk-runtime-core:deploy-prod, applications, sync, dnk-runtime-core/dnk-runtime-core, allow

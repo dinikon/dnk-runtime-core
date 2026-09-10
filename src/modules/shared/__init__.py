@@ -1,14 +1,24 @@
-from .domain import CurrencyCodeVO, EntityIdVO, DomainError
-from .kernel import Principal, RequestContext
-from src.modules.shared.infrastructure.time import UtcClock
-from src.modules.shared.kernel.time import ClockPort
+from src.modules.shared.application.uuid import UUIdGeneratorProtocol
+from src.modules.shared.domain import (
+    CurrencyCodeVO,
+    DomainError,
+    EntityIdVO,
+    EntityIdTypeError,
+)
+from src.modules.shared.domain.events import IntegrationEvent
+from src.modules.shared.domain.identity_context import Principal, RequestContext
+from src.modules.shared.domain.jobs import ScheduledJob
+from src.modules.shared.domain.time import ClockPort
 
 __all__ = [
     "ClockPort",
     "CurrencyCodeVO",
     "EntityIdVO",
+    "EntityIdTypeError",
+    "IntegrationEvent",
     "DomainError",
     "Principal",
     "RequestContext",
-    "UtcClock",
+    "ScheduledJob",
+    "UUIdGeneratorProtocol",
 ]

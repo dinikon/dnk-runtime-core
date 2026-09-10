@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from src.modules.shared.kernel.tokens.models import StoredToken
+from src.modules.shared.application.tokens import TokenBackendProtocol
+from src.modules.shared.domain.tokens import StoredToken
 
 
-class InMemoryTokenBackend:
+class InMemoryTokenBackend(TokenBackendProtocol):
     """In-memory token backend для development/tests fallback."""
 
     def __init__(self) -> None:

@@ -1,24 +1,18 @@
 from __future__ import annotations
 
 import unittest
-from dataclasses import dataclass
 from uuid import uuid4
 
-from src.modules.tenancy.application.commands import CreateTenantCommand
 from src.modules.tenancy.application.ports.schema_bootstrap import (
     TenantSchemaBootstrapContextFactory,
 )
-from src.modules.tenancy.application.use_cases.create_tenant import CreateTenantUseCase
-from src.modules.tenancy.domain.services import TenantOnboardingDraft
-from src.modules.tenancy.domain.entities import Tenant, TenantDomain
-from src.modules.tenancy.domain.value_objects import (
-    TenantDomainKind,
-    TenantDomainStatus,
-    TenantDomainTlsMode,
-    TenantDomainVerificationStatus,
-    TenantServiceType,
-    TenantStatus,
+from src.modules.tenancy.application.tenant import (
+    CreateTenantCommand,
+    CreateTenantUseCase,
 )
+from src.modules.tenancy.domain.service import TenantOnboardingDraft
+from src.modules.tenancy.domain.tenant import Tenant
+from src.modules.tenancy.domain.tenant_domain import TenantDomain
 
 
 class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):
@@ -31,12 +25,13 @@ class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):
         created_user_id = uuid4()
         created_user_email_id = uuid4()
         recorded_context = None
+        steps = []
 
         class TenantOnboardingServiceStub:
-
             async def create_tenant_with_primary_domain(
                 self, **kwargs
             ) -> TenantOnboardingDraft:
+                steps.append("tenant")
                 return TenantOnboardingDraft(
                     tenant=tenant,
                     tenant_domain=tenant_domain,
@@ -44,6 +39,7 @@ class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
         class IdentityProvisioningServiceStub:
             async def create_tenant_admin(self, **kwargs):
+                steps.append("admin")
                 return type(
                     "Provisioned",
                     (),
@@ -58,13 +54,13 @@ class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):
             async def bootstrap(self, *, context):
                 nonlocal recorded_context
                 recorded_context = context
+                steps.append("schema")
 
         use_case = CreateTenantUseCase(
             tenant_onboarding_service=TenantOnboardingServiceStub(),
             identity_provisioning_service=IdentityProvisioningServiceStub(),
             tenant_schema_bootstrap_context_factory=TenantSchemaBootstrapContextFactory(
                 schema_prefix="dnk_",
-                default_seed_path="seed.module",
             ),
             tenant_schema_bootstrap_port=TenantSchemaBootstrapPortStub(),
         )
@@ -80,11 +76,11 @@ class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):
             )
         )
 
+        self.assertEqual(steps, ["tenant", "schema", "admin"])
         self.assertIsNotNone(recorded_context)
         self.assertEqual(
             recorded_context.schema_name,
-            f"dnk_{tenant.id.hex}",
+            f"dnk_{tenant.id.uuid.hex}",
         )
-        self.assertEqual(recorded_context.seed_path, "seed.module")
-        self.assertEqual(result.tenant_id, tenant.id)
+        self.assertEqual(result.tenant_id, tenant.id.uuid)
         self.assertEqual(result.user_id, created_user_id)

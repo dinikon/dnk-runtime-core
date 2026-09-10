@@ -1,0 +1,71 @@
+# PREPARED ONLY. Separate user activation is required before applying to a cluster.
+# Replace domains, Secret references and the initial production digest.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dnk-runtime-core
+  namespace: argocd
+spec:
+  project: dnk-runtime-core
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dnk-runtime-core
+  syncPolicy:
+    syncOptions:
+    - CreateNamespace=true
+  source:
+    repoURL: oci://ghcr.io/dinikon/dnk-runtime-core/helm
+    path: .
+    targetRevision: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    helm:
+      parameters:
+      - name: global.deployment.revision
+        value: replace-me-initial-deployment
+        forceString: true
+      values: |
+        # PLACEHOLDERS: replace all example.com domains and replace-me-* names.
+        global:
+          imagePullSecrets:
+          - name: replace-me-ghcr
+        application:
+          server:
+            publicOrigin: https://runtime.example.com
+          security:
+            controlPlaneApiKey:
+              existingSecret:
+                name: replace-me-runtime
+                key: control-plane-api-key
+          email:
+            fromAddress: noreply@example.com
+            smtp:
+              host: smtp.example.com
+              username: noreply@example.com
+              password:
+                existingSecret:
+                  name: replace-me-runtime
+                  key: smtp-password
+        ingress:
+          enabled: true
+          className: nginx
+          tls:
+            clusterIssuer: letsencrypt-production
+            secretName: ""
+        postgresql:
+          auth:
+            password:
+              existingSecret:
+                name: replace-me-runtime
+                key: postgres-password
+        redis:
+          auth:
+            password:
+              existingSecret:
+                name: replace-me-runtime
+                key: redis-password
+        rabbitmq:
+          auth:
+            password:
+              existingSecret:
+                name: replace-me-runtime
+                key: rabbitmq-password
+      releaseName: dnk-runtime-core

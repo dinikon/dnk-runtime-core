@@ -1,47 +1,19 @@
 # Dependency Injection
 
-## Current Pattern
+HTTP composition lives in module `presentation/depends` functions using FastAPI `Depends` and `Annotated` aliases. Repositories and adapters receive the same request-scoped UoW session. Tenant identifiers are passed explicitly through commands/repository methods; client-data wiring does not bind a repository instance to a tenant.
 
-The project uses explicit composition functions instead of a large global container.
+## Tenant onboarding
 
-- HTTP composition lives in `presentation/depends/` inside each module.
-- Management composition uses dedicated builders, for example `schema_registry/presentation/depends/management.py`.
-- Shared request-scoped objects such as `UnitOfWork` are exposed through `src/modules/shared/depends/`.
+`get_tenant_schema_bootstrap_port` assembles `AlembicTenantSchemaBootstrapAdapter` using `uow.session` and the shared `TenantMigrator`. The use case sees only `TenantSchemaBootstrapPort`. Its context contains tenant id and schema name, with no seed path or runtime metadata.
 
-## HTTP Composition
+## Management
 
-- FastAPI controllers depend on typed aliases like `CreateTenantUseCaseDep` or `AuthenticatedRequestContextDep`.
-- These aliases are built from `Depends(...)` functions inside module-specific `presentation/depends/*`.
-- Repositories and adapters are assembled from the same request-scoped `uow.session`.
+`tenancy/presentation/depends/management.py` builds migration command dependencies. `TenantMigrationManagement.run_one` owns one UoW per tenant. Revision generation opens a separate engine exclusively for reflection, avoiding mutation of the application's shared dialect.
 
-## Management Composition
-
-- `dnk-manage` does not use FastAPI `Depends`.
-- Command handlers explicitly open `UnitOfWork` and call a builder.
-- Example: schema diff command builds `DiffSchemaUseCase` from the active `uow.session`.
-
-## Important Boundary
-
-- `tenancy` does not directly depend on `CreateSchemaUseCase`.
-- It uses tenancy-owned port `TenantSchemaBootstrapPort` and `TenantSchemaBootstrapContextFactory`.
-- `schema_registry` provides the adapter that translates the context into `CreateSchemaCommand`.
-
-## Session-Bound Wiring
-
-- One active `UnitOfWork` owns one `AsyncSession`.
-- Repositories, PostgreSQL inspectors/executors and schema bootstrap use that same session.
-- This is especially important for nested `CreateTenant -> CreateSchema` flow and for `schema_registry` diff execution.
+Events and jobs retain their shared presentation builders. Inventory has no use-case or HTTP DI graph yet.
 
 ## Related
 
-- [Request lifecycle](request-lifecycle.md)
-- [Persistence and Unit of Work](persistence-and-uow.md)
-- [Tenancy module](../modules/tenancy.md)
-- [Schema Registry module](../modules/schema-registry.md)
-
-## Source Of Truth
-
-- `src/modules/shared/depends/uow.py`
-- `src/modules/tenancy/presentation/depends/application.py`
-- `src/modules/schema_registry/presentation/depends/application.py`
-- `src/modules/schema_registry/presentation/depends/management.py`
+- [Persistence and UoW](persistence-and-uow.md)
+- [Management CLI](../interfaces/management-cli.md)
+- [Tenancy](../modules/tenancy.md)

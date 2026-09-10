@@ -1,0 +1,207 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "enabled": {
+      "type": "boolean"
+    },
+    "nameOverride": {
+      "type": "string",
+      "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+      "maxLength": 63
+    },
+    "fullnameOverride": {
+      "type": "string",
+      "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "type": "string",
+          "pattern": "^$|^[^\\s@:]+(?::[0-9]+)?(?:/[^\\s@:]+)*$",
+          "minLength": 1
+        },
+        "tag": {
+          "type": "string",
+          "pattern": "^$|^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$",
+          "minLength": 1
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
+        }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "username": {
+          "type": "string",
+          "minLength": 1
+        },
+        "vhost": {
+          "type": "string",
+          "minLength": 1
+        },
+        "password": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "existingSecret"
+          ],
+          "properties": {
+            "value": {
+              "type": "string"
+            },
+            "existingSecret": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "key"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
+                },
+                "key": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._-]*$"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "external": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "host": {
+          "type": "string",
+          "pattern": "^$|^[A-Za-z0-9][A-Za-z0-9.-]*$"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "useSsl": {
+          "type": "boolean"
+        },
+        "url": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "existingSecret"
+          ],
+          "properties": {
+            "value": {
+              "type": "string"
+            },
+            "existingSecret": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "key"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
+                },
+                "key": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._-]*$"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "persistence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "size": {
+          "type": "string"
+        },
+        "storageClass": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "existingClaim": {
+          "type": "string"
+        }
+      }
+    },
+    "resources": {
+      "type": "object"
+    },
+    "pod": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "annotations": {
+          "type": "object"
+        },
+        "labels": {
+          "type": "object"
+        },
+        "securityContext": {
+          "type": "object"
+        },
+        "containerSecurityContext": {
+          "type": "object"
+        },
+        "nodeSelector": {
+          "type": "object"
+        },
+        "tolerations": {
+          "type": "array",
+          "items": {}
+        },
+        "affinity": {
+          "type": "object"
+        },
+        "imagePullSecrets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    "global": {
+      "type": "object"
+    }
+  }
+}

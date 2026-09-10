@@ -6,8 +6,8 @@ import uuid6
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.modules.shared.db.base import Base, PortableJSON
-from src.modules.shared.db.types import StringUUID
+from src.modules.shared.infrastructure.persistence import Base, PortableJSON
+from src.modules.shared.infrastructure.persistence import StringUUID
 
 
 class TenantDomainModel(Base):
@@ -20,6 +20,17 @@ class TenantDomainModel(Base):
         primary_key=True,
         default=uuid6.uuid7,
         nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.current_timestamp(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.current_timestamp(),
+        nullable=False,
+        onupdate=func.current_timestamp(),
     )
     tenant_id: Mapped[UUID] = mapped_column(
         StringUUID,
@@ -64,17 +75,6 @@ class TenantDomainModel(Base):
     )
     metadata_json: Mapped[dict[str, object] | None] = mapped_column(
         PortableJSON, nullable=True, default=None
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.current_timestamp(),
-        nullable=False,
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.current_timestamp(),
-        nullable=False,
-        onupdate=func.current_timestamp(),
     )
 
     __table_args__ = (

@@ -1,70 +1,37 @@
-# Tenancy Module
+# Tenancy
 
-## Purpose
+Tenancy owns tenant accounts, domain bindings, host resolution and onboarding.
 
-`tenancy` owns tenant lifecycle and tenant host resolution. It is the entry point for creating a tenant, provisioning
-its primary console domain, and connecting onboarding to identity and runtime schema bootstrap.
+## Public flows
 
-## Public Functionality
+- `POST /api/admin/create-tenant`: control-plane bearer authentication; creates tenant and primary domain, bootstraps the tenant schema to Alembic head, then creates its administrator and email inside that schema.
+- `GET /api/console/tenants/resolve`: resolves the incoming host and tenant availability.
 
-- create tenant and primary console domain
-- resolve tenant by host
-- resolve request context by host for downstream auth/business flows
+Request and response contracts are unchanged by the introduction of Inventory.
 
-## Main Flows / Use Cases
+## Domain and persistence
 
-- `CreateTenantUseCase`
-    - creates `Tenant`
-    - creates primary `TenantDomain`
-    - provisions tenant admin through identity
-    - bootstraps runtime schema through `TenantSchemaBootstrapPort`
-- `ResolveTenantByHost`
-    - returns whether tenant exists and whether login is available
-- `ResolveTenantRequestContextByHost`
-    - builds tenant request context from incoming host
+`Tenant` and `TenantDomain` have their domain entities, typed ids, repository protocols, global SQLAlchemy models and explicit mappers. Identity provisioning uses a tenancy-owned port implemented by the identity adapter.
 
-## Domain Model
+## Schema bootstrap
 
-- `Tenant`
-    - tenant identity, name, external id, status, config and timestamps
-- `TenantDomain`
-    - host binding for a tenant, service type, status, verification and TLS mode
+`TenantSchemaBootstrapContext` contains `tenant_id` and `schema_name`. Its factory delegates to the shared `TenantSchemaNaming`: configured prefix plus UUID hex.
 
-## Infrastructure / Persistence
+`TenantSchemaBootstrapPort` is implemented by `AlembicTenantSchemaBootstrapAdapter`. It uses the current UoW session, locks the target schema, rejects an existing schema, creates it and runs tenant migrations. There is no seed, datasource metadata or dynamic schema dependency.
 
-- SQLAlchemy repositories and persistence models live under `tenancy/infrastructure/`
-- persistence stores tenant records and tenant domains
-- module also contains identity provisioning adapter and host mapping logic
+Administrator provisioning runs only after schema bootstrap succeeds. The whole onboarding operation commits together or rolls back together, including failures after administrator insertion. A schema-name conflict is a tenancy error mapped to HTTP 409. Technical migration errors remain server errors.
 
-## Presentation / Entry Points
+## Presentation and management
 
-- `POST /api/admin/create-tenant`
-    - protected by control-plane bearer API key
-- `GET /api/console/tenants/resolve`
-    - resolves tenant availability by host
+HTTP DI is assembled in `presentation/depends`. Migration CLI composition lives in `presentation/depends/management.py`; it reads existing tenant identifiers and processes one tenant per UoW. Existing schemas are required by management commands.
 
-## Dependencies On Other Modules
+## Tests
 
-- depends on `identity` through `IdentityProvisioningServiceProtocol`
-- depends on `schema_registry` only through tenancy-owned `TenantSchemaBootstrapPort`
-- relies on `shared` for request context, UoW and infrastructure
-
-## Tests Covering This Module
-
-- tenant creation orchestration and schema bootstrap boundary tests
-- host resolution endpoint and use case tests
-- architecture boundary test that prevents direct import of `schema_registry.application`
+Unit tests cover orchestration, host resolution and the bootstrap boundary. PostgreSQL integration tests verify successful onboarding, schema-conflict handling and complete rollback after migration or administrator provisioning failure.
 
 ## Related
 
+- [Inventory](inventory.md)
+- [Identity](identity.md)
+- [Tenant migrations](../data/tenant-migrations.md)
 - [HTTP API](../interfaces/http-api.md)
-- [Domain models](../data/domain-models.md)
-- [Dependency injection](../architecture/dependency-injection.md)
-- [Test map](../quality/test-map.md)
-
-## Source Of Truth
-
-- `src/modules/tenancy/application/use_cases/create_tenant.py`
-- `src/modules/tenancy/domain/entities.py`
-- `src/modules/tenancy/application/ports/schema_bootstrap.py`
-- `src/modules/tenancy/presentation/http/admin_tenants.py`

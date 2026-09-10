@@ -7,8 +7,8 @@ import uuid6
 from sqlalchemy import DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.modules.shared.db.base import Base, PortableJSON
-from src.modules.shared.db.types import StringUUID
+from src.modules.shared.infrastructure.persistence import Base, PortableJSON
+from src.modules.shared.infrastructure.persistence import StringUUID
 
 
 class TenantModel(Base):
@@ -20,6 +20,17 @@ class TenantModel(Base):
         StringUUID,
         primary_key=True,
         default=uuid6.uuid7,
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.current_timestamp(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.current_timestamp(),
+        onupdate=func.current_timestamp(),
         nullable=False,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -38,15 +49,4 @@ class TenantModel(Base):
     custom_config: Mapped[dict[str, Any] | None] = mapped_column(
         PortableJSON,
         nullable=True,
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.current_timestamp(),
-        nullable=False,
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.current_timestamp(),
-        onupdate=func.current_timestamp(),
-        nullable=False,
     )

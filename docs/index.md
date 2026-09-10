@@ -1,6 +1,7 @@
 # Documentation Index
 
-This documentation describes the current implementation of `dnk-runtime-core` as it exists in `src/` and `test/`.
+This documentation describes the current implementation of `dnk-runtime-core` as it exists in `src/`, `test/` and
+`frontends/`.
 
 ## Architecture
 
@@ -14,9 +15,16 @@ This documentation describes the current implementation of `dnk-runtime-core` as
 
 - [Tenancy](modules/tenancy.md)
 - [Identity](modules/identity.md)
-- [CRM](modules/crm.md)
-- [Schema Registry](modules/schema-registry.md)
+- [Inventory](modules/inventory.md)
 - [Shared](modules/shared.md)
+
+## Roadmap-границы модулей
+
+Эти документы описывают планируемые границы bounded contexts. Это не документация текущей реализации, пока не добавлены
+соответствующие пакеты `src/modules/*`.
+
+- [Campaigns](modules/campaigns.md)
+- [External Events](modules/external-events.md)
 
 ## Interfaces
 
@@ -24,16 +32,31 @@ This documentation describes the current implementation of `dnk-runtime-core` as
 - [Management CLI](interfaces/management-cli.md)
 - [Configuration](interfaces/configuration.md)
 
-## Data And Runtime Model
+## Frontends
+
+- [Console frontend](frontends/console.md)
+
+## Data Model
 
 - [Domain models](data/domain-models.md)
-- [Runtime schema](data/runtime-schema.md)
+- [Tenant migrations](data/tenant-migrations.md)
+- [Historical dynamic modules](history/index.md)
 
 ## Quality And Constraints
 
 - [Test map](quality/test-map.md)
 - [Constraints and conventions](quality/constraints-and-conventions.md)
 - [Develop style](develop-style.md)
+
+## Operations
+
+- [Minimal CI/CD: local development and automated deployment](plan/ci-cd.md)
+- [Repository split and local transition](repository-split.md)
+- [Standalone Helm deployment](../helm/README.md)
+
+- [CRM removal runbook](operations/remove-crm.md)
+- [Custom object module removal](operations/remove-custom-object.md)
+- [Workflow and communication removal](operations/remove-workflow-communication.md)
 
 ## Related
 
@@ -44,3 +67,4 @@ This documentation describes the current implementation of `dnk-runtime-core` as
 - `src/app_factory.py`
 - `src/modules/router.py`
 - `src/management/cli.py`
+- `frontends/apps/console/src/`

@@ -1,0 +1,399 @@
+# Standalone dnk-runtime-core values for the root helm/ chart.
+# No credentials are generated. Never commit actual credentials.
+# Shared deployment revision triggers a rollout after a new Git revision; registry Secrets are namespace-local.
+global:
+  deployment:
+    revision: ''
+  imagePullSecrets: []
+  migrations:
+    coordinator: ''
+enabled: true
+nameOverride: dnk-runtime-core
+fullnameOverride: ''
+# Runtime settings are translated into the environment expected by the published image.
+# Set HTTPS publicOrigin, the API key and a working SMTP server before installing.
+application:
+  server:
+    publicOrigin: ''
+    environment: PRODUCTION
+  security:
+    controlPlaneApiKey:
+      value: ''
+      existingSecret:
+        name: ''
+        key: ''
+  tenancy:
+    schemaPrefix: dnk_
+  auth:
+    otpCodeLength: 6
+    otpTokenTtlSeconds: 300
+    sessionTtlSeconds: 432000
+    sessionCookieName: dnk_session
+  email:
+    provider: smtp
+    fromAddress: ''
+    fromName: DNK Runtime
+    smtp:
+      host: ''
+      port: 587
+      username: ''
+      password:
+        value: ''
+        existingSecret:
+          name: ''
+          key: ''
+      useTls: false
+      useStarttls: true
+      timeoutSeconds: 10
+  database:
+    charset: ''
+    extras: ''
+    pool:
+      size: 30
+      maxOverflow: 10
+      recycleSeconds: 3600
+      useLifo: false
+      prePing: true
+    echo: false
+    startup:
+      maxAttempts: 5
+      retryDelaySeconds: 1
+    retrievalServiceExecutors: 4
+  events:
+    enabled: true
+    publisherConfirms: true
+    prefetch: 20
+    exchangeName: dnk.integration.events
+    publishLimit: 100
+    retryBaseSeconds: 30
+    maxAttempts: 5
+    publisherIdleSleepSeconds: 0.5
+    publisherErrorSleepSeconds: 5
+  scheduledJobs:
+    processLimit: 100
+    recoverLimit: 100
+    lockTtlSeconds: 300
+    retryBaseSeconds: 30
+    maxAttempts: 5
+# Published FastAPI image. latest is always pulled when a new pod starts.
+# extraEnv permits valueFrom but cannot replace chart-managed variables.
+backend:
+  image:
+    repository: ghcr.io/dinikon/runtime/runtime
+    tag: latest
+    pullPolicy: Always
+  replicas: 1
+  service:
+    type: ClusterIP
+    port: 8000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+  probes:
+    startup:
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 60
+    readiness:
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+    liveness:
+      periodSeconds: 20
+      timeoutSeconds: 3
+      failureThreshold: 3
+  pod:
+    annotations: {}
+    labels: {}
+    securityContext: {}
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    imagePullSecrets: []
+  extraEnv: []
+# Published static Vue frontend; chart mounts its static Nginx configuration.
+frontend:
+  image:
+    repository: ghcr.io/dinikon/runtime/frontend-runtime
+    tag: latest
+    pullPolicy: Always
+  replicas: 1
+  service:
+    type: ClusterIP
+    port: 80
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+  probes:
+    startup:
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 60
+    readiness:
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+    liveness:
+      periodSeconds: 20
+      timeoutSeconds: 3
+      failureThreshold: 3
+  pod:
+    annotations: {}
+    labels: {}
+    securityContext: {}
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    imagePullSecrets: []
+# Official Nginx routes /api to FastAPI and everything else to the Vue frontend.
+workers:
+  publisher:
+    image:
+      repository: ghcr.io/dinikon/runtime/runtime
+      tag: latest
+      pullPolicy: Always
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        memory: 512Mi
+    probes: {}
+    pod:
+      annotations: {}
+      labels: {}
+      securityContext: {}
+      containerSecurityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+          - ALL
+      nodeSelector: {}
+      tolerations: []
+      affinity: {}
+      imagePullSecrets: []
+    enabled: true
+  console:
+    image:
+      repository: ghcr.io/dinikon/runtime/runtime
+      tag: latest
+      pullPolicy: Always
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        memory: 512Mi
+    probes: {}
+    pod:
+      annotations: {}
+      labels: {}
+      securityContext: {}
+      containerSecurityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+          - ALL
+      nodeSelector: {}
+      tolerations: []
+      affinity: {}
+      imagePullSecrets: []
+    enabled: false
+    queueName: dnk.integration.console
+    routingKey: '#'
+# Existing system Ingress; cert-manager requests the certificate from this ClusterIssuer.
+# Routes point directly to backend/frontend Services. No application gateway is deployed.
+ingress:
+  enabled: true
+  className: nginx
+  annotations: {}
+  tls:
+    clusterIssuer: letsencrypt-production
+    # Empty: use <application-fullname>-tls, created and renewed by cert-manager.
+    # For a pre-created TLS Secret, set its name and set clusterIssuer: ''.
+    secretName: ''
+# A retained Sync Job runs before workloads; every workload waits for all coordinator Jobs.
+# Disable only when migrations are managed outside this chart.
+migrations:
+  enabled: true
+  waitTimeoutSeconds: 300
+  gateTimeoutSeconds: 900
+  activeDeadlineSeconds: 600
+  backoffLimit: 1
+  resources: {}
+# enabled=false selects an external service. Credentials use value OR existingSecret, never both.
+# StatefulSet PVCs survive uninstall; changing a password does not rotate an initialized database.
+postgresql:
+  enabled: true
+  nameOverride: runtime-postgresql
+  fullnameOverride: ''
+  image:
+    repository: postgres
+    tag: 16-alpine
+    pullPolicy: IfNotPresent
+  auth:
+    database: runtime
+    username: runtime
+    password:
+      value: ''
+      existingSecret:
+        name: ''
+        key: ''
+  external:
+    host: ''
+    port: 5432
+  persistence:
+    enabled: true
+    size: 8Gi
+    storageClass: null
+    existingClaim: ''
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+  pod:
+    annotations: {}
+    labels: {}
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 70
+      runAsGroup: 70
+      fsGroup: 70
+      fsGroupChangePolicy: OnRootMismatch
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    imagePullSecrets: []
+# External Redis accepts host/port/auth or a secret redis:// or rediss:// URL.
+# The URL takes precedence over database; do not combine it with host/password/username/useSsl.
+redis:
+  enabled: true
+  nameOverride: runtime-redis
+  fullnameOverride: ''
+  image:
+    repository: redis
+    tag: 7-alpine
+    pullPolicy: IfNotPresent
+  database: 0
+  auth:
+    password:
+      value: ''
+      existingSecret:
+        name: ''
+        key: ''
+    username: ''
+  external:
+    host: ''
+    port: 6379
+    url:
+      value: ''
+      existingSecret:
+        name: ''
+        key: ''
+    useSsl: false
+  persistence:
+    enabled: true
+    size: 1Gi
+    storageClass: null
+    existingClaim: ''
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+  pod:
+    annotations: {}
+    labels: {}
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 999
+      runAsGroup: 1000
+      fsGroup: 1000
+      fsGroupChangePolicy: OnRootMismatch
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    imagePullSecrets: []
+# Embedded RabbitMQ by default; external supports host/port/auth or secret AMQP(S) URL.
+# Preserve the PVC across installs. Existing Secret changes need an explicit rollout.
+rabbitmq:
+  enabled: true
+  nameOverride: runtime-rabbitmq
+  fullnameOverride: ''
+  image:
+    repository: rabbitmq
+    tag: 3.13-management-alpine
+    pullPolicy: IfNotPresent
+  auth:
+    username: runtime
+    vhost: /
+    password:
+      value: ''
+      existingSecret:
+        name: ''
+        key: ''
+  external:
+    host: ''
+    port: 5672
+    useSsl: false
+    url:
+      value: ''
+      existingSecret:
+        name: ''
+        key: ''
+  persistence:
+    enabled: true
+    size: 4Gi
+    storageClass: null
+    existingClaim: ''
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+  pod:
+    annotations: {}
+    labels: {}
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 100
+      runAsGroup: 101
+      fsGroup: 101
+      fsGroupChangePolicy: OnRootMismatch
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    imagePullSecrets: []

@@ -1,0 +1,26 @@
+{
+  "name": "@dnk/runtime-frontends",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:console": "npm --workspace @dnk/console run dev",
+    "build:console": "npm --workspace @dnk/console run build",
+    "lint:console": "npm --workspace @dnk/console run lint",
+    "preview:console": "npm --workspace @dnk/console run preview",
+    "typecheck:console": "npm --workspace @dnk/console run typecheck"
+  },
+  "devDependencies": {
+    "eslint": "^10.4.0",
+    "eslint-plugin-vue": "^10.9.1",
+    "typescript-eslint": "^8.59.3"
+  },
+  "allowScripts": {
+    "vue-demi@0.14.10": true,
+    "esbuild@0.28.1": true,
+    "fsevents@2.3.3": true
+  }
+}

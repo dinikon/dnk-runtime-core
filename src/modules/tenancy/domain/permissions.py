@@ -5,3 +5,6 @@ class TenancyAction(StrEnum):
     """Действия authorization policy для tenancy-модуля."""
 
     ADMIN_CREATE_TENANT = "tenancy.admin.create_tenant"
+
+
+__all__ = ["TenancyAction"]

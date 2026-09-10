@@ -1,0 +1,7 @@
+.DS_Store
+__pycache__/
+*.pyc
+tests/
+examples/
+build.py
+VALIDATION.md

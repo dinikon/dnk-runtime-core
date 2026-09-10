@@ -1,0 +1,52 @@
+application:
+  server:
+    publicOrigin: https://runtime.example.com
+  security:
+    controlPlaneApiKey:
+      existingSecret:
+        name: replace-me-runtime
+        key: control-plane-api-key
+  email:
+    fromAddress: noreply@example.com
+    smtp:
+      host: smtp.example.com
+      username: noreply@example.com
+      password:
+        existingSecret:
+          name: replace-me-runtime
+          key: smtp-password
+ingress:
+  enabled: true
+  className: nginx
+  tls:
+    clusterIssuer: letsencrypt-production
+    secretName: ''
+postgresql:
+  auth:
+    database: runtime
+    username: runtime
+    password:
+      existingSecret:
+        name: replace-me-runtime
+        key: postgres-password
+  enabled: false
+  external:
+    host: postgres.example.com
+    port: 5432
+redis:
+  enabled: false
+  external:
+    url:
+      existingSecret:
+        name: replace-me-runtime
+        key: redis-url
+rabbitmq:
+  enabled: false
+  external:
+    url:
+      existingSecret:
+        name: replace-me-runtime
+        key: rabbitmq-url
+global:
+  imagePullSecrets:
+  - name: replace-me-ghcr

@@ -1,13 +1,18 @@
 [project]
 name = "dnk-runtime-core"
-version = "0.1.0"
+version = "0.1.0-rc.5"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = "==3.13.9"
 dependencies = [
+    "alembic>=1.19.2,<2",
     "asyncpg>=0.31.0",
     "commitizen>=4.13.9",
-    "fastapi[standard]>=0.135.1",
+    "fastapi[standard]>=0.138.1",
+    "faststream[rabbit]>=0.6.7",
+    "httpx>=0.28.1",
+    "jsonpath-ng>=1.8.0",
+    "pydantic>=2.12.5",
     "redis>=6.4.0",
     "sqlalchemy[asyncio]>=2.0.48",
     "uuid6>=2025.0.1",
@@ -16,9 +21,21 @@ dependencies = [
 [dependency-groups]
 dev = [
     "black>=26.1.0",
+    "pyyaml==6.0.3",
 ]
 [project.scripts]
 dnk-manage = "management.cli:main"
 
 [tool.uv]
 package = true
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version_provider = "uv"
+version_scheme = "semver2"
+tag_format = "v$version"
+ignored_tag_formats = ["release-start/*"]
+major_version_zero = false
+update_changelog_on_bump = true
+changelog_merge_prerelease = true
+version_files = ["helm/Chart.yaml:appVersion"]

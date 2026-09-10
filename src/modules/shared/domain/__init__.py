@@ -1,4 +1,4 @@
-from src.modules.shared.domain.errors import DomainError
+from src.modules.shared.domain.domain_error import DomainError, EntityIdTypeError
 from src.modules.shared.domain.value_object import (
     CurrencyCodeNotSupportedError,
     CurrencyCodeVO,
@@ -10,4 +10,5 @@ __all__ = [
     "CurrencyCodeVO",
     "EntityIdVO",
     "DomainError",
+    "EntityIdTypeError",
 ]

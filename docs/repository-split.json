@@ -1,0 +1,1194 @@
+{
+  "runtimeSourceCommit": "9bd217c23630e69ffaef9ce3749205755e0dfb34",
+  "controlPlaneScaffoldCommit": "ebcfd913ddde22c435bb994f2186874e388e9cb2",
+  "movedControlPlaneFiles": [
+    {
+      "source": "core/.dockerignore",
+      "sha256": "6d6ce49430e86290a19fe9e261d5dd574f8cd5d5997a026009747b946028ebd4"
+    },
+    {
+      "source": "core/.env.example",
+      "sha256": "c882fbd9d1547ded519f006bd2d272560ab1b3118bf6bcae273fa858547d9435"
+    },
+    {
+      "source": "core/.gitignore",
+      "sha256": "569dd0deb201ac35a62db8341c74396448bcc63165ec534202d4a5ad2852c765"
+    },
+    {
+      "source": "core/.python-version",
+      "sha256": "6388dd213929792fb622424feab43c41be73739cf33c96b8fc3eef2537c45481"
+    },
+    {
+      "source": "core/ARCHITECTURE.md",
+      "sha256": "7a504d9a937e058e3d8ef19f32fd6e7fa01733df348be5501a27f9b4ba1f9ba9"
+    },
+    {
+      "source": "core/Dockerfile",
+      "sha256": "32eead6206de6c2839274aee91f6f2e0bc379273fb3f33f67a4bacf935aaac13"
+    },
+    {
+      "source": "core/Dockerfile.dockerignore",
+      "sha256": "88464bbecc56f02493afa2756db32da0eb1cf2f6ebfb866c1708fd60c960d7d4"
+    },
+    {
+      "source": "core/README.md",
+      "sha256": "aba14c7ea1635b72ab30286a92077679606956d474b6318cc5a22b4401af5e5d"
+    },
+    {
+      "source": "core/deploy/compose.e2e.yml",
+      "sha256": "ab939c24d070dddb570ebdb53132c25c35cc2afb739ea9e3f770bacb44e50368"
+    },
+    {
+      "source": "core/deploy/nginx.https.conf.template",
+      "sha256": "b95e4bf4eb7095b3fe0196c329aa86d44dd157add92634d2eb34023cd0633e38"
+    },
+    {
+      "source": "core/pyproject.toml",
+      "sha256": "a74b3fff0dc9a59e30a77d6dbd2f8a9c2a028939916c80923ab668d6b2957300"
+    },
+    {
+      "source": "core/src/accounts/__init__.py",
+      "sha256": "a88d3a072c2e3026e6b663e9d518006f0ac40b924e8555c7304d353542444009"
+    },
+    {
+      "source": "core/src/accounts/adapters/__init__.py",
+      "sha256": "e99d2ea289c0b8acf62be33e6e76b2a8d6063916187794f7d8f2930d98bdae01"
+    },
+    {
+      "source": "core/src/accounts/adapters/account.py",
+      "sha256": "f2e74492c2a7b30ab716064062815790462d741799ba12c1d08069f0095df5ba"
+    },
+    {
+      "source": "core/src/accounts/adapters/mfa.py",
+      "sha256": "866fb3386d098e84d48326dc48ce70ccad63647c271584282ca9b77ca7bf4247"
+    },
+    {
+      "source": "core/src/accounts/adapters/social.py",
+      "sha256": "83033b1290b9184f0f08ed02a2ebc0196a90495442d0c3584879f38bfcf4ebc9"
+    },
+    {
+      "source": "core/src/accounts/admin.py",
+      "sha256": "3358ad91768e5cc478f315381d73bc78dcb1fa1dc2632cac62a3686a3fb7a62f"
+    },
+    {
+      "source": "core/src/accounts/apps.py",
+      "sha256": "814273afe95fcfbff33b38b7dd1f8a6c27f0cc0619ee7416b993131f0787d835"
+    },
+    {
+      "source": "core/src/accounts/checks.py",
+      "sha256": "260d42ac72f9e15bf6b92f6ec6f40af8cdce0cf0bb3b0cd1240cc9d35020975f"
+    },
+    {
+      "source": "core/src/accounts/context_processors.py",
+      "sha256": "4a522a5c5f7692f2f2234826d0e29a2082fe1ef15703639653633840d3612e30"
+    },
+    {
+      "source": "core/src/accounts/exceptions.py",
+      "sha256": "285c6bfff74904dfadb90fe2e6baf25aba0cb2b0fe2413e2f42304be8416b512"
+    },
+    {
+      "source": "core/src/accounts/forms/__init__.py",
+      "sha256": "e7a6e595b87237910d066dafd67fbd3b9f3a6097f0001019e6728c076887db4e"
+    },
+    {
+      "source": "core/src/accounts/forms/authentication.py",
+      "sha256": "4f2993d1c6e358aae394ffb94ebf12cef3e04a534366de97a2dce755f4a072cb"
+    },
+    {
+      "source": "core/src/accounts/forms/passkeys.py",
+      "sha256": "6c85b2b7b7aabc42209b4768370c39be1ab84b812033a471ad0d6e26fc50756a"
+    },
+    {
+      "source": "core/src/accounts/forms/phones.py",
+      "sha256": "092705e49958f9044e43d1c0f16fecb9301a69f307f05b406c0e9c18fb788eb7"
+    },
+    {
+      "source": "core/src/accounts/forms/profile.py",
+      "sha256": "ab6b4d997929aee24291a696f80784f8685a91e29c2e6a6ed12e9cbde83918d0"
+    },
+    {
+      "source": "core/src/accounts/forms/security.py",
+      "sha256": "e2e5f0c1be32116c7f06af990aa7afd59a3b1a4d784c6cb8c837a882519fdcc2"
+    },
+    {
+      "source": "core/src/accounts/integrations/__init__.py",
+      "sha256": "4b8573fa37123878650a871c04b2101eea1cfa500128f51e396f7d69ea7d10f2"
+    },
+    {
+      "source": "core/src/accounts/integrations/smtp.py",
+      "sha256": "f93b05f4e0f92fd3bb1495c54c7f62accbb7036cc2f8abcbca713f442c4c493c"
+    },
+    {
+      "source": "core/src/accounts/integrations/telegram_gateway.py",
+      "sha256": "b97b5c9febf271d3e1507a013019c3fc12b16d97325971e8bc94026145f7149f"
+    },
+    {
+      "source": "core/src/accounts/integrations/telegram_oidc.py",
+      "sha256": "55972c7f2eeb3a78eec2aa4da435272d0a8fe562a329a41d4705a7fe298c7927"
+    },
+    {
+      "source": "core/src/accounts/mail.py",
+      "sha256": "5003bbd7af3a605f8c3c614efb830af16acc567fc6a248df86f7a927d192d8e2"
+    },
+    {
+      "source": "core/src/accounts/management/__init__.py",
+      "sha256": "f0ee38a726c6eb745eb11d592fe3fa6294927c8b67832730151bd6cee371603a"
+    },
+    {
+      "source": "core/src/accounts/management/commands/__init__.py",
+      "sha256": "55e001e563c215b4be863827c3e956f600506188261b3e11ec71e433e8aeef78"
+    },
+    {
+      "source": "core/src/accounts/management/commands/prepare_deployment.py",
+      "sha256": "a26c3df5ed156ce94d47500fe01d05ba53533527a7f922d809e9df034385019f"
+    },
+    {
+      "source": "core/src/accounts/middleware.py",
+      "sha256": "63b362beb05509a68053f598c41cb1a60a8bd51b9adf21aeda16a1b532986ea9"
+    },
+    {
+      "source": "core/src/accounts/migrations/0001_initial.py",
+      "sha256": "4950d446c9a78eade265e07924f6073e1cb0a34c855cbdc201023c94e2d02b4b"
+    },
+    {
+      "source": "core/src/accounts/migrations/0002_user_middle_name.py",
+      "sha256": "9d349e58bb231fa5c6ff4bf069e6f38d1c5927fbf9e2aa730234f16624e24ad8"
+    },
+    {
+      "source": "core/src/accounts/migrations/0003_phone_contacts_uuid_memberships.py",
+      "sha256": "7874e1bcd9450710d058eabee4325501dbdc93390b74c022e72e658b235379b5"
+    },
+    {
+      "source": "core/src/accounts/migrations/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "core/src/accounts/models.py",
+      "sha256": "f51721de12513890a47c861f6aa5b7bd427193e8f450c83f5f906e542982a549"
+    },
+    {
+      "source": "core/src/accounts/oidc.py",
+      "sha256": "11dce7373661db53e6596945912ae28126e53552e64bff931fb4bd4d9eb17705"
+    },
+    {
+      "source": "core/src/accounts/presentation/__init__.py",
+      "sha256": "a2c64d07e586c93f738cf2f237074417c3b09dda918b85802c676270086cf4ae"
+    },
+    {
+      "source": "core/src/accounts/presentation/fields.py",
+      "sha256": "264cf131ea6bfd6ed107641f4c3d47da1f1fdc24db68c6997836498b6368086d"
+    },
+    {
+      "source": "core/src/accounts/presentation/login.py",
+      "sha256": "9c2c2b93433a106e9ad4ff6d497a4fa3c09433b1e39cd4df93066be650258e4d"
+    },
+    {
+      "source": "core/src/accounts/presentation/navigation.py",
+      "sha256": "618b4be4bdc0047e7003abfa0bdc83741ca83983c12a5e0abece9694396f0648"
+    },
+    {
+      "source": "core/src/accounts/presentation/profile.py",
+      "sha256": "b6cfd30475af55e345bc245820d920c4f394f682146e41f7338640c976a8235d"
+    },
+    {
+      "source": "core/src/accounts/presentation/social_accounts.py",
+      "sha256": "82f4d4b74f4c5abe39e53eb149b7aae2126689dd237d85c7325b4370694be6f6"
+    },
+    {
+      "source": "core/src/accounts/reauthentication.py",
+      "sha256": "ca7f1cb2b78bef654655467bcbc1b83fe169c010b3edf00668474cb6f7e2e72e"
+    },
+    {
+      "source": "core/src/accounts/services/__init__.py",
+      "sha256": "d8e69d2c32c47f8b4fcb41faf435719ecdbb965ee014123d91cdf1aa9b5d03b3"
+    },
+    {
+      "source": "core/src/accounts/services/capabilities.py",
+      "sha256": "8799767f442890056056f20528f283354d3f8cfa9b81e24db9f69af3b13da8c2"
+    },
+    {
+      "source": "core/src/accounts/services/feature_access.py",
+      "sha256": "2c9ed52150118e05db6f61882c994e7b532a3b1106674eb419dd593dad6f556e"
+    },
+    {
+      "source": "core/src/accounts/services/login_contacts.py",
+      "sha256": "5dbdeabdc6caa95a6b160582bcb23fc4b6dcfed08bbf8b31d7a525c8cad2f032"
+    },
+    {
+      "source": "core/src/accounts/services/phone_flows.py",
+      "sha256": "af93c7128ec2d92f44cb92e9ea598ea7d46c1d1b99addf756ee559a69d21c480"
+    },
+    {
+      "source": "core/src/accounts/services/phone_proofs.py",
+      "sha256": "97a3fceed42698aaa1215df3e68b20d230829e39bc026421919ec264a85b7ba8"
+    },
+    {
+      "source": "core/src/accounts/services/phones.py",
+      "sha256": "1ed37270d8a3201d968fbe477d76779f14ddd299cb4a3ced002f3c91a7bd2b6c"
+    },
+    {
+      "source": "core/src/accounts/services/profile.py",
+      "sha256": "e043638c232c7569d9da2179fb2576c96c1261b6976c51828896d549e4cc6855"
+    },
+    {
+      "source": "core/src/accounts/services/reauthentication.py",
+      "sha256": "63e773ebba5913a26f9fd60a377a1f0503f6187ba5d1ad1cc357ec45ee878d5c"
+    },
+    {
+      "source": "core/src/accounts/stages.py",
+      "sha256": "abf895b5f36c54d299430b1977cfe15eba1b5a47bf404bd2dbd225e002649e9b"
+    },
+    {
+      "source": "core/src/accounts/static/account/js/onload.js",
+      "sha256": "f8d8c060baa053eb1d2d67a143525eaf06bf60eee05912754a05f9d14a033842"
+    },
+    {
+      "source": "core/src/accounts/static/core/favicon.svg",
+      "sha256": "a5ebd8a508d02a97c2eccdb4a3b0266628d378c6151142fbb4db4786bca99295"
+    },
+    {
+      "source": "core/src/accounts/static/core/fonts/OFL.txt",
+      "sha256": "3b0a5fca3d17942cde889069889dedbbbd075e9b599968c82a95f4d944e9b345"
+    },
+    {
+      "source": "core/src/accounts/static/core/fonts/README.md",
+      "sha256": "c977b1ead2606f83c183e5f96e70c13297bd16c6220eb90b3c8a341df931366d"
+    },
+    {
+      "source": "core/src/accounts/static/core/fonts/inter-cyrillic-wght-normal.woff2",
+      "sha256": "71d5ee93cc1e9f1d520a3a8b66456de18c7879d8df09d57fcd2eaff75fef0075"
+    },
+    {
+      "source": "core/src/accounts/static/core/fonts/inter-latin-wght-normal.woff2",
+      "sha256": "3100e775e8616cd2611beecfa23a4263d7037586789b43f035236a2e6fbd4c62"
+    },
+    {
+      "source": "core/src/accounts/static/core/theme.css",
+      "sha256": "82ca1196dea2d6abd3b4925bc6ddb22f2d68a18557637df78938f7b18239effd"
+    },
+    {
+      "source": "core/src/accounts/static/core/webauthn-feedback.js",
+      "sha256": "ed0439fefbf37234a4f8cfd2a0d48eb328b136204203bf57f2a5e4ff0dd66543"
+    },
+    {
+      "source": "core/src/accounts/telegram.py",
+      "sha256": "82708e9d547005dddd41158acc02e14a8a090b783b080f382427aed7c0e56c5a"
+    },
+    {
+      "source": "core/src/accounts/templates/account/base_confirm_code.html",
+      "sha256": "f3d2ff10154e6c91aa854ab146d90a01e42af7ef98a6d39bdca10c19ccc08e02"
+    },
+    {
+      "source": "core/src/accounts/templates/account/confirm_email_verification_code.html",
+      "sha256": "9c6d578f60ff5344e9017c3c3493ab0dd9d9cc9b95218c15ae3063ee75fb10db"
+    },
+    {
+      "source": "core/src/accounts/templates/account/confirm_login_code.html",
+      "sha256": "78ed1bad5daf1444e4e476157c84793672726fe501d7f71e74b59e64d45dff2d"
+    },
+    {
+      "source": "core/src/accounts/templates/account/confirm_phone_verification_code.html",
+      "sha256": "e9cce388befeb8dd4600df5e0e69a308a8cf168260a969ddd88c4fbb463f54f0"
+    },
+    {
+      "source": "core/src/accounts/templates/account/email/unknown_account_message.txt",
+      "sha256": "3d6d2339f7d89861e5e9ebdc5f7c84c1f2498923532f4abe1363ef61bf065012"
+    },
+    {
+      "source": "core/src/accounts/templates/account/login.html",
+      "sha256": "08d85abcc0901a1ebfd5b29a6bbed3cfdad2d04b0388dc748c882152a1be100e"
+    },
+    {
+      "source": "core/src/accounts/templates/account/request_login_code.html",
+      "sha256": "7429b4f388920b427dfc7f62bae937501934f35a2c59a895cd8df02b21afbc61"
+    },
+    {
+      "source": "core/src/accounts/templates/account/signup.html",
+      "sha256": "e3b5085664fe56080f03d88b593dc96ebe6feb8a4cb8f273bf6b70f69481968b"
+    },
+    {
+      "source": "core/src/accounts/templates/account/signup_by_passkey.html",
+      "sha256": "2eb155c7d0384124399764db8d22e4a4554570783ec80e01425e41d5f1ff55ab"
+    },
+    {
+      "source": "core/src/accounts/templates/accounts/email/reauthenticate_message.txt",
+      "sha256": "91040009657690bdf40fadf0f6ecdbf4ab4e640b11831cbf313cdf789c4f62f8"
+    },
+    {
+      "source": "core/src/accounts/templates/accounts/email/reauthenticate_subject.txt",
+      "sha256": "17ae166a37cc1258326664cc0e382228afc999b9506bc6fcbedcb31a21bf3d9e"
+    },
+    {
+      "source": "core/src/accounts/templates/accounts/overview.html",
+      "sha256": "18be63e1a7204b73a5127324f359305cdc9d6e8266e7917b614ab231c5de95ff"
+    },
+    {
+      "source": "core/src/accounts/templates/accounts/phones.html",
+      "sha256": "5fde891e005ed4ec1f0494cda25eff50a6c623d448c956803ca14df2fb166d80"
+    },
+    {
+      "source": "core/src/accounts/templates/accounts/profile.html",
+      "sha256": "0a1c7f7aaad74e235517f6e54d1faf094b7a3dd8ccf6a61fdea51471d29e5f18"
+    },
+    {
+      "source": "core/src/accounts/templates/accounts/reauthenticate_email.html",
+      "sha256": "f2b352567a348858d9688ae205ad8141b6837a4d4516c4b15f896956faac55a6"
+    },
+    {
+      "source": "core/src/accounts/templates/accounts/recovery_codes_empty.html",
+      "sha256": "392ef8ca9a796fc32978106d540b329830e7f6a1586bb8624d91dbc610c774e3"
+    },
+    {
+      "source": "core/src/accounts/templates/accounts/ui/field.html",
+      "sha256": "e7fa36987667de24a445ecc2b8fa4094f4fc93b6ff82b9061c41743f06ab891b"
+    },
+    {
+      "source": "core/src/accounts/templates/accounts/ui/fields.html",
+      "sha256": "dcbe5d6b851d100c97f30384f9dbe67cc775b52fb043b954d2bfd99e8a0906a8"
+    },
+    {
+      "source": "core/src/accounts/templates/accounts/ui/login_options.html",
+      "sha256": "28744d7e0974276c31e4a5a10829f54c0243300aa96f3b2561b20faec67aa4e1"
+    },
+    {
+      "source": "core/src/accounts/templates/accounts/ui/login_panels.html",
+      "sha256": "e79666f2e7461060fe9258a9751b387b978d7afdfc14a71a98c626aacf14cc49"
+    },
+    {
+      "source": "core/src/accounts/templates/accounts/ui/messages.html",
+      "sha256": "fffe1619dfd0c803fdf1e4d74d6253b58d4a976275bf079153153d06d8fd1c8c"
+    },
+    {
+      "source": "core/src/accounts/templates/allauth/elements/alert.html",
+      "sha256": "fb9baf783e36587b6a7d00248d16133ccaf6707b1cd305989ae31345d7252c09"
+    },
+    {
+      "source": "core/src/accounts/templates/allauth/elements/badge.html",
+      "sha256": "ed2b9af68b3a0841c08d1a49b326e5bb99f3e945eaf7a76a8699c35264ba7232"
+    },
+    {
+      "source": "core/src/accounts/templates/allauth/elements/button.html",
+      "sha256": "6abcacf22c7509fc521a62bca0c575240f7a8fb8b91558eb87c1834d55b166d6"
+    },
+    {
+      "source": "core/src/accounts/templates/allauth/elements/button_group.html",
+      "sha256": "868d1e11762ba32ff9a3dec2a8b9e71d6731a5f4fcc0ece77ccc06fcec15b59b"
+    },
+    {
+      "source": "core/src/accounts/templates/allauth/elements/field.html",
+      "sha256": "5b87f7b478bf40a210a09b50abd20a9f43e2a6d3f0e935c73c16d14c0c647154"
+    },
+    {
+      "source": "core/src/accounts/templates/allauth/elements/fields.html",
+      "sha256": "23a704c81452e0d4bdc36e562ef798f48a29fc9d8de0ea72fd5217ff8cdb2a5b"
+    },
+    {
+      "source": "core/src/accounts/templates/allauth/elements/hr.html",
+      "sha256": "32f6ad5dee89adfb7c8f7fb56d385efba3b8cc6164abfbe6b1e2724e3a9b80a7"
+    },
+    {
+      "source": "core/src/accounts/templates/allauth/elements/panel.html",
+      "sha256": "89862a02e92c15e6bf93fd8523e3eae90a4184de1dbf9da5d9b328fa809c7405"
+    },
+    {
+      "source": "core/src/accounts/templates/allauth/elements/provider.html",
+      "sha256": "39b6f8deff7bdba5d7e25e90117e587d2a0e3ff3eff3722d923fa46638761b25"
+    },
+    {
+      "source": "core/src/accounts/templates/allauth/elements/provider_list.html",
+      "sha256": "f8d04989da129ee5816bed55e029d8f42465c08352f8e5d37d89e360b19cde66"
+    },
+    {
+      "source": "core/src/accounts/templates/allauth/layouts/base.html",
+      "sha256": "01dfde91290924cc75da4178c36e2dca87681a7b33b2d46af30af5c8e8a0f885"
+    },
+    {
+      "source": "core/src/accounts/templates/allauth/layouts/entrance.html",
+      "sha256": "13f43159199cd91391c386f6cfc5162daaf396c53415e3ee4880ed63d3add51d"
+    },
+    {
+      "source": "core/src/accounts/templates/allauth/layouts/manage.html",
+      "sha256": "6ced2ab9996efc47fd3ef09af392a110ce6bf0de777c1996d65672e251c7e09a"
+    },
+    {
+      "source": "core/src/accounts/templates/mfa/index.html",
+      "sha256": "e6290a982328884ae7758b2fedd9a1c7bf38900a940b175e2022fe813ba17614"
+    },
+    {
+      "source": "core/src/accounts/templates/mfa/recovery_codes/index.html",
+      "sha256": "31c9df122b2cbe9a1eb7c7bbbfbdd393324a5b275434880989c02c3d039c32c7"
+    },
+    {
+      "source": "core/src/accounts/templates/mfa/webauthn/authenticator_list.html",
+      "sha256": "6a99424dedfa67a46719b953208a1ab151fbad1041d20f839988133e6cc47a86"
+    },
+    {
+      "source": "core/src/accounts/templates/socialaccount/authentication_error.html",
+      "sha256": "745d05e6a79568e3e527ad1ae7fec4c7c38d9ad55dd50e78362876672ded183a"
+    },
+    {
+      "source": "core/src/accounts/templates/socialaccount/connections.html",
+      "sha256": "cf1dbee2bdc6ff4199369ff4fedafecc7554e2a1ad5b55ab7bdb62f94b8086a0"
+    },
+    {
+      "source": "core/src/accounts/templates/socialaccount/signup.html",
+      "sha256": "b1fb1c21f5f60ff9baeae7ae8c7d0b4cd41bdbe812a8592543e7266f559edb7e"
+    },
+    {
+      "source": "core/src/accounts/templates/socialaccount/snippets/provider_list.html",
+      "sha256": "982daf67ae8524fc27ecea5d2f0ae0c032ad7458bd242d2b9556a8537246800c"
+    },
+    {
+      "source": "core/src/accounts/templates/usersessions/usersession_list.html",
+      "sha256": "9310f86ae73a1515b115ae9fb8629ae7f31060b70677f26a980aff37faaed740"
+    },
+    {
+      "source": "core/src/accounts/templatetags/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "core/src/accounts/templatetags/core_accounts.py",
+      "sha256": "fde4eecb2d01daf8e6df90855e556df6aaf0a51f110ca529b0cb8db004e16278"
+    },
+    {
+      "source": "core/src/accounts/urls.py",
+      "sha256": "bb6f3d6fe21f4c8da90d3ec5010183864b0b8329d605f1f14a550e0bd885af19"
+    },
+    {
+      "source": "core/src/accounts/views/__init__.py",
+      "sha256": "505d0cca1da872025080c2488474da783a0acfb4621f03ddb5ece6821c7a9bbc"
+    },
+    {
+      "source": "core/src/accounts/views/codes.py",
+      "sha256": "fd698a34d1acccd0487249d4f39d10ace812428a97f9fb83bb1f77b34c86af44"
+    },
+    {
+      "source": "core/src/accounts/views/passkeys.py",
+      "sha256": "894e46c47a9152b72596b397a4c53ea25b50f4919554a056eec59aafc9a75c0d"
+    },
+    {
+      "source": "core/src/accounts/views/phones.py",
+      "sha256": "3f3ef92341105ceebaf5a356fa1c74cdfd5867dcf16c807a9af5edfcf505566c"
+    },
+    {
+      "source": "core/src/accounts/views/profile.py",
+      "sha256": "a2dfb087a330e9d9011b6d864776c39363f14842e63fe6c9696014259836fed3"
+    },
+    {
+      "source": "core/src/accounts/views/reauthentication.py",
+      "sha256": "93a8a46b5709e41d331a759fc6d5eb92772a6dbf215f7e00c0935374a728ccde"
+    },
+    {
+      "source": "core/src/accounts/views/recovery_codes.py",
+      "sha256": "c8b87cabc1d6158c0b5e36ca0d9a9928a3ff0e9efa7288c361006c6c36ce3e6f"
+    },
+    {
+      "source": "core/src/accounts/views/security.py",
+      "sha256": "0f226cbce665b18b2cf6303ad9435429ee73ecab2d6a22f824cf52b5be7b58be"
+    },
+    {
+      "source": "core/src/dnk_core/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "core/src/dnk_core/api.py",
+      "sha256": "a03823e906363612e58f005cf274a0182570b1bfde8b478ad8cf447566a4faa7"
+    },
+    {
+      "source": "core/src/dnk_core/asgi.py",
+      "sha256": "2851af0d75c6e2711d4e0d5105fb65af4226e4fadb48bd4e942a19c530b20378"
+    },
+    {
+      "source": "core/src/dnk_core/config.py",
+      "sha256": "11063aad9e63e277673f086057b3d1cf5f269c53ca64c79def32532cbef7de78"
+    },
+    {
+      "source": "core/src/dnk_core/configuration/__init__.py",
+      "sha256": "f6c532836efa14443228df4d7208e535ec78b3811e80535b185560dd21044acb"
+    },
+    {
+      "source": "core/src/dnk_core/configuration/allauth.py",
+      "sha256": "0dd42df3cbbdb59ea189cc7858c325791e96471262772545b67e6cc8a881e404"
+    },
+    {
+      "source": "core/src/dnk_core/configuration/application.py",
+      "sha256": "8c98509b9d0303a8b23a7f21caa24762a42aa3b0c752ab17b03afe6e59b05df8"
+    },
+    {
+      "source": "core/src/dnk_core/configuration/authentication.py",
+      "sha256": "e4328498106f978ce4087b10cdb57bc5062340f32d26af84f469b0f722053320"
+    },
+    {
+      "source": "core/src/dnk_core/configuration/django.py",
+      "sha256": "19ee627307e5ec11829dc9c8bd8e17b3775671c156d71a3080399ee3d2031e68"
+    },
+    {
+      "source": "core/src/dnk_core/configuration/infrastructure.py",
+      "sha256": "05cb1c25f5ee29ba4d4f4a31fd7ba1297af763445b528f3af46f2599a1df5d13"
+    },
+    {
+      "source": "core/src/dnk_core/configuration/validation.py",
+      "sha256": "8d799e0e40af601dfe1cf49222e6f3e803b24a0942a126e51d168ca6bba1e350"
+    },
+    {
+      "source": "core/src/dnk_core/models.py",
+      "sha256": "0954fec6384de9d07f2b64e6e68d34c432d4cf18bb41d4af195e1f1edd9e906d"
+    },
+    {
+      "source": "core/src/dnk_core/settings.py",
+      "sha256": "337e43bf74aff362a4f667902bae7fd133a8c3091797b07f23379db8f047495e"
+    },
+    {
+      "source": "core/src/dnk_core/urls.py",
+      "sha256": "4daee651bcf3ef518d7fc33c24a568a9b8ce02f918d82007f4ec92a010901ba4"
+    },
+    {
+      "source": "core/src/dnk_core/wsgi.py",
+      "sha256": "d2f1726e51acba1e8cec6852b4b79b9793320bdda8674eed62ee9ddb83127498"
+    },
+    {
+      "source": "core/src/manage.py",
+      "sha256": "749bf38fdd3a2577742ae8a6428c09f2436ef181dbd1cb373ca88d140502178e"
+    },
+    {
+      "source": "core/src/prepare_database.py",
+      "sha256": "43e73f184509474b93b4092779258f89bd528a6793e56423de38495514df6333"
+    },
+    {
+      "source": "core/tests/__init__.py",
+      "sha256": "7e276a47db39292e0ded0f121b528f58b31949121a63747cdc85adc5f7d06856"
+    },
+    {
+      "source": "core/tests/browser_adapter.py",
+      "sha256": "ddeec53402fa8aa6c35f4308b4aa8b77d5001ba12da01e0b3b41af12a474818b"
+    },
+    {
+      "source": "core/tests/browser_settings.py",
+      "sha256": "630f97563f3b9b163614ea1a5366f5d0f3b1d27574bb5caec2b23afa87b50ebf"
+    },
+    {
+      "source": "core/tests/helpers.py",
+      "sha256": "175774b6eebbc073bebfd6fed4feaa5ccb2985b7d9d5c9fc7067879a0a0d2a87"
+    },
+    {
+      "source": "core/tests/phone_concurrency_probe.py",
+      "sha256": "1fc93ec03bc88cc078a01925ceb0fa951b908e78f83ffc71aa58536678bdc5ea"
+    },
+    {
+      "source": "core/tests/settings.py",
+      "sha256": "1777618f2a51065c85738b4fe1cd73dd4541273ef092989b1f02ee585838476b"
+    },
+    {
+      "source": "core/tests/test_accounts.py",
+      "sha256": "6330d1fdb13dfc69bdc3931a9c87fd88418e652064cf7dd368b6a2f3724e3afe"
+    },
+    {
+      "source": "core/tests/test_admin_navigation.py",
+      "sha256": "a9e8638e9d0898146db2b90fce14cc8730ffc2d10fb67739e32907b82fbf30d4"
+    },
+    {
+      "source": "core/tests/test_auth_presentation.py",
+      "sha256": "5c13bc69fcf958ce392d863021953964696953128a54e12cb9aecb75380a1f68"
+    },
+    {
+      "source": "core/tests/test_capabilities_api.py",
+      "sha256": "2b3dbfbf64dd81504e1bf2db9667a19e18c4bdadbf26e2cbf0f38031e69258d7"
+    },
+    {
+      "source": "core/tests/test_config.py",
+      "sha256": "432ce1c97f5d2ccbd8f45a709101721b36ea6e6311b2e773f16aebfb2fd51d29"
+    },
+    {
+      "source": "core/tests/test_database_schema.py",
+      "sha256": "37e9b2da7403cdb0a409d07d6784bc89a2fd393774a975ae161d955624f95d00"
+    },
+    {
+      "source": "core/tests/test_feature_policy.py",
+      "sha256": "d6b646b097f921c70c2275368ed0115bb8fb0e636b11a53e09c8823719ce1df4"
+    },
+    {
+      "source": "core/tests/test_mail.py",
+      "sha256": "9605cf6fe88910d783f794c2e3a64ba1155d9b5d134cf5735edd66021aead9ca"
+    },
+    {
+      "source": "core/tests/test_passkey_signup.py",
+      "sha256": "e01cfbb444b3bfa61942fdf901b0d17f87645eb91f37bed6853747090d0dbb64"
+    },
+    {
+      "source": "core/tests/test_passkeys.py",
+      "sha256": "1c6061dadeca810a0b3a08840e08154a1ae6f2130082646f55876bcc01a322d6"
+    },
+    {
+      "source": "core/tests/test_phone_gateway.py",
+      "sha256": "b35a2e519a8c6a3d98c7ec8d41d8e68a56fe322e5926a03d0e0b13a69ffd164e"
+    },
+    {
+      "source": "core/tests/test_phone_numbers.py",
+      "sha256": "8c4e633d1194be505a0649d5cd468ef337f90173af2da366ddbc93b2371448e1"
+    },
+    {
+      "source": "core/tests/test_prepare_deployment.py",
+      "sha256": "9fdf1506883e881e3584ebac6ce7ccd7107b7f7275bbc4c34c4f02758070dbdf"
+    },
+    {
+      "source": "core/tests/test_prepare_deployment_postgres.py",
+      "sha256": "70bb666e419c8d12c1f1308449b42abb5b9b66db453b8f8273ab4f4be3f5be8f"
+    },
+    {
+      "source": "core/tests/test_profile.py",
+      "sha256": "c401f922a92c713d42c3bf82c34eb1591b0bd1545bffc66eda103877a53be1b5"
+    },
+    {
+      "source": "core/tests/test_reauthentication.py",
+      "sha256": "777f0d78790bc7b89358b297ebda1eab58e6e0b16349e13188b85b94b1d9c3e9"
+    },
+    {
+      "source": "core/tests/test_recovery_codes_page.py",
+      "sha256": "b0d7f2366a55c1417f8043f63ebb34ef7994317315d6831d37673d222d925854"
+    },
+    {
+      "source": "core/tests/test_settings.py",
+      "sha256": "2d50139c7ae873f711bef670a91fcb61be4d6c20dc8784dc2e6979109dce62d6"
+    },
+    {
+      "source": "core/tests/test_social_labels.py",
+      "sha256": "45c52d7d161c6bb31480cc0f1903058c69419b55338e8b8ade9b4146272a9e78"
+    },
+    {
+      "source": "core/tests/test_telegram_login.py",
+      "sha256": "60f48b749ed127fb75ddf5d6d81d8b4be720850a9a1a552f74f30212f5251425"
+    },
+    {
+      "source": "core/tests/test_ui_forms.py",
+      "sha256": "51de90aa8e53cb8ff2098df9b225368e3d7f7b9d42cc34e480e6054068cd12ee"
+    },
+    {
+      "source": "core/tests/test_uuid_models.py",
+      "sha256": "a65748e0655099263c76e523d6c0f94330697980bbec60e97cf342f22f3012f3"
+    },
+    {
+      "source": "core/uv.lock",
+      "sha256": "07d936cf63fb5f355b23ebe6f51d5e2a991f9457a355d36951ce568ef4217666"
+    },
+    {
+      "source": "frontends/apps/core/.gitignore",
+      "sha256": "63915f0bc1cc8e51009a026d287621f609f9af9330685129b5d5486d17e84a22"
+    },
+    {
+      "source": "frontends/apps/core/Dockerfile",
+      "sha256": "364d537615dd56c361bfe5dfa058a2ab476415654e1cd5949971ae10b87e6630"
+    },
+    {
+      "source": "frontends/apps/core/README.md",
+      "sha256": "c57fe4c06eeeb9ed05904318eb42f122de0a4e3a92b1262a95e295ce16634f13"
+    },
+    {
+      "source": "frontends/apps/core/e2e/account-navigation.spec.ts",
+      "sha256": "67d8c64bd9def16baa4f71cdb68504ee7ed7fc0abe0f9cc449c491467b2e6fd1"
+    },
+    {
+      "source": "frontends/apps/core/e2e/auth-layout.spec.ts",
+      "sha256": "c3f13dbb300c53be23d8d19dac06a25419abb069cdc2f226adc8e4a6a46972a8"
+    },
+    {
+      "source": "frontends/apps/core/e2e/auth-modes.spec.ts",
+      "sha256": "611d87374d703a38071ebb11b8df4766417eda1834c39f149f0262a0073a1cb6"
+    },
+    {
+      "source": "frontends/apps/core/e2e/auth.spec.ts",
+      "sha256": "def228b63e20498952753c1652ce19d2806b5b20472b2f05c6092ce6d9335392"
+    },
+    {
+      "source": "frontends/apps/core/e2e/capabilities.spec.ts",
+      "sha256": "8c10c8a1a4060e989105ca43978aa3878d86657a3b6be6c770fe9c8588dc66ee"
+    },
+    {
+      "source": "frontends/apps/core/e2e/fixture.ts",
+      "sha256": "eb379787334434421736aaa0025deffb6a9a17f20a1d17d579fb04a0b49e855b"
+    },
+    {
+      "source": "frontends/apps/core/e2e/fixture_account.py",
+      "sha256": "1d61b57ae8eeb18243c5709bbc4f9e379299ffe85e250b8a0d204c74191195a3"
+    },
+    {
+      "source": "frontends/apps/core/e2e/forms.spec.ts",
+      "sha256": "08f2c022ef89de51cc074880733d15cda2ded9644239eaaeb666e2793c3620a1"
+    },
+    {
+      "source": "frontends/apps/core/e2e/phones.spec.ts",
+      "sha256": "2ab8aa6be33b8769c11b973805aa81a655208cb5297273618e2106e5c6cf7cf2"
+    },
+    {
+      "source": "frontends/apps/core/e2e/profile.spec.ts",
+      "sha256": "4ad49ee9fb40d111e0f1bba3ec88758b247543b4a1a87ca0559121bfadc61aa7"
+    },
+    {
+      "source": "frontends/apps/core/e2e/setup.ts",
+      "sha256": "b40eda5e635853d4d51fb9dd10db90df2bde3c88caa6d4ec92891ab2bbee939b"
+    },
+    {
+      "source": "frontends/apps/core/e2e/teardown.ts",
+      "sha256": "6d18cae45afdcd29c8111167480ba4dd609954e78e676b0d2170726e19f307f5"
+    },
+    {
+      "source": "frontends/apps/core/e2e/tsconfig.json",
+      "sha256": "bb063573ff3da830632d8bd46f9832b03672201b20ee27a97c5963e1589139bc"
+    },
+    {
+      "source": "frontends/apps/core/eslint.config.mjs",
+      "sha256": "4d33625bf62f711ba72210f0868cc50cc956e7d414b71a55dc41709be1077e0f"
+    },
+    {
+      "source": "frontends/apps/core/nginx.conf",
+      "sha256": "a5888791fd6fa6b7de4602e7b04122fcf30040bb5ac6b0dbf34701a5576fd19e"
+    },
+    {
+      "source": "frontends/apps/core/nuxt.config.ts",
+      "sha256": "49ef25a75b35668e5263d155662c22fe6bda8287a73e1750f76c3e87b8b04e30"
+    },
+    {
+      "source": "frontends/apps/core/package.json",
+      "sha256": "1a512f7a178bca3f5a387251311689cd323cc1cf6c7acdf52deb3c395593ac6d"
+    },
+    {
+      "source": "frontends/apps/core/playwright.config.ts",
+      "sha256": "95b858569b68037741b39cfca90f83926aea94ce25114a12961fed917edbd2a5"
+    },
+    {
+      "source": "frontends/apps/core/server/routes/robots.txt.ts",
+      "sha256": "375e2192c7f4d52f0986d774f79ceb30eb52976b005be2fafad804b4d4305619"
+    },
+    {
+      "source": "frontends/apps/core/server/routes/sitemap.xml.ts",
+      "sha256": "eca1c15a644819d713e13507423929d1ba7c242ad77963d52bf665cbc804d241"
+    },
+    {
+      "source": "frontends/apps/core/src/app.vue",
+      "sha256": "d47f84c49b3caf3e98cf94e55addb70c83edc84051e75016f492ec59bd657597"
+    },
+    {
+      "source": "frontends/apps/core/src/middleware/auth.ts",
+      "sha256": "d02fa43bad2288d73d9c2297c3d485d6d6b1d81da90ec8219819eafcc3b8f375"
+    },
+    {
+      "source": "frontends/apps/core/src/modules/capabilities/model/capabilities.ts",
+      "sha256": "6d6c99b326d9b78b870db86a6f37e6856d9b077391a6e687cb450bab0a31d5ba"
+    },
+    {
+      "source": "frontends/apps/core/src/modules/home/HomePage.vue",
+      "sha256": "b9388b88b01435af8575336e1623dd3f9af74e954103fc13f28cb581c2f5ef0c"
+    },
+    {
+      "source": "frontends/apps/core/src/modules/home/NotFoundPage.vue",
+      "sha256": "df2a374b21a2483e48573c674c92f80e1603be37e8be0b6806b506e51e4de11c"
+    },
+    {
+      "source": "frontends/apps/core/src/modules/session/model/session.ts",
+      "sha256": "8c08bfb0be2d1bea6ba51eeafb6742cc2c30b3ca145437fdb2cf1feac292b6df"
+    },
+    {
+      "source": "frontends/apps/core/src/modules/workspace/WorkspacePage.vue",
+      "sha256": "1b5c39b029ba6630946424e46e012a4a573a48f92de4ee636c7e913580d757e5"
+    },
+    {
+      "source": "frontends/apps/core/src/modules/workspace/ui/ProfileOverview.vue",
+      "sha256": "18c6816f24862e1575f2247d51f9f384eac4ffb68b524450103c1cb0036bdf90"
+    },
+    {
+      "source": "frontends/apps/core/src/pages/[...slug].vue",
+      "sha256": "4f399d86e8f847059091da275de3866b6590c22d5c4cdb05bf41e200965c4d09"
+    },
+    {
+      "source": "frontends/apps/core/src/pages/app.vue",
+      "sha256": "89a7b91632cfab4210e74edf1640ca6dacc60ca401dca561cecc8fa595fa70a0"
+    },
+    {
+      "source": "frontends/apps/core/src/pages/index.vue",
+      "sha256": "025466550e1d2ea93c655cac003420f3fee993c2e502ed31e85305ddb6de8cf4"
+    },
+    {
+      "source": "frontends/apps/core/src/shared/api.ts",
+      "sha256": "a99f581e3a34aa65cb997bb0736453c01346d903330e1f013c3ccfae07f67546"
+    },
+    {
+      "source": "frontends/apps/core/src/shared/ui/SiteFooter.vue",
+      "sha256": "614a5dfa1a5366e96bfb9b934dad6c55c9013afa49ec5c7cf57b72220ce1ded7"
+    },
+    {
+      "source": "frontends/apps/core/src/shared/ui/SiteHeader.vue",
+      "sha256": "7f3f116072afb69c297e3babd73144a9e81ee9b9e784a0665f7886f49806c46f"
+    },
+    {
+      "source": "frontends/apps/core/src/style.css",
+      "sha256": "7735f60fd029e2dfa0f9d484f0169f8b29838fb1523efc6c6c22d12fd9a41871"
+    },
+    {
+      "source": "frontends/apps/core/tsconfig.json",
+      "sha256": "858a48de1ff04a1c2948fb90a39ac1a6b9869fd8b97e3fd0dbde89454179e0c0"
+    },
+    {
+      "source": "frontends/packages/ui/README.md",
+      "sha256": "ebd45f8ee45d77b1ff07a480a3505523f1744439da6c9d0b4db445e0ba5aaae8"
+    },
+    {
+      "source": "frontends/packages/ui/components.json",
+      "sha256": "6a291f627e6845d7c5f0113a5f94f74a5d8c7d88ba65b108cdb98f82b36e8958"
+    },
+    {
+      "source": "frontends/packages/ui/eslint.config.mjs",
+      "sha256": "9c34deb8901b9c89036e147b08f5251adbb08e16c71e5322a9251422dfb3318d"
+    },
+    {
+      "source": "frontends/packages/ui/package.json",
+      "sha256": "9fe30d7f51200b6bee62a797e578c1ea3c9c0b30449973834a1bd5db66b62836"
+    },
+    {
+      "source": "frontends/packages/ui/src/README.md",
+      "sha256": "9018da4ff5d0a8c3ef22469b71f0e235e3793f8f940be54b9604fcb57e3d5856"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/alert/Alert.vue",
+      "sha256": "85b02ed1f04100ea118d55865b9dbede257500b9c21f2d797a07c557155fb9f0"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/alert/AlertDescription.vue",
+      "sha256": "ea46e3c5fada86174e36846d4bdba36e28e03a9113ec355bde1113c2bfa9f3c8"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/alert/AlertTitle.vue",
+      "sha256": "2c2c495d704f07aab1f7b7893cfc489e5bf1d428dd2f15ce8976d9bd1085b76b"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/alert/index.ts",
+      "sha256": "75328e2037a18a68a92742ef75df72e7af03fc573729d2cd67a2bd8e69e3cbe5"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/avatar/Avatar.vue",
+      "sha256": "eec9c03b2df97fda2aed861bd2ec49fd4202387f0fe56c5a523b9a218b679aac"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/avatar/AvatarFallback.vue",
+      "sha256": "c29ddc2322cabaebfd6223a2e81781c1e2745f8d1009521b48b2c6dc05610d60"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/avatar/AvatarImage.vue",
+      "sha256": "28c533de9f0aeed217cf4e3d8191818470e4116a2092eef68c6fbc71b29ea556"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/avatar/index.ts",
+      "sha256": "6b3f8a3269e4c2bc5f1b06a0216175b5897af50ca119163e23cc815f2c3f7c33"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/badge/Badge.vue",
+      "sha256": "fda0bf1a9d4929f1d1b7fb7b2eed0f7ab3df1f8acfca5eb41a2f5399c6e8dc44"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/badge/index.ts",
+      "sha256": "40059c209ec5a43b52aed1339767bfb9801d76a837aeed9b5a6991608c501c67"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/button/Button.vue",
+      "sha256": "148fd357871ffcc9a789519ac6417f3aabe64e5151d30e9a86bbe98e5a8b103e"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/button/index.ts",
+      "sha256": "dc0b5deb896fb325dacddf7a32e53701a8bef0dae20a01a2ce7422b1f910f62b"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/checkbox/Checkbox.vue",
+      "sha256": "3a8516ed0116a16a217cfd0e78f18aa06e883c93a198c4065560d38b2ef9a070"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/checkbox/index.ts",
+      "sha256": "5348cc51dbc04b363f3ac552969d85bcbf674764d5f3b6c265495c0cdbbef0f8"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/field/Field.vue",
+      "sha256": "edd6f5f7e1b9fa148218053d5cfcbf843f73f70745bdd15190c36b7c8ea0110f"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/field/FieldContent.vue",
+      "sha256": "8d285c935206b4990dac1f3292913c9e08180703879aa7277675bd36dbbe90ca"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/field/FieldDescription.vue",
+      "sha256": "82c1f05999098b734cc871ddad05dc1e105aa0a958b07bdaa136c9bc521908a4"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/field/FieldError.vue",
+      "sha256": "890504fa338136dceceecfe422154ce9d6688e1d46ffec0317bcd673d9803d70"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/field/FieldGroup.vue",
+      "sha256": "95645e0a735f7e32c6e67061d5044aec3dc67d898d561f0e006cc601f8df24af"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/field/FieldLabel.vue",
+      "sha256": "f0b48e43b1a497b55b219e842702ddaa642e3cd3548e48787ffe203d3a030259"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/field/FieldLegend.vue",
+      "sha256": "9d5233b1dd715e9539b241ce68178ec4ed2d9764861b3687579223d2ebe80a81"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/field/FieldSeparator.vue",
+      "sha256": "db301efd908aab08c0d4b230e47b9adc71708133670f7d1d3d87e741dc13c441"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/field/FieldSet.vue",
+      "sha256": "50cc4dc64f324b893c72e36a6d33817d89efcaa2ed72994f1cf6f731986afdd3"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/field/FieldTitle.vue",
+      "sha256": "c94bb3002ae26083e7bf7bda7288ca0699282fc788d7d18dc7f59fe5cb2253c9"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/field/index.ts",
+      "sha256": "d8d4ea6b875410a3cb9e540dcf27516056675647306a16dfb304f8bddaf5ab67"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/input/Input.vue",
+      "sha256": "562821fc4c9c5539e6c1ec4b6a538bebab9f9592e8546b69d8e1fea3eab220c4"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/input/index.ts",
+      "sha256": "ba728db29f97b894318836d094705b34c0f792352548189703224c694d29ed5b"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/input-group/InputGroup.vue",
+      "sha256": "8c3e093a769daafa39929e2220596b1df8f16115198b6a27c113ea8ec2d500c7"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/input-group/InputGroupAddon.vue",
+      "sha256": "9f48094cf72808922e12d753efcf35927d8d8de874d41c5d4e26f07ce8466ea6"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/input-group/InputGroupButton.vue",
+      "sha256": "233d52c29139d3bb29c2d400f273a5bead513a3175781de4041cb5032088f042"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/input-group/InputGroupInput.vue",
+      "sha256": "5aeab6096d096e77a76db54f5636ee73ee9728f1420ea06af374860c58c5841e"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/input-group/InputGroupText.vue",
+      "sha256": "150693e3ed84949e4fc15573cd39bbcec553c99db19cde62e9eff3aa20a72dd5"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/input-group/InputGroupTextarea.vue",
+      "sha256": "9650a6625a5e5f715355cb656b31cebb874ef6700dc9d91fcc4477c2d6afb24e"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/input-group/index.ts",
+      "sha256": "2c801e7696216cb7c4ac51fbab1be0e4816a2153bc685ea84ac1d41e5e85dd8a"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/input-otp/InputOTP.vue",
+      "sha256": "427fd1766229068321e63848a1627cf8db60cb68ba899d3ef641947a936e698e"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/input-otp/InputOTPGroup.vue",
+      "sha256": "b448c1fac0adab3b9e736cf6b9c993b4bb6ab541320c9e84fe6055da31d9df2c"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/input-otp/InputOTPSeparator.vue",
+      "sha256": "d9c9b53e526d9c3744d83bcab325ca1b8a1b051d191918bb9fea325c5c963b35"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/input-otp/InputOTPSlot.vue",
+      "sha256": "29ca26c5addaf97e754a3088cdca7ecffe0747eb873ba91f4406eee326f6728c"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/input-otp/index.ts",
+      "sha256": "448f21e84ea4741b12c93084c13c4e9cf3b909f46371f8b4a9243041a0499563"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/label/Label.vue",
+      "sha256": "4e216f66169cfaab3acf86285862baacadc4729b824e5d808169057563c700d3"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/label/index.ts",
+      "sha256": "66c26173360bc6213b18473375aaa22debd4cc493f26e5331a6087851ff03ec7"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/native-select/NativeSelect.vue",
+      "sha256": "cc3557ece39bc8330623b32d114c16cd97066c26f8c3c4bbb91226faeb08045b"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/native-select/NativeSelectOptGroup.vue",
+      "sha256": "ccf4f6d5576539a392be8c4c27c5d09d1a4e4fa1f0fb20040ffc8602005b8e0c"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/native-select/NativeSelectOption.vue",
+      "sha256": "93230074435d8c5e823cc029f95cbeeab29444e1e357a9fd3e40f42697134437"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/native-select/index.ts",
+      "sha256": "e63785b1a1c30e8075bb4f238152448829da58399249b05bca8c333c2c1479e1"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/radio-group/RadioGroup.vue",
+      "sha256": "0b0cdb65c5f2ca6970cf17032504126be7f0a5db1229e7b561da2e5f5410be2c"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/radio-group/RadioGroupItem.vue",
+      "sha256": "5142125a3378fb9a9bdbd241e78db7c76acdd9d1973e5fe94c3e4ed04da1c825"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/radio-group/index.ts",
+      "sha256": "cb38f5cf77b270d6322b9ade8c2fd67a8be8c2c7a8b7344ae37d2a72194c59f0"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/separator/Separator.vue",
+      "sha256": "1b0442d576e4813c1b042e98fbd52e2262b8daf665b9981b65a221bb8ec19e70"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/separator/index.ts",
+      "sha256": "fcd7839dc204de276f98b80a4ccdb58c7d7494f64389c682312d3490e01b9025"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/sheet/Sheet.vue",
+      "sha256": "765fc0405d3b98658739e5019baa17bb914c5b8cd832a7daa4397f2bd2400cae"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/sheet/SheetClose.vue",
+      "sha256": "a9ae9e32f8154e17e3d14e1a9c4d1555edc8cecd2eb813e832f999b6e356a0bf"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/sheet/SheetContent.vue",
+      "sha256": "19aac24743bd7f3600ea265471252d9110b66ccd5ead848d5b11806e10d46a5d"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/sheet/SheetDescription.vue",
+      "sha256": "15c1f285da5fdff1a4bad14ff4cf9ab0d55b489f7fcd410b233514d6b22939fb"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/sheet/SheetFooter.vue",
+      "sha256": "8afe38f39063e6e92dc855f9fe88e30c2cd388a1457d0b2ccf4398bf79d11a07"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/sheet/SheetHeader.vue",
+      "sha256": "5e9383831926a3b0decd74e8e90fbc2a2284065035803eee781c55bfb6618d0b"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/sheet/SheetOverlay.vue",
+      "sha256": "e3b11e027b5c7a778c30ecf034029241a4c3e8a587b5b1290b240fdf2a3f6113"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/sheet/SheetTitle.vue",
+      "sha256": "84571ae70afad8a598546bf8cf0f7d9c1fbe36ec7e32841f333360d0742f1b73"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/sheet/SheetTrigger.vue",
+      "sha256": "cac73faa1a4ac604675ac86c5dc24f9ee424979fcaa63a25b1a760e9aba1e79c"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/sheet/index.ts",
+      "sha256": "582344a7a7cb9156143fff5e3a898e31833970efac5b1ee6b1d2322938fe37f6"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/skeleton/Skeleton.vue",
+      "sha256": "2deb2d00a0980b256c4b4538bfdb52c32f00d680f1526681f5a2d239c0a50aeb"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/skeleton/index.ts",
+      "sha256": "76c65d13242f2ac4da5ae9f12d2cf9dc9a6825d91f63f9f762e5329461c93314"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/spinner/Spinner.vue",
+      "sha256": "fab2b4361e9410b88910297f7b346ef1911cf05a1783b08afc81f998d6c63168"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/spinner/index.ts",
+      "sha256": "cc089f08a8d333f85a011c1d20975e5976b9d9bfb4c14f3a416dd713adaa746b"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/textarea/Textarea.vue",
+      "sha256": "61208a289f2660b1798a6ec609e9db46886631799f0492b0c40450f74df30ebf"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/textarea/index.ts",
+      "sha256": "9212587988979849b3bbcddebdf46d9b1f80a513c0cf92391d83c9d50b648007"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/toggle/Toggle.vue",
+      "sha256": "9928b2d25235430ce1d912aabf7f67252040c602aa0165277138922fba60692c"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/toggle/index.ts",
+      "sha256": "690920e8bbafb2606c83f79b8b378df389d8bc9ff2bbba0a0633a4e2fc3e507a"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/toggle-group/ToggleGroup.vue",
+      "sha256": "50ea308e27f755b9e6a040266f7610df9abb4e3238b569f78afc1965a5a612ef"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/toggle-group/ToggleGroupItem.vue",
+      "sha256": "00b7a742e785f378b8a3d0ce358c6ab9ac7805e4048a9c00d5e866889486a1ef"
+    },
+    {
+      "source": "frontends/packages/ui/src/components/toggle-group/index.ts",
+      "sha256": "e3340e7550873fea4d20f512e9d84e8bc4f5dfcd674a9866c0e59226bd07c129"
+    },
+    {
+      "source": "frontends/packages/ui/src/django/AccountMenu.vue",
+      "sha256": "a2199bb42078d7cb5792818e21985f504ab0d104f5db2cf9cf2ae525ef6bcac3"
+    },
+    {
+      "source": "frontends/packages/ui/src/django/FieldControl.vue",
+      "sha256": "868744005a9b80802fccfd30b85944c63859cd8a88c25259032420e61ef46cb0"
+    },
+    {
+      "source": "frontends/packages/ui/src/django/LoginChannels.vue",
+      "sha256": "4e142abb458ccb1b306d3e13850d324ed9cd4358f24a50e81a5a2204ac8ef0f6"
+    },
+    {
+      "source": "frontends/packages/ui/src/django/main.ts",
+      "sha256": "c4d9dffb83ecfeba86f1703919baf1d7d858c0fe22b904e0693b0bec8162c28a"
+    },
+    {
+      "source": "frontends/packages/ui/src/django/types.ts",
+      "sha256": "0bf466d48d2aa4da82b81265656fc9513600f4daacefea5001f49beef6115b29"
+    },
+    {
+      "source": "frontends/packages/ui/src/lib/utils.ts",
+      "sha256": "64fc84c1be627f0d586fb4ba64d824a1604f44282381f5bae68cdf86e10bb6ec"
+    },
+    {
+      "source": "frontends/packages/ui/src/style.css",
+      "sha256": "ce58128b7cd9580d1e815b99e41f43a3441828e68d5d5fdc4d6db7cb7b20f9bc"
+    },
+    {
+      "source": "frontends/packages/ui/tsconfig.json",
+      "sha256": "bfec6b33a78a7e61fc30e66f3afd5e98afb7d408f8b0a0af2509eb66d07c0f5d"
+    },
+    {
+      "source": "frontends/packages/ui/vite.config.ts",
+      "sha256": "7b768f0f7732babed9db1b7ea70befb4a963ea3f28ca29798cf46374e4d18fa5"
+    },
+    {
+      "source": "docs/core-ui/QA.md",
+      "sha256": "14f5e59c46a1cf8602cee3248e2ca227219d02166a7379a5ebbf7a7643c157e4"
+    },
+    {
+      "source": "docs/core-ui/README.md",
+      "sha256": "53bde7c067277666c4191c0bcc6726c2f95b1a7e856241b4c18e11351219c612"
+    },
+    {
+      "source": "docs/core-ui/forms.png",
+      "sha256": "1e40014d5a7c64ffb8bd74bc05501470348982257f4cd904c538718804b61a91"
+    },
+    {
+      "source": "docs/core-ui/home.png",
+      "sha256": "6cbfa777dbb61be2a67e8dabdfdaa8c1ef009bcd4e6a60b866180cf20e7cede9"
+    },
+    {
+      "source": "docs/core-ui/login.png",
+      "sha256": "d477fccd6981c7e929feb5cfaea9e9c040f8e307008d575e4c0093da9cf47f81"
+    },
+    {
+      "source": "docs/core-ui/security.png",
+      "sha256": "4969b2f9925ddcd60efbd18a3e6153a677bcf3bcf8a7bb21048eae679a9cb49a"
+    }
+  ]
+}

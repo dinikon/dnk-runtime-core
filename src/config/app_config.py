@@ -17,7 +17,11 @@ from src.config.deploy.control_plane import ControlPlaneConfig
 from src.config.deploy import DeploymentConfig
 from src.config.feature import FeatureConfig
 from src.config.infrastructure import DatabaseConfig
+from src.config.infrastructure.email_config import EmailConfig
+from src.config.infrastructure.event_bus_config import EventBusConfig
+from src.config.infrastructure.rabbitmq_config import RabbitMQConfig
 from src.config.infrastructure.redis_config import RedisConfig
+from src.config.infrastructure.scheduled_jobs_config import ScheduledJobsConfig
 
 # from .deploy import DeploymentConfig
 # from .enterprise import EnterpriseFeatureConfig
@@ -91,6 +95,10 @@ PYPROJECT_TOML_PATH = search_file_upwards(
 class DnkConfig(
     # Infra config
     DatabaseConfig,
+    RabbitMQConfig,
+    EventBusConfig,
+    ScheduledJobsConfig,
+    EmailConfig,
     # Redis config
     RedisConfig,
     # Auth config

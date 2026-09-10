@@ -1,0 +1,50 @@
+global:
+  imagePullSecrets: []
+enabled: true
+nameOverride: runtime-postgresql
+fullnameOverride: ''
+image:
+  repository: postgres
+  tag: 16-alpine
+  pullPolicy: IfNotPresent
+auth:
+  database: dniko
+  username: core
+  password:
+    value: ''
+    existingSecret:
+      name: ''
+      key: ''
+external:
+  host: ''
+  port: 5432
+persistence:
+  enabled: true
+  size: 8Gi
+  storageClass: null
+  existingClaim: ''
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 1Gi
+pod:
+  annotations: {}
+  labels: {}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 70
+    runAsGroup: 70
+    fsGroup: 70
+    fsGroupChangePolicy: OnRootMismatch
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+      - ALL
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  imagePullSecrets: []

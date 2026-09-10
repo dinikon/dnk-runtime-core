@@ -5,18 +5,19 @@ from typing import Annotated
 from fastapi import Depends
 
 from src.config import dnk_config
-from src.modules.schema_registry.presentation.depends.application import (
-    CreateSchemaUseCaseDep,
+from src.modules.shared.presentation.persistence.depends import UoWDep
+from src.modules.shared.infrastructure.persistence.tenant_migrations import (
+    TenantMigrator,
 )
-from src.modules.schema_registry.infrastructure.tenancy_schema_bootstrap_adapter import (
-    SchemaRegistryTenantSchemaBootstrapAdapter,
+from src.modules.tenancy.infrastructure.adapter.schema_bootstrap import (
+    AlembicTenantSchemaBootstrapAdapter,
 )
 from src.modules.tenancy.application.ports.schema_bootstrap import (
     TenantSchemaBootstrapContextFactory,
     TenantSchemaBootstrapPort,
 )
-from src.modules.tenancy.application.use_cases import (
-    CreateTenantUseCase,
+from src.modules.tenancy.application.tenant import CreateTenantUseCase
+from src.modules.tenancy.application.tenant_domain.use_case import (
     ResolveTenantByHostUseCase,
     ResolveTenantRequestContextByHostUseCase,
 )
@@ -53,10 +54,9 @@ CreateTenantUseCaseDep = Annotated[
 def get_tenant_schema_bootstrap_context_factory() -> (
     TenantSchemaBootstrapContextFactory
 ):
-    """Создает фабрику bootstrap context из runtime schema конфигурации."""
+    """Создает фабрику bootstrap context из tenant schema конфигурации."""
     return TenantSchemaBootstrapContextFactory(
         schema_prefix=dnk_config.SCHEMA_PREFIX,
-        default_seed_path=dnk_config.DEFAULT_SEED_MODULE,
     )
 
 
@@ -67,10 +67,10 @@ TenantSchemaBootstrapContextFactoryDep = Annotated[
 
 
 def get_tenant_schema_bootstrap_port(
-    create_schema_use_case: CreateSchemaUseCaseDep,
+    uow: UoWDep,
 ) -> TenantSchemaBootstrapPort:
-    """Создает порт bootstrap tenant schema через schema_registry adapter."""
-    return SchemaRegistryTenantSchemaBootstrapAdapter(create_schema_use_case)
+    """Создает порт bootstrap на соединении текущего UoW."""
+    return AlembicTenantSchemaBootstrapAdapter(uow.session, TenantMigrator())
 
 
 TenantSchemaBootstrapPortDep = Annotated[

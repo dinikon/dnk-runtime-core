@@ -1,0 +1,82 @@
+{
+  "version": "0.0.1",
+  "verified_on": "2026-09-09",
+  "images": [
+    {
+      "image": "ghcr.io/dinikon/runtime/core",
+      "tags": [
+        "0.0.1",
+        "latest"
+      ],
+      "digest": "sha256:4bd129d8f2567380be47d658b3e148c53723dcae71e3fe042f123fa8c2403410",
+      "original_build_digest": "sha256:5e28f6e52bc8a338cb75f1c74ead8279413299f9b5213bfda296e9e92fc859b8",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "source": "https://github.com/dinikon/dnk-runtime-core",
+      "source_revision": "9579b4f378022bff3929eb99799214cc10809dc4-dirty",
+      "github_package_url": "https://github.com/users/dinikon/packages/container/package/runtime%2Fcore",
+      "visibility": "private",
+      "repository": "dinikon/dnk-runtime-core",
+      "verified": true
+    },
+    {
+      "image": "ghcr.io/dinikon/runtime/runtime",
+      "tags": [
+        "0.0.1",
+        "latest"
+      ],
+      "digest": "sha256:1d889f2dda35123f070d5005d131d73bdfa9a85af22257250d05cb32486bb94b",
+      "original_build_digest": "sha256:1a4da04c7be600e8d21f860315a58e523d1409a75d41a57ad7b0b937c5e06b62",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "source": "https://github.com/dinikon/dnk-runtime-core",
+      "source_revision": "9579b4f378022bff3929eb99799214cc10809dc4-dirty",
+      "github_package_url": "https://github.com/users/dinikon/packages/container/package/runtime%2Fruntime",
+      "visibility": "private",
+      "repository": "dinikon/dnk-runtime-core",
+      "verified": true
+    },
+    {
+      "image": "ghcr.io/dinikon/runtime/frontend-core",
+      "tags": [
+        "0.0.1",
+        "latest"
+      ],
+      "digest": "sha256:95f42746c243433315396f6676a1ca520025c8ee00f4af65683c3ac40343b199",
+      "original_build_digest": "sha256:4cf52786cb44ad00d71c60189545b689024decf0135f217db27629f191fd26c2",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "source": "https://github.com/dinikon/dnk-runtime-core",
+      "source_revision": "9579b4f378022bff3929eb99799214cc10809dc4-dirty",
+      "github_package_url": "https://github.com/users/dinikon/packages/container/package/runtime%2Ffrontend-core",
+      "visibility": "private",
+      "repository": "dinikon/dnk-runtime-core",
+      "verified": true
+    },
+    {
+      "image": "ghcr.io/dinikon/runtime/frontend-runtime",
+      "tags": [
+        "0.0.1",
+        "latest"
+      ],
+      "digest": "sha256:4238ffe5a6628ab05185851c508a87d02b0247773797aec098682356ba29f677",
+      "original_build_digest": "sha256:2aa5409f40bad3bef86e7c99c5460c4ca9251b115e695d14a72b49a9892510a9",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "source": "https://github.com/dinikon/dnk-runtime-core",
+      "source_revision": "9579b4f378022bff3929eb99799214cc10809dc4-dirty",
+      "github_package_url": "https://github.com/users/dinikon/packages/container/package/runtime%2Ffrontend-runtime",
+      "visibility": "private",
+      "repository": "dinikon/dnk-runtime-core",
+      "verified": true
+    }
+  ]
+}

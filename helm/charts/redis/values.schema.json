@@ -1,0 +1,293 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DNK Core redis values",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "enabled",
+    "image",
+    "auth",
+    "external",
+    "persistence",
+    "resources",
+    "pod",
+    "database"
+  ],
+  "properties": {
+    "enabled": {
+      "type": "boolean"
+    },
+    "nameOverride": {
+      "type": "string",
+      "maxLength": 63,
+      "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+    },
+    "fullnameOverride": {
+      "type": "string",
+      "maxLength": 63,
+      "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "tag",
+        "pullPolicy"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tag": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pullPolicy": {
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
+        }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "password"
+      ],
+      "properties": {
+        "password": {
+          "$ref": "#/definitions/secret"
+        },
+        "username": {
+          "type": "string"
+        }
+      }
+    },
+    "external": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "host",
+        "port",
+        "url"
+      ],
+      "properties": {
+        "host": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "url": {
+          "$ref": "#/definitions/secret"
+        },
+        "useSsl": {
+          "type": "boolean"
+        }
+      }
+    },
+    "persistence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "size",
+        "existingClaim"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "size": {
+          "type": "string",
+          "minLength": 1
+        },
+        "storageClass": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "existingClaim": {
+          "type": "string",
+          "maxLength": 253,
+          "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
+        }
+      }
+    },
+    "resources": {
+      "type": "object"
+    },
+    "pod": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "annotations",
+        "labels",
+        "securityContext",
+        "containerSecurityContext",
+        "nodeSelector",
+        "tolerations",
+        "affinity",
+        "imagePullSecrets"
+      ],
+      "properties": {
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "securityContext": {
+          "type": "object"
+        },
+        "containerSecurityContext": {
+          "type": "object"
+        },
+        "nodeSelector": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "tolerations": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "affinity": {
+          "type": "object"
+        },
+        "imagePullSecrets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "global": {
+      "type": "object"
+    },
+    "database": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 15
+    }
+  },
+  "definitions": {
+    "secret": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "existingSecret"
+      ],
+      "properties": {
+        "value": {
+          "type": "string"
+        },
+        "existingSecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "key"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 253,
+              "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
+            },
+            "key": {
+              "type": "string",
+              "maxLength": 253,
+              "pattern": "^[A-Za-z0-9._-]*$"
+            }
+          }
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "value": {
+              "const": ""
+            },
+            "existingSecret": {
+              "properties": {
+                "name": {
+                  "const": ""
+                },
+                "key": {
+                  "const": ""
+                }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "value": {
+              "type": "string",
+              "minLength": 1
+            },
+            "existingSecret": {
+              "properties": {
+                "name": {
+                  "const": ""
+                },
+                "key": {
+                  "const": ""
+                }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "value": {
+              "const": ""
+            },
+            "existingSecret": {
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "key": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

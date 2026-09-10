@@ -1,0 +1,81 @@
+{{- if .Values.migrations.enabled -}}
+{{- $fullname := include "dnk.runtime.fullname" . -}}
+{{- $w := .Values.backend -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "dnk.lifecycle.jobName" . }}
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "-10"
+    dnk.io/deployment-token: {{ include "dnk.lifecycle.token" . | quote }}
+  labels:
+    {{- include "dnk.runtime.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrations
+spec:
+  activeDeadlineSeconds: {{ .Values.migrations.activeDeadlineSeconds }}
+  backoffLimit: {{ .Values.migrations.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "dnk.runtime.labels" . | nindent 8 }}
+        app.kubernetes.io/component: migrations
+      annotations:
+        dnk.io/deployment-token: {{ include "dnk.lifecycle.token" . | quote }}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      {{- with concat .Values.global.imagePullSecrets $w.pod.imagePullSecrets | uniq }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $w.pod.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $w.pod.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $w.pod.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $w.pod.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: migrations
+          image: {{ printf "%s:%s" $w.image.repository $w.image.tag | quote }}
+          imagePullPolicy: {{ $w.image.pullPolicy }}
+          command: [python, /opt/dnk-runtime/entrypoint.py]
+          args: [python, /opt/dnk-runtime/migrate.py, --wait-timeout, {{ .Values.migrations.waitTimeoutSeconds | quote }}]
+          envFrom:
+            - configMapRef:
+                name: {{ $fullname }}-config
+          env:
+            {{- include "dnk.runtime.secretEnv" . | nindent 12 }}
+            {{- with $w.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml (default $w.resources .Values.migrations.resources) | nindent 12 }}
+          {{- with $w.pod.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: runtime-scripts
+              mountPath: /opt/dnk-runtime
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: runtime-scripts
+          configMap:
+            name: {{ $fullname }}-scripts
+        - name: tmp
+          emptyDir: {}
+{{- end }}

@@ -2,8 +2,8 @@
 
 ## Purpose
 
-`identity` provides console authentication and session management. The current model is email OTP challenge + session
-cookie for authenticated console users.
+`identity` provides tenant-aware console authentication, current-user profile
+read/update flows, and tenant admin provisioning during onboarding.
 
 ## Public Functionality
 
@@ -16,30 +16,52 @@ cookie for authenticated console users.
 
 ## Main Flows / Use Cases
 
-- `RequestEmailOtp`
-- `ConfirmEmailOtp`
-- `AuthenticateBySession`
-- `GetCurrentUser`
-- `UpdateCurrentUserProfile`
-- `LogoutCurrentSession`
-- `create_tenant_admin` provisioning flow through application service
+- `RequestEmailOtpUseCase.__call__`
+- `ConfirmEmailOtpUseCase.__call__`
+- `AuthenticateBySessionUseCase.__call__`
+- `GetCurrentUserUseCase.__call__`
+- `UpdateCurrentUserProfileUseCase.__call__`
+- `LogoutCurrentSessionUseCase.__call__`
+- `UserService.create_tenant_admin`
 
-## Domain Model
+## Internal Structure
 
-- `User`
-    - tenant-scoped user profile, locale/theme/timezone, last activity and login state
-- `UserEmail`
-    - primary/verified flags, email ownership and verification status
+- `domain/user/`
+    - `entity.py` with `User` and `UserEmail`
+    - `error.py` with user/email login errors
+    - `repository.py` with `UserRepositoryProtocol`
+- `domain/auth/`
+    - `error.py` with OTP/session errors
+- `application/auth/`
+    - `command/`, `dto/`, `service/`, `use_case/`
+- `application/user/`
+    - `dto/`, `service/`
+- `application/ports/`
+  - tenant context and token store ports
+- `presentation/http/console_auth/`
+    - controller/request/response files per endpoint
+- `presentation/depends/`
+    - `application.py` for use case wiring
+    - `infrastructure.py` for repository/adapters/settings wiring
 
 ## Infrastructure / Persistence
 
-- SQLAlchemy repositories store users and user emails
-- token/session implementations use shared token infrastructure
-- Redis-related settings exist in config, while auth services consume token/session backends
+- `UserModel` and `UserEmailModel` inherit `TenantBase`; Alembic owns `users` and `user_emails` in each tenant schema
+- `users` has no SQL `tenant_id` column; `user_emails.user_id` references `users.id` in the same schema without cascading deletion
+- `SqlAlchemyUserRepository` receives the active UoW session and `TenantSchemaNaming`; every operation requires an explicit tenant identifier
+- Core statements use the models' `__table__` definitions and a per-statement `schema_translate_map`, preserving connection state and avoiding ORM identity collisions across tenants
+- repository results are explicitly mapped to domain entities; `User.tenant_id` comes from the operation context
+- add/profile writes reject a mismatch between the supplied tenant and `User.tenant_id` before executing SQL
+- missing tenant schemas/tables produce infrastructure errors; there is no fallback to shared users
+- startup global `create_all` does not create identity tables; onboarding migrates the tenant schema before creating its administrator
+- token/session implementations use shared `TokenManager`
+- tenant context is resolved through a tenancy-owned use case adapter
+- request OTP delegates typed email sending to shared `EmailService`
+- email delivery uses shared provider wiring with SMTP MVP transport and a placeholder `resend` provider
 
 ## Presentation / Entry Points
 
-All current console auth routes live under `/api/console/auth`:
+Console auth routes live under `/api/console/auth`:
 
 - `POST /request-otp`
 - `POST /confirm-otp`
@@ -47,25 +69,45 @@ All current console auth routes live under `/api/console/auth`:
 - `PATCH /me`
 - `POST /logout`
 
+Each controller keeps its own explicit `try/except -> HTTPException` mapping.
+`identity` does not use a shared `error_mapper.py`.
+Current-user profile stores `interface_theme` as a non-null string.
+The default theme is `system`, and `PATCH /me` requires an explicit non-null theme value.
+
 ## Auth Settings
 
 - OTP code length
 - OTP challenge TTL
 - session TTL
 - session cookie name
+- email OTP response still returns `code` only in `DEVELOPMENT`
 - in development mode, OTP code may be returned in response for easier local testing
 
 ## Dependencies On Other Modules
 
 - uses `tenancy` host resolution rules and tenant availability checks
-- uses `shared` request context, principals, token/time abstractions and auth dependencies
+- uses `shared` request context, UoW and token abstractions
+- is consumed by `tenancy` through `UserService` provisioning adapter
+
+## Transition from shared users
+
+This change requires recreating development/test databases and repeating tenant onboarding. Revision `0002_identity_users` creates empty tenant identity tables; it neither copies nor deletes legacy `public.users` and `public.user_emails`. Existing shared-user databases are not compatible with the new repository. HTTP contracts, OTP/session formats and email uniqueness behavior remain unchanged.
 
 ## Tests Covering This Module
 
-- console auth endpoint tests
-- authentication by session use case tests
-- user service tests
-- shared authentication dependency tests
+- `test/test_identity_tenant_postgres.py`
+    - identical IDs/emails in separate tenant schemas and isolated profile/email writes
+    - local foreign keys, migration transitions and onboarding rollback after administrator insertion
+    - HTTP login, profile updates, cross-tenant session rejection and logout with real repository/DI
+- `test/test_identity_use_cases.py`
+    - auth use cases and tenant admin provisioning service
+- `test/test_identity_http_router.py`
+    - public route registration
+    - cookie behavior
+  - per-controller HTTP error mapping
+- `test/test_architecture_boundaries.py`
+    - forbids legacy identity import paths
+  - forbids removed `error_mapper` and `infrastructure.mapper` imports
 
 ## Related
 
@@ -76,7 +118,9 @@ All current console auth routes live under `/api/console/auth`:
 
 ## Source Of Truth
 
-- `src/modules/identity/presentation/api/console_auth.py`
-- `src/modules/identity/domain/entities.py`
-- `src/modules/identity/application/auth/use_cases/`
+- `src/modules/identity/presentation/http/console_auth/controller/`
+- `src/modules/identity/domain/user/entity.py`
+- `src/modules/identity/domain/auth/error.py`
+- `src/modules/identity/application/auth/use_case/`
+- `src/modules/identity/application/user/service/user_service.py`
 - `src/config/feature/identity/auth_config.py`

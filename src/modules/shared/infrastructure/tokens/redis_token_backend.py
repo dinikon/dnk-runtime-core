@@ -3,10 +3,11 @@ from __future__ import annotations
 from src.modules.shared.infrastructure.tokens.redis_token_repository import (
     RedisTokenRepository,
 )
-from src.modules.shared.kernel.tokens.models import StoredToken
+from src.modules.shared.application.tokens import TokenBackendProtocol
+from src.modules.shared.domain.tokens import StoredToken
 
 
-class RedisTokenBackend:
+class RedisTokenBackend(TokenBackendProtocol):
     """Token backend поверх RedisTokenRepository."""
 
     def __init__(self, repository: RedisTokenRepository):

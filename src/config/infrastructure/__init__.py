@@ -2,8 +2,19 @@ import os
 from typing import Any, Literal
 from urllib.parse import parse_qsl, quote_plus
 
-from pydantic import Field, NonNegativeInt, PositiveInt, computed_field
+from pydantic import (
+    Field,
+    NonNegativeFloat,
+    NonNegativeInt,
+    PositiveInt,
+    computed_field,
+)
 from pydantic_settings import BaseSettings
+
+from src.config.infrastructure.rabbitmq_config import (
+    RabbitMQConfig,
+    RabbitMQSettings,
+)
 
 
 class DatabaseConfig(BaseSettings):
@@ -92,6 +103,16 @@ class DatabaseConfig(BaseSettings):
         default=False,
     )
 
+    DB_STARTUP_MAX_ATTEMPTS: PositiveInt = Field(
+        description="Maximum number of startup attempts to connect to database.",
+        default=5,
+    )
+
+    DB_STARTUP_RETRY_DELAY_SECONDS: NonNegativeFloat = Field(
+        description="Delay in seconds between retry attempts on startup.",
+        default=1,
+    )
+
     RETRIEVAL_SERVICE_EXECUTORS: NonNegativeInt = Field(
         description="Number of processes for the retrieval service, default to CPU cores.",
         default=os.cpu_count() or 1,
@@ -117,3 +138,10 @@ class DatabaseConfig(BaseSettings):
             "connect_args": connect_args,
             "pool_use_lifo": self.SQLALCHEMY_POOL_USE_LIFO,
         }
+
+
+__all__ = [
+    "DatabaseConfig",
+    "RabbitMQConfig",
+    "RabbitMQSettings",
+]

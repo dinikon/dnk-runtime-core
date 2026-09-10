@@ -1,41 +1,32 @@
 # Architecture Overview
 
-`dnk-runtime-core` is a modular backend organized around domain-focused modules under `src/modules/`. The service
-exposes HTTP endpoints through FastAPI and management commands through `dnk-manage`.
+The backend follows modular DDD and Clean Architecture.
 
-## Main Modules
-
-- `tenancy`: creates tenants, creates primary console domains, resolves tenant by host, and owns tenant onboarding flow.
-- `identity`: handles email OTP request/confirmation, session authentication, current user profile and logout.
-- `crm`: currently exposes contact CRUD for authenticated users.
-- `schema_registry`: loads seed manifests, creates or diffs tenant runtime schemas in PostgreSQL, and stores metadata
-  snapshot for runtime objects and fields.
-- `shared`: cross-cutting infrastructure such as database helper, unit of work, request context, authentication,
-  authorization, time and token helpers.
+- `tenancy`: tenant lifecycle, host resolution and transactional tenant-schema bootstrap.
+- `identity`: email OTP, sessions, user profile and administrator provisioning.
+- `inventory`: Warehouse domain and persistence model, with no application/HTTP operations yet.
+- `shared`: identifiers, audit fields, UoW, tenant naming and migrations, authentication, messaging and jobs.
 
 ## Layering
 
-- `domain`: entities, value objects, domain errors, repository contracts and domain-local services.
-- `application`: commands, queries, DTOs, orchestration use cases and application services.
-- `infrastructure`: SQLAlchemy repositories, persistence models, PostgreSQL adapters and external integrations.
-- `presentation`: HTTP routers and dependency composition for FastAPI; management-specific builders live close to module
-  composition.
+- `domain`: entities, value objects, domain errors and repository protocols.
+- `application`: use cases, commands, DTOs and ports.
+- `infrastructure`: persistence and external-service adapters.
+- `presentation`: HTTP/CLI entrypoints and dependency composition.
 
-## Entry Points
+Domain dependencies point inward to shared primitives. One UoW session owns an onboarding transaction. The tenancy-owned bootstrap port is implemented by a PostgreSQL/Alembic adapter; the application layer does not import Alembic.
 
-- HTTP app is created in `src/app_factory.py`.
-- Root API router is assembled in `src/modules/router.py`.
-- Management CLI is assembled in `src/management/cli.py`.
+Global models use `Base`. Static tenant models use `TenantBase` and Alembic. Dynamic modules were removed; see [history](../history/index.md).
+
+## Entry points
+
+- HTTP: `src/app_factory.py` and `src/modules/router.py`.
+- CLI: `src/management/cli.py`.
+- Tenant revisions: `migrations/tenant/versions/`.
 
 ## Related
 
 - [Project structure](project-structure.md)
-- [Request lifecycle](request-lifecycle.md)
+- [Persistence and UoW](persistence-and-uow.md)
 - [Dependency injection](dependency-injection.md)
-- [HTTP API](../interfaces/http-api.md)
-
-## Source Of Truth
-
-- `src/app_factory.py`
-- `src/modules/router.py`
-- `src/management/cli.py`
+- [Tenant migrations](../data/tenant-migrations.md)

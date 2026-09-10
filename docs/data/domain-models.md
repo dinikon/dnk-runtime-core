@@ -2,6 +2,10 @@
 
 This page maps the main business entities that currently appear in the service.
 
+Identifier convention: `EntityIdVO` is the single shared UUID primitive and the base class for concrete ids. Tenant
+scope uses `EntityIdVO` directly; concrete entities expose concrete subclasses such as `UserIdVO`,
+`WarehouseIdVO`.
+
 ## Tenancy
 
 ### `Tenant`
@@ -9,7 +13,7 @@ This page maps the main business entities that currently appear in the service.
 - Module owner: `tenancy`
 - Business meaning: tenant account / workspace identity
 - Key fields:
-    - `id`
+    - `id` as `EntityIdVO`
     - `name`
     - `external_id`
     - `status`
@@ -21,7 +25,8 @@ This page maps the main business entities that currently appear in the service.
 - Module owner: `tenancy`
 - Business meaning: tenant host binding for a specific service surface
 - Key fields:
-    - `tenant_id`
+    - `id` as `TenantDomainIdVO`
+    - `tenant_id` as `EntityIdVO`
     - `service_type`
     - `kind`
     - `host`
@@ -31,13 +36,16 @@ This page maps the main business entities that currently appear in the service.
 
 ## Identity
 
+- Structure note: `identity` splits user state into `domain/user/` and auth-specific
+  OTP/session errors into `domain/auth/`.
+
 ### `User`
 
 - Module owner: `identity`
 - Business meaning: tenant-scoped console user
 - Key fields:
-    - `id`
-    - `tenant_id`
+    - `id` as `UserIdVO`
+    - `tenant_id` as `EntityIdVO`
     - `status`
     - name fields
     - locale/theme/timezone
@@ -49,65 +57,16 @@ This page maps the main business entities that currently appear in the service.
 - Module owner: `identity`
 - Business meaning: user email identity and verification record
 - Key fields:
-    - `user_id`
+    - `id` as `UserEmailIdVO`
+    - `user_id` as `UserIdVO`
     - `email`
     - `is_primary`
     - `is_verified`
     - `is_deleted`
 
-## CRM
+## Inventory
 
-### `ContactEntity`
-
-- Module owner: `crm`
-- Business meaning: CRM contact record
-- Key fields:
-    - `id`
-    - timestamps
-    - `contact_name` with last/first/middle name
-
-## Schema Registry
-
-### `DataSourceEntity`
-
-- Module owner: `schema_registry`
-- Business meaning: tenant runtime data source metadata
-- Key fields:
-    - `id`
-    - `tenant_id`
-    - `data_source_type`
-    - `schema_name`
-    - `connection_dsn`
-    - timestamps
-
-### `ObjectEntity`
-
-- Module owner: `schema_registry`
-- Business meaning: runtime object metadata inside a tenant schema
-- Key fields:
-    - `id`
-    - `tenant_id`
-    - `data_source_id`
-    - `object_name`
-    - `object_label`
-    - `description`
-    - `fields`
-
-### `FieldEntity`
-
-- Module owner: `schema_registry`
-- Business meaning: metadata for one runtime field inside one object
-- Key fields:
-    - `id`
-    - `object_id`
-    - `field_name`
-    - `field_type`
-    - `label`
-    - `description`
-    - `is_nullable`
-    - `default_value`
-    - `options`
-    - `settings`
+`Warehouse` represents a physical warehouse with `WarehouseIdVO`, title, nullable parent id and audit fields. Storage uses a self-FK within each tenant schema. Multiple roots are allowed, self-parent is rejected, and deletion of a parent with children is restricted. Longer cycles are deferred to future hierarchy use cases.
 
 ## Shared Kernel Concepts
 
@@ -123,16 +82,14 @@ This page maps the main business entities that currently appear in the service.
 
 ## Related
 
-- [Runtime schema](runtime-schema.md)
+- [Tenant migrations](tenant-migrations.md)
 - [Tenancy module](../modules/tenancy.md)
 - [Identity module](../modules/identity.md)
-- [CRM module](../modules/crm.md)
-- [Schema Registry module](../modules/schema-registry.md)
+- [Inventory module](../modules/inventory.md)
 
 ## Source Of Truth
 
-- `src/modules/tenancy/domain/entities.py`
-- `src/modules/identity/domain/entities.py`
-- `src/modules/crm/domain/contact/entity.py`
-- `src/modules/schema_registry/domain/datasource/entity.py`
-- `src/modules/schema_registry/domain/object/entity.py`
+- `src/modules/tenancy/domain/tenant/entity.py`
+- `src/modules/tenancy/domain/tenant_domain/entity.py`
+- `src/modules/identity/domain/user/entity.py`
+- `src/modules/identity/domain/auth/error.py`

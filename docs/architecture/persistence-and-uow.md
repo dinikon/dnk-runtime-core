@@ -1,59 +1,23 @@
-# Persistence And Unit Of Work
+# Persistence and Unit of Work
 
-## Database Helper
+`DatabaseHelper` owns the async SQLAlchemy engine, session factory, startup retry and disposal. Startup `create_all` targets only global `Base.metadata`.
 
-`DatabaseHelper` owns:
+Static tenant tables (`warehouses`, `users`, `user_emails`) inherit `TenantBase`. They are created and evolved exclusively by tenant Alembic revisions, not startup `create_all`.
 
-- SQLAlchemy async engine
-- async session factory
-- metadata `create_all()`
-- engine disposal on shutdown
+## Transaction boundaries
 
-It is initialized in `src/modules/shared/db/helper.py` and attached to app state in `src/app_factory.py`.
+`UnitOfWork` creates a session on entry, commits on success and rolls back on failure. Session close runs in `finally`, including when commit/rollback fails.
 
-## Unit Of Work
+HTTP dependencies share the same UoW session across repositories, identity provisioning and schema bootstrap. The bootstrap adapter creates the schema and runs Alembic using that connection. Administrator and email insertion follows successful bootstrap on the same session. The migrator and identity repository have no internal commit, so PostgreSQL DDL and all onboarding records are atomic, including a failure after administrator insertion.
 
-`UnitOfWork` in `src/modules/shared/db/uow.py` is request-scoped and session-scoped.
+Management `upgrade --all` uses a separate UoW for each tenant. Failed tenants are rolled back; successful tenants remain upgraded. Migration generation uses a separate engine for reflection.
 
-Behavior:
+## Identity schema selection
 
-- `__aenter__` creates an `AsyncSession`
-- `__aexit__` commits if no exception happened
-- `__aexit__` rolls back if an exception happened
-- session is always closed on exit
-
-## HTTP Usage
-
-- `src/modules/shared/depends/uow.py` creates one `UnitOfWork` per HTTP request.
-- Controllers and dependency builders consume repositories assembled from `uow.session`.
-
-## Management Usage
-
-- CLI handlers explicitly open `async with UnitOfWork(...) as uow`.
-- Builders then assemble repositories/adapters from `uow.session`.
-
-## Session-Bound Repositories And Adapters
-
-Examples:
-
-- SQLAlchemy repositories in `identity`, `tenancy`, `crm`, `schema_registry`
-- PostgreSQL schema inspector and executor in `schema_registry`
-- nested schema bootstrap adapter used from tenant creation flow
-
-## Why It Matters
-
-- Ensures one transaction boundary for each request or command
-- Keeps nested schema bootstrap in the same active transaction
-- Allows rollback of onboarding + schema work together on failure
+Identity repositories receive an explicit `EntityIdVO` tenant scope for every operation. `TenantSchemaNaming` determines the physical schema. SQLAlchemy Core statements built from tenant model tables apply their own `schema_translate_map`; they do not change the shared engine, connection options or `search_path`, or keep tenant users in the ORM identity map. Multiple tenant operations on one session therefore remain isolated even with equal record IDs. The domain `User.tenant_id` is reconstructed from that scope rather than persisted as a column.
 
 ## Related
 
+- [Tenant migrations](../data/tenant-migrations.md)
 - [Dependency injection](dependency-injection.md)
-- [Schema Registry module](../modules/schema-registry.md)
-- [Shared module](../modules/shared.md)
-
-## Source Of Truth
-
-- `src/modules/shared/db/helper.py`
-- `src/modules/shared/db/uow.py`
-- `src/modules/shared/depends/uow.py`
+- [Shared](../modules/shared.md)
