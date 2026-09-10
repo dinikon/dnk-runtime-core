@@ -1,3 +1,10 @@
+## v0.2.1 (2026-09-11)
+
+### Refactor
+
+- **cicd**: update artifact handling logic and cleanup docs
+- **cicd**: remove delivery functionality and tests
+
 ## v0.2.0 (2026-09-11)
 
 ### Feat
