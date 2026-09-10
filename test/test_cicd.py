@@ -20,6 +20,7 @@ from scripts.cicd.artifacts import (
     Registry,
     package_chart,
     publish_artifacts,
+    publish_images,
 )
 from scripts.cicd.common import Error, ROOT, run, versions
 from scripts.cicd.delivery import deliver
@@ -364,30 +365,33 @@ class ReleaseTests(unittest.TestCase):
         calls = []
         fail = [True]
 
-        def builder(root, target, env):
-            calls.append(target)
-            if target == "frontend-runtime" and fail[0]:
-                fail[0] = False
-                raise Error("simulated frontend build failure")
-            ref = env["REGISTRY_PREFIX"] + "/" + target + ":" + env["IMAGE_TAG"]
-            registry.save(
-                ref,
-                {
-                    "annotations": {
-                        "org.opencontainers.image.revision": env["SOURCE_REVISION"],
-                        "org.opencontainers.image.version": env["VERSION"],
-                    }
-                },
-            )
+        def builder(root, targets, env):
+            calls.append(tuple(targets))
+            for target in targets:
+                if target == "frontend-runtime" and fail[0]:
+                    fail[0] = False
+                    raise Error("simulated frontend build failure")
+                ref = env["REGISTRY_PREFIX"] + "/" + target + ":" + env["IMAGE_TAG"]
+                registry.save(
+                    ref,
+                    {
+                        "annotations": {
+                            "org.opencontainers.image.revision": env["SOURCE_REVISION"],
+                            "org.opencontainers.image.version": env["VERSION"],
+                        }
+                    },
+                )
 
         args = (self.repo, tag, self.repo.branch(), self.repo.sha(), "123", "1")
         with self.assertRaisesRegex(Error, "simulated"):
             publish_artifacts(*args, registry=registry, builder=builder)
-        record = publish_artifacts(*args, registry=registry, builder=builder)
-        again = publish_artifacts(*args[:-1], "2", registry=registry, builder=builder)
+        self.assertEqual(registry.chart_pushes, 0)
+        record = publish_artifacts(*args[:-1], "2", registry=registry, builder=builder)
+        again = publish_artifacts(*args[:-1], "3", registry=registry, builder=builder)
         self.assertEqual(record, again)
-        self.assertEqual(calls.count("runtime"), 1)
-        self.assertEqual(calls.count("frontend-runtime"), 2)
+        self.assertEqual(
+            calls, [("runtime", "frontend-runtime"), ("frontend-runtime",)]
+        )
         self.assertEqual(registry.chart_pushes, 1)
         with (
             self.repo.checkout(tag) as checkout,
@@ -440,6 +444,98 @@ class MemoryRegistry:
         ref = repository + ":" + publication["chart_version"]
         self.save(ref, {"annotations": {PUBLICATION: json.dumps(publication)}})
         return self.digest(ref)
+
+
+class ArtifactTests(unittest.TestCase):
+    prefix = "registry.example/runtime"
+    app = "0.1.0-rc.1"
+    source = "source-sha"
+
+    def save_image(self, registry, target, tag, source=None):
+        registry.save(
+            f"{self.prefix}/{target}:{tag}",
+            {
+                "annotations": {
+                    "org.opencontainers.image.revision": source or self.source,
+                    "org.opencontainers.image.version": self.app,
+                }
+            },
+        )
+
+    def publish(self, registry, builder, unique="sha-source-123-1"):
+        return publish_images(
+            ROOT,
+            registry,
+            self.prefix,
+            self.app,
+            self.source,
+            unique,
+            self.app,
+            builder,
+        )
+
+    def test_partial_batch_failure_preserves_either_image_for_new_attempt(self):
+        for completed, missing in (
+            ("runtime", "frontend-runtime"),
+            ("frontend-runtime", "runtime"),
+        ):
+            with self.subTest(completed=completed):
+                registry = MemoryRegistry()
+
+                def fail_batch(root, targets, env):
+                    self.assertEqual(targets, ["runtime", "frontend-runtime"])
+                    self.save_image(registry, completed, env["IMAGE_TAG"])
+                    raise Error("one parallel build failed")
+
+                with self.assertRaisesRegex(Error, "parallel build failed"):
+                    self.publish(registry, fail_batch)
+                saved_digest = registry.digest(f"{self.prefix}/{completed}:{self.app}")
+
+                def retry(root, targets, env):
+                    self.assertEqual(targets, [missing])
+                    self.save_image(registry, missing, env["IMAGE_TAG"])
+
+                result = self.publish(registry, retry, unique="sha-source-123-2")
+                self.assertEqual(set(result), {"runtime", "frontend-runtime"})
+                self.assertEqual(result[completed]["digest"], saved_digest)
+                skipped = Mock(side_effect=AssertionError("Images already exist"))
+                self.assertEqual(self.publish(registry, skipped), result)
+                skipped.assert_not_called()
+
+    def test_wrong_partial_image_cannot_be_promoted(self):
+        registry = MemoryRegistry()
+        self.save_image(registry, "runtime", "sha-source-123-1", source="wrong-source")
+        builder = Mock()
+        with self.assertRaisesRegex(Error, "different source/version"):
+            self.publish(registry, builder)
+        self.assertIsNone(registry.manifest(f"{self.prefix}/runtime:{self.app}"))
+        builder.assert_not_called()
+
+    def test_version_created_during_build_is_not_overwritten(self):
+        registry = MemoryRegistry()
+
+        def race(root, targets, env):
+            for target in targets:
+                self.save_image(registry, target, env["IMAGE_TAG"])
+            self.save_image(registry, "runtime", self.app, source="another-source")
+
+        with self.assertRaisesRegex(Error, "different source/version"):
+            self.publish(registry, race)
+        self.assertEqual(
+            registry.manifest(f"{self.prefix}/runtime:{self.app}")["annotations"][
+                "org.opencontainers.image.revision"
+            ],
+            "another-source",
+        )
+
+    def test_successful_builder_must_publish_every_requested_image(self):
+        registry = MemoryRegistry()
+
+        def incomplete(root, targets, env):
+            self.save_image(registry, "runtime", env["IMAGE_TAG"])
+
+        with self.assertRaisesRegex(Error, "without publishing image frontend-runtime"):
+            self.publish(registry, incomplete)
 
 
 class DeliveryTests(unittest.TestCase):
