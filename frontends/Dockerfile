@@ -1,4 +1,5 @@
-FROM node:24-alpine AS build
+# Console produces static assets shared by both target architectures.
+FROM --platform=$BUILDPLATFORM node:24-alpine AS build
 
 WORKDIR /app
 

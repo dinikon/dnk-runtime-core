@@ -3,6 +3,7 @@
 import copy
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import tarfile
@@ -10,13 +11,17 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch as mock_patch
 
+import httpx
+import tomlkit
 import yaml
 
 from scripts.cicd.artifacts import (
+    GitHub,
     PUBLICATION,
     Registry,
     package_chart,
     publish_artifacts,
+    publish_images,
 )
 from scripts.cicd.common import Error, ROOT, run, versions
 from scripts.cicd.delivery import deliver
@@ -38,6 +43,132 @@ class Releases:
 
     def ready(self, tag, prerelease=True):
         self.items[tag] = {"isPrerelease": prerelease, "isDraft": False}
+
+
+class GitHubReleaseTests(unittest.TestCase):
+    def setUp(self):
+        self.github = GitHub("owner/repo")
+        self.requests = []
+        self.responses = []
+        self.release = {
+            "draft": False,
+            "prerelease": True,
+            "tag_name": "v0.1.0-rc.1",
+            "body": "Release notes",
+        }
+        self.enterContext(mock_patch.dict(os.environ, {}, clear=True))
+        self.enterContext(
+            mock_patch(
+                "scripts.cicd.artifacts.run",
+                side_effect=AssertionError("Release lookup must not call gh"),
+            )
+        )
+        client = httpx.Client
+        self.enterContext(
+            mock_patch(
+                "scripts.cicd.artifacts.httpx.Client",
+                side_effect=lambda **kwargs: client(
+                    transport=httpx.MockTransport(self.respond), **kwargs
+                ),
+            )
+        )
+
+    def respond(self, request):
+        self.requests.append(request)
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    def test_public_release_without_token_or_gh(self):
+        self.responses.append(httpx.Response(200, json=self.release))
+        self.assertEqual(
+            self.github.get_release("v0.1.0-rc.1"),
+            {
+                "isDraft": False,
+                "isPrerelease": True,
+                "tagName": "v0.1.0-rc.1",
+                "body": "Release notes",
+            },
+        )
+        request = self.requests[0]
+        self.assertEqual(
+            str(request.url),
+            "https://api.github.com/repos/owner/repo/releases/tags/v0.1.0-rc.1",
+        )
+        self.assertNotIn("Authorization", request.headers)
+
+    def test_environment_tokens_and_precedence(self):
+        for environment, token in (
+            ({"GH_TOKEN": "gh-token"}, "gh-token"),
+            ({"GITHUB_TOKEN": "github-token"}, "github-token"),
+            ({"GH_TOKEN": "gh-token", "GITHUB_TOKEN": "github-token"}, "gh-token"),
+            ({"GH_TOKEN": "", "GITHUB_TOKEN": "github-token"}, "github-token"),
+        ):
+            with (
+                self.subTest(environment=environment),
+                mock_patch.dict(os.environ, environment, clear=True),
+            ):
+                self.responses.append(httpx.Response(200, json=self.release))
+                self.github.get_release("v0.1.0-rc.1")
+                self.assertEqual(
+                    self.requests[-1].headers["Authorization"], "Bearer " + token
+                )
+
+    def test_missing_release_returns_none_when_releases_are_accessible(self):
+        self.responses.extend(
+            [httpx.Response(404), httpx.Response(200, json=[self.release])]
+        )
+        self.assertIsNone(self.github.get_release("v0.1.0-rc.2"))
+
+    def test_draft_release_is_found_on_later_page(self):
+        os.environ["GH_TOKEN"] = "test-token"
+        draft = self.release | {
+            "tag_name": "v0.1.0",
+            "draft": True,
+            "prerelease": False,
+        }
+        self.responses.extend(
+            [
+                httpx.Response(404),
+                httpx.Response(
+                    200,
+                    json=[self.release],
+                    headers={
+                        "Link": '<https://api.github.com/repos/owner/repo/releases?page=2>; rel="next"'
+                    },
+                ),
+                httpx.Response(200, json=[draft]),
+            ]
+        )
+        result = self.github.get_release("v0.1.0")
+        self.assertTrue(result["isDraft"])
+        self.assertFalse(result["isPrerelease"])
+        self.assertEqual(self.requests[-1].url.params["page"], "2")
+        self.assertEqual(
+            self.requests[-1].headers["Authorization"], "Bearer test-token"
+        )
+
+    def test_inaccessible_repository_is_not_treated_as_pending_release(self):
+        self.responses.extend([httpx.Response(404), httpx.Response(404)])
+        with self.assertRaisesRegex(Error, "HTTP 404.*GH_TOKEN"):
+            self.github.get_release("v0.1.0-rc.1")
+
+    def test_api_failures_are_actionable_without_exposing_token(self):
+        os.environ["GH_TOKEN"] = "secret-token"
+        for status in (401, 403, 429, 500):
+            with self.subTest(status=status):
+                self.responses.append(httpx.Response(status, text="secret-token"))
+                with self.assertRaisesRegex(Error, f"HTTP {status}.*GH_TOKEN") as error:
+                    self.github.get_release("v0.1.0-rc.1")
+                self.assertNotIn("secret-token", str(error.exception))
+
+    def test_network_failures_are_actionable(self):
+        for failure in (httpx.ConnectError, httpx.ReadTimeout):
+            with self.subTest(failure=failure):
+                self.responses.append(failure("Connection failed"))
+                with self.assertRaisesRegex(Error, "check the network connection"):
+                    self.github.get_release("v0.1.0-rc.1")
 
 
 class ReleaseTests(unittest.TestCase):
@@ -62,6 +193,25 @@ class ReleaseTests(unittest.TestCase):
             self.root / "helm",
             ignore=shutil.ignore_patterns("__pycache__", ".DS_Store"),
         )
+        # Start from an unreleased fixture, even when checks run on an RC/stable
+        # checkout. Copying its versions would change every expected release.
+        project_path = self.root / "pyproject.toml"
+        project = tomlkit.parse(project_path.read_text())
+        project["project"]["version"] = "0.1.0"
+        project_path.write_text(tomlkit.dumps(project))
+        lock_path = self.root / "uv.lock"
+        lock = tomlkit.parse(lock_path.read_text())
+        for package in lock["package"]:
+            if package["name"] == project["project"]["name"]:
+                package["version"] = "0.1.0"
+                break
+        else:
+            self.fail("Application package is missing from the fixture lockfile")
+        lock_path.write_text(tomlkit.dumps(lock))
+        chart_path = self.root / "helm/Chart.yaml"
+        chart = yaml.safe_load(chart_path.read_text())
+        chart.update(version="0.3.2", appVersion="0.1.0")
+        chart_path.write_text(yaml.safe_dump(chart, sort_keys=False))
         (self.root / ".gitignore").write_text("__pycache__/\n.venv/\n")
         self.commit("chore: initial repository", "base.txt")
         self.repo.git("remote", "add", "origin", remote)
@@ -235,30 +385,33 @@ class ReleaseTests(unittest.TestCase):
         calls = []
         fail = [True]
 
-        def builder(root, target, env):
-            calls.append(target)
-            if target == "frontend-runtime" and fail[0]:
-                fail[0] = False
-                raise Error("simulated frontend build failure")
-            ref = env["REGISTRY_PREFIX"] + "/" + target + ":" + env["IMAGE_TAG"]
-            registry.save(
-                ref,
-                {
-                    "annotations": {
-                        "org.opencontainers.image.revision": env["SOURCE_REVISION"],
-                        "org.opencontainers.image.version": env["VERSION"],
-                    }
-                },
-            )
+        def builder(root, targets, env):
+            calls.append(tuple(targets))
+            for target in targets:
+                if target == "frontend-runtime" and fail[0]:
+                    fail[0] = False
+                    raise Error("simulated frontend build failure")
+                ref = env["REGISTRY_PREFIX"] + "/" + target + ":" + env["IMAGE_TAG"]
+                registry.save(
+                    ref,
+                    {
+                        "annotations": {
+                            "org.opencontainers.image.revision": env["SOURCE_REVISION"],
+                            "org.opencontainers.image.version": env["VERSION"],
+                        }
+                    },
+                )
 
         args = (self.repo, tag, self.repo.branch(), self.repo.sha(), "123", "1")
         with self.assertRaisesRegex(Error, "simulated"):
             publish_artifacts(*args, registry=registry, builder=builder)
-        record = publish_artifacts(*args, registry=registry, builder=builder)
-        again = publish_artifacts(*args[:-1], "2", registry=registry, builder=builder)
+        self.assertEqual(registry.chart_pushes, 0)
+        record = publish_artifacts(*args[:-1], "2", registry=registry, builder=builder)
+        again = publish_artifacts(*args[:-1], "3", registry=registry, builder=builder)
         self.assertEqual(record, again)
-        self.assertEqual(calls.count("runtime"), 1)
-        self.assertEqual(calls.count("frontend-runtime"), 2)
+        self.assertEqual(
+            calls, [("runtime", "frontend-runtime"), ("frontend-runtime",)]
+        )
         self.assertEqual(registry.chart_pushes, 1)
         with (
             self.repo.checkout(tag) as checkout,
@@ -311,6 +464,98 @@ class MemoryRegistry:
         ref = repository + ":" + publication["chart_version"]
         self.save(ref, {"annotations": {PUBLICATION: json.dumps(publication)}})
         return self.digest(ref)
+
+
+class ArtifactTests(unittest.TestCase):
+    prefix = "registry.example/runtime"
+    app = "0.1.0-rc.1"
+    source = "source-sha"
+
+    def save_image(self, registry, target, tag, source=None):
+        registry.save(
+            f"{self.prefix}/{target}:{tag}",
+            {
+                "annotations": {
+                    "org.opencontainers.image.revision": source or self.source,
+                    "org.opencontainers.image.version": self.app,
+                }
+            },
+        )
+
+    def publish(self, registry, builder, unique="sha-source-123-1"):
+        return publish_images(
+            ROOT,
+            registry,
+            self.prefix,
+            self.app,
+            self.source,
+            unique,
+            self.app,
+            builder,
+        )
+
+    def test_partial_batch_failure_preserves_either_image_for_new_attempt(self):
+        for completed, missing in (
+            ("runtime", "frontend-runtime"),
+            ("frontend-runtime", "runtime"),
+        ):
+            with self.subTest(completed=completed):
+                registry = MemoryRegistry()
+
+                def fail_batch(root, targets, env):
+                    self.assertEqual(targets, ["runtime", "frontend-runtime"])
+                    self.save_image(registry, completed, env["IMAGE_TAG"])
+                    raise Error("one parallel build failed")
+
+                with self.assertRaisesRegex(Error, "parallel build failed"):
+                    self.publish(registry, fail_batch)
+                saved_digest = registry.digest(f"{self.prefix}/{completed}:{self.app}")
+
+                def retry(root, targets, env):
+                    self.assertEqual(targets, [missing])
+                    self.save_image(registry, missing, env["IMAGE_TAG"])
+
+                result = self.publish(registry, retry, unique="sha-source-123-2")
+                self.assertEqual(set(result), {"runtime", "frontend-runtime"})
+                self.assertEqual(result[completed]["digest"], saved_digest)
+                skipped = Mock(side_effect=AssertionError("Images already exist"))
+                self.assertEqual(self.publish(registry, skipped), result)
+                skipped.assert_not_called()
+
+    def test_wrong_partial_image_cannot_be_promoted(self):
+        registry = MemoryRegistry()
+        self.save_image(registry, "runtime", "sha-source-123-1", source="wrong-source")
+        builder = Mock()
+        with self.assertRaisesRegex(Error, "different source/version"):
+            self.publish(registry, builder)
+        self.assertIsNone(registry.manifest(f"{self.prefix}/runtime:{self.app}"))
+        builder.assert_not_called()
+
+    def test_version_created_during_build_is_not_overwritten(self):
+        registry = MemoryRegistry()
+
+        def race(root, targets, env):
+            for target in targets:
+                self.save_image(registry, target, env["IMAGE_TAG"])
+            self.save_image(registry, "runtime", self.app, source="another-source")
+
+        with self.assertRaisesRegex(Error, "different source/version"):
+            self.publish(registry, race)
+        self.assertEqual(
+            registry.manifest(f"{self.prefix}/runtime:{self.app}")["annotations"][
+                "org.opencontainers.image.revision"
+            ],
+            "another-source",
+        )
+
+    def test_successful_builder_must_publish_every_requested_image(self):
+        registry = MemoryRegistry()
+
+        def incomplete(root, targets, env):
+            self.save_image(registry, "runtime", env["IMAGE_TAG"])
+
+        with self.assertRaisesRegex(Error, "without publishing image frontend-runtime"):
+            self.publish(registry, incomplete)
 
 
 class DeliveryTests(unittest.TestCase):
