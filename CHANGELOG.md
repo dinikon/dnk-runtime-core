@@ -1,3 +1,9 @@
+## v0.2.0-rc.1 (2026-09-10)
+
+### Feat
+
+- **test**: add versioning logic for pyproject, lockfile, and helm chart
+
 ## v0.1.0 (2026-09-10)
 
 ### Feat
