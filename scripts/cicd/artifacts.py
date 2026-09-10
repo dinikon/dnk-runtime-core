@@ -71,7 +71,7 @@ class Registry:
 
 
 def wait_for_manifest(registry, ref, *, digest=None):
-    """A successful push may become readable later; retry only missing manifests."""
+    """Wait for a pushed manifest or a moved alias to expose the expected digest."""
     for number, delay in enumerate((0, *REGISTRY_RETRY_DELAYS), 1):
         if delay:
             print(

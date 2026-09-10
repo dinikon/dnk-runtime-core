@@ -1,6 +1,5 @@
 """Release transactions use real Git/Commitizen, temporary repos and fake remote APIs."""
 
-import copy
 import hashlib
 import json
 import os
