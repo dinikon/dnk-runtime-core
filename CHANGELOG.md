@@ -1,0 +1,337 @@
+## v0.1.0-rc.1 (2026-09-10)
+
+### Feat
+
+- **helm, tests**: add certificate validation and update ingress handling
+- **tests**: add system ingress test with nginx and cert-manager integration
+- **tests**: add system ingress test with nginx and cert-manager integration
+- **helm**: enhance Helm charts with annotations, templates, and ArgoCD tests
+- **accounts, helm**: add phone number management with UUIDs and Helm chart templates
+- **accounts**: add support for optional middle name in user profiles
+- **accounts, ui**: add progressive authentication forms and reusable toggle components
+- **ui, accounts**: add reusable Vue components and templates for forms and UI
+- **accounts, frontends**: initialize user account management and frontend authentication
+- **identity, tenancy**: add per-tenant identity schema migrations and repository
+- **marketing**: initialize marketing app with templates, styles, and assets
+- **workflow**: add workflow editor components and routing integration
+- **control_plane**: initialize Django project with default settings and dependencies
+- **control-plane**: initialize control-plane app, FastAPI setup, and Helm chart
+- **landing**: add landing page with UI components and CRM, table, and event ingestion modules
+- **workflow**: initialize CI workflow for branch checks and runtime verification
+- **workflow**: add edit workflow application feature with dialog, form, and API integration
+- **workflow**: add update workflow feature with use case, endpoint, and tests
+- **workflow**: add supporting text to WorkflowApplicationsPageHeader
+- **workflow**: add create workflow application feature with dialog and form
+- **workflow**: add workflow applications list with improved UI components and skeleton loading
+- **workflow**: add infinite query for workflow applications and associated API
+- **pagination**: add reusable CursorPagination and OffsetPagination components
+- **workflow**: redesign CreateWorkflowForm with emoji picker
+- **workflow**: add EmojiPicker component and emoji model
+- **workflow**: add CreateWorkflowForm component and API integration
+- **workflow**: add workflow module with routes, pages, and components
+- **workflow**: add workflow definition command repository with protocol, integration, and tests
+- **workflow**: initialize workflow application module with DTOs, commands, use cases, and tests
+- **broadcast**: add support for single broadcast retrieval with frontend, HTTP endpoint, use case, and tests
+- **broadcast**: add frontend support for broadcast module with pages, components, utilities, and API integration
+- **broadcast**: implement broadcast fields description with DTOs, repositories, use case, and HTTP endpoint
+- **broadcast**: implement list broadcasts feature with HTTP route, use case, and repository integration
+- **broadcast**: add HTTP routes, schemas, and repository for broadcast management
+- **broadcast**: initialize broadcast module with DTOs, repository, and DDD structure
+- **shared**: add EntityDescriptionVO and integrate into Broadcast entity
+- **communication**: add cooldown timer and error handling for test messaging
+- **communication**: add deliveries management with toolbar, queries, and test messaging
+- **communication**: add templates management with toolbar, table, and creation workflow
+- **communication**: add connections management with toolbar, mutations, and queries
+- **communication**: add endpoints for provider connection/connector management and status updates
+- **providers**: add eSputnik email provider configuration
+- **communication**: add communication module with deliveries and providers pages
+- **broadcast**: add domain models for broadcast and recipient, and integrate MinIO configuration
+- **console/runtime-object**: add row selection with checkboxes
+- **console/runtime-object**: simplify sorting logic and add remove sort button
+- **console/runtime-object**: enhance sorting logic and add shift multi-sort feat(console/ui): sync toaster theme with color mode
+- **console/runtime-object**: improve loading indicators and table animations
+- **console/navigation**: replace anchor tags with RouterLink for internal navigation
+- **console/ui**: improve layout responsiveness and overflow handling in workspace and runtime object components
+- **console/runtime-object**: fix logic handling for query state and filter application
+- **console/runtime-object**: integrate query state composable and improve filtering/sorting behavior
+- **console/runtime-object**: add reusable runtime object models, forms, filters, and components
+- **console/runtime-object**: add reusable runtime object models, forms, filters, and components
+- **console/ui**: add reusable UI components for accordion, alert-dialog, calendar, carousel, and button group
+- **console/navigation**: add icons to workspace navigation items and update types
+- **console/navigation**: refactor workspace navigation and simplify sidebar integration
+- **console/navigation**: integrate logout functionality with router and mutation handling
+- **auth**: refactor user store and integrate HTTP interceptors for session handling
+- **console/stores**: split session store into separate user and tenant stores
+- **tenancy**: add unit tests for tenant resolution use case and HTTP router
+- **tenancy**: add tenant_name field to resolve tenant responses and DTOs
+- **frontend**: add Docker support with multi-stage build and proxy configuration
+- **console/crm**: integrate CRM module with routes, headers, and workspace layout adjustments
+- **console/navigation**: add workspace navigation with sidebar components and mock data
+- **console/ui**: add reusable DropdownMenu and Breadcrumb components to enhance UI consistency
+- **console/ui**: add Sonner Toaster and improve OTP components integration
+- **console/ui**: add reusable InputOTP components and enhance OTP handling
+- **console/router**: improve auth flow and route handling with better error management and redirects
+- **console/dashboard**: add dashboard page, routes, and layout integration
+- **console/auth**: refactor authentication module and components for improved structure
+- **console**: restructure API and feature modules for better organization
+- **console**: remove unused components and layouts
+- **segmentation**: expand documentation to reflect current module implementation
+- **segmentation**: add snapshot management use cases and HTTP controllers
+- **segmentation**: handle archived segment in version evaluation and API response
+- **segmentation**: add evaluation services, query protocols, and HTTP controllers
+- **segmentation**: add unique rule ID validation and enhance DSL validation tests
+- **segmentation**: add DSL for segment version configuration and runtime validation
+- **segmentation**: refactor router prefixes and enhance static member entity validation
+- **segmentation**: add use cases and HTTP controllers for segment and version management
+- **segmentation**: implement static member management with add, list, and remove use cases
+- **segmentation**: add module structure with domain, application, infrastructure, and presentation layers
+- **communication**: implement delivery attempts/events queries, use cases, HTTP controllers, and responses
+- **outbound-message**: validate `InitiatorTypeVO` and enforce type restrictions
+- **communication**: add logging for job processing and update Docker settings
+- **outbound-message**: introduce `RecipientIdentifierTypeVO` and refactor recipient handling
+- **contact-point**: add selection module with commands, services, and error handling
+- **contact-point**: handle `ContactPointNotFoundError` and add corresponding test cases
+- **contact-point**: implement query and presentation layers for contact point management
+- **events**: add console worker for integration events and Docker configuration
+- **events**: add outbox publisher worker and Docker setup
+- **messaging**: add `BrokerQueueArguments` for structured queue configuration
+- **crm**: add integration events for contact lifecycle and outbox support
+- **messaging**: enhance RabbitMQ broker with locking, queue arguments, and refined mapper logic
+- **messaging**: refactor messaging architecture and implement RabbitMQ support
+- **messaging**: implement shared application and infrastructure messaging module with RabbitMQ support
+- **jobs**: add shared scheduled job management module
+- **events**: implement shared integration event bus infrastructure
+- **contact_point**: add list owner contact points use case and API endpoint
+- **contact_point**: add primary binding promotion logic and tests
+- **uuid**: integrate UUIDv7 generator and refactor UUID dependency handling
+- **contact_point**: implement attach and detach use cases with FastAPI controllers and infrastructure dependencies
+- **contact_point**: enforce CONTACT_POINT feature check in AttachContactPointUseCase
+- **contact_point**: add domain models, value objects, and business logic scaffolding
+- **schema_registry**: add support for multi-tenant diff and enhance CLI
+- **schema_registry**: add contact_point schema and seed test setup
+- **schema_registry**: add ObjectFeatureCode enum and enforce user mutability constraints
+- **schema_registry**: remove SYSTEM kind and enforce constraints for ObjectFeature kind and status
+- **schema_registry**: add HTTP controller and update dependencies for ObjectFeature handling
+- **schema_registry**: add use cases and dependencies for ObjectFeature handling
+- **schema_registry**: add ObjectFeature application layer components
+- **schema_registry**: implement SqlAlchemyObjectFeatureConfigRepository
+- **schema_registry**: add ObjectFeatureConfigRepositoryProtocol to domain
+- **schema_registry**: add ObjectFeatureConfig domain models and utilities
+- **schema_registry**: add ObjectFeatureConfigORM for runtime feature configs
+- **runtime-data**: improve query compiler with enhanced SQL escaping and support for `neq` and `between` operators
+- **runtime-data**: add query capability resolution and integrate with CRM field descriptions
+- **runtime-data**: enable semantic validation for filters and use typed filter expressions
+- **runtime-data**: implement PostgreSQL query compiler infrastructure with tests
+- **runtime-data**: enforce MAX_SEARCH_LIMIT and default sorting for queries
+- **runtime-data**: add multiselect operators to Filter DSL with validation and tests
+- **runtime-data**: support `starts_with` and `ends_with` operators in Filter DSL
+- **runtime-data**: add structured error details for filter and sort DSL validation
+- **runtime-data**: add unit tests and enhance Filter DSL parser and operator registry
+- **runtime-data**: implement query DSL modules for filtering and sorting
+- **crm**: implement Company module with CQRS structure and initial HTTP endpoints
+- **console**: integrate Vue Query, Vue Table, and collapsible UI components
+- **console**: add Prettier for code formatting
+- **console**: add ESLint configuration with Vue and TypeScript support
+- **crm**: add Contacts page with routing and sidebar integration
+- **schema_registry**: implement custom relation APIs for creation, deletion, and listing
+- **schema_registry**: add runtime relation metadata with domain, persistence, and service layers
+- **schema_registry**: add runtime relation metadata with domain, persistence, and service layers
+- **provider_connection**: introduce use case protocols and update response serialization
+- **provider_connection**: add entity conversion for request handling and fix tests
+- **provider_connection**: add entity conversion for request handling and fix tests
+- **communication**: split message template repository into query and runtime repositories
+- **communication**: restructure template module, add commands, DTOs, and use cases
+- **communication**: replace version_no with datetime-based version and refactor related domain logic
+- **communication**: replace enum classes with value objects and update domain logic
+- **communication**: add domain service, entities, and tests for message templates
+- **communication**: add value objects for domain aggregates
+- **communication**: add enums, value objects, and entities for domain aggregates
+- **communication**: restructure domain module into aggregates with value objects, entities, services, and repositories
+- **communication**: add Vue components for provider tabs and implement provider connection/query management
+- **communication**: implement module structure with core commands, DTOs, and HTTP routers
+- add tests for `ObjectLabelVO` and refactor communication message claiming logic
+- **communication**: add TurboSMS SMS provider integration with YAML_HTTP support
+- **communication**: add RabbitMQ-backed queue for outbound message processing
+- **communication**: add RabbitMQ-backed queue for outbound message processing
+- **infrastructure**: add RabbitMQ service and dependency integration
+- **communication**: deprecate root-level send spec and enforce message type validation
+- **communication**: refactor send spec handling and enforce message-type-level configurations
+- **communication**: implement communication module with API, commands, and UI components
+- **frontends**: add Checkbox, Textarea components and refine ProfileSettingsPage UI
+- **frontends**: add reusable Alert, Card, and Label UI components with variants
+- **frontends**: add new UI components including AppSidebar, Avatar, Breadcrumb, DropdownMenu, and Collapsible
+- **frontends**: remove Contacts workspace and related components, APIs, and dependencies
+- **frontends**: implement Objects workspace with schema browsing, record management, and API integration
+- **frontends**: implement Contacts workspace with sidebar, table, details panel, and API integration
+- **frontends**: implement reusable auth components and enhance LoginPage UI
+- **frontends**: add `cn` utility for class name merging with Tailwind support
+- **frontends**: add `Button` component with reka-ui integration
+- **frontends**: add new York style theme, update Tailwind config, and integrate additional UI libraries
+- **frontends**: update button styles for disabled state in auth forms
+- **frontends**: implement email OTP authentication flow with tenant resolution and improved UI styles
+- **frontends**: implement workspace setup for Vue-based console app with foundational structure
+- **schema_registry**: add support for custom object prefix handling and reconciliation
+- **custom_object**: remove custom object module and related files
+- **custom_object**: remove custom object module
+- **custom_object**: implement custom object module with CRUD and field support
+- **shared**: standardize EntityIdVO usage and add concrete ID value objects
+- **shared**: standardize EntityIdVO usage and add concrete ID value objects
+- **inventory**: implement application, domain, infrastructure, and presentation layers
+- **schema_registry**: add support for `kind` classification in objects and fields
+- **shared, identity**: implement shared email service with SMTP and system email support
+- **crm**: implement endpoint and use cases for describing `contact` model and its fields
+- **db**: add startup initialization with retry policy and tests
+- **crm, runtime_data**: add `status` and `tags` support for contact entities and use cases
+- **schema_registry**: add `category` and `tags` fields to contact schema seed
+- **crm, schema_registry**: update `first_name` to be required and `last_name` optional; add nullable column handling
+- **runtime_data, crm**: introduce runtime-based repositories with PostgreSQL integration
+- **schema_registry**: add support for schema reconciliation and field preservation
+- **schema_registry**: support altering column defaults and add tests
+- **schema_registry**: support UUID generator normalization and add tests
+- **schema_registry**: handle foreign key drops for removed tables and add test coverage
+- **schema_registry**: handle foreign key drops for removed tables and add test coverage
+- **schema_registry**: add diff schema use case, CLI command, and test seeds
+- **runtime_schema**: add relation management use cases and persistence
+- **runtime_schema**: introduce module for tenant schema management
+- **tenancy**: implement tenant schema provisioning and data source management
+- **universal_access**: initialize module structure with domain layers
+- **crm**: add persistence models for `Company`, `Contact`, `Deal`, and `Lead`
+- **shared**: add `AudienceMixin` and `TenantSystemMixin` for shared database models
+- **shared**: add `TenantBase` with tenant schema support
+- **mock**: introduce mock module with API endpoints and frontend contracts
+- **identity**: add update current user profile functionality
+- **identity**: add current user retrieval via session cookie
+- **tenant**: refactor tenant and identity module dependencies
+- **identity**: implement identity authentication module with OTP and session management
+- **tenant**: Auth API_KEY tenants, s2s api, ControlePlane.
+- **admin-tenants**: introduce tenant creation flow with FastAPI router and services
+
+### Fix
+
+- **ci**: add new to .gitignore
+- **user_repository**: add missing `user_type` field in user persistence
+- **schema_registry**: update field seeds to allow null values
+- **schema_registry**: update field properties to allow null values
+
+### Refactor
+
+- **cicd**: update image prefix and chart repository paths
+- **ci**: remove GitHub Actions workflows and migrate CI/CD to scripts
+- **helm**: remove dnk-runtime-core chart and all dependencies
+- extract control plane and isolate runtime deployment
+- **helm**: update uvicorn command syntax in workloads.yaml
+- **helm**: remove gateway from dnk-runtime-core and consolidate ingress configuration
+- **helm**: remove gateway from dnk-runtime-core and consolidate ingress configuration
+- **helm**: remove unused dnk-runtime-core Helm charts, templates, and dependencies
+- **accounts**: restructure Django app into modular architecture
+- **runtime_schema, runtime_data, schema_registry**: remove modules, tests, and documentation related to runtime objects
+- **runtime_data, schema_registry**: remove application, domain, and infrastructure layers
+- **communication**: remove application and domain layers, commands, and DTOs
+- **marketing**: remove app, templates, styles, and related assets
+- **landing**: remove unused components and landing page implementation
+- **workspace**: simplify WorkspaceNavUser menu, remove unused components and items
+- **control-plane**: remove ADRs, glossary, implementation plan, and app modules
+- **control-plane**: restructure project directories and update module paths
+- **custom_object**: remove custom_object module and all related components
+- **contact_point**: remove contact_point module and exports
+- **crm**: remove unused `__init__.py` files and obsolete imports across CRM module
+- **workflow**: update dialog headers and card styling for consistency
+- **workflow**: update card header font size in UI component
+- **crm**: remove CRM module and associated components
+- **workflow**: update card UI layout and remove unused badge and labels
+- **workflow**: update card header size and font styling in UI component
+- **workflow**: improve form layout and remove unused FieldDescription component
+- **workflow**: remove workflow applications module and associated components
+- **workflow**: rename and replace workflow application list components
+- **workflow**: extract pagination-disabled logic into computed property
+- **workflow**: remove create workflow-related components and API
+- **pagination**: extract shared cursor logic into reusable components
+- **workflow**: restructure runtime repository and implement query/use cases
+- **docs**: move CODING_STYLE_MANUAL.md to prompts directory
+- **workflow**: make `title` field nullable across schema, entity, and repository
+- **workflow**: make `title` field nullable across schema, entity, and repository
+- **workflow**: update create workflow use case to use specific title/description variables
+- **emoji-picker**: replace icon-cover-picker with emoji-background-picker
+- **workflow**: replace emoji picker with reusable icon-cover-picker
+- **frontend**: replace "lucide-vue-next" with "@lucide/vue" across components
+- **frontend**: remove unused package-lock.json file
+- **modules**: remove unused package initializations
+- **broadcast**: introduce dynamic column widths and simplify table layout
+- **api**: update router prefixes and tags for consistency across modules
+- **communication**: remove unused value objects and fields related to template and connection codes
+- **communication**: remove unused value objects and fields related to template and connection codes
+- **shared**: restructure domain errors and update imports across modules
+- **broadcast**: remove broadcast module and associated routes
+- **communication**: move utility functions to separate files and update imports
+- **communication**: unify toolbar components and optimize query handling
+- **broadcast**: remove unused source_id field from broadcast entity
+- **contact_point**: make DTO methods static
+- **segmentation**: replace `SegmentStaticMember` instantiation with `create` factory method
+- **communication**: remove shared HTTP error mappers and refactor tenant identification handling in controllers
+- **shared**: remove unused shared module dependencies and implementations
+- **contact_point**: split services into dedicated modules and update dependencies
+- **contact_point**: remove `display_value` field from entity, schema, and related tests
+- **contact_point**: update entity structure, DTOs, and use case signatures for consistency with tenant runtime schema
+- **schema_registry**: update variable naming and improve DTO creation consistency
+- **schema_registry**: move object feature protocols to respective use case files
+- **schema_registry**: modularize object feature controllers, requests, and responses
+- **schema_registry**: modularize object feature controllers, requests, and responses
+- **runtime-data**: introduce typed filter builder and update PostgreSQL gateways to use typed filters
+- **runtime-data**: modularize relation loading with utility functions and improve typing consistency
+- **runtime-data**: improve descriptor variable naming and typing in validators and SQL compilers
+- **runtime-data**: replace `list` with `List` for typing consistency across PostgreSQL gateways
+- **runtime-data**: restructure PostgreSQL gateway with modular execution and relation loading
+- **runtime-data**: consolidate query parameters into RuntimeQueryPlan
+- **runtime-data**: centralize field filter/sort capabilities validation
+- **crm**: remove ContactService and migrate logic to use case layer
+- **crm**: remove ContactsTable component and simplify ContactsPage layout
+- **console**: replace Prettier with Vue Query and Vue Table libraries
+- **components**: remove unused UI components and APIs
+- **crm**: simplify AppSidebar navigation structure
+- **communication**: replace dynamic response mapping with explicit schema mapping
+- **communication**: replace dynamic response mapping with explicit schema mapping
+- **auth**: replace AuthShell/AuthCard with reusable AuthLayout and Card components
+- **api**: migrate HTTP client to axios and update identity API methods for consistency
+- **api**: restructure HTTP and identity APIs for improved modularity
+- **persistence**: reorder and deduplicate field definitions across modules
+- **authentication**: standardize tenant ID validation and simplify principal checks across modules
+- **authentication**: standardize tenant ID validation and simplify principal checks across modules
+- **identity**: make `interface_theme` non-nullable across all layers
+- **identity**: remove mapper and error mapper modules, update repository with explicit ORM-to-domain mapping
+- **identity**: remove auth, provisioning, and presentation modules and their dependencies
+- **tenancy**: remove tenancy module and related components
+- **schema_registry**: reformat method signature in `repository.py`
+- **schema_registry**: introduce `_ObjectSeedPartial` and use `TypeAlias` for migration operations
+- **schema_registry**: introduce helper methods for entity creation, field parsing, and validations
+- **schema_registry**: introduce helper methods for entity creation, field parsing, and validations
+- remove SQLite support and migrate to PostgreSQL-only backend
+- **tests**: relocate DropTableOperation assertion in schema planning tests
+- **schema_registry**: remove field_type_mode and related attributes
+- **schema_registry**: remove unused field_type_sql_preset attribute
+- **schema_registry**: remove obsolete migration and service logic
+- **schema_registry**: split metadata service into dedicated read/write services and add diff logic
+- **schema_registry**: split metadata service into dedicated read/write services and add diff logic
+- **schema_registry**: add session flush calls and refactor repository methods
+- **schema_registry**: reorganize module structure and add __all__ exports
+- **schema_registry**: add default_value support to FieldEntity and centralize error inheritance
+- **schema_registry**: add use cases, commands, and migration utilities for schema creation and diffing
+- **schema_registry**: introduce value objects and entity for DataSource domain
+- **schema_registry**: fix FieldSeed imports and add missing init files
+- **schema_registry**: replace raw names and labels with ObjectNameVO and ObjectLabelVO in service logic
+- **schema_registry**: update repository protocol and adjust service logic accordingly
+- **crm**: remove fake repositories, update use cases to depend on query repository protocol, and simplify service logic
+- **schema_registry**: update domain entities, repository, and ObjectORM for improved persistence and naming consistency
+- **schema_registry**: add ObjectORM and repository for persistence layer
+- **crm**: unify ContactIdVO with shared EntityIdVO across commands and controllers
+- **schema_registry**: update FieldSeed imports to reflect new domain structure
+- **schema_registry**: introduce object and field domain entities, value objects, and services
+- **crm**: replace ContactIdVO with shared EntityIdVO and remove old value object
+- **crm**: centralize domain error handling and replace ValueError with custom errors
+- **crm**: remove `now` parameter from commands and unify clock dependency handling
+- **crm**: remove tenant context from commands, queries, and services
+- **crm**: remove debug print in AddContact controller
+- **router**: update route prefixes and simplify endpoints
+- **tenancy**: replace schema name delimiter from hyphen to underscore
+- **identity**: simplify current user response mapping with helper functions
+- **identity**: remove debug print statement from request email OTP use case
+- **tenant**: replace JSONB with PortableJSON for better cross-database compatibility
