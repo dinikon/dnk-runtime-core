@@ -1,983 +1,185 @@
-# CI/CD implementation plan
+# Минимальный CI/CD для одного разработчика
 
-## Goal
+Статус: согласуемый проект процесса. Команды `make` ниже — предлагаемый интерфейс автоматизации, их ещё нужно реализовать. Текущие workflows пока не изменены.
 
-Set up a staged CI/CD process for `dnk-runtime-core` from development branches to production publication.
+**Локально:** разработка, линт, тесты, проверки, расчёт номера выпуска через Commitizen и merge.
+**В GitHub Actions:** создание prerelease-версий через Commitizen, публикация GitHub Pre-release/Release, сборка двух образов, GHCR и доставка через существующий ArgoCD.
 
-Target behavior:
+PR не обязателен. Обычный порядок: проверить локально → merge локально → push. Отдельных approve, ботов, расписания релизов и staging-окружения нет.
 
-- `feature/*` and `bug-fix/*`: run CI checks only.
-- `develop`: run CI checks and build a development Docker image.
-- `pre-release`: run CI checks, build an image, deploy to the test Kubernetes environment through ArgoCD and Helm.
-- `release`: run CI checks, create a semantic version tag, publish a GitHub Release, build production images, deploy to production through ArgoCD and Helm.
-- `main`: keep stable released state. It should be updated after successful production release.
+## 1. Ветки и триггеры
 
-## Current project notes
+| Ветка | Назначение | Что запускает push |
+| --- | --- | --- |
+| `feature/*` | Разработка от `develop` | Ничего |
+| `develop` | Рабочая стабильная версия | Сборка и deployment dev |
+| `release/X.Y.Z` | Зафиксированный состав следующего выпуска из `develop`; проверяется локально | Для каждого нового коммита: версия `X.Y.Z-rc.N`, Git-тег Commitizen, образы и GitHub Pre-release |
+| `hotfix/*` | Исправление от `main` или конкретной release-ветки | Ничего |
+| `main` | Финальная версия `X.Y.Z` для production | Сборка, deployment prod и GitHub Release без признака prerelease |
 
-- The project already has `Dockerfile`, `uv.lock`, `pyproject.toml`, and `test/`.
-- Tests are run with:
+`pull_request` и push Git-тега deployment не запускают. **Локальный merge ничего не разворачивает: запуск происходит после push целевой ветки на GitHub.**
 
-```bash
-uv run python -m unittest discover -s test -p "test_*.py" -v
+## 2. Твой обычный процесс
+
+### Разработать фичу
+
+Создаёшь рабочую ветку от свежего develop:
+
+```sh
+git switch develop
+git pull --ff-only
+git switch -c feature/tenant-export
 ```
 
-- Compile smoke check:
+Пишешь код, фиксируешь изменения через `uv run cz commit`. Перед переносом запускаешь локально `make check`.
 
-```bash
-uv run python -m compileall src
+Готовую фичу сливаешь сам:
+
+```sh
+git switch develop
+git pull --ff-only
+git merge --no-ff feature/tenant-export
+make check
+git push origin develop
 ```
 
-- `pyproject.toml` currently requires `Python ==3.13.9`, but `Dockerfile` uses `python:3.12-slim-bookworm`.
-  This must be aligned before Docker image build becomes a required CI gate.
-- Helm charts and ArgoCD Applications are implemented under `helm` and `deploy/argocd`. The current installation and migration contract is documented in [the Helm guide](../../helm/README.md); the pipeline sketches below are historical planning context.
+Здесь повторная локальная проверка относится к результату merge. GitHub собирает Runtime и Console, публикует образы и обновляет dev. В интерфейсе dev можно посмотреть результат. Feature-ветку после успешного переноса можно удалить.
 
-## Branch strategy
+**PR создавать не нужно.** Используем обычный merge с сохранением Conventional Commits, поэтому Commitizen видит исходные `feat:`/`fix:`. Merge можно сделать и через IDE.
 
-Use persistent branches:
+### Подготовить выпуск
+
+Когда хочешь выпустить текущий develop, запускаешь из него:
+
+```sh
+make release
+```
+
+Команда обновляет refs, проверяет чистое рабочее дерево и синхронизацию develop с main. Затем Commitizen рассчитывает следующую версию, например `0.2.0`; команда создаёт `release/0.2.0`, переключает тебя в неё и отправляет ветку на GitHub. Номер вручную не вводишь. Первый push создаёт prerelease `v0.2.0-rc.1` для начального состояния ветки.
+
+В этой ветке проверяешь выпуск локально, при необходимости исправляешь баги. После каждого нового коммита и push автоматически появляется следующий prerelease. Новые фичи остаются в develop для следующего выпуска. Prerelease публикуется в GitHub и GHCR; отдельного deployment release-ветки нет.
+
+### Каждый коммит в release — отдельный prerelease
 
 ```text
-main
-develop
-pre-release
-release
+release/0.2.0: начальный commit → v0.2.0-rc.1 → GitHub Pre-release
+release/0.2.0: следующий commit → v0.2.0-rc.2 → GitHub Pre-release
+release/0.2.0: ещё один commit  → v0.2.0-rc.3 → GitHub Pre-release
+main: публикация выпуска      → v0.2.0      → GitHub Release → prod
 ```
 
-Use branch prefixes for work branches:
+Публикация начинается после отправки коммита на GitHub. Если одним push отправлены несколько новых коммитов, каждому создаётся свой prerelease по порядку, включая `docs:`/`test:` commits. При создании release-ветки публикуется только её начальный HEAD, без повторного выпуска всей истории develop. Слияние hotfix также запускает публикацию новых коммитов release.
 
-```text
-feature/<task-or-ticket>
-bug-fix/<task-or-ticket>
+`X.Y.Z` берётся из имени release-ветки и не меняется на каждом исправлении; увеличивается только `rc.N`. Уже созданные tags и GitHub Pre-releases сохраняются после финального выпуска. Повторная обработка того же исходного SHA использует его существующий prerelease, а не увеличивает номер ещё раз.
+
+### Отправить выпуск в prod
+
+Из готовой release-ветки:
+
+```sh
+make publish
 ```
 
-Do not use long-lived `feature` and `bug-fix` branches unless there is a separate operational reason.
-They are better as prefixes because each task gets isolated CI status and a focused PR.
+Команда выполняет локально:
 
-Branch flow:
+1. Обновляет refs и теги, требует чистое рабочее дерево и опубликованный prerelease именно для текущего HEAD release. Все локальные изменения должны быть отправлены; если публикация ещё идёт, команда ждёт её завершения. Текущий main должен входить в историю release.
+2. Сливает в main тег последнего prerelease через merge commit. Он содержит весь текущий код release и подготовленные Commitizen файлы версии.
+3. **На main** Commitizen переводит `0.2.0-rc.N` в `0.2.0`: обновляет версию приложения, `uv.lock`, Helm `appVersion`, changelog и создаёт финальный commit с Git-тегом `v0.2.0`. Новое повышение до `0.2.1` здесь не выполняется.
+4. Запускает локальный `make check` для финальной версии.
+5. Сливает main обратно в develop, возвращая туда исправления и версию.
+6. Отправляет main, develop и тег одним атомарным push. При конфликте останавливается до отправки; конфликт решаешь локально.
 
-```text
-feature/* or bug-fix/*
-  -> PR to develop
-  -> merge develop to pre-release
-  -> merge pre-release to release
-  -> release automation publishes production
-  -> merge release back to main and develop
+После push автоматически обновляются prod из main и dev из develop. Для `v0.2.0` публикуется обычный GitHub Release; прежние `v0.2.0-rc.N` остаются предрелизными публикациями. В GitHub Actions смотришь результат доставки. Дополнительных кнопок и PR нет. Release-ветку удаляешь после успешного deployment.
+
+При повторном запуске после локальной ошибки или сбоя push команда продолжает подготовленный выпуск: второй bump и второй тег не создаются.
+
+## 3. Hotfix
+
+### Баг в production
+
+Создаёшь ветку от актуального main:
+
+```sh
+git switch main
+git pull --ff-only
+git switch -c hotfix/tenant-login
 ```
 
-## Required GitHub settings
+Исправляешь баг, делаешь `fix:` commit и запускаешь `make publish` из hotfix-ветки. Для hotfix от main prerelease не требуется: команда сливает исправление в main, где Commitizen формирует только PATCH, например `0.2.0 → 0.2.1`. Локальная проверка, обратное слияние и push выполняются так же. После push публикуется GitHub Release, обновляется prod, а исправление возвращается в develop.
 
-Branch protection:
+### Баг в готовящемся release
 
-```text
-develop:
-  require pull request
-  require CI checks
+Создаёшь hotfix от этой release-ветки, исправляешь баг и сливаешь обратно в неё обычным merge. Проверяешь локально и делаешь push release: CI создаёт следующие prerelease-версии. Отдельный patch-релиз не появляется: исправление входит в готовящийся выпуск. `make publish` запускаешь из release-ветки, когда готов весь выпуск.
 
-pre-release:
-  require pull request
-  require CI checks
+Для простоты готовь один выпуск за раз. Если срочный prod hotfix понадобился во время подготовки release, после hotfix влей новый main в release и проверь результат локально. Если номер release уже занят hotfix, перед следующим push повтори `make release` из текущей release-ветки: в этом режиме команда пересчитывает номер и переименовывает ветку, сохраняя изменения. Для новой серии RC-счёт начинается с 1. Опубликованные теги не перемещаются.
 
-release:
-  require pull request
-  require CI checks
-  require production environment approval before deploy-prod
+## 4. Минимальная автоматизация
 
-main:
-  require pull request
-  require CI checks
-  no direct pushes
-```
+Нужны всего три локальные команды:
 
-GitHub environments:
+| Команда | Действие |
+| --- | --- |
+| `make check` | Существующие линт, тесты backend/frontend, проверки Helm и миграций — локально; PostgreSQL integration использует отдельную тестовую БД |
+| `make release` | Рассчитать номер, создать release-ветку и отправить её для первого prerelease |
+| `make publish` | Перенести последний prerelease или prod hotfix в main, сформировать финальную версию, проверить локально и отправить выпуск |
 
-```text
-test:
-  used by pre-release deploy
-
-production:
-  used by release deploy
-  requires manual approval
-```
-
-Secrets and variables:
-
-```text
-REGISTRY=ghcr.io
-IMAGE_NAME=dnk-runtime-core
-GITOPS_REPO=<org>/<gitops-repo>
-GITOPS_TOKEN=<token with write access to GitOps repo>
-```
-
-Optional only if GitHub Actions must force ArgoCD sync:
-
-```text
-ARGOCD_SERVER
-ARGOCD_AUTH_TOKEN
-```
-
-Preferred deployment model: GitHub Actions updates the GitOps repository with a new Helm image tag, and ArgoCD syncs Kubernetes from Git. Avoid storing direct Kubernetes credentials in GitHub Actions.
-
-## Task 1. Add CI for development branches
-
-Purpose: make every `feature/*`, `bug-fix/*`, and `develop` change testable before any image build or deployment logic exists.
-
-Files to add:
-
-```text
-.github/workflows/ci.yml
-```
-
-Workflow pseudocode:
-
-```yaml
-name: ci
-
-on:
-  pull_request:
-    branches:
-      - develop
-      - pre-release
-      - release
-      - main
-  push:
-    branches:
-      - develop
-      - "feature/**"
-      - "bug-fix/**"
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-
-      - name: Install dependencies
-        run: uv sync --frozen
-
-      - name: Compile source
-        run: uv run python -m compileall src
-
-      - name: Check formatting
-        run: uv run black --check src test
-
-      - name: Run tests
-        run: uv run python -m unittest discover -s test -p "test_*.py" -v
-```
-
-Immediate test:
-
-```bash
-uv run python -m compileall src
-uv run python -m unittest discover -s test -p "test_*.py" -v
-```
-
-GitHub test:
-
-```text
-1. Create feature/ci-smoke.
-2. Push a small documentation-only change.
-3. Open PR to develop.
-4. Verify CI check appears and passes.
-```
-
-Acceptance criteria:
-
-```text
-CI is required before merge to develop.
-Failed tests block PR merge.
-No Docker registry or Kubernetes access is required at this stage.
-```
-
-## Task 2. Align Python runtime for CI and Docker
-
-Purpose: make local install, CI test, and Docker build use the same Python version.
-
-Files to update:
-
-```text
-Dockerfile
-pyproject.toml, only if the project decides to change the required Python version
-```
-
-Recommended option:
-
-```dockerfile
-FROM python:3.13-slim-bookworm AS runtime
-```
-
-Immediate test:
-
-```bash
-docker build -t dnk-runtime-core:local .
-docker run --rm dnk-runtime-core:local python --version
-```
-
-Expected result:
-
-```text
-The image Python version satisfies pyproject.toml.
-The image build finishes with uv sync --frozen.
-```
-
-Acceptance criteria:
-
-```text
-Docker image can be built from the current lock file.
-CI Python and container Python are compatible.
-```
-
-## Task 3. Build and publish development images from develop
-
-Purpose: prove container publishing before adding deployment.
-
-Update:
-
-```text
-.github/workflows/ci.yml
-```
-
-Add job pseudocode:
-
-```yaml
-  build-dev-image:
-    needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/dnk-runtime-core:develop
-            ghcr.io/${{ github.repository_owner }}/dnk-runtime-core:dev-${{ github.sha }}
-```
-
-Immediate test:
-
-```text
-1. Merge a PR into develop.
-2. Check GitHub Actions build-dev-image job.
-3. Check GHCR package contains tags develop and dev-<sha>.
-```
-
-Optional local test:
-
-```bash
-docker pull ghcr.io/<org>/dnk-runtime-core:develop
-docker run --rm -p 8000:8000 ghcr.io/<org>/dnk-runtime-core:develop
-```
-
-Acceptance criteria:
-
-```text
-Development image is published only after CI passes.
-Feature and bug-fix branches do not publish images.
-```
-
-## Task 4. Create base branches and protection rules
-
-Purpose: lock the workflow before deployment automation is enabled.
-
-Commands:
-
-```bash
-git fetch origin
-
-git checkout main
-git pull origin main
-
-git checkout -b develop
-git push -u origin develop
-
-git checkout main
-git checkout -b pre-release
-git push -u origin pre-release
-
-git checkout main
-git checkout -b release
-git push -u origin release
-```
-
-If branches already exist, only verify they are up to date.
-
-Immediate test:
-
-```text
-1. Try to push directly to protected develop.
-2. Confirm GitHub rejects direct push or requires PR.
-3. Open a PR from feature/* to develop and confirm required CI appears.
-```
-
-Acceptance criteria:
-
-```text
-All control branches exist.
-Direct pushes are blocked where required.
-Required CI checks are attached to protected branches.
-```
-
-## Task 5. Add Helm chart for the application
-
-Purpose: make the service deployable in Kubernetes before adding ArgoCD automation.
-
-Files to add:
-
-```text
-helm/Chart.yaml
-helm/values.yaml
-helm/values-test.yaml
-helm/values-prod.yaml
-helm/templates/deployment.yaml
-helm/templates/service.yaml
-helm/templates/ingress.yaml
-helm/templates/configmap.yaml
-```
-
-Base values pseudocode:
-
-```yaml
-image:
-  repository: ghcr.io/<org>/dnk-runtime-core
-  tag: develop
-  pullPolicy: IfNotPresent
-
-replicaCount: 1
-
-service:
-  type: ClusterIP
-  port: 8000
-
-env:
-  APP_ENV: default
-
-resources:
-  requests:
-    cpu: 100m
-    memory: 256Mi
-  limits:
-    cpu: 500m
-    memory: 512Mi
-```
-
-Test values pseudocode:
-
-```yaml
-image:
-  tag: pre-placeholder
-
-env:
-  APP_ENV: test
-
-replicaCount: 1
-```
-
-Production values pseudocode:
-
-```yaml
-image:
-  tag: v0.1.0
-
-env:
-  APP_ENV: production
-
-replicaCount: 3
-```
-
-Immediate test:
-
-```bash
-helm lint helm
-helm template dnk-runtime-core helm -f helm/values-test.yaml
-helm template dnk-runtime-core helm -f helm/values-prod.yaml
-```
-
-Acceptance criteria:
-
-```text
-helm lint passes.
-helm template renders Deployment, Service, ConfigMap and optional Ingress.
-The rendered Deployment contains the expected image repository and tag.
-```
-
-## Task 6. Add Helm validation to CI
-
-Purpose: prevent broken Kubernetes manifests from reaching `pre-release` or `release`.
-
-Update:
-
-```text
-.github/workflows/ci.yml
-```
-
-Job pseudocode:
-
-```yaml
-  helm:
-    needs: test
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: azure/setup-helm@v4
-
-      - name: Helm lint
-        run: helm lint helm
-
-      - name: Render test manifests
-        run: helm template dnk-runtime-core helm -f helm/values-test.yaml
-
-      - name: Render prod manifests
-        run: helm template dnk-runtime-core helm -f helm/values-prod.yaml
-```
-
-Immediate test:
-
-```text
-1. Open PR with a valid Helm chart.
-2. Confirm helm job passes.
-3. Break a template locally or in a test branch.
-4. Confirm helm job fails.
-```
-
-Acceptance criteria:
-
-```text
-Broken Helm chart blocks merge.
-CI validates both test and production values.
-```
-
-## Task 7. Prepare GitOps repository structure
-
-Purpose: make ArgoCD deploy from Git state, not from direct CI access to Kubernetes.
-
-Recommended GitOps repository layout:
-
-```text
-environments/
-  test/
-    dnk-runtime-core/
-      Chart.yaml or chart reference
-      values.yaml
-  prod/
-    dnk-runtime-core/
-      Chart.yaml or chart reference
-      values.yaml
-argocd/
-  applications/
-    dnk-runtime-core-test.yaml
-    dnk-runtime-core-prod.yaml
-```
-
-Test environment values pseudocode:
-
-```yaml
-image:
-  repository: ghcr.io/<org>/dnk-runtime-core
-  tag: pre-placeholder
-```
-
-Production environment values pseudocode:
-
-```yaml
-image:
-  repository: ghcr.io/<org>/dnk-runtime-core
-  tag: v0.1.0
-```
-
-ArgoCD test application pseudocode:
-
-```yaml
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: dnk-runtime-core-test
-  namespace: argocd
-spec:
-  project: default
-  source:
-    repoURL: https://github.com/<org>/<gitops-repo>.git
-    targetRevision: main
-    path: environments/test/dnk-runtime-core
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: dnk-test
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-```
-
-ArgoCD production application pseudocode:
-
-```yaml
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: dnk-runtime-core-prod
-  namespace: argocd
-spec:
-  project: production
-  source:
-    repoURL: https://github.com/<org>/<gitops-repo>.git
-    targetRevision: main
-    path: environments/prod/dnk-runtime-core
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: dnk-prod
-  syncPolicy:
-    automated:
-      prune: false
-      selfHeal: true
-```
-
-Immediate test:
-
-```text
-1. Commit GitOps test application.
-2. Open ArgoCD UI.
-3. Confirm dnk-runtime-core-test appears.
-4. Confirm rendered manifests are visible.
-```
-
-Acceptance criteria:
-
-```text
-ArgoCD can read GitOps repo.
-Test application can sync into dnk-test namespace.
-Production application exists but requires controlled sync/approval policy.
-```
-
-## Task 8. Add pre-release deploy to test environment
-
-Purpose: make `pre-release` automatically deploy to test after CI passes.
-
-Files to add or update:
-
-```text
-.github/workflows/pre-release.yml
-```
-
-Workflow pseudocode:
-
-```yaml
-name: pre-release
-
-on:
-  push:
-    branches:
-      - pre-release
-
-permissions:
-  contents: read
-  packages: write
-
-jobs:
-  test:
-    uses: ./.github/workflows/ci.yml
-
-  build-image:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - checkout
-      - login to ghcr.io
-      - build and push:
-          tags:
-            - ghcr.io/<org>/dnk-runtime-core:pre-release
-            - ghcr.io/<org>/dnk-runtime-core:pre-${GITHUB_SHA}
-
-  deploy-test:
-    needs: build-image
-    environment: test
-    runs-on: ubuntu-latest
-    steps:
-      - checkout GitOps repo using GITOPS_TOKEN
-      - update environments/test/dnk-runtime-core/values.yaml:
-          image.tag: pre-${GITHUB_SHA}
-      - commit:
-          message: "deploy(test): dnk-runtime-core pre-${GITHUB_SHA}"
-      - push to GitOps main
-      - ArgoCD auto-sync deploys the new image
-```
-
-Immediate test:
-
-```text
-1. Merge develop into pre-release.
-2. Confirm pre-release workflow passes.
-3. Confirm GHCR contains pre-release and pre-<sha> tags.
-4. Confirm GitOps test values.yaml was updated.
-5. Confirm ArgoCD synced dnk-runtime-core-test.
-6. Confirm Kubernetes Deployment uses image tag pre-<sha>.
-```
-
-Acceptance criteria:
-
-```text
-Every push to pre-release produces a test deployment.
-Failed CI prevents image publishing and deployment.
-GitOps repo contains a traceable deploy commit.
-```
-
-## Task 9. Configure automatic semantic versioning
-
-Purpose: make release tags deterministic and generated from commit history.
-
-Use Conventional Commits:
-
-```text
-fix: correct tenant schema bootstrap
-feat: add provider connector import
-feat!: change runtime schema contract
-```
-
-Recommended `pyproject.toml` config pseudocode:
+Рабочие feature/hotfix-ветки создаются обычной командой Git. Настройка Commitizen:
 
 ```toml
 [tool.commitizen]
 name = "cz_conventional_commits"
+version_provider = "uv"
+version_scheme = "semver2"
 tag_format = "v$version"
-version_scheme = "semver"
-version_provider = "pep621"
+major_version_zero = false
 update_changelog_on_bump = true
-major_version_zero = true
+changelog_merge_prerelease = true
+version_files = ["helm/Chart.yaml:appVersion"]
 ```
 
-Release version rules:
+`fix`, `perf`, `refactor` повышают PATCH; `feat` — MINOR; breaking change — MAJOR. Только docs/test/ci/chore не начинают новую серию выпусков, но в уже созданной release-ветке любой новый commit получает следующий RC. Provider `uv` согласует версию приложения с lockfile: [документация Commitizen](https://commitizen-tools.github.io/commitizen/config/version_provider/).
+
+Для начального расчёта локальная команда использует `cz bump --get-next`. В release номер `X.Y.Z` фиксирован, а CI выбирает следующий свободный `rc.N` и передаёт его Commitizen: например, `cz bump 0.2.0-rc.2 --yes --changelog`. Явная автоматически рассчитанная версия обеспечивает RC даже для docs-only commit. При завершении выпуска на main выполняется `cz bump 0.2.0 --yes --changelog`. В обоих случаях **commit и Git-тег создаёт Commitizen**; примеры номеров подставляет автоматизация. См. [Commitizen bump](https://commitizen-tools.github.io/commitizen/commands/bump/).
+
+Версия Helm chart остаётся отдельной; chart берётся из того же Git SHA, что и исходники образов, без отдельной публикации chart.
+
+## 5. Что делает CI/CD
+
+Достаточно одного `deploy.yml`, запускаемого на push в `develop`, `release/**` и `main`:
 
 ```text
-fix      -> patch
-feat     -> minor
-breaking -> major
+push develop   → собрать Runtime + Console → GHCR → ArgoCD dev
+push release/* → Commitizen RC + Git-тег → образы → GHCR + GitHub Pre-release
+push main      → финальные образы → GHCR → ArgoCD prod → GitHub Release
 ```
 
-Immediate test:
+Для `release/*` CI последовательно обрабатывает все ещё не опубликованные коммиты ветки. Для каждого создаёт в отдельном checkout служебный commit с RC-версией и тегом Commitizen, отправляет **тег**, собирает образы из этого тега и создаёт GitHub Pre-release с changelog, исходным SHA и ссылками на образы. Служебный commit доступен через тег и не отправляется обратно в release-ветку: твоя рабочая история не меняется и цикл новых prerelease не возникает. `make publish` затем переносит выбранный тег в main.
 
-```bash
-uv run cz check --rev-range origin/release..HEAD
-uv run cz bump --dry-run
-```
+На одну release-ветку работает один обработчик; он восстанавливает пропущенные коммиты по истории и соответствию «исходный SHA → RC-тег». Теги и соответствия сохраняются при сбое, поэтому повторный запуск продолжает публикацию того же RC. Создание тега и GitHub публикации выполняется в текущем workflow; отдельного запуска по тегу нет. Для Git-тегов и GitHub Releases достаточно `GITHUB_TOKEN` с `contents: write`, для GHCR — `packages: write`.
 
-GitHub test:
+GitHub Pre-release — отдельная запись в Releases с признаком `prerelease: true`, а не только Git-тег. Финальная запись `vX.Y.Z` из main имеет `prerelease: false`. Для публикации используется уже существующий тег (`--verify-tag`); prerelease не помечается Latest. См. [GitHub Release create](https://cli.github.com/manual/gh_release_create).
 
-```text
-1. Create test branch from release.
-2. Add commits with fix: and feat: messages.
-3. Run release workflow in dry-run mode if configured.
-4. Confirm expected next version.
-```
+Доставка для `develop`/`main`:
 
-Acceptance criteria:
+1. Берёт точный SHA события push и собирает оба образа через существующий Docker Bake.
+2. Публикует их с уникальным тегом `sha-<commit>-<run>-<attempt>`; `latest` не используется. У каждого повтора сборки свой тег. Для RC и финального выпуска оба образа также получают версионный тег, например `0.2.0-rc.2` или `0.2.0`: он присваивается один раз и не перезаписывается. При повторе уже опубликованной версии используются сохранённые образы.
+3. Только после публикации обоих образов обновляет нужный ArgoCD Application: `targetRevision` равен исходному SHA; backend, workers, migration Job и initContainer используют новый runtime image tag, frontend — новый Console image tag. `global.deployment.revision` получает уникальный идентификатор этого deployment.
+4. Запускает полный Sync и ждёт завершения rollout, включая штатный migration Job chart. Это доставка приложения; линт, тесты и приёмочные сценарии в CI не запускаются.
+5. Сохраняет SHA и image tags в результате запуска, отмечает deployment успешным или неуспешным. После успешного prod deployment публикует финальный GitHub Release с changelog. До этого запись может оставаться draft; существующий stable Git-тег при сбое не удаляется.
 
-```text
-Invalid release commit messages are rejected.
-Next version can be calculated without manual editing.
-Version source of truth is pyproject.toml.
-Tags use vX.Y.Z format.
-```
+Существующий ArgoCD позволяет менять revision и Helm parameters через [app set](https://argo-cd.readthedocs.io/en/stable/user-guide/commands/argocd_app_set/), а завершение доставки ждать через [app wait](https://argo-cd.readthedocs.io/en/stable/user-guide/commands/argocd_app_wait/). Достаточно двух Applications — dev и prod. CI управляет их revision/image parameters напрямую; отдельный GitOps-репозиторий не нужен.
 
-## Task 10. Add release workflow for GitHub Release and production image
+Applications закрепляются на SHA, auto-sync отключается; revision и tags обновляются вместе перед явным Sync. Нынешнее отслеживание движущегося `main` нужно убрать, иначе раскатка может начаться до публикации образов. Эти поля не должен перезаписывать другой контроллер.
 
-Purpose: make `release` publish an immutable application release.
+В одном окружении deployment выполняется последовательно; начатую миграцию новый push не отменяет. Перед обновлением Application job сверяет свой SHA с текущей целевой веткой, чтобы опоздавшая сборка не вернула старый код. Prod-сборка выполняется из main заново: это отдельная сборка от ранее развёрнутой на dev.
 
-Files to add:
+Если сборка не удалась, deployment не начинается. После сбоя доставки повторяешь нужный запуск. Для rollback возвращаешь в ArgoCD SHA и оба image tags предыдущего успешного запуска, задаёшь новый идентификатор операции `global.deployment.revision` и выполняешь полный Sync. Откат образов не откатывает БД; старый код должен быть совместим с уже применёнными миграциями. Пока main и фактический prod расходятся после сбоя/rollback, сначала восстанови согласованность, затем начинай следующий выпуск или hotfix.
 
-```text
-.github/workflows/release.yml
-```
+## 6. Что потребуется внедрить
 
-Workflow pseudocode:
-
-```yaml
-name: release
-
-on:
-  push:
-    branches:
-      - release
-
-permissions:
-  contents: write
-  packages: write
-
-concurrency:
-  group: release
-  cancel-in-progress: false
-
-jobs:
-  test:
-    run: same checks as ci
-
-  version:
-    needs: test
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      tag: ${{ steps.version.outputs.tag }}
-
-    steps:
-      - checkout with fetch-depth 0
-      - setup python and uv
-      - uv sync --frozen
-      - check conventional commits
-      - run:
-          uv run cz bump --yes --changelog
-      - read version from pyproject.toml
-      - commit:
-          message: "chore(release): vX.Y.Z"
-      - tag:
-          name: vX.Y.Z
-      - push release commit and tag
-
-  build-prod-image:
-    needs: version
-    runs-on: ubuntu-latest
-    steps:
-      - checkout release tag
-      - login to ghcr.io
-      - build and push:
-          tags:
-            - ghcr.io/<org>/dnk-runtime-core:vX.Y.Z
-            - ghcr.io/<org>/dnk-runtime-core:latest
-            - ghcr.io/<org>/dnk-runtime-core:${GITHUB_SHA}
-
-  github-release:
-    needs:
-      - version
-      - build-prod-image
-    runs-on: ubuntu-latest
-    steps:
-      - create GitHub Release:
-          tag: vX.Y.Z
-          title: vX.Y.Z
-          notes: changelog for vX.Y.Z
-```
-
-Immediate test:
-
-```text
-1. Push to release from a controlled test branch or test repo first.
-2. Confirm release workflow calculates next version.
-3. Confirm tag vX.Y.Z exists.
-4. Confirm GitHub Release exists.
-5. Confirm GHCR contains vX.Y.Z and latest image tags.
-```
-
-Acceptance criteria:
-
-```text
-Release tag is immutable.
-GitHub Release is created automatically.
-Production image is published only after tests pass.
-```
-
-## Task 11. Add production deployment through ArgoCD and Helm
-
-Purpose: deploy only versioned release images to production.
-
-Update:
-
-```text
-.github/workflows/release.yml
-```
-
-Add deploy job pseudocode:
-
-```yaml
-  deploy-prod:
-    needs:
-      - version
-      - build-prod-image
-      - github-release
-    environment: production
-    runs-on: ubuntu-latest
-
-    steps:
-      - checkout GitOps repo using GITOPS_TOKEN
-      - update environments/prod/dnk-runtime-core/values.yaml:
-          image.tag: vX.Y.Z
-      - commit:
-          message: "deploy(prod): dnk-runtime-core vX.Y.Z"
-      - push to GitOps main
-      - ArgoCD syncs production from GitOps repo
-```
-
-Production safeguards:
-
-```text
-Use GitHub production environment approval.
-Use ArgoCD project restrictions for production.
-Disable automated prune in production unless the team explicitly accepts it.
-Deploy only immutable SemVer tags, not latest.
-```
-
-Immediate test:
-
-```text
-1. Approve production environment job in GitHub Actions.
-2. Confirm GitOps prod values.yaml changed to vX.Y.Z.
-3. Confirm ArgoCD dnk-runtime-core-prod syncs successfully.
-4. Confirm Kubernetes Deployment image is ghcr.io/<org>/dnk-runtime-core:vX.Y.Z.
-5. Confirm application health endpoint or docs endpoint responds.
-```
-
-Acceptance criteria:
-
-```text
-Production deploy cannot happen before GitHub Release and production image are published.
-Production deploy has a GitOps commit trail.
-Rollback can be done by reverting the GitOps image tag commit.
-```
-
-## Task 12. Add post-release synchronization
-
-Purpose: keep `main` and `develop` aligned with released code and version bump.
-
-Options:
-
-```text
-Manual:
-  PR release -> main
-  PR release -> develop
-
-Automated:
-  workflow opens PRs after successful production deploy
-```
-
-Recommended first implementation:
-
-```text
-Use manual PRs until the release flow is stable.
-```
-
-Immediate test:
-
-```text
-1. After production deploy, open PR from release to main.
-2. Confirm CI passes.
-3. Merge to main.
-4. Open PR from release to develop.
-5. Confirm CI passes.
-6. Merge to develop.
-```
-
-Acceptance criteria:
-
-```text
-main contains the released commit and tag history.
-develop contains the released version bump and changelog.
-Next release starts from a consistent version state.
-```
-
-## Task 13. Add rollback procedure
-
-Purpose: make production recovery explicit before relying on automated deploys.
-
-Rollback through GitOps:
-
-```text
-1. Find previous stable image tag, for example v0.1.4.
-2. Revert the GitOps commit that changed prod image tag to v0.1.5.
-3. Push revert commit.
-4. ArgoCD syncs production back to v0.1.4.
-```
-
-Emergency rollback through ArgoCD UI:
-
-```text
-1. Open dnk-runtime-core-prod application.
-2. Select previous synced revision.
-3. Roll back.
-4. Follow up by committing the same target state to GitOps.
-```
-
-Immediate test:
-
-```text
-1. Run rollback drill in test environment.
-2. Deploy pre-<new-sha>.
-3. Revert GitOps test image tag to pre-<old-sha>.
-4. Confirm ArgoCD returns the test deployment to the old image.
-```
-
-Acceptance criteria:
-
-```text
-Team can roll back without editing Kubernetes resources manually.
-Rollback action leaves a Git history trail.
-```
-
-## Final CI/CD path
-
-Expected final sequence:
-
-```text
-feature/task
-  -> CI
-  -> PR to develop
-
-develop
-  -> CI
-  -> build ghcr.io/<org>/dnk-runtime-core:develop
-  -> build ghcr.io/<org>/dnk-runtime-core:dev-<sha>
-
-pre-release
-  -> CI
-  -> build ghcr.io/<org>/dnk-runtime-core:pre-release
-  -> build ghcr.io/<org>/dnk-runtime-core:pre-<sha>
-  -> update GitOps test values
-  -> ArgoCD deploys test
-
-release
-  -> CI
-  -> calculate version
-  -> create tag vX.Y.Z
-  -> create GitHub Release
-  -> build ghcr.io/<org>/dnk-runtime-core:vX.Y.Z
-  -> build ghcr.io/<org>/dnk-runtime-core:latest
-  -> update GitOps prod values
-  -> ArgoCD deploys production
-
-main
-  -> receives released state from release after production deploy
-```
-
-## Definition of done
-
-The CI/CD setup is complete when:
-
-```text
-1. PRs to develop are blocked by failing tests.
-2. Push to develop publishes a development image.
-3. Push to pre-release deploys to test through ArgoCD.
-4. Push to release creates SemVer tag and GitHub Release.
-5. Release workflow publishes immutable production image tags.
-6. Production deploy uses GitHub environment approval.
-7. Production deploy updates GitOps repo and ArgoCD syncs from Git.
-8. Rollback is tested in the test environment.
-9. main and develop are synchronized after production release.
-```
+- Добавить три локальные команды и конфигурацию Commitizen. Один раз согласовать стартовый stable tag, `project.version`, `uv.lock` и нынешний Helm `appVersion`.
+- Добавить обработку каждого нового release-коммита, создание RC-тегов Commitizen и GitHub Pre-release; из main публиковать финальный GitHub Release.
+- Перенести проверки из `.github/workflows/ci.yml` и `helm.yml` в `make check`; автоматические CI-проверки отключить, сборку и доставку оставить в `deploy.yml`.
+- В Docker Bake убрать автоматическое добавление `latest` и передавать уникальный image tag из workflow.
+- Подготовить ArgoCD dev/prod, доступ CI к ArgoCD и запись в существующие GHCR-пакеты. Секреты приложений остаются в окружениях.
+- Разрешить собственный push в develop/main, без обязательных PR/review/CI checks; запрет force-push можно сохранить.
