@@ -12,7 +12,7 @@ import yaml
 from helm.build import verify
 from .common import Error, run, versions, write_json
 
-IMAGE_PREFIX = "ghcr.io/dinikon/runtime"
+IMAGE_PREFIX = "ghcr.io/dinikon/dnk-runtime-core"
 CHART_REPOSITORY = "ghcr.io/dinikon/dnk-runtime-core/helm"
 HELM_CONFIG = "application/vnd.cncf.helm.config.v1+json"
 HELM_LAYER = "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
