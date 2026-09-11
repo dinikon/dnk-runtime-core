@@ -1,3 +1,9 @@
+## v0.2.2 (2026-09-11)
+
+### Refactor
+
+- **test**: remove test_cicd.py and related test cases
+
 ## v0.2.1 (2026-09-11)
 
 ### Refactor
