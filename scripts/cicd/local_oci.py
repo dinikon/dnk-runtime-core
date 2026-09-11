@@ -8,8 +8,10 @@ import sys
 import tempfile
 import uuid
 
-from .artifacts import HELM_CONFIG, HELM_LAYER, Registry, package_chart
+from .charts import package_chart
+from .registry import HELM_CONFIG, HELM_LAYER, Registry
 from .common import ROOT, run
+from .observability import configure_logging, stage
 
 # Existing cluster helper always creates its own kubeconfig and explicit context.
 sys.path.insert(0, str(ROOT / "helm/tests"))
@@ -19,6 +21,7 @@ ARGO_VERSION = "v3.1.0"
 
 
 def integration():
+    """Verify OCI publication, aliases and rollout using only disposable local resources."""
     registry = Registry(plain_http=True)
     name = "dnk-oci-" + uuid.uuid4().hex[:8]
     with Cluster(namespace="argo-platform", reuse_test_images=True) as cluster:
@@ -328,4 +331,6 @@ def integration():
 
 
 if __name__ == "__main__":
-    integration()
+    configure_logging()
+    with stage("Local OCI integration"):
+        integration()

@@ -7,9 +7,12 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import time
 import tomllib
 
 import yaml
+
+from .observability import logger
 
 ROOT = Path(__file__).resolve().parents[2]
 STABLE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
@@ -21,6 +24,8 @@ class Error(RuntimeError):
 
 
 def run(*args, cwd=ROOT, env=None, check=True):
+    """Capture process output for parsing; log timing without arguments or secrets."""
+    started = time.monotonic()
     result = subprocess.run(
         [str(arg) for arg in args],
         cwd=cwd,
@@ -28,6 +33,12 @@ def run(*args, cwd=ROOT, env=None, check=True):
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+    )
+    logger.debug(
+        "Process %s exited: code=%s duration=%.2fs",
+        Path(args[0]).name,
+        result.returncode,
+        time.monotonic() - started,
     )
     if check and result.returncode:
         # Never print argv: credentials can be passed to registry/Argo CLIs.
@@ -38,14 +49,24 @@ def run(*args, cwd=ROOT, env=None, check=True):
 
 
 def live(*args, cwd=ROOT, env=None):
+    """Stream long-running tool output directly and propagate a nonzero exit code."""
+    started = time.monotonic()
+    logger.info("Running process: %s", Path(args[0]).name)
     result = subprocess.run(
         [str(arg) for arg in args], cwd=cwd, env=os.environ | (env or {})
+    )
+    logger.info(
+        "Process %s exited: code=%s duration=%.2fs",
+        Path(args[0]).name,
+        result.returncode,
+        time.monotonic() - started,
     )
     if result.returncode:
         raise Error(f"{args[0]} failed ({result.returncode})")
 
 
 def stable(version):
+    """Parse a stable SemVer; reject prereleases and malformed versions."""
     match = STABLE.fullmatch(version)
     if not match:
         raise Error(f"Expected a stable SemVer version, got {version!r}")
@@ -53,11 +74,13 @@ def stable(version):
 
 
 def patch(version):
+    """Increment the patch component of a stable version."""
     major, minor, micro = stable(version)
     return f"{major}.{minor}.{micro + 1}"
 
 
 def versions(root):
+    """Read app/chart versions and enforce agreement with Helm appVersion."""
     project = tomllib.loads((root / "pyproject.toml").read_text())
     chart = yaml.safe_load((root / "helm/Chart.yaml").read_text())
     app = project["project"]["version"]
@@ -67,6 +90,7 @@ def versions(root):
 
 
 def set_chart_version(root, version):
+    """Update only the top-level chart version, preserving vendored dependencies."""
     path = root / "helm/Chart.yaml"
     content, count = re.subn(
         r"(?m)^version:.*$", f"version: {version}", path.read_text()
@@ -77,6 +101,7 @@ def set_chart_version(root, version):
 
 
 def write_json(path, value):
+    """Replace a JSON file atomically so interrupted writes leave the prior record."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
