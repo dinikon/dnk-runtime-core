@@ -49,7 +49,8 @@ Review generated revisions before applying them. Global tables still use startup
 
 ## Documentation
 
-- [Minimal CI/CD: local development and automated deployment](docs/plan/ci-cd.md)
+- [CI/CD: release workflow and artifact publication](docs/plan/ci-cd.md)
+- [CI/CD maintenance: modules, job logs and build cache](docs/operations/ci-cd.md)
 - [Container images: build and publish to GitHub Packages](docs/container-images.md)
 - [Documentation index](docs/index.md)
 - [Architecture](docs/architecture/overview.md)

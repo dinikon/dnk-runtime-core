@@ -1,136 +1,16 @@
-"""Git transactions. Release metadata lives in immutable annotated tags."""
+"""Release planning and resumable local publication transactions."""
 
-from __future__ import annotations
-
-from contextlib import contextmanager
-import base64
 import json
 from pathlib import Path
 import sys
-import tempfile
 import time
 
-import yaml
-
-from .common import (
-    Error,
-    RC,
-    patch,
-    run,
-    set_chart_version,
-    stable,
-    versions,
-    write_json,
-)
-
-
-class Repo:
-    def __init__(self, root):
-        self.root = Path(root).resolve()
-
-    def git(self, *args, check=True):
-        return run("git", *args, cwd=self.root, check=check)
-
-    def sha(self, ref="HEAD"):
-        return self.git("rev-parse", "--verify", f"{ref}^{{commit}}").stdout.strip()
-
-    def exists(self, ref):
-        return self.git("rev-parse", "--verify", ref, check=False).returncode == 0
-
-    def branch(self):
-        return self.git("symbolic-ref", "--short", "HEAD").stdout.strip()
-
-    def ancestor(self, parent, child):
-        result = self.git("merge-base", "--is-ancestor", parent, child, check=False)
-        if result.returncode not in (0, 1):
-            raise Error(result.stderr)
-        return result.returncode == 0
-
-    def clean(self):
-        if self.git("status", "--porcelain").stdout:
-            raise Error(
-                "Commit or remove local changes first; resolve and commit any merge conflict"
-            )
-
-    def fetch(self):
-        self.git("fetch", "origin", "--tags", "--prune")
-
-    def tags(self, pattern):
-        return self.git("tag", "--list", pattern).stdout.splitlines()
-
-    def metadata(self, tag):
-        raw = self.git(
-            "for-each-ref", "--format=%(contents)", f"refs/tags/{tag}"
-        ).stdout
-        try:
-            if raw.strip().startswith("dnk-cicd:"):
-                raw = base64.b64decode(raw.strip().removeprefix("dnk-cicd:")).decode()
-            data = json.loads(raw)
-        except ValueError as error:
-            raise Error(f"Tag {tag} has no valid CI/CD metadata") from error
-        if not isinstance(data, dict) or data.get("schema") != 1:
-            raise Error(f"Unsupported tag metadata: {tag}")
-        return data
-
-    def stable_tags(self, ref="HEAD"):
-        result = []
-        for tag in self.tags("v*"):
-            try:
-                number = stable(tag[1:])
-            except Error:
-                continue
-            if self.ancestor(tag, ref):
-                result.append((number, tag))
-        return [tag for _, tag in sorted(result)]
-
-    def chart_at(self, ref):
-        content = self.git("show", f"{ref}:helm/Chart.yaml").stdout
-        return str(yaml.safe_load(content)["version"])
-
-    def local_branch(self, name):
-        remote = f"origin/{name}"
-        if not self.exists(f"refs/heads/{name}"):
-            self.git("branch", name, remote)
-        if self.sha(name) != self.sha(remote):
-            raise Error(f"Local {name} differs from {remote}; synchronize it first")
-
-    @contextmanager
-    def checkout(self, ref):
-        with tempfile.TemporaryDirectory(prefix="dnk-release-") as directory:
-            path = Path(directory) / "checkout"
-            self.git("worktree", "add", "--detach", str(path), ref)
-            try:
-                yield Repo(path)
-            finally:
-                self.git("worktree", "remove", "--force", str(path))
-
-    def bump(self, app, chart, metadata):
-        tag = "v" + app
-        if self.exists(f"refs/tags/{tag}"):
-            if self.metadata(tag) != metadata or self.sha(tag) != self.sha():
-                raise Error(f"Refusing to reuse unrelated tag {tag}")
-            return tag
-        set_chart_version(self.root, chart)
-        run(
-            sys.executable,
-            "-m",
-            "commitizen",
-            "bump",
-            app,
-            "--yes",
-            "--changelog",
-            "--annotated-tag",
-            "--annotated-tag-message",
-            "dnk-cicd:"
-            + base64.b64encode(json.dumps(metadata, sort_keys=True).encode()).decode(),
-            cwd=self.root,
-        )
-        if versions(self.root) != (app, chart):
-            raise Error("Commitizen produced inconsistent application/chart versions")
-        return tag
+from .common import Error, RC, patch, run, stable, versions, write_json
+from .observability import logger, stage
 
 
 def start_release(repo):
+    """Create or resume one release series and atomically push its start marker."""
     repo.clean()
     repo.fetch()
     branch = repo.branch()
@@ -195,10 +75,11 @@ def start_release(repo):
     repo.git(
         "push", "--atomic", "--set-upstream", "origin", target, "refs/tags/" + marker
     )
-    print(f"Published {target}; GitHub Actions will create its prereleases")
+    logger.info("Published %s; GitHub Actions will create its prereleases", target)
 
 
 def release_sources(repo, branch):
+    """List every reachable source commit from the release marker in topology order."""
     app = branch.removeprefix("release/")
     stable(app)
     metadata = repo.metadata("release-start/" + app)
@@ -214,6 +95,7 @@ def release_sources(repo, branch):
 
 
 def rc_tags(repo, app):
+    """Read existing RC reservations sorted by their sequence number."""
     result = []
     for tag in repo.tags(f"v{app}-rc.*"):
         match = RC.fullmatch(tag)
@@ -224,6 +106,7 @@ def rc_tags(repo, app):
 
 
 def prepare_rc(repo, branch, source):
+    """Reuse the source commit reservation or create and push its next RC tag."""
     app = branch[8:]
     tags = rc_tags(repo, app)
     for _, tag, metadata in tags:
@@ -254,6 +137,7 @@ def prepare_rc(repo, branch, source):
 
 
 def wait_prerelease(repo, github, branch, source, timeout=3600):
+    """Wait for the exact source SHA to have a published GitHub prerelease."""
     deadline = time.monotonic() + timeout
     while True:
         repo.fetch()
@@ -271,7 +155,12 @@ def wait_prerelease(repo, github, branch, source, timeout=3600):
             raise Error(
                 "Prerelease is not ready; inspect Actions and retry make publish"
             )
-        print("Waiting for the current HEAD prerelease...", flush=True)
+        logger.info(
+            "Waiting for prerelease: branch=%s source=%s remaining=%.0fs",
+            branch,
+            source,
+            max(0, deadline - time.monotonic()),
+        )
         time.sleep(10)
 
 
@@ -286,6 +175,9 @@ def publish(repo, github, check):
     repo.fetch()
     if journal.exists():
         state = json.loads(journal.read_text())
+        logger.info(
+            "Resuming publication: phase=%s app=%s", state["phase"], state["app"]
+        )
     else:
         branch, source = repo.branch(), repo.sha()
         if not branch.startswith(("release/", "hotfix/")):
@@ -360,7 +252,7 @@ def publish(repo, github, check):
         if repo.sha(tag) != state["main_sha"]:
             raise Error("Published tag differs from the prepared transaction")
         journal.unlink()
-        print(f"{tag} was already pushed successfully")
+        logger.info("%s was already pushed successfully", tag)
         return
     for name in ("main", "develop"):
         if repo.sha("origin/" + name) != state["base_" + name]:
@@ -376,34 +268,38 @@ def publish(repo, github, check):
         "chart_version": state["chart"],
     }
     if state["phase"] == "merge":
-        repo.git("switch", "main")
-        if not repo.ancestor(state["merge_ref"], "HEAD"):
-            repo.git("merge", "--no-ff", "--no-edit", state["merge_ref"])
-        repo.bump(state["app"], state["chart"], metadata)
-        state.update(phase="check", main_sha=repo.sha())
-        write_json(journal, state)
+        with stage("Prepare stable version", tag=tag):
+            repo.git("switch", "main")
+            if not repo.ancestor(state["merge_ref"], "HEAD"):
+                repo.git("merge", "--no-ff", "--no-edit", state["merge_ref"])
+            repo.bump(state["app"], state["chart"], metadata)
+            state.update(phase="check", main_sha=repo.sha())
+            write_json(journal, state)
     if state["phase"] == "check":
-        repo.git("switch", "main")
-        if repo.sha() != state["main_sha"]:
-            raise Error(
-                "Prepared main changed; refusing to publish an unchecked version"
-            )
-        check()
-        repo.clean()
-        state["phase"] = "backmerge"
-        write_json(journal, state)
+        with stage("Validate stable version", tag=tag):
+            repo.git("switch", "main")
+            if repo.sha() != state["main_sha"]:
+                raise Error(
+                    "Prepared main changed; refusing to publish an unchecked version"
+                )
+            check()
+            repo.clean()
+            state["phase"] = "backmerge"
+            write_json(journal, state)
     if state["phase"] == "backmerge":
-        repo.git("switch", "develop")
-        if not repo.ancestor(state["main_sha"], "HEAD"):
-            repo.git("merge", "--no-ff", "--no-edit", state["main_sha"])
-        state.update(phase="push", develop_sha=repo.sha())
-        write_json(journal, state)
+        with stage("Merge stable into develop", tag=tag):
+            repo.git("switch", "develop")
+            if not repo.ancestor(state["main_sha"], "HEAD"):
+                repo.git("merge", "--no-ff", "--no-edit", state["main_sha"])
+            state.update(phase="push", develop_sha=repo.sha())
+            write_json(journal, state)
     if (
         repo.sha("main") != state["main_sha"]
         or repo.sha("develop") != state["develop_sha"]
         or repo.sha(tag) != state["main_sha"]
     ):
         raise Error("Prepared refs changed; refusing to publish")
-    repo.git("push", "--atomic", "origin", "main", "develop", "refs/tags/" + tag)
+    with stage("Push stable refs atomically", tag=tag):
+        repo.git("push", "--atomic", "origin", "main", "develop", "refs/tags/" + tag)
     journal.unlink()
-    print(f"Published {tag}; follow artifact publication in GitHub Actions")
+    logger.info("Published %s; follow artifact publication in GitHub Actions", tag)

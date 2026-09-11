@@ -1,74 +1,25 @@
 """Entry point: python -m scripts.cicd --help."""
 
 import argparse
-import json
 import os
 from pathlib import Path
 import sys
 
-from .artifacts import (
-    GitHub,
-    current_publication,
-    publish_artifacts,
-    publish_channel_aliases,
-)
 from .checks import check
-from .common import Error, ROOT, stable, versions, write_json
-from .gitops import Repo, prepare_rc, publish, release_sources, start_release
-
-
-def ci(repo, github, branch, sha, output):
-    if branch not in ("develop", "main") and not branch.startswith("release/"):
-        raise Error("Only develop, main and release/* are publication branches")
-    repo.fetch()
-    run_id, attempt = os.environ["GITHUB_RUN_ID"], os.environ["GITHUB_RUN_ATTEMPT"]
-    if not run_id.isdecimal() or not attempt.isdecimal():
-        raise Error("Run id and attempt must be numeric")
-    if branch.startswith("release/"):
-        if repo.exists("refs/tags/v" + branch[8:]):
-            print("Release is finalized; no further RC tags will be created")
-            return
-        for source in release_sources(repo, branch):
-            tag = prepare_rc(repo, branch, source)
-            record = publish_artifacts(repo, tag, branch, source, run_id, attempt)
-            changelog = repo.git("show", tag + ":CHANGELOG.md").stdout
-            github.publish(tag, record, changelog)
-        return
-    if branch == "main":
-        with repo.checkout(sha) as checkout:
-            app, chart = versions(checkout.root)
-            stable(app)
-            stable(chart)
-        tag = "v" + app
-        if not repo.exists("refs/tags/" + tag) or repo.sha(tag) != repo.sha(sha):
-            raise Error(
-                "Main push must point at the stable tag produced by make publish"
-            )
-        metadata = repo.metadata(tag)
-        if (
-            metadata.get("kind") != "stable"
-            or metadata.get("app_version") != app
-            or metadata.get("chart_version") != chart
-        ):
-            raise Error("Main tag metadata does not match the versioned files")
-        source = metadata["source_sha"]
-    else:
-        source = sha
-    record = publish_artifacts(repo, sha, branch, source, run_id, attempt)
-    write_json(output, record)
-    if branch == "main":
-        github.publish(
-            tag,
-            record,
-            repo.git("show", sha + ":CHANGELOG.md").stdout,
-            latest=current_publication(repo, record),
-        )
-    publish_channel_aliases(repo, record)
-    print(json.dumps(record, indent=2))
+from .common import Error, ROOT
+from .github import GitHub
+from .gitops import publish, start_release
+from .observability import configure_logging, log_context, logger
+from .pipeline import ci
+from .repository import Repo
 
 
 def main():
+    """Parse CLI options and translate actionable failures into a nonzero exit."""
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--log-level", choices=("DEBUG", "INFO", "WARNING", "ERROR"), default="INFO"
+    )
     commands = parser.add_subparsers(dest="command", required=True)
     checks = commands.add_parser("check")
     checks.add_argument("--full", action="store_true")
@@ -79,20 +30,22 @@ def main():
     workflow.add_argument("--sha", required=True)
     workflow.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    configure_logging(args.log_level)
     repo = Repo(ROOT)
     github = GitHub(os.environ.get("GITHUB_REPOSITORY", "dinikon/dnk-runtime-core"))
-    try:
-        if args.command == "check":
-            check(ROOT, args.full)
-        elif args.command == "release":
-            start_release(repo)
-        elif args.command == "publish":
-            publish(repo, github, lambda: check(ROOT))
-        elif args.command == "ci":
-            ci(repo, github, args.branch, args.sha, args.output)
-    except (Error, OSError, ValueError, KeyError) as error:
-        print(f"CI/CD: {error}", file=sys.stderr)
-        return 1
+    with log_context(command=args.command):
+        try:
+            if args.command == "check":
+                check(ROOT, args.full)
+            elif args.command == "release":
+                start_release(repo)
+            elif args.command == "publish":
+                publish(repo, github, lambda: check(ROOT))
+            elif args.command == "ci":
+                ci(repo, github, args.branch, args.sha, args.output)
+        except (Error, OSError, ValueError, KeyError) as error:
+            logger.error("CI/CD: %s", error)
+            return 1
     return 0
 
 
