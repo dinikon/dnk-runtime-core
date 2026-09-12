@@ -331,7 +331,8 @@ class HelmContractTests(unittest.TestCase):
         self.assertEqual(len(ingresses), counts * int(ingress))
         for item in ingresses:
             self.assertEqual(
-                item["spec"]["tls"][0]["hosts"], [item["spec"]["rules"][0]["host"]]
+                item["spec"]["tls"][0]["hosts"],
+                [rule["host"] for rule in item["spec"]["rules"]],
             )
             self.assertIn(
                 item["spec"]["rules"][0]["http"]["paths"][0]["backend"]["service"][
@@ -449,6 +450,98 @@ class HelmContractTests(unittest.TestCase):
                 invalid = fixture(ingress=True)
                 invalid["ingress"].update(override)
                 self.run_helm(chart, invalid, success=False)
+
+    def test_shared_tenant_hosts_route_to_the_same_services(self):
+        for hosts in [[], ["*.dniko.app"], ["*.dniko.app", "customer.example.org"]]:
+            for managed_tls in [True, False]:
+                with self.subTest(hosts=hosts, managed_tls=managed_tls):
+                    values = runtime_values(ingress=True)
+                    values["ingress"]["hosts"] = hosts
+                    values["ingress"]["tls"] = {
+                        "clusterIssuer": "letsencrypt-dns01" if managed_tls else "",
+                        "secretName": "runtime-wildcard-tls",
+                    }
+                    values["backend"] = {"service": {"port": 8101}}
+                    values["frontend"] = {"service": {"port": 3101}}
+                    resources = self.render(values)
+                    (ingress,) = [r for r in resources if r["kind"] == "Ingress"]
+                    fullname = ingress["metadata"]["name"]
+                    expected_hosts = hosts or ["runtime.example.test"]
+                    self.assertEqual(
+                        ingress["spec"]["tls"],
+                        [
+                            {
+                                "secretName": "runtime-wildcard-tls",
+                                "hosts": expected_hosts,
+                            }
+                        ],
+                    )
+                    self.assertEqual(
+                        [rule["host"] for rule in ingress["spec"]["rules"]],
+                        expected_hosts,
+                    )
+                    annotations = ingress["metadata"]["annotations"]
+                    self.assertEqual(
+                        annotations.get("cert-manager.io/cluster-issuer"),
+                        "letsencrypt-dns01" if managed_tls else None,
+                    )
+                    self.assertNotIn(
+                        "nginx.ingress.kubernetes.io/rewrite-target", annotations
+                    )
+                    self.assertNotIn(
+                        "nginx.ingress.kubernetes.io/upstream-vhost", annotations
+                    )
+                    for rule in ingress["spec"]["rules"]:
+                        self.assertEqual(
+                            rule["http"]["paths"],
+                            [
+                                {
+                                    "path": path,
+                                    "pathType": "Prefix",
+                                    "backend": {
+                                        "service": {
+                                            "name": fullname + "-" + component,
+                                            "port": {"number": port},
+                                        }
+                                    },
+                                }
+                                for path, component, port in [
+                                    ("/api", "backend", 8101),
+                                    ("/", "frontend", 3101),
+                                ]
+                            ],
+                        )
+                    config = next(
+                        r
+                        for r in resources
+                        if r["kind"] == "ConfigMap"
+                        and r["metadata"]["name"] == fullname + "-config"
+                    )
+                    self.assertEqual(
+                        config["data"]["DNK_PUBLIC_ORIGIN"],
+                        "https://runtime.example.test",
+                    )
+
+    def test_invalid_ingress_hosts_are_rejected(self):
+        for hosts in [
+            [""],
+            ["*"],
+            ["https://tenant1.dniko.app"],
+            ["tenant1.dniko.app/api"],
+            ["tenant1.dniko.app:443"],
+            ["tenant*.dniko.app"],
+            ["*.*.dniko.app"],
+            ["UPPER.dniko.app"],
+            ["-tenant.dniko.app"],
+            ["tenant..dniko.app"],
+            ["*.dniko.app", "*.dniko.app"],
+            [123],
+            "*.dniko.app",
+        ]:
+            with self.subTest(hosts=hosts):
+                values = runtime_values(ingress=True)
+                values["ingress"]["hosts"] = hosts
+                self.run_helm(RUNTIME, values, success=False)
 
     def test_lint_and_package_all_entrypoints(self):
         for chart, fixture in [(RUNTIME, runtime_values)]:

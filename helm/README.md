@@ -62,6 +62,90 @@ cert-manager создаёт сертификат по аннотации Ingress
 `ingress.tls.clusterIssuer: ""` и `ingress.tls.secretName`. Chart не устанавливает
 системные контроллеры. Маршруты сохраняют исходные пути, без rewrite-target.
 
+## Один runtime для многих тенантов
+
+Один Helm-релиз обслуживает все tenant-домены через общие backend/frontend Services.
+Задайте `ingress.hosts: ['*.dniko.app']`: для каждого совпавшего домена `/api`
+с `pathType: Prefix` направляется в backend, `/` — во frontend. Например:
+
+```text
+https://tenant1.dniko.app/       → frontend Service
+https://tenant1.dniko.app/api/…  → backend Service, Host: tenant1.dniko.app
+https://acme2.dniko.app/         → тот же frontend Service
+https://acme2.dniko.app/api/…    → тот же backend Service, Host: acme2.dniko.app
+```
+
+Готовый overlay: [values-multitenant.yaml](examples/values-multitenant.yaml).
+Применяйте его поверх настроенных values с вашими существующими Secrets и инфраструктурой:
+
+```sh
+helm lint helm -f my-values.yaml -f helm/examples/values-multitenant.yaml --strict
+helm template dnk-runtime-core helm \
+  -f my-values.yaml -f helm/examples/values-multitenant.yaml
+```
+
+`ingress.hosts` содержит доменные имена без протокола, порта и пути. Пустой список
+сохраняет прежнее поведение: один hostname из `application.server.publicOrigin`.
+Непустой список полностью определяет hosts в `rules` и `tls`, без автоматического
+добавления `publicOrigin`. Можно указать несколько wildcard-зон и точных имён;
+сертификат должен покрывать весь список.
+
+`application.server.publicOrigin` остаётся конкретным HTTPS origin, например
+`https://runtime.dniko.app`, а не `https://*.dniko.app`. В текущем chart его схема
+также включает Secure-флаг session cookie. Этот параметр не выбирает тенанта
+и не задаёт API URL фронтенда. Зарезервируйте служебный hostname отдельно от имён тенантов.
+
+Перед применением overlay настройте:
+
+1. **DNS:** wildcard-запись `*.dniko.app` на публичный адрес Ingress controller
+   (A/AAAA или CNAME на его DNS-имя). На одном сервере это может быть его внешний IP,
+   если порты 80/443 действительно обслуживает Ingress controller. Внутренний IP
+   backend Service для DNS не подходит. Создание нового тенанта внутри этой зоны
+   не требует отдельной DNS-записи или изменения Helm.
+2. **TLS:** сертификат на `*.dniko.app`. Для Let’s Encrypt нужен DNS-01 solver
+   у ClusterIssuer с доступом к DNS-зоне. Overlay использует существующий
+   `letsencrypt-production`; сначала добавьте ему Cloudflare DNS-01 по
+   [инструкции](../deploy/cert-manager/README.md). HTTP-01 для остальных имён
+   сохраняется. Runtime chart не создаёт и не обновляет ClusterIssuer.
+   Issuer только с HTTP-01 wildcard не выпустит. Для готового сертификата укажите
+   `clusterIssuer: ''` и имя TLS Secret в namespace runtime. При наличии issuer
+   cert-manager создаёт и обновляет Secret, указанный в `secretName`.
+3. **Ingress controller:** используйте существующий `IngressClass` и сохраняйте
+   исходный `Host` при передаче в backend. Не задавайте `rewrite-target`,
+   `upstream-vhost` или перенаправление всех tenants на `runtime.dniko.app`.
+   FastAPI уже содержит префикс `/api`; удаление этого префикса сломает endpoints.
+   Backend/frontend Services остаются `ClusterIP`.
+4. **Control-plane:** зарегистрируйте конкретный `tenant1.dniko.app` в runtime
+   при создании тенанта (`tenant_domain.host`, без `https://` и `/api`). Wildcard
+   Ingress пропускает запросы, а runtime ищет точное имя в `tenant_domains`.
+   Запись `*.dniko.app` в этой таблице не заменяет регистрацию отдельных тенантов.
+
+Console уже использует относительный `VITE_API_BASE_URL=/api` по умолчанию.
+Оставьте его относительным при сборке frontend image; значение с другим доменом
+нарушит эту схему. При открытии `tenant1.dniko.app` UI вызывает
+`GET /api/console/tenants/resolve` на том же домене. Runtime возвращает
+`exists` и `available`: неизвестное имя даёт `exists: false`, а активный тенант
+на активном домене — `available: true`. Страница login получает ответ и выбирает
+состояние формы. Сейчас недоступный workspace отображается вместо формы ввода email;
+сетевой сбой также отображается как недоступный workspace.
+
+Отдельный API-домен и CORS для такой схемы не требуются. Поле `api_host` в resolve
+остаётся частью ответа, но Console не переключает по нему адрес API. Session cookie
+не имеет `Domain` и остаётся привязана к текущему домену; не расширяйте её на
+`.dniko.app`. Backend дополнительно проверяет tenant/domain/host сессии.
+
+После установки проверьте `/` и `/api/console/tenants/resolve` на зарегистрированном
+`tenant1.dniko.app` и на незарегистрированном имени этой зоны. На обоих доменах `/`
+должен загрузить UI; resolve второго должен вернуть JSON с `exists: false`,
+а не HTML или Ingress 404.
+Wildcard `*.dniko.app` в Ingress покрывает один уровень имён: он не включает
+`dniko.app` и `a.b.dniko.app`. Для доменов клиента вне этой зоны нужны отдельные
+DNS, host-правило и TLS-покрытие.
+
+Справка: [Kubernetes Ingress](https://kubernetes.io/docs/concepts/services-networking/ingress/),
+[cert-manager DNS-01](https://cert-manager.io/docs/configuration/acme/dns01/),
+[cert-manager Ingress](https://cert-manager.io/docs/usage/ingress/).
+
 ## Миграции, обновление и откат
 
 Миграционный Job выполняется при install/upgrade и полном ArgoCD Sync. Workloads

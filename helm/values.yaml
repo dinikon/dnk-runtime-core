@@ -14,6 +14,7 @@ fullnameOverride: ''
 # Set HTTPS publicOrigin, the API key and a working SMTP server before installing.
 application:
   server:
+    # Concrete HTTPS origin; tenant routing is configured separately in ingress.hosts.
     publicOrigin: ''
     environment: PRODUCTION
   security:
@@ -221,8 +222,12 @@ workers:
 ingress:
   enabled: true
   className: nginx
+  # Empty: use the hostname from application.server.publicOrigin (legacy behavior).
+  # Shared runtime: ['*.dniko.app']. Explicit hosts replace the fallback hostname.
+  hosts: []
   annotations: {}
   tls:
+    # Wildcard hosts require an ACME issuer with a DNS-01 solver, or an existing certificate.
     clusterIssuer: letsencrypt-production
     # Empty: use <application-fullname>-tls, created and renewed by cert-manager.
     # For a pre-created TLS Secret, set its name and set clusterIssuer: ''.

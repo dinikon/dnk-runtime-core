@@ -1,0 +1,26 @@
+# Cluster-level configuration, applied separately from the runtime Helm release.
+# Based on the existing issuer: preserve its ACME account Secret and HTTP-01 solver.
+# First create cloudflare-dniko-api-token in cert-manager's cluster resource namespace.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-production
+spec:
+  acme:
+    email: denis.inikon@gmail.com
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: letsencrypt-prodaction-private-key
+    solvers:
+      - http01:
+          ingress:
+            class: nginx
+      - selector:
+          # Exact certificate name: individual tenant certificates retain HTTP-01.
+          dnsNames:
+            - '*.dniko.app'
+        dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: cloudflare-dniko-api-token
+              key: api-token

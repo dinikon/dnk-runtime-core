@@ -1,5 +1,6 @@
 {{- if .Values.ingress.enabled }}
 {{- $fullname := include "dnk.runtime.fullname" . }}
+{{- $hosts := include "dnk.ingress.hosts" . | fromYamlArray }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -13,25 +14,27 @@ spec:
   tls:
     - secretName: {{ include "dnk.ingress.tlsSecretName" . | quote }}
       hosts:
-        - {{ include "dnk.runtime.hostname" . | quote }}
+        {{- range $hosts }}
+        - {{ . | quote }}
+        {{- end }}
   rules:
-    - host: {{ include "dnk.runtime.hostname" . | quote }}
+    {{- range $hosts }}
+    - host: {{ . | quote }}
       http:
         paths:
-          {{- range $path := list "/api" }}
-          - path: {{ $path }}
+          - path: /api
             pathType: Prefix
             backend:
               service:
                 name: {{ $fullname }}-backend
                 port:
                   number: {{ $.Values.backend.service.port }}
-          {{- end }}
           - path: /
             pathType: Prefix
             backend:
               service:
                 name: {{ $fullname }}-frontend
                 port:
-                  number: {{ .Values.frontend.service.port }}
+                  number: {{ $.Values.frontend.service.port }}
+    {{- end }}
 {{- end }}

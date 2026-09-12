@@ -10,6 +10,7 @@ from src.modules.tenancy.application.tenant_domain.query import (
 from src.modules.tenancy.domain.tenant import TenantRepositoryProtocol
 from src.modules.tenancy.domain.tenant_domain import (
     TenantDomainRepositoryProtocol,
+    TenantDomainStatus,
 )
 
 
@@ -73,7 +74,10 @@ class ResolveTenantByHostUseCase:
 
         return ResolveTenantByHostResultDTO(
             exists=True,
-            available=tenant.allows_login(),
+            available=(
+                tenant_domain.status == TenantDomainStatus.ACTIVE
+                and tenant.allows_login()
+            ),
             status=tenant.status.value,
             tenant_id=tenant.id.uuid,
             tenant_name=tenant.name,
