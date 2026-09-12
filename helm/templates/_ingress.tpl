@@ -1,4 +1,8 @@
 {{/* System ingress controller and cert-manager are installed by the cluster operator. */}}
+{{- define "dnk.ingress.hosts" -}}
+{{- default (list (include "dnk.runtime.hostname" .)) .Values.ingress.hosts | toYaml -}}
+{{- end -}}
+
 {{- define "dnk.ingress.tlsSecretName" -}}
 {{- default (printf "%s-tls" (include "dnk.lifecycle.fullname" .)) .Values.ingress.tls.secretName -}}
 {{- end -}}

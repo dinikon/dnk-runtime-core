@@ -1,0 +1,19 @@
+# Overlay on your configured embedded/external/mixed values; keep existing credentials.
+# DNS: *.dniko.app must resolve to the public address of the cluster's Ingress controller.
+application:
+  server:
+    # A concrete service origin, never https://*.dniko.app.
+    # Reserve this hostname for the runtime; tenants are resolved from each request's Host.
+    publicOrigin: https://runtime.dniko.app
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - '*.dniko.app'
+  tls:
+    # First extend the existing issuer with the Cloudflare DNS-01 solver:
+    # deploy/cert-manager/letsencrypt-production.yaml (see its README for the API token Secret).
+    clusterIssuer: letsencrypt-production
+    secretName: runtime-dniko-wildcard-tls
+    # To reuse a certificate covering *.dniko.app in this namespace instead,
+    # set clusterIssuer: '' and secretName to the existing TLS Secret's name.

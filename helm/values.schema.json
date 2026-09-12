@@ -900,6 +900,16 @@
           "maxLength": 253,
           "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$"
         },
+        "hosts": {
+          "description": "DNS hosts served by this shared runtime, including wildcards such as *.dniko.app. Empty uses application.server.publicOrigin's hostname.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "maxLength": 253,
+            "pattern": "^(\\*\\.)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$"
+          }
+        },
         "annotations": {
           "type": "object",
           "additionalProperties": {
