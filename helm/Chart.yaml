@@ -2,8 +2,8 @@ apiVersion: v2
 name: dnk-runtime-core
 description: DNK runtime API, Vue frontend, system Ingress and integration workers
 type: application
-version: 0.3.6
-appVersion: 0.2.2
+version: 0.3.7-rc.1
+appVersion: 0.3.0-rc.1
 annotations:
   dnk.io/application-name: dnk-runtime-core
 dependencies:
