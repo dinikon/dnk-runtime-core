@@ -1,3 +1,9 @@
+## v0.3.0 (2026-09-12)
+
+### Feat
+
+- **ingress**: add DNS wildcard support and Cloudflare DNS-01 solver configuration
+
 ## v0.2.2 (2026-09-11)
 
 ### Refactor
