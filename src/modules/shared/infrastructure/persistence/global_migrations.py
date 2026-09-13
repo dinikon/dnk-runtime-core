@@ -7,7 +7,7 @@ from alembic import command
 from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.script import ScriptDirectory
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from src.modules.shared.infrastructure.persistence.tenant_migrations import (
@@ -46,9 +46,23 @@ class GlobalMigrator:
         )
 
     async def require_current(self, connection: AsyncConnection) -> None:
+        """Require the revision and physical public tables without changing the DB."""
         if await self.current(connection) != (self.head(),):
             raise GlobalSchemaNotReadyError(
                 "Runtime public schema is not at the application revision; run database upgrade"
+            )
+        import src.modules.persistence  # noqa: F401
+        from src.modules.shared.infrastructure.persistence.base import Base
+
+        tables = await connection.run_sync(
+            lambda conn: inspect(conn).get_table_names(schema="public")
+        )
+        missing = {table.name for table in Base.metadata.tables.values()} - set(tables)
+        if missing:
+            raise GlobalSchemaNotReadyError(
+                "Runtime public schema is missing required tables: "
+                + ", ".join(sorted(missing))
+                + "; run database upgrade"
             )
 
     async def upgrade(self, connection: AsyncConnection) -> None:
@@ -66,3 +80,4 @@ class GlobalMigrator:
                 command.upgrade(config, "head")
 
             await connection.run_sync(run)
+        await self.require_current(connection)
