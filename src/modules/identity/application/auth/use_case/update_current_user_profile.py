@@ -70,6 +70,8 @@ class UpdateCurrentUserProfileUseCase:
         )
         if user is None or user.tenant_id != tenant_id:
             raise InvalidSessionError()
+        if session.session_epoch != user.session_epoch:
+            raise InvalidSessionError()
         if not user.can_login():
             raise UserLoginUnavailableError()
 
@@ -92,6 +94,7 @@ class UpdateCurrentUserProfileUseCase:
         return UpdateCurrentUserProfileResultDTO(
             id=user.id.uuid,
             status=user.status,
+            role=user.role,
             last_name=user.last_name,
             first_name=user.first_name,
             middle_name=user.middle_name,

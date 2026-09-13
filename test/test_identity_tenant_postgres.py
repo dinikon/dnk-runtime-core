@@ -23,6 +23,7 @@ from src.modules.identity.presentation.depends.infrastructure import (
     get_session_store,
 )
 from src.modules.identity.presentation.http.router import router as auth_router
+from src.modules.identity.presentation.http.csrf import require_csrf
 from src.modules.shared import EntityIdVO
 from src.modules.shared.application.persistence.tenant_schema_naming import (
     TenantSchemaNaming,
@@ -309,7 +310,7 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
             await self.migrator.upgrade(connection, schema)
             self.assertEqual(
                 await self.migrator.current(connection, schema),
-                ("0002_identity_users",),
+                ("0003_identity_cloud_access",),
             )
             foreign_keys = await connection.run_sync(
                 lambda conn: inspect(conn).get_foreign_keys(
@@ -366,13 +367,15 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
         app = FastAPI()
         app.state.db = self.sessions
         app.include_router(auth_router, prefix="/api/console")
+        # CSRF/Origin behavior is covered by dedicated browser security tests.
+        app.dependency_overrides[require_csrf] = lambda: None
         app.dependency_overrides[get_otp_challenge_store] = lambda: tokens
         app.dependency_overrides[get_session_store] = lambda: tokens
         app.dependency_overrides[get_email_service] = lambda: mail
         endpoint = "/api/console/auth"
         async with AsyncClient(
             transport=ASGITransport(app=app),
-            base_url=f"http://{left.tenant_domain_host}",
+            base_url=f"https://{left.tenant_domain_host}",
         ) as client:
             response = await client.post(
                 f"{endpoint}/request-otp", json={"email": "shared@example.com"}
@@ -382,7 +385,8 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
             code = mail.send.await_args.args[2]["otp_code"]
             payload = {"email": "shared@example.com", "token": token, "code": code}
             response = await client.post(
-                f"http://{right.tenant_domain_host}{endpoint}/confirm-otp", json=payload
+                f"https://{right.tenant_domain_host}{endpoint}/confirm-otp",
+                json=payload,
             )
             self.assertEqual(response.status_code, 401, response.text)
             response = await client.post(f"{endpoint}/confirm-otp", json=payload)
@@ -405,7 +409,7 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
             response = await client.patch(f"{endpoint}/me", json=profile)
             self.assertEqual(response.status_code, 200, response.text)
             self.assertEqual(response.json()["first_name"], "Updated")
-            foreign_url = f"http://{right.tenant_domain_host}{endpoint}/me"
+            foreign_url = f"https://{right.tenant_domain_host}{endpoint}/me"
             headers = {"cookie": f"{dnk_config.AUTH.session_cookie_name}={cookie}"}
             self.assertEqual(
                 (await client.get(foreign_url, headers=headers)).status_code, 401

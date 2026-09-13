@@ -17,12 +17,6 @@ application:
     # Concrete HTTPS origin; tenant routing is configured separately in ingress.hosts.
     publicOrigin: ''
     environment: PRODUCTION
-  security:
-    controlPlaneApiKey:
-      value: ''
-      existingSecret:
-        name: ''
-        key: ''
   tenancy:
     schemaPrefix: dnk_
   auth:
@@ -76,6 +70,50 @@ application:
     lockTtlSeconds: 300
     retryBaseSeconds: 30
     maxAttempts: 5
+# Runtime-owned HTTPS integration. Core tenant creation stays disabled until acceptance.
+controlPlane:
+  enabled: false
+  publicOrigin: ''
+  managementOrigin: ''
+  managementHost: ''
+  allowedBaseDomains: []
+  instanceId: ''
+  trustedProxyNetworks: []
+  allowedCoreFingerprints: []
+  ingressProbeAddress: ''
+  # An independent RabbitMQ user/vhost, managed by the operator; never Core's broker.
+  rabbitmqUrl:
+    value: ''
+    existingSecret:
+      name: ''
+      key: ''
+  installQueue: dnk.runtime.installation
+  accessQueue: dnk.runtime.access
+  # Existing Secret with encryption.key, tls.crt, tls.key, ca.crt; retained with backups.
+  credentialsSecret: ''
+  # Existing Secret with ca.crt for validating Core client certificates at ingress.
+  clientCaSecret: ''
+  leaseSeconds: 180
+  stepTimeoutSeconds: 120
+  heartbeatIntervalSeconds: 10
+  heartbeatTtlSeconds: 30
+  observationIntervalSeconds: 30
+  observationTtlSeconds: 60
+  dispatchIntervalSeconds: 5
+  reconcileIntervalSeconds: 30
+  requestTimeoutSeconds: 10
+  retryBaseSeconds: 5
+  retryMaxSeconds: 300
+  ingress:
+    className: nginx
+    tls:
+      clusterIssuer: letsencrypt-production
+      secretName: ''
+  networkPolicy:
+    ingressNamespaceSelector:
+      kubernetes.io/metadata.name: ingress-nginx
+    ingressPodSelector:
+      app.kubernetes.io/component: controller
 # Published FastAPI image. latest is always pulled when a new pod starts.
 # extraEnv permits valueFrom but cannot replace chart-managed variables.
 backend:
@@ -217,6 +255,52 @@ workers:
     enabled: false
     queueName: dnk.integration.console
     routingKey: '#'
+  lifecycle:
+    image:
+      repository: ghcr.io/dinikon/runtime/runtime
+      tag: latest
+      pullPolicy: Always
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        memory: 512Mi
+    probes:
+      readiness:
+        exec:
+          command:
+          - python
+          - -m
+          - src.modules.control_plane.worker
+          - --healthcheck
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 3
+      liveness:
+        exec:
+          command:
+          - python
+          - -m
+          - src.modules.control_plane.worker
+          - --healthcheck
+        periodSeconds: 20
+        timeoutSeconds: 5
+        failureThreshold: 6
+    pod:
+      annotations: {}
+      labels: {}
+      securityContext: {}
+      containerSecurityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+          - ALL
+      nodeSelector: {}
+      tolerations: []
+      affinity: {}
+      imagePullSecrets: []
 # Existing system Ingress; cert-manager requests the certificate from this ClusterIssuer.
 # Routes point directly to backend/frontend Services. No application gateway is deployed.
 ingress:

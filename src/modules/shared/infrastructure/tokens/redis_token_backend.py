@@ -38,6 +38,13 @@ class RedisTokenBackend(TokenBackendProtocol):
             return None
         return token
 
+    async def consume(self, key: str) -> StoredToken | None:
+        payload = await self._repository.consume_json(key)
+        if payload is None:
+            return None
+        token = StoredToken.from_dict(payload)
+        return token if not token.is_expired() else None
+
     async def delete(self, key: str) -> None:
         """Удаляет token из Redis по key."""
         await self._repository.delete(key)

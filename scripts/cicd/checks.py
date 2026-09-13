@@ -8,7 +8,7 @@ import tempfile
 
 from dotenv import dotenv_values
 
-from .check_environment import postgres, snapshot
+from .check_environment import postgres, integration_stores, snapshot
 from .common import Error, live
 from .observability import stage
 
@@ -41,8 +41,9 @@ def check(root, full=False):
             if value is not None
         }
         environment.update(PYTHONPATH=str(copy) + os.pathsep + str(copy / "src"))
-        with postgres() as database:
+        with postgres() as database, integration_stores() as stores:
             environment.update(database)
+            environment.update(stores)
             with stage("Compile backend"):
                 live(
                     sys.executable,

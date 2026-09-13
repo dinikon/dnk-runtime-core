@@ -40,7 +40,9 @@ class TenantDomainModel(Base):
     )
     service_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     kind: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
-    host: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    host: Mapped[str] = mapped_column(
+        String(255), nullable=False, unique=True, index=True
+    )
     base_path: Mapped[str | None] = mapped_column(
         String(255), nullable=True, default=None
     )

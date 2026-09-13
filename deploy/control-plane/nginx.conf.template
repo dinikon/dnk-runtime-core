@@ -1,0 +1,42 @@
+# Access logs omit requests altogether: callback codes/invitation tokens are private.
+access_log off;
+ssl_protocols TLSv1.2 TLSv1.3;
+ssl_certificate /var/run/dnk/control-plane/server.crt;
+ssl_certificate_key /var/run/dnk/control-plane/server.key;
+
+server {
+    listen 443 ssl default_server;
+    server_name _;
+    return 404;
+}
+
+server {
+    listen 443 ssl;
+    server_name ${CONTROL_PLANE__MANAGEMENT_HOST};
+    ssl_client_certificate /var/run/dnk/control-plane/core-client-ca.crt;
+    ssl_verify_client on;
+    location /internal/v1/ {
+        proxy_pass http://api:8000;
+        proxy_set_header Host $host;
+        proxy_set_header ssl-client-verify $ssl_client_verify;
+        proxy_set_header ssl-client-cert $ssl_client_escaped_cert;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+    location / { return 404; }
+}
+
+server {
+    listen 443 ssl;
+    server_name ${RUNTIME_TENANT_HOSTS};
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header ssl-client-verify "";
+    proxy_set_header ssl-client-cert "";
+    location = /.well-known/dnk/tenant-ready { proxy_pass http://api:8000; }
+    location = /.well-known/dnk/instance-routing { proxy_pass http://api:8000; }
+    location /api/ { proxy_pass http://api:8000; }
+    location /internal/ { return 404; }
+    location / { proxy_pass http://frontend:80; }
+}

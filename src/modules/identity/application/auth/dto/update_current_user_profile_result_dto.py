@@ -20,6 +20,7 @@ class UpdateCurrentUserProfileResultDTO:
     interface_theme: str
     timezone: str
     emails: list[GetCurrentUserEmailDTO] = field(default_factory=list)
+    role: str = "member"
 
 
 __all__ = ["UpdateCurrentUserProfileResultDTO"]

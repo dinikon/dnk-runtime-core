@@ -1,49 +1,60 @@
 # HTTP API
 
-All public HTTP routes are mounted under `/api`.
+## Management protocol v1
 
-## Tenancy
+Management routes are served only on the Runtime management hostname through mTLS. The application checks the unmodified socket peer, Host and Core certificate fingerprint before interpreting proxy headers. Responses are direct JSON objects without a `data` envelope.
 
-| Method | Path                           | Module    | Request                          | Response                          | Auth                         | Main errors                                              |
-|--------|--------------------------------|-----------|----------------------------------|-----------------------------------|------------------------------|----------------------------------------------------------|
-| `POST` | `/api/admin/create-tenant`     | `tenancy` | `AdminCreateTenantRequestSchema` | `AdminCreateTenantResponseSchema` | Control-plane bearer API key | `401`, `409`, `422`, `500` if API key is not configured  |
-| `GET`  | `/api/console/tenants/resolve` | `tenancy` | query from request host          | `ResolveTenantResponseSchema`     | none                         | normal not-found/availability is encoded in response DTO |
+Versioned [JSON schemas and synthetic examples](../contracts/runtime-v1/README.md) describe the exact request/response shapes and include regeneration and contract-test commands.
 
-`ResolveTenantResponseSchema` includes `tenant_id`, `tenant_name`, `status`, and `api_host` when a tenant is found; missing tenants return nullable tenant fields.
+| Method | Path | Result |
+| --- | --- | --- |
+| GET | `/internal/v1/status/` | `ready`, `protocol_version: 1`, `domains` with separate routing/TLS observations |
+| POST | `/internal/v1/tenant-provisioning/` | `202` after durable acceptance; `Idempotency-Key` equals `attempt_id` |
+| GET | `/internal/v1/tenant-provisioning/{attempt_id}/` | Saved result, or `404` for an unknown record |
+| GET | `/internal/v1/metrics/` | Prometheus integration metrics |
 
-## Inventory
+Commands contain `tenant_id`, `operation_id`, `attempt_id`, `hostname`, `name`, `owner: {sub, verified_email, profile}`, and `oidc: {issuer, client_id, client_secret, redirect_uri}`. Tenant and subject identifiers are Core UUIDs; Runtime reserves its own UUID before installation. Validation responses do not echo credentials.
 
-Inventory currently exposes no HTTP routes. Dynamic schema configuration routes were removed.
+Attempt responses contain `tenant_id`, `operation_id`, `attempt_id`, `state`, `resources_state`, `runtime_tenant_id` and a safe error code. States are `queued/running/succeeded/failed`; resource states are `absent/present/unknown`. Installation failures are saved results returned with HTTP `200`. Only verified `failed + absent` permits another attempt; a missing attempt does not prove resource absence. The former bearer-key creation endpoint has been removed.
 
-## Identity / Console Auth
+## Readiness
 
-Mounted under `/api/console/auth`.
+| Method | Path | Result |
+| --- | --- | --- |
+| GET | `/.well-known/dnk/tenant-ready` | Ready: `200 {tenant_id, hostname, ready: true}`; unknown Host: `404`; incomplete: `503` |
+| GET | `/.well-known/dnk/instance-routing` | Instance/hostname response only on reserved probe hosts |
+| GET | `/health/live` | Process liveness; not published by ingress |
+| GET | `/health/ready` | Current global database revision; not published by ingress |
 
-| Method  | Path                            | Module     | Request                                 | Response                             | Auth                 | Main errors                |
-|---------|---------------------------------|------------|-----------------------------------------|--------------------------------------|----------------------|----------------------------|
-| `POST`  | `/api/console/auth/request-otp` | `identity` | `RequestEmailOtpRequestSchema`          | `RequestEmailOtpResponseSchema`      | tenant host required | `403`, `404`               |
-| `POST`  | `/api/console/auth/confirm-otp` | `identity` | `ConfirmEmailOtpRequestSchema`          | `ConfirmEmailOtpResponseSchema`      | tenant host required | `401`, `403`, `404`        |
-| `GET`   | `/api/console/auth/me`          | `identity` | session cookie                          | `CurrentUserResponseSchema`          | session cookie       | `401`, `403`, `404`        |
-| `PATCH` | `/api/console/auth/me`          | `identity` | `UpdateCurrentUserProfileRequestSchema` | `CurrentUserResponseSchema`          | session cookie       | `401`, `403`, `404`, `422` |
-| `POST`  | `/api/console/auth/logout`      | `identity` | session cookie                          | `LogoutCurrentSessionResponseSchema` | session cookie       | `403`, `404`               |
+Readiness never requests Core tokens. The routing probe is separate from a Tenant and cannot claim an installation is ready.
 
-## Notes
+## Console identity and access
 
-- Session cookie name comes from auth config and defaults to `dnk_session`.
-- Identity routes are tenant-host aware, so host extraction is part of the authentication flow.
-- Identity controllers map domain/tenancy errors directly inside controller files.
-- `PATCH /api/console/auth/me` requires `interface_theme` and does not accept `null`.
-- `GET /api/console/auth/me` and `PATCH /api/console/auth/me` always return `interface_theme` as a string.
+Tenant context comes from the exact request Host. Session cookies are host-only, Secure, HttpOnly and SameSite=Lax by default. Browser mutations require the exact Origin and `X-CSRF-Token` obtained from `/api/console/auth/csrf`. Fetch a fresh token after a session transition. OIDC callback uses its one-time state instead.
 
-## Related
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | `/api/console/tenants/resolve` | Workspace availability; unknown Host is `404` |
+| GET | `/api/console/auth/csrf` | Anonymous or session-bound browser token |
+| POST | `/api/console/auth/request-otp` | Existing active user's email |
+| POST | `/api/console/auth/confirm-otp` | Confirm code and open local session |
+| GET / PATCH | `/api/console/auth/me` | Current profile; response includes `role` |
+| POST | `/api/console/auth/logout` | End local session |
+| GET | `/api/console/users` | Admin; `{users: [...]}` |
+| PATCH | `/api/console/users/{user_id}` | Admin; optional `role: admin/member`, `status: active/revoked` |
+| GET / POST | `/api/console/invitations` | Admin; list or create `{email, role}` and receive `invitation_url` |
+| DELETE | `/api/console/invitations/{invitation_id}` | Admin; revoke invitation |
+| POST | `/api/console/invitations/request-otp` | `{invitation_token}`; code goes only to the invitation email |
+| POST | `/api/console/invitations/accept` | `{invitation_token, token, code, first_name, last_name}`; create local user after OTP |
+| GET | `/api/auth/cloud/status/` | `{enabled, linked}` |
+| POST | `/api/auth/cloud/start/` | `{purpose: login/link}` → `{authorization_url}` |
+| GET | `/api/auth/cloud/callback/` | Exact registered query callback; local login or explicit link |
+| DELETE | `/api/auth/cloud/link/` | Unlink and invalidate local sessions |
 
-- [Management CLI](management-cli.md)
-- [Tenancy module](../modules/tenancy.md)
-- [Identity module](../modules/identity.md)
+Invitation links expire after seven days. Duplicate local email or cloud identity conflicts rather than merging accounts. Members cannot manage other users. The last active administrator cannot be revoked or demoted. Unlink preserves permitted OTP access. Local revocation takes effect without Core connectivity and old sessions do not revive when access is restored.
 
-## Source Of Truth
+## Runtime to Core
 
-- `src/modules/router.py`
-- `src/modules/tenancy/presentation/http/admin_tenant/controller/`
-- `src/modules/tenancy/presentation/http/console_tenant/controller/`
-- `src/modules/identity/presentation/http/console_auth/controller/`
+The outbox sends Instance-mTLS `PUT /internal/v1/tenants/{tenant_id}/access/{user_id}/` with `{event_id, version, available}`. Core replies `{status: 200, data: {applied, version?}}`; both applied and already-processed results acknowledge delivery. Roles stay local.
+
+See [Control Plane integration](../modules/control-plane.md), [Identity](../modules/identity.md) and [configuration](configuration.md).

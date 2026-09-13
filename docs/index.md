@@ -14,6 +14,7 @@ This documentation describes the current implementation of `dnk-runtime-core` as
 ## Modules
 
 - [Tenancy](modules/tenancy.md)
+- [Control Plane integration](modules/control-plane.md)
 - [Identity](modules/identity.md)
 - [Inventory](modules/inventory.md)
 - [Shared](modules/shared.md)
@@ -45,6 +46,7 @@ This documentation describes the current implementation of `dnk-runtime-core` as
 ## Quality And Constraints
 
 - [Test map](quality/test-map.md)
+- [Control Plane v1 validation](quality/control-plane-v1-validation.md)
 - [Constraints and conventions](quality/constraints-and-conventions.md)
 - [Develop style](develop-style.md)
 

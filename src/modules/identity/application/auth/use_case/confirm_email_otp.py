@@ -110,6 +110,7 @@ class ConfirmEmailOtpUseCase:
                     host=tenant_context.host,
                     issued_at=generated_session.issued_at,
                     expires_at=generated_session.expires_at,
+                    session_epoch=user.session_epoch,
                 ),
                 ttl_seconds=self._session_ttl_seconds,
             )

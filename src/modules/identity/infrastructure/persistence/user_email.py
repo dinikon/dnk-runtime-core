@@ -18,6 +18,12 @@ class UserEmailModel(TenantBase):
     __table_args__ = (
         PrimaryKeyConstraint("id", name="pk_user_emails"),
         Index("ix_user_emails_user_id", "user_id"),
+        Index(
+            "uq_user_emails_live_email",
+            "email",
+            unique=True,
+            postgresql_where=sa.text("NOT is_deleted"),
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(

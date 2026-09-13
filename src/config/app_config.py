@@ -130,6 +130,7 @@ class DnkConfig(
         env_nested_delimiter="__",
         # ignore extra attributes
         extra="ignore",
+        hide_input_in_errors=True,
     )
 
     # Before adding any config,

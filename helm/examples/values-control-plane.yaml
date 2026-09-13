@@ -1,0 +1,30 @@
+# Merge with configured values-embedded/external. Every Secret already exists.
+controlPlane:
+  enabled: true
+  publicOrigin: https://core.example.test
+  managementOrigin: https://core-management.example.test
+  managementHost: runtime-management.example.test
+  instanceId: c50b45a1-acdc-4214-8a64-3fd8fbf8b101
+  allowedBaseDomains: [first.example.test, second.example.test]
+  # Replace with the actual socket source range of your Ingress controller.
+  trustedProxyNetworks: [10.10.0.0/24]
+  # Replace with SHA-256 fingerprints of permitted Core leaf certificates.
+  allowedCoreFingerprints: [aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa]
+  ingressProbeAddress: ingress.example.test:443
+  credentialsSecret: runtime-integration-credentials
+  clientCaSecret: core-client-ca
+  rabbitmqUrl:
+    existingSecret:
+      name: runtime-provisioning-broker
+      key: url
+  ingress:
+    className: nginx
+    tls:
+      clusterIssuer: ''
+      secretName: runtime-management-tls
+ingress:
+  enabled: true
+  hosts: ['*.first.example.test', '*.second.example.test']
+  tls:
+    clusterIssuer: ''
+    secretName: runtime-platform-wildcards

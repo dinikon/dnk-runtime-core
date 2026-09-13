@@ -21,6 +21,7 @@ class ScheduledJobModel(Base):
     """Global PostgreSQL storage for shared scheduled jobs."""
 
     __tablename__ = "scheduled_jobs"
+    __mapper_args__ = {"eager_defaults": True}
     __table_args__ = (
         Index("scheduled_jobs_due_idx", "status", "run_at"),
         Index("scheduled_jobs_stuck_idx", "status", "locked_until"),

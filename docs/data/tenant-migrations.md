@@ -2,7 +2,7 @@
 
 ## Ownership
 
-Alembic owns static tenant tables. Global tables still use `Base.metadata.create_all` at application startup. No dynamic object subsystem is active. Removed modules' existing database tables are not dropped by this change.
+Alembic owns both global and static tenant tables. Global revisions live in `migrations/global/`; run `dnk-manage database upgrade` before starting API and workers. Startup only checks their version. The fresh global baseline refuses an existing unversioned database rather than adopting or deleting its tables. No dynamic object subsystem is active.
 
 Tenant models use `TenantBase` with logical schema `tenant`. `src/modules/tenant_persistence.py` registers model imports and historical table names. Retain historical names after removing a model so autogenerate can detect its removal. Unregistered legacy tables are excluded from reflection candidates; they are never adopted or deleted automatically.
 
@@ -14,11 +14,11 @@ Tenant models use `TenantBase` with logical schema `tenant`. `src/modules/tenant
 
 `CreateTenantUseCase` creates the tenant and primary domain, invokes the tenancy-owned bootstrap port, then provisions the administrator and email in the migrated schema. `AlembicTenantSchemaBootstrapAdapter` uses the same UoW session to acquire a schema lock, reject an existing schema, create it and upgrade to `head`.
 
-The adapter and migrator never commit. PostgreSQL DDL, Alembic version writes, tenant, domain and user writes commit together. Any failure rolls everything back. Existing-schema conflicts return HTTP 409; migration failures are server errors.
+The adapter and migrator never commit. PostgreSQL DDL, Alembic version writes, tenant, domain, owner identity and cloud connection writes commit together. Any failure rolls everything back. The Control Plane installer records accepted-command errors in its durable attempt state and reconciles actual resources before declaring absence.
 
 ## Revisions
 
-Files live in `migrations/tenant/versions/`; each tenant schema has its own `alembic_version`. The first revision is `0001_warehouses`; `0002_identity_users` adds tenant-local `users` and `user_emails` with a same-schema foreign key. Revisions contain no fixed tenant names and do not import current ORM models.
+Files live in `migrations/tenant/versions/`; each tenant schema has its own `alembic_version`. The first revision is `0001_warehouses`; `0002_identity_users` adds tenant-local `users` and `user_emails` with a same-schema foreign key. `0003_identity_cloud_access` adds roles, session epochs, cloud identities, invitations and live normalized-email uniqueness. Revisions contain no fixed tenant names and do not import current ORM models.
 
 The migration environment uses transaction-local `search_path` (through PostgreSQL `set_config(..., true)`) and explicitly sets `version_table_schema`. Successful execution restores the previous path. Failed transactions are rolled back by the owner. Migration files must preserve transactional execution: no internal commit, autocommit block or nontransactional DDL in onboarding revisions.
 
@@ -57,7 +57,7 @@ Review renames, destructive changes and CHECK expressions manually. Longer wareh
 
 CI starts PostgreSQL 16 and sets `TEST_POSTGRES_URL` to a disposable database. Tests cover full onboarding, rollback, two tenants, constraints, upgrades/downgrades, generated revision execution and concurrency across processes. Local integration tests skip only when this variable is absent; they do not fall back to the application's database URL.
 
-For installations already using tenant-local identity, deploy code including `migrations/` (the Dockerfile copies it), then run `upgrade --all` against existing tenants and inspect the summary. For the initial transition from shared users, follow the database recreation procedure above. New tenants use the deployed head automatically.
+Control Plane v1 targets a fresh database. Migration or adoption of existing installations is outside this release; no command automatically deletes an old database. For subsequent releases on a versioned v1 database, deploy the migration files, upgrade global tables and use `upgrade --all` for tenant revisions before starting the matching workers. New tenants use the deployed head automatically.
 
 ## Related
 

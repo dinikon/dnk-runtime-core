@@ -70,7 +70,7 @@ async def confirm_email_otp(
         value=result.session_token,
         max_age=result.expires_in,
         httponly=True,
-        secure=False,
+        secure=not settings.allow_insecure_http,
         samesite="lax",
         path="/",
     )

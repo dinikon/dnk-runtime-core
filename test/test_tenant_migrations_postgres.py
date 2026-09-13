@@ -143,7 +143,7 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(
                 await self.migrator.current(connection, schema),
-                ("0002_identity_users",),
+                (self.migrator.head(),),
             )
             indexes = await connection.run_sync(
                 lambda conn: inspect(conn).get_indexes("warehouses", schema=schema)
@@ -219,7 +219,7 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
             await self.migrator.downgrade(connection, right, "base")
             self.assertEqual(
-                await self.migrator.current(connection, left), ("0002_identity_users",)
+                await self.migrator.current(connection, left), (self.migrator.head(),)
             )
 
     async def onboard(self, *, fail=False, existing_schema=False):
@@ -279,7 +279,7 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
         async with self.engine.begin() as connection:
             self.assertEqual(
                 await self.migrator.current(connection, schema),
-                ("0002_identity_users",),
+                (self.migrator.head(),),
             )
             self.assertEqual(
                 await connection.scalar(
@@ -388,7 +388,7 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
             for schema in self.schemas:
                 self.assertEqual(
                     await self.migrator.current(connection, schema),
-                    ("0002_identity_users",),
+                    (self.migrator.head(),),
                 )
             self.assertFalse(
                 await schema_exists(connection, f"dnk_{tenants[1].id.uuid.hex}")
@@ -483,7 +483,7 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 await self.migrator.upgrade(connection, schema)
                 self.assertEqual(
                     await self.migrator.current(connection, schema),
-                    ("0002_identity_users",),
+                    (self.migrator.head(),),
                 )
 
         await asyncio.wait_for(

@@ -11,6 +11,7 @@ class CurrentUserResponseSchema(BaseModel):
     """Pydantic-схема профиля текущего пользователя."""
 
     id: UUID
+    role: str = "member"
     status: str
     last_name: str
     first_name: str

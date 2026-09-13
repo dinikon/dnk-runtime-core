@@ -8,7 +8,7 @@
 {{- end -}}
 
 {{- define "dnk.ingress.validate" -}}
-{{- range $key := list "argocd.argoproj.io/sync-wave" "cert-manager.io/cluster-issuer" "cert-manager.io/issuer" "cert-manager.io/issuer-kind" "cert-manager.io/issuer-group" "kubernetes.io/ingress.class" -}}
+{{- range $key := list "argocd.argoproj.io/sync-wave" "cert-manager.io/cluster-issuer" "cert-manager.io/issuer" "cert-manager.io/issuer-kind" "cert-manager.io/issuer-group" "kubernetes.io/ingress.class" "nginx.ingress.kubernetes.io/enable-access-log" -}}
 {{- if hasKey $.Values.ingress.annotations $key -}}
 {{- fail (printf "ingress.annotations cannot override managed annotation %s; use ingress.className or ingress.tls" $key) -}}
 {{- end -}}
@@ -26,6 +26,7 @@
 {{ toYaml . }}
 {{- end }}
 argocd.argoproj.io/sync-wave: "0"
+nginx.ingress.kubernetes.io/enable-access-log: "false"
 {{- with .Values.ingress.tls.clusterIssuer }}
 cert-manager.io/cluster-issuer: {{ . | quote }}
 {{- end }}

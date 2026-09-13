@@ -38,6 +38,7 @@ export interface ConsoleUserEmail {
 
 export interface ConsoleUser {
   id: string;
+  role: "admin" | "member";
   status: string;
   last_name: string;
   first_name: string;

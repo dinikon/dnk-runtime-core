@@ -54,9 +54,6 @@ def runtime_values(pg=True, redis=True, existing=False, ingress=False, rabbit=Tr
     return infrastructure_values(pg, redis, existing) | {
         "application": {
             "server": {"publicOrigin": "https://runtime.example.test"},
-            "security": {
-                "controlPlaneApiKey": secret(CONTROL_KEY, "control-plane", existing)
-            },
             "email": {
                 "fromAddress": "runtime@example.test",
                 "smtp": {"host": "smtp.example.test"},
@@ -385,7 +382,17 @@ class HelmContractTests(unittest.TestCase):
                 self.assertEqual(container["imagePullPolicy"], "Always")
 
     def test_direct_ingress_and_certificate_defaults(self):
-        for chart, fixture, backend_paths in [(RUNTIME, runtime_values, {"/api"})]:
+        for chart, fixture, backend_paths in [
+            (
+                RUNTIME,
+                runtime_values,
+                {
+                    "/api",
+                    "/.well-known/dnk/tenant-ready",
+                    "/.well-known/dnk/instance-routing",
+                },
+            )
+        ]:
             values = fixture()
             del values["ingress"]
             values.setdefault("backend", {})["service"] = {"port": 8101}
@@ -402,7 +409,10 @@ class HelmContractTests(unittest.TestCase):
             paths = ingress["spec"]["rules"][0]["http"]["paths"]
             self.assertEqual({p["path"] for p in paths}, backend_paths | {"/"})
             for path in paths:
-                self.assertEqual(path["pathType"], "Prefix")
+                self.assertEqual(
+                    path["pathType"],
+                    "Exact" if path["path"].startswith("/.well-known/") else "Prefix",
+                )
                 backend = path["path"] in backend_paths
                 self.assertEqual(
                     path["backend"]["service"],
@@ -497,7 +507,11 @@ class HelmContractTests(unittest.TestCase):
                             [
                                 {
                                     "path": path,
-                                    "pathType": "Prefix",
+                                    "pathType": (
+                                        "Exact"
+                                        if path.startswith("/.well-known/")
+                                        else "Prefix"
+                                    ),
                                     "backend": {
                                         "service": {
                                             "name": fullname + "-" + component,
@@ -506,6 +520,12 @@ class HelmContractTests(unittest.TestCase):
                                     },
                                 }
                                 for path, component, port in [
+                                    ("/.well-known/dnk/tenant-ready", "backend", 8101),
+                                    (
+                                        "/.well-known/dnk/instance-routing",
+                                        "backend",
+                                        8101,
+                                    ),
                                     ("/api", "backend", 8101),
                                     ("/", "frontend", 3101),
                                 ]
@@ -671,7 +691,7 @@ class HelmContractTests(unittest.TestCase):
                 RUNTIME,
                 runtime_values,
                 "DB_PASSWORD",
-                ("application", "security", "controlPlaneApiKey"),
+                ("postgresql", "auth", "password"),
             )
         ]:
             cases = []

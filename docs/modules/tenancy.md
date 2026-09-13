@@ -4,10 +4,10 @@ Tenancy owns tenant accounts, domain bindings, host resolution and onboarding.
 
 ## Public flows
 
-- `POST /api/admin/create-tenant`: control-plane bearer authentication; creates tenant and primary domain, bootstraps the tenant schema to Alembic head, then creates its administrator and email inside that schema.
+- Creation is invoked by the durable [Control Plane installer](control-plane.md); the former bearer-key endpoint is removed.
 - `GET /api/console/tenants/resolve`: resolves the incoming host and tenant availability.
 
-Request and response contracts are unchanged by the introduction of Inventory.
+Runtime UUIDs are reserved before installation. New installations remain `provisioning` until local verification and activation commit. Exact host bindings have a global unique constraint; display names may repeat.
 
 ## Domain and persistence
 

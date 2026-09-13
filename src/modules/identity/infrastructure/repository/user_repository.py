@@ -42,6 +42,8 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
             .values(
                 id=user.id.uuid,
                 status=user.status,
+                role=user.role,
+                session_epoch=user.session_epoch,
                 user_type="user",
                 last_name=user.last_name,
                 first_name=user.first_name,
@@ -123,6 +125,8 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
             id=UserIdVO.from_value(row["id"]),
             tenant_id=tenant_id,
             status=row["status"],
+            role=row.get("role") or "member",
+            session_epoch=row.get("session_epoch") or 0,
             last_name=row["last_name"],
             first_name=row["first_name"],
             middle_name=row["middle_name"],

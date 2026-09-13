@@ -3,7 +3,7 @@
 ## HTTP Request Flow
 
 1. FastAPI app is created in `src/app_factory.py`.
-2. Root router from `src/modules/router.py` is mounted under `/api`.
+2. The outer middleware verifies raw management peer/Host/certificate before accepting proxy information. Console routes use `/api/console`; cloud and management routers mount separately.
 3. Module router selects the concrete controller function.
 4. `presentation/depends/*` resolves use case and infrastructure dependencies.
 5. Controller reads tenant from authenticated request context when the route works with tenant business data.
@@ -15,11 +15,11 @@
 
 ## Example Paths
 
-- `POST /api/admin/create-tenant`
-    - tenancy controller
-    - tenancy use case
-    - identity provisioning
-    - schema bootstrap through tenancy-owned port
+- `POST /internal/v1/tenant-provisioning/`
+    - authenticated management request
+    - command/registry/outbox commit before `202`
+    - independent worker invokes tenancy and identity adapters
+    - schema/Owner bootstrap commits with a fenced installation checkpoint
 - `POST /api/console/auth/request-otp`
     - host extraction
   - identity controller in `presentation/http/console_auth/controller/`

@@ -31,6 +31,7 @@ class SessionRecord:
     host: str
     issued_at: datetime
     expires_at: datetime
+    session_epoch: int = 0
 
 
 class OtpChallengeStorePort(Protocol):

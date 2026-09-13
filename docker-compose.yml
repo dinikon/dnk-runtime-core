@@ -19,6 +19,17 @@ x-backend-common: &backend-common
     EVENT_BUS__PUBLISHER_WORKER_ENABLED: "true"
 
 services:
+  migrations:
+    <<: *backend-common
+    command: [dnk-manage, database, upgrade]
+    environment:
+      <<: *backend-environment
+      CONTROL_PLANE__ENABLED: "false"
+      CONTROL_PLANE__ENCRYPTION_KEY_PATH: ""
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   api:
     <<: *backend-common
     container_name: dnk-api
@@ -30,9 +41,12 @@ services:
       - 0.0.0.0
       - --port
       - "8000"
+      - --no-proxy-headers
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:
+      migrations:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -43,7 +57,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "python -c \"from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/docs', timeout=2).read()\"",
+          "python -c \"from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/health/ready', timeout=2).read()\"",
         ]
       interval: 10s
       timeout: 5s

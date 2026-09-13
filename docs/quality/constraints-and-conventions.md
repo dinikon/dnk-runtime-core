@@ -27,7 +27,7 @@
 
 - HTTP business routes use request context from shared authentication dependency.
 - Console auth is host-aware and session-cookie based.
-- Control-plane protected routes use bearer API key validation.
+- Control-plane routes require the separate management Host, a trusted ingress socket peer, verified mTLS and an allowed Core certificate fingerprint.
 - Client data routes must not accept `tenant_id` from public payloads,
   query params or
   path
@@ -47,7 +47,7 @@
 ## Tenant Migration Rules
 
 - Static tenant models inherit shared TenantBase and use Alembic revisions.
-- Global Base models retain startup create_all.
+- Global Base models use global Alembic revisions; startup checks the revision without changing the schema.
 - Bootstrap DDL shares the onboarding transaction and never commits internally.
 - Schema names use the shared naming strategy and a stable SCHEMA_PREFIX.
 - Autogenerate uses a separate engine and a metadata copy; shared engine state is not changed.

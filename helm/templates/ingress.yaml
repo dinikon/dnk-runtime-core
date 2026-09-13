@@ -22,6 +22,20 @@ spec:
     - host: {{ . | quote }}
       http:
         paths:
+          - path: /.well-known/dnk/tenant-ready
+            pathType: Exact
+            backend:
+              service:
+                name: {{ $fullname }}-backend
+                port:
+                  number: {{ $.Values.backend.service.port }}
+          - path: /.well-known/dnk/instance-routing
+            pathType: Exact
+            backend:
+              service:
+                name: {{ $fullname }}-backend
+                port:
+                  number: {{ $.Values.backend.service.port }}
           - path: /api
             pathType: Prefix
             backend:

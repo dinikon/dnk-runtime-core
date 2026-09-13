@@ -15,10 +15,10 @@ from src.modules.shared.infrastructure.persistence.database_helper import (
 class DatabaseStartupTests(unittest.IsolatedAsyncioTestCase):
     async def test_initialize_for_startup_succeeds_on_first_attempt(self) -> None:
         helper = DatabaseHelper()
-        create_all_mock = AsyncMock(return_value=None)
+        check_schema_mock = AsyncMock(return_value=None)
 
         with (
-            patch.object(helper, "create_all", create_all_mock),
+            patch.object(helper, "check_schema", check_schema_mock),
             patch(
                 "src.modules.shared.infrastructure.persistence.database_helper.asyncio.sleep",
                 new_callable=AsyncMock,
@@ -32,17 +32,17 @@ class DatabaseStartupTests(unittest.IsolatedAsyncioTestCase):
         ):
             await helper.initialize_for_startup()
 
-        self.assertEqual(create_all_mock.await_count, 1)
+        self.assertEqual(check_schema_mock.await_count, 1)
         sleep_mock.assert_not_awaited()
 
     async def test_initialize_for_startup_retries_and_then_succeeds(self) -> None:
         helper = DatabaseHelper()
-        create_all_mock = AsyncMock(
+        check_schema_mock = AsyncMock(
             side_effect=[OSError("down-1"), OSError("down-2"), None]
         )
 
         with (
-            patch.object(helper, "create_all", create_all_mock),
+            patch.object(helper, "check_schema", check_schema_mock),
             patch(
                 "src.modules.shared.infrastructure.persistence.database_helper.asyncio.sleep",
                 new_callable=AsyncMock,
@@ -56,17 +56,17 @@ class DatabaseStartupTests(unittest.IsolatedAsyncioTestCase):
         ):
             await helper.initialize_for_startup()
 
-        self.assertEqual(create_all_mock.await_count, 3)
+        self.assertEqual(check_schema_mock.await_count, 3)
         self.assertEqual(sleep_mock.await_count, 2)
 
     async def test_initialize_for_startup_raises_database_startup_error_after_retries(
         self,
     ) -> None:
         helper = DatabaseHelper()
-        create_all_mock = AsyncMock(side_effect=OSError("connection refused"))
+        check_schema_mock = AsyncMock(side_effect=OSError("connection refused"))
 
         with (
-            patch.object(helper, "create_all", create_all_mock),
+            patch.object(helper, "check_schema", check_schema_mock),
             patch(
                 "src.modules.shared.infrastructure.persistence.database_helper.asyncio.sleep",
                 new_callable=AsyncMock,
@@ -89,17 +89,17 @@ class DatabaseStartupTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("port=5432", str(caught.exception))
         self.assertIn("database=dnk", str(caught.exception))
         self.assertIn("retry_delay=0s", str(caught.exception))
-        self.assertEqual(create_all_mock.await_count, 3)
+        self.assertEqual(check_schema_mock.await_count, 3)
         self.assertEqual(sleep_mock.await_count, 2)
 
     async def test_initialize_for_startup_does_not_retry_non_retryable_error(
         self,
     ) -> None:
         helper = DatabaseHelper()
-        create_all_mock = AsyncMock(side_effect=RuntimeError("unexpected failure"))
+        check_schema_mock = AsyncMock(side_effect=RuntimeError("unexpected failure"))
 
         with (
-            patch.object(helper, "create_all", create_all_mock),
+            patch.object(helper, "check_schema", check_schema_mock),
             patch(
                 "src.modules.shared.infrastructure.persistence.database_helper.asyncio.sleep",
                 new_callable=AsyncMock,
@@ -114,7 +114,7 @@ class DatabaseStartupTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(RuntimeError):
                 await helper.initialize_for_startup()
 
-        self.assertEqual(create_all_mock.await_count, 1)
+        self.assertEqual(check_schema_mock.await_count, 1)
         sleep_mock.assert_not_awaited()
 
     async def test_lifespan_disposes_engine_when_startup_fails(self) -> None:

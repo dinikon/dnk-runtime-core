@@ -8,7 +8,7 @@ Inventory is the bounded context for future physical stock management. The curre
 
 `WarehouseRepositoryProtocol` defines `add` and `get_by_id`, both with explicit `tenant_id: EntityIdVO`. There is no repository implementation yet.
 
-`WarehouseModel` inherits `TenantBase` and `TenantSystemMixin`. Its logical schema is `tenant`, translated to the physical schema by the caller. It belongs only to `TenantBase.metadata`; startup global `create_all` does not create it.
+`WarehouseModel` inherits `TenantBase` and `TenantSystemMixin`. Its logical schema is `tenant`, translated to the physical schema by the caller. It belongs only to `TenantBase.metadata` and is created by tenant Alembic migrations.
 
 | Field | PostgreSQL type | Meaning |
 |---|---|---|

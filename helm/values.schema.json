@@ -76,43 +76,6 @@
             }
           }
         },
-        "security": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "controlPlaneApiKey": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": [
-                "value",
-                "existingSecret"
-              ],
-              "properties": {
-                "value": {
-                  "type": "string"
-                },
-                "existingSecret": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "name",
-                    "key"
-                  ],
-                  "properties": {
-                    "name": {
-                      "type": "string",
-                      "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
-                    },
-                    "key": {
-                      "type": "string",
-                      "pattern": "^[A-Za-z0-9._-]*$"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
         "tenancy": {
           "type": "object",
           "additionalProperties": false,
@@ -885,6 +848,89 @@
               "type": "string"
             }
           }
+        },
+        "lifecycle": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "repository": {
+                  "type": "string",
+                  "pattern": "^$|^[^\\s@:]+(?::[0-9]+)?(?:/[^\\s@:]+)*$"
+                },
+                "tag": {
+                  "type": "string",
+                  "pattern": "^$|^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$"
+                },
+                "pullPolicy": {
+                  "type": "string",
+                  "enum": [
+                    "Always",
+                    "IfNotPresent",
+                    "Never"
+                  ]
+                }
+              }
+            },
+            "replicas": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "resources": {
+              "type": "object"
+            },
+            "probes": {
+              "type": "object"
+            },
+            "pod": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "annotations": {
+                  "type": "object"
+                },
+                "labels": {
+                  "type": "object"
+                },
+                "securityContext": {
+                  "type": "object"
+                },
+                "containerSecurityContext": {
+                  "type": "object"
+                },
+                "nodeSelector": {
+                  "type": "object"
+                },
+                "tolerations": {
+                  "type": "array",
+                  "items": {}
+                },
+                "affinity": {
+                  "type": "object"
+                },
+                "imagePullSecrets": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "name"
+                    ],
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "required": []
         }
       }
     },
@@ -1551,6 +1597,178 @@
     },
     "dnk-common": {
       "type": "object"
+    },
+    "controlPlane": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "publicOrigin": {
+          "type": "string"
+        },
+        "managementOrigin": {
+          "type": "string"
+        },
+        "managementHost": {
+          "type": "string"
+        },
+        "allowedBaseDomains": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "instanceId": {
+          "type": "string"
+        },
+        "trustedProxyNetworks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "allowedCoreFingerprints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "ingressProbeAddress": {
+          "type": "string"
+        },
+        "rabbitmqUrl": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "existingSecret"
+          ],
+          "properties": {
+            "value": {
+              "type": "string"
+            },
+            "existingSecret": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "key"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
+                },
+                "key": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._-]*$"
+                }
+              }
+            }
+          }
+        },
+        "installQueue": {
+          "type": "string"
+        },
+        "accessQueue": {
+          "type": "string"
+        },
+        "credentialsSecret": {
+          "type": "string"
+        },
+        "clientCaSecret": {
+          "type": "string"
+        },
+        "leaseSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "stepTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "heartbeatIntervalSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "heartbeatTtlSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "observationIntervalSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "observationTtlSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "dispatchIntervalSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "reconcileIntervalSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "requestTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "retryBaseSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "retryMaxSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "ingress": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "className": {
+              "type": "string"
+            },
+            "tls": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "clusterIssuer": {
+                  "type": "string"
+                },
+                "secretName": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "networkPolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ingressNamespaceSelector": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "ingressPodSelector": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "$schema": "http://json-schema.org/draft-07/schema#",

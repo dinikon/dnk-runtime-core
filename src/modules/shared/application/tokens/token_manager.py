@@ -67,10 +67,9 @@ class TokenManager:
     ) -> dict[str, object] | None:
         """Возвращает token body и сразу удаляет token из backend."""
         key = self._build_key(prefix=prefix, suffix=suffix, token=token)
-        stored = await self._backend.get(key)
+        stored = await self._backend.consume(key)
         if stored is None:
             return None
-        await self._backend.delete(key)
         return dict(stored.body)
 
     @staticmethod

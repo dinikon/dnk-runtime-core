@@ -1,0 +1,57 @@
+{
+  "$defs": {
+    "DomainReadiness": {
+      "additionalProperties": false,
+      "properties": {
+        "base_domain": {
+          "title": "Base Domain",
+          "type": "string"
+        },
+        "routing_ready": {
+          "title": "Routing Ready",
+          "type": "boolean"
+        },
+        "tls_ready": {
+          "title": "Tls Ready",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "base_domain",
+        "routing_ready",
+        "tls_ready"
+      ],
+      "title": "DomainReadiness",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "ready": {
+      "title": "Ready",
+      "type": "boolean"
+    },
+    "protocol_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Protocol Version",
+      "type": "integer"
+    },
+    "domains": {
+      "items": {
+        "$ref": "#/$defs/DomainReadiness"
+      },
+      "title": "Domains",
+      "type": "array"
+    }
+  },
+  "required": [
+    "ready",
+    "protocol_version",
+    "domains"
+  ],
+  "title": "StatusResponse",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dnk:runtime:v1:status-response"
+}
