@@ -18,6 +18,24 @@ The public baseline does not adopt an unversioned database. Such a deployment
 fails without stamping or deleting existing tables. There is no reset command or
 automatic downgrade. Preserve databases and tenant schemas on application rollback.
 
+### Missing `tenant_domains` during provisioning
+
+If Control Plane reports `runtime_unavailable` and Runtime logs contain
+`UndefinedTableError: relation "tenant_domains" does not exist`, deploy the Runtime
+image containing `0003_restore_tenant_domains` and run `dnk-manage database upgrade`
+against the same database used by the API and workers. Helm runs this through its
+migration Job before starting the updated workloads. Editing the original baseline
+or restarting an old image does not rerun an already recorded revision.
+
+The repair creates the missing public domain table with its indexes and constraints
+in versioned databases. An existing domain table and all other data stay unchanged.
+It does not reconstruct lost domain records; if the missing table previously held
+domains for active tenants, restore those records from backup before relying on
+their routing. After migration, run `dnk-manage database check`, confirm
+`/health/ready` returns `200`, and let Control Plane retry the provisioning request.
+Readiness returns `503` if a required public table is missing even at the latest
+revision.
+
 Helm runs the existing migration Job and deployment-token gate before API and
 workers. The migration process has its own ConfigMap with integration disabled and
 does not mount encryption/private-key material. The lifecycle deployment runs
