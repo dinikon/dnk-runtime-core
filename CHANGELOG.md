@@ -1,3 +1,10 @@
+## v1.1.0-rc.1 (2026-09-13)
+
+### Feat
+
+- **global**: add migration to restore tenant_domains table with constraints and indexes
+- **global**: add migration to restore tenant_domains table with constraints and indexes
+
 ## v1.0.0 (2026-09-13)
 
 ### BREAKING CHANGE
