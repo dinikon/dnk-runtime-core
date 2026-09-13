@@ -1,11 +1,12 @@
 {{- $root := . -}}
 {{- $fullname := include "dnk.runtime.fullname" . -}}
-{{- $workloads := dict "backend" .Values.backend "frontend" .Values.frontend "publisher" .Values.workers.publisher "console" .Values.workers.console -}}
-{{- range $component := list "backend" "frontend" "publisher" "console" -}}
+{{- $workloads := dict "backend" .Values.backend "frontend" .Values.frontend "publisher" .Values.workers.publisher "console" .Values.workers.console "lifecycle" .Values.workers.lifecycle -}}
+{{- range $component := list "backend" "frontend" "publisher" "console" "lifecycle" -}}
 {{- $w := index $workloads $component -}}
-{{- $worker := has $component (list "publisher" "console") -}}
-{{- if or (not $worker) $w.enabled -}}
+{{- $worker := has $component (list "publisher" "console" "lifecycle") -}}
+{{- if or (not $worker) (and (ne $component "lifecycle") $w.enabled) (and (eq $component "lifecycle") $root.Values.controlPlane.enabled) -}}
 {{- $python := or $worker (eq $component "backend") -}}
+{{- $integration := has $component (list "backend" "lifecycle") -}}
 {{- $port := ternary 8000 80 (eq $component "backend") }}
 ---
 apiVersion: apps/v1
@@ -82,17 +83,19 @@ spec:
           {{- if $python }}
           command: [python, /opt/dnk-runtime/entrypoint.py]
           {{- if eq $component "backend" }}
-          args: [python, -m, uvicorn, --app-dir, /opt/dnk-runtime, --factory, http_app:create_app, --host, 0.0.0.0, --port, "8000", --proxy-headers, --forwarded-allow-ips, "*"]
+          args: [python, -m, uvicorn, --app-dir, /opt/dnk-runtime, --factory, http_app:create_app, --host, 0.0.0.0, --port, "8000", --no-proxy-headers]
           {{- else if eq $component "publisher" }}
           args: [dnk-manage, events, publisher-worker]
+          {{- else if eq $component "lifecycle" }}
+          args: [python, -m, src.modules.control_plane.worker]
           {{- else }}
           args: [dnk-manage, events, console-worker, --queue-name, {{ $w.queueName | quote }}, --routing-key, {{ $w.routingKey | quote }}]
           {{- end }}
           envFrom:
             - configMapRef:
-                name: {{ $fullname }}-config
+                name: {{ $fullname }}-{{ ternary "config" "migration-config" $integration }}
           env:
-            {{- include "dnk.runtime.secretEnv" $root | nindent 12 }}
+            {{- include (ternary "dnk.runtime.secretEnv" "dnk.runtime.infrastructureSecretEnv" $integration) $root | nindent 12 }}
             {{- with $root.Values.backend.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -104,7 +107,7 @@ spec:
           {{- range $probe := list "startup" "readiness" "liveness" }}
           {{ $probe }}Probe:
             httpGet:
-              path: {{ index (dict "backend" "/docs" "frontend" "/") $component }}
+              path: {{ if eq $component "frontend" }}/{{ else if eq $probe "liveness" }}/health/live{{ else }}/health/ready{{ end }}
               port: http
               httpHeaders:
                 - name: Host
@@ -130,6 +133,11 @@ spec:
             - name: runtime-scripts
               mountPath: /opt/dnk-runtime
               readOnly: true
+            {{- if and $root.Values.controlPlane.enabled $integration }}
+            - name: control-plane-credentials
+              mountPath: /var/run/dnk/control-plane
+              readOnly: true
+            {{- end }}
             {{- else }}
             - name: nginx-config
               mountPath: /etc/nginx/conf.d/default.conf
@@ -144,6 +152,12 @@ spec:
         - name: runtime-scripts
           configMap:
             name: {{ $fullname }}-scripts
+        {{- if and $root.Values.controlPlane.enabled $integration }}
+        - name: control-plane-credentials
+          secret:
+            secretName: {{ $root.Values.controlPlane.credentialsSecret | quote }}
+            defaultMode: 0400
+        {{- end }}
         {{- else }}
         - name: nginx-config
           configMap:

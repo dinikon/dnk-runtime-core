@@ -1,4 +1,4 @@
-"""Isolated source snapshots and disposable PostgreSQL for local checks."""
+"""Isolated source snapshots and disposable integration services for checks."""
 
 from contextlib import contextmanager
 from pathlib import Path
@@ -51,8 +51,12 @@ def postgres():
             if time.monotonic() > deadline:
                 raise Error("Disposable PostgreSQL did not become ready")
             time.sleep(1)
+        for database in ("control_plane_test", "global_test"):
+            run("docker", "exec", name, "createdb", "-U", "postgres", database)
         yield {
             "TEST_POSTGRES_URL": f"postgresql+asyncpg://postgres:{password}@127.0.0.1:{port}/inventory_test",
+            "TEST_CP_POSTGRES_URL": f"postgresql+asyncpg://postgres:{password}@127.0.0.1:{port}/control_plane_test",
+            "DNK_TEST_DATABASE_URL": f"postgresql+asyncpg://postgres:{password}@127.0.0.1:{port}/global_test",
             "DB_HOST": "127.0.0.1",
             "DB_PORT": port,
             "DB_USERNAME": "postgres",
@@ -61,7 +65,83 @@ def postgres():
         }
     finally:
         logger.info("Removing disposable PostgreSQL: %s", name)
-        run("docker", "rm", "-f", name, check=False)
+        run("docker", "rm", "-f", "--volumes", name, check=False)
+
+
+@contextmanager
+def integration_stores():
+    """Exercise Redis atomic consumption and real RabbitMQ delivery in CI."""
+    tag = uuid.uuid4().hex[:12]
+    redis_name, rabbit_name = f"dnk-check-redis-{tag}", f"dnk-check-rabbit-{tag}"
+    password = uuid.uuid4().hex
+    names = []
+    try:
+        for name, port, image, extra in (
+            (redis_name, 6379, "redis:7-alpine", ()),
+            (
+                rabbit_name,
+                5672,
+                "rabbitmq:3.13-management-alpine",
+                (
+                    "-e",
+                    "RABBITMQ_DEFAULT_USER=runtime_test",
+                    "-e",
+                    "RABBITMQ_DEFAULT_PASS=" + password,
+                    "-e",
+                    "RABBITMQ_DEFAULT_VHOST=runtime-control-plane-test",
+                ),
+            ),
+        ):
+            names.append(name)
+            run(
+                "docker",
+                "run",
+                "-d",
+                "--name",
+                name,
+                "--publish",
+                f"127.0.0.1::{port}",
+                *extra,
+                image,
+            )
+        deadline = time.monotonic() + 90
+        for name, exec_options, command in (
+            (redis_name, (), ("redis-cli", "ping")),
+            (
+                rabbit_name,
+                ("--user", "rabbitmq"),
+                ("rabbitmq-diagnostics", "-q", "check_port_connectivity"),
+            ),
+        ):
+            while (
+                probe := run(
+                    "docker", "exec", *exec_options, name, *command, check=False
+                )
+            ).returncode:
+                if time.monotonic() > deadline:
+                    raise Error(
+                        f"Disposable integration store {name} did not become ready: "
+                        + (probe.stderr + probe.stdout)[-2000:]
+                    )
+                time.sleep(1)
+        redis_port = (
+            run("docker", "port", redis_name, "6379/tcp")
+            .stdout.strip()
+            .rsplit(":", 1)[1]
+        )
+        rabbit_port = (
+            run("docker", "port", rabbit_name, "5672/tcp")
+            .stdout.strip()
+            .rsplit(":", 1)[1]
+        )
+        yield {
+            "TEST_REDIS_URL": f"redis://127.0.0.1:{redis_port}/0",
+            "TEST_CP_RABBITMQ_URL": f"amqp://runtime_test:{password}@127.0.0.1:{rabbit_port}/runtime-control-plane-test",
+        }
+    finally:
+        for name in reversed(names):
+            logger.info("Removing disposable integration store: %s", name)
+            run("docker", "rm", "-f", "--volumes", name, check=False)
 
 
 def snapshot(root, destination):

@@ -37,10 +37,13 @@ helm upgrade --install dnk-runtime-core helm \
   --wait --wait-for-jobs --timeout 20m
 ```
 
-Runtime сохраняет tenant authentication, `CONTROL_PLANE_API_KEY` и `dnk-manage`.
-Перед установкой задайте управляющий API key, SMTP и постоянные пароли инфраструктуры.
+Runtime сохраняет tenant authentication и `dnk-manage`. Служебная интеграция v1
+использует mTLS на отдельном management hostname; общий API key удалён. Перед
+установкой задайте SMTP и постоянные пароли инфраструктуры.
 Ingress направляет `/api` в FastAPI, остальные пути — в Console. Runtime миграции
-выполняются атомарной пачкой под advisory lock; существующие tenant-схемы сохраняются.
+выполняются атомарной пачкой под advisory lock: public Alembic, затем tenant Alembic.
+Новый public baseline предназначен для пустой БД. Автоматического принятия старой
+неверсионированной БД, stamp или сброса данных нет. API только проверяет ревизию.
 
 Любую инфраструктурную зависимость можно переключить на внешний сервер отдельно:
 `enabled: false` и параметры `external`. Для внешнего Redis поддерживается URL
@@ -204,3 +207,9 @@ Smoke создаёт и удаляет собственный Kind-класте�
 ```sh
 python helm/tests/runtime_migrations_integration.py --runtime-image dnk-test/runtime:helm-test
 ```
+
+## Control Plane v1
+
+Настройка management mTLS, очередей, двух зон и постоянных credentials описана
+в [руководстве интеграции](../docs/deployment/control-plane-v1.md). Overlay для
+проверки Helm: [values-control-plane.yaml](examples/values-control-plane.yaml).

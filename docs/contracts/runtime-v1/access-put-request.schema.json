@@ -1,0 +1,30 @@
+{
+  "additionalProperties": false,
+  "description": "Runtime's immutable PUT payload; version is a per-user sequence.",
+  "properties": {
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "version": {
+      "maximum": 9223372036854775807,
+      "minimum": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "available": {
+      "title": "Available",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "event_id",
+    "version",
+    "available"
+  ],
+  "title": "AccessProjectionPayload",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dnk:runtime:v1:access-put-request"
+}

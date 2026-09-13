@@ -9,6 +9,13 @@ export const router = createRouter({
   routes: [
     ...authRoutes,
     {
+      path: "/accept-invitation",
+      name: "accept-invitation",
+      component: () =>
+        import("@/modules/access/pages/AcceptInvitationPage.vue"),
+      meta: { public: true },
+    },
+    {
       path: "/",
       component: AppLayout,
       children: [
@@ -17,6 +24,16 @@ export const router = createRouter({
           redirect: { name: "dashboard" },
         },
         ...dashboardRoutes,
+        {
+          path: "settings/members",
+          name: "members",
+          component: () => import("@/modules/access/pages/MembersPage.vue"),
+        },
+        {
+          path: "settings/account",
+          name: "account",
+          component: () => import("@/modules/access/pages/AccountPage.vue"),
+        },
       ],
     },
     {

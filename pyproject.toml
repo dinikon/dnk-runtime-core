@@ -1,17 +1,20 @@
 [project]
 name = "dnk-runtime-core"
-version = "0.3.0"
+version = "1.0.0-rc.1"
 description = "Add your description here"
 readme = "README.md"
 requires-python = "==3.13.9"
 dependencies = [
     "alembic>=1.19.2,<2",
     "asyncpg>=0.31.0",
+    "authlib>=1.6.6,<1.7",
     "commitizen>=4.13.9",
+    "cryptography>=45,<49",
     "fastapi[standard]>=0.138.1",
     "faststream[rabbit]>=0.6.7",
     "httpx>=0.28.1",
     "jsonpath-ng>=1.8.0",
+    "prometheus-client>=0.22,<1",
     "pydantic>=2.12.5",
     "redis>=6.4.0",
     "sqlalchemy[asyncio]>=2.0.48",

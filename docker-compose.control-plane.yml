@@ -1,0 +1,110 @@
+# Combine with docker-compose.yml. Requires Docker Compose 2.24.4+ for !reset.
+# Supply real certificates and a persistent Fernet key before enabling integration.
+x-integration-environment: &integration-environment
+  CONTROL_PLANE__ENABLED: "true"
+  CONTROL_PLANE__PUBLIC_ORIGIN: ${CONTROL_PLANE__PUBLIC_ORIGIN}
+  CONTROL_PLANE__MANAGEMENT_ORIGIN: ${CONTROL_PLANE__MANAGEMENT_ORIGIN}
+  CONTROL_PLANE__MANAGEMENT_HOST: ${CONTROL_PLANE__MANAGEMENT_HOST}
+  CONTROL_PLANE__INSTANCE_ID: ${CONTROL_PLANE__INSTANCE_ID}
+  CONTROL_PLANE__ALLOWED_BASE_DOMAINS: ${CONTROL_PLANE__ALLOWED_BASE_DOMAINS}
+  CONTROL_PLANE__ALLOWED_CORE_FINGERPRINTS: ${CONTROL_PLANE__ALLOWED_CORE_FINGERPRINTS}
+  CONTROL_PLANE__TRUSTED_PROXY_NETWORKS: '["172.30.66.2/32"]'
+  CONTROL_PLANE__INGRESS_PROBE_ADDRESS: runtime-ingress:443
+  CONTROL_PLANE__ENCRYPTION_KEY_PATH: /var/run/dnk/control-plane/encryption.key
+  CONTROL_PLANE__CLIENT_CERT_PATH: /var/run/dnk/control-plane/tls.crt
+  CONTROL_PLANE__CLIENT_KEY_PATH: /var/run/dnk/control-plane/tls.key
+  CONTROL_PLANE__CA_BUNDLE_PATH: /var/run/dnk/control-plane/ca.crt
+  CONTROL_PLANE__RABBITMQ_URL: ${CONTROL_PLANE__RABBITMQ_URL}
+
+services:
+  api:
+    ports: !reset []
+    environment:
+      <<: *integration-environment
+    volumes:
+      - ${CONTROL_PLANE_SECRET_DIRECTORY}:/var/run/dnk/control-plane:ro
+    networks:
+      default: {}
+      runtime-ingress: {}
+
+  frontend:
+    ports: !reset []
+    networks:
+      default: {}
+      runtime-ingress: {}
+
+  lifecycle-worker:
+    build:
+      context: .
+    image: dnk-runtime-core:local
+    restart: unless-stopped
+    command: [python, -m, src.modules.control_plane.worker]
+    env_file: [.env]
+    environment:
+      <<: *integration-environment
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_DATABASE: ${DB_DATABASE:-dniko}
+      REDIS_HOST: redis
+      RABBITMQ__ENABLED: "false"
+    volumes:
+      - ${CONTROL_PLANE_SECRET_DIRECTORY}:/var/run/dnk/control-plane:ro
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      provisioning-rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -m, src.modules.control_plane.worker, --healthcheck]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      default: {}
+      runtime-ingress: {}
+
+  provisioning-rabbitmq:
+    image: rabbitmq:4-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${PROVISIONING_RABBITMQ_USERNAME:-runtime-provisioning}
+      RABBITMQ_DEFAULT_PASS: ${PROVISIONING_RABBITMQ_PASSWORD}
+      RABBITMQ_DEFAULT_VHOST: runtime-provisioning
+    volumes:
+      - provisioning_rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: [CMD, rabbitmq-diagnostics, -q, ping]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  runtime-ingress:
+    image: nginx:1.28-alpine
+    restart: unless-stopped
+    ports: ["${RUNTIME_HTTPS_PORT:-443}:443"]
+    environment:
+      RUNTIME_TENANT_HOSTS: ${RUNTIME_TENANT_HOSTS}
+      CONTROL_PLANE__MANAGEMENT_HOST: ${CONTROL_PLANE__MANAGEMENT_HOST}
+      NGINX_ENVSUBST_FILTER: '^(RUNTIME_TENANT_HOSTS|CONTROL_PLANE__MANAGEMENT_HOST)$$'
+    volumes:
+      - ./deploy/control-plane/nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ${CONTROL_PLANE_SECRET_DIRECTORY}:/var/run/dnk/control-plane:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    networks:
+      runtime-ingress:
+        ipv4_address: 172.30.66.2
+
+networks:
+  runtime-ingress:
+    ipam:
+      config:
+        - subnet: 172.30.66.0/24
+
+volumes:
+  provisioning_rabbitmq_data:

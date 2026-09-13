@@ -1,0 +1,65 @@
+{
+  "$defs": {
+    "AccessProjectionAcknowledgment": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "applied": {
+                "const": true
+              }
+            },
+            "required": [
+              "applied"
+            ]
+          },
+          "then": {
+            "required": [
+              "version"
+            ]
+          }
+        }
+      ],
+      "description": "Core may omit version only when acknowledging a duplicate/stale event.",
+      "properties": {
+        "applied": {
+          "title": "Applied",
+          "type": "boolean"
+        },
+        "version": {
+          "default": null,
+          "maximum": 9223372036854775807,
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "applied"
+      ],
+      "title": "AccessProjectionAcknowledgment",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Core's wrapped successful response, unlike Runtime's unwrapped API.",
+  "properties": {
+    "status": {
+      "const": 200,
+      "title": "Status",
+      "type": "integer"
+    },
+    "data": {
+      "$ref": "#/$defs/AccessProjectionAcknowledgment"
+    }
+  },
+  "required": [
+    "status",
+    "data"
+  ],
+  "title": "AccessProjectionResponse",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dnk:runtime:v1:access-put-response"
+}

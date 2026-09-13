@@ -3,6 +3,9 @@ from pydantic_settings import BaseSettings
 
 
 class IdentityAuthSettings(BaseModel):
+    allow_insecure_http: bool = Field(
+        default=False, description="Explicit local development HTTP cookie exception."
+    )
     otp_code_length: int = Field(
         default=6,
         ge=4,

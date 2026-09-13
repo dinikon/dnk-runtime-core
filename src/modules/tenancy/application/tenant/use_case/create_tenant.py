@@ -10,6 +10,7 @@ from src.modules.tenancy.application.ports.schema_bootstrap import (
 from src.modules.tenancy.application.tenant.command import CreateTenantCommand
 from src.modules.tenancy.application.tenant.dto import CreateTenantResultDTO
 from src.modules.tenancy.domain.service import TenantOnboardingService
+from src.modules.tenancy.domain.tenant.value_object import TenantIdVO
 
 
 class CreateTenantUseCase:
@@ -41,6 +42,15 @@ class CreateTenantUseCase:
                 tenant_name=command.tenant_name,
                 external_id=command.external_id,
                 tenant_domain_host=command.tenant_domain_host,
+                **(
+                    {
+                        "reserved_tenant_id": TenantIdVO.from_value(
+                            command.reserved_tenant_id
+                        )
+                    }
+                    if command.reserved_tenant_id
+                    else {}
+                ),
             )
         )
 

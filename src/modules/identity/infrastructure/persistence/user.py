@@ -17,6 +17,8 @@ class UserModel(TenantBase):
     __table_args__ = (
         PrimaryKeyConstraint("id", name="pk_users"),
         Index("ix_users_status", "status"),
+        sa.CheckConstraint("role IN ('admin', 'member')", name="ck_users_role"),
+        sa.CheckConstraint("session_epoch >= 0", name="ck_users_session_epoch"),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -40,6 +42,12 @@ class UserModel(TenantBase):
         String(255),
         server_default=sa.text("'active'"),
         nullable=False,
+    )
+    role: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default="member"
+    )
+    session_epoch: Mapped[int] = mapped_column(
+        sa.BigInteger, nullable=False, server_default="0"
     )
     user_type: Mapped[str] = mapped_column(String(255))
     last_name: Mapped[str] = mapped_column(String(255), nullable=False)

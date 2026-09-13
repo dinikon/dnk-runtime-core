@@ -45,15 +45,33 @@ helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | quote }}
       key: {{ default $binding.key $binding.source.existingSecret.key | quote }}
 {{- end -}}{{- end -}}
 {{- end -}}
+{{- define "dnk.runtime.infrastructureSecretEnv" -}}
+{{- range $env, $binding := (include "dnk.runtime.secretBindings" . | fromYaml) -}}
+{{- if and (not (hasPrefix "CONTROL_PLANE__" $env)) (or $binding.source.value $binding.source.existingSecret.name) }}
+- name: {{ $env }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ default $binding.name $binding.source.existingSecret.name | quote }}
+      key: {{ default $binding.key $binding.source.existingSecret.key | quote }}
+{{- end -}}{{- end -}}
+{{- end -}}
 {{- define "dnk.runtime.config" -}}
 SQLALCHEMY_DATABASE_URI_SCHEME: "postgresql+asyncpg"
 {{- range $env, $path := (.Files.Get "files/environment.yaml" | fromYaml) }}
 {{- $v := $.Values -}}{{- range (splitList "." $path) -}}{{- $v = index $v . -}}{{- end }}
-{{- if kindIs "float64" $v }}
+{{- if or (not (hasPrefix "CONTROL_PLANE__" $env)) $.Values.controlPlane.enabled (eq $env "CONTROL_PLANE__ENABLED") }}
+{{- if or (kindIs "float64" $v) (kindIs "slice" $v) }}
 {{ $env }}: {{ $v | toJson | quote }}
 {{- else }}
 {{ $env }}: {{ $v | toString | quote }}
 {{- end }}
+{{- end }}
+{{- end }}
+{{- if .Values.controlPlane.enabled }}
+CONTROL_PLANE__ENCRYPTION_KEY_PATH: "/var/run/dnk/control-plane/encryption.key"
+CONTROL_PLANE__CLIENT_CERT_PATH: "/var/run/dnk/control-plane/tls.crt"
+CONTROL_PLANE__CLIENT_KEY_PATH: "/var/run/dnk/control-plane/tls.key"
+CONTROL_PLANE__CA_BUNDLE_PATH: "/var/run/dnk/control-plane/ca.crt"
 {{- end }}
 DB_DATABASE: {{ .Values.postgresql.auth.database | quote }}
 DB_USERNAME: {{ .Values.postgresql.auth.username | quote }}
@@ -78,7 +96,7 @@ EVENT_BUS__PUBLISHER_WORKER_ENABLED: {{ .Values.workers.publisher.enabled | quot
 {{- $port := regexFind ":[0-9]+$" $url.host | trimPrefix ":" -}}
 {{- if and $port (or (lt (int $port) 1) (gt (int $port) 65535)) -}}{{- fail "application.server.publicOrigin port must be between 1 and 65535" -}}{{- end -}}
 {{- if and (eq $app.server.environment "PRODUCTION") (ne $url.scheme "https") -}}{{- fail "production application.server.publicOrigin requires HTTPS" -}}{{- end -}}
-{{- include "dnk.runtime.validateSecret" (dict "secret" $app.security.controlPlaneApiKey "path" "application.security.controlPlaneApiKey" "required" true) -}}
+{{- include "dnk.runtime.validateControlPlane" . -}}
 {{- include "dnk.runtime.validateSecret" (dict "secret" $app.email.smtp.password "path" "application.email.smtp.password" "required" false) -}}
 {{- $_ := required "application.email.smtp.host is required" $app.email.smtp.host -}}
 {{- $_ := required "application.email.fromAddress is required" $app.email.fromAddress -}}
@@ -104,7 +122,7 @@ EVENT_BUS__PUBLISHER_WORKER_ENABLED: {{ .Values.workers.publisher.enabled | quot
 {{- if and (eq $dep "redis") (not (regexMatch "^(|/|/[0-9]+)$" $u.path)) -}}{{- fail "redis.external.url must use an integer database path" -}}{{- end -}}
 {{- end -}}
 {{- end -}}
-{{- $workloads := dict "backend" .Values.backend "frontend" .Values.frontend "publisher" .Values.workers.publisher "console" .Values.workers.console -}}
+{{- $workloads := dict "backend" .Values.backend "frontend" .Values.frontend "publisher" .Values.workers.publisher "console" .Values.workers.console "lifecycle" .Values.workers.lifecycle -}}
 {{- range $name, $w := $workloads -}}
 {{- $_ := required (printf "%s.image.repository is required" $name) $w.image.repository -}}{{- $_ := required (printf "%s.image.tag is required" $name) $w.image.tag -}}
 {{- range $key := list "app.kubernetes.io/name" "app.kubernetes.io/instance" "app.kubernetes.io/component" -}}{{- if hasKey $w.pod.labels $key -}}{{- fail (printf "%s.pod.labels cannot override selector %s" $name $key) -}}{{- end -}}{{- end -}}

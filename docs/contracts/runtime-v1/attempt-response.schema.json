@@ -1,0 +1,76 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "tenant_id": {
+      "format": "uuid",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "operation_id": {
+      "format": "uuid",
+      "title": "Operation Id",
+      "type": "string"
+    },
+    "attempt_id": {
+      "format": "uuid",
+      "title": "Attempt Id",
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "queued",
+        "running",
+        "succeeded",
+        "failed"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "resources_state": {
+      "enum": [
+        "absent",
+        "present",
+        "unknown"
+      ],
+      "title": "Resources State",
+      "type": "string"
+    },
+    "runtime_tenant_id": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Runtime Tenant Id"
+    },
+    "error_code": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Code"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "operation_id",
+    "attempt_id",
+    "state",
+    "resources_state",
+    "runtime_tenant_id",
+    "error_code"
+  ],
+  "title": "AttemptResponse",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dnk:runtime:v1:attempt-response"
+}

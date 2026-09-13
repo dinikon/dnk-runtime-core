@@ -1,9 +1,8 @@
-"""Bootstrap shared tables and migrate every tenant in one PostgreSQL transaction.
+"""Migrate public tables and every tenant in one PostgreSQL transaction.
 
 The mounted runner uses APIs already shipped in the published runtime image.
 It never resets schemas or retries work after obtaining its connection/lock.
-Existing shared tables are not altered: their versioned evolution is outside
-this chart's current contract.
+The public baseline supports fresh databases; there is no legacy stamp or reset.
 """
 
 import argparse
@@ -65,7 +64,9 @@ async def run(wait_timeout):
     sys.path[:0] = [str(root), str(root / "src")]
     from sqlalchemy import select
     from src.config import dnk_config
-    from src.modules.shared.infrastructure.persistence.base import Base
+    from src.modules.shared.infrastructure.persistence.global_migrations import (
+        GlobalMigrator,
+    )
     from src.modules.shared.infrastructure.persistence.database_helper import db_helper
     from src.modules.shared.infrastructure.persistence.tenant_migrations import (
         TenantMigrator,
@@ -80,7 +81,7 @@ async def run(wait_timeout):
     naming = TenantSchemaNaming(dnk_config.SCHEMA_PREFIX)
 
     async def bootstrap(connection):
-        await connection.run_sync(Base.metadata.create_all)
+        await GlobalMigrator().upgrade(connection)
 
     async def tenant_ids(connection):
         result = await connection.scalars(

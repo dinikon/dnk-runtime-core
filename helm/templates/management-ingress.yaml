@@ -1,0 +1,35 @@
+{{- if .Values.controlPlane.enabled }}
+{{- $cp := .Values.controlPlane }}
+{{- $fullname := include "dnk.runtime.fullname" . }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullname }}-management
+  labels:
+    {{- include "dnk.runtime.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    nginx.ingress.kubernetes.io/auth-tls-secret: {{ printf "%s/%s" .Release.Namespace $cp.clientCaSecret | quote }}
+    nginx.ingress.kubernetes.io/auth-tls-verify-client: "on"
+    nginx.ingress.kubernetes.io/auth-tls-pass-certificate-to-upstream: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    {{- with $cp.ingress.tls.clusterIssuer }}
+    cert-manager.io/cluster-issuer: {{ . | quote }}
+    {{- end }}
+spec:
+  ingressClassName: {{ $cp.ingress.className | quote }}
+  tls:
+    - secretName: {{ default (printf "%s-management-tls" $fullname) $cp.ingress.tls.secretName | quote }}
+      hosts: [{{ $cp.managementHost | quote }}]
+  rules:
+    - host: {{ $cp.managementHost | quote }}
+      http:
+        paths:
+          - path: /internal/v1/
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullname }}-backend
+                port:
+                  number: {{ .Values.backend.service.port }}
+{{- end }}

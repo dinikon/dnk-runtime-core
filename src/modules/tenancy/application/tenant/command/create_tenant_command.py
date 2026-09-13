@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from uuid import UUID
 
 
 @dataclass(frozen=True, slots=True)
@@ -11,6 +12,7 @@ class CreateTenantCommand:
     user_last_name: str
     user_first_name: str
     user_email: str
+    reserved_tenant_id: UUID | None = None
 
 
 __all__ = ["CreateTenantCommand"]

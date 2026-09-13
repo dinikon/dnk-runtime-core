@@ -63,13 +63,13 @@ class DatabaseHelper:
         )
 
     async def initialize_for_startup(self) -> None:
-        """Пытается инициализировать схему БД с retry-политикой."""
+        """Wait for connectivity and require the migration Job's public revision."""
         max_attempts = dnk_config.DB_STARTUP_MAX_ATTEMPTS
         retry_delay = dnk_config.DB_STARTUP_RETRY_DELAY_SECONDS
 
         for attempt in range(1, max_attempts + 1):
             try:
-                await self.create_all()
+                await self.check_schema()
                 return
             except Exception as exc:
                 is_retryable = self._is_retryable_startup_error(exc)
@@ -89,7 +89,7 @@ class DatabaseHelper:
                         "%s Last error: %s: %s",
                         message,
                         type(exc).__name__,
-                        exc,
+                        type(exc).__name__,
                     )
                     raise DatabaseStartupError(message) from exc
 
@@ -100,9 +100,18 @@ class DatabaseHelper:
                     max_attempts,
                     retry_delay,
                     type(exc).__name__,
-                    exc,
+                    type(exc).__name__,
                 )
                 await asyncio.sleep(retry_delay)
+
+    async def check_schema(self) -> None:
+        """Read public migration state without creating or modifying tables."""
+        from src.modules.shared.infrastructure.persistence.global_migrations import (
+            GlobalMigrator,
+        )
+
+        async with self.engine.connect() as connection:
+            await GlobalMigrator().require_current(connection)
 
     @asynccontextmanager
     async def session(self) -> AsyncIterator[AsyncSession]:

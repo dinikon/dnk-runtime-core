@@ -16,6 +16,10 @@ class TokenBackendProtocol(Protocol):
         """Возвращает token по key или None."""
         ...
 
+    async def consume(self, key: str) -> StoredToken | None:
+        """Atomically retrieve and remove a nonexpired token."""
+        ...
+
     async def delete(self, key: str) -> None:
         """Удаляет token по key."""
         ...

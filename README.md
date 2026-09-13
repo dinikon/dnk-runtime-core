@@ -7,8 +7,8 @@ Modular FastAPI backend with tenant onboarding, console authentication, and stat
 This repository owns the FastAPI runtime, tenant data, workers, Console and Shortlink.
 Django accounts and the Nuxt Core frontend live in
 [dnk-control-plane](https://github.com/dinikon/dnk-control-plane).
-Both projects build independently. Local PostgreSQL and Redis remain in this Compose
-project; Control Plane connects through its external Docker network.
+Both projects build independently and communicate through HTTPS. Runtime owns its
+PostgreSQL, Redis and worker broker; Core does not share that database or broker.
 
 The standalone [Helm chart](helm/README.md) deploys Runtime directly from `helm/`.
 Control Plane has its own independent root chart; there is no platform umbrella.
@@ -19,6 +19,7 @@ existing local stack.
 
 - `tenancy`: tenant lifecycle, domains, and transactional schema bootstrap.
 - `identity`: email OTP, sessions, and tenant administrator provisioning.
+- `control_plane`: Runtime v1 provisioning, mTLS integration, readiness and access projection delivery.
 - `inventory`: Warehouse domain model and tenant-scoped persistence model; no HTTP API yet.
 - `shared`: database/UoW, tenant migrations, identifiers, audit fields, messaging, and jobs.
 
@@ -45,7 +46,12 @@ dnk-manage tenant-migrations current --all
 dnk-manage tenant-migrations revision --autogenerate --tenant-id <tenant_id> -m "Describe the change"
 ```
 
-Review generated revisions before applying them. Global tables still use startup `create_all`. Users and emails are tenant-local from revision `0002_identity_users`; the transition from shared users requires recreating test databases and repeating onboarding, without copying existing user data.
+Review generated revisions before applying them. Public tables now have a separate
+Alembic track. Run `dnk-manage database upgrade` on a fresh database before starting
+the API; startup checks the installed revision without creating tables. Existing
+unversioned databases are rejected without adoption or data deletion. Users, emails,
+cloud identities and invitations remain tenant-local. See the
+[Runtime v1 deployment guide](docs/deployment/control-plane-v1.md).
 
 ## Documentation
 

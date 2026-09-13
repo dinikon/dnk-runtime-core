@@ -48,6 +48,11 @@ class RedisTokenRepository:
             return None
         return json.loads(raw_value)
 
+    async def consume_json(self, key: str) -> dict[str, Any] | None:
+        """Redis GETDEL is atomic, including across worker processes."""
+        value = await self._client.getdel(key)
+        return json.loads(value) if value is not None else None
+
     async def delete(self, key: str) -> None:
         """Удаляет payload из Redis по key."""
         await self._client.delete(key)

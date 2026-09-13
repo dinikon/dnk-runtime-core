@@ -1,3 +1,13 @@
+## v1.0.0-rc.1 (2026-09-13)
+
+### BREAKING CHANGE
+
+- The admin tenant API has been deprecated and replaced with control plane integration. Update integrations to use new runtime schemas.
+
+### Feat
+
+- **tenancy**: remove admin tenant API and introduce runtime schemas for control plane integration
+
 ## v0.3.0 (2026-09-12)
 
 ### Feat

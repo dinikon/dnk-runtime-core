@@ -88,12 +88,7 @@ def _extract_request_id(request: Request) -> str | None:
 
 
 def _extract_request_ip(request: Request) -> str | None:
-    """Достает client ip из x-forwarded-for или request.client."""
-    forwarded_for = request.headers.get("x-forwarded-for")
-    if forwarded_for:
-        first_ip = forwarded_for.split(",", 1)[0].strip()
-        if first_ip:
-            return first_ip
+    """Reads the client address normalized by the trusted ingress boundary."""
     client = request.client
     if client is None:
         return None

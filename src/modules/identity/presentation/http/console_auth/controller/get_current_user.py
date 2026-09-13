@@ -68,6 +68,7 @@ def _to_current_user_response(
     return CurrentUserResponseSchema(
         id=result.id,
         status=result.status,
+        role=result.role,
         last_name=result.last_name,
         first_name=result.first_name,
         middle_name=result.middle_name,

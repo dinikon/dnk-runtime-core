@@ -7,6 +7,8 @@ import { getApiErrorMessage } from "@/app/providers/http";
 import { useTenantStore } from "@/app/stores/tenant";
 import { useUserStore } from "@/app/stores/user";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { accessApi } from "@/modules/access/api";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { AuthLayout } from "@/layouts";
 import AuthPageTitle from "@/modules/auth/components/AuthPageTitle.vue";
@@ -28,6 +30,13 @@ const requestOtpMutation = useRequestOtpMutation();
 const confirmOtpMutation = useConfirmOtpMutation();
 const emailChallenge = ref<EmailChallenge | null>(null);
 const authError = ref<string | null>(null);
+const cloudEnabled = ref(false);
+const cloudBusy = ref(false);
+const cloudError = ref(
+  route.query.cloud_error
+    ? "Cloud sign-in could not be completed. Please try again or use an email code."
+    : "",
+);
 
 const loginStep = computed<AuthLoginStep>(() => {
   if (tenantStore.isResolvingTenant || !tenantStore.tenant) {
@@ -41,9 +50,32 @@ const loginStep = computed<AuthLoginStep>(() => {
   return emailChallenge.value ? "confirm-otp" : "request-otp";
 });
 
-onMounted(() => {
-  void tenantStore.resolveTenant();
+onMounted(async () => {
+  await tenantStore.resolveTenant();
+  if (tenantStore.isTenantAvailable) {
+    try {
+      cloudEnabled.value = (await accessApi.cloudStatus()).enabled;
+    } catch {
+      cloudEnabled.value = false;
+    }
+  }
 });
+
+async function cloudLogin() {
+  cloudBusy.value = true;
+  cloudError.value = "";
+  try {
+    window.location.assign(
+      (await accessApi.cloudStart("login")).authorization_url,
+    );
+  } catch (error) {
+    cloudError.value = getApiErrorMessage(
+      error,
+      "Cloud sign-in is unavailable. You can still use an email code.",
+    );
+    cloudBusy.value = false;
+  }
+}
 
 async function requestOtp(email: string) {
   authError.value = null;
@@ -106,7 +138,11 @@ async function redirectAfterLogin() {
   authError.value = null;
 
   await router.replace(
-    typeof redirect === "string" ? redirect : { name: "dashboard" },
+    typeof redirect === "string" &&
+      redirect.startsWith("/") &&
+      !redirect.startsWith("//")
+      ? redirect
+      : { name: "dashboard" },
   );
 }
 </script>
@@ -164,5 +200,16 @@ async function redirectAfterLogin() {
       @confirm="confirmOtp"
       @resend="resendOtp"
     />
+    <div
+      v-if="cloudEnabled && loginStep === 'request-otp'"
+      class="flex w-full max-w-sm flex-col gap-3"
+    >
+      <Button variant="outline" :disabled="cloudBusy" @click="cloudLogin">{{
+        cloudBusy ? "Connecting…" : "Continue with cloud account"
+      }}</Button>
+      <Alert v-if="cloudError" variant="destructive" role="alert"
+        ><AlertDescription>{{ cloudError }}</AlertDescription></Alert
+      >
+    </div>
   </AuthLayout>
 </template>

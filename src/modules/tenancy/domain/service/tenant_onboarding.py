@@ -8,7 +8,9 @@ from src.modules.tenancy.domain.tenant import (
     TenantExternalIdAlreadyExistsError,
     TenantNameAlreadyExistsError,
     TenantRepositoryProtocol,
+    TenantStatus,
 )
+from src.modules.tenancy.domain.tenant.value_object import TenantIdVO
 from src.modules.tenancy.domain.tenant_domain import (
     InvalidTenantDomainHostError,
     TenantDomain,
@@ -43,6 +45,7 @@ class TenantOnboardingService:
         tenant_name: str,
         external_id: str,
         tenant_domain_host: str,
+        reserved_tenant_id: TenantIdVO | None = None,
     ) -> TenantOnboardingDraft:
         """Создает tenant с primary console domain после проверок уникальности."""
         normalized_name = tenant_name.strip()
@@ -51,8 +54,6 @@ class TenantOnboardingService:
         if not normalized_host:
             raise InvalidTenantDomainHostError()
 
-        if await self._tenants_repository.exists_by_name(normalized_name):
-            raise TenantNameAlreadyExistsError(normalized_name)
         if await self._tenants_repository.exists_by_external_id(normalized_external_id):
             raise TenantExternalIdAlreadyExistsError(normalized_external_id)
         if await self._tenant_domains_repository.exists_by_host(normalized_host):
@@ -61,6 +62,10 @@ class TenantOnboardingService:
         tenant = Tenant.create(
             name=normalized_name,
             external_id=normalized_external_id,
+            tenant_id=reserved_tenant_id,
+            status=(
+                TenantStatus.PROVISIONING if reserved_tenant_id else TenantStatus.ACTIVE
+            ),
         )
         await self._tenants_repository.add(tenant)
 

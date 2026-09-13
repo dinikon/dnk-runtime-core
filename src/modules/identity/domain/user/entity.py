@@ -53,6 +53,8 @@ class User:
     created_at: datetime
     updated_at: datetime
     emails: list[UserEmail] = field(default_factory=list)
+    role: str = "member"
+    session_epoch: int = 0
 
     @classmethod
     def create_tenant_admin(
@@ -64,16 +66,13 @@ class User:
         """Создает active tenant admin с profile defaults."""
         normalized_first_name = first_name.strip()
         normalized_last_name = last_name.strip()
-        if not normalized_first_name:
-            raise DomainError("User first name must not be empty.")
-        if not normalized_last_name:
-            raise DomainError("User last name must not be empty.")
-
+        # Bootstrap profiles may be incomplete; no name is inferred from email.
         now = datetime.now(UTC)
         return cls(
             id=UserIdVO.from_value(uuid6.uuid7()),
             tenant_id=tenant_id,
             status="active",
+            role="admin",
             last_name=normalized_last_name,
             first_name=normalized_first_name,
             middle_name=None,

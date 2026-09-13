@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from src.modules.shared.presentation.http.depends import RequestHostDep
 from src.modules.tenancy.application.tenant_domain.query import (
@@ -27,6 +27,8 @@ async def resolve_tenant(
     """HTTP endpoint resolve tenant по host текущего request."""
 
     result = await use_case.execute(ResolveTenantByHostQuery(host=host))
+    if not result.exists:
+        raise HTTPException(404, "Tenant not found")
     return ResolveTenantResponseSchema(
         exists=result.exists,
         available=result.available,

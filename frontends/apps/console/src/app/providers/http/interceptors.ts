@@ -21,7 +21,7 @@ export function installHttpInterceptors(router: Router, pinia: Pinia) {
       }
 
       const currentRoute = router.currentRoute.value;
-      if (currentRoute.name !== "login") {
+      if (!currentRoute.meta.public) {
         useUserStore(pinia).clearUser();
         void router
           .replace({

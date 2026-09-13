@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import type { SidebarProps } from "@/components/ui/sidebar";
+import { computed } from "vue";
+import { useUserStore } from "@/app/stores/user";
 
-import { Command } from "@lucide/vue";
+import { Command, Users, UserRound } from "@lucide/vue";
 import { RouterLink } from "vue-router";
 
 import { workspaceNavigation } from "@/app/navigation";
@@ -22,6 +24,25 @@ import {
 const props = withDefaults(defineProps<SidebarProps>(), {
   variant: "inset",
 });
+const userStore = useUserStore();
+const navGroups = computed(() => [
+  ...workspaceNavigation.navGroups,
+  {
+    title: "Settings",
+    items: [
+      { title: "Account", url: "/settings/account", icon: UserRound },
+      ...(userStore.user?.role === "admin"
+        ? [
+            {
+              title: "Members & invitations",
+              url: "/settings/members",
+              icon: Users,
+            },
+          ]
+        : []),
+    ],
+  },
+]);
 </script>
 
 <template>
@@ -43,7 +64,7 @@ const props = withDefaults(defineProps<SidebarProps>(), {
       </SidebarMenu>
     </SidebarHeader>
     <SidebarContent>
-      <WorkspaceNavMain :groups="workspaceNavigation.navGroups" />
+      <WorkspaceNavMain :groups="navGroups" />
       <WorkspaceNavSecondary
         :items="[workspaceNavigation.support]"
         class="mt-auto"

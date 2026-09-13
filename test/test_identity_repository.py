@@ -205,7 +205,7 @@ class SqlAlchemyUserRepositoryTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(
             {index.name for index in UserEmailModel.__table__.indexes},
-            {"ix_user_emails_user_id"},
+            {"ix_user_emails_user_id", "uq_user_emails_live_email"},
         )
 
     async def test_reads_apply_configured_schema_to_user_and_email_queries(self):

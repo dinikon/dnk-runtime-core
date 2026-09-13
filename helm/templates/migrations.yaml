@@ -54,9 +54,9 @@ spec:
           args: [python, /opt/dnk-runtime/migrate.py, --wait-timeout, {{ .Values.migrations.waitTimeoutSeconds | quote }}]
           envFrom:
             - configMapRef:
-                name: {{ $fullname }}-config
+                name: {{ $fullname }}-migration-config
           env:
-            {{- include "dnk.runtime.secretEnv" . | nindent 12 }}
+            {{- include "dnk.runtime.infrastructureSecretEnv" . | nindent 12 }}
             {{- with $w.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

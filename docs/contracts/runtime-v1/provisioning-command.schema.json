@@ -1,0 +1,135 @@
+{
+  "$defs": {
+    "OIDC": {
+      "additionalProperties": false,
+      "properties": {
+        "issuer": {
+          "maxLength": 2048,
+          "title": "Issuer",
+          "type": "string"
+        },
+        "client_id": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Client Id",
+          "type": "string"
+        },
+        "client_secret": {
+          "format": "password",
+          "title": "Client Secret",
+          "type": "string",
+          "writeOnly": true
+        },
+        "redirect_uri": {
+          "maxLength": 2048,
+          "title": "Redirect Uri",
+          "type": "string"
+        }
+      },
+      "required": [
+        "issuer",
+        "client_id",
+        "client_secret",
+        "redirect_uri"
+      ],
+      "title": "OIDC",
+      "type": "object"
+    },
+    "Owner": {
+      "additionalProperties": false,
+      "properties": {
+        "sub": {
+          "format": "uuid",
+          "title": "Sub",
+          "type": "string"
+        },
+        "verified_email": {
+          "format": "email",
+          "title": "Verified Email",
+          "type": "string"
+        },
+        "profile": {
+          "$ref": "#/$defs/OwnerProfile"
+        }
+      },
+      "required": [
+        "sub",
+        "verified_email"
+      ],
+      "title": "Owner",
+      "type": "object"
+    },
+    "OwnerProfile": {
+      "additionalProperties": false,
+      "properties": {
+        "first_name": {
+          "default": "",
+          "maxLength": 255,
+          "title": "First Name",
+          "type": "string"
+        },
+        "last_name": {
+          "default": "",
+          "maxLength": 255,
+          "title": "Last Name",
+          "type": "string"
+        },
+        "display_name": {
+          "default": "",
+          "maxLength": 255,
+          "title": "Display Name",
+          "type": "string"
+        }
+      },
+      "title": "OwnerProfile",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "tenant_id": {
+      "format": "uuid",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "operation_id": {
+      "format": "uuid",
+      "title": "Operation Id",
+      "type": "string"
+    },
+    "attempt_id": {
+      "format": "uuid",
+      "title": "Attempt Id",
+      "type": "string"
+    },
+    "hostname": {
+      "title": "Hostname",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 255,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "owner": {
+      "$ref": "#/$defs/Owner"
+    },
+    "oidc": {
+      "$ref": "#/$defs/OIDC"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "operation_id",
+    "attempt_id",
+    "hostname",
+    "name",
+    "owner",
+    "oidc"
+  ],
+  "title": "ProvisioningCommand",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dnk:runtime:v1:provisioning-command"
+}

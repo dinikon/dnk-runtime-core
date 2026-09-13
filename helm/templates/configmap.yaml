@@ -9,3 +9,19 @@ metadata:
     {{- include "dnk.runtime.labels" . | nindent 4 }}
 data:
   {{- include "dnk.runtime.config" . | nindent 2 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dnk.runtime.fullname" . }}-migration-config
+  annotations:
+    argocd.argoproj.io/sync-wave: "-30"
+  labels:
+    {{- include "dnk.runtime.labels" . | nindent 4 }}
+data:
+  CONTROL_PLANE__ENABLED: "false"
+  {{- range $key, $value := (include "dnk.runtime.config" . | fromYaml) }}
+  {{- if not (hasPrefix "CONTROL_PLANE__" $key) }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- end }}

@@ -13,6 +13,9 @@ read/update flows, and tenant admin provisioning during onboarding.
 - update current user profile
 - logout current session
 - provision tenant admin user during onboarding
+- fixed admin/member roles, seven-day invitations, OTP acceptance and access revocation
+- explicit cloud login/link/unlink using Authlib OIDC
+- CSRF browser binding and session epoch revocation
 
 ## Main Flows / Use Cases
 
@@ -53,7 +56,7 @@ read/update flows, and tenant admin provisioning during onboarding.
 - repository results are explicitly mapped to domain entities; `User.tenant_id` comes from the operation context
 - add/profile writes reject a mismatch between the supplied tenant and `User.tenant_id` before executing SQL
 - missing tenant schemas/tables produce infrastructure errors; there is no fallback to shared users
-- startup global `create_all` does not create identity tables; onboarding migrates the tenant schema before creating its administrator
+- global migrations do not create identity tables; onboarding migrates each tenant schema before creating its administrator
 - token/session implementations use shared `TokenManager`
 - tenant context is resolved through a tenancy-owned use case adapter
 - request OTP delegates typed email sending to shared `EmailService`
@@ -89,9 +92,13 @@ The default theme is `system`, and `PATCH /me` requires an explicit non-null the
 - uses `shared` request context, UoW and token abstractions
 - is consumed by `tenancy` through `UserService` provisioning adapter
 
-## Transition from shared users
+## Cloud access and invitations
 
-This change requires recreating development/test databases and repeating tenant onboarding. Revision `0002_identity_users` creates empty tenant identity tables; it neither copies nor deletes legacy `public.users` and `public.user_emails`. Existing shared-user databases are not compatible with the new repository. HTTP contracts, OTP/session formats and email uniqueness behavior remain unchanged.
+Revision `0003_identity_cloud_access` adds role, session epoch, cloud bindings, invitations and unique live normalized email. This release targets fresh databases; no legacy import or automatic reset is performed.
+
+Owner bootstrap creates an admin and exact `(issuer, sub)` binding. Invitations create a local user only after OTP verification of the fixed email, followed by explicit cloud linking in a local session. Matching cloud email never links accounts. A conflicting identity is not overwritten. Local access, the Core projection version and outbox commit in one UoW.
+
+Every session consumer checks current user status and epoch. Revocation or unlink invalidates prior sessions permanently; restoring access does not revive them. Admin operations protect the last active administrator. Cloud tokens are discarded after identity validation; subsequent requests use local sessions. Secure, HttpOnly, host-only SameSite=Lax cookies are the default; insecure HTTP requires an explicit local-development setting. See [HTTP API](../interfaces/http-api.md) for added routes and CSRF requirements.
 
 ## Tests Covering This Module
 
@@ -101,10 +108,9 @@ This change requires recreating development/test databases and repeating tenant 
     - HTTP login, profile updates, cross-tenant session rejection and logout with real repository/DI
 - `test/test_identity_use_cases.py`
     - auth use cases and tenant admin provisioning service
-- `test/test_identity_http_router.py`
-    - public route registration
-    - cookie behavior
-  - per-controller HTTP error mapping
+- `test/test_identity_access_postgres.py`: invitations, roles, revocation, linking and rollback
+- `test/test_identity_cloud.py`: OIDC claims, issuer isolation and JWKS rotation
+- `test/test_identity_csrf.py` and `test/test_identity_redis.py`: browser binding and atomic state
 - `test/test_architecture_boundaries.py`
     - forbids legacy identity import paths
   - forbids removed `error_mapper` and `infrastructure.mapper` imports

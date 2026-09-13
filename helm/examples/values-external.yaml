@@ -1,11 +1,6 @@
 application:
   server:
     publicOrigin: https://runtime.example.com
-  security:
-    controlPlaneApiKey:
-      existingSecret:
-        name: replace-me-runtime
-        key: control-plane-api-key
   email:
     fromAddress: noreply@example.com
     smtp:

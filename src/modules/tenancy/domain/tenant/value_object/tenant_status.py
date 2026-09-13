@@ -6,6 +6,7 @@ class TenantStatus(StrEnum):
 
     ACTIVE = "active"
     FREEZE = "freeze"
+    PROVISIONING = "provisioning"
 
 
 __all__ = ["TenantStatus"]

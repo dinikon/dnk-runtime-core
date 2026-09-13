@@ -25,6 +25,11 @@ class InMemoryTokenBackend(TokenBackendProtocol):
             return None
         return token
 
+    async def consume(self, key: str) -> StoredToken | None:
+        """A pop with no await makes consumption indivisible in this event loop."""
+        token = self._storage.pop(key, None)
+        return token if token is not None and not token.is_expired() else None
+
     async def delete(self, key: str) -> None:
         """Удаляет token по key, если он существует."""
         self._storage.pop(key, None)

@@ -102,9 +102,9 @@ Project configuration is assembled by `DnkConfig`, which combines multiple setti
 
 - Group: `config/deploy/control_plane.py`
 - Responsibilities:
-    - bearer API key for control-plane protected routes
-- Critical for tenancy admin route:
-    - `CONTROL_PLANE_API_KEY`
+    - mTLS peer and certificate trust for management routes; immutable Core origins and Instance identity
+- Runtime v1 integration group:
+    - `CONTROL_PLANE`: Runtime v1 mTLS identity, allowed domains, outbound Core origins, encrypted credentials and independent worker queues; see [deployment](../deployment/control-plane-v1.md).
 
 ## Deployment Config
 

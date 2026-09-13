@@ -90,14 +90,14 @@ class AuthenticateBySessionUseCase:
         )
         if user is None or user.tenant_id != tenant_id:
             return None
-        if not user.can_login():
+        if not user.can_login() or session.session_epoch != user.session_epoch:
             return None
 
         return SessionPrincipal(
             user_id=str(user.id.uuid),
             tenant_id=str(tenant_context.tenant_id),
             session_id=session.session_id,
-            roles=(),
+            roles=(user.role,),
             permissions=(),
             is_authenticated=True,
         )

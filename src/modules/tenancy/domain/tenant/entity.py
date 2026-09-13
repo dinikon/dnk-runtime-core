@@ -37,7 +37,14 @@ class Tenant:
         return self.status == TenantStatus.ACTIVE
 
     @classmethod
-    def create(cls, name: str, external_id: str) -> "Tenant":
+    def create(
+        cls,
+        name: str,
+        external_id: str,
+        *,
+        tenant_id: TenantIdVO | None = None,
+        status: TenantStatus = TenantStatus.ACTIVE,
+    ) -> "Tenant":
         """Создает active tenant с нормализованными name и external_id."""
         normalized_name = name.strip()
         normalized_external_id = external_id.strip()
@@ -48,10 +55,10 @@ class Tenant:
 
         now = datetime.now(UTC)
         return cls(
-            id=TenantIdVO.from_value(uuid6.uuid7()),
+            id=tenant_id or TenantIdVO.from_value(uuid6.uuid7()),
             name=normalized_name,
             external_id=normalized_external_id,
-            status=TenantStatus.ACTIVE,
+            status=status,
             custom_config=None,
             created_at=now,
             updated_at=now,

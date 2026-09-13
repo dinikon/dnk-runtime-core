@@ -29,6 +29,7 @@ class TokenManagerBackedSessionStore(SessionStorePort):
                 "host": session.host,
                 "issued_at": session.issued_at,
                 "expires_at": session.expires_at,
+                "session_epoch": session.session_epoch,
             },
             ttl=ttl_seconds,
         )
@@ -51,6 +52,7 @@ class TokenManagerBackedSessionStore(SessionStorePort):
             host=_required_str(body, "host"),
             issued_at=_required_datetime(body, "issued_at"),
             expires_at=_required_datetime(body, "expires_at"),
+            session_epoch=int(body.get("session_epoch", -1)),
         )
 
     async def invalidate_session(self, tenant_id: UUID, token: str) -> None:

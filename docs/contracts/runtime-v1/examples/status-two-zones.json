@@ -1,0 +1,16 @@
+{
+  "ready": true,
+  "protocol_version": 1,
+  "domains": [
+    {
+      "base_domain": "one.example.test",
+      "routing_ready": true,
+      "tls_ready": true
+    },
+    {
+      "base_domain": "two.example.test",
+      "routing_ready": true,
+      "tls_ready": false
+    }
+  ]
+}
