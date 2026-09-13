@@ -21,8 +21,10 @@ import { accessApi } from "../api";
 const route = useRoute();
 const router = useRouter();
 const userStore = useUserStore();
+// Generated invitations keep the token in the fragment, out of HTTP request URLs.
 const invitationToken =
-  typeof route.query.token === "string" ? route.query.token : "";
+  new URLSearchParams(route.hash.slice(1)).get("token") ??
+  (typeof route.query.token === "string" ? route.query.token : "");
 const otpToken = ref("");
 const code = ref("");
 const firstName = ref("");
