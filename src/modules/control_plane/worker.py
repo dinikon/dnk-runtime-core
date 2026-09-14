@@ -62,6 +62,11 @@ class RuntimeWorker:
         from src.modules.control_plane.infrastructure.deletion import DeletionWorker
 
         self.deletions = DeletionWorker(session_factory, settings, schema_prefix)
+        from src.modules.control_plane.infrastructure.role_sync import (
+            RoleProjectionSync,
+        )
+
+        self.roles = RoleProjectionSync(session_factory, settings, schema_prefix)
         self.installer = Installer(session_factory, settings, schema_prefix)
         self.access = AccessDelivery(session_factory, settings)
         self.install_queue = BrokerQueue(
@@ -242,6 +247,7 @@ class RuntimeWorker:
                     (self.observations, self.settings.observation_interval_seconds),
                     (self.dispatch, self.settings.dispatch_interval_seconds),
                     (self.deletions.due, self.settings.dispatch_interval_seconds),
+                    (self.roles.due, self.settings.reconcile_interval_seconds),
                     (self.reconcile, self.settings.reconcile_interval_seconds),
                 ):
                     group.create_task(self.periodic(action, interval))

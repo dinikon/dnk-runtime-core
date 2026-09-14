@@ -1,5 +1,6 @@
 import asyncio
 from uuid import UUID
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
@@ -196,14 +197,34 @@ async def deletion_body(request, limit):
     dependencies=[Depends(require_management)],
 )
 async def deletion_capability(
-    tenant_id: UUID, user_id: UUID, request: Request, uow: UoWDep
+    tenant_id: UUID,
+    user_id: UUID,
+    request: Request,
+    uow: UoWDep,
+    authorization_basis: Literal["owner", "runtime_admin"] = "runtime_admin",
 ):
-    from src.modules.control_plane.application.contracts import DeletionCapability
-
-    allowed = await deletion_repository(request, uow.session).admin(tenant_id, user_id)
-    return DeletionCapability(
-        can_delete=allowed, reason=None if allowed else "administrator_required"
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+    from src.modules.control_plane.infrastructure.models import InstallationModel
+    from src.modules.shared.infrastructure.persistence.tenant_gate import (
+        TenantGate,
+        TenantUnavailable,
     )
+
+    installation = await uow.session.get(InstallationModel, tenant_id)
+    if installation is None:
+        return DeletionCapability(can_delete=False, reason="tenant_unavailable")
+    try:
+        async with TenantGate(async_sessionmaker(uow.session.bind)).hold(
+            installation.runtime_tenant_id
+        ):
+            result = await deletion_repository(request, uow.session).capability(
+                tenant_id, user_id, authorization_basis
+            )
+            await uow.commit()
+            return result
+    except TenantUnavailable:
+        await uow.rollback()
+        return DeletionCapability(can_delete=False, reason="tenant_unavailable")
 
 
 @router.post(

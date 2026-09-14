@@ -1,21 +1,26 @@
 # Tenant deletion protocol v1
 
-Runtime advertises `deletion_protocol_version: 1` in management status. Provisioning
-v1 remains supported. Deploy the global migration `0004_tenant_deletion` and restart
+Runtime advertises `deletion_protocol_version: 1` and `owner_deletion_supported: true` in management status. Provisioning
+v1 remains supported. Deploy the global migrations through `0005_access_roles` and restart
 all API, integration event and control-plane worker processes before Core enables
 new deletion requests. Keep the existing management hostname, ingress mTLS and
 certificate fingerprint checks; deletion endpoints never accept browser authority.
 
 | Endpoint | Meaning |
 |---|---|
-| `GET /internal/v1/tenants/{core_id}/deletion-capability/{global_user_id}/` | Current local administrator check through issuer/sub |
+| `GET /internal/v1/tenants/{core_id}/deletion-capability/{global_user_id}/` | Current access snapshot and authority check; optional `authorization_basis=owner` is set only by trusted Core |
 | `POST /internal/v1/tenant-deletions/` | Authorize and durably accept an irreversible block; `Idempotency-Key` equals operation UUID |
 | `GET /internal/v1/tenant-deletions/{operation_id}/` | Current state or minimal completion receipt |
 | `POST /internal/v1/tenant-deletions/{operation_id}/purge/` | Separate purge command with core tenant UUID and confirmed version 2 |
 
 Commands fix Core tenant UUID, Runtime tenant UUID when known, hostname, operation,
-source and global initiator. User source requires an active local `admin` with the
-trusted Core issuer/sub; owner status has no meaning here. Operator source is set
+source and global initiator. User commands default to `authorization_basis=runtime_admin`:
+an active local `admin` with the trusted Core issuer/sub is required. Core may instead
+send `authorization_basis=owner` after checking its authoritative `Tenant.owner`.
+This ownership right survives local demotion, revocation and cloud unlinking; Runtime
+still verifies placement and an active/frozen tenant. Browser claims never supply this
+basis. Both user paths retain Core's mandatory action-specific identity proof.
+The omitted/default admin basis preserves the digest of pre-upgrade accepted commands. Operator source is set
 only by Core after checking Django permissions. It can fence an installation that
 has not yet reached this Instance. A missing operation (`404`) never proves the
 absence of resources. A semantic command hash detects changed retries even after
@@ -80,3 +85,29 @@ MFA, manual Django Admin purge and retained history; see its `docs/tenant-deleti
 Purge covers current project PostgreSQL/Redis stores. Existing backup and historical
 operational-log retention remains unchanged, and already delivered external data
 cannot be recalled. Old messages in shared queues are dropped when consumed.
+
+
+## Role projection and cached capabilities
+
+Core lists never fan out to Instances. The existing access PUT now carries
+`role: admin | member | null` alongside `available`; unlinking clears the role.
+Role-only changes advance the same per-user sequence and commit with the local
+membership change and delivery outbox. Retries retain the exact event payload.
+
+Management capability checks return `access_snapshot` with event ID, version,
+availability and role, under the same admission/membership locks as changes.
+They repair a stale projection before returning; Core applies snapshots using the
+same version boundary as delivered events. The final deletion command always checks
+Admin authority again, or accepts Core's authenticated ownership assertion.
+
+`RoleProjectionSync` runs in the existing control-plane worker. Migration
+`0005_access_roles` marks old rows unsynchronized; batches of at most 100 reconcile
+real bound identities and roles, produce new events, and persist completion. An
+attempt timestamp rotates failed work so one failing tenant cannot starve others.
+The partial index excludes already synchronized rows. Deleting tenants are excluded
+and admission prevents races with purge.
+
+Deploy the compatible Core backend/migration before this Runtime update, then the
+new Core frontend. Old Core receivers reject role-bearing events. Until the Instance
+advertises Owner support, Core may use the legacy Admin path but cannot assert Owner.
+No provisioning protocol bump or new broker/periodic browser poll is required.

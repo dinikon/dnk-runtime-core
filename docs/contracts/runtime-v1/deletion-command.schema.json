@@ -40,6 +40,15 @@
       ],
       "title": "Source",
       "type": "string"
+    },
+    "authorization_basis": {
+      "default": "runtime_admin",
+      "enum": [
+        "owner",
+        "runtime_admin"
+      ],
+      "title": "Authorization Basis",
+      "type": "string"
     }
   },
   "required": [

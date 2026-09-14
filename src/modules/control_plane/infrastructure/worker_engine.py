@@ -133,6 +133,7 @@ class Installer:
                     installation.runtime_tenant_id,
                     UUID(command["owner"]["sub"]),
                     True,
+                    "admin",
                 )
             elif resources != "present":
                 raise RuntimeError("Unconfirmed resources")

@@ -239,8 +239,14 @@ class AccessProjectionWriter:
         self.session = session
 
     async def set_available(
-        self, tenant_id: UUID, global_user_id: UUID, available: bool
+        self,
+        tenant_id: UUID,
+        global_user_id: UUID,
+        available: bool,
+        role: str | None = None,
     ) -> int:
+        if role not in {"admin", "member", None}:
+            raise ValueError("Invalid cloud access role")
         installation = await self.session.scalar(
             select(InstallationModel).where(
                 InstallationModel.runtime_tenant_id == tenant_id
@@ -255,7 +261,11 @@ class AccessProjectionWriter:
         projection = await self.session.get(
             AccessProjectionModel, (core_id, global_user_id)
         )
-        if projection is not None and projection.available == available:
+        if (
+            projection is not None
+            and projection.role_synced
+            and (projection.available, projection.role) == (available, role)
+        ):
             return projection.version
         version = 1 if projection is None else projection.version + 1
         if version > 9223372036854775807:
@@ -265,11 +275,14 @@ class AccessProjectionWriter:
                 core_tenant_id=core_id,
                 global_user_id=global_user_id,
                 available=available,
+                role=role,
+                role_synced=True,
                 version=version,
             )
             self.session.add(projection)
         else:
             projection.available, projection.version = available, version
+            projection.role, projection.role_synced = role, True
         event_id, stamp = uuid4(), now()
         self.session.add(
             DeliveryModel(
@@ -282,6 +295,7 @@ class AccessProjectionWriter:
                     "event_id": str(event_id),
                     "version": version,
                     "available": available,
+                    "role": role,
                 },
                 state="pending",
                 next_attempt_at=stamp,
@@ -290,3 +304,40 @@ class AccessProjectionWriter:
         )
         await self.session.flush()
         return version
+
+    async def refresh(self, installation, global_user_id, issuer, naming):
+        """Caller holds the tenant admission and identity locks through commit."""
+        from src.modules.identity.infrastructure.repository.access_repository import (
+            AccessRepository,
+        )
+        from src.modules.identity.infrastructure.persistence.user import UserModel
+
+        access = AccessRepository(self.session, naming)
+        runtime_id = installation.runtime_tenant_id
+        binding = await access.identity_for_subject(
+            runtime_id, issuer, str(global_user_id)
+        )
+        role, available = None, False
+        if binding:
+            users = UserModel.__table__
+            user = (
+                await access.execute(
+                    select(users.c.role, users.c.status).where(
+                        users.c.id == binding.user_id
+                    ),
+                    runtime_id,
+                )
+            ).first()
+            if user:
+                role, available = user.role, user.status == "active"
+        version = await self.set_available(runtime_id, global_user_id, available, role)
+        if not version:
+            return None
+        return await self.session.scalar(
+            select(DeliveryModel.payload).where(
+                DeliveryModel.kind == "access",
+                DeliveryModel.core_tenant_id == installation.core_tenant_id,
+                DeliveryModel.aggregate_id == global_user_id,
+                DeliveryModel.version == version,
+            )
+        )

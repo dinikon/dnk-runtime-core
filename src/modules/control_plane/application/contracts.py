@@ -131,6 +131,7 @@ class StatusResponse(ProtocolModel):
     ready: bool
     protocol_version: Literal[1] = 1
     deletion_protocol_version: Literal[1] = 1
+    owner_deletion_supported: StrictBool = True
     domains: list[DomainReadiness]
 
 
@@ -141,8 +142,15 @@ class DeletionCommand(ProtocolModel):
     runtime_tenant_id: UUID | None = None
     initiator_id: UUID
     source: Literal["user", "operator"]
+    authorization_basis: Literal["owner", "runtime_admin"] = "runtime_admin"
 
     _hostname = field_validator("hostname")(exact_hostname)
+
+    @model_validator(mode="after")
+    def owner_is_user(self):
+        if self.source != "user" and self.authorization_basis == "owner":
+            raise ValueError("Owner authority is only valid for user requests")
+        return self
 
 
 class DeletionResponse(ProtocolModel):
@@ -159,6 +167,7 @@ class DeletionResponse(ProtocolModel):
 class DeletionCapability(ProtocolModel):
     can_delete: StrictBool
     reason: str | None = None
+    access_snapshot: "AccessProjectionPayload | None" = None
 
 
 class PurgeCommand(ProtocolModel):
@@ -172,6 +181,7 @@ class AccessProjectionPayload(ProtocolModel):
     event_id: UUID
     version: int = Field(strict=True, ge=1, le=9223372036854775807)
     available: StrictBool
+    role: Literal["admin", "member"] | None = None
 
 
 class AccessProjectionAcknowledgment(ProtocolModel):

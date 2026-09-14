@@ -12,7 +12,7 @@ The installer uses tenancy's existing transaction for schema, tenant migrations,
 
 ## Access projection
 
-Identity invokes a transaction-bound port when cloud access changes. Local rights, the persistent monotonically increasing version and the outbox event commit together. Versions survive unlink/relink. The initial Owner event has version 1.
+Identity invokes a transaction-bound port when cloud access changes. Local rights, role (`admin`/`member`/null), availability, the persistent monotonically increasing version and the outbox event commit together. A role-only change advances the version. Existing projections are upgraded in resumable background batches. Versions survive unlink/relink. The initial Owner event has version 1.
 
 RabbitMQ messages carry UUIDs only. A wakeup is acknowledged at broker publication; an access event is delivered only after Core returns a valid `200`, including `applied=false`. Temporary failures retry with backoff. Identity/contract errors block hot retries and remain visible. Core downtime does not undo local changes.
 

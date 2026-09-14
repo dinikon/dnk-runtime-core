@@ -259,6 +259,7 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
                 self.tenant.uuid,
                 __import__("uuid").UUID(oidc.exchange.return_value),
                 True,
+                "member",
             )
             await cloud.unlink("tenant.example", self.member_session.token)
             self.assertIsNone(
@@ -268,6 +269,34 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
             with self.assertRaises(IdentityAccessError):
                 await service.principal("tenant.example", self.member_session.token)
+
+    async def test_role_only_changes_publish_the_bound_users_current_role(self):
+        subject = uuid4()
+        async with UnitOfWork(self.sessions) as uow:
+            service = self.service(uow)
+            await service.access.bind(
+                self.tenant.uuid,
+                self.member.id.uuid,
+                "https://core.example/issuer",
+                str(subject),
+            )
+            await uow.commit()
+            for role, status in (
+                ("admin", "active"),
+                ("member", "active"),
+                ("member", "revoked"),
+            ):
+                await service.change_user(
+                    "tenant.example",
+                    self.admin_session.token,
+                    self.member.id.uuid,
+                    role=role,
+                    status=status,
+                )
+                self.projections.set_available.assert_awaited_with(
+                    self.tenant.uuid, subject, status == "active", role
+                )
+            self.assertEqual(self.projections.set_available.await_count, 3)
 
     async def test_http_callback_failure_rolls_back_binding_before_safe_redirect(self):
         from fastapi import FastAPI

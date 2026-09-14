@@ -43,6 +43,11 @@
       "title": "Deletion Protocol Version",
       "type": "integer"
     },
+    "owner_deletion_supported": {
+      "default": true,
+      "title": "Owner Deletion Supported",
+      "type": "boolean"
+    },
     "domains": {
       "items": {
         "$ref": "#/$defs/DomainReadiness"
@@ -55,6 +60,7 @@
     "ready",
     "protocol_version",
     "deletion_protocol_version",
+    "owner_deletion_supported",
     "domains"
   ],
   "title": "StatusResponse",

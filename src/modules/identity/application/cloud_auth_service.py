@@ -150,7 +150,7 @@ class CloudAuthService:
                 context.tenant_id, user.id.uuid, connection.issuer, subject
             )
             await self.local.projections.set_available(
-                context.tenant_id, UUID(subject), True
+                context.tenant_id, UUID(subject), True, user.role
             )
             await self.local.uow.commit()
             return "link", None
@@ -185,7 +185,7 @@ class CloudAuthService:
         if identity:
             await self.local.access.unbind(context.tenant_id, user.id.uuid)
             await self.local.projections.set_available(
-                context.tenant_id, UUID(identity.subject), False
+                context.tenant_id, UUID(identity.subject), False, None
             )
         await self.local.uow.commit()
         return {"ok": True}

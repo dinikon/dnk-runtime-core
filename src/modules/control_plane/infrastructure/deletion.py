@@ -11,6 +11,7 @@ from sqlalchemy.schema import DropSchema
 from src.modules.control_plane.application.contracts import (
     DeletionCommand,
     DeletionResponse,
+    DeletionCapability,
 )
 from src.modules.control_plane.infrastructure.models import (
     AccessProjectionModel,
@@ -20,7 +21,11 @@ from src.modules.control_plane.infrastructure.models import (
     InstallationModel,
     ProvisioningAttemptModel,
 )
-from src.modules.control_plane.infrastructure.services import now, serialize
+from src.modules.control_plane.infrastructure.services import (
+    now,
+    serialize,
+    AccessProjectionWriter,
+)
 from src.modules.identity.infrastructure.persistence.user import UserModel
 from src.modules.identity.infrastructure.repository.access_repository import (
     AccessRepository,
@@ -70,6 +75,37 @@ class DeletionRepository:
         self.session, self.settings = session, settings
         self.naming = TenantSchemaNaming(schema_prefix)
 
+    async def capability(self, tenant_id, user_id, authorization_basis):
+        installation = await self.session.get(InstallationModel, tenant_id)
+        if installation is None:
+            return DeletionCapability(can_delete=False, reason="tenant_unavailable")
+        tenant = await self.session.get(
+            TenantModel, installation.runtime_tenant_id, populate_existing=True
+        )
+        if (
+            tenant is None
+            or tenant.external_id != str(tenant_id)
+            or tenant.status not in {"active", "freeze"}
+            or await self.session.get(DeletionModel, tenant_id)
+        ):
+            return DeletionCapability(can_delete=False, reason="tenant_unavailable")
+        await AccessRepository(self.session, self.naming).lock(tenant.id)
+        snapshot = await AccessProjectionWriter(self.session).refresh(
+            installation,
+            user_id,
+            f"{self.settings.public_origin}/oidc/tenants/{tenant_id}",
+            self.naming,
+        )
+        allowed = snapshot is not None and (
+            authorization_basis == "owner"
+            or (snapshot["available"] and snapshot["role"] == "admin")
+        )
+        return DeletionCapability(
+            can_delete=allowed,
+            reason=None if allowed else "administrator_required",
+            access_snapshot=snapshot,
+        )
+
     async def admin(self, tenant_id, user_id):
         installation = await self.session.get(InstallationModel, tenant_id)
         if installation is None:
@@ -112,10 +148,12 @@ class DeletionRepository:
         return deletion_response(row) if row else None
 
     async def accept(self, command: DeletionCommand):
+        payload = command.model_dump(mode="json")
+        # Keep the digest of pre-upgrade accepted commands, including tombstones.
+        if command.authorization_basis == "runtime_admin":
+            payload.pop("authorization_basis")
         command_hash = hashlib.sha256(
-            json.dumps(
-                command.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
-            ).encode()
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()
         await serialize(self.session, f"cp:tenant:{command.tenant_id}")
         saved = await self.session.get(
@@ -164,10 +202,12 @@ class DeletionRepository:
             # Membership changes use this exact lock. Commit of acceptance is
             # the authority boundary; capability lookups never grant a right.
             await AccessRepository(self.session, self.naming).lock(runtime_id)
-        if command.source == "user" and not await self.admin(
-            command.tenant_id, command.initiator_id
-        ):
-            raise DeletionError("administrator_required", 403)
+        if command.source == "user":
+            if command.authorization_basis == "owner":
+                if tenant is None or tenant.status not in {"active", "freeze"}:
+                    raise DeletionError("administrator_required", 403)
+            elif not await self.admin(command.tenant_id, command.initiator_id):
+                raise DeletionError("administrator_required", 403)
         created = bool(tenant and tenant.status in {"active", "freeze"}) or bool(
             await self.session.scalar(
                 select(ProvisioningAttemptModel.attempt_id)
@@ -184,7 +224,7 @@ class DeletionRepository:
             operation_id=command.operation_id,
             state="deletion_pending",
             version=1,
-            command=command.model_dump(mode="json"),
+            command=payload,
             updated_at=now(),
             command_hash=command_hash,
             creation_succeeded=created,

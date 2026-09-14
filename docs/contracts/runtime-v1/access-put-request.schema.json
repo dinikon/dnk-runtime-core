@@ -16,6 +16,22 @@
     "available": {
       "title": "Available",
       "type": "boolean"
+    },
+    "role": {
+      "anyOf": [
+        {
+          "enum": [
+            "admin",
+            "member"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Role"
     }
   },
   "required": [

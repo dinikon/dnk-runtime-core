@@ -332,6 +332,132 @@ class TenantDeletionTests(unittest.IsolatedAsyncioTestCase):
                 (await session.get(TenantModel, runtime_id)).status, "active"
             )
 
+    async def test_owner_can_delete_after_demotion_revocation_or_unlink(self):
+        for mode in ("member", "revoked", "unlinked"):
+            with self.subTest(mode=mode):
+                payload, runtime_id = await self.install()
+                command = self.command(payload).model_copy(
+                    update={"authorization_basis": "owner"}
+                )
+                async with TenantGate(self.sessions).hold(runtime_id):
+                    async with self.sessions() as session, session.begin():
+                        access = AccessRepository(session, TenantSchemaNaming("dnk_"))
+                        await access.lock(runtime_id)
+                        binding = await access.identity_for_subject(
+                            runtime_id,
+                            payload["oidc"]["issuer"],
+                            payload["owner"]["sub"],
+                        )
+                        await access.change_access(
+                            runtime_id,
+                            binding.user_id,
+                            "member",
+                            "revoked" if mode == "revoked" else "active",
+                        )
+                        if mode == "unlinked":
+                            await access.unbind(runtime_id, binding.user_id)
+                        result = await self.repo(session).capability(
+                            command.tenant_id, command.initiator_id, "owner"
+                        )
+                        self.assertTrue(result.can_delete)
+                        self.assertEqual(
+                            result.access_snapshot.available, mode == "member"
+                        )
+                with self.assertRaises(DeletionError):
+                    await self.accept(
+                        command.model_copy(
+                            update={"authorization_basis": "runtime_admin"}
+                        )
+                    )
+                self.assertEqual((await self.accept(command)).state, "deletion_pending")
+                self.assertEqual((await self.accept(command)).state, "deletion_pending")
+                with self.assertRaises(DeletionError):
+                    await self.accept(
+                        command.model_copy(
+                            update={"authorization_basis": "runtime_admin"}
+                        )
+                    )
+
+    async def test_role_backfill_retries_and_live_snapshot_prevents_stale_admin(self):
+        from src.modules.control_plane.infrastructure.services import (
+            AccessProjectionWriter,
+        )
+        from src.modules.control_plane.infrastructure.role_sync import (
+            RoleProjectionSync,
+        )
+
+        payload, runtime_id = await self.install()
+        core_id, user_id = UUID(payload["tenant_id"]), UUID(payload["owner"]["sub"])
+        async with self.sessions() as session, session.begin():
+            access = AccessRepository(session, TenantSchemaNaming("dnk_"))
+            await access.lock(runtime_id)
+            binding = await access.identity_for_subject(
+                runtime_id, payload["oidc"]["issuer"], str(user_id)
+            )
+            await access.change_access(runtime_id, binding.user_id, "member", "active")
+            # An installation created before role-bearing events were deployed.
+            await session.execute(
+                update(AccessProjectionModel)
+                .where(AccessProjectionModel.core_tenant_id == core_id)
+                .values(role=None, role_synced=False)
+            )
+        sync = RoleProjectionSync(self.sessions, self.settings, "dnk_")
+        with patch.object(
+            AccessProjectionWriter, "refresh", side_effect=OSError("temporary")
+        ):
+            await sync.due()
+        async with self.sessions() as session:
+            self.assertFalse(
+                (
+                    await session.get(AccessProjectionModel, (core_id, user_id))
+                ).role_synced
+            )
+        await sync.due()
+        async with self.sessions() as session:
+            row = await session.get(AccessProjectionModel, (core_id, user_id))
+            self.assertEqual(
+                (row.available, row.role, row.version, row.role_synced),
+                (True, "member", 2, True),
+            )
+        async with TenantGate(self.sessions).hold(runtime_id):
+            async with self.sessions() as session, session.begin():
+                result = await self.repo(session).capability(
+                    core_id, user_id, "runtime_admin"
+                )
+                self.assertFalse(result.can_delete)
+                self.assertEqual(
+                    (result.access_snapshot.version, result.access_snapshot.role),
+                    (2, "member"),
+                )
+                access = AccessRepository(session, TenantSchemaNaming("dnk_"))
+                await access.change_access(
+                    runtime_id, binding.user_id, "admin", "active"
+                )
+                await AccessProjectionWriter(session).set_available(
+                    runtime_id, user_id, True, "admin"
+                )
+                promoted = await self.repo(session).capability(
+                    core_id, user_id, "runtime_admin"
+                )
+                self.assertTrue(promoted.can_delete)
+                self.assertEqual(promoted.access_snapshot.version, 3)
+        await sync.due()
+        async with self.sessions() as session:
+            events = list(
+                await session.scalars(
+                    select(DeliveryModel)
+                    .where(
+                        DeliveryModel.core_tenant_id == core_id,
+                        DeliveryModel.kind == "access",
+                    )
+                    .order_by(DeliveryModel.version)
+                )
+            )
+            self.assertEqual(
+                [event.payload["role"] for event in events],
+                ["admin", "member", "admin"],
+            )
+
     async def test_admission_spans_http_handler_commits_and_drains_before_blocked(self):
         payload, runtime_id = await self.install()
         entered, finish = asyncio.Event(), asyncio.Event()

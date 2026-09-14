@@ -76,7 +76,28 @@ EXAMPLES = {
     ),
     "deletion-capability": (
         "deletion-capability",
-        {"can_delete": True, "reason": None},
+        {
+            "can_delete": True,
+            "reason": None,
+            "access_snapshot": {
+                "event_id": EVENT,
+                "version": 1,
+                "available": True,
+                "role": "admin",
+            },
+        },
+    ),
+    "deletion-owner-command": (
+        "deletion-command",
+        {
+            "tenant_id": TENANT,
+            "runtime_tenant_id": RUNTIME,
+            "operation_id": OPERATION,
+            "hostname": HOSTNAME,
+            "initiator_id": USER,
+            "source": "user",
+            "authorization_basis": "owner",
+        },
     ),
     "purge-command": ("purge-command", {"tenant_id": TENANT, "version": 2}),
     "provisioning-command": (
@@ -146,6 +167,7 @@ EXAMPLES = {
             "ready": True,
             "protocol_version": 1,
             "deletion_protocol_version": 1,
+            "owner_deletion_supported": True,
             "domains": [
                 {
                     "base_domain": "one.example.test",
@@ -162,7 +184,7 @@ EXAMPLES = {
     ),
     "access-put-request": (
         "access-put-request",
-        {"event_id": EVENT, "version": 1, "available": True},
+        {"event_id": EVENT, "version": 1, "available": True, "role": "admin"},
     ),
     "access-put-applied": (
         "access-put-response",

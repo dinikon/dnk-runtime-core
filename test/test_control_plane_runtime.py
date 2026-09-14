@@ -524,7 +524,7 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
             writer = AccessProjectionWriter(session)
             self.assertEqual(
                 await writer.set_available(
-                    installation.runtime_tenant_id, user_id, True
+                    installation.runtime_tenant_id, user_id, True, "admin"
                 ),
                 1,
             )
@@ -536,7 +536,7 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(
                 await writer.set_available(
-                    installation.runtime_tenant_id, user_id, True
+                    installation.runtime_tenant_id, user_id, True, "admin"
                 ),
                 3,
             )
@@ -576,7 +576,7 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
             ]
             self.assertEqual(states, ["delivered", "pending", "blocked"])
         self.assertEqual([value["version"] for value in sent], [1, 2, 3])
-        self.assertEqual(set(sent[0]), {"event_id", "version", "available"})
+        self.assertEqual(set(sent[0]), {"event_id", "version", "available", "role"})
         # A duplicate broker notification cannot bypass a persisted HTTP backoff.
         await delivery.run(events[1].event_id)
         self.assertEqual(len(sent), 3)
@@ -719,7 +719,14 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
                     await asyncio.sleep(0.05)
             self.assertEqual(
                 deliveries,
-                [{"event_id": str(event.event_id), "version": 1, "available": True}],
+                [
+                    {
+                        "event_id": str(event.event_id),
+                        "version": 1,
+                        "available": True,
+                        "role": "admin",
+                    }
+                ],
             )
             await worker.heartbeat()
         finally:

@@ -1,4 +1,50 @@
 {
+  "$defs": {
+    "AccessProjectionPayload": {
+      "additionalProperties": false,
+      "description": "Runtime's immutable PUT payload; version is a per-user sequence.",
+      "properties": {
+        "event_id": {
+          "format": "uuid",
+          "title": "Event Id",
+          "type": "string"
+        },
+        "version": {
+          "maximum": 9223372036854775807,
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        },
+        "available": {
+          "title": "Available",
+          "type": "boolean"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "enum": [
+                "admin",
+                "member"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Role"
+        }
+      },
+      "required": [
+        "event_id",
+        "version",
+        "available"
+      ],
+      "title": "AccessProjectionPayload",
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
   "properties": {
     "can_delete": {
@@ -16,6 +62,17 @@
       ],
       "default": null,
       "title": "Reason"
+    },
+    "access_snapshot": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AccessProjectionPayload"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     }
   },
   "required": [
