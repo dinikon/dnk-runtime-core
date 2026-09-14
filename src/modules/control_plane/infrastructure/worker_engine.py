@@ -20,6 +20,7 @@ from src.modules.control_plane.infrastructure.models import (
     CloudConnectionModel,
     DeliveryModel,
     InstallationModel,
+    DeletionModel,
     ProvisioningAttemptModel,
 )
 from src.modules.control_plane.infrastructure.tenancy_adapter import TenancyAdapter
@@ -69,6 +70,8 @@ class Installer:
         if core_id is None:
             return None
         await serialize(session, f"cp:tenant:{core_id}")
+        if await session.get(DeletionModel, core_id):
+            return None
         return await session.get(
             ProvisioningAttemptModel,
             attempt_id,
@@ -238,6 +241,29 @@ class AccessDelivery:
         return context
 
     async def run(self, event_id: UUID) -> None:
+        from src.modules.shared.infrastructure.persistence.tenant_gate import (
+            TenantGate,
+            TenantUnavailable,
+        )
+
+        async with self.sessions() as session:
+            runtime_id = await session.scalar(
+                select(InstallationModel.runtime_tenant_id)
+                .join(
+                    DeliveryModel,
+                    DeliveryModel.core_tenant_id == InstallationModel.core_tenant_id,
+                )
+                .where(DeliveryModel.event_id == event_id)
+            )
+        if runtime_id is None:
+            return
+        try:
+            async with TenantGate(self.sessions).hold(runtime_id):
+                await self._run(event_id)
+        except TenantUnavailable:
+            return
+
+    async def _run(self, event_id: UUID) -> None:
         async with self.sessions() as session, session.begin():
             event = await session.get(DeliveryModel, event_id, with_for_update=True)
             if (
@@ -245,6 +271,10 @@ class AccessDelivery:
                 or event.kind != "access"
                 or event.state in {"delivered", "blocked"}
             ):
+                return
+            if await session.get(DeletionModel, event.core_tenant_id):
+                event.state = "delivered"
+                event.delivered_at = now()
                 return
             if event.state == "pending" and aware(event.next_attempt_at) > now():
                 return
@@ -343,6 +373,9 @@ async def due_attempts(session, limit: int = 100):
             await session.scalars(
                 select(ProvisioningAttemptModel.attempt_id)
                 .where(
+                    ~ProvisioningAttemptModel.core_tenant_id.in_(
+                        select(DeletionModel.core_tenant_id)
+                    ),
                     or_(
                         ProvisioningAttemptModel.state == "queued",
                         (ProvisioningAttemptModel.state == "running")

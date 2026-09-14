@@ -1,0 +1,56 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "tenant_id": {
+      "format": "uuid",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "operation_id": {
+      "format": "uuid",
+      "title": "Operation Id",
+      "type": "string"
+    },
+    "hostname": {
+      "title": "Hostname",
+      "type": "string"
+    },
+    "runtime_tenant_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Runtime Tenant Id"
+    },
+    "initiator_id": {
+      "format": "uuid",
+      "title": "Initiator Id",
+      "type": "string"
+    },
+    "source": {
+      "enum": [
+        "user",
+        "operator"
+      ],
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "operation_id",
+    "hostname",
+    "initiator_id",
+    "source"
+  ],
+  "title": "DeletionCommand",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dnk:runtime:v1:deletion-command"
+}

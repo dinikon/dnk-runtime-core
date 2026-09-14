@@ -393,7 +393,7 @@ class SharedEventsTests(unittest.IsolatedAsyncioTestCase):
 
         console_output = output.getvalue()
         self.assertIn("Invalid integration event received", console_output)
-        self.assertIn("raw_payload=", console_output)
+        self.assertNotIn("raw_payload=", console_output)
         self.assertFalse(message.acked)
         self.assertFalse(message.rejected_requeue)
 

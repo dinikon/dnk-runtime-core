@@ -4,6 +4,7 @@ import json
 import sys
 from collections.abc import Mapping
 from typing import Any, TextIO
+from uuid import UUID
 
 from faststream import FastStream
 from faststream.middlewares.acknowledgement.config import AckPolicy
@@ -15,6 +16,10 @@ from src.modules.shared.application.messaging import (
     BrokerTopologyPort,
 )
 from src.modules.shared.domain.events import IntegrationEvent
+from src.modules.shared.application.persistence.tenant_admission import (
+    TenantUnavailable,
+    unrestricted_admission,
+)
 from src.modules.shared.infrastructure.events.rabbitmq_integration_event_publisher import (
     build_event_bus_exchange,
 )
@@ -68,37 +73,43 @@ async def handle_integration_event_console_message(
     payload: Mapping[str, Any],
     message: RabbitMessage,
     output: TextIO | None = None,
+    admission=unrestricted_admission,
 ) -> None:
     stream = output or sys.stdout
     try:
-        event = IntegrationEvent.from_payload(payload)
-    except Exception as exc:
+        tenant_id = UUID(str(payload["tenant_id"]))
+    except Exception:
         print("Invalid integration event received", file=stream)
-        print(f"error={exc}", file=stream)
-        print(
-            "raw_payload="
-            + json.dumps(
-                dict(payload), ensure_ascii=False, sort_keys=True, default=str
-            ),
-            file=stream,
-        )
         stream.flush()
         await message.reject(requeue=False)
         return
 
-    print("Integration event received", file=stream)
-    print(f"event_id={event.event_id}", file=stream)
-    print(f"event_type={event.event_type}", file=stream)
-    print(f"tenant_id={event.tenant_id}", file=stream)
-    print(f"aggregate_type={event.aggregate_type}", file=stream)
-    print(f"aggregate_id={event.aggregate_id}", file=stream)
-    print(
-        "raw_payload="
-        + json.dumps(dict(payload), ensure_ascii=False, sort_keys=True, default=str),
-        file=stream,
-    )
-    stream.flush()
-    await message.ack()
+    try:
+        async with admission(tenant_id):
+            try:
+                event = IntegrationEvent.from_payload(payload)
+            except Exception:
+                print("Invalid integration event received", file=stream)
+                stream.flush()
+                await message.reject(requeue=False)
+                return
+            print("Integration event received", file=stream)
+            print(f"event_id={event.event_id}", file=stream)
+            print(f"event_type={event.event_type}", file=stream)
+            print(f"tenant_id={event.tenant_id}", file=stream)
+            print(f"aggregate_type={event.aggregate_type}", file=stream)
+            print(f"aggregate_id={event.aggregate_id}", file=stream)
+            print(
+                "raw_payload="
+                + json.dumps(
+                    dict(payload), ensure_ascii=False, sort_keys=True, default=str
+                ),
+                file=stream,
+            )
+            stream.flush()
+            await message.ack()
+    except TenantUnavailable:
+        await message.ack()
 
 
 def build_integration_event_console_worker_app(
@@ -136,10 +147,16 @@ def build_integration_event_console_worker_app(
         payload: dict[str, Any],
         message: RabbitMessage,
     ) -> None:
+        from src.modules.shared.infrastructure.persistence.database_helper import (
+            db_helper,
+        )
+        from src.modules.shared.infrastructure.persistence.tenant_gate import TenantGate
+
         await handle_integration_event_console_message(
             payload=payload,
             message=message,
             output=output,
+            admission=TenantGate(db_helper.session_factory).hold,
         )
 
     return app

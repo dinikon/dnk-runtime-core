@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from src.modules.shared.infrastructure.persistence.tenant_gate import session_guard
+
 from collections.abc import Mapping
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,6 +45,7 @@ def build_schedule_scheduled_job_use_case(
 ) -> ScheduleScheduledJobUseCase:
     """Builds the scheduled job scheduling use case."""
     return ScheduleScheduledJobUseCase(
+        admission=session_guard(session),
         repository=build_scheduled_job_repository(session),
         clock=clock or UtcClock(),
         uuid_generator=uuid_generator or UUID7Generator(),
@@ -59,6 +62,7 @@ def build_process_due_scheduled_jobs_use_case(
 ) -> ProcessDueScheduledJobsUseCase:
     """Builds the due scheduled jobs processing use case."""
     return ProcessDueScheduledJobsUseCase(
+        admission=session_guard(session),
         repository=build_scheduled_job_repository(session),
         dispatcher=dispatcher or build_scheduled_job_dispatcher(),
         clock=clock or UtcClock(),

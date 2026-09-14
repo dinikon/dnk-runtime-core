@@ -515,6 +515,9 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_access_version_survives_revoke_relink_and_http_classification(self):
         payload, _ = await self.accept()
+        await Installer(self.sessions, self.config, "dnk_").run(
+            UUID(payload["attempt_id"])
+        )
         core_id, user_id = UUID(payload["tenant_id"]), UUID(payload["owner"]["sub"])
         async with self.sessions() as session, session.begin():
             installation = await session.get(InstallationModel, core_id)

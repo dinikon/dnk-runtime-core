@@ -37,6 +37,12 @@
       "title": "Protocol Version",
       "type": "integer"
     },
+    "deletion_protocol_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Deletion Protocol Version",
+      "type": "integer"
+    },
     "domains": {
       "items": {
         "$ref": "#/$defs/DomainReadiness"
@@ -48,6 +54,7 @@
   "required": [
     "ready",
     "protocol_version",
+    "deletion_protocol_version",
     "domains"
   ],
   "title": "StatusResponse",

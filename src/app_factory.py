@@ -82,6 +82,11 @@ def create_app() -> DnkApp:
     app.include_router(identity_integration_router)
     app.include_router(cloud_router)
     integration = dnk_config.CONTROL_PLANE
+    from src.modules.shared.presentation.http.tenant_gate import (
+        TenantAdmissionMiddleware,
+    )
+
+    app.add_middleware(TenantAdmissionMiddleware)
     app.add_middleware(
         ManagementTrustBoundary,
         enabled=integration.enabled,

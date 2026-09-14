@@ -55,11 +55,13 @@ class OutboxPublisherBuilderTests(unittest.IsolatedAsyncioTestCase):
                 publisher,
                 clock,
                 retry_base_seconds,
+                admission,
             ) -> None:
                 recorded["repository"] = repository
                 recorded["publisher"] = publisher
                 recorded["clock"] = clock
                 recorded["retry_base_seconds"] = retry_base_seconds
+                recorded["admission"] = admission
 
             async def __call__(self, command):
                 recorded["command"] = command
@@ -83,6 +85,9 @@ class OutboxPublisherBuilderTests(unittest.IsolatedAsyncioTestCase):
                 EventPublisherStub,
             ),
             patch.object(builder, "PublishOutboxEventsUseCase", UseCaseStub),
+            patch.object(
+                builder, "session_guard", return_value="test-admission"
+            ) as guard,
         ):
             publish_once = builder.build_publish_once(
                 config=config,
@@ -93,6 +98,8 @@ class OutboxPublisherBuilderTests(unittest.IsolatedAsyncioTestCase):
             result = await publish_once()
 
         self.assertEqual(result.published, 2)
+        guard.assert_called_once_with(created_uows[0].session)
+        self.assertEqual(recorded["admission"], "test-admission")
         self.assertEqual(len(created_uows), 1)
         self.assertEqual(created_uows[0].commits, 1)
         self.assertIs(recorded["session"], created_uows[0].session)

@@ -12,6 +12,9 @@ from src.modules.shared.application.jobs.scheduled_job_repository_protocol impor
 from src.modules.shared.application.uuid import UUIdGeneratorProtocol
 from src.modules.shared.domain.jobs import ScheduledJob, ScheduledJobStatus
 from src.modules.shared.domain.time import ClockPort
+from src.modules.shared.application.persistence.tenant_admission import (
+    unrestricted_admission,
+)
 
 
 class ScheduleScheduledJobUseCase:
@@ -23,15 +26,21 @@ class ScheduleScheduledJobUseCase:
         repository: ScheduledJobRepositoryProtocol,
         clock: ClockPort,
         uuid_generator: UUIdGeneratorProtocol,
+        admission=unrestricted_admission,
     ) -> None:
         self._repository = repository
         self._clock = clock
         self._uuid_generator = uuid_generator
+        self._admission = admission
 
     async def __call__(
         self,
         command: ScheduleScheduledJobCommand,
     ) -> ScheduleScheduledJobResultDTO:
+        async with self._admission(command.tenant_id):
+            return await self._schedule(command)
+
+    async def _schedule(self, command):
         now = self._clock.now()
         job = ScheduledJob(
             id=command.job_id or self._uuid_generator.new(),

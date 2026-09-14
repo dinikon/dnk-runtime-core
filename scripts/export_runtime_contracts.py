@@ -10,6 +10,10 @@ from src.modules.control_plane.application.contracts import (
     StatusResponse,
     AccessProjectionPayload,
     AccessProjectionResponse,
+    DeletionCommand,
+    DeletionResponse,
+    DeletionCapability,
+    PurgeCommand,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +24,10 @@ MODELS = {
     "status-response": StatusResponse,
     "access-put-request": AccessProjectionPayload,
     "access-put-response": AccessProjectionResponse,
+    "deletion-command": DeletionCommand,
+    "deletion-response": DeletionResponse,
+    "deletion-capability": DeletionCapability,
+    "purge-command": PurgeCommand,
 }
 TENANT = "11111111-1111-4111-8111-111111111111"
 OPERATION = "22222222-2222-4222-8222-222222222222"
@@ -29,6 +37,48 @@ EVENT = "55555555-5555-4555-8555-555555555555"
 RUNTIME = "66666666-6666-4666-8666-666666666666"
 HOSTNAME = "sample.one.example.test"
 EXAMPLES = {
+    "deletion-command": (
+        "deletion-command",
+        {
+            "tenant_id": TENANT,
+            "runtime_tenant_id": RUNTIME,
+            "operation_id": OPERATION,
+            "hostname": HOSTNAME,
+            "initiator_id": USER,
+            "source": "user",
+        },
+    ),
+    "deletion-blocked": (
+        "deletion-response",
+        {
+            "tenant_id": TENANT,
+            "runtime_tenant_id": RUNTIME,
+            "operation_id": OPERATION,
+            "state": "blocked",
+            "version": 2,
+            "resources_state": "unknown",
+            "error_code": None,
+            "creation_succeeded": True,
+        },
+    ),
+    "deletion-complete": (
+        "deletion-response",
+        {
+            "tenant_id": TENANT,
+            "runtime_tenant_id": RUNTIME,
+            "operation_id": OPERATION,
+            "state": "deleted",
+            "version": 4,
+            "resources_state": "absent",
+            "error_code": None,
+            "creation_succeeded": True,
+        },
+    ),
+    "deletion-capability": (
+        "deletion-capability",
+        {"can_delete": True, "reason": None},
+    ),
+    "purge-command": ("purge-command", {"tenant_id": TENANT, "version": 2}),
     "provisioning-command": (
         "provisioning-command",
         {
@@ -95,6 +145,7 @@ EXAMPLES = {
         {
             "ready": True,
             "protocol_version": 1,
+            "deletion_protocol_version": 1,
             "domains": [
                 {
                     "base_domain": "one.example.test",

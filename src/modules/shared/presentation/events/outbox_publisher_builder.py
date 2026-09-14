@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from src.modules.shared.infrastructure.persistence.tenant_gate import session_guard
+
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
 
@@ -53,6 +55,7 @@ def build_publish_once(
             )
             use_case = PublishOutboxEventsUseCase(
                 repository=repository,
+                admission=session_guard(uow.session),
                 publisher=event_publisher,
                 clock=worker_clock,
                 retry_base_seconds=config.EVENT_BUS.retry_base_seconds,

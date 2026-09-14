@@ -32,4 +32,4 @@ Application ports and use cases define protocol/orchestration; infrastructure su
 
 `test_control_plane_runtime.py` covers real PostgreSQL acceptance, concurrency, fencing, installation recovery and delivery. `test_management_trust_boundary.py` covers peer/certificate trust; `test_global_migrations_postgres.py` covers fresh installation and refusal to overwrite an existing unversioned database. Helm tests check management isolation, zones, secrets and workers. Live ingress checks are separate from manifest rendering.
 
-See [HTTP API](../interfaces/http-api.md), [contract schemas](../contracts/runtime-v1/README.md), [Tenancy](tenancy.md), [Identity](identity.md), [release checks](../deployment/control-plane-v1.md) and [Helm](../../helm/README.md).
+See [tenant deletion](tenant-deletion.md), [HTTP API](../interfaces/http-api.md), [contract schemas](../contracts/runtime-v1/README.md), [Tenancy](tenancy.md), [Identity](identity.md), [release checks](../deployment/control-plane-v1.md) and [Helm](../../helm/README.md).

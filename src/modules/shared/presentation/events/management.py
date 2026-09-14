@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from src.modules.shared.infrastructure.persistence.tenant_gate import session_guard
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config.infrastructure.event_bus_config import EventBusSettings
@@ -69,6 +71,7 @@ def build_publish_outbox_events_use_case(
 ) -> PublishOutboxEventsUseCase:
     """Builds the outbox publication use case from shared presentation wiring."""
     return PublishOutboxEventsUseCase(
+        admission=session_guard(session),
         repository=build_outbox_repository(session),
         publisher=publisher,
         clock=clock or UtcClock(),
@@ -84,6 +87,7 @@ def build_idempotent_event_consumer(
 ) -> IdempotentEventConsumer:
     """Builds an inbox-backed idempotent consumer for future workers."""
     return IdempotentEventConsumer(
+        admission=session_guard(session),
         inbox_repository=build_inbox_repository(session),
         handler=handler,
         clock=clock or UtcClock(),

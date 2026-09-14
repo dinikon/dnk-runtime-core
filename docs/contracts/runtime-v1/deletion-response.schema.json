@@ -1,0 +1,79 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "tenant_id": {
+      "format": "uuid",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "runtime_tenant_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Runtime Tenant Id"
+    },
+    "operation_id": {
+      "format": "uuid",
+      "title": "Operation Id",
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "deletion_pending",
+        "blocked",
+        "purging",
+        "deleted"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "version": {
+      "title": "Version",
+      "type": "integer"
+    },
+    "resources_state": {
+      "enum": [
+        "present",
+        "unknown",
+        "absent"
+      ],
+      "title": "Resources State",
+      "type": "string"
+    },
+    "creation_succeeded": {
+      "title": "Creation Succeeded",
+      "type": "boolean"
+    },
+    "error_code": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Code"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "runtime_tenant_id",
+    "operation_id",
+    "state",
+    "version",
+    "resources_state",
+    "creation_succeeded"
+  ],
+  "title": "DeletionResponse",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dnk:runtime:v1:deletion-response"
+}

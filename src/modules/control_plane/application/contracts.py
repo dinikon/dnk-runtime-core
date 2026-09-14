@@ -130,7 +130,40 @@ class StatusResponse(ProtocolModel):
     )
     ready: bool
     protocol_version: Literal[1] = 1
+    deletion_protocol_version: Literal[1] = 1
     domains: list[DomainReadiness]
+
+
+class DeletionCommand(ProtocolModel):
+    tenant_id: UUID
+    operation_id: UUID
+    hostname: str
+    runtime_tenant_id: UUID | None = None
+    initiator_id: UUID
+    source: Literal["user", "operator"]
+
+    _hostname = field_validator("hostname")(exact_hostname)
+
+
+class DeletionResponse(ProtocolModel):
+    tenant_id: UUID
+    runtime_tenant_id: UUID | None
+    operation_id: UUID
+    state: Literal["deletion_pending", "blocked", "purging", "deleted"]
+    version: int
+    resources_state: Literal["present", "unknown", "absent"]
+    creation_succeeded: StrictBool
+    error_code: str | None = None
+
+
+class DeletionCapability(ProtocolModel):
+    can_delete: StrictBool
+    reason: str | None = None
+
+
+class PurgeCommand(ProtocolModel):
+    tenant_id: UUID
+    version: int = Field(strict=True, ge=1)
 
 
 class AccessProjectionPayload(ProtocolModel):

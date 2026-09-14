@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from src.modules.shared.application.persistence.tenant_admission import (
+    TenantUnavailable,
+    unrestricted_admission,
+)
+
 from src.modules.shared.application.events.event_consumer_port import (
     EventConsumerPort,
 )
@@ -25,7 +30,9 @@ class IdempotentEventConsumer:
         inbox_repository: InboxRepositoryProtocol,
         handler: EventConsumerPort,
         clock: ClockPort,
+        admission=unrestricted_admission,
     ) -> None:
+        self._admission = admission
         self._inbox_repository = inbox_repository
         self._handler = handler
         self._clock = clock
@@ -35,6 +42,13 @@ class IdempotentEventConsumer:
         command: HandleIntegrationEventCommand,
         event: IntegrationEvent,
     ) -> HandleIntegrationEventResultDTO:
+        try:
+            async with self._admission(event.tenant_id):
+                return await self.handle(command, event)
+        except TenantUnavailable:
+            return HandleIntegrationEventResultDTO(consumed=False, duplicate=False)
+
+    async def handle(self, command, event):
         now = self._clock.now()
         first_delivery = await self._inbox_repository.record_received(
             source=command.source,

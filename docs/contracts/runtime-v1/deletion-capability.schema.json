@@ -1,0 +1,28 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "can_delete": {
+      "title": "Can Delete",
+      "type": "boolean"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    }
+  },
+  "required": [
+    "can_delete"
+  ],
+  "title": "DeletionCapability",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dnk:runtime:v1:deletion-capability"
+}

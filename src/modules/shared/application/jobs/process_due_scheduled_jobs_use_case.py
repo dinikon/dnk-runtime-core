@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from src.modules.shared.application.persistence.tenant_admission import (
+    TenantUnavailable,
+    unrestricted_admission,
+)
 
 from src.modules.shared.application.jobs.process_due_scheduled_jobs_command import (
     ProcessDueScheduledJobsCommand,
@@ -32,7 +36,9 @@ class ProcessDueScheduledJobsUseCase:
         clock: ClockPort,
         uuid_generator: UUIdGeneratorProtocol,
         retry_policy: ScheduledJobRetryPolicy,
+        admission=unrestricted_admission,
     ) -> None:
+        self._admission = admission
         self._repository = repository
         self._dispatcher = dispatcher
         self._clock = clock
@@ -57,29 +63,34 @@ class ProcessDueScheduledJobsUseCase:
         retried = 0
         for job in jobs:
             try:
-                await self._dispatcher.dispatch(job)
-                if await self._repository.mark_done(
-                    job_id=job.id,
-                    lock_token=lock_token,
-                    completed_at=now,
-                ):
-                    done += 1
-            except Exception as exc:
-                retry_at = None
-                if job.attempts < command.max_attempts:
-                    retry_at = self._retry_policy.next_retry_at(
-                        now=now,
-                        attempts=job.attempts,
-                    )
-                    retried += 1
-                await self._repository.mark_failed(
-                    job_id=job.id,
-                    lock_token=lock_token,
-                    error=str(exc),
-                    retry_at=retry_at,
-                    failed_at=now,
-                )
-                failed += 1
+                async with self._admission(job.tenant_id):
+                    try:
+                        await self._dispatcher.dispatch(job)
+                        if await self._repository.mark_done(
+                            job_id=job.id,
+                            lock_token=lock_token,
+                            completed_at=now,
+                        ):
+                            done += 1
+                    except Exception as exc:
+                        retry_at = None
+                        if job.attempts < command.max_attempts:
+                            retry_at = self._retry_policy.next_retry_at(
+                                now=now,
+                                attempts=job.attempts,
+                            )
+                            retried += 1
+                        await self._repository.mark_failed(
+                            job_id=job.id,
+                            lock_token=lock_token,
+                            error=str(exc),
+                            retry_at=retry_at,
+                            failed_at=now,
+                        )
+                        failed += 1
+            except TenantUnavailable:
+                continue
+
         return ProcessDueScheduledJobsResultDTO(
             scanned=len(jobs),
             processed=len(jobs),

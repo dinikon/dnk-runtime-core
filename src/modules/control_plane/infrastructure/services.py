@@ -18,6 +18,7 @@ from src.modules.control_plane.infrastructure.models import (
     CloudConnectionModel,
     DeliveryModel,
     InstallationModel,
+    DeletionModel,
     ProvisioningAttemptModel,
 )
 
@@ -67,6 +68,8 @@ class ProvisioningRepository:
     async def accept(
         self, command: ProvisioningCommand, digest: str, replay_json: str
     ) -> AttemptResponse:
+        if await self.session.get(DeletionModel, command.tenant_id):
+            raise ProvisioningConflict("Tenant deletion is permanent")
         # Immutable attempts can be replayed under MVCC without waiting for the
         # installer's DDL transaction/tenant lock. This keeps lost-response retries
         # responsive even while physical installation is running.
@@ -80,6 +83,10 @@ class ProvisioningRepository:
             return response(saved, installation)
         await serialize(self.session, f"cp:attempt:{command.attempt_id}")
         await serialize(self.session, f"cp:tenant:{command.tenant_id}")
+        if await self.session.get(
+            DeletionModel, command.tenant_id, populate_existing=True
+        ):
+            raise ProvisioningConflict("Tenant deletion is permanent")
         attempt = await self.session.get(ProvisioningAttemptModel, command.attempt_id)
         installation = await self.session.get(InstallationModel, command.tenant_id)
         if attempt is not None:
@@ -242,6 +249,8 @@ class AccessProjectionWriter:
         if installation is None:
             raise ValueError("Tenant has no cloud placement")
         core_id = installation.core_tenant_id
+        if await self.session.get(DeletionModel, core_id):
+            return 0
         await serialize(self.session, f"cp:access:{core_id}:{global_user_id}")
         projection = await self.session.get(
             AccessProjectionModel, (core_id, global_user_id)

@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from src.modules.shared.application.persistence.tenant_admission import (
+    TenantUnavailable,
+    unrestricted_admission,
+)
 
 from src.modules.shared.application.events.event_publisher_port import (
     EventPublisherPort,
@@ -27,7 +31,9 @@ class PublishOutboxEventsUseCase:
         publisher: EventPublisherPort,
         clock: ClockPort,
         retry_base_seconds: int,
+        admission=unrestricted_admission,
     ) -> None:
+        self._admission = admission
         self._repository = repository
         self._publisher = publisher
         self._clock = clock
@@ -46,25 +52,32 @@ class PublishOutboxEventsUseCase:
         failed = 0
         for outbox_event in events:
             try:
-                await self._publisher.publish(outbox_event.to_integration_event())
-                await self._repository.mark_published(
-                    event_id=outbox_event.id,
-                    published_at=now,
-                )
-                published += 1
-            except Exception as exc:
-                next_attempt_at = None
-                if outbox_event.publish_attempts < command.max_attempts:
-                    next_attempt_at = now + timedelta(
-                        seconds=self._retry_base_seconds
-                        * max(1, outbox_event.publish_attempts)
-                    )
-                await self._repository.mark_publish_failed(
-                    event_id=outbox_event.id,
-                    error=str(exc),
-                    next_attempt_at=next_attempt_at,
-                )
-                failed += 1
+                async with self._admission(outbox_event.tenant_id):
+                    try:
+                        await self._publisher.publish(
+                            outbox_event.to_integration_event()
+                        )
+                        await self._repository.mark_published(
+                            event_id=outbox_event.id,
+                            published_at=now,
+                        )
+                        published += 1
+                    except Exception as exc:
+                        next_attempt_at = None
+                        if outbox_event.publish_attempts < command.max_attempts:
+                            next_attempt_at = now + timedelta(
+                                seconds=self._retry_base_seconds
+                                * max(1, outbox_event.publish_attempts)
+                            )
+                        await self._repository.mark_publish_failed(
+                            event_id=outbox_event.id,
+                            error=str(exc),
+                            next_attempt_at=next_attempt_at,
+                        )
+                        failed += 1
+            except TenantUnavailable:
+                continue
+
         return PublishOutboxResultDTO(
             scanned=len(events),
             published=published,
