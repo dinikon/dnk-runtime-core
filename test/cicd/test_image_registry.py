@@ -70,7 +70,9 @@ class DockerImageRegistryTests(unittest.TestCase):
 
     def test_status_digits_in_a_tag_are_not_an_authentication_failure(self):
         ref = "ghcr.io/example/api:feat-401403aa"
-        self.process.return_value = Mock(returncode=1, stderr=f"ERROR: {ref}: not found")
+        self.process.return_value = Mock(
+            returncode=1, stderr=f"ERROR: {ref}: not found"
+        )
         self.assertIsNone(self.registry.manifest(ref))
 
     def test_access_network_and_helper_failures_are_not_missing_images(self):
