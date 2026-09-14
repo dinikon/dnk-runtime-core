@@ -4,9 +4,9 @@ import shutil
 
 from .artifacts import IMAGE_PREFIX
 from .common import Error, run, versions
+from .image_registry import DockerImageRegistry
 from .images import build_images, publish_images
 from .observability import log_context, logger, stage
-from .registry import Registry
 
 
 def publish_feature(repo, *, registry=None, builder=None):
@@ -27,16 +27,15 @@ def publish_feature(repo, *, registry=None, builder=None):
     source = repo.sha()
     tag = "feat-" + source[:8]
 
-    for tool in ("docker", "oras"):
-        if shutil.which(tool) is None:
-            raise Error(f"Install {tool} first; see docs/operations/ci-cd.md")
+    if shutil.which("docker") is None:
+        raise Error("Install docker first; see docs/operations/ci-cd.md")
     buildx = run("docker", "buildx", "version", cwd=repo.root, check=False)
     if buildx.returncode:
         raise Error(
             "Docker Buildx is required; install/enable it before publish-feature"
         )
 
-    registry = registry if registry is not None else Registry()
+    registry = registry if registry is not None else DockerImageRegistry()
 
     def build(root, targets, environment):
         # Never inherit another branch's cache identity or a single-platform build.

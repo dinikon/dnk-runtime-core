@@ -10,6 +10,7 @@
 | `.github/workflows/deploy.yml` | Триггеры, права job, инструменты, запуск публикации и сохранение диагностики |
 | `scripts/cicd/__main__.py` | Аргументы команд, настройка логирования и код завершения |
 | `scripts/cicd/feature.py` | Локальная публикация образов из чистой feature-ветки |
+| `scripts/cicd/image_registry.py` | Проверка образов через Docker Buildx без ORAS |
 | `scripts/cicd/pipeline.py` | Сценарии develop/main/release, последовательность RC и запись результатов |
 | `scripts/cicd/artifacts.py` | Координация: готовые образы → Helm chart |
 | `scripts/cicd/images.py` | Docker Bake, кэш, повторное использование образов, восстановление частичных сборок |
@@ -51,9 +52,9 @@ Staged/unstaged изменения, конфликты, untracked-файлы, д
 в сборку: контекст берётся из временного worktree зафиксированного коммита.
 Рабочая ветка сохраняется; временная копия удаляется при успехе и ошибке.
 
-Нужны зависимости `uv sync --frozen`, Git, Docker с Buildx, ORAS и авторизация
-Docker/ORAS в GHCR с правом публикации в эти image repositories. Для входа используйте
-`docker login ghcr.io` и `oras login ghcr.io`. Отсутствующий инструмент вызывает
+Нужны зависимости `uv sync --frozen`, Git, Docker с Buildx и авторизация
+Docker в GHCR с правом публикации в эти image repositories. Для входа используйте
+`docker login ghcr.io`. ORAS для этой команды не требуется. Отсутствующий инструмент вызывает
 понятную ошибку. Builder должен поддерживать обе платформы: `linux/amd64` и
 `linux/arm64`; команда явно задаёт их независимо от переменной `PLATFORMS`.
 
@@ -63,6 +64,8 @@ Bake собирает недостающие образы одним вызов�
 `make publish-feature`: готовые образы сохранятся, недостающие будут собраны.
 Коллизия короткого SHA или ошибка доступа останавливает публикацию.
 Успешный результат содержит полные адреса образов и проверенные digest.
+Проверка метаданных и digest использует `docker buildx imagetools inspect` и
+существующую авторизацию Docker. ORAS остаётся инструментом публикации Helm в CI.
 
 Опциональный кэш включается через `CICD_BUILD_CACHE=registry make publish-feature`;
 идентичность кэша берётся из фактической feature-ветки, даже если `BRANCH` задан иначе.

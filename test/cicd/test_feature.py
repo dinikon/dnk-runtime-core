@@ -1,5 +1,6 @@
 """Feature publication guards and retries using real Git and a fake registry."""
 
+import json
 import os
 from unittest.mock import Mock, patch
 
@@ -178,7 +179,7 @@ class FeatureTests(ReleaseRepoTestCase):
         self.assert_untouched()
 
     def test_missing_tools_and_buildx_fail_before_registry(self):
-        for missing in ("docker", "oras"):
+        for missing in ("docker",):
             with self.subTest(missing=missing):
                 self.tools.side_effect = lambda name: None if name == missing else name
                 with self.assertRaisesRegex(Error, "Install " + missing + " first"):
@@ -262,7 +263,9 @@ class FeatureTests(ReleaseRepoTestCase):
             patch("scripts.cicd.__main__.ROOT", self.root),
             patch("scripts.cicd.__main__.configure_logging"),
             patch("sys.argv", ["cicd", "publish-feature"]),
-            patch("scripts.cicd.feature.Registry", return_value=self.registry),
+            patch(
+                "scripts.cicd.feature.DockerImageRegistry", return_value=self.registry
+            ),
             patch("scripts.cicd.feature.build_images", self.builder),
         ):
             self.assertEqual(main(), 0)
@@ -271,3 +274,29 @@ class FeatureTests(ReleaseRepoTestCase):
                 self.assertEqual(main(), 1)
             self.assertIn("requires a feature/* branch", logs.output[0])
         self.builder.assert_called_once()
+
+    def test_default_registry_publishes_and_retries_without_oras(self):
+        self.tools.side_effect = lambda name: name if name == "docker" else None
+
+        def inspect(*args, check):
+            self.assertEqual(args[:4], ("docker", "buildx", "imagetools", "inspect"))
+            self.assertFalse(check)
+            ref = args[-1]
+            manifest = self.registry.manifest(ref)
+            if manifest is None:
+                return Mock(returncode=1, stderr=f"ERROR: {ref}: not found\n")
+            return Mock(
+                returncode=0,
+                stdout=json.dumps(manifest | {"digest": self.registry.digest(ref)}),
+            )
+
+        with patch("scripts.cicd.image_registry.run", side_effect=inspect):
+            first = publish_feature(self.repo, builder=self.builder)
+            again = publish_feature(self.repo, builder=self.builder)
+        self.assertEqual(first, again)
+        self.assertEqual(set(first), set(self.targets))
+        self.builder.assert_called_once()
+        self.assertTrue(
+            all(call.args == ("docker",) for call in self.tools.call_args_list)
+        )
+        self.assert_untouched()
