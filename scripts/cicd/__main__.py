@@ -7,6 +7,7 @@ import sys
 
 from .checks import check
 from .common import Error, ROOT
+from .feature import publish_feature
 from .github import GitHub
 from .gitops import publish, start_release
 from .observability import configure_logging, log_context, logger
@@ -25,6 +26,7 @@ def main():
     checks.add_argument("--full", action="store_true")
     commands.add_parser("release")
     commands.add_parser("publish")
+    commands.add_parser("publish-feature")
     workflow = commands.add_parser("ci")
     workflow.add_argument("--branch", required=True)
     workflow.add_argument("--sha", required=True)
@@ -41,6 +43,8 @@ def main():
                 start_release(repo)
             elif args.command == "publish":
                 publish(repo, github, lambda: check(ROOT))
+            elif args.command == "publish-feature":
+                publish_feature(repo)
             elif args.command == "ci":
                 ci(repo, github, args.branch, args.sha, args.output)
         except (Error, OSError, ValueError, KeyError) as error:

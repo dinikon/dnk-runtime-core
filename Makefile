@@ -1,4 +1,4 @@
-.PHONY: check check-cicd check-full release publish
+.PHONY: check check-cicd check-full release publish publish-feature
 
 check:
 	uv run --frozen python -m scripts.cicd check
@@ -14,3 +14,6 @@ release:
 
 publish:
 	uv run --frozen python -m scripts.cicd publish
+
+publish-feature:
+	uv run --frozen python -m scripts.cicd publish-feature

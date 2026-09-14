@@ -13,6 +13,7 @@ GitHub Actions занимается только публикацией обра
 | `make check-full` | Базовые проверки, установка/обновление в Kind, миграции и OCI/ArgoCD integration |
 | `make release` | Создание и отправка release-ветки с автоматически рассчитанным номером |
 | `make publish` | Финализация версии на main, локальная проверка, обратный merge в develop и атомарный push |
+| `make publish-feature` | Публикация образов текущей чистой feature-ветки с тегом `feat-<SHA8>`; [требования и повторы](../operations/ci-cd.md#образы-из-feature-ветки) |
 
 Для базовых проверок нужны Python **3.13.9**, uv **0.10.4**, Node.js **24** с npm, Docker и Helm **3.19.0**. Для полного набора — также Kind **0.29.0**, kubectl **1.33.1**, ORAS **1.3.0**, OpenSSL и curl. Локальные команды выпуска требуют Git с настроенной личностью автора и права push в репозиторий. Установка GitHub CLI `gh` локально не нужна: `make publish` читает состояние Releases напрямую через GitHub REST API, используя уже имеющийся `httpx`.
 

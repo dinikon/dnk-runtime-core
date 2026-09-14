@@ -50,8 +50,13 @@ class Repo:
         return result.returncode == 0
 
     def clean(self):
-        """Require a clean working tree before changing release refs."""
-        if self.git("status", "--porcelain").stdout:
+        """Require committed tracked and unignored files, regardless of Git settings."""
+        if self.git(
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=all",
+            "--ignore-submodules=none",
+        ).stdout:
             raise Error(
                 "Commit or remove local changes first; resolve and commit any merge conflict"
             )
