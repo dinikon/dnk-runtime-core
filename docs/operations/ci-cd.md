@@ -9,8 +9,9 @@
 | --- | --- |
 | `.github/workflows/deploy.yml` | Триггеры, права job, инструменты, запуск публикации и сохранение диагностики |
 | `scripts/cicd/__main__.py` | Аргументы команд, настройка логирования и код завершения |
-| `scripts/cicd/feature.py` | Локальная публикация образов из чистой feature-ветки |
+| `scripts/cicd/feature.py` | Публикация образов и Helm из чистой feature-ветки, канал feat |
 | `scripts/cicd/image_registry.py` | Проверка образов через Docker Buildx без ORAS |
+| `scripts/cicd/chart_registry.py` | Helm OCI и alias feat через HTTP API с авторизацией Docker |
 | `scripts/cicd/pipeline.py` | Сценарии develop/main/release, последовательность RC и запись результатов |
 | `scripts/cicd/artifacts.py` | Координация: готовые образы → Helm chart |
 | `scripts/cicd/images.py` | Docker Bake, кэш, повторное использование образов, восстановление частичных сборок |
@@ -34,44 +35,71 @@ RC требуют последовательной нумерации, а GitHub
 
 ## Образы из feature-ветки
 
-Из корня этого проекта, находясь в `feature/*`, выполните:
+Из корня этого проекта, находясь в чистой `feature/*`, выполните:
 
 ```sh
 make publish-feature
 ```
 
 Команда публикует `ghcr.io/dinikon/dnk-runtime-core/runtime` и
-`ghcr.io/dinikon/dnk-runtime-core/frontend-runtime` с единственным тегом
+`ghcr.io/dinikon/dnk-runtime-core/frontend-runtime` с тегом
 `feat-<первые 8 символов SHA HEAD>`, например `feat-a1b2c3d4`.
+Затем собирает Helm chart с этими образами и публикует его в
+`ghcr.io/dinikon/dnk-runtime-core/helm` с версией
+`<исходная-chart-version>-feat.g<SHA8>`, например `0.3.5-feat.ga1b2c3d4`.
+Тег `feat` у Helm указывает на digest последнего успешно опубликованного комплекта.
 В control plane та же команда запускается отдельно и использует SHA того проекта.
 
-Перед запуском закоммитьте все изменения, включая новые и удалённые файлы.
-Staged/unstaged изменения, конфликты, untracked-файлы, другая ветка и detached HEAD
-останавливают команду до обращения к registry. Проверка untracked-файлов работает
-даже при `status.showUntrackedFiles=no`. Игнорируемые Git файлы допустимы и не входят
-в сборку: контекст берётся из временного worktree зафиксированного коммита.
-Рабочая ветка сохраняется; временная копия удаляется при успехе и ошибке.
+Staged/unstaged изменения, новые и удалённые файлы, конфликты, другая ветка и detached
+HEAD останавливают запуск до обращения к registry. Проверка работает даже при
+`status.showUntrackedFiles=no`. Игнорируемые Git файлы допустимы и не входят в сборку:
+образы и chart берутся из временного worktree зафиксированного коммита. Исходные
+версии, Git-ветки и теги не меняются; временные файлы удаляются при успехе и ошибке.
 
-Нужны зависимости `uv sync --frozen`, Git, Docker с Buildx и авторизация
-Docker в GHCR с правом публикации в эти image repositories. Для входа используйте
-`docker login ghcr.io`. ORAS для этой команды не требуется. Отсутствующий инструмент вызывает
-понятную ошибку. Builder должен поддерживать обе платформы: `linux/amd64` и
-`linux/arm64`; команда явно задаёт их независимо от переменной `PLATFORMS`.
+Нужны зависимости `uv sync --frozen`, Git, Docker с Buildx, Helm и авторизация Docker
+в GHCR с правом публикации образов и пакета `/helm`: `docker login ghcr.io`.
+ORAS не требуется. Для Helm используется стандартный OCI HTTP API с учётными
+данными Docker из `config.json` или credential helper. Секреты не выводятся в лог.
+Сборка образов явно использует `linux/amd64` и `linux/arm64`.
 
-Bake собирает недостающие образы одним вызовом с `--push`. Текущая версия приложения
-и полный SHA сохраняются в OCI-метаданных. Уже готовый тег используется повторно
-только при совпадении полного SHA и версии. После частичного сбоя повторите
-`make publish-feature`: готовые образы сохранятся, недостающие будут собраны.
-Коллизия короткого SHA или ошибка доступа останавливает публикацию.
-Успешный результат содержит полные адреса образов и проверенные digest.
-Проверка метаданных и digest использует `docker buildx imagetools inspect` и
-существующую авторизацию Docker. ORAS остаётся инструментом публикации Helm в CI.
+Chart сохраняет исходный `appVersion`, закреплённые image tags, `publication.json`
+и `global.deployment.revision=feat-<полный SHA>`. Это запускает новый rollout и
+миграционные hooks при смене коммита. OCI-пакет содержит Helm config и один tgz layer,
+поддерживаемый native OCI-источником ArgoCD.
 
-Опциональный кэш включается через `CICD_BUILD_CACHE=registry make publish-feature`;
-идентичность кэша берётся из фактической feature-ветки, даже если `BRANCH` задан иначе.
-Команда не делает Git push, не создаёт Git-теги, Helm chart или GitHub Release,
-не меняет версии и aliases `dev`/`latest`. Предварительные проверки качества
-запускаются отдельно через `make check`.
+Повторный `make publish-feature` использует готовые образы и chart, проверяя полный
+SHA, версии и метаданные. После частичной ошибки выполняются только недостающие шаги.
+Коллизия короткого SHA или ошибка доступа останавливает публикацию. `feat` обновляется
+после проверки chart; незавершённая сборка не заменяет предыдущий комплект. Если во
+время публикации сменились локальная ветка или HEAD, готовые артефакты сохраняются,
+но `feat` не перемещается. Все feature-ветки используют общий канал `feat`.
+
+### Однократная настройка ArgoCD на feat
+
+У существующего Application выберите `targetRevision: feat` и включите auto-sync.
+Адрес источника остаётся `oci://ghcr.io/dinikon/dnk-runtime-core/helm`, `path: .`.
+Пример merge patch — `deploy/argocd/examples/feature-channel.patch.yaml`:
+
+```sh
+kubectl --context <ваш-контекст> -n argocd patch application dnk-runtime-core-dev \
+  --type merge --patch-file deploy/argocd/examples/feature-channel.patch.yaml
+```
+
+Если Application управляется из Git или ApplicationSet, внесите те же поля в его
+источник конфигурации, чтобы контроллер не вернул `targetRevision: dev`.
+Сохраните существующие domains, values, Secrets и imagePullSecrets; image tags и
+`global.deployment.revision` не должны переопределять значения опубликованного chart.
+
+После публикации ArgoCD обнаружит новый digest при следующем обновлении источника;
+задержка зависит от reconciliation и кэша, а не от времени завершения make.
+Для немедленной проверки используйте Hard Refresh в ArgoCD. Сам publisher не
+обращается к кластеру. Обычный канал `dev` и production сохраняют свои настройки.
+См. [OCI sources](https://argo-cd.readthedocs.io/en/stable/user-guide/oci/) и
+[reconciliation settings](https://argo-cd.readthedocs.io/en/stable/operator-manual/argocd-cm-yaml/).
+
+Опциональный кэш: `CICD_BUILD_CACHE=registry make publish-feature`; его идентичность
+берётся из фактической feature-ветки. Проверки качества запускаются отдельно через
+`make check`. Git push, повышение исходных версий и GitHub Release не выполняются.
 
 ## Логи Jobs
 

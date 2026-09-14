@@ -60,7 +60,11 @@ def publish_feature(repo, *, registry=None, chart_registry=None, builder=None):
 
     with log_context(branch=branch, sha=source, image_tag=tag), ExitStack() as stack:
         checkout = stack.enter_context(repo.checkout(source))
-        charts = chart_registry if chart_registry is not None else stack.enter_context(ChartRegistry(CHART_REPOSITORY))
+        charts = (
+            chart_registry
+            if chart_registry is not None
+            else stack.enter_context(ChartRegistry(CHART_REPOSITORY))
+        )
         app, chart = versions(checkout.root)
         # The g prefix keeps an all-numeric SHA with leading zeroes valid SemVer.
         chart_version = chart.split("-", 1)[0].split("+", 1)[0] + "-feat.g" + source[:8]
@@ -69,17 +73,24 @@ def publish_feature(repo, *, registry=None, chart_registry=None, builder=None):
                 checkout.root, registry, IMAGE_PREFIX, app, source, tag, build
             )
         record = {
-            "schema": 1, "channel": "feat", "branch": branch,
-            "source_sha": source, "build_sha": source,
-            "app_version": app, "chart_version": chart_version,
+            "schema": 1,
+            "channel": "feat",
+            "branch": branch,
+            "source_sha": source,
+            "build_sha": source,
+            "app_version": app,
+            "chart_version": chart_version,
             "chart_repository": CHART_REPOSITORY,
-            "deployment_revision": "feat-" + source, "images": images,
+            "deployment_revision": "feat-" + source,
+            "images": images,
         }
         with stage("Publish feature Helm chart", chart_version=chart_version):
             digest = publish_feature_chart(checkout.root, charts, record)
         # A user may have switched branches or committed while the build ran.
         if repo.branch() != branch or repo.sha() != source:
-            raise Error("Branch/HEAD changed during publication; feat was not updated. Retry from the intended commit")
+            raise Error(
+                "Branch/HEAD changed during publication; feat was not updated. Retry from the intended commit"
+            )
         alias = CHART_REPOSITORY + ":feat"
         with stage("Update ArgoCD feat channel"):
             if charts.manifest(alias) is None or charts.digest(alias) != digest:
@@ -92,7 +103,12 @@ def publish_feature(repo, *, registry=None, chart_registry=None, builder=None):
                 image["tag"],
                 image["digest"],
             )
-        logger.info("Feature chart published: %s:%s (%s); ArgoCD targetRevision: feat", CHART_REPOSITORY, chart_version, digest)
+        logger.info(
+            "Feature chart published: %s:%s (%s); ArgoCD targetRevision: feat",
+            CHART_REPOSITORY,
+            chart_version,
+            digest,
+        )
         return record | {"chart_digest": digest, "chart_alias": "feat"}
 
 
@@ -106,7 +122,17 @@ def publish_feature_chart(root, registry, record):
         except (KeyError, ValueError, TypeError) as error:
             raise Error(f"Chart {ref} has no valid publication metadata") from error
         # Branch is provenance: the same commit can be published from another feature branch.
-        for key in ("schema", "channel", "source_sha", "build_sha", "app_version", "chart_version", "chart_repository", "deployment_revision", "images"):
+        for key in (
+            "schema",
+            "channel",
+            "source_sha",
+            "build_sha",
+            "app_version",
+            "chart_version",
+            "chart_repository",
+            "deployment_revision",
+            "images",
+        ):
             if not isinstance(saved, dict) or saved.get(key) != record[key]:
                 raise Error(f"Chart {ref} differs in {key}; refusing to overwrite it")
 
@@ -117,7 +143,11 @@ def publish_feature_chart(root, registry, record):
     with tempfile.TemporaryDirectory(prefix="dnk-feature-chart-") as temporary:
         archive, config = package_chart(root, Path(temporary), record)
         if registry.manifest(ref) is not None:
-            raise Error("Chart version appeared during packaging; retry to validate and reuse it")
-        digest = registry.push_chart(record["chart_repository"], archive, config, record)
+            raise Error(
+                "Chart version appeared during packaging; retry to validate and reuse it"
+            )
+        digest = registry.push_chart(
+            record["chart_repository"], archive, config, record
+        )
     validate(wait_for_manifest(registry, ref, digest=digest))
     return digest

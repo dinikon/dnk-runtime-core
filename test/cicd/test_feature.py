@@ -1,12 +1,16 @@
 """Feature publication guards and retries using real Git and a fake registry."""
 
+from contextlib import nullcontext
 import json
 import os
+import tarfile
+import yaml
 from unittest.mock import Mock, patch
 
 from scripts.cicd.__main__ import main
-from scripts.cicd.common import Error
-from scripts.cicd.feature import IMAGE_PREFIX, publish_feature
+from scripts.cicd.common import Error, run
+from scripts.cicd.feature import CHART_REPOSITORY, IMAGE_PREFIX, publish_feature
+from scripts.cicd.registry import PUBLICATION
 from scripts.cicd.repository import Repo
 from test.cicd.support import MemoryRegistry, ReleaseRepoTestCase
 
@@ -20,9 +24,14 @@ class FeatureTests(ReleaseRepoTestCase):
         self.repo.git("switch", "-c", self.branch)
         self.source = self.repo.sha()
         self.tag = "feat-" + self.source[:8]
+        self.chart_version = "0.3.2-feat.g" + self.source[:8]
+        self.chart_ref = CHART_REPOSITORY + ":" + self.chart_version
         self.refs = self.repo.git("show-ref").stdout
         self.worktrees = self.repo.git("worktree", "list", "--porcelain").stdout
         self.registry = MemoryRegistry()
+        self.alias = self.enterContext(
+            patch.object(self.registry, "alias", wraps=self.registry.alias)
+        )
         self.lookup = self.enterContext(
             patch.object(self.registry, "manifest", wraps=self.registry.manifest)
         )
@@ -64,7 +73,12 @@ class FeatureTests(ReleaseRepoTestCase):
             self.save(target)
 
     def publish(self):
-        return publish_feature(self.repo, registry=self.registry, builder=self.builder)
+        return publish_feature(
+            self.repo,
+            registry=self.registry,
+            chart_registry=self.registry,
+            builder=self.builder,
+        )
 
     def assert_untouched(self):
         self.assertEqual(self.repo.git("show-ref").stdout, self.refs)
@@ -73,7 +87,6 @@ class FeatureTests(ReleaseRepoTestCase):
         )
         for root in self.build_roots:
             self.assertFalse(root.exists())
-        self.assertEqual(self.registry.chart_pushes, 0)
 
     def assert_rejected(self, message):
         self.tools.reset_mock()
@@ -83,10 +96,13 @@ class FeatureTests(ReleaseRepoTestCase):
         self.buildx.assert_not_called()
         self.lookup.assert_not_called()
         self.builder.assert_not_called()
+        self.alias.assert_not_called()
+        self.assertEqual(self.registry.chart_pushes, 0)
 
     def test_publishes_both_images_and_reports_verified_digests(self):
         with self.assertLogs("scripts.cicd", level="INFO") as logs:
-            images = self.publish()
+            record = self.publish()
+        images = record["images"]
         self.assertEqual(set(images), set(self.targets))
         self.builder.assert_called_once()
         self.assertEqual(self.builder.call_args.args[1], list(self.targets))
@@ -98,6 +114,12 @@ class FeatureTests(ReleaseRepoTestCase):
                 any(ref in line and image["digest"] in line for line in logs.output)
             )
         self.assert_untouched()
+        self.assertEqual(record["chart_version"], self.chart_version)
+        self.assertEqual(
+            record["chart_digest"], self.registry.digest(CHART_REPOSITORY + ":feat")
+        )
+        self.assertEqual(self.registry.chart_pushes, 1)
+        self.alias.assert_called_once()
         self.repo.clean()
 
     def test_rejects_other_branches_and_detached_head_before_external_tools(self):
@@ -179,7 +201,7 @@ class FeatureTests(ReleaseRepoTestCase):
         self.assert_untouched()
 
     def test_missing_tools_and_buildx_fail_before_registry(self):
-        for missing in ("docker",):
+        for missing in ("docker", "helm"):
             with self.subTest(missing=missing):
                 self.tools.side_effect = lambda name: None if name == missing else name
                 with self.assertRaisesRegex(Error, "Install " + missing + " first"):
@@ -254,7 +276,9 @@ class FeatureTests(ReleaseRepoTestCase):
             ),
             patch("scripts.cicd.images.live", side_effect=bake) as process,
         ):
-            publish_feature(self.repo, registry=self.registry)
+            publish_feature(
+                self.repo, registry=self.registry, chart_registry=self.registry
+            )
         process.assert_called_once()
         self.assert_untouched()
 
@@ -266,6 +290,10 @@ class FeatureTests(ReleaseRepoTestCase):
             patch(
                 "scripts.cicd.feature.DockerImageRegistry", return_value=self.registry
             ),
+            patch(
+                "scripts.cicd.feature.ChartRegistry",
+                return_value=nullcontext(self.registry),
+            ),
             patch("scripts.cicd.feature.build_images", self.builder),
         ):
             self.assertEqual(main(), 0)
@@ -276,7 +304,9 @@ class FeatureTests(ReleaseRepoTestCase):
         self.builder.assert_called_once()
 
     def test_default_registry_publishes_and_retries_without_oras(self):
-        self.tools.side_effect = lambda name: name if name == "docker" else None
+        self.tools.side_effect = lambda name: (
+            name if name in ("docker", "helm") else None
+        )
 
         def inspect(*args, check):
             self.assertEqual(args[:4], ("docker", "buildx", "imagetools", "inspect"))
@@ -291,12 +321,118 @@ class FeatureTests(ReleaseRepoTestCase):
             )
 
         with patch("scripts.cicd.image_registry.run", side_effect=inspect):
-            first = publish_feature(self.repo, builder=self.builder)
-            again = publish_feature(self.repo, builder=self.builder)
+            first = publish_feature(
+                self.repo, chart_registry=self.registry, builder=self.builder
+            )
+            again = publish_feature(
+                self.repo, chart_registry=self.registry, builder=self.builder
+            )
         self.assertEqual(first, again)
-        self.assertEqual(set(first), set(self.targets))
+        self.assertEqual(set(first["images"]), set(self.targets))
         self.builder.assert_called_once()
         self.assertTrue(
-            all(call.args == ("docker",) for call in self.tools.call_args_list)
+            all(
+                call.args in (("docker",), ("helm",))
+                for call in self.tools.call_args_list
+            )
         )
         self.assert_untouched()
+
+    def test_chart_contains_feature_images_and_a_new_deployment_revision(self):
+        original = self.registry.push_chart
+        chart_source = (self.root / "helm/Chart.yaml").read_bytes()
+
+        def push(repository, archive, config, record):
+            metadata = yaml.safe_load(config.read_text())
+            self.assertEqual(metadata["version"], self.chart_version)
+            self.assertEqual(metadata["appVersion"], "0.1.0")
+            with tarfile.open(archive) as package:
+                values = yaml.safe_load(
+                    package.extractfile(metadata["name"] + "/values.yaml")
+                )
+                embedded = json.load(
+                    package.extractfile(metadata["name"] + "/publication.json")
+                )
+            self.assertEqual(embedded, record)
+            for component in (
+                values["backend"],
+                values["frontend"],
+                *values.get("workers", {}).values(),
+            ):
+                self.assertEqual(component["image"]["tag"], self.tag)
+            self.assertEqual(
+                values["global"]["deployment"]["revision"], "feat-" + self.source
+            )
+            rendered = run(
+                "helm",
+                "template",
+                "feature-test",
+                archive,
+                "-f",
+                self.root / "helm/examples/values-embedded.yaml",
+            ).stdout
+            self.assertIn(":" + self.tag, rendered)
+            self.assertIn("feat-" + self.source, rendered)
+            self.alias.assert_not_called()
+            return original(repository, archive, config, record)
+
+        with patch.object(self.registry, "push_chart", side_effect=push):
+            self.publish()
+        self.assertEqual((self.root / "helm/Chart.yaml").read_bytes(), chart_source)
+        self.assert_untouched()
+
+    def test_chart_push_failure_preserves_alias_and_reuses_images_on_retry(self):
+        self.registry.save(CHART_REPOSITORY + ":feat", {"old": True})
+        previous = self.registry.digest(CHART_REPOSITORY + ":feat")
+        with patch.object(
+            self.registry, "push_chart", side_effect=Error("chart upload failed")
+        ):
+            with self.assertRaisesRegex(Error, "chart upload failed"):
+                self.publish()
+        self.alias.assert_not_called()
+        self.assertEqual(self.registry.digest(CHART_REPOSITORY + ":feat"), previous)
+        self.publish()
+        self.builder.assert_called_once()
+        self.assertEqual(self.registry.chart_pushes, 1)
+        self.assert_untouched()
+
+    def test_alias_failure_reuses_the_complete_chart(self):
+        self.alias.side_effect = Error("alias push failed")
+        with self.assertRaisesRegex(Error, "alias push failed"):
+            self.publish()
+        self.assertEqual(self.registry.chart_pushes, 1)
+        self.alias.side_effect = None
+        self.publish()
+        self.builder.assert_called_once()
+        self.assertEqual(self.registry.chart_pushes, 1)
+        self.assert_untouched()
+
+    def test_changed_head_does_not_move_feat(self):
+        def build(root, targets, environment):
+            self.build(root, targets, environment)
+            self.commit("feat: newer local commit")
+
+        self.builder.side_effect = build
+        with self.assertRaisesRegex(Error, "Branch/HEAD changed"):
+            self.publish()
+        self.alias.assert_not_called()
+        self.assertIsNotNone(self.registry.manifest(self.chart_ref))
+
+    def test_existing_chart_with_wrong_identity_is_not_overwritten(self):
+        record = self.publish()
+        self.alias.reset_mock()
+        record["source_sha"] = "other-commit"
+        self.registry.save(
+            self.chart_ref, {"annotations": {PUBLICATION: json.dumps(record)}}
+        )
+        with self.assertRaisesRegex(Error, "differs in source_sha"):
+            self.publish()
+        self.alias.assert_not_called()
+        self.assertEqual(self.registry.chart_pushes, 1)
+
+    def test_same_commit_from_another_feature_branch_reuses_the_chart(self):
+        self.publish()
+        self.repo.git("switch", "-c", "feature/another")
+        self.publish()
+        self.builder.assert_called_once()
+        self.assertEqual(self.registry.chart_pushes, 1)

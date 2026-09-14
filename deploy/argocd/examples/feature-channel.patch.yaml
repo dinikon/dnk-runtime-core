@@ -1,0 +1,9 @@
+# One-time merge patch for an existing Application opting into feature builds.
+# Keep this in the Git/ApplicationSet source when it owns the Application.
+# See docs/operations/ci-cd.md for the patch command and existing values to preserve.
+spec:
+  source:
+    targetRevision: feat
+  syncPolicy:
+    automated:
+      enabled: true
