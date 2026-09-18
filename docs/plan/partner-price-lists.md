@@ -473,6 +473,142 @@ flowchart TD
 8. `pause` увеличивает `schedule_revision`; все jobs со старой revision становятся no-op. `resume` создает новую
    occurrence. Изменение CRON работает аналогично.
 
+### 9.1. Процесс `CronWorker`
+
+Регулярные задачи выполняет отдельный постоянно работающий процесс `CronWorker` на базе `shared.jobs`. Предлагаемый
+entrypoint: `dnk-manage jobs worker`; проверка процесса: `dnk-manage jobs healthcheck`.
+
+Это Deployment/Compose service, а не Kubernetes `CronJob`. Пользовательские CRON expressions создаются и меняются во
+время работы приложения, тогда как Kubernetes `CronJob` является статическим объектом deployment-конфигурации.
+`CronWorker` читает динамическое расписание из PostgreSQL и может обслуживать все tenant schedules одним процессом.
+
+Worker выполняет цикл:
+
+1. при старте проверяет установленную global migration revision и собирает dispatcher с зарегистрированным
+   `price_list.sync -> PriceListSyncJobHandler`;
+2. каждые `poll_interval_seconds` короткой транзакцией выбирает due jobs через `FOR UPDATE SKIP LOCKED`, переводит их
+   в `running`, фиксирует `lock_token/locked_until` и коммитит захват до запуска handler;
+3. выполняет каждую job вне транзакции захвата; handler открывает отдельные короткие UoW для `SyncRun`, staging batches,
+   следующей CRON occurrence и финального применения;
+4. отдельной транзакцией помечает job как `done`, `scheduled` для retry или `failed`;
+5. каждые `recover_interval_seconds` возвращает просроченные `running` jobs в очередь либо завершает их как `failed`
+   после `max_attempts`;
+6. после успешного poll/recovery cycle обновляет локальный heartbeat-файл; healthcheck проверяет его свежесть и
+   доступность PostgreSQL;
+7. по `SIGTERM/SIGINT` прекращает захватывать новые jobs, дает текущей job завершиться в пределах termination grace
+   period и закрывает session factory. Если контейнер принудительно остановлен, expired lock подхватит recovery loop.
+
+Текущий `dnk-manage jobs process-due` сохраняется как диагностическая one-shot команда, но production workload
+использует `jobs worker`. Существующую реализацию необходимо переразбить: сейчас одна UoW охватывает claim, handler и
+финальный status всей пачки, что неприемлемо для длительного скачивания/разбора XLSX.
+
+Добавить настройки `SCHEDULED_JOBS`:
+
+- `poll_interval_seconds` — пауза между пустыми poll cycles, например `2`;
+- `recover_interval_seconds` — период recovery, например `30`;
+- `lock_ttl_seconds` — стартовый lease;
+- `lock_heartbeat_seconds` — период продления lease для долгой синхронизации;
+- `shutdown_grace_seconds`;
+- существующие `process_limit`, `recover_limit`, `retry_base_seconds`, `max_attempts`.
+
+Для длинной job worker продлевает `locked_until` только при совпадающем `lock_token`. Перед `mark_done`, применением
+staging и созданием следующей occurrence повторно проверяется владение lease. Это не позволяет старому процессу
+записать результат после того, как job уже была восстановлена другим worker.
+
+При простое сервиса пропущенные интервалы объединяются: overdue job запускается один раз, а следующая occurrence
+рассчитывается как ближайшее будущее время по CRON относительно текущего времени. Worker не создает очередь из всех
+пропущенных запусков. Ручная синхронизация имеет trigger `manual` и не создает новую CRON-цепочку.
+
+### 9.2. Docker Compose
+
+В `docker-compose.yml` добавить сервис:
+
+```yaml
+cron-worker:
+  <<: *backend-common
+  container_name: dnk-cron-worker
+  restart: unless-stopped
+  command: [dnk-manage, jobs, worker]
+  environment:
+    <<: *backend-environment
+    RABBITMQ__ENABLED: "false"
+  depends_on:
+    migrations:
+      condition: service_completed_successfully
+    postgres:
+      condition: service_healthy
+  healthcheck:
+    test: [CMD, dnk-manage, jobs, healthcheck]
+    interval: 10s
+    timeout: 5s
+    retries: 3
+  stop_grace_period: 60s
+```
+
+Worker использует тот же Runtime image, `.env`, PostgreSQL и migration gate, что и API. RabbitMQ для `shared.jobs` не
+требуется: очередь хранится в PostgreSQL. В `docker-compose.control-plane.yml` отдельное переопределение не нужно,
+если базовый service уже получает необходимые tenant/runtime settings; overlay может только добавить общие secrets,
+если они понадобятся fetcher-у.
+
+Compose acceptance проверяет, что после `docker compose up` service остается running/healthy, видит выполненные
+миграции, забирает due `price_list.sync` и корректно восстанавливает job после принудительного restart.
+
+### 9.3. Helm
+
+В chart добавить `workers.cron` рядом с `publisher`, `console` и `lifecycle`:
+
+```yaml
+workers:
+  cron:
+    enabled: true
+    replicas: 1
+    image:
+      repository: ghcr.io/dinikon/runtime/runtime
+      tag: latest
+      pullPolicy: Always
+    pollIntervalSeconds: 2
+    recoverIntervalSeconds: 30
+    lockTtlSeconds: 300
+    lockHeartbeatSeconds: 60
+    shutdownGraceSeconds: 60
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 1Gi
+    probes:
+      readiness:
+        exec:
+          command: [dnk-manage, jobs, healthcheck]
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 3
+      liveness:
+        exec:
+          command: [dnk-manage, jobs, healthcheck]
+        periodSeconds: 20
+        timeoutSeconds: 5
+        failureThreshold: 3
+```
+
+Изменения chart:
+
+- добавить `cron` в worker map/list `helm/templates/workloads.yaml`;
+- для component `cron` установить args `[dnk-manage, jobs, worker]`, не создавать Service и не открывать порт;
+- использовать runtime image, общий migration gate, DB secrets/config и `/tmp` `emptyDir` для загружаемых файлов;
+- установить `terminationGracePeriodSeconds` из `shutdownGraceSeconds` и `preStop`, если worker требует время на drain;
+- передать параметры как `SCHEDULED_JOBS__*` env через общий config template;
+- описать весь `workers.cron` contract в `helm/values.schema.json` с `additionalProperties: false`;
+- добавить настройки в `helm/README.md` и example values;
+- обновить Helm render/lint tests: enabled/disabled worker, image/tag propagation, command/args, env, probes, resources,
+  pod settings, отсутствие Service и корректное количество Deployments.
+
+По умолчанию `workers.cron.enabled=true`, иначе созданные PriceList schedules никогда не будут выполнены. Начальное
+значение `replicas=1`; несколько replicas разрешаются после PostgreSQL concurrency tests, поскольку `SKIP LOCKED`,
+lease token и advisory lock PriceList предотвращают двойную обработку. Pod не требует RabbitMQ credentials и должен
+запускаться только после успешной migration Job.
+
 ## 10. Парсеры
 
 ### XML
@@ -866,6 +1002,7 @@ Pinia не хранит offers, filters или wizard server draft. Глобал
 - `price_list_sync_rows_total{result}`;
 - `price_list_sync_download_bytes{format}`;
 - `price_list_sync_last_success_timestamp` — лучше как DB/readiness query, а не metric label per list;
+- `scheduled_job_worker_poll_total{result}`, `scheduled_job_worker_heartbeat_age_seconds` и длительность poll/recovery;
 - число due/running/stuck jobs уже наблюдается общим jobs worker.
 
 Structured logs содержат `tenant_id`, `price_list_id`, `sync_run_id`, `scheduled_job_id`, phase и counters, но не
@@ -931,9 +1068,14 @@ Tenant Alembic revision после текущего head создает пять
 
 1. Добавить проверку CRON/timezone и расчет preview следующих запусков.
 2. Расширить shared jobs идемпотентной `schedule_once` операцией.
-3. Реализовать `PriceListSyncJobHandler`, lock, retries и schedule revision fencing.
-4. Зарегистрировать handler в management/worker composition root.
-5. Добавить pause/resume/edit schedule и cleanup job.
+3. Переработать выполнение shared jobs на короткие транзакции claim/execute/finalize и добавить lease heartbeat.
+4. Реализовать long-running `dnk-manage jobs worker`, recovery loop, healthcheck и graceful shutdown.
+5. Реализовать `PriceListSyncJobHandler`, lock, retries и schedule revision fencing.
+6. Зарегистрировать handler в management/worker composition root.
+7. Добавить pause/resume/edit schedule и cleanup job.
+8. Добавить `cron-worker` в `docker-compose.yml` с migration dependency, healthcheck и restart policy.
+9. Добавить `workers.cron` в Helm values/schema/workload template, probes, resources и chart documentation.
+10. Добавить Compose smoke и Helm render/lint tests для CronWorker.
 
 Результат: синхронизация выполняется регулярно и восстанавливается после crash/retry без дублей.
 
@@ -1002,6 +1144,19 @@ Tenant Alembic revision после текущего head создает пять
 - pause не удаляет историю и блокирует старые scheduled occurrences;
 - pagination и filters работают для offers/runs/history.
 
+### CronWorker и deployment
+
+- worker забирает due job после commit захвата и не держит транзакцию во время сетевого скачивания;
+- два worker replicas не захватывают одну job и один PriceList одновременно;
+- lease heartbeat продлевает долгую job, а процесс со старым `lock_token` не применяет результат;
+- recovery возвращает job после аварийного завершения worker и соблюдает `max_attempts`;
+- после простоя создается одна актуальная синхронизация без catch-up storm;
+- `SIGTERM` прекращает новый claim и дает активной job завершиться в пределах grace period;
+- Docker Compose config содержит healthy `cron-worker`, зависящий от успешных migrations и PostgreSQL;
+- Helm render создает CronWorker Deployment с правильными args/env/probes/resources и без Service;
+- `workers.cron.enabled=false` полностью убирает workload, а default values запускают один replica;
+- Helm schema отклоняет неизвестные и некорректные `workers.cron` значения.
+
 ### Frontend
 
 - DTO mapper сохраняет decimal values и корректно обрабатывает `rrp=NULL`;
@@ -1036,6 +1191,8 @@ MVP считается готовым, если:
 13. Фильтры по прайс-листу, закупочной цене, РРД, марже и availability работают на всем tenant dataset, а не только на
     текущей странице.
 14. Полнотекстовый поиск, descending sort и pagination сохраняются в URL и воспроизводятся после refresh.
+15. Docker Compose и Helm по умолчанию запускают здоровый `CronWorker`, который обрабатывает due jobs, восстанавливает
+    зависшие задачи и продолжает расписание после рестарта без дублирования синхронизаций.
 
 ## 19. Решения вне MVP
 
