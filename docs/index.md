@@ -26,6 +26,7 @@ This documentation describes the current implementation of `dnk-runtime-core` as
 
 - [Campaigns](modules/campaigns.md)
 - [External Events](modules/external-events.md)
+- [Commerce Core: каталог, склад, заказы и интеграции](plan/commerce-domain-and-integrations.md)
 
 ## Interfaces
 

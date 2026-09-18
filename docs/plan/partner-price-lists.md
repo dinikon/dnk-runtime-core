@@ -1,4 +1,4 @@
-# План реализации модуля партнерских прайс-листов
+# План реализации модуля закупочных прайс-листов партнеров
 
 ## 1. Цель
 
@@ -11,7 +11,8 @@
 - запускает следующие синхронизации по CRON-расписанию;
 - хранит карточку партнерского предложения отдельно от изменяемого состояния цены и остатка;
 - записывает новую версию цены/остатка только при фактическом изменении;
-- явно обрабатывает новые, пропавшие, повторно появившиеся и некорректные позиции.
+- явно обрабатывает новые, пропавшие, повторно появившиеся и некорректные позиции;
+- предоставляет в Console мастер настройки и таблицу для анализа закупочной цены, РРЦ, РРД и маржи.
 
 Модуль не изменяет локальный складской баланс и не становится частью `inventory`. Его задача — наблюдение за внешним
 ассортиментом партнера. Связь партнерского offer с будущим локальным товаром или `catalog.SellableItem` должна
@@ -40,7 +41,8 @@
 РРД и маржа не вычисляются, если РРЦ отсутствует или равна нулю. Отрицательные значения не обрезаются: они должны
 показывать оператору, что закупочная цена выше рекомендованной розничной. Перед разработкой продукта остается
 подтвердить требуемый срок хранения истории; остальные решения ниже можно использовать как безопасные значения по
-умолчанию.
+умолчанию. `margin_percent` намеренно не является торговой наценкой: наценка делила бы РРД на закупочную цену и при
+необходимости должна добавляться отдельным показателем.
 
 ## 3. Проверенные примеры источников
 
@@ -536,14 +538,326 @@ Preview и настоящая синхронизация обязаны испо
 | `GET` | `/price-lists` | Список и агрегированный sync status |
 | `GET` | `/price-lists/{id}` | Конфигурация без раскрытия URL-secret |
 | `GET` | `/price-lists/{id}/runs` | История запусков и counters |
-| `GET` | `/price-lists/{id}/offers` | Текущие offers с фильтрами |
-| `GET` | `/price-lists/{id}/offers/{offer_id}/history` | История цены/остатка |
+| `GET` | `/price-lists/{id}/offers` | Offers одного прайс-листа с тем же query contract |
+| `GET` | `/price-list-offers` | Общая tenant-таблица offers с фильтрами, поиском и сортировкой |
+| `GET` | `/price-list-offers/{offer_id}/history` | История закупочной цены/остатка |
+
+`GET /price-list-offers` выполняет фильтрацию, сортировку, расчет производных показателей и пагинацию на backend.
+Клиентская сортировка только загруженной страницы запрещена, поскольку она даст неверный результат для общего набора.
+
+Query contract:
+
+- `price_list_id` — один или несколько прайс-листов;
+- `purchase_price_min`, `purchase_price_max`;
+- `recommended_retail_income_min`, `recommended_retail_income_max`;
+- `margin_percent_min`, `margin_percent_max`;
+- `availability=in_stock|out_of_stock|unknown` — multi-value;
+- `has_rrp=true|false`;
+- `q` — полнотекстовый поиск по `title`, `sku`, `external_id` и названию PriceList;
+- `sort=title|sku|purchase_price|rrp|recommended_retail_income|margin_percent|availability|observed_at`;
+- `direction=asc|desc`; для первого клика по денежным колонкам используется `desc`;
+- параметры offset/cursor pagination согласно выбранному общему контракту Console.
+
+Полнотекстовый поиск реализуется в PostgreSQL, а не фильтрацией загруженного массива в браузере. Для
+`partner_offers` создается нормализованный search document из `title`, `sku` и `external_id` с GIN index; запрос
+строится безопасно через `websearch_to_tsquery`/эквивалент для выбранной конфигурации языка. Название PriceList
+участвует через join и нормализованный text predicate либо через read projection, если query plan покажет
+необходимость. SKU/external ID дополнительно поддерживают точное и prefix-сопоставление. Пустой или слишком короткий
+`q` не запускает дорогой full scan. Search implementation и индексы проверяются через `EXPLAIN` на объемах,
+сопоставимых с production.
+
+Backend вычисляет показатели на текущем `OfferState`:
+
+```text
+recommended_retail_income = rrp - purchase_price
+margin_percent = recommended_retail_income / rrp * 100, если rrp > 0
+```
+
+`recommended_retail_income` и `margin_percent` возвращаются как `NULL`, если РРЦ отсутствует или равна нулю.
+Вычисления выполняются через PostgreSQL `NUMERIC`; округление для отображения не влияет на фильтр и sort. Для
+стабильной пагинации backend всегда добавляет `offer.id` как последний tie-breaker. Если выражения станут узким
+местом на большом объеме, их следует вынести в обновляемую current-state read projection, а не хранить в append-only
+истории как отдельные бизнес-факты.
+
+Ответ строки списка содержит:
+
+- offer: `id`, `sku`, `external_id`, `title`, `lifecycle_status`;
+- PriceList: `id`, `title`;
+- current state: `purchase_price`, `rrp`, `currency`, `availability`, `quantity`, `observed_at`;
+- derived: `recommended_retail_income`, `margin_percent`.
+
+Денежные значения передаются в JSON decimal-строками, чтобы JavaScript не терял точность. DTO mapper отвечает за
+форматирование, но не пересчитывает РРД или маржу.
 
 Все mutation endpoints используют authenticated request context, authorization boundary и одну request-scoped UoW.
 Для редактирования draft можно добавить optimistic version (`If-Match`/version field), чтобы вкладки не затирали
 mapping друг друга.
 
-## 13. Наблюдаемость и эксплуатация
+## 13. Frontend Console
+
+Frontend реализуется в существующем Vue 3 приложении `frontends/apps/console` и следует правилам
+[`docs/frontends/console.md`](../frontends/console.md): route page является orchestrator, API/DTO/model разделены,
+бизнес-компоненты находятся внутри feature module, а UI primitives не знают о PriceList, API или TanStack Query.
+
+### 13.1. Пользовательские разделы и маршруты
+
+В `workspaceNavigation` добавляется группа «Закупки»:
+
+- «Прайс-листы» — управление источниками и синхронизациями;
+- «Офферы партнеров» — единая таблица закупочных предложений всех прайс-листов.
+
+Маршруты регистрируются через feature-owned `price-lists/routes.ts`, а корневой `app/router.ts` только подключает
+экспортированный массив:
+
+| Route | Page | Назначение |
+|---|---|---|
+| `/purchasing/price-lists` | `PriceListsPage.vue` | Список прайс-листов и состояние синхронизаций |
+| `/purchasing/price-lists/new` | `CreatePriceListPage.vue` | Мастер из трех шагов |
+| `/purchasing/price-lists/:priceListId` | `PriceListDetailsPage.vue` | Overview, offers, runs и settings одного прайса |
+| `/purchasing/offers` | `PurchaseOffersPage.vue` | Общая таблица offers с аналитикой РРД/маржи |
+
+Страница detail использует query parameter `tab=overview|offers|runs|settings`, чтобы выбранная вкладка сохранялась
+при refresh/back. Вкладка offers повторно использует общую таблицу, но фиксирует `price_list_id` текущего прайса и
+не показывает фильтр выбора PriceList.
+
+### 13.2. Структура frontend-модуля
+
+Новый модуль развивается по целевой структуре из Console architecture:
+
+```text
+frontends/apps/console/src/modules/price-lists/
+├── api/
+│   ├── price-lists.api.ts
+│   ├── price-lists.dto.ts
+│   └── price-lists.mapper.ts
+├── model/
+│   ├── price-list.types.ts
+│   ├── purchase-offer.types.ts
+│   ├── price-list.constants.ts
+│   ├── price-list.query-keys.ts
+│   ├── use-price-lists-query.ts
+│   ├── use-price-list-query.ts
+│   ├── use-purchase-offers-query.ts
+│   ├── use-price-list-runs-query.ts
+│   ├── use-create-price-list.ts
+│   ├── use-preview-price-list.ts
+│   ├── use-activate-price-list.ts
+│   ├── use-sync-price-list.ts
+│   ├── use-update-price-list.ts
+│   └── use-purchase-offers-page-state.ts
+├── ui/
+│   ├── price-lists/
+│   ├── wizard/
+│   ├── details/
+│   ├── offers/
+│   └── runs/
+├── pages/
+│   ├── PriceListsPage.vue
+│   ├── CreatePriceListPage.vue
+│   ├── PriceListDetailsPage.vue
+│   └── PurchaseOffersPage.vue
+├── routes.ts
+└── index.ts
+```
+
+Зависимости направлены в одну сторону:
+
+```text
+Page -> model composables + feature UI
+model composables -> API client + query keys + mappers
+feature UI -> frontend model types + shared/UI primitives
+API -> shared Axios client
+```
+
+Компоненты из `ui/` не импортируют `api/*.dto.ts`, Axios, query keys или query composables. DTO mapper преобразует
+snake_case backend contracts в frontend types один раз на API boundary.
+`price-lists.api.ts` использует существующий shared Axios client с `withCredentials: true`; отдельный HTTP client или
+feature-specific auth handling не создается.
+
+### 13.3. Экран списка прайс-листов
+
+`PriceListsPage.vue` является orchestrator и собирает:
+
+```text
+PriceListsPage
+|-- PriceListsHeader
+|-- PriceListsToolbar
+|-- PriceListsSearchBar
+|-- PriceListsBody
+|   |-- PriceListsSkeleton
+|   |-- PriceListsEmpty
+|   |-- PriceListsError
+|   `-- PriceListsResults
+|       `-- PriceListsTable
+|-- PriceListsFooter
+`-- PausePriceListConfirmDialog
+```
+
+Таблица прайс-листов показывает название, формат, masked URL/host, status, число active offers, последний успешный
+запуск, следующий запуск и last run status. Primary action — «Создать прайс-лист». Row actions: открыть, запустить
+сейчас, pause/resume и перейти к runs. Во время initial sync отображается progress/status без обещания точного процента,
+если backend еще не знает полного числа строк.
+
+### 13.4. Мастер создания
+
+`CreatePriceListPage.vue` владеет server draft, текущим шагом, route guards и mutation orchestration. Поля и
+валидация разбиты на компоненты:
+
+```text
+CreatePriceListPage
+|-- PriceListWizardHeader
+|-- PriceListWizardStepper
+|-- PriceListWizardBody
+|   |-- PriceListSourceForm
+|   |-- PriceListMappingForm
+|   `-- PriceListScheduleForm
+|-- PriceListPreviewTable
+`-- PriceListWizardFooter
+```
+
+- `PriceListSourceForm` собирает title, URL, format/preset, item path или XLSX sheet/header.
+- «Предзагрузить» вызывает preview mutation и блокирует переход к mapping до успешного ответа.
+- `PriceListMappingForm` показывает source column/path, target field, transform/default и sample values рядом.
+- В preview явно подписывается «Закупочная цена» и «Рекомендованная розничная цена».
+- `PriceListScheduleForm` содержит CRON, timezone, пять следующих запусков, new/missing policies и threshold.
+- Footer выполняет back/next; финальная кнопка «Создать и загрузить» вызывает activation и переводит на detail page.
+- Draft ID остается в URL/route state, поэтому refresh не теряет уже сохраненные шаги.
+- Несохраненные локальные изменения защищаются navigation guard с confirm dialog.
+
+Формы используют `vee-validate` + `zod`, уже установленные в Console. Клиентская схема улучшает UX, но server errors
+остаются авторитетными и привязываются к конкретным полям/строкам mapping.
+
+### 13.5. Таблица закупочных offers
+
+`PurchaseOffersPage.vue` следует page/body/results ответственности:
+
+```text
+PurchaseOffersPage
+|-- PurchaseOffersHeader
+|-- PurchaseOffersToolbar
+|   |-- PurchaseOffersFilters
+|   `-- ActiveOfferFilterChips
+|-- PurchaseOffersSearchBar
+|-- PurchaseOffersBody
+|   |-- PurchaseOffersSkeleton
+|   |-- PurchaseOffersEmpty
+|   |-- PurchaseOffersError
+|   `-- PurchaseOffersResults
+|       `-- PurchaseOffersTable
+|-- PurchaseOffersFooter
+|   `-- OffsetPagination
+`-- OfferHistoryDrawer
+```
+
+`PurchaseOffersTable` строится на установленном `@tanstack/vue-table` в controlled/manual режиме. Backend владеет
+sorting, filtering и pagination; таблица только эмитит их изменение. Состояние страницы хранится в URL query через
+`usePurchaseOffersPageState`, поэтому ссылку с выбранными фильтрами можно скопировать, refresh не сбрасывает вид, а
+Back возвращает предыдущий набор.
+
+Колонки первой версии:
+
+| Колонка | Значение и отображение | Sort |
+|---|---|---|
+| Товар | `title`, вторичной строкой `external_id` | текстовый |
+| SKU | `sku` | текстовый |
+| Прайс-лист | название PriceList | текстовый |
+| Закупочная цена | `purchase_price` + currency | числовой, первый клик `desc` |
+| РРЦ | `rrp` + currency или `—` | числовой, первый клик `desc` |
+| РРД | `recommended_retail_income` + currency или `—` | числовой, первый клик `desc` |
+| Маржа | `margin_percent` или `—` | числовой, первый клик `desc` |
+| Наличие | status badge + quantity, если известно | status sort |
+| Обновлено | `observed_at` в timezone пользователя | date sort, default `desc` |
+
+Правила отображения:
+
+- деньги форматируются через `Intl.NumberFormat` по currency и locale пользователя;
+- процент показывается с 1–2 знаками, но сортируется по неокругленному backend value;
+- положительный, нулевой и отрицательный РРД различаются знаком, текстом и цветом; цвет не является единственным
+  индикатором;
+- отсутствие РРЦ дает `—` одновременно в РРЦ, РРД и марже;
+- `quantity=NULL` показывает только availability, а не фиктивный `0`;
+- заголовок таблицы sticky, числовые колонки выровнены вправо, длинные title сокращаются с доступным tooltip;
+- клик по строке открывает `OfferHistoryDrawer`, не меняя фильтры таблицы.
+
+`OfferHistoryDrawer` загружает данные лениво и показывает дату, закупочную цену, РРЦ, РРД, маржу, availability,
+quantity и причину изменения. РРД и маржа для исторической строки вычисляются backend теми же формулами, что и для
+current state.
+
+### 13.6. Фильтры, поиск и сортировка
+
+`PurchaseOffersFilters` предоставляет:
+
+- multi-select PriceList;
+- диапазон закупочной цены `от/до`;
+- диапазон РРД `от/до`, включая отрицательные значения;
+- диапазон маржи `% от/до`, включая отрицательные значения;
+- multi-select availability: «В наличии», «Нет в наличии», «Неизвестно»;
+- опциональный переключатель «Только с РРЦ»;
+- «Сбросить все» и chips каждого активного фильтра.
+
+Изменение фильтра сбрасывает pagination на первую страницу. Диапазоны применяются после подтверждения или короткого
+debounce, чтобы каждый ввод символа не создавал запрос. Невалидный диапазон (`min > max`) показывается до запроса.
+
+`PurchaseOffersSearchBar` реализует один глобальный поиск по видимым текстовым идентификаторам: title, SKU,
+external ID и названию прайс-листа. Ввод debounced на 300–500 ms, `q` нормализуется и передается на backend.
+Числовые денежные колонки ищутся диапазонами, а не преобразованием decimal в текст: это сохраняет предсказуемые
+индексы и числовую семантику.
+
+Каждый sortable header поддерживает `desc`, `asc` и reset. Для закупочной цены, РРЦ, РРД, маржи и даты первое
+нажатие означает сортировку от большего к меньшему. Активное направление обозначается иконкой и `aria-sort`.
+Одновременная multi-sort в MVP не требуется; backend всегда применяет стабильный secondary sort по `offer.id`.
+
+### 13.7. Frontend state и запросы
+
+TanStack Query является server-state boundary:
+
+- query keys включают tenant-independent route context и весь нормализованный filter/sort/page state;
+- search/filter transitions используют `placeholderData`, чтобы таблица не исчезала между запросами;
+- stale response не перезаписывает более новый query state;
+- после activation/manual sync invalidates detail/runs, но offers обновляются после успешного run;
+- list/detail polling включается только пока есть `queued`, `downloading`, `parsing` или `applying` run, например раз
+  в 5 секунд; в стабильном состоянии polling выключен;
+- `AbortSignal` TanStack Query передается в Axios, чтобы отменять устаревший поиск;
+- mutation buttons имеют pending state и защищены от повторного submit.
+
+Pinia не хранит offers, filters или wizard server draft. Глобальные stores остаются границей user/tenant session,
+а feature state находится в route query, локальной форме и TanStack Query cache.
+
+### 13.8. Loading, empty и error состояния
+
+- Первичная загрузка показывает table skeleton с сохраненной шириной колонок.
+- Пустой tenant показывает CTA «Создать прайс-лист».
+- Пустой результат фильтра показывает «Ничего не найдено» и кнопку сброса фильтров, без CTA создания источника.
+- Background refetch сохраняет строки и показывает ненавязчивый progress indicator.
+- Ошибка list query имеет retry; mapping validation показывает ошибки около соответствующей строки.
+- Failed sync не очищает последнюю успешную таблицу и отображается banner со ссылкой на run details.
+- `401/403` обрабатываются общими Axios interceptors/session flow, а не feature-компонентами.
+
+### 13.9. Доступность и responsive behavior
+
+- Все controls доступны с клавиатуры, dialog/drawer удерживают focus, ошибки связаны с полями через ARIA.
+- Значения sort доступны через `aria-sort`, badge наличия имеет текст, а не только цвет.
+- На узком экране таблица сохраняет горизонтальный scroll; ключевые «Товар» и «Закупочная цена» остаются первыми.
+- Filter panel на mobile открывается в Sheet/Drawer, desktop использует Popover или боковую панель.
+- Необязательные колонки можно скрывать через toolbar; выбор хранится локально как пользовательское UI preference,
+  но не влияет на URL query и backend response.
+
+### 13.10. Frontend verification
+
+Минимальная проверка реализации:
+
+- `npm run typecheck:console`;
+- `npm run lint:console`;
+- `npm run build:console`;
+- component tests для mapper, URL query state, отображения derived/null values, filters и sort emits;
+- browser acceptance: мастер создания, preview/mapping, initial sync status, фильтры, descending sorts, search,
+  pagination, pause/resume и открытие истории offer;
+- responsive и keyboard smoke tests для wizard, filters и table.
+
+Если в workspace к моменту реализации все еще нет test runner, добавить Vitest + Vue Test Utils отдельным техническим
+шагом; отсутствие runner не является причиной переносить filter/query logic внутрь компонентов.
+
+## 14. Наблюдаемость и эксплуатация
 
 Метрики без tenant/URL/offer labels высокой кардинальности:
 
@@ -565,7 +879,7 @@ Retention должен быть конфигурируемым отдельно 
 - failed staging rows (например, 7 дней);
 - временных файлов (удалять сразу после run).
 
-## 14. Зависимости и миграции
+## 15. Зависимости и миграции
 
 Потребуются runtime dependencies:
 
@@ -582,7 +896,7 @@ Tenant Alembic revision после текущего head создает пять
 `scheduled_jobs.id`. Изменение shared jobs должно оставаться общим техническим механизмом без импорта business-модуля
 в `shared`.
 
-## 15. Этапы реализации
+## 16. Этапы реализации
 
 ### Этап 1. Domain и persistence foundation
 
@@ -623,7 +937,19 @@ Tenant Alembic revision после текущего head создает пять
 
 Результат: синхронизация выполняется регулярно и восстанавливается после crash/retry без дублей.
 
-### Этап 5. Production hardening
+### Этап 5. Frontend Console
+
+1. Добавить feature routes и группу «Закупки» в workspace navigation.
+2. Реализовать API DTO/mappers, query keys, TanStack Query queries/mutations и URL page state.
+3. Реализовать список прайс-листов и мастер source → mapping → schedule → activation.
+4. Реализовать detail page с overview, offers, runs и settings.
+5. Реализовать общую таблицу offers, серверные filters/search/sort/pagination и историю offer.
+6. Проверить accessibility, responsive behavior, typecheck, lint, build и browser acceptance flows.
+
+Результат: оператор полностью создает прайс-лист и анализирует закупочные предложения из Console без ручных API
+вызовов.
+
+### Этап 6. Production hardening
 
 1. Добавить metrics, structured logging, alerts и retention jobs.
 2. Нагрузочно проверить большие XML/XLSX, batch sizes и память.
@@ -631,7 +957,7 @@ Tenant Alembic revision после текущего head создает пять
 4. Провести security tests для SSRF, XML entities, YAML bombs, ZIP bombs и secret redaction.
 5. Добавить runbook: повторить run, исправить mapping, rotation URL token, pause проблемного источника.
 
-## 16. Тестовая стратегия
+## 17. Тестовая стратегия
 
 ### Unit
 
@@ -676,7 +1002,20 @@ Tenant Alembic revision после текущего head создает пять
 - pause не удаляет историю и блокирует старые scheduled occurrences;
 - pagination и filters работают для offers/runs/history.
 
-## 17. Критерии готовности MVP
+### Frontend
+
+- DTO mapper сохраняет decimal values и корректно обрабатывает `rrp=NULL`;
+- URL query round-trip сохраняет price-list, purchase price, РРД, margin, availability, search и sort;
+- table headers отправляют `desc` первым направлением для денежных показателей;
+- фильтры сбрасывают pagination и не отправляют невалидные диапазоны;
+- поиск debounced и отменяет устаревший запрос;
+- loading/empty/error/results выбираются в `PurchaseOffersBody`, а не внутри table;
+- wizard нельзя активировать до успешных preview и mapping validation;
+- manual sync/pause/resume инвалидируют только связанные query keys;
+- РРЦ/РРД/маржа показывают `—` при отсутствии РРЦ, отрицательный доход отображается явно;
+- keyboard и responsive acceptance для мастера, фильтров, сортировки, пагинации и history drawer.
+
+## 18. Критерии готовности MVP
 
 MVP считается готовым, если:
 
@@ -691,8 +1030,14 @@ MVP считается готовым, если:
 8. CRON запускается в выбранной timezone, не создает дубли при retry и переживает рестарт worker.
 9. Все данные tenant-isolated, URL-secret не попадает в job payload/log/API.
 10. Есть unit, parser, PostgreSQL integration и HTTP acceptance tests, метрики и операторская история запусков.
+11. В Console есть раздел «Закупки», мастер PriceList, список синхронизаций и общая таблица партнерских offers.
+12. Таблица показывает закупочную цену, РРЦ, РРД и маржу; корректно обрабатывает отсутствующую РРЦ и отрицательный
+    доход.
+13. Фильтры по прайс-листу, закупочной цене, РРД, марже и availability работают на всем tenant dataset, а не только на
+    текущей странице.
+14. Полнотекстовый поиск, descending sort и pagination сохраняются в URL и воспроизводятся после refresh.
 
-## 18. Решения вне MVP
+## 19. Решения вне MVP
 
 - автоматическое сопоставление offer с внутренним каталогом по SKU/штрихкоду;
 - расчет лучшего предложения среди нескольких партнеров;
