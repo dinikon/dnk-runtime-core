@@ -108,6 +108,46 @@
             }
           }
         },
+        "priceLists": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "sourceEncryptionKey"
+          ],
+          "properties": {
+            "sourceEncryptionKey": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value",
+                "existingSecret"
+              ],
+              "properties": {
+                "value": {
+                  "type": "string"
+                },
+                "existingSecret": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "key"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
+                    },
+                    "key": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9._-]*$"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
         "email": {
           "type": "object",
           "additionalProperties": false,
@@ -301,6 +341,22 @@
               "minimum": 1
             },
             "maxAttempts": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "pollIntervalSeconds": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "recoverIntervalSeconds": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "lockHeartbeatSeconds": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "shutdownGraceSeconds": {
               "type": "integer",
               "minimum": 1
             }
@@ -673,6 +729,55 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "cron": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "repository": {"type": "string", "minLength": 1},
+                "tag": {"type": "string", "minLength": 1},
+                "pullPolicy": {
+                  "type": "string",
+                  "enum": ["Always", "IfNotPresent", "Never"]
+                }
+              }
+            },
+            "replicas": {"type": "integer", "minimum": 1},
+            "pollIntervalSeconds": {"type": "integer", "minimum": 1},
+            "recoverIntervalSeconds": {"type": "integer", "minimum": 1},
+            "lockTtlSeconds": {"type": "integer", "minimum": 1},
+            "lockHeartbeatSeconds": {"type": "integer", "minimum": 1},
+            "shutdownGraceSeconds": {"type": "integer", "minimum": 1},
+            "resources": {"type": "object"},
+            "probes": {"type": "object"},
+            "pod": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "annotations": {"type": "object"},
+                "labels": {"type": "object"},
+                "securityContext": {"type": "object"},
+                "containerSecurityContext": {"type": "object"},
+                "nodeSelector": {"type": "object"},
+                "tolerations": {"type": "array", "items": {}},
+                "affinity": {"type": "object"},
+                "imagePullSecrets": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["name"],
+                    "properties": {"name": {"type": "string", "minLength": 1}},
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          }
+        },
         "publisher": {
           "type": "object",
           "additionalProperties": false,

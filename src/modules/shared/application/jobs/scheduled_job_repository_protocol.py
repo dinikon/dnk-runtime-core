@@ -17,6 +17,10 @@ class ScheduledJobRepositoryProtocol(Protocol):
         """Persists a new scheduled job in the active UnitOfWork."""
         ...
 
+    async def schedule_once(self, job: ScheduledJob) -> bool:
+        """Persists a deterministic job unless its id already exists."""
+        ...
+
     async def claim_due_jobs(
         self,
         *,
@@ -36,6 +40,21 @@ class ScheduledJobRepositoryProtocol(Protocol):
         completed_at: datetime,
     ) -> bool:
         """Marks a running job done when lock token matches."""
+        ...
+
+    async def extend_lock(
+        self,
+        *,
+        job_id: UUID,
+        lock_token: str,
+        locked_until: datetime,
+        updated_at: datetime,
+    ) -> bool:
+        """Extends a running job lease when the lock token still matches."""
+        ...
+
+    async def owns_lock(self, *, job_id: UUID, lock_token: str) -> bool:
+        """Checks that a running job is still owned by the current worker."""
         ...
 
     async def mark_failed(

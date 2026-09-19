@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import { AppLayout } from "@/layouts";
 import { authRoutes } from "@/modules/auth/routes";
 import { dashboardRoutes } from "@/modules/dashboard";
+import { priceListRoutes } from "@/modules/price-lists";
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -24,6 +25,7 @@ export const router = createRouter({
           redirect: { name: "dashboard" },
         },
         ...dashboardRoutes,
+        ...priceListRoutes,
         {
           path: "settings/members",
           name: "members",

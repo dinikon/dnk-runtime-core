@@ -56,7 +56,10 @@ class ScheduleScheduledJobUseCase:
             updated_at=now,
             last_error=None,
         )
-        await self._repository.schedule(job)
+        if command.job_id is None:
+            await self._repository.schedule(job)
+        else:
+            await self._repository.schedule_once(job)
         return ScheduleScheduledJobResultDTO(job=job)
 
 

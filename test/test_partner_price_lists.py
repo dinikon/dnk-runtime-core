@@ -1,0 +1,237 @@
+from __future__ import annotations
+
+import os
+import tempfile
+import unittest
+from datetime import UTC, datetime
+from decimal import Decimal
+from pathlib import Path
+from uuid import UUID
+
+from openpyxl import Workbook
+from cryptography.fernet import Fernet
+
+from src.modules.price_lists.application import cron_occurrences, next_cron_occurrence
+from src.modules.price_lists.domain import (
+    MappingValidationError,
+    canonical_state_hash,
+    deterministic_cleanup_job_id,
+    deterministic_job_id,
+    mask_source_url,
+    normalize_availability,
+)
+from src.modules.price_lists.infrastructure.source import (
+    HttpRemoteFileFetcher,
+    SourceParser,
+    SourceUrlCipher,
+    prom_xml_config,
+)
+
+
+class PartnerPriceListDomainTests(unittest.TestCase):
+    def test_metrics_state_hash_and_secret_masking(self) -> None:
+        state_hash = canonical_state_hash(
+            purchase_price=Decimal("80.00"),
+            rrp=Decimal("100.00"),
+            currency="uah",
+            availability="in_stock",
+            quantity=3,
+        )
+        self.assertEqual(len(state_hash), 64)
+        self.assertEqual(normalize_availability("В наличии"), "in_stock")
+        self.assertEqual(normalize_availability("В наличии", 0), "out_of_stock")
+        self.assertEqual(
+            mask_source_url(
+                "https://partner.example/private/token/file.xlsx?key=secret"
+            ),
+            "https://partner.example/…/file.xlsx",
+        )
+
+    def test_deterministic_job_id_and_timezone_cron(self) -> None:
+        tenant_id = UUID("11111111-1111-1111-1111-111111111111")
+        price_list_id = UUID("22222222-2222-2222-2222-222222222222")
+        first = deterministic_job_id(
+            tenant_id, price_list_id, 3, "2026-09-18T12:00:00Z"
+        )
+        second = deterministic_job_id(
+            tenant_id, price_list_id, 3, "2026-09-18T12:00:00Z"
+        )
+        self.assertEqual(first, second)
+        self.assertEqual(
+            deterministic_cleanup_job_id(tenant_id, "2026-09-19T03:00:00+00:00"),
+            deterministic_cleanup_job_id(tenant_id, "2026-09-19T03:00:00+00:00"),
+        )
+        next_at = next_cron_occurrence(
+            "0 9 * * *",
+            "Europe/Kyiv",
+            after=datetime(2026, 1, 1, 7, 30, tzinfo=UTC),
+        )
+        self.assertEqual(next_at, datetime(2026, 1, 2, 7, 0, tzinfo=UTC))
+
+    def test_source_url_is_encrypted_and_fast_cron_is_rejected(self) -> None:
+        cipher = SourceUrlCipher(Fernet.generate_key().decode("ascii"))
+        source = "https://partner.example/private/token.xlsx?key=secret"
+        encrypted = cipher.encrypt(source)
+        self.assertNotIn("secret", encrypted)
+        self.assertEqual(cipher.decrypt(encrypted), source)
+        with self.assertRaisesRegex(ValueError, "at least 15 minutes"):
+            cron_occurrences("*/5 * * * *", "Europe/Kyiv")
+
+
+class PartnerPriceListParserTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.parser = SourceParser()
+
+    def test_prom_xml_preset_parses_attributes_and_prices(self) -> None:
+        source, mapping = prom_xml_config()
+        xml = b"""<?xml version='1.0'?>
+        <!DOCTYPE yml_catalog SYSTEM 'shops.dtd'>
+        <yml_catalog><shop><offers>
+          <offer id='42' in_stock='true'><vendorCode>SKU-42</vendorCode>
+          <name>Protein</name><price>120.50</price><priceRRP>180</priceRRP>
+          <currencyId>UAH</currencyId></offer>
+        </offers></shop></yml_catalog>"""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "sample.xml"
+            path.write_bytes(xml)
+            row = next(self.parser.rows(path, "xml", source, mapping))
+        self.assertFalse(row.errors)
+        self.assertEqual(row.normalized["external_id"], "42")
+        self.assertEqual(row.normalized["purchase_price"], Decimal("120.50"))
+        self.assertEqual(row.normalized["availability"], "in_stock")
+
+    def test_xml_parser_matches_the_full_configured_item_path(self) -> None:
+        source, mapping = prom_xml_config()
+        xml = b"""<yml_catalog><metadata><offer id='wrong'/></metadata><shop>
+        <offers><offer id='right' in_stock='false'><vendorCode>SKU</vendorCode>
+        <name>Item</name><price>10</price><currencyId>UAH</currencyId>
+        </offer></offers></shop></yml_catalog>"""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "sample.xml"
+            path.write_bytes(xml)
+            rows = list(self.parser.rows(path, "xml", source, mapping))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].normalized["external_id"], "right")
+
+    def test_xlsx_is_read_only_and_uses_header_mapping(self) -> None:
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Sheet1"
+        sheet.append(
+            [
+                "Артикул",
+                "Название (UA)",
+                "РРЦ",
+                "Цена",
+                "Валюта",
+                "Наличие",
+                "Количество",
+            ]
+        )
+        sheet.append(["SKU-1", "Товар", 150, 100, "UAH", "В наличии", 4])
+        mapping = {
+            "external_id": {"selector": "Артикул", "required": True},
+            "sku": {"selector": "Артикул", "required": True},
+            "title": {"selector": "Название (UA)", "required": True},
+            "purchase_price": {"selector": "Цена", "required": True},
+            "rrp": {"selector": "РРЦ"},
+            "currency": {"selector": "Валюта", "required": True},
+            "availability": {"selector": "Наличие"},
+            "quantity": {"selector": "Количество"},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "sample.xlsx"
+            workbook.save(path)
+            inspection = self.parser.inspect(
+                path, "xlsx", {"sheet_name": "Sheet1", "header_row": 1}
+            )
+            row = next(
+                self.parser.rows(
+                    path,
+                    "xlsx",
+                    {"sheet_name": "Sheet1", "header_row": 1, "data_start_row": 2},
+                    mapping,
+                )
+            )
+        self.assertIn("Цена", inspection["columns"])
+        self.assertEqual(row.normalized["quantity"], 4)
+        self.assertEqual(row.normalized["availability"], "in_stock")
+
+    def test_unsafe_xml_entities_and_broken_xlsx_are_rejected(self) -> None:
+        source, mapping = prom_xml_config()
+        entity_xml = b"""<?xml version='1.0'?><!DOCTYPE x [<!ENTITY e 'secret'>]>
+        <yml_catalog><shop><offers><offer id='1'><vendorCode>A</vendorCode>
+        <name>&e;</name><price>1</price><currencyId>UAH</currencyId>
+        </offer></offers></shop></yml_catalog>"""
+        with tempfile.TemporaryDirectory() as directory:
+            xml_path = Path(directory) / "entity.xml"
+            xml_path.write_bytes(entity_xml)
+            with self.assertRaises(Exception):
+                list(self.parser.rows(xml_path, "xml", source, mapping))
+            xlsx_path = Path(directory) / "broken.xlsx"
+            xlsx_path.write_bytes(b"not-a-zip")
+            with self.assertRaises(MappingValidationError):
+                self.parser.inspect(xlsx_path, "xlsx", {})
+
+
+class PartnerPriceListFetcherTests(unittest.IsolatedAsyncioTestCase):
+    async def test_fetcher_rejects_credentials_and_private_networks(self) -> None:
+        fetcher = HttpRemoteFileFetcher()
+        with self.assertRaisesRegex(ValueError, "Credentials"):
+            await fetcher._validate_url("https://user:password@example.com/file.xml")
+        with self.assertRaisesRegex(ValueError, "non-public"):
+            await fetcher._validate_url("https://127.0.0.1/file.xml")
+
+
+@unittest.skipUnless(
+    os.environ.get("PRICE_LIST_SAMPLE_XML")
+    and os.environ.get("PRICE_LIST_SAMPLE_XLSX"),
+    "Set PRICE_LIST_SAMPLE_XML and PRICE_LIST_SAMPLE_XLSX to downloaded partner samples.",
+)
+class PartnerPriceListRealSampleTests(unittest.TestCase):
+    def test_real_partner_samples(self) -> None:
+        parser = SourceParser()
+        source, mapping = prom_xml_config()
+        xml_rows = list(
+            parser.rows(
+                Path(os.environ["PRICE_LIST_SAMPLE_XML"]),
+                "xml",
+                source,
+                mapping,
+                limit=3,
+            )
+        )
+        self.assertEqual(len(xml_rows), 3)
+        self.assertFalse(xml_rows[0].errors)
+        xlsx_mapping = {
+            "external_id": {"selector": "Артикул", "required": True},
+            "sku": {"selector": "Артикул", "required": True},
+            "title": {
+                "selectors": ["Название (UA)", "Название (RU)"],
+                "required": True,
+            },
+            "purchase_price": {"selector": "Цена", "required": True},
+            "rrp": {"selector": "РРЦ"},
+            "currency": {"selector": "Валюта", "default": "UAH", "required": True},
+            "availability": {"selector": "Наличие"},
+            "quantity": {"selector": "Количество"},
+        }
+        xlsx_rows = list(
+            parser.rows(
+                Path(os.environ["PRICE_LIST_SAMPLE_XLSX"]),
+                "xlsx",
+                {"sheet_name": "Sheet1", "header_row": 1, "data_start_row": 2},
+                xlsx_mapping,
+                limit=3,
+            )
+        )
+        self.assertEqual(len(xlsx_rows), 3)
+        self.assertFalse(xlsx_rows[0].errors)
+
+
+__all__ = [
+    "PartnerPriceListDomainTests",
+    "PartnerPriceListParserTests",
+    "PartnerPriceListFetcherTests",
+    "PartnerPriceListRealSampleTests",
+]

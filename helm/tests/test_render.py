@@ -162,7 +162,9 @@ class HelmContractTests(unittest.TestCase):
         counts = len(packages)
         deployments = [r for r in manifests if r["kind"] == "Deployment"]
         jobs = [r for r in manifests if r["kind"] == "Job"]
-        self.assertEqual(len(deployments), 2 * counts + int("runtime" in packages))
+        self.assertEqual(
+            len(deployments), 2 * counts + 2 * int("runtime" in packages)
+        )
         self.assertEqual(len(jobs), counts)
         statefulsets = [r for r in manifests if r["kind"] == "StatefulSet"]
         self.assertEqual(

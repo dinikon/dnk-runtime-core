@@ -3,7 +3,8 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import insert, select, update
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.shared.application.jobs import RecoverStuckJobsResultDTO
@@ -38,6 +39,36 @@ class SqlAlchemyScheduledJobRepository:
             )
         )
         await self._session.flush()
+
+    async def schedule_once(self, job: ScheduledJob) -> bool:
+        """Inserts a caller-identified job idempotently."""
+        values = {
+            "id": job.id,
+            "tenant_id": job.tenant_id,
+            "job_type": job.job_type,
+            "payload": dict(job.payload),
+            "run_at": job.run_at,
+            "status": ScheduledJobStatus.SCHEDULED.value,
+            "attempts": 0,
+            "locked_until": None,
+            "lock_token": None,
+            "created_at": job.created_at,
+            "updated_at": job.updated_at,
+            "last_error": None,
+        }
+        dialect = (
+            self._session.bind.dialect.name if self._session.bind else "postgresql"
+        )
+        statement = insert(ScheduledJobModel).values(**values)
+        if dialect == "postgresql":
+            statement = (
+                postgresql_insert(ScheduledJobModel)
+                .values(**values)
+                .on_conflict_do_nothing(index_elements=[ScheduledJobModel.id])
+            )
+        result = await self._session.execute(statement)
+        await self._session.flush()
+        return bool(result.rowcount)
 
     async def claim_due_jobs(
         self,
@@ -98,6 +129,33 @@ class SqlAlchemyScheduledJobRepository:
         )
         await self._session.flush()
         return bool(result.rowcount)
+
+    async def extend_lock(
+        self,
+        *,
+        job_id: UUID,
+        lock_token: str,
+        locked_until: datetime,
+        updated_at: datetime,
+    ) -> bool:
+        result = await self._session.execute(
+            update(ScheduledJobModel)
+            .where(ScheduledJobModel.id == job_id)
+            .where(ScheduledJobModel.status == ScheduledJobStatus.RUNNING.value)
+            .where(ScheduledJobModel.lock_token == lock_token)
+            .values(locked_until=locked_until, updated_at=updated_at)
+        )
+        await self._session.flush()
+        return bool(result.rowcount)
+
+    async def owns_lock(self, *, job_id: UUID, lock_token: str) -> bool:
+        result = await self._session.execute(
+            select(ScheduledJobModel.id)
+            .where(ScheduledJobModel.id == job_id)
+            .where(ScheduledJobModel.status == ScheduledJobStatus.RUNNING.value)
+            .where(ScheduledJobModel.lock_token == lock_token)
+        )
+        return result.scalar_one_or_none() is not None
 
     async def mark_failed(
         self,

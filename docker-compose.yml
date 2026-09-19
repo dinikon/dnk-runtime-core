@@ -17,6 +17,8 @@ x-backend-common: &backend-common
     RABBITMQ__URL: amqp://${RABBITMQ_USERNAME:-rabbitmq}:${RABBITMQ_PASSWORD:-rabbitmq}@rabbitmq:5672/
     RABBITMQ__PREFETCH: ${RABBITMQ__PREFETCH:-20}
     EVENT_BUS__PUBLISHER_WORKER_ENABLED: "true"
+    AUTH__ALLOW_INSECURE_HTTP: "true"
+    PRICE_LISTS__SOURCE_ENCRYPTION_KEY: ${PRICE_LISTS__SOURCE_ENCRYPTION_KEY:-}
 
 services:
   migrations:
@@ -104,6 +106,26 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+
+  cron-worker:
+    <<: *backend-common
+    container_name: dnk-cron-worker
+    restart: unless-stopped
+    command: [dnk-manage, jobs, worker]
+    environment:
+      <<: *backend-environment
+      RABBITMQ__ENABLED: "false"
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "dnk-manage", "jobs", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    stop_grace_period: 60s
 
   postgres:
     image: postgres:16-alpine

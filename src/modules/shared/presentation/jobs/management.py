@@ -19,6 +19,7 @@ from src.modules.shared.application.jobs import (
 from src.modules.shared.application.uuid import UUIdGeneratorProtocol
 from src.modules.shared.domain.time import ClockPort
 from src.modules.shared.infrastructure.jobs import SqlAlchemyScheduledJobRepository
+from src.modules.shared.infrastructure.jobs import ScheduledJobWorker
 from src.modules.shared.infrastructure.time import UtcClock
 from src.modules.shared.infrastructure.uuid import UUID7Generator
 
@@ -28,6 +29,11 @@ def build_scheduled_job_repository(
 ) -> SqlAlchemyScheduledJobRepository:
     """Builds the shared SQLAlchemy scheduled job repository."""
     return SqlAlchemyScheduledJobRepository(session)
+
+
+def build_scheduled_job_worker(**kwargs) -> ScheduledJobWorker:
+    """Builds the production long-running worker at the shared composition root."""
+    return ScheduledJobWorker(**kwargs)
 
 
 def build_scheduled_job_dispatcher(
@@ -102,4 +108,5 @@ __all__ = [
     "build_schedule_scheduled_job_use_case",
     "build_scheduled_job_dispatcher",
     "build_scheduled_job_repository",
+    "build_scheduled_job_worker",
 ]

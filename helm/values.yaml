@@ -24,6 +24,13 @@ application:
     otpTokenTtlSeconds: 300
     sessionTtlSeconds: 432000
     sessionCookieName: dnk_session
+  priceLists:
+    # Persistent Fernet key. Generate once with `openssl rand -base64 32 | tr '+/' '-_'`.
+    sourceEncryptionKey:
+      value: ''
+      existingSecret:
+        name: ''
+        key: ''
   email:
     provider: smtp
     fromAddress: ''
@@ -70,6 +77,10 @@ application:
     lockTtlSeconds: 300
     retryBaseSeconds: 30
     maxAttempts: 5
+    pollIntervalSeconds: 2
+    recoverIntervalSeconds: 30
+    lockHeartbeatSeconds: 60
+    shutdownGraceSeconds: 60
 # Runtime-owned HTTPS integration. Core tenant creation stays disabled until acceptance.
 controlPlane:
   enabled: false
@@ -199,6 +210,50 @@ frontend:
     imagePullSecrets: []
 # Official Nginx routes /api to FastAPI and everything else to the Vue frontend.
 workers:
+  cron:
+    enabled: true
+    image:
+      repository: ghcr.io/dinikon/runtime/runtime
+      tag: latest
+      pullPolicy: Always
+    replicas: 1
+    pollIntervalSeconds: 2
+    recoverIntervalSeconds: 30
+    lockTtlSeconds: 300
+    lockHeartbeatSeconds: 60
+    shutdownGraceSeconds: 60
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 1Gi
+    probes:
+      readiness:
+        exec:
+          command: [dnk-manage, jobs, healthcheck]
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 3
+      liveness:
+        exec:
+          command: [dnk-manage, jobs, healthcheck]
+        periodSeconds: 20
+        timeoutSeconds: 5
+        failureThreshold: 3
+    pod:
+      annotations: {}
+      labels: {}
+      securityContext: {}
+      containerSecurityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+          - ALL
+      nodeSelector: {}
+      tolerations: []
+      affinity: {}
+      imagePullSecrets: []
   publisher:
     image:
       repository: ghcr.io/dinikon/runtime/runtime
