@@ -48,7 +48,6 @@ class PriceListSyncJobHandler:
         fetcher: HttpRemoteFileFetcher | None = None,
         parser: SourceParser | None = None,
     ) -> None:
-        started = time.monotonic()
         self.session_factory = session_factory
         self.fetcher = fetcher or HttpRemoteFileFetcher()
         self.parser = parser or SourceParser()
@@ -74,6 +73,7 @@ class PriceListSyncJobHandler:
         trigger: str,
         price_list: dict,
     ) -> None:
+        started = time.monotonic()
         async with self.session_factory() as session:
             repository = SqlAlchemyPriceListRepository(session)
             existing_run = await repository.get_run_by_job(
@@ -194,6 +194,7 @@ class PriceListSyncJobHandler:
             ).inc()
             logger.warning(
                 "Partner price-list synchronization failed.",
+                exc_info=True,
                 extra={
                     "tenant_id": str(job.tenant_id),
                     "price_list_id": str(price_list_id),

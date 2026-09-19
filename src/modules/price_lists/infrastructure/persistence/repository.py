@@ -35,6 +35,11 @@ from src.modules.shared.application.persistence.tenant_schema_naming import (
 )
 from src.modules.shared.infrastructure.persistence.base import TENANT_SCHEMA_ALIAS
 
+# Keep multi-row INSERT statements comfortably below asyncpg/PostgreSQL's
+# 32,767 bind-parameter limit. The widest price-list row currently uses 13
+# parameters, so a 1,000-row batch has at most 13,000 parameters.
+PRICE_LIST_WRITE_BATCH_SIZE = 1_000
+
 
 class SqlAlchemyPriceListRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -44,6 +49,22 @@ class SqlAlchemyPriceListRepository:
     def _options(self, tenant_id: UUID) -> dict[str, Any]:
         schema = self.naming.schema_name(EntityIdVO.from_value(tenant_id))
         return {"schema_translate_map": {TENANT_SCHEMA_ALIAS: schema}}
+
+    async def _insert_many(
+        self,
+        *,
+        tenant_id: UUID,
+        table: sa.Table,
+        values: list[dict[str, Any]],
+    ) -> None:
+        """Inserts large collections without exceeding driver bind limits."""
+        for offset in range(0, len(values), PRICE_LIST_WRITE_BATCH_SIZE):
+            batch = values[offset : offset + PRICE_LIST_WRITE_BATCH_SIZE]
+            await self.session.execute(
+                insert(table)
+                .values(batch)
+                .execution_options(**self._options(tenant_id))
+            )
 
     async def create(
         self,
@@ -268,32 +289,31 @@ class SqlAlchemyPriceListRepository:
         }
         staging = PriceListSyncItemModel.__table__
         if rows:
-            await self.session.execute(
-                insert(staging)
-                .values(
-                    [
-                        {
-                            "sync_run_id": run_id,
-                            "row_number": row.row_number,
-                            "external_id": row.normalized.get("external_id"),
-                            "sku": row.normalized.get("sku"),
-                            "title": row.normalized.get("title"),
-                            "purchase_price": row.normalized.get("purchase_price"),
-                            "rrp": row.normalized.get("rrp"),
-                            "currency": row.normalized.get("currency"),
-                            "availability": row.normalized.get("availability"),
-                            "quantity": row.normalized.get("quantity"),
-                            "value_hash": row.normalized.get("value_hash"),
-                            "normalized_payload": {
-                                key: str(value) if isinstance(value, Decimal) else value
-                                for key, value in row.normalized.items()
-                            },
-                            "validation_errors": list(row.errors),
-                        }
-                        for row in rows
-                    ]
-                )
-                .execution_options(**self._options(tenant_id))
+            staging_values = [
+                {
+                    "sync_run_id": run_id,
+                    "row_number": row.row_number,
+                    "external_id": row.normalized.get("external_id"),
+                    "sku": row.normalized.get("sku"),
+                    "title": row.normalized.get("title"),
+                    "purchase_price": row.normalized.get("purchase_price"),
+                    "rrp": row.normalized.get("rrp"),
+                    "currency": row.normalized.get("currency"),
+                    "availability": row.normalized.get("availability"),
+                    "quantity": row.normalized.get("quantity"),
+                    "value_hash": row.normalized.get("value_hash"),
+                    "normalized_payload": {
+                        key: str(value) if isinstance(value, Decimal) else value
+                        for key, value in row.normalized.items()
+                    },
+                    "validation_errors": list(row.errors),
+                }
+                for row in rows
+            ]
+            await self._insert_many(
+                tenant_id=tenant_id,
+                table=staging,
+                values=staging_values,
             )
         offers = PartnerOfferModel.__table__
         states = PartnerOfferStateModel.__table__

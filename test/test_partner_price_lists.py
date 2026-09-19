@@ -6,10 +6,12 @@ import unittest
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
+from unittest.mock import AsyncMock, patch
 
 from openpyxl import Workbook
 from cryptography.fernet import Fernet
+from sqlalchemy.dialects import postgresql
 
 from src.modules.price_lists.application import cron_occurrences, next_cron_occurrence
 from src.modules.price_lists.domain import (
@@ -26,6 +28,15 @@ from src.modules.price_lists.infrastructure.source import (
     SourceUrlCipher,
     prom_xml_config,
 )
+from src.modules.price_lists.infrastructure.persistence.models import (
+    PriceListSyncItemModel,
+)
+from src.modules.price_lists.infrastructure.persistence.repository import (
+    PRICE_LIST_WRITE_BATCH_SIZE,
+    SqlAlchemyPriceListRepository,
+)
+from src.modules.price_lists.presentation.jobs.handler import PriceListSyncJobHandler
+from src.modules.shared.domain.jobs import ScheduledJob
 
 
 class PartnerPriceListDomainTests(unittest.TestCase):
@@ -181,6 +192,110 @@ class PartnerPriceListFetcherTests(unittest.IsolatedAsyncioTestCase):
             await fetcher._validate_url("https://user:password@example.com/file.xml")
         with self.assertRaisesRegex(ValueError, "non-public"):
             await fetcher._validate_url("https://127.0.0.1/file.xml")
+
+
+class PartnerPriceListLargeImportTests(unittest.IsolatedAsyncioTestCase):
+    async def test_staging_insert_is_split_below_asyncpg_parameter_limit(self) -> None:
+        session = AsyncMock()
+        repository = SqlAlchemyPriceListRepository(session)
+        tenant_id = uuid4()
+        run_id = uuid4()
+        values = [
+            {
+                "sync_run_id": run_id,
+                "row_number": row_number,
+                "external_id": str(row_number),
+                "sku": f"SKU-{row_number}",
+                "title": f"Offer {row_number}",
+                "purchase_price": Decimal("1"),
+                "rrp": Decimal("2"),
+                "currency": "UAH",
+                "availability": "in_stock",
+                "quantity": None,
+                "value_hash": "a" * 64,
+                "normalized_payload": {},
+                "validation_errors": [],
+            }
+            for row_number in range(1, 8_400)
+        ]
+
+        await repository._insert_many(
+            tenant_id=tenant_id,
+            table=PriceListSyncItemModel.__table__,
+            values=values,
+        )
+
+        self.assertEqual(session.execute.await_count, 9)
+        for call in session.execute.await_args_list:
+            statement = call.args[0]
+            compiled = statement.compile(dialect=postgresql.dialect())
+            self.assertLessEqual(len(compiled.params), 32_767)
+            self.assertLessEqual(
+                len(statement._multi_values[0]), PRICE_LIST_WRITE_BATCH_SIZE
+            )
+
+    async def test_sync_failure_is_not_masked_by_duration_metric(self) -> None:
+        class Session:
+            commit = AsyncMock()
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, traceback):
+                return None
+
+        class Repository:
+            get_run_by_job = AsyncMock(return_value=None)
+            create_run = AsyncMock(return_value=uuid4())
+            finish_run = AsyncMock()
+
+        class FailingFetcher:
+            async def fetch(self, url: str):
+                raise ValueError("source download failed")
+
+        repository = Repository()
+        handler = PriceListSyncJobHandler(lambda: Session(), fetcher=FailingFetcher())
+        now = datetime.now(UTC)
+        job = ScheduledJob(
+            id=uuid4(),
+            tenant_id=uuid4(),
+            job_type="price_list.sync",
+            payload={},
+            run_at=now,
+            status="running",
+            attempts=1,
+            locked_until=now,
+            lock_token="lease",
+            created_at=now,
+            updated_at=now,
+        )
+        cipher = SourceUrlCipher(Fernet.generate_key().decode("ascii"))
+
+        with (
+            patch(
+                "src.modules.price_lists.presentation.jobs.handler."
+                "SqlAlchemyPriceListRepository",
+                return_value=repository,
+            ),
+            patch(
+                "src.modules.price_lists.presentation.jobs.handler.SourceUrlCipher",
+                return_value=cipher,
+            ),
+        ):
+            with self.assertRaisesRegex(ValueError, "source download failed"):
+                await handler._synchronize(
+                    job,
+                    uuid4(),
+                    "manual",
+                    {
+                        "source_url_secret": cipher.encrypt(
+                            "https://partner.example/feed.xml"
+                        ),
+                        "source_format": "xml",
+                    },
+                )
+
+        repository.finish_run.assert_awaited_once()
 
 
 @unittest.skipUnless(
