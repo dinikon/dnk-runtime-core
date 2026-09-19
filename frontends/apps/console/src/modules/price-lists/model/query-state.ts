@@ -1,5 +1,5 @@
 import type { LocationQuery } from "vue-router";
-import type { OfferFilters } from "../api/contracts";
+import type { OfferFilters, OfferHistoryFilters } from "../api/contracts";
 
 export const defaultOfferFilters: OfferFilters = {
   q: "",
@@ -12,6 +12,28 @@ export const defaultOfferFilters: OfferFilters = {
   marginMax: "",
   availability: "",
   hasRrp: "",
+  sort: "observed_at",
+  direction: "desc",
+  page: 1,
+  limit: 50,
+  includeArchived: false,
+};
+
+export const defaultOfferHistoryFilters: OfferHistoryFilters = {
+  observedFrom: "",
+  observedTo: "",
+  purchasePriceMin: "",
+  purchasePriceMax: "",
+  rrpMin: "",
+  rrpMax: "",
+  incomeMin: "",
+  incomeMax: "",
+  marginMin: "",
+  marginMax: "",
+  quantityMin: "",
+  quantityMax: "",
+  availability: "",
+  changeReason: "",
   sort: "observed_at",
   direction: "desc",
   page: 1,
@@ -41,6 +63,7 @@ export function filtersFromQuery(query: LocationQuery): OfferFilters {
     limit: [25, 50, 100].includes(Number(first(query.limit)))
       ? Number(first(query.limit))
       : defaultOfferFilters.limit,
+    includeArchived: first(query.include_archived) === "true",
   };
 }
 
@@ -60,6 +83,7 @@ export function filtersToQuery(filters: OfferFilters): Record<string, string> {
     ["direction", filters.direction],
     ["page", filters.page],
     ["limit", filters.limit],
+    ["include_archived", filters.includeArchived ? "true" : ""],
   ];
   return Object.fromEntries(
     entries.filter(([, value]) => value !== "" && value !== 0).map(([key, value]) => [key, String(value)]),

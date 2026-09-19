@@ -17,9 +17,13 @@ export const priceListRoutes: RouteRecordRaw[] = [
     component: () => import("./pages/PriceListDetailPage.vue"),
   },
   {
+    path: "purchases/price-lists/:id/edit",
+    name: "price-list-edit",
+    component: () => import("./pages/PriceListWizardPage.vue"),
+  },
+  {
     path: "purchases/offers",
     name: "partner-offers",
     component: () => import("./pages/PartnerOffersPage.vue"),
   },
 ];
-

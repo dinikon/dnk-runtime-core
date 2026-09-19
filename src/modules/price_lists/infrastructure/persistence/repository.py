@@ -7,6 +7,7 @@ from uuid import UUID
 
 import uuid6
 from sqlalchemy import (
+    Table,
     and_,
     case,
     delete,
@@ -54,7 +55,7 @@ class SqlAlchemyPriceListRepository:
         self,
         *,
         tenant_id: UUID,
-        table: sa.Table,
+        table: Table,
         values: list[dict[str, Any]],
     ) -> None:
         """Inserts large collections without exceeding driver bind limits."""
@@ -115,7 +116,9 @@ class SqlAlchemyPriceListRepository:
         row = result.mappings().one_or_none()
         return dict(row) if row else None
 
-    async def list(self, tenant_id: UUID) -> list[dict[str, Any]]:
+    async def list(
+        self, tenant_id: UUID, *, scope: str = "current"
+    ) -> list[dict[str, Any]]:
         table = PriceListModel.__table__
         offers = PartnerOfferModel.__table__
         runs = PriceListSyncRunModel.__table__
@@ -132,14 +135,19 @@ class SqlAlchemyPriceListRepository:
             .correlate(table)
             .scalar_subquery()
         )
+        statement = select(
+            table,
+            active_offer_count.label("active_offer_count"),
+            last_run_status.label("last_run_status"),
+        )
+        if scope == "current":
+            statement = statement.where(table.c.status != "archived")
+        elif scope == "archived":
+            statement = statement.where(table.c.status == "archived")
         result = await self.session.execute(
-            select(
-                table,
-                active_offer_count.label("active_offer_count"),
-                last_run_status.label("last_run_status"),
+            statement.order_by(table.c.created_at.desc(), table.c.id).execution_options(
+                **self._options(tenant_id)
             )
-            .order_by(table.c.created_at.desc(), table.c.id)
-            .execution_options(**self._options(tenant_id))
         )
         return [dict(row) for row in result.mappings()]
 
@@ -156,6 +164,14 @@ class SqlAlchemyPriceListRepository:
             update(PriceListModel.__table__)
             .where(PriceListModel.__table__.c.id == price_list_id)
             .values(**values)
+            .execution_options(**self._options(tenant_id))
+        )
+        return bool(result.rowcount)
+
+    async def delete(self, *, tenant_id: UUID, price_list_id: UUID) -> bool:
+        result = await self.session.execute(
+            delete(PriceListModel.__table__)
+            .where(PriceListModel.__table__.c.id == price_list_id)
             .execution_options(**self._options(tenant_id))
         )
         return bool(result.rowcount)
@@ -259,6 +275,24 @@ class SqlAlchemyPriceListRepository:
             update(PriceListModel.__table__)
             .where(PriceListModel.__table__.c.id == price_list_id)
             .values(**price_values)
+            .execution_options(**self._options(tenant_id))
+        )
+
+    async def skip_run(
+        self,
+        *,
+        tenant_id: UUID,
+        run_id: UUID,
+        reason: str,
+    ) -> None:
+        await self.session.execute(
+            update(PriceListSyncRunModel.__table__)
+            .where(PriceListSyncRunModel.__table__.c.id == run_id)
+            .values(
+                status="skipped",
+                finished_at=datetime.now(UTC),
+                error_summary=reason,
+            )
             .execution_options(**self._options(tenant_id))
         )
 
@@ -516,12 +550,21 @@ class SqlAlchemyPriceListRepository:
         limit: int,
         sort: str,
         direction: str,
+        include_archived: bool = False,
     ) -> tuple[list[dict[str, Any]], int]:
         offers = PartnerOfferModel.__table__
         states = PartnerOfferStateModel.__table__
+        historical_states = states.alias("historical_states")
         price_lists = PriceListModel.__table__
         income = states.c.rrp - states.c.purchase_price
         margin = case((states.c.rrp > 0, income / states.c.rrp * 100), else_=None)
+        change_count = (
+            select(func.count(historical_states.c.id))
+            .where(historical_states.c.offer_id == offers.c.id)
+            .where(historical_states.c.change_reason != "initial")
+            .correlate(offers)
+            .scalar_subquery()
+        )
         base = (
             select(
                 offers.c.id,
@@ -539,11 +582,14 @@ class SqlAlchemyPriceListRepository:
                 states.c.observed_at,
                 income.label("recommended_retail_income"),
                 margin.label("margin_percent"),
+                change_count.label("change_count"),
             )
             .join(price_lists, price_lists.c.id == offers.c.price_list_id)
             .join(states, states.c.id == offers.c.current_state_id, isouter=True)
         )
         clauses = []
+        if not include_archived:
+            clauses.append(price_lists.c.status != "archived")
         if filters.get("price_list_ids"):
             clauses.append(offers.c.price_list_id.in_(filters["price_list_ids"]))
         if filters.get("availability"):
@@ -610,23 +656,68 @@ class SqlAlchemyPriceListRepository:
         return [dict(row) for row in result.mappings()], total
 
     async def offer_history(
-        self, tenant_id: UUID, offer_id: UUID
-    ) -> list[dict[str, Any]]:
+        self,
+        *,
+        tenant_id: UUID,
+        offer_id: UUID,
+        filters: dict[str, Any],
+        offset: int,
+        limit: int,
+        sort: str,
+        direction: str,
+    ) -> tuple[list[dict[str, Any]], int]:
         states = PartnerOfferStateModel.__table__
         income = states.c.rrp - states.c.purchase_price
         margin = case((states.c.rrp > 0, income / states.c.rrp * 100), else_=None)
-        result = await self.session.execute(
-            select(
-                states,
-                income.label("recommended_retail_income"),
-                margin.label("margin_percent"),
-            )
-            .where(states.c.offer_id == offer_id)
-            .order_by(states.c.observed_at.desc())
-            .limit(500)
+        base = select(
+            states,
+            income.label("recommended_retail_income"),
+            margin.label("margin_percent"),
+        ).where(states.c.offer_id == offer_id)
+        clauses = []
+        if filters.get("observed_from") is not None:
+            clauses.append(states.c.observed_at >= filters["observed_from"])
+        if filters.get("observed_to") is not None:
+            clauses.append(states.c.observed_at <= filters["observed_to"])
+        for key, expression in {
+            "purchase_price": states.c.purchase_price,
+            "rrp": states.c.rrp,
+            "recommended_retail_income": income,
+            "margin_percent": margin,
+            "quantity": states.c.quantity,
+        }.items():
+            if filters.get(f"{key}_min") is not None:
+                clauses.append(expression >= filters[f"{key}_min"])
+            if filters.get(f"{key}_max") is not None:
+                clauses.append(expression <= filters[f"{key}_max"])
+        if filters.get("availability"):
+            clauses.append(states.c.availability.in_(filters["availability"]))
+        if filters.get("change_reason"):
+            clauses.append(states.c.change_reason.in_(filters["change_reason"]))
+        if clauses:
+            base = base.where(and_(*clauses))
+        count_result = await self.session.execute(
+            select(func.count())
+            .select_from(base.subquery())
             .execution_options(**self._options(tenant_id))
         )
-        return [dict(row) for row in result.mappings()]
+        sort_columns = {
+            "observed_at": states.c.observed_at,
+            "purchase_price": states.c.purchase_price,
+            "rrp": states.c.rrp,
+            "recommended_retail_income": income,
+            "margin_percent": margin,
+            "quantity": states.c.quantity,
+        }
+        order = sort_columns.get(sort, states.c.observed_at)
+        order = order.asc() if direction == "asc" else order.desc()
+        result = await self.session.execute(
+            base.order_by(order.nulls_last(), states.c.id)
+            .offset(offset)
+            .limit(limit)
+            .execution_options(**self._options(tenant_id))
+        )
+        return [dict(row) for row in result.mappings()], int(count_result.scalar_one())
 
     async def cleanup_failed_staging(
         self, *, tenant_id: UUID, older_than: datetime

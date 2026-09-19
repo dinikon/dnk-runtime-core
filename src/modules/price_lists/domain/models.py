@@ -16,6 +16,7 @@ class PriceListStatus(StrEnum):
     ACTIVE = "active"
     PAUSED = "paused"
     INVALID = "invalid"
+    ARCHIVED = "archived"
 
 
 class SourceFormat(StrEnum):

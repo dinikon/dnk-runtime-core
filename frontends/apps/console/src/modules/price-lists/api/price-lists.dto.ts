@@ -1,5 +1,6 @@
 import type {
   OffersResponse,
+  OfferHistoryResponse,
   PartnerOfferState,
   PreviewResult,
   PriceList,
@@ -10,5 +11,6 @@ import type {
 export type PriceListDto = PriceList;
 export type PreviewResultDto = PreviewResult;
 export type OffersResponseDto = OffersResponse;
+export type OfferHistoryResponseDto = OfferHistoryResponse;
 export type SyncRunDto = SyncRun;
 export type PartnerOfferStateDto = PartnerOfferState;

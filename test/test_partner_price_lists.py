@@ -7,13 +7,18 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from uuid import UUID, uuid4
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from openpyxl import Workbook
 from cryptography.fernet import Fernet
 from sqlalchemy.dialects import postgresql
 
-from src.modules.price_lists.application import cron_occurrences, next_cron_occurrence
+from src.modules.price_lists.application import (
+    PriceListService,
+    PriceListStateConflict,
+    cron_occurrences,
+    next_cron_occurrence,
+)
 from src.modules.price_lists.domain import (
     MappingValidationError,
     canonical_state_hash,
@@ -195,6 +200,137 @@ class PartnerPriceListFetcherTests(unittest.IsolatedAsyncioTestCase):
             await fetcher._validate_url("https://127.0.0.1/file.xml")
 
 
+class PartnerPriceListSettingsTests(unittest.IsolatedAsyncioTestCase):
+    def _price_list(self, *, status: str = "paused") -> dict:
+        return {
+            "id": uuid4(),
+            "status": status,
+            "source_url_secret": "encrypted-source",
+            "source_format": "xlsx",
+            "source_preset": None,
+            "source_config": {
+                "sheet_name": "Sheet1",
+                "header_row": 1,
+                "data_start_row": 2,
+            },
+            "mapping_config": {
+                "external_id": {"selector": "SKU"},
+                "sku": {"selector": "SKU"},
+                "title": {"selector": "Title"},
+                "purchase_price": {"selector": "Price"},
+                "currency": {"selector": "Currency"},
+            },
+            "mapping_version": 3,
+            "schedule_revision": 7,
+        }
+
+    async def test_paused_settings_update_keeps_secret_and_does_not_fetch_unchanged_source(
+        self,
+    ) -> None:
+        current = self._price_list()
+        repository = AsyncMock()
+        repository.get.return_value = current
+        fetcher = AsyncMock()
+        service = PriceListService(repository, fetcher=fetcher)
+        cipher = Mock()
+        cipher.decrypt.return_value = "https://partner.example/current.xlsx"
+
+        with patch(
+            "src.modules.price_lists.application.service.SourceUrlCipher",
+            return_value=cipher,
+        ):
+            await service.update_settings(
+                tenant_id=uuid4(),
+                actor_id=uuid4(),
+                price_list_id=current["id"],
+                title=" Updated title ",
+                source_url=None,
+                source_format="xlsx",
+                source_preset=None,
+                source_config=current["source_config"],
+                mapping_config=current["mapping_config"],
+                cron_expression="0 */6 * * *",
+                timezone="Europe/Kyiv",
+                new_item_policy="create",
+                missing_item_policy="mark_out_of_stock",
+                missing_threshold=2,
+            )
+
+        fetcher.fetch.assert_not_awaited()
+        values = repository.update_config.await_args.kwargs["values"]
+        self.assertEqual(values["title"], "Updated title")
+        self.assertEqual(values["status"], "paused")
+        self.assertEqual(values["schedule_revision"], 8)
+        self.assertIsNone(values["next_sync_at"])
+        self.assertNotIn("source_url_secret", values)
+        self.assertNotIn("mapping_version", values)
+
+    async def test_active_and_archived_settings_updates_are_rejected(self) -> None:
+        for status in ("active", "archived"):
+            repository = AsyncMock()
+            current = self._price_list(status=status)
+            repository.get.return_value = current
+            service = PriceListService(repository)
+
+            with self.assertRaises(PriceListStateConflict):
+                await service.update_settings(
+                    tenant_id=uuid4(),
+                    actor_id=uuid4(),
+                    price_list_id=current["id"],
+                    title="Title",
+                    source_url=None,
+                    source_format="xlsx",
+                    source_preset=None,
+                    source_config=current["source_config"],
+                    mapping_config=current["mapping_config"],
+                    cron_expression="0 */6 * * *",
+                    timezone="Europe/Kyiv",
+                    new_item_policy="create",
+                    missing_item_policy="mark_out_of_stock",
+                    missing_threshold=2,
+                )
+            repository.update_config.assert_not_awaited()
+
+    async def test_paused_schedule_stays_paused_without_next_run(self) -> None:
+        current = self._price_list()
+        repository = AsyncMock()
+        repository.get.return_value = current
+
+        await PriceListService(repository).save_schedule(
+            tenant_id=uuid4(),
+            actor_id=uuid4(),
+            price_list_id=current["id"],
+            cron_expression="0 */6 * * *",
+            timezone="Europe/Kyiv",
+            new_item_policy="create",
+            missing_item_policy="mark_out_of_stock",
+            missing_threshold=2,
+        )
+
+        values = repository.update_config.await_args.kwargs["values"]
+        self.assertIsNone(values["next_sync_at"])
+        self.assertEqual(values["schedule_revision"], 8)
+
+    async def test_active_schedule_conflict_is_checked_before_cron(self) -> None:
+        current = self._price_list(status="active")
+        repository = AsyncMock()
+        repository.get.return_value = current
+
+        with self.assertRaises(PriceListStateConflict):
+            await PriceListService(repository).save_schedule(
+                tenant_id=uuid4(),
+                actor_id=uuid4(),
+                price_list_id=current["id"],
+                cron_expression="not a cron",
+                timezone="Europe/Kyiv",
+                new_item_policy="create",
+                missing_item_policy="mark_out_of_stock",
+                missing_threshold=2,
+            )
+
+        repository.update_config.assert_not_awaited()
+
+
 class PartnerPriceListLargeImportTests(unittest.IsolatedAsyncioTestCase):
     async def test_staging_insert_is_split_below_asyncpg_parameter_limit(self) -> None:
         session = AsyncMock()
@@ -287,6 +423,7 @@ class PartnerPriceListLargeImportTests(unittest.IsolatedAsyncioTestCase):
                 await handler._synchronize(
                     job,
                     uuid4(),
+                    1,
                     "manual",
                     {
                         "source_url_secret": cipher.encrypt(

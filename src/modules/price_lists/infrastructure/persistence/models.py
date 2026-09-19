@@ -22,7 +22,7 @@ class PriceListModel(TenantSystemMixin, TenantBase):
     __tablename__ = "price_lists"
     __table_args__ = (
         sa.CheckConstraint(
-            "status IN ('draft','ready','active','paused','invalid')",
+            "status IN ('draft','ready','active','paused','invalid','archived')",
             name="ck_price_lists_status",
         ),
         sa.CheckConstraint(
@@ -74,6 +74,7 @@ class PriceListModel(TenantSystemMixin, TenantBase):
     )
     last_success_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
     last_error_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    archived_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
 
 
 class PartnerOfferModel(TenantSystemMixin, TenantBase):

@@ -1,5 +1,6 @@
-export type PriceListStatus = "draft" | "ready" | "active" | "paused" | "invalid";
+export type PriceListStatus = "draft" | "ready" | "active" | "paused" | "invalid" | "archived";
 export type SourceFormat = "xml" | "yaml" | "xlsx";
+export type PriceListScope = "current" | "archived" | "all";
 
 export interface MappingField {
   selector?: string;
@@ -25,11 +26,16 @@ export interface PriceList {
   source_url_display: string;
   source_config: Record<string, unknown>;
   mapping_config: MappingConfig;
+  mapping_version: number;
   cron_expression: string | null;
   timezone: string;
+  new_item_policy: "create" | "quarantine" | "ignore";
+  missing_item_policy: "mark_out_of_stock" | "mark_missing" | "keep_last" | "archive";
+  missing_threshold: number;
   next_sync_at: string | null;
   last_success_at: string | null;
   last_error_at: string | null;
+  archived_at: string | null;
   schedule_revision: number;
   active_offer_count?: number;
   last_run_status?: string | null;
@@ -66,6 +72,7 @@ export interface PartnerOffer {
   availability: "in_stock" | "out_of_stock" | "unknown" | null;
   quantity: number | null;
   observed_at: string | null;
+  change_count: number;
 }
 
 export interface PartnerOfferState {
@@ -83,6 +90,13 @@ export interface PartnerOfferState {
 
 export interface OffersResponse {
   items: PartnerOffer[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+export interface OfferHistoryResponse {
+  items: PartnerOfferState[];
   total: number;
   offset: number;
   limit: number;
@@ -109,6 +123,28 @@ export interface OfferFilters {
   marginMax: string;
   availability: string;
   hasRrp: string;
+  sort: string;
+  direction: "asc" | "desc";
+  page: number;
+  limit: number;
+  includeArchived: boolean;
+}
+
+export interface OfferHistoryFilters {
+  observedFrom: string;
+  observedTo: string;
+  purchasePriceMin: string;
+  purchasePriceMax: string;
+  rrpMin: string;
+  rrpMax: string;
+  incomeMin: string;
+  incomeMax: string;
+  marginMin: string;
+  marginMax: string;
+  quantityMin: string;
+  quantityMax: string;
+  availability: string;
+  changeReason: string;
   sort: string;
   direction: "asc" | "desc";
   page: number;

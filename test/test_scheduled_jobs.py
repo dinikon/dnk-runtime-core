@@ -347,6 +347,41 @@ class ScheduledJobsRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("scheduled_jobs.status NOT IN", sql)
         self.assertIn("UPDATE scheduled_jobs", sql)
 
+    async def test_cancel_matching_revokes_all_price_list_job_leases(self) -> None:
+        session = _SessionStub(rowcount=2)
+        repository = SqlAlchemyScheduledJobRepository(session)
+        tenant_id = uuid4()
+
+        result = await repository.cancel_matching(
+            tenant_id=tenant_id,
+            job_type="price_list.sync",
+            payload_contains={"price_list_id": "price-list-1"},
+            canceled_at=self.now,
+        )
+
+        sql = _postgres_sql(session.execute_statement)
+        self.assertEqual(result, 2)
+        self.assertIn("UPDATE scheduled_jobs", sql)
+        self.assertIn("scheduled_jobs.tenant_id =", sql)
+        self.assertIn("scheduled_jobs.job_type =", sql)
+        self.assertIn("scheduled_jobs.payload @>", sql)
+        self.assertIn("scheduled_jobs.status IN", sql)
+
+    async def test_delete_matching_removes_only_entity_jobs(self) -> None:
+        session = _SessionStub(rowcount=4)
+        repository = SqlAlchemyScheduledJobRepository(session)
+
+        result = await repository.delete_matching(
+            tenant_id=uuid4(),
+            job_type="price_list.sync",
+            payload_contains={"price_list_id": "price-list-1"},
+        )
+
+        sql = _postgres_sql(session.execute_statement)
+        self.assertEqual(result, 4)
+        self.assertIn("DELETE FROM scheduled_jobs", sql)
+        self.assertIn("scheduled_jobs.payload @>", sql)
+
     async def test_recover_stuck_returns_running_jobs_to_scheduled_or_failed(
         self,
     ) -> None:

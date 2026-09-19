@@ -73,6 +73,27 @@ class ScheduledJobRepositoryProtocol(Protocol):
         """Cancels a non-terminal job."""
         ...
 
+    async def cancel_matching(
+        self,
+        *,
+        tenant_id: UUID,
+        job_type: str,
+        payload_contains: dict[str, object],
+        canceled_at: datetime,
+    ) -> int:
+        """Cancels non-terminal jobs matching one tenant, type and payload."""
+        ...
+
+    async def delete_matching(
+        self,
+        *,
+        tenant_id: UUID,
+        job_type: str,
+        payload_contains: dict[str, object],
+    ) -> int:
+        """Deletes jobs matching one tenant, type and payload."""
+        ...
+
     async def recover_stuck_jobs(
         self,
         *,

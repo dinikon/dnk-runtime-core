@@ -6,12 +6,13 @@ from typing import Any, Literal
 from uuid import UUID
 
 import uuid6
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field, HttpUrl
 
 from src.modules.identity.presentation.http.csrf import require_csrf
 from src.modules.price_lists.application import (
     PriceListService,
+    PriceListStateConflict,
     cron_occurrences,
     next_cron_occurrence,
 )
@@ -47,6 +48,14 @@ class MappingRequest(BaseModel):
     mapping_config: dict[str, Any]
 
 
+class PreviewPriceListRequest(BaseModel):
+    source_url: HttpUrl | None = None
+    source_format: Literal["xml", "yaml", "xlsx"] | None = None
+    source_preset: Literal["prom_xml"] | None = None
+    source_config: dict[str, Any] | None = None
+    mapping_config: dict[str, Any] | None = None
+
+
 class ScheduleRequest(BaseModel):
     cron_expression: str = Field(min_length=5, max_length=128)
     timezone: str = Field(default="Europe/Kyiv", max_length=64)
@@ -55,6 +64,19 @@ class ScheduleRequest(BaseModel):
         "mark_out_of_stock", "mark_missing", "keep_last", "archive"
     ] = "mark_out_of_stock"
     missing_threshold: int = Field(default=2, ge=1, le=100)
+
+
+class UpdatePriceListSettingsRequest(ScheduleRequest):
+    title: str = Field(min_length=1, max_length=255)
+    source_url: HttpUrl | None = None
+    source_format: Literal["xml", "yaml", "xlsx"]
+    source_preset: Literal["prom_xml"] | None = None
+    source_config: dict[str, Any]
+    mapping_config: dict[str, Any]
+
+
+class DeletePriceListRequest(BaseModel):
+    confirmation_title: str = Field(min_length=1, max_length=255)
 
 
 def _ids(context: RequestContext) -> tuple[UUID, UUID]:
@@ -128,9 +150,13 @@ async def create_price_list(
 
 
 @router.get("")
-async def list_price_lists(context: AuthenticatedRequestContextDep, uow: UoWDep):
+async def list_price_lists(
+    context: AuthenticatedRequestContextDep,
+    uow: UoWDep,
+    scope: Literal["current", "archived", "all"] = "current",
+):
     tenant_id, _ = _ids(context)
-    rows = await SqlAlchemyPriceListRepository(uow.session).list(tenant_id)
+    rows = await SqlAlchemyPriceListRepository(uow.session).list(tenant_id, scope=scope)
     return {"items": [_public_price_list(row) for row in rows]}
 
 
@@ -166,12 +192,21 @@ async def preview_price_list(
     price_list_id: UUID,
     context: AuthenticatedRequestContextDep,
     uow: UoWDep,
+    payload: PreviewPriceListRequest | None = None,
 ):
     tenant_id, _ = _ids(context)
     try:
         return await PriceListService(
             SqlAlchemyPriceListRepository(uow.session)
-        ).preview(tenant_id, price_list_id)
+        ).preview(
+            tenant_id,
+            price_list_id,
+            candidate=(
+                payload.model_dump(exclude_unset=True, mode="json")
+                if payload is not None
+                else None
+            ),
+        )
     except LookupError as exc:
         raise HTTPException(404, str(exc)) from exc
     except Exception as exc:
@@ -194,6 +229,8 @@ async def save_mapping(
             source_config=payload.source_config,
             mapping_config=payload.mapping_config,
         )
+    except PriceListStateConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
     except (ValueError, LookupError) as exc:
         raise HTTPException(422, str(exc)) from exc
     return {"status": "ready"}
@@ -216,9 +253,40 @@ async def save_schedule(
             price_list_id=price_list_id,
             **payload.model_dump(),
         )
+    except PriceListStateConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
     except (ValueError, LookupError) as exc:
         raise HTTPException(422, str(exc)) from exc
     return {"next_sync_at": next_at}
+
+
+@router.put("/{price_list_id}/settings", dependencies=[Depends(require_csrf)])
+async def update_price_list_settings(
+    price_list_id: UUID,
+    payload: UpdatePriceListSettingsRequest,
+    context: AuthenticatedRequestContextDep,
+    uow: UoWDep,
+):
+    tenant_id, actor_id = _ids(context)
+    values = payload.model_dump(mode="json")
+    source_url = values.pop("source_url", None)
+    try:
+        await PriceListService(
+            SqlAlchemyPriceListRepository(uow.session)
+        ).update_settings(
+            tenant_id=tenant_id,
+            actor_id=actor_id,
+            price_list_id=price_list_id,
+            source_url=source_url,
+            **values,
+        )
+    except PriceListStateConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"status": "saved"}
 
 
 @router.post(
@@ -344,6 +412,9 @@ async def pause_price_list(
     row = await repository.get(tenant_id, price_list_id)
     if row is None:
         raise HTTPException(404, "Price list not found.")
+    if row["status"] != "active":
+        raise HTTPException(409, "Only active price lists can be paused.")
+    now = datetime.now(UTC)
     await repository.update_config(
         tenant_id=tenant_id,
         actor_id=actor_id,
@@ -353,6 +424,12 @@ async def pause_price_list(
             "schedule_revision": int(row["schedule_revision"]) + 1,
             "next_sync_at": None,
         },
+    )
+    await build_scheduled_job_repository(uow.session).cancel_matching(
+        tenant_id=tenant_id,
+        job_type="price_list.sync",
+        payload_contains={"price_list_id": str(price_list_id)},
+        canceled_at=now,
     )
     return {"status": "paused"}
 
@@ -372,6 +449,8 @@ async def resume_price_list(
     row = await repository.get(tenant_id, price_list_id)
     if row is None:
         raise HTTPException(404, "Price list not found.")
+    if row["status"] != "paused":
+        raise HTTPException(409, "Only paused price lists can be resumed.")
     revision = int(row["schedule_revision"]) + 1
     run_at = datetime.now(UTC)
     await repository.update_config(
@@ -392,6 +471,96 @@ async def resume_price_list(
         )
     )
     return {"status": "active", "job_id": job_id}
+
+
+@router.post("/{price_list_id}/archive", dependencies=[Depends(require_csrf)])
+async def archive_price_list(
+    price_list_id: UUID,
+    context: AuthenticatedRequestContextDep,
+    uow: UoWDep,
+):
+    tenant_id, actor_id = _ids(context)
+    repository = SqlAlchemyPriceListRepository(uow.session)
+    row = await repository.get(tenant_id, price_list_id)
+    if row is None:
+        raise HTTPException(404, "Price list not found.")
+    if row["status"] == "archived":
+        raise HTTPException(409, "Price list is already archived.")
+    now = datetime.now(UTC)
+    await repository.update_config(
+        tenant_id=tenant_id,
+        actor_id=actor_id,
+        price_list_id=price_list_id,
+        values={
+            "status": "archived",
+            "archived_at": now,
+            "next_sync_at": None,
+            "schedule_revision": int(row["schedule_revision"]) + 1,
+        },
+    )
+    canceled = await build_scheduled_job_repository(uow.session).cancel_matching(
+        tenant_id=tenant_id,
+        job_type="price_list.sync",
+        payload_contains={"price_list_id": str(price_list_id)},
+        canceled_at=now,
+    )
+    return {"status": "archived", "canceled_jobs": canceled}
+
+
+@router.post("/{price_list_id}/restore", dependencies=[Depends(require_csrf)])
+async def restore_price_list(
+    price_list_id: UUID,
+    context: AuthenticatedRequestContextDep,
+    uow: UoWDep,
+):
+    tenant_id, actor_id = _ids(context)
+    repository = SqlAlchemyPriceListRepository(uow.session)
+    row = await repository.get(tenant_id, price_list_id)
+    if row is None:
+        raise HTTPException(404, "Price list not found.")
+    if row["status"] != "archived":
+        raise HTTPException(409, "Only archived price lists can be restored.")
+    await repository.update_config(
+        tenant_id=tenant_id,
+        actor_id=actor_id,
+        price_list_id=price_list_id,
+        values={
+            "status": "paused",
+            "archived_at": None,
+            "next_sync_at": None,
+            "schedule_revision": int(row["schedule_revision"]) + 1,
+        },
+    )
+    return {"status": "paused"}
+
+
+@router.delete(
+    "/{price_list_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_csrf)],
+)
+async def delete_price_list(
+    price_list_id: UUID,
+    payload: DeletePriceListRequest,
+    context: AuthenticatedRequestContextDep,
+    uow: UoWDep,
+):
+    tenant_id, _ = _ids(context)
+    repository = SqlAlchemyPriceListRepository(uow.session)
+    row = await repository.get(tenant_id, price_list_id)
+    if row is None:
+        raise HTTPException(404, "Price list not found.")
+    if row["status"] != "archived":
+        raise HTTPException(409, "Archive the price list before deleting it.")
+    if payload.confirmation_title != row["title"]:
+        raise HTTPException(422, "Confirmation title does not match.")
+    await build_scheduled_job_repository(uow.session).delete_matching(
+        tenant_id=tenant_id,
+        job_type="price_list.sync",
+        payload_contains={"price_list_id": str(price_list_id)},
+    )
+    await repository.delete(tenant_id=tenant_id, price_list_id=price_list_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{price_list_id}/runs")
@@ -426,6 +595,7 @@ async def _offers_response(
     direction: str,
     offset: int,
     limit: int,
+    include_archived: bool,
 ):
     items, total = await repository.list_offers(
         tenant_id=tenant_id,
@@ -445,6 +615,7 @@ async def _offers_response(
         limit=limit,
         sort=sort,
         direction=direction,
+        include_archived=include_archived,
     )
     return {"items": items, "total": total, "offset": offset, "limit": limit}
 
@@ -459,6 +630,7 @@ async def list_price_list_offers(
     direction: Literal["asc", "desc"] = "desc",
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
+    include_archived: bool = False,
 ):
     tenant_id, _ = _ids(context)
     return await _offers_response(
@@ -478,6 +650,7 @@ async def list_price_list_offers(
         direction=direction,
         offset=offset,
         limit=limit,
+        include_archived=include_archived,
     )
 
 
@@ -499,6 +672,7 @@ async def list_all_offers(
     direction: Literal["asc", "desc"] = "desc",
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
+    include_archived: bool = False,
 ):
     tenant_id, _ = _ids(context)
     return await _offers_response(
@@ -518,6 +692,7 @@ async def list_all_offers(
         direction=direction,
         offset=offset,
         limit=limit,
+        include_archived=include_archived,
     )
 
 
@@ -526,10 +701,48 @@ async def offer_history(
     offer_id: UUID,
     context: AuthenticatedRequestContextDep,
     uow: UoWDep,
+    observed_from: datetime | None = None,
+    observed_to: datetime | None = None,
+    purchase_price_min: Decimal | None = None,
+    purchase_price_max: Decimal | None = None,
+    rrp_min: Decimal | None = None,
+    rrp_max: Decimal | None = None,
+    recommended_retail_income_min: Decimal | None = None,
+    recommended_retail_income_max: Decimal | None = None,
+    margin_percent_min: Decimal | None = None,
+    margin_percent_max: Decimal | None = None,
+    quantity_min: int | None = Query(default=None, ge=0),
+    quantity_max: int | None = Query(default=None, ge=0),
+    availability: list[str] = Query(default=[]),
+    change_reason: list[str] = Query(default=[]),
+    sort: str = "observed_at",
+    direction: Literal["asc", "desc"] = "desc",
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
 ):
     tenant_id, _ = _ids(context)
-    return {
-        "items": await SqlAlchemyPriceListRepository(uow.session).offer_history(
-            tenant_id, offer_id
-        )
-    }
+    items, total = await SqlAlchemyPriceListRepository(uow.session).offer_history(
+        tenant_id=tenant_id,
+        offer_id=offer_id,
+        filters={
+            "observed_from": observed_from,
+            "observed_to": observed_to,
+            "purchase_price_min": purchase_price_min,
+            "purchase_price_max": purchase_price_max,
+            "rrp_min": rrp_min,
+            "rrp_max": rrp_max,
+            "recommended_retail_income_min": recommended_retail_income_min,
+            "recommended_retail_income_max": recommended_retail_income_max,
+            "margin_percent_min": margin_percent_min,
+            "margin_percent_max": margin_percent_max,
+            "quantity_min": quantity_min,
+            "quantity_max": quantity_max,
+            "availability": availability,
+            "change_reason": change_reason,
+        },
+        offset=offset,
+        limit=limit,
+        sort=sort,
+        direction=direction,
+    )
+    return {"items": items, "total": total, "offset": offset, "limit": limit}

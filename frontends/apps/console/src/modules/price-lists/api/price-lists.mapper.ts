@@ -1,5 +1,6 @@
 import type {
   OffersResponse,
+  OfferHistoryResponse,
   PartnerOfferState,
   PreviewResult,
   PriceList,
@@ -7,6 +8,7 @@ import type {
 } from "../model/types";
 import type {
   OffersResponseDto,
+  OfferHistoryResponseDto,
   PartnerOfferStateDto,
   PreviewResultDto,
   PriceListDto,
@@ -21,3 +23,7 @@ export const mapOffers = (value: OffersResponseDto): OffersResponse => ({
 });
 export const mapSyncRun = (value: SyncRunDto): SyncRun => ({ ...value });
 export const mapOfferState = (value: PartnerOfferStateDto): PartnerOfferState => ({ ...value });
+export const mapOfferHistory = (value: OfferHistoryResponseDto): OfferHistoryResponse => ({
+  ...value,
+  items: value.items.map(mapOfferState),
+});

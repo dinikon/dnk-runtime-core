@@ -64,12 +64,13 @@ class PriceListSyncJobHandler:
         async with self._price_list_lock(job.tenant_id, price_list_id) as acquired:
             if not acquired:
                 return
-            await self._synchronize(job, price_list_id, trigger, price_list)
+            await self._synchronize(job, price_list_id, revision, trigger, price_list)
 
     async def _synchronize(
         self,
         job: ScheduledJob,
         price_list_id: UUID,
+        revision: int,
         trigger: str,
         price_list: dict,
     ) -> None:
@@ -134,7 +135,9 @@ class PriceListSyncJobHandler:
             if not valid_external_ids or rejected / max(len(rows), 1) > 0.25:
                 raise ValueError("Source validation threshold exceeded.")
             async with self.session_factory() as session:
-                await self._require_lease(session, job)
+                await self._require_current_schedule(
+                    session, job, price_list_id, revision
+                )
                 repository = SqlAlchemyPriceListRepository(session)
                 counters = await repository.apply_rows(
                     tenant_id=job.tenant_id,
@@ -173,7 +176,23 @@ class PriceListSyncJobHandler:
                 },
             )
         except LostJobLease:
-            raise
+            async with self.session_factory() as session:
+                await SqlAlchemyPriceListRepository(session).skip_run(
+                    tenant_id=job.tenant_id,
+                    run_id=run_id,
+                    reason="Synchronization was superseded by a lifecycle change.",
+                )
+                await session.commit()
+            logger.info(
+                "Partner price-list synchronization skipped after lifecycle change.",
+                extra={
+                    "tenant_id": str(job.tenant_id),
+                    "price_list_id": str(price_list_id),
+                    "sync_run_id": str(run_id),
+                    "scheduled_job_id": str(job.id),
+                },
+            )
+            return
         except Exception as exc:
             async with self.session_factory() as session:
                 repository = SqlAlchemyPriceListRepository(session)
@@ -278,6 +297,24 @@ class PriceListSyncJobHandler:
         )
         if not owns_lock:
             raise LostJobLease("Scheduled job lease was lost.")
+
+    async def _require_current_schedule(
+        self,
+        session: AsyncSession,
+        job: ScheduledJob,
+        price_list_id: UUID,
+        revision: int,
+    ) -> None:
+        await self._require_lease(session, job)
+        current = await SqlAlchemyPriceListRepository(session).get(
+            job.tenant_id, price_list_id
+        )
+        if (
+            current is None
+            or current["status"] != "active"
+            or int(current["schedule_revision"]) != revision
+        ):
+            raise LostJobLease("Price-list schedule is no longer current.")
 
     @asynccontextmanager
     async def _price_list_lock(

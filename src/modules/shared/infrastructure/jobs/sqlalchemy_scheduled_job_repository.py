@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import insert, select, update
+from sqlalchemy import delete, insert, select, update
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -215,6 +215,55 @@ class SqlAlchemyScheduledJobRepository:
         )
         await self._session.flush()
         return bool(result.rowcount)
+
+    async def cancel_matching(
+        self,
+        *,
+        tenant_id: UUID,
+        job_type: str,
+        payload_contains: dict[str, object],
+        canceled_at: datetime,
+    ) -> int:
+        """Cancels all matching scheduled or running jobs and revokes leases."""
+        result = await self._session.execute(
+            update(ScheduledJobModel)
+            .where(ScheduledJobModel.tenant_id == tenant_id)
+            .where(ScheduledJobModel.job_type == job_type)
+            .where(ScheduledJobModel.payload.contains(payload_contains))
+            .where(
+                ScheduledJobModel.status.in_(
+                    [
+                        ScheduledJobStatus.SCHEDULED.value,
+                        ScheduledJobStatus.RUNNING.value,
+                    ]
+                )
+            )
+            .values(
+                status=ScheduledJobStatus.CANCELED.value,
+                locked_until=None,
+                lock_token=None,
+                updated_at=canceled_at,
+            )
+        )
+        await self._session.flush()
+        return int(result.rowcount or 0)
+
+    async def delete_matching(
+        self,
+        *,
+        tenant_id: UUID,
+        job_type: str,
+        payload_contains: dict[str, object],
+    ) -> int:
+        """Deletes all matching jobs after their owning entity is archived."""
+        result = await self._session.execute(
+            delete(ScheduledJobModel)
+            .where(ScheduledJobModel.tenant_id == tenant_id)
+            .where(ScheduledJobModel.job_type == job_type)
+            .where(ScheduledJobModel.payload.contains(payload_contains))
+        )
+        await self._session.flush()
+        return int(result.rowcount or 0)
 
     async def recover_stuck_jobs(
         self,

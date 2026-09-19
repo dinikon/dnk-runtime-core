@@ -25,6 +25,10 @@ from src.modules.price_lists.infrastructure.source import (
 )
 
 
+class PriceListStateConflict(ValueError):
+    """Raised when a lifecycle state does not allow a requested mutation."""
+
+
 def next_cron_occurrence(
     expression: str,
     timezone: str,
@@ -107,17 +111,24 @@ class PriceListService:
         )
 
     async def preview(
-        self, tenant_id: UUID, price_list_id: UUID, *, limit: int = 20
+        self,
+        tenant_id: UUID,
+        price_list_id: UUID,
+        *,
+        candidate: dict[str, Any] | None = None,
+        limit: int = 20,
     ) -> dict[str, Any]:
         price_list = await self._required(tenant_id, price_list_id)
-        fetched = await self.fetcher.fetch(
-            SourceUrlCipher().decrypt(price_list["source_url_secret"])
-        )
+        resolved = self._resolve_candidate(price_list, candidate or {})
+        _validate_source_config(resolved["source_format"], resolved["source_config"])
+        if resolved["mapping_config"]:
+            _validate_mapping_config(resolved["mapping_config"])
+        fetched = await self.fetcher.fetch(resolved["source_url"])
         try:
             inspection = self.parser.inspect(
                 fetched.path,
-                price_list["source_format"],
-                price_list["source_config"],
+                resolved["source_format"],
+                resolved["source_config"],
             )
             rows = (
                 [
@@ -128,17 +139,17 @@ class PriceListService:
                     }
                     for row in self.parser.rows(
                         fetched.path,
-                        price_list["source_format"],
-                        price_list["source_config"],
-                        price_list["mapping_config"],
+                        resolved["source_format"],
+                        resolved["source_config"],
+                        resolved["mapping_config"],
                         limit=limit,
                     )
                 ]
-                if price_list["mapping_config"]
+                if resolved["mapping_config"]
                 else []
             )
             return {
-                "format": price_list["source_format"],
+                "format": resolved["source_format"],
                 "content_type": fetched.content_type,
                 "size": fetched.size,
                 "checksum": fetched.checksum,
@@ -160,8 +171,13 @@ class PriceListService:
         current = await self._required(tenant_id, price_list_id)
         _validate_source_config(current["source_format"], source_config)
         _validate_mapping_config(mapping_config)
-        if current["status"] == PriceListStatus.ACTIVE.value:
-            raise ValueError("Pause the price list before changing its mapping.")
+        if current["status"] in {
+            PriceListStatus.ACTIVE.value,
+            PriceListStatus.ARCHIVED.value,
+        }:
+            raise PriceListStateConflict(
+                "Pause or restore the price list before changing its mapping."
+            )
         fetched = await self.fetcher.fetch(
             SourceUrlCipher().decrypt(current["source_url_secret"])
         )
@@ -199,7 +215,11 @@ class PriceListService:
                 "source_config": source_config,
                 "mapping_config": mapping_config,
                 "mapping_version": int(current["mapping_version"]) + 1,
-                "status": PriceListStatus.READY.value,
+                "status": (
+                    PriceListStatus.PAUSED.value
+                    if current["status"] == PriceListStatus.PAUSED.value
+                    else PriceListStatus.READY.value
+                ),
             },
         )
 
@@ -215,10 +235,15 @@ class PriceListService:
         missing_item_policy: str,
         missing_threshold: int,
     ) -> datetime:
-        next_at = cron_occurrences(cron_expression, timezone, count=1)[0]
         current = await self._required(tenant_id, price_list_id)
-        if current["status"] == PriceListStatus.ACTIVE.value:
-            raise ValueError("Pause the price list before changing its schedule.")
+        if current["status"] in {
+            PriceListStatus.ACTIVE.value,
+            PriceListStatus.ARCHIVED.value,
+        }:
+            raise PriceListStateConflict(
+                "Pause or restore the price list before changing its schedule."
+            )
+        next_at = cron_occurrences(cron_expression, timezone, count=1)[0]
         await self.repository.update_config(
             tenant_id=tenant_id,
             actor_id=actor_id,
@@ -229,11 +254,166 @@ class PriceListService:
                 "new_item_policy": new_item_policy,
                 "missing_item_policy": missing_item_policy,
                 "missing_threshold": missing_threshold,
-                "next_sync_at": next_at,
+                "next_sync_at": (
+                    None
+                    if current["status"] == PriceListStatus.PAUSED.value
+                    else next_at
+                ),
                 "schedule_revision": int(current["schedule_revision"]) + 1,
             },
         )
         return next_at
+
+    async def update_settings(
+        self,
+        *,
+        tenant_id: UUID,
+        actor_id: UUID,
+        price_list_id: UUID,
+        title: str,
+        source_url: str | None,
+        source_format: str,
+        source_preset: str | None,
+        source_config: dict[str, Any],
+        mapping_config: dict[str, Any],
+        cron_expression: str,
+        timezone: str,
+        new_item_policy: str,
+        missing_item_policy: str,
+        missing_threshold: int,
+    ) -> None:
+        current = await self._required(tenant_id, price_list_id)
+        if current["status"] in {
+            PriceListStatus.ACTIVE.value,
+            PriceListStatus.ARCHIVED.value,
+        }:
+            raise PriceListStateConflict(
+                "Pause or restore the price list before changing its settings."
+            )
+        normalized_title = title.strip()
+        if not normalized_title:
+            raise ValueError("Price-list title is required.")
+        next_at = cron_occurrences(cron_expression, timezone, count=1)[0]
+        candidate = self._resolve_candidate(
+            current,
+            {
+                "source_url": source_url,
+                "source_format": source_format,
+                "source_preset": source_preset,
+                "source_config": source_config,
+                "mapping_config": mapping_config,
+            },
+        )
+        _validate_source_config(candidate["source_format"], candidate["source_config"])
+        _validate_mapping_config(candidate["mapping_config"])
+        source_changed = any(
+            candidate[key] != current[key]
+            for key in (
+                "source_format",
+                "source_preset",
+                "source_config",
+                "mapping_config",
+            )
+        ) or (
+            source_url is not None
+            and candidate["source_url"]
+            != SourceUrlCipher().decrypt(current["source_url_secret"])
+        )
+        if source_changed:
+            await self._validate_candidate_file(candidate)
+        values: dict[str, Any] = {
+            "title": normalized_title,
+            "source_format": candidate["source_format"],
+            "source_preset": candidate["source_preset"],
+            "source_config": candidate["source_config"],
+            "mapping_config": candidate["mapping_config"],
+            "cron_expression": cron_expression,
+            "timezone": timezone,
+            "new_item_policy": new_item_policy,
+            "missing_item_policy": missing_item_policy,
+            "missing_threshold": missing_threshold,
+            "schedule_revision": int(current["schedule_revision"]) + 1,
+            "next_sync_at": (
+                None if current["status"] == PriceListStatus.PAUSED.value else next_at
+            ),
+            "status": (
+                PriceListStatus.PAUSED.value
+                if current["status"] == PriceListStatus.PAUSED.value
+                else PriceListStatus.READY.value
+            ),
+        }
+        if source_changed:
+            values["mapping_version"] = int(current["mapping_version"]) + 1
+        if source_url is not None:
+            values.update(
+                source_url_secret=SourceUrlCipher().encrypt(candidate["source_url"]),
+                source_url_display=mask_source_url(candidate["source_url"]),
+            )
+        await self.repository.update_config(
+            tenant_id=tenant_id,
+            actor_id=actor_id,
+            price_list_id=price_list_id,
+            values=values,
+        )
+
+    def _resolve_candidate(
+        self, current: dict[str, Any], candidate: dict[str, Any]
+    ) -> dict[str, Any]:
+        source_url = candidate.get("source_url") or SourceUrlCipher().decrypt(
+            current["source_url_secret"]
+        )
+        source_format = SourceFormat(
+            candidate.get("source_format", current["source_format"])
+        ).value
+        source_preset = candidate.get("source_preset", current["source_preset"])
+        source_config = dict(
+            candidate.get("source_config", current["source_config"]) or {}
+        )
+        mapping_config = dict(
+            candidate.get("mapping_config", current["mapping_config"]) or {}
+        )
+        if source_preset == "prom_xml":
+            if source_format != SourceFormat.XML.value:
+                raise ValueError("Prom preset requires XML format.")
+            preset_source, preset_mapping = prom_xml_config()
+            source_config = {**preset_source, **source_config}
+            mapping_config = mapping_config or preset_mapping
+        return {
+            "source_url": source_url,
+            "source_format": source_format,
+            "source_preset": source_preset,
+            "source_config": source_config,
+            "mapping_config": mapping_config,
+        }
+
+    async def _validate_candidate_file(self, candidate: dict[str, Any]) -> None:
+        fetched = await self.fetcher.fetch(candidate["source_url"])
+        try:
+            rows = list(
+                self.parser.rows(
+                    fetched.path,
+                    candidate["source_format"],
+                    candidate["source_config"],
+                    candidate["mapping_config"],
+                    limit=50,
+                )
+            )
+            valid = [row for row in rows if not row.errors]
+            external_ids = [
+                str(row.normalized["external_id"])
+                for row in rows
+                if row.normalized.get("external_id") not in (None, "")
+            ]
+            if not valid:
+                raise ValueError("Mapping preview has no valid rows.")
+            if len(external_ids) != len(set(external_ids)):
+                raise ValueError(
+                    "Mapping preview contains duplicate external_id values."
+                )
+            if (len(rows) - len(valid)) / max(len(rows), 1) > 0.25:
+                raise ValueError("Mapping preview validation threshold exceeded.")
+        finally:
+            Path(fetched.path).unlink(missing_ok=True)
 
     async def _required(self, tenant_id: UUID, price_list_id: UUID) -> dict[str, Any]:
         result = await self.repository.get(tenant_id, price_list_id)
