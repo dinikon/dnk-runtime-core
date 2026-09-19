@@ -177,20 +177,24 @@ class SourceParser:
     ) -> dict[str, Any]:
         if source_format == "xlsx":
             self._validate_xlsx_archive(path)
-            workbook = load_workbook(path, read_only=True, data_only=True)
-            try:
-                sheets = list(workbook.sheetnames)
-                sheet = workbook[source_config.get("sheet_name") or sheets[0]]
-                header_row = int(source_config.get("header_row", 1))
-                rows = sheet.iter_rows(
-                    min_row=header_row, max_row=header_row, values_only=True
-                )
-                headers = [
-                    str(value).strip() for value in next(rows) if value is not None
-                ]
-                return {"sheets": sheets, "columns": headers}
-            finally:
-                workbook.close()
+            # Remote files are intentionally stored under random extensionless
+            # temporary names. Passing a binary stream makes openpyxl validate
+            # the ZIP payload instead of rejecting the temporary filename.
+            with path.open("rb") as source:
+                workbook = load_workbook(source, read_only=True, data_only=True)
+                try:
+                    sheets = list(workbook.sheetnames)
+                    sheet = workbook[source_config.get("sheet_name") or sheets[0]]
+                    header_row = int(source_config.get("header_row", 1))
+                    rows = sheet.iter_rows(
+                        min_row=header_row, max_row=header_row, values_only=True
+                    )
+                    headers = [
+                        str(value).strip() for value in next(rows) if value is not None
+                    ]
+                    return {"sheets": sheets, "columns": headers}
+                finally:
+                    workbook.close()
         if source_format == "xml":
             paths: set[str] = set()
             stack: list[str] = []
@@ -275,35 +279,38 @@ class SourceParser:
         self, path: Path, source_config: dict[str, Any]
     ) -> Iterator[tuple[int, Any]]:
         self._validate_xlsx_archive(path)
-        workbook = load_workbook(path, read_only=True, data_only=True)
-        try:
-            sheet_name = source_config.get("sheet_name") or workbook.sheetnames[0]
-            if sheet_name not in workbook.sheetnames:
-                raise MappingValidationError("Configured XLSX sheet does not exist.")
-            sheet = workbook[sheet_name]
-            header_row = int(source_config.get("header_row", 1))
-            data_start = int(source_config.get("data_start_row", header_row + 1))
-            header_values = next(
-                sheet.iter_rows(
-                    min_row=header_row, max_row=header_row, values_only=True
+        with path.open("rb") as source:
+            workbook = load_workbook(source, read_only=True, data_only=True)
+            try:
+                sheet_name = source_config.get("sheet_name") or workbook.sheetnames[0]
+                if sheet_name not in workbook.sheetnames:
+                    raise MappingValidationError(
+                        "Configured XLSX sheet does not exist."
+                    )
+                sheet = workbook[sheet_name]
+                header_row = int(source_config.get("header_row", 1))
+                data_start = int(source_config.get("data_start_row", header_row + 1))
+                header_values = next(
+                    sheet.iter_rows(
+                        min_row=header_row, max_row=header_row, values_only=True
+                    )
                 )
-            )
-            headers = [
-                str(value).strip() if value is not None else ""
-                for value in header_values
-            ]
-            if len(headers) > self.max_columns:
-                raise MappingValidationError("XLSX column limit exceeded.")
-            for count, values in enumerate(
-                sheet.iter_rows(min_row=data_start, values_only=True), start=0
-            ):
-                if count >= self.max_rows:
-                    raise MappingValidationError("Source row limit exceeded.")
-                if all(value is None for value in values):
-                    continue
-                yield data_start + count, dict(zip(headers, values, strict=False))
-        finally:
-            workbook.close()
+                headers = [
+                    str(value).strip() if value is not None else ""
+                    for value in header_values
+                ]
+                if len(headers) > self.max_columns:
+                    raise MappingValidationError("XLSX column limit exceeded.")
+                for count, values in enumerate(
+                    sheet.iter_rows(min_row=data_start, values_only=True), start=0
+                ):
+                    if count >= self.max_rows:
+                        raise MappingValidationError("Source row limit exceeded.")
+                    if all(value is None for value in values):
+                        continue
+                    yield data_start + count, dict(zip(headers, values, strict=False))
+            finally:
+                workbook.close()
 
     def _validate_xlsx_archive(self, path: Path) -> None:
         try:

@@ -124,7 +124,7 @@ class PartnerPriceListParserTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0].normalized["external_id"], "right")
 
-    def test_xlsx_is_read_only_and_uses_header_mapping(self) -> None:
+    def test_extensionless_xlsx_is_read_only_and_uses_header_mapping(self) -> None:
         workbook = Workbook()
         sheet = workbook.active
         sheet.title = "Sheet1"
@@ -151,7 +151,8 @@ class PartnerPriceListParserTests(unittest.TestCase):
             "quantity": {"selector": "Количество"},
         }
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "sample.xlsx"
+            # HttpRemoteFileFetcher uses an extensionless random temporary path.
+            path = Path(directory) / "downloaded-price-list"
             workbook.save(path)
             inspection = self.parser.inspect(
                 path, "xlsx", {"sheet_name": "Sheet1", "header_row": 1}
