@@ -1,3 +1,41 @@
+## v2.0.0-rc.1 (2026-09-20)
+
+### BREAKING CHANGE
+
+- Deletion receipts and purging worker require all nodes to run updated processes post-migration. Ensure migration `0004_tenant_deletion` is applied before enabling namespace cleanup and deletion.
+
+### Feat
+
+- **docs**: update benchmarks and operational details for price lists
+- **benchmarks**: add high-volume price list processing benchmarks
+- **price-lists**: add streaming sync documentation and cursor tests
+- **price-lists**: add PostgreSQL benchmark and expand domain exports
+- **price-lists**: add PostgreSQL benchmark and expand domain exports
+- **price-lists**: improve batch processing and domain integration
+- **price-lists**: enhance validation and repository abstraction
+- **jobs**: add concurrency control, graceful shutdown, and health checks
+- **price-lists**: update availability mapping and semantics
+- **price_lists**: add archive lifecycle, CRUD operations, and enhanced filters
+- **price_lists**: add batch processing for large price list inserts to avoid driver bind limits
+- **price_lists**: initialize partner price lists module with migrations, API, and scheduled jobs
+- **cicd**: add Helm chart support to publish-feature workflow
+- **cicd**: extend publish-feature to support Helm chart publication
+- **cicd**: add DockerImageRegistry for manifest lookups without ORAS
+- **cicd**: add publish-feature command for container images
+- **global**: introduce durable tenant deletion and resumable purging protocol
+
+### Fix
+
+- **jobs**: scope worker diagnostics to application logs
+- **jobs**: keep long price-list synchronizations healthy
+- **parser**: support extensionless XLSX files by using binary streams
+- **cicd**: improve test readability for image registry authentication failure
+- **access**: update invitation token retrieval to handle fragment-based tokens
+
+### Refactor
+
+- **price-lists**: remove SQLAlchemy repository and service implementations
+
 ## v1.1.0 (2026-09-13)
 
 ### Feat
