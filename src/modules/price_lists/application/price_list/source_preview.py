@@ -46,6 +46,8 @@ class SourcePreview:
                 "mapping_config",
             )
         }
+        for name in ("source_config", "mapping_config"):
+            resolved[name] = dict(resolved[name] or {})
         resolved["source_url"] = SourceUrlVO(
             changes.get("source_url") or self.cipher.decrypt(price.source_url_secret)
         ).value
