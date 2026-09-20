@@ -12,6 +12,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -77,11 +78,23 @@ class CloudConnectionModel(Base):
 
 class AccessProjectionModel(Base):
     __tablename__ = "cp_access_projections"
-    __table_args__ = (CheckConstraint("version >= 1"),)
+    __table_args__ = (
+        CheckConstraint("version >= 1"),
+        Index(
+            "cp_access_role_sync_idx",
+            "sync_attempted_at",
+            postgresql_where=text("NOT role_synced"),
+        ),
+    )
     core_tenant_id: Mapped[UUID] = mapped_column(StringUUID, primary_key=True)
     global_user_id: Mapped[UUID] = mapped_column(StringUUID, primary_key=True)
     available: Mapped[bool] = mapped_column(Boolean, nullable=False)
     version: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    role: Mapped[str | None] = mapped_column(String(16))
+    role_synced: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    sync_attempted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class DeliveryModel(Base):
@@ -126,5 +139,26 @@ class ReadinessObservationModel(Base):
     routing_ready: Mapped[bool] = mapped_column(Boolean, nullable=False)
     tls_ready: Mapped[bool] = mapped_column(Boolean, nullable=False)
     observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+
+class DeletionModel(Base):
+    """Durable lifecycle fence; identifying payload is erased by purge."""
+
+    __tablename__ = "cp_tenant_deletions"
+    __table_args__ = (
+        CheckConstraint("state IN ('deletion_pending','blocked','purging','deleted')"),
+    )
+    core_tenant_id: Mapped[UUID] = mapped_column(StringUUID, primary_key=True)
+    runtime_tenant_id: Mapped[UUID | None] = mapped_column(StringUUID, unique=True)
+    operation_id: Mapped[UUID] = mapped_column(StringUUID, unique=True, nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    version: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)
+    command: Mapped[dict | None] = mapped_column(PortableJSON)
+    command_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    creation_succeeded: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )

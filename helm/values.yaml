@@ -24,6 +24,24 @@ application:
     otpTokenTtlSeconds: 300
     sessionTtlSeconds: 432000
     sessionCookieName: dnk_session
+  priceLists:
+    batchSize: 1000
+    maxErrorRatio: 0.5
+    maxRows: 2000000
+    maxDownloadBytes: 1073741824
+    maxUncompressedBytes: 4294967296
+    batchMaxBytes: 4194304
+    parserQueueBatches: 1
+    maxRecordBytes: 1048576
+    stringCacheBytes: 8388608
+    maxTempBytes: 4294967296
+    failedStagingRetentionDays: 7
+    # Persistent Fernet key. Generate once with `openssl rand -base64 32 | tr '+/' '-_'`.
+    sourceEncryptionKey:
+      value: ''
+      existingSecret:
+        name: ''
+        key: ''
   email:
     provider: smtp
     fromAddress: ''
@@ -70,6 +88,10 @@ application:
     lockTtlSeconds: 300
     retryBaseSeconds: 30
     maxAttempts: 5
+    pollIntervalSeconds: 2
+    recoverIntervalSeconds: 30
+    lockHeartbeatSeconds: 60
+    shutdownGraceSeconds: 60
 # Runtime-owned HTTPS integration. Core tenant creation stays disabled until acceptance.
 controlPlane:
   enabled: false
@@ -199,6 +221,58 @@ frontend:
     imagePullSecrets: []
 # Official Nginx routes /api to FastAPI and everything else to the Vue frontend.
 workers:
+  cron:
+    enabled: true
+    image:
+      repository: ghcr.io/dinikon/runtime/runtime
+      tag: latest
+      pullPolicy: Always
+    replicas: 1
+    concurrency: 4
+    jobTimeoutSeconds: 3600
+    pollIntervalSeconds: 2
+    recoverIntervalSeconds: 30
+    lockTtlSeconds: 300
+    lockHeartbeatSeconds: 60
+    shutdownGraceSeconds: 60
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 1Gi
+    probes:
+      startup:
+        exec:
+          command: [dnk-manage, jobs, healthcheck, --liveness]
+        periodSeconds: 5
+        timeoutSeconds: 3
+        failureThreshold: 24
+      readiness:
+        exec:
+          command: [dnk-manage, jobs, healthcheck]
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 3
+      liveness:
+        exec:
+          command: [dnk-manage, jobs, healthcheck, --liveness]
+        periodSeconds: 20
+        timeoutSeconds: 5
+        failureThreshold: 3
+    pod:
+      annotations: {}
+      labels: {}
+      securityContext: {}
+      containerSecurityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+          - ALL
+      nodeSelector: {}
+      tolerations: []
+      affinity: {}
+      imagePullSecrets: []
   publisher:
     image:
       repository: ghcr.io/dinikon/runtime/runtime

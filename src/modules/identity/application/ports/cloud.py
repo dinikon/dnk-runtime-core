@@ -18,5 +18,9 @@ class CloudConnectionReaderPort(Protocol):
 
 class AccessProjectionWriterPort(Protocol):
     async def set_available(
-        self, tenant_id: UUID, global_user_id: UUID, available: bool
+        self,
+        tenant_id: UUID,
+        global_user_id: UUID,
+        available: bool,
+        role: str | None = None,
     ) -> int: ...

@@ -347,6 +347,41 @@ class ScheduledJobsRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("scheduled_jobs.status NOT IN", sql)
         self.assertIn("UPDATE scheduled_jobs", sql)
 
+    async def test_cancel_matching_revokes_all_price_list_job_leases(self) -> None:
+        session = _SessionStub(rowcount=2)
+        repository = SqlAlchemyScheduledJobRepository(session)
+        tenant_id = uuid4()
+
+        result = await repository.cancel_matching(
+            tenant_id=tenant_id,
+            job_type="price_list.sync",
+            payload_contains={"price_list_id": "price-list-1"},
+            canceled_at=self.now,
+        )
+
+        sql = _postgres_sql(session.execute_statement)
+        self.assertEqual(result, 2)
+        self.assertIn("UPDATE scheduled_jobs", sql)
+        self.assertIn("scheduled_jobs.tenant_id =", sql)
+        self.assertIn("scheduled_jobs.job_type =", sql)
+        self.assertIn("scheduled_jobs.payload @>", sql)
+        self.assertIn("scheduled_jobs.status IN", sql)
+
+    async def test_delete_matching_removes_only_entity_jobs(self) -> None:
+        session = _SessionStub(rowcount=4)
+        repository = SqlAlchemyScheduledJobRepository(session)
+
+        result = await repository.delete_matching(
+            tenant_id=uuid4(),
+            job_type="price_list.sync",
+            payload_contains={"price_list_id": "price-list-1"},
+        )
+
+        sql = _postgres_sql(session.execute_statement)
+        self.assertEqual(result, 4)
+        self.assertIn("DELETE FROM scheduled_jobs", sql)
+        self.assertIn("scheduled_jobs.payload @>", sql)
+
     async def test_recover_stuck_returns_running_jobs_to_scheduled_or_failed(
         self,
     ) -> None:
@@ -444,6 +479,27 @@ class ScheduledJobsConcurrentClaimTests(unittest.IsolatedAsyncioTestCase):
         result_1, result_2 = await asyncio.gather(task_1, task_2)
 
         self.assertTrue(set(result_1).isdisjoint(result_2))
+        async with session_factory() as session:
+            repository = SqlAlchemyScheduledJobRepository(session)
+            job_id = result_1[0]
+            arguments = dict(
+                job_id=job_id,
+                reason="ResourceBusy",
+                retry_at=now + timedelta(seconds=30),
+                released_at=now,
+            )
+            self.assertFalse(
+                await repository.release_for_retry(lock_token="wrong", **arguments)
+            )
+            self.assertTrue(
+                await repository.release_for_retry(lock_token="worker-0", **arguments)
+            )
+            await session.commit()
+            released = await session.get(ScheduledJobModel, job_id)
+            self.assertEqual(released.attempts, 0)
+            self.assertEqual(released.status, ScheduledJobStatus.SCHEDULED.value)
+            self.assertIsNone(released.lock_token)
+            self.assertEqual(released.run_at, now + timedelta(seconds=30))
         await engine.dispose()
 
 

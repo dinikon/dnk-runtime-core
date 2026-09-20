@@ -14,6 +14,9 @@ async def get_uow(request: Request) -> AsyncGenerator[UnitOfWorkProtocol, None]:
     """FastAPI dependency, открывающая UnitOfWork на время request."""
 
     session_factory = getattr(request.app.state, "db", db_helper.session_factory)
+    connection = getattr(request.state, "tenant_connection", None)
+    if connection is not None:
+        session_factory = async_sessionmaker(connection, expire_on_commit=False)
     typed_session_factory: async_sessionmaker[AsyncSession] = session_factory
     async with UnitOfWork(typed_session_factory) as uow:
         yield uow

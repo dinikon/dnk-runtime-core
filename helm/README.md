@@ -2,6 +2,24 @@
 
 `helm/` — корень самостоятельного пакета **dnk-runtime-core 0.3.2**. Он устанавливает
 FastAPI, workers и Console; исходники соседнего репозитория и OCI registry для сборки не нужны.
+
+## CronWorker
+
+`workers.cron` по умолчанию запускает один экземпляр PostgreSQL-backed worker с
+командой `dnk-manage jobs worker`. Он обслуживает динамические CRON-расписания
+закупочных прайс-листов, продлевает lease долгих задач и восстанавливает задачи
+после аварийного завершения. Readiness/liveness выполняют
+`dnk-manage jobs healthcheck`; Service и сетевой порт для worker не создаются.
+
+Интервалы polling/recovery, TTL и heartbeat настраиваются в `workers.cron`,
+общие batch/retry limits — в `application.scheduledJobs`. Для временных XML/XLSX
+контейнер получает `emptyDir` в `/tmp`. Отключить workload можно только явно:
+`workers.cron.enabled=false`.
+
+Полный URL партнерского прайс-листа шифруется до записи в tenant schema. Для
+использования модуля задайте постоянный Fernet-ключ через
+`application.priceLists.sourceEncryptionKey.value` или ссылку `existingSecret`;
+ключ должен быть одинаковым у API и CronWorker и сохраняться при обновлениях.
 Общий пакет `dnk-platform` удалён. Каждый сервис устанавливается своим релизом.
 
 ```text

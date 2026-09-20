@@ -1,6 +1,11 @@
 application:
   server:
     publicOrigin: https://runtime.example.com
+  priceLists:
+    sourceEncryptionKey:
+      existingSecret:
+        name: replace-me-runtime
+        key: price-list-encryption-key
   email:
     fromAddress: noreply@example.com
     smtp:

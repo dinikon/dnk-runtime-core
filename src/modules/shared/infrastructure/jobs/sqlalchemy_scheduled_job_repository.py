@@ -3,7 +3,8 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, func, insert, select, update
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.shared.application.jobs import RecoverStuckJobsResultDTO
@@ -38,6 +39,36 @@ class SqlAlchemyScheduledJobRepository:
             )
         )
         await self._session.flush()
+
+    async def schedule_once(self, job: ScheduledJob) -> bool:
+        """Inserts a caller-identified job idempotently."""
+        values = {
+            "id": job.id,
+            "tenant_id": job.tenant_id,
+            "job_type": job.job_type,
+            "payload": dict(job.payload),
+            "run_at": job.run_at,
+            "status": ScheduledJobStatus.SCHEDULED.value,
+            "attempts": 0,
+            "locked_until": None,
+            "lock_token": None,
+            "created_at": job.created_at,
+            "updated_at": job.updated_at,
+            "last_error": None,
+        }
+        dialect = (
+            self._session.bind.dialect.name if self._session.bind else "postgresql"
+        )
+        statement = insert(ScheduledJobModel).values(**values)
+        if dialect == "postgresql":
+            statement = (
+                postgresql_insert(ScheduledJobModel)
+                .values(**values)
+                .on_conflict_do_nothing(index_elements=[ScheduledJobModel.id])
+            )
+        result = await self._session.execute(statement)
+        await self._session.flush()
+        return bool(result.rowcount)
 
     async def claim_due_jobs(
         self,
@@ -99,6 +130,76 @@ class SqlAlchemyScheduledJobRepository:
         await self._session.flush()
         return bool(result.rowcount)
 
+    async def extend_lock(
+        self,
+        *,
+        job_id: UUID,
+        lock_token: str,
+        locked_until: datetime,
+        updated_at: datetime,
+    ) -> bool:
+        result = await self._session.execute(
+            update(ScheduledJobModel)
+            .where(ScheduledJobModel.id == job_id)
+            .where(ScheduledJobModel.status == ScheduledJobStatus.RUNNING.value)
+            .where(ScheduledJobModel.lock_token == lock_token)
+            .values(locked_until=locked_until, updated_at=updated_at)
+        )
+        await self._session.flush()
+        return bool(result.rowcount)
+
+    async def owns_lock(self, *, job_id: UUID, lock_token: str) -> bool:
+        result = await self._session.execute(
+            select(ScheduledJobModel.id)
+            .where(ScheduledJobModel.id == job_id)
+            .where(ScheduledJobModel.status == ScheduledJobStatus.RUNNING.value)
+            .where(ScheduledJobModel.lock_token == lock_token)
+        )
+        return result.scalar_one_or_none() is not None
+
+    async def terminal_or_missing(
+        self, *, tenant_id: UUID, job_ids: list[UUID]
+    ) -> set[UUID]:
+        """Finds jobs that cannot be recovered or retried by a worker."""
+        if not job_ids:
+            return set()
+        result = await self._session.execute(
+            select(ScheduledJobModel.id).where(
+                ScheduledJobModel.tenant_id == tenant_id,
+                ScheduledJobModel.id.in_(job_ids),
+                ScheduledJobModel.status.in_(("scheduled", "running")),
+            )
+        )
+        return set(job_ids) - set(result.scalars())
+
+    async def owns_current_lease(
+        self,
+        *,
+        job_id: UUID,
+        tenant_id: UUID,
+        lock_token: str,
+        for_update: bool = False,
+    ) -> bool:
+        """Fences business publication against cancellation and lease recovery."""
+        from datetime import UTC
+
+        now = (
+            func.clock_timestamp()
+            if self._session.bind.dialect.name == "postgresql"
+            else datetime.now(UTC)
+        )
+        statement = select(ScheduledJobModel.id).where(
+            ScheduledJobModel.id == job_id,
+            ScheduledJobModel.tenant_id == tenant_id,
+            ScheduledJobModel.status == ScheduledJobStatus.RUNNING.value,
+            ScheduledJobModel.lock_token == lock_token,
+            ScheduledJobModel.locked_until > now,
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        result = await self._session.execute(statement)
+        return result.scalar_one_or_none() is not None
+
     async def mark_failed(
         self,
         *,
@@ -134,6 +235,34 @@ class SqlAlchemyScheduledJobRepository:
         await self._session.flush()
         return bool(result.rowcount)
 
+    async def release_for_retry(
+        self,
+        *,
+        job_id: UUID,
+        lock_token: str,
+        reason: str,
+        retry_at: datetime,
+        released_at: datetime,
+    ) -> bool:
+        """Release contention/shutdown without exhausting the failure budget."""
+        result = await self._session.execute(
+            update(ScheduledJobModel)
+            .where(ScheduledJobModel.id == job_id)
+            .where(ScheduledJobModel.status == ScheduledJobStatus.RUNNING.value)
+            .where(ScheduledJobModel.lock_token == lock_token)
+            .values(
+                status=ScheduledJobStatus.SCHEDULED.value,
+                attempts=func.greatest(ScheduledJobModel.attempts - 1, 0),
+                run_at=retry_at,
+                locked_until=None,
+                lock_token=None,
+                last_error=reason,
+                updated_at=released_at,
+            )
+        )
+        await self._session.flush()
+        return bool(result.rowcount)
+
     async def cancel(self, *, job_id: UUID, canceled_at: datetime) -> bool:
         """Cancels a non-terminal job."""
         result = await self._session.execute(
@@ -157,6 +286,55 @@ class SqlAlchemyScheduledJobRepository:
         )
         await self._session.flush()
         return bool(result.rowcount)
+
+    async def cancel_matching(
+        self,
+        *,
+        tenant_id: UUID,
+        job_type: str,
+        payload_contains: dict[str, object],
+        canceled_at: datetime,
+    ) -> int:
+        """Cancels all matching scheduled or running jobs and revokes leases."""
+        result = await self._session.execute(
+            update(ScheduledJobModel)
+            .where(ScheduledJobModel.tenant_id == tenant_id)
+            .where(ScheduledJobModel.job_type == job_type)
+            .where(ScheduledJobModel.payload.contains(payload_contains))
+            .where(
+                ScheduledJobModel.status.in_(
+                    [
+                        ScheduledJobStatus.SCHEDULED.value,
+                        ScheduledJobStatus.RUNNING.value,
+                    ]
+                )
+            )
+            .values(
+                status=ScheduledJobStatus.CANCELED.value,
+                locked_until=None,
+                lock_token=None,
+                updated_at=canceled_at,
+            )
+        )
+        await self._session.flush()
+        return int(result.rowcount or 0)
+
+    async def delete_matching(
+        self,
+        *,
+        tenant_id: UUID,
+        job_type: str,
+        payload_contains: dict[str, object],
+    ) -> int:
+        """Deletes all matching jobs after their owning entity is archived."""
+        result = await self._session.execute(
+            delete(ScheduledJobModel)
+            .where(ScheduledJobModel.tenant_id == tenant_id)
+            .where(ScheduledJobModel.job_type == job_type)
+            .where(ScheduledJobModel.payload.contains(payload_contains))
+        )
+        await self._session.flush()
+        return int(result.rowcount or 0)
 
     async def recover_stuck_jobs(
         self,

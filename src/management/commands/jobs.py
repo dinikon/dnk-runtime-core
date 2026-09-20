@@ -1,17 +1,32 @@
 from __future__ import annotations
+from src.modules.price_lists.presentation.depends.application import (
+    get_synchronize_price_list_use_case,
+    get_cleanup_price_list_use_case,
+)
 
 import argparse
+import asyncio
+import logging
+from pathlib import Path
+import signal
 
 from src.config import dnk_config
+from src.management.job_healthcheck import main as probe_main
 from src.modules.shared.application.jobs import (
     ProcessDueScheduledJobsCommand,
     RecoverStuckScheduledJobsCommand,
 )
 from src.modules.shared.infrastructure.persistence import UnitOfWork
 from src.modules.shared.infrastructure.persistence.database_helper import db_helper
+from src.modules.price_lists.presentation.jobs import (
+    PriceListCleanupJobHandler,
+    PriceListSyncJobHandler,
+)
 from src.modules.shared.presentation.jobs import (
     build_process_due_scheduled_jobs_use_case,
     build_recover_stuck_scheduled_jobs_use_case,
+    build_scheduled_job_dispatcher,
+    build_scheduled_job_worker,
 )
 
 
@@ -67,6 +82,64 @@ async def handle_jobs_root(_args: argparse.Namespace) -> int:
     return 1
 
 
+async def handle_worker(_args: argparse.Namespace) -> int:
+    """Runs the production scheduled-jobs polling worker until a signal arrives."""
+    logging.basicConfig(level=logging.WARNING)
+    logging.getLogger("src.modules").setLevel(logging.INFO)
+    await db_helper.initialize_for_startup()
+    settings = dnk_config.SCHEDULED_JOBS
+    stop = asyncio.Event()
+    if dnk_config.SQLALCHEMY_POOL_SIZE and (
+        dnk_config.SQLALCHEMY_POOL_SIZE + dnk_config.SQLALCHEMY_MAX_OVERFLOW
+        < 4 * settings.concurrency + 2
+    ):
+        raise ValueError(
+            "Cron DB pool requires at least 4 * concurrency + 2 connections"
+        )
+    loop = asyncio.get_running_loop()
+    for event in (signal.SIGTERM, signal.SIGINT):
+        try:
+            loop.add_signal_handler(event, stop.set)
+        except NotImplementedError:
+            pass
+    dispatcher = build_scheduled_job_dispatcher(
+        {
+            "price_list.sync": PriceListSyncJobHandler(
+                get_synchronize_price_list_use_case(db_helper.session_factory)
+            ),
+            "price_list.cleanup": PriceListCleanupJobHandler(
+                get_cleanup_price_list_use_case(db_helper.session_factory)
+            ),
+        }
+    )
+    worker = build_scheduled_job_worker(
+        session_factory=db_helper.session_factory,
+        dispatcher=dispatcher,
+        process_limit=settings.process_limit,
+        recover_limit=settings.recover_limit,
+        lock_ttl_seconds=settings.lock_ttl_seconds,
+        lock_heartbeat_seconds=settings.lock_heartbeat_seconds,
+        retry_base_seconds=settings.retry_base_seconds,
+        max_attempts=settings.max_attempts,
+        poll_interval_seconds=settings.poll_interval_seconds,
+        recover_interval_seconds=settings.recover_interval_seconds,
+        heartbeat_path=Path(settings.heartbeat_path),
+        concurrency=settings.concurrency,
+        job_timeout_seconds=settings.job_timeout_seconds,
+        shutdown_grace_seconds=settings.shutdown_grace_seconds,
+    )
+    try:
+        await worker.run(stop)
+        return 0
+    finally:
+        await db_helper.dispose()
+
+
+async def handle_healthcheck(args: argparse.Namespace) -> int:
+    """Use the same lightweight probe for programmatic parser callers."""
+    return probe_main(["--liveness"] if getattr(args, "liveness", False) else [])
+
+
 def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Registers shared scheduled jobs management commands."""
     settings = dnk_config.SCHEDULED_JOBS
@@ -119,10 +192,25 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     )
     recover_stuck_parser.set_defaults(handler=handle_recover_stuck)
 
+    worker_parser = jobs_subparsers.add_parser(
+        "worker",
+        help="Run the long-lived shared scheduled jobs worker.",
+    )
+    worker_parser.set_defaults(handler=handle_worker)
+
+    healthcheck_parser = jobs_subparsers.add_parser(
+        "healthcheck",
+        help="Check worker heartbeat and its last successful database poll.",
+    )
+    healthcheck_parser.add_argument("--liveness", action="store_true")
+    healthcheck_parser.set_defaults(handler=handle_healthcheck)
+
 
 __all__ = [
     "handle_jobs_root",
     "handle_process_due",
     "handle_recover_stuck",
+    "handle_worker",
+    "handle_healthcheck",
     "register",
 ]

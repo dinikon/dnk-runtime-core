@@ -17,6 +17,10 @@ class ScheduledJobRepositoryProtocol(Protocol):
         """Persists a new scheduled job in the active UnitOfWork."""
         ...
 
+    async def schedule_once(self, job: ScheduledJob) -> bool:
+        """Persists a deterministic job unless its id already exists."""
+        ...
+
     async def claim_due_jobs(
         self,
         *,
@@ -38,6 +42,38 @@ class ScheduledJobRepositoryProtocol(Protocol):
         """Marks a running job done when lock token matches."""
         ...
 
+    async def extend_lock(
+        self,
+        *,
+        job_id: UUID,
+        lock_token: str,
+        locked_until: datetime,
+        updated_at: datetime,
+    ) -> bool:
+        """Extends a running job lease when the lock token still matches."""
+        ...
+
+    async def owns_lock(self, *, job_id: UUID, lock_token: str) -> bool:
+        """Checks that a running job is still owned by the current worker."""
+        ...
+
+    async def terminal_or_missing(
+        self, *, tenant_id: UUID, job_ids: list[UUID]
+    ) -> set[UUID]:
+        """Finds terminal or missing jobs in a bounded tenant-scoped batch."""
+        ...
+
+    async def owns_current_lease(
+        self,
+        *,
+        job_id: UUID,
+        tenant_id: UUID,
+        lock_token: str,
+        for_update: bool = False,
+    ) -> bool:
+        """Checks the tenant, token and unexpired lease; optionally fences commit."""
+        ...
+
     async def mark_failed(
         self,
         *,
@@ -52,6 +88,27 @@ class ScheduledJobRepositoryProtocol(Protocol):
 
     async def cancel(self, *, job_id: UUID, canceled_at: datetime) -> bool:
         """Cancels a non-terminal job."""
+        ...
+
+    async def cancel_matching(
+        self,
+        *,
+        tenant_id: UUID,
+        job_type: str,
+        payload_contains: dict[str, object],
+        canceled_at: datetime,
+    ) -> int:
+        """Cancels non-terminal jobs matching one tenant, type and payload."""
+        ...
+
+    async def delete_matching(
+        self,
+        *,
+        tenant_id: UUID,
+        job_type: str,
+        payload_contains: dict[str, object],
+    ) -> int:
+        """Deletes jobs matching one tenant, type and payload."""
         ...
 
     async def recover_stuck_jobs(

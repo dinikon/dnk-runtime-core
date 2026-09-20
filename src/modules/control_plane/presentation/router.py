@@ -1,5 +1,6 @@
 import asyncio
 from uuid import UUID
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
@@ -12,6 +13,8 @@ from src.modules.control_plane.application.contracts import (
     ProvisioningCommand,
     StatusResponse,
     DomainReadiness,
+    DeletionResponse,
+    DeletionCapability,
 )
 from src.modules.control_plane.infrastructure.readiness import (
     instance_status,
@@ -171,3 +174,128 @@ async def public_ready(request: Request, uow: UoWDep):
         await uow.rollback()
         raise HTTPException(503, "Local installation services are not ready") from None
     return JSONResponse(result, headers={"Cache-Control": "no-store"})
+
+
+def deletion_repository(request, session):
+    from src.modules.control_plane.infrastructure.deletion import DeletionRepository
+
+    return DeletionRepository(session, settings(request), dnk_config.SCHEMA_PREFIX)
+
+
+async def deletion_body(request, limit):
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > limit:
+            raise HTTPException(413, "Command is too large")
+    return body
+
+
+@router.get(
+    "/internal/v1/tenants/{tenant_id}/deletion-capability/{user_id}/",
+    response_model=DeletionCapability,
+    dependencies=[Depends(require_management)],
+)
+async def deletion_capability(
+    tenant_id: UUID,
+    user_id: UUID,
+    request: Request,
+    uow: UoWDep,
+    authorization_basis: Literal["owner", "runtime_admin"] = "runtime_admin",
+):
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+    from src.modules.control_plane.infrastructure.models import InstallationModel
+    from src.modules.shared.infrastructure.persistence.tenant_gate import (
+        TenantGate,
+        TenantUnavailable,
+    )
+
+    installation = await uow.session.get(InstallationModel, tenant_id)
+    if installation is None:
+        return DeletionCapability(can_delete=False, reason="tenant_unavailable")
+    try:
+        async with TenantGate(async_sessionmaker(uow.session.bind)).hold(
+            installation.runtime_tenant_id
+        ):
+            result = await deletion_repository(request, uow.session).capability(
+                tenant_id, user_id, authorization_basis
+            )
+            await uow.commit()
+            return result
+    except TenantUnavailable:
+        await uow.rollback()
+        return DeletionCapability(can_delete=False, reason="tenant_unavailable")
+
+
+@router.post(
+    "/internal/v1/tenant-deletions/",
+    response_model=DeletionResponse,
+    status_code=202,
+    dependencies=[Depends(require_management)],
+)
+async def accept_deletion(
+    request: Request, uow: UoWDep, idempotency_key: str = Header(default="")
+):
+    from src.modules.control_plane.application.contracts import DeletionCommand
+    from src.modules.control_plane.infrastructure.deletion import DeletionError
+
+    try:
+        body = await deletion_body(request, 8192)
+        command = DeletionCommand.model_validate_json(body)
+        if idempotency_key != str(command.operation_id):
+            raise ValueError
+        result = await deletion_repository(request, uow.session).accept(command)
+        await uow.commit()
+        return result
+    except (ValueError, ValidationError):
+        raise HTTPException(422, "Invalid deletion command") from None
+    except DeletionError as exc:
+        await uow.rollback()
+        raise HTTPException(exc.status, exc.code) from None
+    except IntegrityError:
+        await uow.rollback()
+        raise HTTPException(409, "command_conflict") from None
+
+
+@router.get(
+    "/internal/v1/tenant-deletions/{operation_id}/",
+    response_model=DeletionResponse,
+    dependencies=[Depends(require_management)],
+)
+async def lookup_deletion(operation_id: UUID, request: Request, uow: UoWDep):
+    result = await deletion_repository(request, uow.session).lookup(operation_id)
+    if result is None:
+        raise HTTPException(404, "deletion_not_found")
+    return result
+
+
+@router.post(
+    "/internal/v1/tenant-deletions/{operation_id}/purge/",
+    response_model=DeletionResponse,
+    status_code=202,
+    dependencies=[Depends(require_management)],
+)
+async def purge_deletion(
+    operation_id: UUID,
+    request: Request,
+    uow: UoWDep,
+    idempotency_key: str = Header(default=""),
+):
+    from src.modules.control_plane.application.contracts import PurgeCommand
+    from src.modules.control_plane.infrastructure.deletion import DeletionError
+
+    try:
+        body = await deletion_body(request, 4096)
+        if idempotency_key != str(operation_id):
+            raise ValueError
+        command = PurgeCommand.model_validate_json(body)
+        result = await deletion_repository(request, uow.session).request_purge(
+            operation_id, command
+        )
+        await uow.commit()
+        return result
+    except (ValueError, ValidationError):
+        raise HTTPException(422, "Invalid purge command") from None
+    except DeletionError as exc:
+        await uow.rollback()
+        raise HTTPException(exc.status, exc.code) from None

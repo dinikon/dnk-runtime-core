@@ -1,0 +1,16 @@
+export type {
+  MappingConfig,
+  MappingField,
+  OfferFilters,
+  OfferHistoryFilters,
+  OfferHistoryResponse,
+  OffersResponse,
+  PartnerOffer,
+  PartnerOfferState,
+  PreviewResult,
+  PriceList,
+  PriceListStatus,
+  PriceListScope,
+  SourceFormat,
+  SyncRun,
+} from "../model/types";

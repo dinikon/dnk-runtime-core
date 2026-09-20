@@ -194,6 +194,91 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 0,
             )
 
+    async def test_price_list_archive_migration_upgrade_and_downgrade(self):
+        schema = await self.new_schema()
+        price_list_id = uuid4()
+        actor_id = uuid4()
+        async with self.engine.begin() as connection:
+            columns = await connection.run_sync(
+                lambda conn: inspect(conn).get_columns("price_lists", schema=schema)
+            )
+            self.assertIn("archived_at", {column["name"] for column in columns})
+            await connection.execute(
+                text(
+                    f'INSERT INTO "{schema}".price_lists '
+                    "(id, title, created_by, updated_by, status, source_format, "
+                    "source_url_secret, source_url_display) "
+                    "VALUES (:id, 'Archive migration', :actor, :actor, "
+                    "'archived', 'xml', 'encrypted', 'https://example.com/…')"
+                ),
+                {"id": price_list_id, "actor": actor_id},
+            )
+            await self.migrator.downgrade(
+                connection, schema, "0004_partner_price_lists"
+            )
+            downgraded_columns = await connection.run_sync(
+                lambda conn: inspect(conn).get_columns("price_lists", schema=schema)
+            )
+            self.assertNotIn(
+                "archived_at", {column["name"] for column in downgraded_columns}
+            )
+            self.assertEqual(
+                await connection.scalar(
+                    text(f'SELECT status FROM "{schema}".price_lists WHERE id = :id'),
+                    {"id": price_list_id},
+                ),
+                "paused",
+            )
+            await self.migrator.upgrade(connection, schema)
+            upgraded_columns = await connection.run_sync(
+                lambda conn: inspect(conn).get_columns("price_lists", schema=schema)
+            )
+            self.assertIn(
+                "archived_at", {column["name"] for column in upgraded_columns}
+            )
+
+    async def test_price_list_streaming_upgrade_preserves_existing_quarantine(self):
+        schema = await self.new_schema()
+        price_id, actor_id, run_id = uuid4(), uuid4(), uuid4()
+        async with self.engine.begin() as connection:
+            await self.migrator.downgrade(
+                connection, schema, "0005_price_list_management"
+            )
+            await connection.execute(
+                text(
+                    f"""INSERT INTO "{schema}".price_lists (id,title,created_by,updated_by,source_format,source_url_secret,source_url_display) VALUES (:id,'Existing',:actor,:actor,'xml','encrypted','masked')"""
+                ),
+                dict(id=price_id, actor=actor_id),
+            )
+            await connection.execute(
+                text(
+                    f"""INSERT INTO "{schema}".price_list_sync_runs (id,price_list_id,status,trigger,started_at,finished_at) VALUES (:id,:price,'partial','manual',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)"""
+                ),
+                dict(id=run_id, price=price_id),
+            )
+            await connection.execute(
+                text(
+                    f"""INSERT INTO "{schema}".price_list_sync_items (sync_run_id,row_number,external_id) VALUES (:run,1,'quarantine')"""
+                ),
+                dict(run=run_id),
+            )
+            await self.migrator.upgrade(connection, schema)
+            result = (
+                await connection.execute(
+                    text(
+                        f'SELECT sync_run_id,external_id,quarantined FROM "{schema}".price_list_sync_items'
+                    )
+                )
+            ).one()
+            self.assertEqual(tuple(result), (run_id, "quarantine", True))
+            indexes = await connection.run_sync(
+                lambda conn: inspect(conn).get_indexes("partner_offers", schema=schema)
+            )
+            self.assertTrue(
+                {"ix_partner_offers_list_id", "ix_partner_offers_search_document"}
+                <= {item["name"] for item in indexes}
+            )
+
     async def test_two_tenants_have_independent_versions_and_foreign_keys(self):
         left, right = await self.new_schema(), await self.new_schema(upgrade=False)
         async with self.engine.begin() as connection:

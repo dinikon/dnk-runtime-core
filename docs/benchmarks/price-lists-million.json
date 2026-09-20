@@ -1,0 +1,453 @@
+{
+  "rows": 1000001,
+  "concurrency": 4,
+  "results": {
+    "parallel_initial": [
+      {
+        "format": "xml",
+        "status": "succeeded",
+        "counters": {
+          "read": 1000001,
+          "valid": 1000001,
+          "rejected": 0,
+          "created": 1000001,
+          "changed": 1000001,
+          "unchanged": 0,
+          "missing": 0,
+          "reappeared": 0,
+          "ignored": 0,
+          "quarantined": 0
+        },
+        "duration_seconds": 530.242,
+        "phases": {
+          "source_bytes": 171666902,
+          "download": 2.784,
+          "parse_stage": 221.348,
+          "publish": 306.1
+        },
+        "sql_statements": 12540,
+        "offers": 1000001,
+        "states": 1000001
+      },
+      {
+        "format": "yaml",
+        "status": "succeeded",
+        "counters": {
+          "read": 1000001,
+          "valid": 1000001,
+          "rejected": 0,
+          "created": 1000001,
+          "changed": 1000001,
+          "unchanged": 0,
+          "missing": 0,
+          "reappeared": 0,
+          "ignored": 0,
+          "quarantined": 0
+        },
+        "duration_seconds": 524.085,
+        "phases": {
+          "source_bytes": 137666819,
+          "download": 0.22,
+          "parse_stage": 216.431,
+          "publish": 307.365
+        },
+        "sql_statements": 12044,
+        "offers": 1000001,
+        "states": 1000001
+      },
+      {
+        "format": "xlsx",
+        "status": "succeeded",
+        "counters": {
+          "read": 1000001,
+          "valid": 1000001,
+          "rejected": 0,
+          "created": 1000001,
+          "changed": 1000001,
+          "unchanged": 0,
+          "missing": 0,
+          "reappeared": 0,
+          "ignored": 0,
+          "quarantined": 0
+        },
+        "duration_seconds": 620.263,
+        "phases": {
+          "source_bytes": 34952832,
+          "download": 0.015,
+          "parse_stage": 346.846,
+          "publish": 273.394
+        },
+        "sql_statements": 12044,
+        "offers": 1000001,
+        "states": 1000001
+      },
+      {
+        "format": "xml",
+        "status": "succeeded",
+        "counters": {
+          "read": 1000001,
+          "valid": 1000001,
+          "rejected": 0,
+          "created": 1000001,
+          "changed": 1000001,
+          "unchanged": 0,
+          "missing": 0,
+          "reappeared": 0,
+          "ignored": 0,
+          "quarantined": 0
+        },
+        "duration_seconds": 527.382,
+        "phases": {
+          "source_bytes": 171666902,
+          "download": 0.631,
+          "parse_stage": 218.765,
+          "publish": 307.848
+        },
+        "sql_statements": 12044,
+        "offers": 1000001,
+        "states": 1000001
+      }
+    ],
+    "unchanged": {
+      "format": "xml",
+      "status": "succeeded",
+      "counters": {
+        "read": 1000001,
+        "valid": 1000001,
+        "rejected": 0,
+        "created": 0,
+        "changed": 0,
+        "unchanged": 1000001,
+        "missing": 0,
+        "reappeared": 0,
+        "ignored": 0,
+        "quarantined": 0
+      },
+      "duration_seconds": 144.166,
+      "phases": {
+        "source_bytes": 171666902,
+        "download": 0.118,
+        "parse_stage": 58.044,
+        "publish": 86.001
+      },
+      "sql_statements": 10078,
+      "offers": 1000001,
+      "states": 1000001
+    },
+    "changed": {
+      "format": "xml",
+      "status": "succeeded",
+      "counters": {
+        "read": 1000001,
+        "valid": 1000001,
+        "rejected": 0,
+        "created": 0,
+        "changed": 10001,
+        "unchanged": 990000,
+        "missing": 0,
+        "reappeared": 0,
+        "ignored": 0,
+        "quarantined": 0
+      },
+      "duration_seconds": 152.937,
+      "phases": {
+        "source_bytes": 171666902,
+        "download": 0.072,
+        "parse_stage": 60.859,
+        "publish": 92.002
+      },
+      "sql_statements": 11081,
+      "offers": 1000001,
+      "states": 1010002
+    },
+    "missing": {
+      "format": "xml",
+      "status": "succeeded",
+      "counters": {
+        "read": 10,
+        "valid": 10,
+        "rejected": 0,
+        "created": 0,
+        "changed": 999991,
+        "unchanged": 10,
+        "missing": 999991,
+        "reappeared": 0,
+        "ignored": 0,
+        "quarantined": 0
+      },
+      "duration_seconds": 151.078,
+      "phases": {
+        "source_bytes": 1627,
+        "download": 0.0,
+        "parse_stage": 0.006,
+        "publish": 151.069
+      },
+      "sql_statements": 3079,
+      "offers": 1000001,
+      "states": 2009993
+    }
+  },
+  "fixture_bytes": {
+    "xml": 171666902,
+    "yaml": 137666819,
+    "xlsx": 34952832
+  },
+  "wal_bytes": 23759233696,
+  "query_plan": [
+    {
+      "Plan": {
+        "Node Type": "Limit",
+        "Parallel Aware": false,
+        "Async Capable": false,
+        "Startup Cost": 159485.39,
+        "Total Cost": 159491.22,
+        "Plan Rows": 50,
+        "Plan Width": 29,
+        "Actual Startup Time": 425.197,
+        "Actual Total Time": 439.752,
+        "Actual Rows": 50,
+        "Actual Loops": 1,
+        "Shared Hit Blocks": 15639,
+        "Shared Read Blocks": 88793,
+        "Shared Dirtied Blocks": 0,
+        "Shared Written Blocks": 204,
+        "Local Hit Blocks": 0,
+        "Local Read Blocks": 0,
+        "Local Dirtied Blocks": 0,
+        "Local Written Blocks": 0,
+        "Temp Read Blocks": 18766,
+        "Temp Written Blocks": 18932,
+        "Plans": [
+          {
+            "Node Type": "Gather Merge",
+            "Parent Relationship": "Outer",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Startup Cost": 159485.39,
+            "Total Cost": 256788.68,
+            "Plan Rows": 833970,
+            "Plan Width": 29,
+            "Actual Startup Time": 417.834,
+            "Actual Total Time": 432.387,
+            "Actual Rows": 50,
+            "Actual Loops": 1,
+            "Workers Planned": 2,
+            "Workers Launched": 2,
+            "Shared Hit Blocks": 15639,
+            "Shared Read Blocks": 88793,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 204,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 18766,
+            "Temp Written Blocks": 18932,
+            "Plans": [
+              {
+                "Node Type": "Sort",
+                "Parent Relationship": "Outer",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Startup Cost": 158485.36,
+                "Total Cost": 159527.83,
+                "Plan Rows": 416985,
+                "Plan Width": 29,
+                "Actual Startup Time": 409.461,
+                "Actual Total Time": 409.607,
+                "Actual Rows": 38,
+                "Actual Loops": 3,
+                "Sort Key": [
+                  "s.observed_at DESC NULLS LAST",
+                  "o.id"
+                ],
+                "Sort Method": "top-N heapsort",
+                "Sort Space Used": 32,
+                "Sort Space Type": "Memory",
+                "Shared Hit Blocks": 15639,
+                "Shared Read Blocks": 88793,
+                "Shared Dirtied Blocks": 0,
+                "Shared Written Blocks": 204,
+                "Local Hit Blocks": 0,
+                "Local Read Blocks": 0,
+                "Local Dirtied Blocks": 0,
+                "Local Written Blocks": 0,
+                "Temp Read Blocks": 18766,
+                "Temp Written Blocks": 18932,
+                "Workers": [
+                  {
+                    "Worker Number": 0,
+                    "Sort Method": "top-N heapsort",
+                    "Sort Space Used": 31,
+                    "Sort Space Type": "Memory"
+                  },
+                  {
+                    "Worker Number": 1,
+                    "Sort Method": "top-N heapsort",
+                    "Sort Space Used": 31,
+                    "Sort Space Type": "Memory"
+                  }
+                ],
+                "Plans": [
+                  {
+                    "Node Type": "Hash Join",
+                    "Parent Relationship": "Outer",
+                    "Parallel Aware": true,
+                    "Async Capable": false,
+                    "Join Type": "Inner",
+                    "Startup Cost": 68625.16,
+                    "Total Cost": 144633.42,
+                    "Plan Rows": 416985,
+                    "Plan Width": 29,
+                    "Actual Startup Time": 316.92,
+                    "Actual Total Time": 389.093,
+                    "Actual Rows": 333334,
+                    "Actual Loops": 3,
+                    "Inner Unique": false,
+                    "Hash Cond": "(s.id = o.current_state_id)",
+                    "Shared Hit Blocks": 15551,
+                    "Shared Read Blocks": 88791,
+                    "Shared Dirtied Blocks": 0,
+                    "Shared Written Blocks": 204,
+                    "Local Hit Blocks": 0,
+                    "Local Read Blocks": 0,
+                    "Local Dirtied Blocks": 0,
+                    "Local Written Blocks": 0,
+                    "Temp Read Blocks": 18766,
+                    "Temp Written Blocks": 18932,
+                    "Workers": [],
+                    "Plans": [
+                      {
+                        "Node Type": "Seq Scan",
+                        "Parent Relationship": "Outer",
+                        "Parallel Aware": true,
+                        "Async Capable": false,
+                        "Relation Name": "partner_offer_states",
+                        "Alias": "s",
+                        "Startup Cost": 0.0,
+                        "Total Cost": 56470.23,
+                        "Plan Rows": 858023,
+                        "Plan Width": 29,
+                        "Actual Startup Time": 0.245,
+                        "Actual Total Time": 131.912,
+                        "Actual Rows": 669998,
+                        "Actual Loops": 3,
+                        "Shared Hit Blocks": 15495,
+                        "Shared Read Blocks": 32395,
+                        "Shared Dirtied Blocks": 0,
+                        "Shared Written Blocks": 93,
+                        "Local Hit Blocks": 0,
+                        "Local Read Blocks": 0,
+                        "Local Dirtied Blocks": 0,
+                        "Local Written Blocks": 0,
+                        "Temp Read Blocks": 0,
+                        "Temp Written Blocks": 0,
+                        "Workers": []
+                      },
+                      {
+                        "Node Type": "Hash",
+                        "Parent Relationship": "Inner",
+                        "Parallel Aware": true,
+                        "Async Capable": false,
+                        "Startup Cost": 60561.85,
+                        "Total Cost": 60561.85,
+                        "Plan Rows": 416985,
+                        "Plan Width": 32,
+                        "Actual Startup Time": 100.439,
+                        "Actual Total Time": 100.44,
+                        "Actual Rows": 333334,
+                        "Actual Loops": 3,
+                        "Hash Buckets": 131072,
+                        "Original Hash Buckets": 131072,
+                        "Hash Batches": 16,
+                        "Original Hash Batches": 16,
+                        "Peak Memory Usage": 4992,
+                        "Shared Hit Blocks": 0,
+                        "Shared Read Blocks": 56392,
+                        "Shared Dirtied Blocks": 0,
+                        "Shared Written Blocks": 111,
+                        "Local Hit Blocks": 0,
+                        "Local Read Blocks": 0,
+                        "Local Dirtied Blocks": 0,
+                        "Local Written Blocks": 0,
+                        "Temp Read Blocks": 0,
+                        "Temp Written Blocks": 6064,
+                        "Workers": [],
+                        "Plans": [
+                          {
+                            "Node Type": "Seq Scan",
+                            "Parent Relationship": "Outer",
+                            "Parallel Aware": true,
+                            "Async Capable": false,
+                            "Relation Name": "partner_offers",
+                            "Alias": "o",
+                            "Startup Cost": 0.0,
+                            "Total Cost": 60561.85,
+                            "Plan Rows": 416985,
+                            "Plan Width": 32,
+                            "Actual Startup Time": 2.54,
+                            "Actual Total Time": 69.489,
+                            "Actual Rows": 333334,
+                            "Actual Loops": 3,
+                            "Shared Hit Blocks": 0,
+                            "Shared Read Blocks": 56392,
+                            "Shared Dirtied Blocks": 0,
+                            "Shared Written Blocks": 111,
+                            "Local Hit Blocks": 0,
+                            "Local Read Blocks": 0,
+                            "Local Dirtied Blocks": 0,
+                            "Local Written Blocks": 0,
+                            "Temp Read Blocks": 0,
+                            "Temp Written Blocks": 0,
+                            "Workers": []
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "Planning": {
+        "Shared Hit Blocks": 4,
+        "Shared Read Blocks": 9,
+        "Shared Dirtied Blocks": 0,
+        "Shared Written Blocks": 9,
+        "Local Hit Blocks": 0,
+        "Local Read Blocks": 0,
+        "Local Dirtied Blocks": 0,
+        "Local Written Blocks": 0,
+        "Temp Read Blocks": 0,
+        "Temp Written Blocks": 0
+      },
+      "Planning Time": 0.501,
+      "Triggers": [],
+      "JIT": {
+        "Functions": 31,
+        "Options": {
+          "Inlining": false,
+          "Optimization": false,
+          "Expressions": true,
+          "Deforming": true
+        },
+        "Timing": {
+          "Generation": 0.985,
+          "Inlining": 0.0,
+          "Optimization": 1.954,
+          "Emission": 13.041,
+          "Total": 15.98
+        }
+      },
+      "Execution Time": 549.667
+    }
+  ],
+  "peak_temp_bytes": 368175608,
+  "sql_statement_scope": "SQLAlchemy statements; native COPY RPCs are additional bounded batch calls.",
+  "duration_seconds": 1094.109,
+  "peak_rss_bytes": 155742208,
+  "memory.peak": "578187264",
+  "memory.max": "1073741824"
+}

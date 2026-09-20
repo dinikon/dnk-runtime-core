@@ -98,6 +98,7 @@ EVENT_BUS__PUBLISHER_WORKER_ENABLED: {{ .Values.workers.publisher.enabled | quot
 {{- if and (eq $app.server.environment "PRODUCTION") (ne $url.scheme "https") -}}{{- fail "production application.server.publicOrigin requires HTTPS" -}}{{- end -}}
 {{- include "dnk.runtime.validateControlPlane" . -}}
 {{- include "dnk.runtime.validateSecret" (dict "secret" $app.email.smtp.password "path" "application.email.smtp.password" "required" false) -}}
+{{- include "dnk.runtime.validateSecret" (dict "secret" $app.priceLists.sourceEncryptionKey "path" "application.priceLists.sourceEncryptionKey" "required" false) -}}
 {{- $_ := required "application.email.smtp.host is required" $app.email.smtp.host -}}
 {{- $_ := required "application.email.fromAddress is required" $app.email.fromAddress -}}
 {{- if and $app.email.smtp.useTls $app.email.smtp.useStarttls -}}{{- fail "application.email.smtp.useTls and useStarttls are mutually exclusive" -}}{{- end -}}
@@ -122,7 +123,7 @@ EVENT_BUS__PUBLISHER_WORKER_ENABLED: {{ .Values.workers.publisher.enabled | quot
 {{- if and (eq $dep "redis") (not (regexMatch "^(|/|/[0-9]+)$" $u.path)) -}}{{- fail "redis.external.url must use an integer database path" -}}{{- end -}}
 {{- end -}}
 {{- end -}}
-{{- $workloads := dict "backend" .Values.backend "frontend" .Values.frontend "publisher" .Values.workers.publisher "console" .Values.workers.console "lifecycle" .Values.workers.lifecycle -}}
+{{- $workloads := dict "backend" .Values.backend "frontend" .Values.frontend "cron" .Values.workers.cron "publisher" .Values.workers.publisher "console" .Values.workers.console "lifecycle" .Values.workers.lifecycle -}}
 {{- range $name, $w := $workloads -}}
 {{- $_ := required (printf "%s.image.repository is required" $name) $w.image.repository -}}{{- $_ := required (printf "%s.image.tag is required" $name) $w.image.tag -}}
 {{- range $key := list "app.kubernetes.io/name" "app.kubernetes.io/instance" "app.kubernetes.io/component" -}}{{- if hasKey $w.pod.labels $key -}}{{- fail (printf "%s.pod.labels cannot override selector %s" $name $key) -}}{{- end -}}{{- end -}}

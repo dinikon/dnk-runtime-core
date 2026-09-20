@@ -1,9 +1,17 @@
 from dataclasses import dataclass
+
+from src.modules.shared.infrastructure.persistence.tenant_gate import (
+    TenantGate,
+    TenantUnavailable,
+)
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.engine import URL
 from sqlalchemy.pool import NullPool
+from sqlalchemy import select
+from src.modules.shared.infrastructure.persistence.tenant_gate import DELETING
+from src.modules.tenancy.infrastructure.persistence.tenant import TenantModel
 
 from src.modules.shared.application.persistence.tenant_schema_naming import (
     TenantSchemaNaming,
@@ -45,10 +53,21 @@ class TenantMigrationManagement:
     async def list_ids(self) -> list[UUID]:
         """Читает tenants без создания отсутствующих схем."""
         async with UnitOfWork(self._session_factory) as uow:
-            ids = await SqlAlchemyTenantRepository(uow.session).list_ids()
-            return sorted((item.uuid for item in ids), key=str)
+            ids = await uow.session.scalars(
+                select(TenantModel.id).where(TenantModel.status.not_in(DELETING))
+            )
+            return sorted(ids, key=str)
 
     async def run_one(self, tenant_id: UUID, *, upgrade: bool) -> TenantMigrationStatus:
+        try:
+            async with TenantGate(self._session_factory).hold(tenant_id):
+                return await self._run_one(tenant_id, upgrade=upgrade)
+        except TenantUnavailable:
+            raise TenantMigrationError("Tenant is unavailable for migration.") from None
+
+    async def _run_one(
+        self, tenant_id: UUID, *, upgrade: bool
+    ) -> TenantMigrationStatus:
         """Обрабатывает ровно один tenant в собственной транзакции."""
         typed_id = TenantIdVO.from_value(tenant_id)
         async with UnitOfWork(self._session_factory) as uow:
@@ -67,8 +86,15 @@ class TenantMigrationManagement:
             )
 
     async def revision(self, tenant_id: UUID, message: str):
+        try:
+            async with TenantGate(self._session_factory).hold(tenant_id):
+                return await self._revision(tenant_id, message)
+        except TenantUnavailable:
+            raise TenantMigrationError("Tenant is unavailable for migration.") from None
+
+    async def _revision(self, tenant_id: UUID, message: str):
         """Генерирует черновик через отдельный engine для reflection."""
-        status = await self.run_one(tenant_id, upgrade=False)
+        status = await self._run_one(tenant_id, upgrade=False)
         engine = create_async_engine(self._database_url, poolclass=NullPool)
         try:
             async with engine.begin() as connection:

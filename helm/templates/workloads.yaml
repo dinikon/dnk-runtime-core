@@ -1,9 +1,9 @@
 {{- $root := . -}}
 {{- $fullname := include "dnk.runtime.fullname" . -}}
-{{- $workloads := dict "backend" .Values.backend "frontend" .Values.frontend "publisher" .Values.workers.publisher "console" .Values.workers.console "lifecycle" .Values.workers.lifecycle -}}
-{{- range $component := list "backend" "frontend" "publisher" "console" "lifecycle" -}}
+{{- $workloads := dict "backend" .Values.backend "frontend" .Values.frontend "cron" .Values.workers.cron "publisher" .Values.workers.publisher "console" .Values.workers.console "lifecycle" .Values.workers.lifecycle -}}
+{{- range $component := list "backend" "frontend" "cron" "publisher" "console" "lifecycle" -}}
 {{- $w := index $workloads $component -}}
-{{- $worker := has $component (list "publisher" "console" "lifecycle") -}}
+{{- $worker := has $component (list "cron" "publisher" "console" "lifecycle") -}}
 {{- if or (not $worker) (and (ne $component "lifecycle") $w.enabled) (and (eq $component "lifecycle") $root.Values.controlPlane.enabled) -}}
 {{- $python := or $worker (eq $component "backend") -}}
 {{- $integration := has $component (list "backend" "lifecycle") -}}
@@ -48,6 +48,9 @@ spec:
         checksum/config: {{ include (print $root.Template.BasePath "/frontend-configmap.yaml") $root | sha256sum }}
         {{- end }}
     spec:
+      {{- if eq $component "cron" }}
+      terminationGracePeriodSeconds: {{ add $w.shutdownGraceSeconds 20 }}
+      {{- end }}
       automountServiceAccountToken: false
       {{- if include "dnk.lifecycle.gateEnabled" $root }}
       serviceAccountName: {{ include "dnk.lifecycle.serviceAccountName" $root }}
@@ -86,6 +89,8 @@ spec:
           args: [python, -m, uvicorn, --app-dir, /opt/dnk-runtime, --factory, http_app:create_app, --host, 0.0.0.0, --port, "8000", --no-proxy-headers]
           {{- else if eq $component "publisher" }}
           args: [dnk-manage, events, publisher-worker]
+          {{- else if eq $component "cron" }}
+          args: [dnk-manage, jobs, worker]
           {{- else if eq $component "lifecycle" }}
           args: [python, -m, src.modules.control_plane.worker]
           {{- else }}
@@ -96,6 +101,30 @@ spec:
                 name: {{ $fullname }}-{{ ternary "config" "migration-config" $integration }}
           env:
             {{- include (ternary "dnk.runtime.secretEnv" "dnk.runtime.infrastructureSecretEnv" $integration) $root | nindent 12 }}
+            {{- if eq $component "cron" }}
+            - name: SCHEDULED_JOBS__CONCURRENCY
+              value: {{ $w.concurrency | quote }}
+            - name: SCHEDULED_JOBS__JOB_TIMEOUT_SECONDS
+              value: {{ $w.jobTimeoutSeconds | quote }}
+            - name: SCHEDULED_JOBS__PROCESS_LIMIT
+              value: {{ $root.Values.application.scheduledJobs.processLimit | quote }}
+            - name: SCHEDULED_JOBS__RECOVER_LIMIT
+              value: {{ $root.Values.application.scheduledJobs.recoverLimit | quote }}
+            - name: SCHEDULED_JOBS__RETRY_BASE_SECONDS
+              value: {{ $root.Values.application.scheduledJobs.retryBaseSeconds | quote }}
+            - name: SCHEDULED_JOBS__MAX_ATTEMPTS
+              value: {{ $root.Values.application.scheduledJobs.maxAttempts | quote }}
+            - name: SCHEDULED_JOBS__POLL_INTERVAL_SECONDS
+              value: {{ $w.pollIntervalSeconds | quote }}
+            - name: SCHEDULED_JOBS__RECOVER_INTERVAL_SECONDS
+              value: {{ $w.recoverIntervalSeconds | quote }}
+            - name: SCHEDULED_JOBS__LOCK_TTL_SECONDS
+              value: {{ $w.lockTtlSeconds | quote }}
+            - name: SCHEDULED_JOBS__LOCK_HEARTBEAT_SECONDS
+              value: {{ $w.lockHeartbeatSeconds | quote }}
+            - name: SCHEDULED_JOBS__SHUTDOWN_GRACE_SECONDS
+              value: {{ $w.shutdownGraceSeconds | quote }}
+            {{- end }}
             {{- with $root.Values.backend.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -147,7 +176,12 @@ spec:
       volumes:
         {{- include "dnk.lifecycle.gateVolumes" $root | nindent 8 }}
         - name: tmp
+          {{- if eq $component "cron" }}
+          emptyDir:
+            sizeLimit: {{ mul (int $w.concurrency) (int $root.Values.application.priceLists.maxTempBytes) | quote }}
+          {{- else }}
           emptyDir: {}
+          {{- end }}
         {{- if $python }}
         - name: runtime-scripts
           configMap:

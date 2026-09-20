@@ -55,6 +55,12 @@ cloud identities and invitations remain tenant-local. See the
 
 ## Documentation
 
+Publish this project's images from a clean `feature/*` branch with
+`make publish-feature`. Images receive `feat-<first 8 characters of HEAD SHA>`; a matching Helm package
+is published under the `feat` channel for ArgoCD. Docker Buildx and Helm are required;
+ORAS is not needed.
+See [requirements and retries](docs/operations/ci-cd.md#образы-из-feature-ветки).
+
 - [CI/CD: release workflow and artifact publication](docs/plan/ci-cd.md)
 - [CI/CD maintenance: modules, job logs and build cache](docs/operations/ci-cd.md)
 - [Container images: build and publish to GitHub Packages](docs/container-images.md)

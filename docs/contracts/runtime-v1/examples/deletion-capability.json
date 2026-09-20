@@ -1,0 +1,10 @@
+{
+  "can_delete": true,
+  "reason": null,
+  "access_snapshot": {
+    "event_id": "55555555-5555-4555-8555-555555555555",
+    "version": 1,
+    "available": true,
+    "role": "admin"
+  }
+}

@@ -13,6 +13,7 @@ from pydantic_settings import (
 
 from src.libs.file_utils import search_file_upwards
 from src.config.feature.identity.auth_config import IdentityAuthConfig
+from src.config.feature.price_lists_config import PriceListsConfig
 from src.config.deploy.control_plane import ControlPlaneConfig
 from src.config.deploy import DeploymentConfig
 from src.config.feature import FeatureConfig
@@ -103,6 +104,7 @@ class DnkConfig(
     RedisConfig,
     # Auth config
     IdentityAuthConfig,
+    PriceListsConfig,
     # Control Plane config
     ControlPlaneConfig,
     # Packaging info

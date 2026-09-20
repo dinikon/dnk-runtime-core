@@ -150,7 +150,7 @@ async def invitation_otp(
     payload: InvitationOtpRequest, host: RequestHostDep, service: AccessServiceDep
 ):
     result = await call(service.request_invitation_otp(host, payload.invitation_token))
-    if not dnk_config.DEVELOPMENT:
+    if dnk_config.DEPLOY_ENV != "DEVELOPMENT":
         result.pop("code", None)
     return result
 

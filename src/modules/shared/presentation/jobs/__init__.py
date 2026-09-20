@@ -5,6 +5,7 @@ from src.modules.shared.presentation.jobs.management import (
     build_schedule_scheduled_job_use_case,
     build_scheduled_job_dispatcher,
     build_scheduled_job_repository,
+    build_scheduled_job_worker,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "build_schedule_scheduled_job_use_case",
     "build_scheduled_job_dispatcher",
     "build_scheduled_job_repository",
+    "build_scheduled_job_worker",
 ]

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from src.modules.shared.infrastructure.persistence.tenant_gate import session_guard
+
 from collections.abc import Mapping
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +19,7 @@ from src.modules.shared.application.jobs import (
 from src.modules.shared.application.uuid import UUIdGeneratorProtocol
 from src.modules.shared.domain.time import ClockPort
 from src.modules.shared.infrastructure.jobs import SqlAlchemyScheduledJobRepository
+from src.modules.shared.infrastructure.jobs import ScheduledJobWorker
 from src.modules.shared.infrastructure.time import UtcClock
 from src.modules.shared.infrastructure.uuid import UUID7Generator
 
@@ -26,6 +29,11 @@ def build_scheduled_job_repository(
 ) -> SqlAlchemyScheduledJobRepository:
     """Builds the shared SQLAlchemy scheduled job repository."""
     return SqlAlchemyScheduledJobRepository(session)
+
+
+def build_scheduled_job_worker(**kwargs) -> ScheduledJobWorker:
+    """Builds the production long-running worker at the shared composition root."""
+    return ScheduledJobWorker(**kwargs)
 
 
 def build_scheduled_job_dispatcher(
@@ -43,6 +51,7 @@ def build_schedule_scheduled_job_use_case(
 ) -> ScheduleScheduledJobUseCase:
     """Builds the scheduled job scheduling use case."""
     return ScheduleScheduledJobUseCase(
+        admission=session_guard(session),
         repository=build_scheduled_job_repository(session),
         clock=clock or UtcClock(),
         uuid_generator=uuid_generator or UUID7Generator(),
@@ -59,6 +68,7 @@ def build_process_due_scheduled_jobs_use_case(
 ) -> ProcessDueScheduledJobsUseCase:
     """Builds the due scheduled jobs processing use case."""
     return ProcessDueScheduledJobsUseCase(
+        admission=session_guard(session),
         repository=build_scheduled_job_repository(session),
         dispatcher=dispatcher or build_scheduled_job_dispatcher(),
         clock=clock or UtcClock(),
@@ -98,4 +108,5 @@ __all__ = [
     "build_schedule_scheduled_job_use_case",
     "build_scheduled_job_dispatcher",
     "build_scheduled_job_repository",
+    "build_scheduled_job_worker",
 ]

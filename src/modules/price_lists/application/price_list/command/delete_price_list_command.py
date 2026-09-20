@@ -1,0 +1,16 @@
+from dataclasses import dataclass
+from src.modules.shared.domain.value_object.entity_id import EntityIdVO
+from src.modules.price_lists.domain.price_list.value_object import PriceListIdVO
+
+
+@dataclass(slots=True, frozen=True)
+class DeletePriceListCommand:
+    """Входные данные действия delete_price_list."""
+
+    tenant_id: EntityIdVO
+    actor_id: EntityIdVO
+    price_list_id: PriceListIdVO
+    confirmation_title: str
+
+
+__all__ = ["DeletePriceListCommand"]

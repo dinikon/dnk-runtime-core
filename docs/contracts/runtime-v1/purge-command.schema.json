@@ -1,0 +1,23 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "tenant_id": {
+      "format": "uuid",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "version": {
+      "minimum": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "version"
+  ],
+  "title": "PurgeCommand",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dnk:runtime:v1:purge-command"
+}

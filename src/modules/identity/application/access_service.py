@@ -133,7 +133,10 @@ class IdentityAccessService:
             )
             if binding:
                 await self.projections.set_available(
-                    context.tenant_id, UUID(binding.subject), next_status == "active"
+                    context.tenant_id,
+                    UUID(binding.subject),
+                    next_status == "active",
+                    next_role,
                 )
         await self.uow.commit()
         return {"ok": True}
