@@ -104,7 +104,10 @@ function promMapping(): MappingConfig {
     external_id: { selector: "@id", required: true }, sku: { selector: "vendorCode", required: true },
     title: { selector: "name", required: true }, purchase_price: { selector: "price", type: "decimal", required: true },
     rrp: { selector: "priceRRP", type: "decimal" }, currency: { selector: "currencyId", default: "UAH", required: true },
-    availability: { selector: "@in_stock" }, quantity: { constant: null },
+    availability: {
+      selector: "@available", default: "out_of_stock",
+      map: { "склад": "in_stock", "true": "in_stock", "false": "out_of_stock", "": "out_of_stock" },
+    }, quantity: { constant: null },
   };
 }
 function preparePreset() {

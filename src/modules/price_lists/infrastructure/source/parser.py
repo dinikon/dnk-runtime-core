@@ -25,7 +25,16 @@ PROM_XML_MAPPING = {
     "purchase_price": {"selector": "price", "type": "decimal", "required": True},
     "rrp": {"selector": "priceRRP", "type": "decimal"},
     "currency": {"selector": "currencyId", "default": "UAH"},
-    "availability": {"selector": "@in_stock"},
+    "availability": {
+        "selector": "@available",
+        "default": "out_of_stock",
+        "map": {
+            "склад": "in_stock",
+            "true": "in_stock",
+            "false": "out_of_stock",
+            "": "out_of_stock",
+        },
+    },
     "quantity": {"constant": None},
 }
 

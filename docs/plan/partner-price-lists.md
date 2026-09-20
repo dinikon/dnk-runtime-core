@@ -70,7 +70,7 @@ yml_catalog
 | `purchase_price` | `price` | Закупочная цена партнера |
 | `rrp` | `priceRRP` | РРЦ |
 | `currency` | `currencyId` | Например, `UAH` |
-| `availability` | `@in_stock` | Нормализация `true/false` |
+| `availability` | `@available` | `склад/true` → в наличии; `false` и пусто → нет в наличии |
 | `quantity` | константа `NULL` | В примере точного количества нет |
 
 `item_path` для этого файла: `yml_catalog.shop.offers.offer`. Preset должен заполнять путь и mapping автоматически,
@@ -319,8 +319,9 @@ Staging-модель на время синхронизации. Она хран
     "rrp": {"selector": "priceRRP", "type": "decimal"},
     "currency": {"selector": "currencyId", "default": "UAH"},
     "availability": {
-      "selector": "@in_stock",
-      "map": {"true": "in_stock", "false": "out_of_stock", "": "unknown"}
+      "selector": "@available",
+      "default": "out_of_stock",
+      "map": {"склад": "in_stock", "true": "in_stock", "false": "out_of_stock", "": "out_of_stock"}
     },
     "quantity": {"constant": null}
   }

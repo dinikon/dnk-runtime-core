@@ -103,7 +103,7 @@ class PartnerPriceListParserTests(unittest.TestCase):
         xml = b"""<?xml version='1.0'?>
         <!DOCTYPE yml_catalog SYSTEM 'shops.dtd'>
         <yml_catalog><shop><offers>
-          <offer id='42' in_stock='true'><vendorCode>SKU-42</vendorCode>
+          <offer id='42' available='true'><vendorCode>SKU-42</vendorCode>
           <name>Protein</name><price>120.50</price><priceRRP>180</priceRRP>
           <currencyId>UAH</currencyId></offer>
         </offers></shop></yml_catalog>"""
@@ -116,10 +116,40 @@ class PartnerPriceListParserTests(unittest.TestCase):
         self.assertEqual(row.normalized["purchase_price"], Decimal("120.50"))
         self.assertEqual(row.normalized["availability"], "in_stock")
 
+    def test_prom_xml_available_semantics(self) -> None:
+        source, mapping = prom_xml_config()
+        cases = [
+            ("склад", "in_stock"),
+            ("true", "in_stock"),
+            ("false", "out_of_stock"),
+            ("", "out_of_stock"),
+            ("   ", "out_of_stock"),
+            (None, "out_of_stock"),
+            (" СКЛАД ", "in_stock"),
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "sample.xml"
+            for available, expected in cases:
+                with self.subTest(available=available):
+                    attribute = (
+                        f'available="{available}"' if available is not None else ""
+                    )
+                    legacy = "false" if expected == "in_stock" else "true"
+                    path.write_text(
+                        f"""<yml_catalog><shop><offers>
+                        <offer id="42" {attribute} in_stock="{legacy}">
+                        <vendorCode>SKU</vendorCode><name>Item</name><price>10</price>
+                        </offer></offers></shop></yml_catalog>""",
+                        encoding="utf-8",
+                    )
+                    row = next(self.parser.rows(path, "xml", source, mapping))
+                    self.assertFalse(row.errors)
+                    self.assertEqual(row.normalized["availability"], expected)
+
     def test_xml_parser_matches_the_full_configured_item_path(self) -> None:
         source, mapping = prom_xml_config()
         xml = b"""<yml_catalog><metadata><offer id='wrong'/></metadata><shop>
-        <offers><offer id='right' in_stock='false'><vendorCode>SKU</vendorCode>
+        <offers><offer id='right' available='false'><vendorCode>SKU</vendorCode>
         <name>Item</name><price>10</price><currencyId>UAH</currencyId>
         </offer></offers></shop></yml_catalog>"""
         with tempfile.TemporaryDirectory() as directory:
