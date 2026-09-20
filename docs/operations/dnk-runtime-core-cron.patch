@@ -1,0 +1,46 @@
+--- a/Apps/dnk.runtime-core.yaml
++++ b/Apps/dnk.runtime-core.yaml
+@@ -51,7 +51,6 @@
+ 
+           scheduledJobs:
+-            # The worker processes jobs serially, so claiming a large batch only
+-            # leaves later jobs locked while a long-running sync is in progress.
+-            processLimit: 1
++            # Claim only into available slots; independent price lists run concurrently.
++            processLimit: 4
+ 
+           email:
+@@ -93,11 +92,27 @@
+ 
+           cron:
+-            # The bundled healthcheck expects the outer worker loop to update its
+-            # heartbeat every 30s. Long-running price-list jobs legitimately keep
+-            # that loop busy for longer, so these probes kill a healthy worker.
+-            # Kubernetes still restarts the pod whenever the worker process exits.
++            # Requires the chart/image with concurrent jobs and lightweight probes.
++            concurrency: 4
++            jobTimeoutSeconds: 900
++            shutdownGraceSeconds: 60
+             probes:
+-              readiness: null
+-              liveness: null
++              startup:
++                exec:
++                  command: [dnk-manage, jobs, healthcheck, --liveness]
++                periodSeconds: 5
++                timeoutSeconds: 3
++                failureThreshold: 24
++              readiness:
++                exec:
++                  command: [dnk-manage, jobs, healthcheck]
++                periodSeconds: 10
++                timeoutSeconds: 3
++                failureThreshold: 3
++              liveness:
++                exec:
++                  command: [dnk-manage, jobs, healthcheck, --liveness]
++                periodSeconds: 20
++                timeoutSeconds: 3
++                failureThreshold: 3
+             resources:
+               limits:

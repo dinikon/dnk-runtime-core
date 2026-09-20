@@ -11,6 +11,7 @@ from sqlalchemy import (
     Table,
     and_,
     case,
+    cast,
     column,
     delete,
     func,
@@ -88,7 +89,13 @@ class SqlAlchemyPriceListRepository:
                 await self.session.execute(
                     update(table)
                     .where(table.c.id == changed.c.id)
-                    .values({name: changed.c[name] for name in fields})
+                    # An all-NULL VALUES column is inferred as text by PostgreSQL.
+                    .values(
+                        {
+                            name: cast(changed.c[name], table.c[name].type)
+                            for name in fields
+                        }
+                    )
                     .execution_options(**self._options(tenant_id))
                 )
 

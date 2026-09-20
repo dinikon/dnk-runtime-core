@@ -34,6 +34,9 @@ from src.modules.price_lists.infrastructure.source import (
     SourceParser,
 )
 from src.modules.shared.domain.jobs import ScheduledJob, ScheduledJobStatus
+from src.modules.shared.application.jobs.scheduled_job_deferred import (
+    ScheduledJobDeferred,
+)
 from src.modules.shared.presentation.jobs import build_scheduled_job_repository
 
 logger = logging.getLogger(__name__)
@@ -64,7 +67,7 @@ class PriceListSyncJobHandler:
             return
         async with self._price_list_lock(job.tenant_id, price_list_id) as acquired:
             if not acquired:
-                return
+                raise ScheduledJobDeferred("Price list is already synchronizing")
             await self._synchronize(job, price_list_id, revision, trigger, price_list)
 
     async def _synchronize(

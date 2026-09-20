@@ -56,6 +56,7 @@ This documentation describes the current implementation of `dnk-runtime-core` as
 - [Minimal CI/CD: local development and automated deployment](plan/ci-cd.md)
 - [Repository split and local transition](repository-split.md)
 - [Standalone Helm deployment](../helm/README.md)
+- [Cron concurrency, probes and PostgreSQL tuning](operations/cron-and-postgresql.md)
 
 - [CRM removal runbook](operations/remove-crm.md)
 - [Custom object module removal](operations/remove-custom-object.md)

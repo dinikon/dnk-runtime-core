@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager
-from datetime import UTC, datetime
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -11,6 +9,9 @@ from unittest.mock import AsyncMock, Mock, patch
 from uuid import uuid4
 
 from src.management.job_healthcheck import fresh
+from src.modules.shared.application.jobs.scheduled_job_deferred import (
+    ScheduledJobDeferred,
+)
 from src.modules.shared.infrastructure.jobs.worker import ScheduledJobWorker
 
 
@@ -112,7 +113,7 @@ class ScheduledJobWorkerTests(unittest.IsolatedAsyncioTestCase):
             self.assertLessEqual(peak, 2)
             async with asyncio.timeout(1):
                 while self.repository.extend_lock.await_count < 1:
-                    await asyncio.sleep(.005)
+                    await asyncio.sleep(0.005)
             self.assertGreaterEqual(self.repository.extend_lock.await_count, 1)
             release.set()
             async with asyncio.timeout(1):
@@ -129,6 +130,16 @@ class ScheduledJobWorkerTests(unittest.IsolatedAsyncioTestCase):
         worker = self.worker(concurrency=3)
         self.assertEqual(await worker.process_once(), 0)
         self.assertEqual(self.repository.claim_due_jobs.call_args.kwargs["limit"], 3)
+
+    async def test_busy_resource_is_deferred_without_being_marked_done_or_failed(self):
+        worker = self.worker()
+        worker._dispatch.side_effect = ScheduledJobDeferred()
+        job = self.job()
+        job.attempts = worker.max_attempts
+        await worker._process_job(job)
+        self.repository.mark_done.assert_not_awaited()
+        self.repository.mark_failed.assert_not_awaited()
+        self.repository.release_for_retry.assert_awaited_once()
 
     async def test_job_deadline_cancels_handler_and_retries(self):
         worker = self.worker(job_timeout_seconds=0.03)
@@ -188,6 +199,7 @@ class ScheduledJobWorkerTests(unittest.IsolatedAsyncioTestCase):
     async def test_shutdown_bounds_active_jobs_and_releases_lease(self):
         worker = self.worker()
         job = self.job()
+        job.attempts = worker.max_attempts
         worker._claim_jobs = AsyncMock(side_effect=[[job], []])
         started = asyncio.Event()
         cancelled = asyncio.Event()
@@ -207,4 +219,5 @@ class ScheduledJobWorkerTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.wait_for(task, 1)
         self.assertTrue(cancelled.is_set())
         self.repository.mark_done.assert_not_awaited()
-        self.repository.mark_failed.assert_awaited_once()
+        self.repository.mark_failed.assert_not_awaited()
+        self.repository.release_for_retry.assert_awaited_once()

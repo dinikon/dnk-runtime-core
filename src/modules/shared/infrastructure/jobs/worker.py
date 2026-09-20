@@ -14,12 +14,14 @@ from src.modules.shared.application.jobs import (
     ScheduledJobDispatcherPort,
     ScheduledJobRetryPolicy,
 )
+from src.modules.shared.application.jobs.scheduled_job_deferred import (
+    ScheduledJobDeferred,
+)
 from src.modules.shared.infrastructure.jobs.sqlalchemy_scheduled_job_repository import (
     SqlAlchemyScheduledJobRepository,
 )
 from src.modules.shared.infrastructure.persistence.tenant_gate import (
     TenantGate,
-    TenantUnavailable,
 )
 from src.modules.shared.infrastructure.observability.metrics import (
     scheduled_job_worker_cycles,
@@ -205,8 +207,10 @@ class ScheduledJobWorker:
             # The interrupted transaction rolls back before the job is released.
             handler.cancel()
             await asyncio.gather(handler, return_exceptions=True)
-            await self._fail_job(job, "WorkerShutdown")
+            await self._release_job(job, "WorkerShutdown")
             raise
+        except ScheduledJobDeferred:
+            await self._release_job(job, "ResourceBusy")
         except Exception as exc:
             handler.cancel()
             await asyncio.gather(handler, return_exceptions=True)
@@ -218,6 +222,24 @@ class ScheduledJobWorker:
             scheduled_job_worker_cycles.labels(phase="job").observe(
                 time.monotonic() - started
             )
+
+    async def _release_job(self, job, reason: str) -> None:
+        now = datetime.now(UTC)
+        try:
+            async with asyncio.timeout(10):
+                async with self.session_factory() as session:
+                    await SqlAlchemyScheduledJobRepository(session).release_for_retry(
+                        job_id=job.id,
+                        lock_token=job.lock_token,
+                        reason=reason,
+                        retry_at=now + timedelta(seconds=30),
+                        released_at=now,
+                    )
+                    await session.commit()
+            logger.info("Scheduled job deferred: id=%s reason=%s", job.id, reason)
+        except (SQLAlchemyError, OSError, TimeoutError):
+            self.readiness_path.unlink(missing_ok=True)
+            logger.warning("Could not release job; lease will expire: id=%s", job.id)
 
     async def _fail_job(self, job, error_type: str) -> None:
         logger.warning("Scheduled job failed: id=%s error_type=%s", job.id, error_type)
@@ -266,14 +288,17 @@ class ScheduledJobWorker:
         while True:
             await asyncio.sleep(self.lock_heartbeat_seconds)
             now = datetime.now(UTC)
-            async with self.session_factory() as session:
-                extended = await SqlAlchemyScheduledJobRepository(session).extend_lock(
-                    job_id=job_id,
-                    lock_token=lock_token,
-                    locked_until=now + timedelta(seconds=self.lock_ttl_seconds),
-                    updated_at=now,
-                )
-                await session.commit()
+            async with asyncio.timeout(10):
+                async with self.session_factory() as session:
+                    extended = await SqlAlchemyScheduledJobRepository(
+                        session
+                    ).extend_lock(
+                        job_id=job_id,
+                        lock_token=lock_token,
+                        locked_until=now + timedelta(seconds=self.lock_ttl_seconds),
+                        updated_at=now,
+                    )
+                    await session.commit()
             if not extended:
                 lost.set()
                 return

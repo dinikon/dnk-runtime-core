@@ -479,6 +479,27 @@ class ScheduledJobsConcurrentClaimTests(unittest.IsolatedAsyncioTestCase):
         result_1, result_2 = await asyncio.gather(task_1, task_2)
 
         self.assertTrue(set(result_1).isdisjoint(result_2))
+        async with session_factory() as session:
+            repository = SqlAlchemyScheduledJobRepository(session)
+            job_id = result_1[0]
+            arguments = dict(
+                job_id=job_id,
+                reason="ResourceBusy",
+                retry_at=now + timedelta(seconds=30),
+                released_at=now,
+            )
+            self.assertFalse(
+                await repository.release_for_retry(lock_token="wrong", **arguments)
+            )
+            self.assertTrue(
+                await repository.release_for_retry(lock_token="worker-0", **arguments)
+            )
+            await session.commit()
+            released = await session.get(ScheduledJobModel, job_id)
+            self.assertEqual(released.attempts, 0)
+            self.assertEqual(released.status, ScheduledJobStatus.SCHEDULED.value)
+            self.assertIsNone(released.lock_token)
+            self.assertEqual(released.run_at, now + timedelta(seconds=30))
         await engine.dispose()
 
 

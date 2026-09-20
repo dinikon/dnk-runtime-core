@@ -14,18 +14,23 @@ class CronWorkerDeploymentTests(HelmContractTests):
         spec = podspec(deployment)
         container = spec["containers"][0]
         self.assertEqual(container["args"], ["dnk-manage", "jobs", "worker"])
-        self.assertEqual(spec["terminationGracePeriodSeconds"], 60)
+        self.assertEqual(spec["terminationGracePeriodSeconds"], 80)
+        for probe in ("startupProbe", "livenessProbe"):
+            self.assertEqual(
+                container[probe]["exec"]["command"],
+                ["dnk-manage", "jobs", "healthcheck", "--liveness"],
+            )
         self.assertEqual(
             container["readinessProbe"]["exec"]["command"],
             ["dnk-manage", "jobs", "healthcheck"],
         )
         env = {
-            item["name"]: item["value"]
-            for item in container["env"]
-            if "value" in item
+            item["name"]: item["value"] for item in container["env"] if "value" in item
         }
         self.assertEqual(env["SCHEDULED_JOBS__POLL_INTERVAL_SECONDS"], "2")
         self.assertEqual(env["SCHEDULED_JOBS__LOCK_TTL_SECONDS"], "300")
+        self.assertEqual(env["SCHEDULED_JOBS__CONCURRENCY"], "4")
+        self.assertEqual(env["SCHEDULED_JOBS__JOB_TIMEOUT_SECONDS"], "900")
         self.assertEqual(container["resources"]["limits"]["memory"], "1Gi")
         self.assertFalse(
             any(

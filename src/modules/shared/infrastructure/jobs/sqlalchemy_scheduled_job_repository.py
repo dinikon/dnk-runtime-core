@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import delete, insert, select, update
+from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -188,6 +188,34 @@ class SqlAlchemyScheduledJobRepository:
             .where(ScheduledJobModel.status == ScheduledJobStatus.RUNNING.value)
             .where(ScheduledJobModel.lock_token == lock_token)
             .values(**values)
+        )
+        await self._session.flush()
+        return bool(result.rowcount)
+
+    async def release_for_retry(
+        self,
+        *,
+        job_id: UUID,
+        lock_token: str,
+        reason: str,
+        retry_at: datetime,
+        released_at: datetime,
+    ) -> bool:
+        """Release contention/shutdown without exhausting the failure budget."""
+        result = await self._session.execute(
+            update(ScheduledJobModel)
+            .where(ScheduledJobModel.id == job_id)
+            .where(ScheduledJobModel.status == ScheduledJobStatus.RUNNING.value)
+            .where(ScheduledJobModel.lock_token == lock_token)
+            .values(
+                status=ScheduledJobStatus.SCHEDULED.value,
+                attempts=func.greatest(ScheduledJobModel.attempts - 1, 0),
+                run_at=retry_at,
+                locked_until=None,
+                lock_token=None,
+                last_error=reason,
+                updated_at=released_at,
+            )
         )
         await self._session.flush()
         return bool(result.rowcount)

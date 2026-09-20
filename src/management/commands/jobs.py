@@ -3,13 +3,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
-from datetime import UTC, datetime
 from pathlib import Path
 import signal
 
-from sqlalchemy import text
-
 from src.config import dnk_config
+from src.management.job_healthcheck import main as probe_main
 from src.modules.shared.application.jobs import (
     ProcessDueScheduledJobsCommand,
     RecoverStuckScheduledJobsCommand,
@@ -129,25 +127,9 @@ async def handle_worker(_args: argparse.Namespace) -> int:
         await db_helper.dispose()
 
 
-async def handle_healthcheck(_args: argparse.Namespace) -> int:
-    """Checks the worker heartbeat and the PostgreSQL connection."""
-    settings = dnk_config.SCHEDULED_JOBS
-    heartbeat = Path(settings.heartbeat_path)
-    if not heartbeat.exists():
-        return 1
-    try:
-        last = datetime.fromisoformat(heartbeat.read_text(encoding="utf-8").strip())
-    except (OSError, ValueError):
-        return 1
-    max_age = max(settings.poll_interval_seconds * 5, 30)
-    if (datetime.now(UTC) - last).total_seconds() > max_age:
-        return 1
-    try:
-        async with db_helper.session_factory() as session:
-            await session.execute(text("SELECT 1"))
-    except Exception:
-        return 1
-    return 0
+async def handle_healthcheck(args: argparse.Namespace) -> int:
+    """Use the same lightweight probe for programmatic parser callers."""
+    return probe_main(["--liveness"] if getattr(args, "liveness", False) else [])
 
 
 def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -210,8 +192,9 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
 
     healthcheck_parser = jobs_subparsers.add_parser(
         "healthcheck",
-        help="Check CronWorker heartbeat and database connectivity.",
+        help="Check worker heartbeat and its last successful database poll.",
     )
+    healthcheck_parser.add_argument("--liveness", action="store_true")
     healthcheck_parser.set_defaults(handler=handle_healthcheck)
 
 
