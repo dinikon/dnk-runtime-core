@@ -102,6 +102,10 @@ spec:
           env:
             {{- include (ternary "dnk.runtime.secretEnv" "dnk.runtime.infrastructureSecretEnv" $integration) $root | nindent 12 }}
             {{- if eq $component "cron" }}
+            - name: SCHEDULED_JOBS__CONCURRENCY
+              value: {{ $w.concurrency | quote }}
+            - name: SCHEDULED_JOBS__JOB_TIMEOUT_SECONDS
+              value: {{ $w.jobTimeoutSeconds | quote }}
             - name: SCHEDULED_JOBS__PROCESS_LIMIT
               value: {{ $root.Values.application.scheduledJobs.processLimit | quote }}
             - name: SCHEDULED_JOBS__RECOVER_LIMIT

@@ -6,6 +6,8 @@ import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.modules.shared.application.jobs import (
@@ -45,6 +47,9 @@ class ScheduledJobWorker:
         poll_interval_seconds: int,
         recover_interval_seconds: int,
         heartbeat_path: Path,
+        concurrency: int = 4,
+        job_timeout_seconds: float = 900,
+        shutdown_grace_seconds: float = 60,
     ) -> None:
         self.session_factory = session_factory
         self.dispatcher = dispatcher
@@ -57,105 +62,192 @@ class ScheduledJobWorker:
         self.poll_interval_seconds = poll_interval_seconds
         self.recover_interval_seconds = recover_interval_seconds
         self.heartbeat_path = heartbeat_path
+        self.concurrency = concurrency
+        self.job_timeout_seconds = job_timeout_seconds
+        self.shutdown_grace_seconds = shutdown_grace_seconds
+        self.readiness_path = Path(str(heartbeat_path) + ".ready")
         self.tenant_gate = TenantGate(session_factory)
 
     async def run(self, stop: asyncio.Event) -> None:
-        # A healthy import can take longer than the probe's maximum heartbeat
-        # age. Keep reporting event-loop liveness while the poll is in progress.
+        self.readiness_path.unlink(missing_ok=True)
         self._heartbeat()
         processing = asyncio.create_task(self._run(stop))
         try:
             while not processing.done():
-                await asyncio.wait({processing}, timeout=self.poll_interval_seconds)
+                await asyncio.wait(
+                    {processing}, timeout=min(self.poll_interval_seconds, 5)
+                )
                 if not processing.done():
                     self._heartbeat()
             await processing
         finally:
             processing.cancel()
             await asyncio.gather(processing, return_exceptions=True)
+            self.readiness_path.unlink(missing_ok=True)
+            self.heartbeat_path.unlink(missing_ok=True)
 
     async def _run(self, stop: asyncio.Event) -> None:
         last_recovery = 0.0
-        while not stop.is_set():
-            now_monotonic = time.monotonic()
-            if now_monotonic - last_recovery >= self.recover_interval_seconds:
-                await self.recover_once()
-                last_recovery = now_monotonic
-            processed = await self.process_once()
-            self._heartbeat()
-            if not processed:
+        active: set[asyncio.Task] = set()
+        try:
+            while not stop.is_set():
+                for task in tuple(active):
+                    if task.done():
+                        active.remove(task)
+                        await task
                 try:
-                    await asyncio.wait_for(
-                        stop.wait(), timeout=self.poll_interval_seconds
+                    # Bound DB polling too: a lost TCP connection must not leave
+                    # readiness true forever or prevent graceful shutdown.
+                    async with asyncio.timeout(10):
+                        now_monotonic = time.monotonic()
+                        if (
+                            now_monotonic - last_recovery
+                            >= self.recover_interval_seconds
+                        ):
+                            await self.recover_once()
+                            last_recovery = now_monotonic
+                        available = self.concurrency - len(active)
+                        if available:
+                            jobs = await self._claim_jobs(
+                                min(available, self.process_limit)
+                            )
+                            # No await between commit/claim and task creation: every
+                            # leased job starts immediately in an available slot.
+                            for job in jobs:
+                                active.add(asyncio.create_task(self._process_job(job)))
+                        else:
+                            async with self.session_factory() as session:
+                                await session.execute(text("SELECT 1"))
+                        self._ready()
+                except (SQLAlchemyError, OSError, TimeoutError) as exc:
+                    self.readiness_path.unlink(missing_ok=True)
+                    logger.warning(
+                        "Scheduled-job poll unavailable: %s", type(exc).__name__
                     )
-                except TimeoutError:
-                    pass
+                stop_wait = asyncio.create_task(stop.wait())
+                try:
+                    await asyncio.wait(
+                        active | {stop_wait},
+                        timeout=min(self.poll_interval_seconds, 5),
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                finally:
+                    stop_wait.cancel()
+                    await asyncio.gather(stop_wait, return_exceptions=True)
+        finally:
+            self.readiness_path.unlink(missing_ok=True)
+            if active:
+                _, pending = await asyncio.wait(
+                    active, timeout=self.shutdown_grace_seconds
+                )
+                for task in pending:
+                    task.cancel()
+                await asyncio.gather(*active, return_exceptions=True)
 
-    async def process_once(self) -> int:
-        cycle_started = time.monotonic()
+    async def _claim_jobs(self, limit: int):
         now = datetime.now(UTC)
-        lock_token = f"cron-{time.time_ns()}"
         async with self.session_factory() as session:
-            repository = SqlAlchemyScheduledJobRepository(session)
-            jobs = await repository.claim_due_jobs(
-                # Execution is serial: queued jobs must not consume their lease
-                # or attempts while a preceding import is still running.
-                limit=min(self.process_limit, 1),
+            jobs = await SqlAlchemyScheduledJobRepository(session).claim_due_jobs(
+                limit=limit,
                 now=now,
                 locked_until=now + timedelta(seconds=self.lock_ttl_seconds),
-                lock_token=lock_token,
+                lock_token=f"cron-{time.time_ns()}",
             )
             await session.commit()
         scheduled_job_worker_polls.labels(result="claimed" if jobs else "idle").inc()
-        for job in jobs:
-            logger.info("Scheduled job started: id=%s type=%s", job.id, job.job_type)
-            lease_lost = asyncio.Event()
-            heartbeat = asyncio.create_task(
-                self._extend_lease(job.id, lock_token, lease_lost)
+        return jobs
+
+    async def process_once(self) -> int:
+        """One bounded concurrent batch for management/testing callers."""
+        jobs = await self._claim_jobs(min(self.concurrency, self.process_limit))
+        await asyncio.gather(*(self._process_job(job) for job in jobs))
+        return len(jobs)
+
+    async def _dispatch(self, job) -> None:
+        async with self.tenant_gate.hold(job.tenant_id):
+            await self.dispatcher.dispatch(job)
+
+    async def _process_job(self, job) -> None:
+        started = time.monotonic()
+        logger.info("Scheduled job started: id=%s type=%s", job.id, job.job_type)
+        lease_lost = asyncio.Event()
+        heartbeat = asyncio.create_task(
+            self._extend_lease(job.id, job.lock_token, lease_lost)
+        )
+        handler = asyncio.create_task(self._dispatch(job))
+        try:
+            done, _ = await asyncio.wait(
+                {heartbeat, handler},
+                timeout=self.job_timeout_seconds,
+                return_when=asyncio.FIRST_COMPLETED,
             )
-            try:
-                async with self.tenant_gate.hold(job.tenant_id):
-                    await self.dispatcher.dispatch(job)
-                if lease_lost.is_set():
-                    continue
-                async with self.session_factory() as session:
-                    await SqlAlchemyScheduledJobRepository(session).mark_done(
-                        job_id=job.id,
-                        lock_token=lock_token,
-                        completed_at=datetime.now(UTC),
-                    )
-                    await session.commit()
-                logger.info("Scheduled job completed: id=%s", job.id)
-            except TenantUnavailable:
-                continue
-            except Exception as exc:
-                logger.warning(
-                    "Scheduled job failed: id=%s error_type=%s",
-                    job.id,
-                    type(exc).__name__,
+            if not done:
+                raise TimeoutError("Scheduled job exceeded its execution deadline")
+            if heartbeat in done:
+                await heartbeat  # Propagate DB failures and stop the handler.
+                raise RuntimeError("Scheduled job lease was lost")
+            await handler
+            if lease_lost.is_set():
+                return
+            async with self.session_factory() as session:
+                await SqlAlchemyScheduledJobRepository(session).mark_done(
+                    job_id=job.id,
+                    lock_token=job.lock_token,
+                    completed_at=datetime.now(UTC),
                 )
-                failed_at = datetime.now(UTC)
-                retry_at = None
-                if job.attempts < self.max_attempts:
-                    retry_at = self.retry_policy.next_retry_at(
-                        now=failed_at, attempts=job.attempts
-                    )
+                await session.commit()
+            logger.info(
+                "Scheduled job completed: id=%s duration_seconds=%.3f",
+                job.id,
+                time.monotonic() - started,
+            )
+        except asyncio.CancelledError:
+            # The interrupted transaction rolls back before the job is released.
+            handler.cancel()
+            await asyncio.gather(handler, return_exceptions=True)
+            await self._fail_job(job, "WorkerShutdown")
+            raise
+        except Exception as exc:
+            handler.cancel()
+            await asyncio.gather(handler, return_exceptions=True)
+            await self._fail_job(job, type(exc).__name__)
+        finally:
+            handler.cancel()
+            heartbeat.cancel()
+            await asyncio.gather(handler, heartbeat, return_exceptions=True)
+            scheduled_job_worker_cycles.labels(phase="job").observe(
+                time.monotonic() - started
+            )
+
+    async def _fail_job(self, job, error_type: str) -> None:
+        logger.warning("Scheduled job failed: id=%s error_type=%s", job.id, error_type)
+        failed_at = datetime.now(UTC)
+        retry_at = (
+            self.retry_policy.next_retry_at(now=failed_at, attempts=job.attempts)
+            if job.attempts < self.max_attempts
+            else None
+        )
+        try:
+            async with asyncio.timeout(10):
                 async with self.session_factory() as session:
                     await SqlAlchemyScheduledJobRepository(session).mark_failed(
                         job_id=job.id,
-                        lock_token=lock_token,
-                        error=f"{type(exc).__name__}: handler failed",
+                        lock_token=job.lock_token,
+                        error=f"{error_type}: handler failed",
                         retry_at=retry_at,
                         failed_at=failed_at,
                     )
                     await session.commit()
-            finally:
-                heartbeat.cancel()
-                await asyncio.gather(heartbeat, return_exceptions=True)
-        scheduled_job_worker_cycles.labels(phase="poll").observe(
-            time.monotonic() - cycle_started
-        )
-        return len(jobs)
+        except (SQLAlchemyError, OSError, TimeoutError):
+            # On a DB outage the persisted lease expires; recovery requeues it.
+            self.readiness_path.unlink(missing_ok=True)
+            logger.warning(
+                "Could not record failure; job will recover after lease expiry: id=%s",
+                job.id,
+            )
+
+    def _ready(self) -> None:
+        self._write_timestamp(self.readiness_path)
 
     async def recover_once(self) -> None:
         cycle_started = time.monotonic()
@@ -187,6 +279,11 @@ class ScheduledJobWorker:
                 return
 
     def _heartbeat(self) -> None:
-        now = datetime.now(UTC)
-        self.heartbeat_path.write_text(now.isoformat(), encoding="utf-8")
-        scheduled_job_worker_heartbeat.set(now.timestamp())
+        self._write_timestamp(self.heartbeat_path)
+        scheduled_job_worker_heartbeat.set(datetime.now(UTC).timestamp())
+
+    @staticmethod
+    def _write_timestamp(path: Path) -> None:
+        temporary = path.with_name(path.name + ".tmp")
+        temporary.write_text(datetime.now(UTC).isoformat(), encoding="utf-8")
+        temporary.replace(path)

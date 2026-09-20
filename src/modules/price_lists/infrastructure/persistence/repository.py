@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -10,6 +11,7 @@ from sqlalchemy import (
     Table,
     and_,
     case,
+    column,
     delete,
     func,
     insert,
@@ -17,6 +19,7 @@ from sqlalchemy import (
     or_,
     select,
     update,
+    values as sql_values,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -66,6 +69,28 @@ class SqlAlchemyPriceListRepository:
                 .values(batch)
                 .execution_options(**self._options(tenant_id))
             )
+
+    async def _update_many(
+        self, *, tenant_id: UUID, table: Table, values: list[dict[str, Any]]
+    ) -> None:
+        """Update many different rows in one PostgreSQL round trip per batch."""
+        groups = defaultdict(list)
+        for value in values:
+            groups[tuple(sorted(key for key in value if key != "id"))].append(value)
+        for fields, items in groups.items():
+            names = ("id", *fields)
+            for offset in range(0, len(items), PRICE_LIST_WRITE_BATCH_SIZE):
+                batch = items[offset : offset + PRICE_LIST_WRITE_BATCH_SIZE]
+                changed = sql_values(
+                    *(column(name, table.c[name].type) for name in names),
+                    name="changed",
+                ).data([tuple(row[name] for name in names) for row in batch])
+                await self.session.execute(
+                    update(table)
+                    .where(table.c.id == changed.c.id)
+                    .values({name: changed.c[name] for name in fields})
+                    .execution_options(**self._options(tenant_id))
+                )
 
     async def create(
         self,
@@ -358,18 +383,17 @@ class SqlAlchemyPriceListRepository:
         )
         existing = {row["external_id"]: dict(row) for row in existing_result.mappings()}
         current_states: dict[UUID, dict[str, Any]] = {}
-        state_ids = [
-            row["current_state_id"]
-            for row in existing.values()
-            if row["current_state_id"]
-        ]
-        if state_ids:
+        if existing:
             state_result = await self.session.execute(
                 select(states)
-                .where(states.c.id.in_(state_ids))
+                .join(offers, offers.c.current_state_id == states.c.id)
+                .where(offers.c.price_list_id == price_list["id"])
                 .execution_options(**self._options(tenant_id))
             )
             current_states = {row["id"]: dict(row) for row in state_result.mappings()}
+        new_offers: list[dict[str, Any]] = []
+        new_states: list[dict[str, Any]] = []
+        offer_updates: list[dict[str, Any]] = []
         quarantined_ids: set[str] = set()
         for row in valid:
             value = row.normalized
@@ -386,9 +410,8 @@ class SqlAlchemyPriceListRepository:
                     counters["ignored"] += 1
                     continue
                 offer_id = uuid6.uuid7()
-                await self.session.execute(
-                    insert(offers)
-                    .values(
+                new_offers.append(
+                    dict(
                         id=offer_id,
                         price_list_id=price_list["id"],
                         sku=str(value["sku"]),
@@ -402,8 +425,8 @@ class SqlAlchemyPriceListRepository:
                         created_by=actor_id,
                         updated_by=actor_id,
                     )
-                    .execution_options(**self._options(tenant_id))
                 )
+                offer_update = {"id": offer_id}
                 counters["created"] += 1
                 reason = "initial"
             else:
@@ -411,20 +434,17 @@ class SqlAlchemyPriceListRepository:
                 if offer["lifecycle_status"] in {"missing", "archived"}:
                     counters["reappeared"] += 1
                     reason = "reappeared"
-                await self.session.execute(
-                    update(offers)
-                    .where(offers.c.id == offer_id)
-                    .values(
-                        sku=str(value["sku"]),
-                        title=str(value["title"]),
-                        lifecycle_status="active",
-                        last_seen_at=now,
-                        missing_since=None,
-                        consecutive_missing_runs=0,
-                        updated_by=actor_id,
-                    )
-                    .execution_options(**self._options(tenant_id))
+                offer_update = dict(
+                    id=offer_id,
+                    sku=str(value["sku"]),
+                    title=str(value["title"]),
+                    lifecycle_status="active",
+                    last_seen_at=now,
+                    missing_since=None,
+                    consecutive_missing_runs=0,
+                    updated_by=actor_id,
                 )
+            offer_updates.append(offer_update)
             current_state = (
                 current_states.get(offer.get("current_state_id")) if offer else None
             )
@@ -433,9 +453,8 @@ class SqlAlchemyPriceListRepository:
                 counters["unchanged"] += 1
                 continue
             state_id = uuid6.uuid7()
-            await self.session.execute(
-                insert(states)
-                .values(
+            new_states.append(
+                dict(
                     id=state_id,
                     offer_id=offer_id,
                     sync_run_id=run_id,
@@ -448,14 +467,8 @@ class SqlAlchemyPriceListRepository:
                     value_hash=value["value_hash"],
                     change_reason=reason,
                 )
-                .execution_options(**self._options(tenant_id))
             )
-            await self.session.execute(
-                update(offers)
-                .where(offers.c.id == offer_id)
-                .values(current_state_id=state_id)
-                .execution_options(**self._options(tenant_id))
-            )
+            offer_update["current_state_id"] = state_id
             counters["changed"] += 1
         missing_policy = str(
             price_list.get("missing_item_policy") or "mark_out_of_stock"
@@ -464,6 +477,7 @@ class SqlAlchemyPriceListRepository:
             for external_id, offer in existing.items():
                 if external_id in seen_ids:
                     continue
+                offer_update = {"id": offer["id"]}
                 missing_runs = int(offer["consecutive_missing_runs"] or 0) + 1
                 lifecycle = offer["lifecycle_status"]
                 if missing_runs >= int(price_list.get("missing_threshold") or 1):
@@ -484,9 +498,8 @@ class SqlAlchemyPriceListRepository:
                             )
                             if current_state["value_hash"] != missing_hash:
                                 state_id = uuid6.uuid7()
-                                await self.session.execute(
-                                    insert(states)
-                                    .values(
+                                new_states.append(
+                                    dict(
                                         id=state_id,
                                         offer_id=offer["id"],
                                         sync_run_id=run_id,
@@ -499,27 +512,22 @@ class SqlAlchemyPriceListRepository:
                                         value_hash=missing_hash,
                                         change_reason="missing_policy",
                                     )
-                                    .execution_options(**self._options(tenant_id))
                                 )
-                                await self.session.execute(
-                                    update(offers)
-                                    .where(offers.c.id == offer["id"])
-                                    .values(current_state_id=state_id)
-                                    .execution_options(**self._options(tenant_id))
-                                )
+                                offer_update["current_state_id"] = state_id
                                 counters["changed"] += 1
                     counters["missing"] += 1
-                await self.session.execute(
-                    update(offers)
-                    .where(offers.c.id == offer["id"])
-                    .values(
-                        lifecycle_status=lifecycle,
-                        consecutive_missing_runs=missing_runs,
-                        missing_since=offer["missing_since"] or now,
-                        updated_by=actor_id,
-                    )
-                    .execution_options(**self._options(tenant_id))
+                offer_update.update(
+                    lifecycle_status=lifecycle,
+                    consecutive_missing_runs=missing_runs,
+                    missing_since=offer["missing_since"] or now,
+                    updated_by=actor_id,
                 )
+                offer_updates.append(offer_update)
+        # FK order matters: offers -> immutable states -> current-state pointers.
+        # All batches remain in the caller's transaction for atomic publication.
+        await self._insert_many(tenant_id=tenant_id, table=offers, values=new_offers)
+        await self._insert_many(tenant_id=tenant_id, table=states, values=new_states)
+        await self._update_many(tenant_id=tenant_id, table=offers, values=offer_updates)
         cleanup = delete(staging).where(staging.c.sync_run_id == run_id)
         if quarantined_ids:
             cleanup = cleanup.where(staging.c.external_id.not_in(quarantined_ids))

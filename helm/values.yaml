@@ -217,6 +217,8 @@ workers:
       tag: latest
       pullPolicy: Always
     replicas: 1
+    concurrency: 4
+    jobTimeoutSeconds: 900
     pollIntervalSeconds: 2
     recoverIntervalSeconds: 30
     lockTtlSeconds: 300
@@ -229,6 +231,12 @@ workers:
       limits:
         memory: 1Gi
     probes:
+      startup:
+        exec:
+          command: [dnk-manage, jobs, healthcheck, --liveness]
+        periodSeconds: 5
+        timeoutSeconds: 3
+        failureThreshold: 24
       readiness:
         exec:
           command: [dnk-manage, jobs, healthcheck]
@@ -237,7 +245,7 @@ workers:
         failureThreshold: 3
       liveness:
         exec:
-          command: [dnk-manage, jobs, healthcheck]
+          command: [dnk-manage, jobs, healthcheck, --liveness]
         periodSeconds: 20
         timeoutSeconds: 5
         failureThreshold: 3

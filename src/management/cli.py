@@ -45,8 +45,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> None:
+    arguments = list(argv) if argv is not None else sys.argv[1:]
+    # Probes must not import the application's models, drivers and all commands.
+    if arguments[:2] == ["jobs", "healthcheck"]:
+        _bootstrap_pythonpath()
+        from src.management.job_healthcheck import main as healthcheck
+
+        raise SystemExit(healthcheck(arguments[2:]))
     parser = build_parser()
-    args = parser.parse_args(list(argv) if argv is not None else None)
+    args = parser.parse_args(arguments)
     handler = getattr(args, "handler", None)
     if handler is None:
         parser.print_help()

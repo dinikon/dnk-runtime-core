@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, PositiveInt
+from pydantic import BaseModel, Field, PositiveInt, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -11,6 +11,8 @@ class ScheduledJobsSettings(BaseModel):
         default=100,
         description="Default due scheduled jobs batch size.",
     )
+    concurrency: PositiveInt = Field(default=4, le=32)
+    job_timeout_seconds: PositiveInt = Field(default=900)
     recover_limit: PositiveInt = Field(
         default=100,
         description="Default stuck scheduled jobs recovery batch size.",
@@ -47,6 +49,12 @@ class ScheduledJobsSettings(BaseModel):
         default="/tmp/dnk-cron-worker-heartbeat",
         description="Worker heartbeat file used by container health checks.",
     )
+
+    @model_validator(mode="after")
+    def validate_lease_intervals(self):
+        if self.lock_heartbeat_seconds * 2 >= self.lock_ttl_seconds:
+            raise ValueError("lock_ttl_seconds must exceed twice lock_heartbeat_seconds")
+        return self
 
 
 class ScheduledJobsConfig(BaseSettings):

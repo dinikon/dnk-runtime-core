@@ -12,7 +12,7 @@ from typing import AsyncIterator
 from uuid import UUID
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, async_sessionmaker
 
 from src.modules.price_lists.application import next_cron_occurrence
 from src.modules.price_lists.domain import (
@@ -184,6 +184,19 @@ class PriceListSyncJobHandler:
                     "sync_counters": counters,
                 },
             )
+        except asyncio.CancelledError:
+            try:
+                async with asyncio.timeout(5):
+                    async with self.session_factory() as session:
+                        await SqlAlchemyPriceListRepository(session).finish_run(
+                            tenant_id=job.tenant_id, price_list_id=price_list_id,
+                            run_id=run_id, status="failed", checksum=None,
+                            counters={}, error="Synchronization interrupted; job may retry.",
+                        )
+                        await session.commit()
+            except Exception:
+                logger.warning("Could not record interrupted price-list run: %s", run_id)
+            raise
         except LostJobLease:
             async with self.session_factory() as session:
                 await SqlAlchemyPriceListRepository(session).skip_run(
@@ -332,27 +345,32 @@ class PriceListSyncJobHandler:
         """Serializes syncs for one tenant/price-list on PostgreSQL."""
         digest = hashlib.sha256(f"{tenant_id}:{price_list_id}".encode()).digest()
         lock_key = int.from_bytes(digest[:8], byteorder="big", signed=True)
-        async with self.session_factory() as session:
-            connection = await session.connection()
+        bind = self.session_factory.kw["bind"]
+        engine = bind.engine if isinstance(bind, AsyncConnection) else bind
+        # Pin the physical connection until unlock: committing an AsyncSession
+        # alone would return a still-locked connection to the pool.
+        async with engine.connect() as connection:
             if connection.dialect.name != "postgresql":
                 yield True
                 return
-            acquired = bool(
-                (
-                    await session.execute(
-                        text("SELECT pg_try_advisory_lock(:lock_key)"),
-                        {"lock_key": lock_key},
-                    )
-                ).scalar_one()
-            )
+            acquired = bool(await connection.scalar(
+                text("SELECT pg_try_advisory_lock(:lock_key)"), {"lock_key": lock_key}
+            ))
             try:
+                await connection.commit()
                 yield acquired
             finally:
                 if acquired:
-                    await session.execute(
-                        text("SELECT pg_advisory_unlock(:lock_key)"),
-                        {"lock_key": lock_key},
-                    )
+                    try:
+                        await connection.rollback()
+                        await asyncio.shield(connection.execute(
+                            text("SELECT pg_advisory_unlock(:lock_key)"),
+                            {"lock_key": lock_key},
+                        ))
+                        await connection.commit()
+                    except BaseException:
+                        await connection.invalidate()
+                        raise
 
 
 class LostJobLease(RuntimeError):
