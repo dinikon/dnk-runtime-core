@@ -2,7 +2,10 @@ from dataclasses import dataclass
 from decimal import Decimal
 import re
 from src.modules.price_lists.domain.offer.error import InvalidOfferValueError
-from src.modules.price_lists.domain.offer.value_object.money import MoneyVO, QuantityVO
+from src.modules.price_lists.domain.offer.value_object.money import (
+    ImportPriceVO,
+    QuantityVO,
+)
 from src.modules.price_lists.domain.offer.value_object.availability import (
     normalize_availability,
 )
@@ -30,9 +33,11 @@ class OfferValues:
             if value is None or not 1 <= len(str(value).strip()) <= 255:
                 raise InvalidOfferValueError(f"{name}: expected 1 to 255 characters")
             object.__setattr__(self, name, str(value).strip())
-        object.__setattr__(self, "purchase_price", MoneyVO(self.purchase_price).value)
+        object.__setattr__(
+            self, "purchase_price", ImportPriceVO(self.purchase_price).value
+        )
         if self.rrp is not None:
-            object.__setattr__(self, "rrp", MoneyVO(self.rrp).value)
+            object.__setattr__(self, "rrp", ImportPriceVO(self.rrp).value)
         if self.quantity is not None:
             object.__setattr__(self, "quantity", QuantityVO(self.quantity).value)
         currency = str(self.currency).strip().upper()

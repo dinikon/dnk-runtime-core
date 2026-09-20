@@ -33,7 +33,10 @@ from src.modules.price_lists.domain.price_list.error import (
     PriceListStateConflict,
 )
 from src.modules.price_lists.domain.offer.error import InvalidOfferValueError
-from src.modules.price_lists.domain.offer.value_object.money import MoneyVO, QuantityVO
+from src.modules.price_lists.domain.offer.value_object.money import (
+    ImportPriceVO,
+    QuantityVO,
+)
 from src.modules.price_lists.application.sync_run.options import ImportOptions
 from src.modules.price_lists.domain.sync_run.entity import SyncRun
 from src.modules.price_lists.domain.sync_run.error import SourceValidationError
@@ -235,8 +238,8 @@ class PartnerPriceListFetcherTests(unittest.IsolatedAsyncioTestCase):
 
 class PriceListValueTests(unittest.TestCase):
     def test_money_normalization_and_invalid_values(self):
-        self.assertEqual(MoneyVO("10").value, MoneyVO("10.0000").value)
-        self.assertEqual(MoneyVO("1.23455").value, Decimal("1.2346"))
+        self.assertEqual(ImportPriceVO("10").value, ImportPriceVO("10.0000").value)
+        self.assertEqual(ImportPriceVO("1.23455").value, Decimal("1.2346"))
         for value in (
             "NaN",
             "sNaN",
@@ -247,7 +250,7 @@ class PriceListValueTests(unittest.TestCase):
             "999999999999999.99999",
         ):
             with self.subTest(value=value), self.assertRaises(InvalidOfferValueError):
-                MoneyVO(value)
+                ImportPriceVO(value)
         for value in ("1.9", "NaN", "Infinity", "2147483648", -1):
             with self.subTest(value=value), self.assertRaises(InvalidOfferValueError):
                 QuantityVO(value)

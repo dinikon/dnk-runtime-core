@@ -1,3 +1,18 @@
+from src.modules.currency.presentation.depends import (
+    CurrencyServicesDep,
+    build_currency_services,
+)
+from src.modules.shared.presentation.persistence.depends import UoWDep
+from src.modules.price_lists.application.offer.money import (
+    OfferMoneyService,
+    ConvertedOfferService,
+)
+from src.modules.price_lists.infrastructure.persistence.money_snapshot import (
+    SqlOfferMoneyRepository,
+)
+from src.modules.price_lists.presentation.depends.infrastructure import (
+    get_tenant_naming,
+)
 from src.modules.price_lists.presentation.depends.infrastructure import (
     SyncRunRepositoryDep,
     get_background_repositories,
@@ -319,17 +334,33 @@ UpdateSettingsUseCaseDep = Annotated[
 ]
 
 
-def get_list_offers_use_case(repository: QueryRepositoryDep) -> ListOffersUseCase:
+def get_offer_money_service(
+    currency: CurrencyServicesDep, uow: UoWDep, options: ImportOptionsDep
+):
+    return OfferMoneyService(
+        currency.facade,
+        SqlOfferMoneyRepository(uow.session, get_tenant_naming(), options),
+    )
+
+
+OfferMoneyServiceDep = Annotated[OfferMoneyService, Depends(get_offer_money_service)]
+
+
+def get_list_offers_use_case(
+    repository: QueryRepositoryDep, money: OfferMoneyServiceDep
+) -> ListOffersUseCase:
     """Собирает ListOffersUseCase."""
-    return ListOffersUseCase(repository)
+    return ListOffersUseCase(repository, money)
 
 
 ListOffersUseCaseDep = Annotated[ListOffersUseCase, Depends(get_list_offers_use_case)]
 
 
-def get_offer_history_use_case(repository: QueryRepositoryDep) -> OfferHistoryUseCase:
+def get_offer_history_use_case(
+    repository: QueryRepositoryDep, money: OfferMoneyServiceDep
+) -> OfferHistoryUseCase:
     """Собирает OfferHistoryUseCase."""
-    return OfferHistoryUseCase(repository)
+    return OfferHistoryUseCase(repository, money)
 
 
 OfferHistoryUseCaseDep = Annotated[
@@ -354,7 +385,7 @@ class ImportComponents:
     runs: SyncRunRepository
     staging: StagingPort
     jobs: JobSchedulerPort
-    offer_service: OfferService
+    offer_service: ConvertedOfferService
     uow: UnitOfWorkProtocol
 
     async def commit(self):
@@ -374,7 +405,15 @@ def get_background_transactions(session_factory, *, options=None, clock=None):
     def assemble(uow):
         ports = get_background_repositories(uow, options, clock)
         return ImportComponents(
-            **ports, offer_service=OfferService(ports["offers"], clock), uow=uow
+            **ports,
+            offer_service=ConvertedOfferService(
+                OfferService(ports["offers"], clock),
+                OfferMoneyService(
+                    build_currency_services(uow.session, clock).facade,
+                    SqlOfferMoneyRepository(uow.session, get_tenant_naming(), options),
+                ),
+            ),
+            uow=uow,
         )
 
     return get_background_transaction_factory(session_factory, assemble)

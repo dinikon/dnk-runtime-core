@@ -406,6 +406,39 @@
               "minimum": 1
             }
           }
+        },
+        "currency": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "nbu": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "apiUrl": {
+                  "type": "string",
+                  "pattern": "^https?://"
+                },
+                "timeoutSeconds": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 120
+                },
+                "retryCount": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 5
+                },
+                "syncEnabled": {
+                  "type": "boolean"
+                },
+                "syncSchedule": {
+                  "type": "string",
+                  "minLength": 9
+                }
+              }
+            }
+          }
         }
       }
     },

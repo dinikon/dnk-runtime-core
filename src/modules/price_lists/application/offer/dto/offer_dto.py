@@ -26,6 +26,8 @@ class OfferDTO:
     recommended_retail_income: Decimal | None
     margin_percent: Decimal | None
     change_count: int
+    historical_conversion: dict | None = None
+    current_conversion: dict | None = None
 
 
 @dataclass(slots=True, frozen=True)
@@ -45,6 +47,7 @@ class OfferStateDTO:
     change_reason: str
     recommended_retail_income: Decimal | None
     margin_percent: Decimal | None
+    historical_conversion: dict | None = None
 
 
 @dataclass(slots=True, frozen=True)

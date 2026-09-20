@@ -1,4 +1,6 @@
-export type PriceListStatus = "draft" | "ready" | "active" | "paused" | "invalid" | "archived";
+import type { OfferConversion } from "@/modules/currency/model/types";
+export type PriceListStatus =
+  "draft" | "ready" | "active" | "paused" | "invalid" | "archived";
 export type SourceFormat = "xml" | "yaml" | "xlsx";
 export type PriceListScope = "current" | "archived" | "all";
 
@@ -30,7 +32,8 @@ export interface PriceList {
   cron_expression: string | null;
   timezone: string;
   new_item_policy: "create" | "quarantine" | "ignore";
-  missing_item_policy: "mark_out_of_stock" | "mark_missing" | "keep_last" | "archive";
+  missing_item_policy:
+    "mark_out_of_stock" | "mark_missing" | "keep_last" | "archive";
   missing_threshold: number;
   next_sync_at: string | null;
   last_success_at: string | null;
@@ -57,6 +60,8 @@ export interface PreviewResult {
 }
 
 export interface PartnerOffer {
+  historical_conversion?: OfferConversion | null;
+  current_conversion?: OfferConversion | null;
   id: string;
   sku: string;
   external_id: string;
@@ -76,6 +81,7 @@ export interface PartnerOffer {
 }
 
 export interface PartnerOfferState {
+  historical_conversion?: OfferConversion | null;
   id: string;
   observed_at: string;
   purchase_price: string;
@@ -113,6 +119,7 @@ export interface SyncRun {
 }
 
 export interface OfferFilters {
+  businessDate: string;
   q: string;
   priceListId: string;
   purchasePriceMin: string;

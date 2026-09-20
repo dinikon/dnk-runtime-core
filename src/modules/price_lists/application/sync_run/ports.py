@@ -1,4 +1,4 @@
-from src.modules.price_lists.domain.offer.service import OfferService
+from src.modules.price_lists.application.offer.money import ConvertedOfferService
 from collections.abc import AsyncIterator
 from contextlib import AbstractAsyncContextManager
 from datetime import datetime
@@ -129,7 +129,7 @@ class StagingPort(Protocol):
 class ImportTransaction(Protocol):
     """UoW без SQLAlchemy в application-контракте."""
 
-    offer_service: OfferService
+    offer_service: ConvertedOfferService
     prices: PriceListRepository
     offers: OfferRepository
     runs: SyncRunRepository

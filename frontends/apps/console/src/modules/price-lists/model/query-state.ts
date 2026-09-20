@@ -2,6 +2,7 @@ import type { LocationQuery } from "vue-router";
 import type { OfferFilters, OfferHistoryFilters } from "../api/contracts";
 
 export const defaultOfferFilters: OfferFilters = {
+  businessDate: "",
   q: "",
   priceListId: "",
   purchasePriceMin: "",
@@ -47,6 +48,7 @@ function first(value: LocationQuery[string]): string {
 export function filtersFromQuery(query: LocationQuery): OfferFilters {
   const direction = first(query.direction);
   return {
+    businessDate: first(query.business_date),
     q: first(query.q),
     priceListId: first(query.price_list_id),
     purchasePriceMin: first(query.purchase_price_min),
@@ -69,6 +71,7 @@ export function filtersFromQuery(query: LocationQuery): OfferFilters {
 
 export function filtersToQuery(filters: OfferFilters): Record<string, string> {
   const entries: Array<[string, string | number]> = [
+    ["business_date", filters.businessDate],
     ["q", filters.q],
     ["price_list_id", filters.priceListId],
     ["purchase_price_min", filters.purchasePriceMin],
@@ -86,7 +89,9 @@ export function filtersToQuery(filters: OfferFilters): Record<string, string> {
     ["include_archived", filters.includeArchived ? "true" : ""],
   ];
   return Object.fromEntries(
-    entries.filter(([, value]) => value !== "" && value !== 0).map(([key, value]) => [key, String(value)]),
+    entries
+      .filter(([, value]) => value !== "" && value !== 0)
+      .map(([key, value]) => [key, String(value)]),
   );
 }
 

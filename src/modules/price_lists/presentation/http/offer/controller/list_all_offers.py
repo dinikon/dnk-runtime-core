@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 from uuid import UUID
 from typing import Literal
@@ -47,6 +48,7 @@ async def list_all_offers(
     pagination: Literal["offset", "cursor"] = "offset",
     cursor: str | None = Query(default=None, max_length=4096),
     include_total: bool = False,
+    business_date: date | None = None,
 ):
     """HTTP-запрос list_all_offers с совместимым offset и cursor режимом."""
     with http_errors():
@@ -75,6 +77,7 @@ async def list_all_offers(
                 pagination=pagination,
                 cursor=cursor,
                 include_total=include_total,
+                business_date=business_date,
             )
         )
         values = dto_values(result)

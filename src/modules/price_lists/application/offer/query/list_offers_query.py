@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 
@@ -17,6 +18,7 @@ class ListOffersQuery:
     pagination: str = "offset"
     cursor: str | None = None
     include_total: bool = False
+    business_date: date | None = None
 
 
 __all__ = ["ListOffersQuery"]

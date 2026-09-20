@@ -1,32 +1,33 @@
 from __future__ import annotations
 
-from enum import StrEnum
+from dataclasses import dataclass
+import re
 
-from src.modules.shared.domain.value_object.currency_code_not_supported_error import (
-    CurrencyCodeNotSupportedError,
-)
+from .money_errors import InvalidCurrencyCodeError
 
 
-class CurrencyCodeVO(StrEnum):
-    """Value object поддержанного ISO-like кода валюты."""
+@dataclass(frozen=True, slots=True)
+class CurrencyCodeVO:
+    """Syntactic identifier; currency membership belongs to the directory."""
 
-    USD = "USD"
-    EUR = "EUR"
-    GBP = "GBP"
-    UAH = "UAH"
-    PLN = "PLN"
+    value: str
+
+    def __post_init__(self):
+        if not isinstance(self.value, str):
+            raise InvalidCurrencyCodeError("Currency code must be a string.")
+        value = self.value.strip()
+        if re.fullmatch(r"[A-Za-z]{3}", value) is None:
+            raise InvalidCurrencyCodeError(
+                "Currency code must contain three ASCII letters."
+            )
+        object.__setattr__(self, "value", value.upper())
 
     @classmethod
     def from_value(cls, value: str | CurrencyCodeVO) -> CurrencyCodeVO:
-        """Создает CurrencyCodeVO из строки или возвращает готовый enum."""
-        if isinstance(value, cls):
-            return value
+        return value if isinstance(value, cls) else cls(value)
 
-        normalized = value.strip().upper()
-        try:
-            return cls(normalized)
-        except ValueError:
-            raise CurrencyCodeNotSupportedError(value) from None
+    def __str__(self):
+        return self.value
 
 
-__all__ = ["CurrencyCodeNotSupportedError", "CurrencyCodeVO"]
+__all__ = ["InvalidCurrencyCodeError", "CurrencyCodeVO"]

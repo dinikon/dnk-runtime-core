@@ -27,6 +27,11 @@ export const router = createRouter({
         ...dashboardRoutes,
         ...priceListRoutes,
         {
+          path: "settings/currency",
+          name: "currency",
+          component: () => import("@/modules/currency/ui/CurrencyPage.vue"),
+        },
+        {
           path: "settings/members",
           name: "members",
           component: () => import("@/modules/access/pages/MembersPage.vue"),

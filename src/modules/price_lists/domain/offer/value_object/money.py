@@ -5,7 +5,7 @@ from src.modules.price_lists.domain.offer.error import InvalidOfferValueError
 
 
 @dataclass(slots=True, frozen=True)
-class MoneyVO:
+class ImportPriceVO:
     """Неотрицательная конечная цена в точности NUMERIC(19,4)."""
 
     value: Decimal
@@ -48,4 +48,4 @@ class QuantityVO:
             raise InvalidOfferValueError("Quantity must be a finite integer.") from None
 
 
-__all__ = ["MoneyVO", "QuantityVO"]
+__all__ = ["ImportPriceVO", "QuantityVO"]

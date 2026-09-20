@@ -22,6 +22,9 @@ def _bootstrap_pythonpath() -> None:
 def build_parser() -> argparse.ArgumentParser:
     _bootstrap_pythonpath()
     from src.management.commands.database import register as register_database
+    from src.modules.currency.presentation.management import (
+        register as register_currency,
+    )
     from src.management.commands.events import (
         register as register_events,
     )
@@ -41,6 +44,7 @@ def build_parser() -> argparse.ArgumentParser:
     register_jobs(subparsers)
     register_tenant_migrations(subparsers)
     register_database(subparsers)
+    register_currency(subparsers)
     return parser
 
 

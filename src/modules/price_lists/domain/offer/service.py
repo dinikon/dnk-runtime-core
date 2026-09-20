@@ -54,7 +54,7 @@ class OfferService:
             else:
                 counters["unchanged"] += 1
         await self.repository.save_batch(tenant_id, new, changed, states)
-        return counters, quarantine
+        return counters, quarantine, states
 
     async def apply_missing_batch(self, tenant_id, price, run_id, offers, state_ids):
         """Применяет отсутствие без полного набора ID в памяти."""
@@ -76,7 +76,7 @@ class OfferService:
                 states.append(state)
                 counters["changed"] += 1
         await self.repository.save_batch(tenant_id, [], offers, states)
-        return counters
+        return counters, states
 
 
 __all__ = ["OfferService"]

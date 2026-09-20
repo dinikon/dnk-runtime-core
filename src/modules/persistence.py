@@ -5,3 +5,4 @@ import src.modules.shared.infrastructure.events.integration_inbox_event_model  #
 import src.modules.shared.infrastructure.events.integration_outbox_event_model  # noqa: F401
 import src.modules.shared.infrastructure.jobs.scheduled_job_model  # noqa: F401
 import src.modules.control_plane.infrastructure.models  # noqa: F401
+import src.modules.currency.infrastructure.persistence  # noqa: F401

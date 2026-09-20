@@ -1,7 +1,10 @@
 from typing import Any
 import re
 from src.modules.price_lists.domain.offer.error import InvalidOfferValueError
-from src.modules.price_lists.domain.offer.value_object.money import MoneyVO, QuantityVO
+from src.modules.price_lists.domain.offer.value_object.money import (
+    ImportPriceVO,
+    QuantityVO,
+)
 from src.modules.price_lists.domain.offer.value_object.values import OfferValues
 from src.modules.price_lists.domain.offer.value_object.availability import (
     normalize_availability,
@@ -40,7 +43,7 @@ def _extract(raw: Any, specification: dict[str, Any]) -> Any:
 
 
 def _decimal(value):
-    return None if value in (None, "") else MoneyVO(value).value
+    return None if value in (None, "") else ImportPriceVO(value).value
 
 
 def _integer(value):

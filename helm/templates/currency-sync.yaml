@@ -1,0 +1,76 @@
+{{- if .Values.application.currency.nbu.syncEnabled }}
+{{- $fullname := include "dnk.runtime.fullname" . -}}
+{{- $w := .Values.backend -}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $fullname }}-currency-sync
+  labels:
+    {{- include "dnk.runtime.labels" . | nindent 4 }}
+    app.kubernetes.io/component: currency-sync
+spec:
+  schedule: {{ .Values.application.currency.nbu.syncSchedule | quote }}
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 600
+      template:
+        metadata:
+          labels:
+            {{- include "dnk.runtime.labels" . | nindent 12 }}
+            app.kubernetes.io/component: currency-sync
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          {{- if include "dnk.lifecycle.gateEnabled" . }}
+          serviceAccountName: {{ include "dnk.lifecycle.serviceAccountName" . }}
+          initContainers:
+            {{- include "dnk.lifecycle.gate" . | nindent 12 }}
+          {{- end }}
+          {{- with concat .Values.global.imagePullSecrets $w.pod.imagePullSecrets | uniq }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $w.pod.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: currency-sync
+              image: {{ printf "%s:%s" $w.image.repository $w.image.tag | quote }}
+              imagePullPolicy: {{ $w.image.pullPolicy }}
+              command: [python, /opt/dnk-runtime/entrypoint.py]
+              args: [dnk-manage, currency, sync-rates, --scheduled]
+              envFrom:
+                - configMapRef:
+                    name: {{ $fullname }}-migration-config
+              env:
+                {{- include "dnk.runtime.infrastructureSecretEnv" . | nindent 16 }}
+                {{- with $w.extraEnv }}
+                {{- toYaml . | nindent 16 }}
+                {{- end }}
+              resources:
+                {{- toYaml $w.resources | nindent 16 }}
+              {{- with $w.pod.containerSecurityContext }}
+              securityContext:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              volumeMounts:
+                - name: runtime-scripts
+                  mountPath: /opt/dnk-runtime
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            {{- include "dnk.lifecycle.gateVolumes" . | nindent 12 }}
+            - name: runtime-scripts
+              configMap:
+                name: {{ $fullname }}-scripts
+            - name: tmp
+              emptyDir: {}
+{{- end }}

@@ -1,9 +1,15 @@
-import { FileSpreadsheet, LifeBuoy, ShoppingBasket } from "@lucide/vue";
+import { FileSpreadsheet, LifeBuoy, ShoppingBasket, Coins } from "@lucide/vue";
 
 import type { WorkspaceNavigation } from "./workspace-navigation.types";
 
 export const workspaceNavigation: WorkspaceNavigation = {
   navGroups: [
+    {
+      title: "Настройки",
+      items: [
+        { title: "Валюты и курсы", url: "/settings/currency", icon: Coins },
+      ],
+    },
     {
       title: "Закупки",
       items: [

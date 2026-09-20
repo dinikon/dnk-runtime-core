@@ -27,7 +27,10 @@ import {
 } from "./price-lists.mapper";
 
 export const priceListsApi = {
-  async list(scope: PriceListScope = "current", signal?: AbortSignal): Promise<PriceList[]> {
+  async list(
+    scope: PriceListScope = "current",
+    signal?: AbortSignal,
+  ): Promise<PriceList[]> {
     const { data } = await httpClient.get<{ items: PriceListDto[] }>(
       "/console/price-lists",
       { signal, params: { scope } },
@@ -51,13 +54,16 @@ export const priceListsApi = {
     const { data } = await httpClient.post("/console/price-lists", payload);
     return data;
   },
-  async preview(id: string, candidate?: {
-    source_url?: string;
-    source_format?: SourceFormat;
-    source_preset?: "prom_xml" | null;
-    source_config?: Record<string, unknown>;
-    mapping_config?: MappingConfig;
-  }): Promise<PreviewResult> {
+  async preview(
+    id: string,
+    candidate?: {
+      source_url?: string;
+      source_format?: SourceFormat;
+      source_preset?: "prom_xml" | null;
+      source_config?: Record<string, unknown>;
+      mapping_config?: MappingConfig;
+    },
+  ): Promise<PreviewResult> {
     const { data } = await httpClient.post<PreviewResultDto>(
       `/console/price-lists/${id}/preview`,
       candidate,
@@ -80,28 +86,36 @@ export const priceListsApi = {
       cron_expression: string;
       timezone: string;
       new_item_policy: "create" | "quarantine" | "ignore";
-      missing_item_policy: "mark_out_of_stock" | "mark_missing" | "keep_last" | "archive";
+      missing_item_policy:
+        "mark_out_of_stock" | "mark_missing" | "keep_last" | "archive";
       missing_threshold: number;
     },
   ): Promise<void> {
     await httpClient.put(`/console/price-lists/${id}/schedule`, payload);
   },
-  async updateSettings(id: string, payload: {
-    title: string;
-    source_url?: string;
-    source_format: SourceFormat;
-    source_preset: "prom_xml" | null;
-    source_config: Record<string, unknown>;
-    mapping_config: MappingConfig;
-    cron_expression: string;
-    timezone: string;
-    new_item_policy: "create" | "quarantine" | "ignore";
-    missing_item_policy: "mark_out_of_stock" | "mark_missing" | "keep_last" | "archive";
-    missing_threshold: number;
-  }): Promise<void> {
+  async updateSettings(
+    id: string,
+    payload: {
+      title: string;
+      source_url?: string;
+      source_format: SourceFormat;
+      source_preset: "prom_xml" | null;
+      source_config: Record<string, unknown>;
+      mapping_config: MappingConfig;
+      cron_expression: string;
+      timezone: string;
+      new_item_policy: "create" | "quarantine" | "ignore";
+      missing_item_policy:
+        "mark_out_of_stock" | "mark_missing" | "keep_last" | "archive";
+      missing_threshold: number;
+    },
+  ): Promise<void> {
     await httpClient.put(`/console/price-lists/${id}/settings`, payload);
   },
-  async previewSchedule(expression: string, timezone: string): Promise<string[]> {
+  async previewSchedule(
+    expression: string,
+    timezone: string,
+  ): Promise<string[]> {
     const params = new URLSearchParams({ expression, timezone });
     const { data } = await httpClient.get<{ occurrences: string[] }>(
       `/console/price-lists/schedule-preview?${params.toString()}`,
@@ -111,7 +125,10 @@ export const priceListsApi = {
   async activate(id: string): Promise<void> {
     await httpClient.post(`/console/price-lists/${id}/activate`);
   },
-  async action(id: string, action: "sync" | "pause" | "resume" | "archive" | "restore"): Promise<void> {
+  async action(
+    id: string,
+    action: "sync" | "pause" | "resume" | "archive" | "restore",
+  ): Promise<void> {
     await httpClient.post(`/console/price-lists/${id}/${action}`);
   },
   async delete(id: string, confirmationTitle: string): Promise<void> {
@@ -126,9 +143,13 @@ export const priceListsApi = {
     );
     return data.items.map(mapSyncRun);
   },
-  async offers(filters: OfferFilters, signal?: AbortSignal): Promise<OffersResponse> {
+  async offers(
+    filters: OfferFilters,
+    signal?: AbortSignal,
+  ): Promise<OffersResponse> {
     const params = new URLSearchParams();
     const pairs: Array<[string, string]> = [
+      ["business_date", filters.businessDate],
       ["q", filters.q],
       ["price_list_id", filters.priceListId],
       ["purchase_price_min", filters.purchasePriceMin],
@@ -152,11 +173,23 @@ export const priceListsApi = {
     );
     return mapOffers(data);
   },
-  async history(id: string, filters: OfferHistoryFilters, signal?: AbortSignal): Promise<OfferHistoryResponse> {
+  async history(
+    id: string,
+    filters: OfferHistoryFilters,
+    signal?: AbortSignal,
+  ): Promise<OfferHistoryResponse> {
     const params = new URLSearchParams();
     const pairs: Array<[string, string]> = [
-      ["observed_from", filters.observedFrom ? new Date(filters.observedFrom).toISOString() : ""],
-      ["observed_to", filters.observedTo ? new Date(filters.observedTo).toISOString() : ""],
+      [
+        "observed_from",
+        filters.observedFrom
+          ? new Date(filters.observedFrom).toISOString()
+          : "",
+      ],
+      [
+        "observed_to",
+        filters.observedTo ? new Date(filters.observedTo).toISOString() : "",
+      ],
       ["purchase_price_min", filters.purchasePriceMin],
       ["purchase_price_max", filters.purchasePriceMax],
       ["rrp_min", filters.rrpMin],

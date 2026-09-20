@@ -17,6 +17,7 @@ This documentation describes the current implementation of `dnk-runtime-core` as
 - [Control Plane integration](modules/control-plane.md)
 - [Identity](modules/identity.md)
 - [Inventory](modules/inventory.md)
+- [Currency](modules/currency.md)
 - [Shared](modules/shared.md)
 
 ## Roadmap-границы модулей

@@ -1,3 +1,8 @@
+from src.modules.shared.domain.value_object.money import Money
+from src.modules.shared.domain.value_object.money_errors import (
+    CurrencyMismatchError,
+    InvalidMoneyError,
+)
 from src.modules.shared.application.uuid import UUIdGeneratorProtocol
 from src.modules.shared.domain import (
     CurrencyCodeVO,
@@ -11,6 +16,9 @@ from src.modules.shared.domain.jobs import ScheduledJob
 from src.modules.shared.domain.time import ClockPort
 
 __all__ = [
+    "Money",
+    "CurrencyMismatchError",
+    "InvalidMoneyError",
     "ClockPort",
     "CurrencyCodeVO",
     "EntityIdVO",

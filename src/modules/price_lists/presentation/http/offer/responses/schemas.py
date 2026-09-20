@@ -23,6 +23,8 @@ class OfferResponse(BaseModel):
     recommended_retail_income: Decimal | None
     margin_percent: Decimal | None
     change_count: int
+    historical_conversion: dict | None = None
+    current_conversion: dict | None = None
 
 
 class OfferStateResponse(BaseModel):
@@ -41,6 +43,7 @@ class OfferStateResponse(BaseModel):
     change_reason: str
     recommended_retail_income: Decimal | None
     margin_percent: Decimal | None
+    historical_conversion: dict | None = None
 
 
 class OfferPageResponse(BaseModel):

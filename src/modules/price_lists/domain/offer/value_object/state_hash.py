@@ -1,7 +1,7 @@
 import hashlib
 import json
 from decimal import Decimal
-from src.modules.price_lists.domain.offer.value_object.money import MoneyVO
+from src.modules.price_lists.domain.offer.value_object.money import ImportPriceVO
 
 
 def canonical_state_hash(
@@ -13,8 +13,8 @@ def canonical_state_hash(
     quantity: int | None,
 ) -> str:
     payload = {
-        "purchase_price": format(MoneyVO(purchase_price).value, "f"),
-        "rrp": None if rrp is None else format(MoneyVO(rrp).value, "f"),
+        "purchase_price": format(ImportPriceVO(purchase_price).value, "f"),
+        "rrp": None if rrp is None else format(ImportPriceVO(rrp).value, "f"),
         "currency": currency.upper(),
         "availability": availability,
         "quantity": quantity,

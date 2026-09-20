@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Self
 from uuid import UUID
 
-from src.modules.shared.domain import EntityIdTypeError
+from src.modules.shared.domain.domain_error import EntityIdTypeError
 
 
 @dataclass(frozen=True, slots=True)

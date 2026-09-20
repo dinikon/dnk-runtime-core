@@ -24,6 +24,19 @@ Each tenant runs in its own transaction. Batches continue after failures and pre
 
 `revision` uses one tenant at the current head to generate a draft through a separate reflection engine. Review the generated revision before applying it. See [tenant migrations](../data/tenant-migrations.md).
 
+## Currency rates
+
+```sh
+dnk-manage currency sync-rates --date-from 2026-09-01 --date-to 2026-09-21
+dnk-manage currency sync-rates --scheduled
+```
+
+Imports global NBU rates with durable audit and immutable revisions. Identical
+re-imports are idempotent. `--scheduled` honors the disabled-by-default
+`CURRENCY__NBU__SYNC_ENABLED`; explicit imports remain available. Without dates,
+the command refreshes the previous seven UTC days through tomorrow. See
+[Currency deployment and contracts](../modules/currency.md).
+
 ## Other commands
 
 ### `dnk-manage events publish-outbox`

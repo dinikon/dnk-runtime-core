@@ -15,6 +15,10 @@ from sqlalchemy import event, select, func, insert, update, delete
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.schema import CreateSchema, DropSchema
 
+from src.modules.shared.infrastructure.persistence.tenant_migrations import (
+    TenantMigrator,
+)
+
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.shared.infrastructure.jobs.scheduled_job_model import ScheduledJobModel
 from src.modules.shared.infrastructure.time.utc_clock import UtcClock
@@ -117,12 +121,7 @@ class PriceListBulkPostgresTests(unittest.IsolatedAsyncioTestCase):
                 lambda conn: ScheduledJobModel.__table__.create(conn, checkfirst=True)
             )
             await connection.execute(CreateSchema(self.schema))
-            await connection.execution_options(**self.execution)
-            await connection.run_sync(
-                lambda conn: PriceListModel.metadata.create_all(
-                    conn, tables=self.tables
-                )
-            )
+            await TenantMigrator().upgrade(connection, self.schema)
         self.transactions = get_background_transactions(
             self.sessions, options=self.options
         )
@@ -270,6 +269,169 @@ class PriceListBulkPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertLess(queries, 60)
         self.assertEqual(await self.count(PartnerOfferStateModel), 1005)
         self.assertEqual(await self.count(PriceListSyncItemModel), 0)
+
+    async def test_currency_snapshots_survive_rate_revisions_and_repeat_import(self):
+        from datetime import date
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        from src.modules.currency.infrastructure.persistence.models import CurrencyModel
+        from src.modules.shared.infrastructure.events.integration_outbox_event_model import (
+            IntegrationOutboxEventModel,
+        )
+        from src.modules.shared.infrastructure.persistence.unit_of_work import (
+            UnitOfWork,
+        )
+        from src.modules.currency.presentation.depends import build_currency_services
+        from src.modules.currency.application.commands import (
+            InitializeCurrency,
+            SetManualRate,
+        )
+        from src.modules.currency.domain.models import CurrencyPair, ProviderCode
+        from src.modules.price_lists.application.offer.money import OfferMoneyService
+        from src.modules.price_lists.infrastructure.persistence.money_snapshot import (
+            SqlOfferMoneyRepository,
+            OfferMoneySnapshotModel,
+        )
+        from test.test_currency import USD, EUR, UAH, POLICY
+
+        async with self.engine.begin() as connection:
+            for model in (CurrencyModel, IntegrationOutboxEventModel):
+                await connection.run_sync(
+                    lambda conn, table=model.__table__: table.create(
+                        conn, checkfirst=True
+                    )
+                )
+            await connection.execute(
+                pg_insert(CurrencyModel.__table__)
+                .values(
+                    [
+                        dict(code=str(code), name=str(code), minor_units=2)
+                        for code in (USD, EUR, UAH)
+                    ]
+                )
+                .on_conflict_do_nothing()
+            )
+        async with UnitOfWork(self.sessions) as uow:
+            settings = build_currency_services(
+                uow.session, UtcClock(), self.naming
+            ).settings
+            await settings.initialize(
+                InitializeCurrency(
+                    self.tenant_id,
+                    self.actor_id,
+                    replace(POLICY, provider_code=ProviderCode("MANUAL")),
+                    (USD, EUR, UAH),
+                    UAH,
+                    date(2020, 1, 1),
+                    "Initial",
+                )
+            )
+            await settings.set_manual_rate(
+                SetManualRate(
+                    self.tenant_id,
+                    self.actor_id,
+                    CurrencyPair(USD, UAH),
+                    Decimal("40"),
+                    date(2020, 1, 1),
+                )
+            )
+
+        def foreign_row(index, currency):
+            values = replace(self.row(index).offer_values(), currency=currency)
+            return ParsedRow(
+                index + 1,
+                {
+                    **{
+                        name: getattr(values, name)
+                        for name in values.__dataclass_fields__
+                    },
+                    "value_hash": values.value_hash,
+                },
+                (),
+            )
+
+        rows = [foreign_row(0, "USD"), foreign_row(1, "EUR")]
+        await self.apply(rows)
+        async with self.sessions() as session:
+            table = OfferMoneySnapshotModel.__table__
+            before = list(
+                (
+                    await session.execute(
+                        select(table).execution_options(**self.execution)
+                    )
+                ).mappings()
+            )
+        usd = next(row for row in before if row["status"] == "converted")
+        self.assertEqual(Decimal(usd["purchase_price"]["converted"]["amount"]), 400)
+        self.assertEqual(Decimal(usd["rrp"]["converted"]["amount"]), 800)
+        self.assertEqual(
+            next(row for row in before if row["status"] == "unavailable")["error_code"],
+            "exchange_rate_not_found",
+        )
+        async with UnitOfWork(self.sessions) as uow:
+            settings = build_currency_services(
+                uow.session, UtcClock(), self.naming
+            ).settings
+            await settings.set_manual_rate(
+                SetManualRate(
+                    self.tenant_id,
+                    self.actor_id,
+                    CurrencyPair(USD, UAH),
+                    Decimal("42"),
+                    date(2020, 1, 1),
+                )
+            )
+            await settings.set_manual_rate(
+                SetManualRate(
+                    self.tenant_id,
+                    self.actor_id,
+                    CurrencyPair(EUR, UAH),
+                    Decimal("50"),
+                    date(2020, 1, 1),
+                )
+            )
+        repeated, _ = await self.apply(rows)
+        self.assertEqual(repeated.counters["unchanged"], 2)
+        self.assertEqual(await self.count(PartnerOfferStateModel), 2)
+        async with self.sessions() as session:
+            money = OfferMoneyService(
+                build_currency_services(session, UtcClock(), self.naming).facade,
+                SqlOfferMoneyRepository(session, self.naming, self.options),
+            )
+            page = await self.query()
+            enriched = await money.enrich(self.tenant_id, page)
+            by_currency = {item.currency: item for item in enriched.items}
+            self.assertEqual(
+                Decimal(
+                    by_currency["USD"].current_conversion["purchase_price"][
+                        "converted"
+                    ]["amount"]
+                ),
+                420,
+            )
+            self.assertEqual(
+                by_currency["USD"].historical_conversion["purchase_price"],
+                usd["purchase_price"],
+            )
+            self.assertEqual(
+                by_currency["EUR"].historical_conversion["status"], "unavailable"
+            )
+            self.assertEqual(
+                by_currency["EUR"].current_conversion["status"], "converted"
+            )
+            after = list(
+                (
+                    await session.execute(
+                        select(table).execution_options(**self.execution)
+                    )
+                ).mappings()
+            )
+            self.assertEqual(before, after)
+        async with self.engine.begin() as connection:
+            await connection.execute(
+                delete(IntegrationOutboxEventModel).where(
+                    IntegrationOutboxEventModel.tenant_id == self.tenant_id.uuid
+                )
+            )
 
     async def test_missing_reappeared_and_partial_feed(self):
         await self.apply([self.row(0), self.row(1)])

@@ -68,3 +68,8 @@ PRICE_LISTS__MAX_RECORD_BYTES: application.priceLists.maxRecordBytes
 PRICE_LISTS__STRING_CACHE_BYTES: application.priceLists.stringCacheBytes
 PRICE_LISTS__MAX_TEMP_BYTES: application.priceLists.maxTempBytes
 PRICE_LISTS__FAILED_STAGING_RETENTION_DAYS: application.priceLists.failedStagingRetentionDays
+CURRENCY__NBU__API_URL: application.currency.nbu.apiUrl
+CURRENCY__NBU__TIMEOUT_SECONDS: application.currency.nbu.timeoutSeconds
+CURRENCY__NBU__RETRY_COUNT: application.currency.nbu.retryCount
+CURRENCY__NBU__SYNC_ENABLED: application.currency.nbu.syncEnabled
+CURRENCY__NBU__SYNC_SCHEDULE: application.currency.nbu.syncSchedule

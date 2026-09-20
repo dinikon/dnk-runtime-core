@@ -13,6 +13,14 @@ fullnameOverride: ''
 # Runtime settings are translated into the environment expected by the published image.
 # Set HTTPS publicOrigin, the API key and a working SMTP server before installing.
 application:
+  currency:
+    nbu:
+      apiUrl: https://bank.gov.ua/NBU_Exchange/exchange_site
+      timeoutSeconds: 15
+      retryCount: 2
+      syncEnabled: false
+      # UTC. Each run refreshes the previous seven days and tomorrow's rates.
+      syncSchedule: '15 18 * * *'
   server:
     # Concrete HTTPS origin; tenant routing is configured separately in ingress.hosts.
     publicOrigin: ''

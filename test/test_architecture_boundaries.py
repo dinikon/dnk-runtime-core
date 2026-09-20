@@ -23,6 +23,33 @@ def iter_imports(path: Path) -> list[str]:
 
 
 class ArchitectureBoundariesTests(unittest.TestCase):
+    def test_currency_layers_and_consumer_boundaries(self):
+        for layer in ("domain", "application"):
+            forbidden = (
+                "sqlalchemy",
+                "fastapi",
+                "pydantic",
+                "httpx",
+                "src.config",
+                "src.modules.currency.infrastructure",
+                "src.modules.currency.presentation",
+                "src.modules.shared.infrastructure",
+                "src.modules.shared.presentation",
+            )
+            if layer == "domain":
+                forbidden += ("src.modules.currency.application",)
+            for path in iter_python_files("src/modules/currency/" + layer):
+                for name in iter_imports(path):
+                    self.assertFalse(
+                        name.startswith(forbidden), f"{path} imports {name}"
+                    )
+        for path in iter_python_files("src/modules/price_lists/domain"):
+            for name in iter_imports(path):
+                self.assertFalse(
+                    name.startswith("src.modules.currency"),
+                    f"{path} couples Offer domain to Currency",
+                )
+
     def test_removed_dynamic_modules_have_no_imports(self) -> None:
         for root in ("src", "test"):
             for path in iter_python_files(root):

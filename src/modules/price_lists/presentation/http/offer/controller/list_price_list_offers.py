@@ -1,3 +1,4 @@
+from datetime import date
 from uuid import UUID
 from typing import Literal
 from fastapi import APIRouter, Query
@@ -38,6 +39,7 @@ async def list_price_list_offers(
     pagination: Literal["offset", "cursor"] = "offset",
     cursor: str | None = Query(default=None, max_length=4096),
     include_total: bool = False,
+    business_date: date | None = None,
 ):
     """HTTP-запрос list_price_list_offers с совместимым offset и cursor режимом."""
     with http_errors():
@@ -55,6 +57,7 @@ async def list_price_list_offers(
                 pagination=pagination,
                 cursor=cursor,
                 include_total=include_total,
+                business_date=business_date,
             )
         )
         values = dto_values(result)
