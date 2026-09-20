@@ -1,4 +1,17 @@
-Ниже — целевая архитектура для Django/PostgreSQL с моделью `schema-per-tenant`, DDD + Clean Architecture. Основной принцип: модуль валют отвечает за **валютную политику, курсы и конвертацию**, но не владеет финансовыми документами. `Order`, `Supply`, `Payment`, `Offer` получают от него результат конвертации и сохраняют этот результат как часть собственной исторической записи.
+Ниже — целевая архитектура для текущего `dnk-runtime-core`: Python 3.13.9, FastAPI, SQLAlchemy AsyncIO, asyncpg и PostgreSQL 16 с моделью `schema-per-tenant`, DDD + Clean Architecture. Основной принцип: модуль валют отвечает за **валютную политику, курсы и конвертацию**, но не владеет финансовыми документами. `Order`, `Supply`, `Payment`, `Offer` получают от него результат конвертации и сохраняют этот результат как часть собственной исторической записи.
+
+Обязательные ограничения текущего проекта:
+
+- HTTP и DI: FastAPI, `Depends` и `Annotated`; Django, DRF и Django Admin в Runtime нет;
+- persistence: async SQLAlchemy 2.x/Core через один request/job-scoped `UnitOfWork` и одну `AsyncSession`;
+- tenant isolation: статические tenant-таблицы с `TenantBase`, `schema_translate_map` и **явным `tenant_id` в command/query/repository API**; runtime-код не меняет `search_path`;
+- migrations: global-таблицы в `migrations/global`, tenant-таблицы в `migrations/tenant`; startup не вызывает `create_all()` и не применяет миграции;
+- configuration: `pydantic-settings` и группа настроек в `DnkConfig`;
+- внешний HTTP: `httpx`; отложенная и периодическая работа: существующие PostgreSQL scheduled jobs/management worker, без Celery;
+- frontend: Vue 3 Console в `frontends/apps/console`, а не Django templates/admin;
+- tests: `unittest`; PostgreSQL integration tests работают только с отдельной `TEST_POSTGRES_URL`.
+
+Базовые правила проекта зафиксированы в [Architecture Overview](../architecture/overview.md), [Persistence and UoW](../architecture/persistence-and-uow.md), [Dependency Injection](../architecture/dependency-injection.md) и [Tenant migrations](../data/tenant-migrations.md).
 
 ## 1. Границы модуля
 
@@ -7,7 +20,7 @@
 ```text
 shared
    │
-   │ Money, CurrencyCode
+   │ Money, CurrencyCodeVO
    ▼
 currency bounded context
    │
@@ -66,104 +79,52 @@ rate_date_policy = PREVIOUS_AVAILABLE
 
 ```text
 src/
-├── shared/
-│   └── domain/
-│       └── money/
-│           ├── currency_code.py
-│           ├── money.py
-│           ├── converted_money.py
-│           ├── conversion_snapshot.py
-│           └── errors.py
-│
-├── modules/
-│   └── currency/
-│       ├── domain/
-│       │   ├── entities/
-│       │   │   ├── currency_policy.py
-│       │   │   ├── functional_currency_period.py
-│       │   │   └── manual_exchange_rate.py
-│       │   │
-│       │   ├── value_objects/
-│       │   │   ├── currency_pair.py
-│       │   │   ├── exchange_rate.py
-│       │   │   ├── provider_code.py
-│       │   │   ├── rate_quote.py
-│       │   │   └── rate_resolution.py
-│       │   │
-│       │   ├── enums/
-│       │   │   ├── rate_date_policy.py
-│       │   │   ├── rate_derivation.py
-│       │   │   └── rate_source_type.py
-│       │   │
-│       │   ├── services/
-│       │   │   ├── cross_rate_calculator.py
-│       │   │   └── conversion_calculator.py
-│       │   │
-│       │   ├── events/
-│       │   └── errors.py
-│       │
-│       ├── application/
-│       │   ├── commands/
-│       │   │   ├── configure_currency_policy.py
-│       │   │   ├── enable_currency.py
-│       │   │   ├── disable_currency.py
-│       │   │   ├── set_manual_rate.py
-│       │   │   └── schedule_functional_currency.py
-│       │   │
-│       │   ├── queries/
-│       │   │   ├── get_currency_policy.py
-│       │   │   ├── get_functional_currency.py
-│       │   │   ├── resolve_rate.py
-│       │   │   └── convert_money.py
-│       │   │
-│       │   ├── services/
-│       │   │   ├── exchange_rate_resolver.py
-│       │   │   ├── money_conversion_service.py
-│       │   │   └── functional_currency_resolver.py
-│       │   │
-│       │   ├── ports/
-│       │   │   ├── currency_directory.py
-│       │   │   ├── currency_policy_repository.py
-│       │   │   ├── functional_currency_repository.py
-│       │   │   ├── manual_rate_repository.py
-│       │   │   ├── provider_rate_repository.py
-│       │   │   ├── exchange_rate_provider.py
-│       │   │   ├── clock.py
-│       │   │   └── unit_of_work.py
-│       │   │
-│       │   └── dto/
-│       │
-│       ├── contracts/
-│       │   ├── facade.py
-│       │   └── dto.py
-│       │
-│       ├── infrastructure/
-│       │   ├── persistence/
-│       │   │   ├── public/
-│       │   │   │   ├── models.py
-│       │   │   │   └── repositories.py
-│       │   │   │
-│       │   │   └── tenant/
-│       │   │       ├── models.py
-│       │   │       └── repositories.py
-│       │   │
-│       │   ├── providers/
-│       │   │   ├── nbu/
-│       │   │   │   ├── client.py
-│       │   │   │   ├── mapper.py
-│       │   │   │   └── adapter.py
-│       │   │   └── manual/
-│       │   │       └── adapter.py
-│       │   │
-│       │   ├── cache/
-│       │   └── tasks/
-│       │       └── sync_rates.py
-│       │
-│       └── presentation/
-│           ├── api/
-│           ├── admin/
-│           └── serializers/
+├── config/
+│   └── feature/currency_config.py
+└── modules/
+    ├── shared/
+    │   └── domain/value_object/
+    │       ├── currency.py
+    │       ├── money.py
+    │       └── money_errors.py
+    └── currency/
+        ├── domain/
+        │   ├── policy/
+        │   ├── functional_currency/
+        │   ├── exchange_rate/
+        │   └── provider/
+        ├── application/
+        │   ├── policy/{command,dto,use_case}/
+        │   ├── functional_currency/{command,dto,query,use_case}/
+        │   ├── exchange_rate/{command,dto,query,use_case}/
+        │   ├── conversion/       # ConvertedMoney/ConversionSnapshot contracts
+        │   ├── facade/
+        │   └── provider/
+        ├── infrastructure/
+        │   ├── persistence/
+        │   │   ├── models.py
+        │   │   ├── global_repositories.py
+        │   │   └── tenant_repositories.py
+        │   └── providers/nbu/{client,mapper,adapter}.py
+        └── presentation/
+            ├── depends/{application,infrastructure}.py
+            ├── http/
+            │   ├── router.py
+            │   └── settings/{controller,requests,responses}/
+            ├── jobs/handler.py
+            └── management.py
+
+migrations/
+├── global/versions/       # currency, global provider rates
+└── tenant/versions/       # policy, enabled currencies, manual rates
+
+frontends/apps/console/src/modules/currency/
+├── api/
+├── model/
+└── ui/
 ```
+
+Точная разбивка пакетов может упрощаться по мере реализации, но она должна сохранять принятую в проекте форму `domain/application/infrastructure/presentation` и группировку по feature aggregate.
 
 Зависимости:
 
@@ -177,7 +138,7 @@ application
 infrastructure / presentation
 ```
 
-`domain` ничего не знает про Django ORM, HTTP, NBU или PostgreSQL.
+`domain` ничего не знает про SQLAlchemy, FastAPI/HTTP, NBU или PostgreSQL. `application` знает только доменные типы и порты; `AsyncSession`, Alembic и `schema_translate_map` остаются в infrastructure/presentation composition.
 
 ---
 
@@ -324,7 +285,7 @@ ProviderRateRepository
 
 # 5. Что хранить внутри tenant schema
 
-Так как schema уже соответствует конкретному tenant, `tenant_id` в каждой таблице не нужен.
+Так как schema уже соответствует конкретному tenant, физической колонки `tenant_id` в каждой tenant-таблице нет. При этом `tenant_id: EntityIdVO` обязательно передаётся явно в каждый command/query и repository method, который обращается к tenant-данным. Repository применяет `schema_translate_map` через общую `TenantSchemaNaming`; DI не биндит repository к tenant.
 
 ## 5.1 `currency_policy`
 
@@ -506,7 +467,12 @@ USD → UAH
 
 # 9. Audit / import execution
 
-Стоит иметь:
+Стоит иметь append-only журнал импорта. Его scope должен совпадать с scope курсов:
+
+- `public.fx_rate_import` — для глобальных NBU/ECB rates;
+- tenant `fx_rate_import` — только для tenant-specific/custom provider.
+
+Поля:
 
 ```text
 fx_rate_import
@@ -540,15 +506,17 @@ error_message
 
 # 10. Какие VO должны быть в `shared`
 
-Shared Kernel должен оставаться небольшим.
+Shared Kernel должен оставаться небольшим. В него входят только независимые от Currency bounded context примитивы: `CurrencyCodeVO`, `Money` и их базовые ошибки. `ConversionSnapshot` и `ConvertedMoney` содержат `RateDerivation`, provider и rate metadata, поэтому живут в публичном application contract Currency, а не в `shared`.
 
-Я бы положил туда четыре основных понятия.
+## `CurrencyCodeVO`
 
-## `CurrencyCode`
+В проекте уже есть `src/modules/shared/domain/value_object/currency.py` с `CurrencyCodeVO` в виде закрытого `StrEnum`. Не нужно создавать рядом второй `CurrencyCode`.
+
+Существующий `CurrencyCodeVO` нужно **заменить новой реализацией по тому же import path**. Закрытый enum несовместим с DB-driven справочником валют и подключаемыми провайдерами. Замена делается без compatibility adapter, feature flag и миграций БД; все текущие Python-потребители и тесты обновляются атомарно в том же change set.
 
 ```python
 @dataclass(frozen=True, slots=True)
-class CurrencyCode:
+class CurrencyCodeVO:
     value: str
 ```
 
@@ -565,7 +533,7 @@ ASCII A-Z
 То есть:
 
 ```python
-CurrencyCode("USD")
+CurrencyCodeVO("USD")
 ```
 
 валиден синтаксически.
@@ -574,11 +542,13 @@ CurrencyCode("USD")
 
 > существует ли USD в системе?
 
-делается через:
+делается асинхронно через:
 
 ```python
 CurrencyDirectory
 ```
+
+Старое имя `CurrencyCodeNotSupportedError` смешивает синтаксис и наличие кода в справочнике. В том же атомарном change set его нужно заменить на `InvalidCurrencyCodeError` для невалидного формата; отсутствующая/неактивная валюта возвращает отдельную application/domain-ошибку из `CurrencyDirectory`.
 
 ---
 
@@ -588,8 +558,10 @@ CurrencyDirectory
 @dataclass(frozen=True, slots=True)
 class Money:
     amount: Decimal
-    currency: CurrencyCode
+    currency: CurrencyCodeVO
 ```
+
+Существующий `price_lists.domain.offer.value_object.MoneyVO` — это не общий money type: он хранит только amount и сразу quantize-ит его до `NUMERIC(19,4)`. Новый shared `Money` не должен скрыто округлять сумму. При интеграции `price_lists` его локальный `MoneyVO` либо удаляется в пользу shared `Money` + явная политика точности, либо остаётся узким import-value type. Параллельные общесистемные типы денег недопустимы.
 
 Должен уметь:
 
@@ -622,13 +594,13 @@ CurrencyMismatchError
 
 # 12. `ConversionSnapshot`
 
-Для фиксации того, как была выполнена конвертация.
+Для фиксации того, как была выполнена конвертация. Это immutable application DTO/public contract модуля Currency, а не shared primitive.
 
 ```python
 @dataclass(frozen=True, slots=True)
 class ConversionSnapshot:
-    source_currency: CurrencyCode
-    target_currency: CurrencyCode
+    source_currency: CurrencyCodeVO
+    target_currency: CurrencyCodeVO
 
     rate: Decimal
 
@@ -642,7 +614,7 @@ class ConversionSnapshot:
     derivation: RateDerivation
 
     source_rate_id: str | None = None
-    bridge_currency: CurrencyCode | None = None
+    bridge_currency: CurrencyCodeVO | None = None
 ```
 
 `requested_date` и `effective_date` обязательно разные понятия.
@@ -670,7 +642,7 @@ effective_date = 2026-09-18
 
 # 13. `ConvertedMoney`
 
-Именно этот VO закрывает ваш кейс:
+Именно этот immutable application DTO закрывает кейс:
 
 > оригинальная сумма + сумма в системной валюте + курс и дата.
 
@@ -791,7 +763,7 @@ class RateQuote:
     derivation: RateDerivation
 
     source_rate_id: str | None
-    bridge_currency: CurrencyCode | None
+    bridge_currency: CurrencyCodeVO | None
 ```
 
 ---
@@ -868,18 +840,18 @@ NEAREST
 
 # 18. Domain entity `CurrencyPolicy`
 
-Это не Django model.
+Это не SQLAlchemy model.
 
 Например:
 
 ```python
 class CurrencyPolicy:
-    default_transaction_currency: CurrencyCode
+    default_transaction_currency: CurrencyCodeVO
     provider_code: ProviderCode
     rate_date_policy: RateDatePolicy
     rounding_mode: RoundingMode
     cross_rates_enabled: bool
-    bridge_currency: CurrencyCode
+    bridge_currency: CurrencyCodeVO
 ```
 
 Ответственность:
@@ -904,7 +876,7 @@ Domain entity:
 
 ```python
 class FunctionalCurrencyPeriod:
-    currency: CurrencyCode
+    currency: CurrencyCodeVO
     valid_from: date
     valid_to: date | None
 ```
@@ -918,9 +890,9 @@ overlaps(period)
 
 ---
 
-# 20. Порты application-слоя
+# 20. Repository protocols и application ports
 
-Это один из наиболее важных слоёв.
+По текущей конвенции проекта repository protocols агрегатов живут рядом с domain aggregate (`domain/<aggregate>/repository.py`), а порты внешних сервисов и facade — в `application/<feature>/`. Все persistence/provider вызовы, выполняющие I/O, асинхронные. Новый currency-модуль не объявляет свои `UnitOfWork` и `Clock`: он переиспользует shared UoW composition и `ClockPort`.
 
 ## `CurrencyDirectory`
 
@@ -929,19 +901,19 @@ overlaps(period)
 ```python
 class CurrencyDirectory(Protocol):
 
-    def exists(
+    async def exists(
         self,
-        code: CurrencyCode,
+        code: CurrencyCodeVO,
     ) -> bool:
         ...
 
-    def get(
+    async def get(
         self,
-        code: CurrencyCode,
+        code: CurrencyCodeVO,
     ) -> CurrencyInfo:
         ...
 
-    def list_active(self) -> Sequence[CurrencyInfo]:
+    async def list_active(self) -> Sequence[CurrencyInfo]:
         ...
 ```
 
@@ -958,25 +930,23 @@ public.currency
 ```python
 class CurrencyPolicyRepository(Protocol):
 
-    def get(self) -> CurrencyPolicy:
+    async def get(self, *, tenant_id: EntityIdVO) -> CurrencyPolicy:
         ...
 
-    def save(
+    async def save(
         self,
+        *,
+        tenant_id: EntityIdVO,
         policy: CurrencyPolicy,
     ) -> None:
         ...
 ```
 
-Tenant определяется текущим schema context.
-
-Поэтому:
+Tenant не определяется скрытым schema context. Он приходит из authenticated request/job context и явно проходит через application-слой:
 
 ```python
-repository.get(tenant_id)
+await repository.get(tenant_id=tenant_id)
 ```
-
-в schema-per-tenant архитектуре зачастую вообще не нужен.
 
 ---
 
@@ -985,19 +955,25 @@ repository.get(tenant_id)
 ```python
 class FunctionalCurrencyRepository(Protocol):
 
-    def get_for_date(
+    async def get_for_date(
         self,
+        *,
+        tenant_id: EntityIdVO,
         business_date: date,
     ) -> FunctionalCurrencyPeriod:
         ...
 
-    def list_periods(
+    async def list_periods(
         self,
+        *,
+        tenant_id: EntityIdVO,
     ) -> Sequence[FunctionalCurrencyPeriod]:
         ...
 
-    def add(
+    async def add(
         self,
+        *,
+        tenant_id: EntityIdVO,
         period: FunctionalCurrencyPeriod,
     ) -> None:
         ...
@@ -1010,16 +986,20 @@ class FunctionalCurrencyRepository(Protocol):
 ```python
 class ManualRateRepository(Protocol):
 
-    def find(
+    async def find(
         self,
+        *,
+        tenant_id: EntityIdVO,
         pair: CurrencyPair,
         date: date,
         policy: RateDatePolicy,
     ) -> ManualExchangeRate | None:
         ...
 
-    def add(
+    async def add(
         self,
+        *,
+        tenant_id: EntityIdVO,
         rate: ManualExchangeRate,
     ) -> None:
         ...
@@ -1034,17 +1014,32 @@ class ManualRateRepository(Protocol):
 ```python
 class ProviderRateRepository(Protocol):
 
-    def find(
+    async def find(
         self,
+        *,
+        tenant_id: EntityIdVO,
         provider: ProviderCode,
         pair: CurrencyPair,
         date: date,
         policy: RateDatePolicy,
     ) -> ProviderRate | None:
         ...
+```
 
-    def save_many(
+Это read-port для tenant-scoped resolver. Его infrastructure adapter по provider definition и policy выбирает global или tenant storage, но caller всё равно передаёт `tenant_id` явно.
+
+Запись импортированных rates лучше не смешивать с read-port:
+
+```python
+class GlobalProviderRateWriter(Protocol):
+    async def save_many(self, *, rates: Sequence[ProviderRate]) -> None:
+        ...
+
+class TenantProviderRateWriter(Protocol):
+    async def save_many(
         self,
+        *,
+        tenant_id: EntityIdVO,
         rates: Sequence[ProviderRate],
     ) -> None:
         ...
@@ -1125,10 +1120,12 @@ save supply
 ```text
 NBU API
    ↓
-sync task
+management command / scheduled-job handler
    ↓
 local rate storage
 ```
+
+Глобальный sync NBU нельзя бездумно оформить как текущую shared `ScheduledJob`: её persistence contract требует non-null `tenant_id`. Для global provider baseline — отдельная idempotent management command, вызываемая deployment scheduler/Cron. Tenant-specific provider может использовать существующие scheduled jobs с явным `tenant_id`. Если global job всё же нужен в shared worker, сначала нужно отдельно расширить его domain, persistence и dispatch contract.
 
 и:
 
@@ -1161,9 +1158,10 @@ ON_DEMAND_AND_PERSIST
 ```python
 class ExchangeRateResolver:
 
-    def resolve(
+    async def resolve(
         self,
         *,
+        tenant_id: EntityIdVO,
         pair: CurrencyPair,
         requested_date: date,
     ) -> RateQuote:
@@ -1242,11 +1240,12 @@ source_rate_ids: tuple[str, ...]
 ```python
 class MoneyConversionService:
 
-    def convert(
+    async def convert(
         self,
         *,
+        tenant_id: EntityIdVO,
         money: Money,
-        target_currency: CurrencyCode,
+        target_currency: CurrencyCodeVO,
         requested_date: date,
     ) -> ConvertedMoney:
         ...
@@ -1346,33 +1345,38 @@ DISPLAY
 ```python
 class CurrencyFacade(Protocol):
 
-    def get_functional_currency(
-        self,
-        business_date: date,
-    ) -> CurrencyCode:
-        ...
-
-    def resolve_rate(
+    async def get_functional_currency(
         self,
         *,
-        source: CurrencyCode,
-        target: CurrencyCode,
+        tenant_id: EntityIdVO,
+        business_date: date,
+    ) -> CurrencyCodeVO:
+        ...
+
+    async def resolve_rate(
+        self,
+        *,
+        tenant_id: EntityIdVO,
+        source: CurrencyCodeVO,
+        target: CurrencyCodeVO,
         date: date,
     ) -> RateQuoteDTO:
         ...
 
-    def convert(
+    async def convert(
         self,
         *,
+        tenant_id: EntityIdVO,
         money: Money,
-        target: CurrencyCode,
+        target: CurrencyCodeVO,
         date: date,
     ) -> ConvertedMoney:
         ...
 
-    def convert_to_functional(
+    async def convert_to_functional(
         self,
         *,
+        tenant_id: EntityIdVO,
         money: Money,
         business_date: date,
     ) -> ConvertedMoney:
@@ -1483,8 +1487,9 @@ Supply #123
 Supply вызывает:
 
 ```python
-currency.convert_to_functional(
-    Money(Decimal("100"), USD),
+await currency.convert_to_functional(
+    tenant_id=tenant_id,
+    money=Money(Decimal("100"), USD),
     business_date=date(2026, 9, 21),
 )
 ```
@@ -1749,7 +1754,7 @@ tenant_schema.table
 public.currency
 ```
 
-Но если используется `django-tenants` или аналогичный механизм, cross-schema FK может усложнять миграции и ORM.
+Но в текущем механизме `TenantBase` + Alembic + `schema_translate_map` cross-schema FK усложняет autogenerate, порядок global/tenant migrations и тестовые metadata copies.
 
 Поэтому я бы предусмотрел два режима.
 
@@ -1771,7 +1776,7 @@ CurrencyDirectory
 CHECK currency_code ~ '^[A-Z]{3}$'
 ```
 
-Если ваша tenant-библиотека стабильно работает с cross-schema FK — добавляйте FK.
+Добавлять cross-schema FK стоит только после отдельного integration-теста autogenerate, bootstrap нового tenant, `upgrade --all` и downgrade. До этого безопасный baseline — `CHAR(3)`/`String(3)`, `CHECK` и application validation через `CurrencyDirectory`.
 
 Но domain architecture не должна зависеть от его наличия.
 
@@ -1782,7 +1787,7 @@ CHECK currency_code ~ '^[A-Z]{3}$'
 Например:
 
 ```python
-DjangoCurrencyPolicyModel
+CurrencyPolicyModel
 ```
 
 никогда не передаётся в application.
@@ -1790,7 +1795,7 @@ DjangoCurrencyPolicyModel
 Repository делает mapping:
 
 ```text
-ORM model
+SQLAlchemy row/model
     ↓ mapper
 Domain CurrencyPolicy
 ```
@@ -1945,24 +1950,20 @@ Domain никогда не знает формат API НБУ.
 
 # 49. Settings для NBU
 
-В generic Settings:
+В отдельной `CurrencySettings`/`CurrencyConfig`, подключённой к `DnkConfig`:
 
 ```text
-currency.providers.nbu.api_url
-currency.providers.nbu.timeout
-currency.providers.nbu.retry_count
-currency.providers.nbu.sync_enabled
-currency.providers.nbu.sync_schedule
+CURRENCY__NBU__API_URL
+CURRENCY__NBU__TIMEOUT_SECONDS
+CURRENCY__NBU__RETRY_COUNT
+CURRENCY__NBU__SYNC_ENABLED
+CURRENCY__NBU__SYNC_SCHEDULE
 ```
 
-Можно:
+Источники технических settings уже определены проектом:
 
 ```text
-ENV
- ↓
-system settings
- ↓
-tenant override
+init → ENV → .env → file secrets → pyproject.toml
 ```
 
 Но выбор:
@@ -1979,9 +1980,9 @@ CurrencyPolicy
 
 ---
 
-# 50. Rate provider plugins
+# 50. Registry provider-адаптеров
 
-С учетом вашей plugin-oriented CRM я бы сразу сделал registry:
+На первом этапе нужен простой registry адаптеров, собранный в FastAPI composition root:
 
 ```python
 class ExchangeRateProviderRegistry:
@@ -2002,15 +2003,15 @@ class ExchangeRateProviderRegistry:
 Тогда:
 
 ```text
-NBU plugin
-ECB plugin
-PrivatBank plugin
-Custom Bank plugin
+NBU adapter
+ECB adapter
+PrivatBank adapter
+Custom Bank adapter
 ```
 
 реализуют один контракт.
 
-Currency domain не меняется.
+Currency domain не меняется. Runtime-discovery через Python entry points и загрузка произвольных tenant-плагинов в текущем проекте не предусмотрены и не входят в этот план.
 
 ---
 
@@ -2022,7 +2023,7 @@ Currency domain не меняется.
 ProviderCapabilities:
     historical_rates: bool
     supported_currencies: bool
-    base_currency: CurrencyCode | None
+    base_currency: CurrencyCodeVO | None
     bulk_download: bool
 ```
 
@@ -2037,6 +2038,8 @@ Resolver сам строит inverse/cross rate.
 ---
 
 # 52. Кэширование
+
+Первая версия должна быть корректной без кэша. Текущий Redis в проекте не является автоматически общим cache backend для бизнес-данных. Кэш добавляется только после измерения и через отдельный port.
 
 Можно кэшировать:
 
@@ -2085,7 +2088,7 @@ unique constraints
 
 # 54. Security / permissions
 
-Отдельные permissions:
+Целевые permissions:
 
 ```text
 currency.view
@@ -2104,6 +2107,8 @@ manual exchange rate
 ```
 
 не должны быть обычными пользовательскими настройками.
+
+Сейчас shared `AuthorizationServiceDep` собран с allow-all implementation. Поэтому просто объявить строки permissions недостаточно: до открытия write endpoints нужен реальный authorization adapter/policy. До этого опасные операции нельзя считать защищёнными.
 
 ---
 
@@ -2128,6 +2133,8 @@ RateResolutionFailed
 ```
 
 Это пригодится audit log и вашему будущему AI/automation слою.
+
+События, которые должны покинуть транзакцию, записываются через существующий transactional outbox в той же UoW. RabbitMQ/FastStream не импортируются в domain/application.
 
 ---
 
@@ -2163,7 +2170,7 @@ last available rate date
 
 # 57. UI страницы
 
-Логически их лучше разделить.
+Логически их лучше разделить в Vue 3 Console. HTTP DTO живут в `api/`, frontend types и query state — в `model/`, components/pages — в `ui/`; UI не импортирует backend ORM/domain types.
 
 ### Currency policy
 
@@ -2221,7 +2228,8 @@ CurrencyFacade
 Например Order:
 
 ```python
-result = currency_facade.convert_to_functional(
+result = await currency_facade.convert_to_functional(
+    tenant_id=request_context.tenant_id,
     money=order.total,
     business_date=order.order_date,
 )
@@ -2241,6 +2249,7 @@ currency
 
 provider_rate             optional/global
 provider definition       optional
+fx_rate_import            global provider audit
 
 
 TENANT
@@ -2254,8 +2263,7 @@ functional_currency_period
 
 manual_exchange_rate
 
-fx_rate_import            audit
-
+fx_rate_import            optional/custom-provider audit
 custom_provider_rate      optional
 ```
 
@@ -2343,223 +2351,69 @@ transaction currency.
 
 # 62. План реализации по этапам
 
-### Этап 1 — Shared Kernel
+### Этап 1 — Shared Kernel и замена `CurrencyCodeVO`
 
-Реализовать:
+- заменить существующий enum новым `CurrencyCodeVO` по тому же import path;
+- обновить shared exports, заменить `CurrencyCodeNotSupportedError` на `InvalidCurrencyCodeError`, обновить текущих Python-потребителей и unit tests одним change set;
+- не делать compatibility layer, feature flag или миграцию БД для этой замены;
+- добавить shared `Money` и `CurrencyMismatchError`;
+- проверить `Decimal`, finite values, immutability и arithmetic только в рамках одной валюты.
 
-```text
-CurrencyCode
-Money
-ConversionSnapshot
-ConvertedMoney
-CurrencyMismatchError
-```
+### Этап 2 — Global currency directory
 
-Покрыть unit tests.
+- добавить `CurrencyModel(Base)` и, при необходимости, global provider-rate/import models;
+- зарегистрировать global models через `src/modules/persistence.py`;
+- создать reviewed revision в `migrations/global/versions/` и загрузить начальный ISO-4217 seed идемпотентно;
+- реализовать async `CurrencyDirectory` на SQLAlchemy; startup не создаёт и не seed-ит таблицы.
 
-Особое внимание:
+### Этап 3 — Tenant domain и application contracts
 
-```text
-Decimal
-immutability
-same-currency arithmetic
-```
+- создать `CurrencyPolicy`, `FunctionalCurrencyPeriod`, `ManualExchangeRate`, `CurrencyPair`, `ExchangeRate` и `RateQuote`;
+- добавить async repository/provider protocols, commands, queries, DTO и use cases;
+- передавать `tenant_id: EntityIdVO` явно во всех tenant-scoped операциях;
+- получать время через shared `ClockPort`, а не вызывать `datetime.now()` в use cases.
 
----
+### Этап 4 — Tenant persistence и Alembic
 
-### Этап 2 — `public.currency`
-
-Создать:
-
-```text
-CurrencyModel
-```
-
-и seed ISO-4217.
-
-Сделать:
-
-```text
-CurrencyDirectoryPort
-DjangoCurrencyDirectory
-```
-
----
-
-### Этап 3 — Tenant domain
-
-Создать:
-
-```text
-CurrencyPolicy
-FunctionalCurrencyPeriod
-ManualExchangeRate
-CurrencyPair
-ExchangeRate
-RateQuote
-```
-
-и соответствующие repository ports.
-
----
-
-### Этап 4 — Tenant persistence
-
-Таблицы:
-
-```text
-currency_policy
-enabled_currency
-functional_currency_period
-manual_exchange_rate
-fx_rate_import
-```
-
-Добавить:
-
-```text
-constraints
-indexes
-revision
-audit fields
-```
-
----
+- добавить `TenantBase` models для `currency_policy`, `enabled_currency`, `functional_currency_period`, `manual_exchange_rate` и tenant-specific import/rate tables;
+- зарегистрировать model imports и исторические имена таблиц в `src/modules/tenant_persistence.py`;
+- создать reviewed revision в `migrations/tenant/versions/` с constraints, indexes, revisions и audit fields;
+- реализовать async repositories на UoW session с `schema_translate_map`; repositories не вызывают `commit()`.
 
 ### Этап 5 — Rate Resolver
 
-Реализовать порядок:
+Реализовать и покрыть тестами порядок `identity → direct → inverse → cross → fail` с `EXACT` и `PREVIOUS_AVAILABLE`. Resolver читает только local persistence и не делает HTTP-вызовы.
 
-```text
-identity
-direct
-inverse
-cross
-fail
-```
+### Этап 6 — Conversion engine и facade
 
-с:
+Реализовать чистые `ConversionCalculator`/`MoneyQuantizer`, Currency-owned `ConversionSnapshot`/`ConvertedMoney`, async `MoneyConversionService` и async `CurrencyFacade`. Facade принимает явные `tenant_id` и business date.
 
-```text
-EXACT
-PREVIOUS_AVAILABLE
-```
+### Этап 7 — Manual mode и FastAPI
 
----
+Добавить manual-rate commands/queries, revision history, FastAPI controllers, Pydantic request/response schemas и wiring в `presentation/depends`. Все repositories и outbox adapter получают одну UoW session. Write API не считается защищённым, пока authorization остаётся allow-all.
 
-### Этап 6 — Conversion engine
+### Этап 8 — NBU adapter и global sync
 
-Реализовать:
-
-```text
-MoneyConversionService
-ConversionCalculator
-MoneyQuantizer
-```
-
-И публичный:
-
-```text
-CurrencyFacade
-```
-
----
-
-### Этап 7 — Manual mode
-
-Сделать:
-
-```text
-manual rates CRUD
-revision history
-permissions
-audit
-```
-
-На этом этапе CRM уже полностью работает без NBU.
-
----
-
-### Этап 8 — NBU adapter
-
-Добавить:
-
-```text
-NbuHttpClient
-NbuMapper
-NbuRateProvider
-SyncProviderRatesCommand
-scheduler
-retry
-audit
-```
-
----
+- добавить async `httpx` client, mapper и `ExchangeRateProviderPort` adapter;
+- добавить idempotent `SyncProviderRates` use case, retry policy и import audit;
+- для global NBU rates добавить `dnk-manage` command, вызываемую deployment scheduler/Cron;
+- не использовать tenant-only shared scheduled-job contract для global sync без его явного расширения.
 
 ### Этап 9 — Functional currency lifecycle
 
-Реализовать:
+Реализовать `ScheduleFunctionalCurrencyChange`, `GetFunctionalCurrencyOnDate`, DB/domain protection от пересечения периодов и защиту от backdated changes при наличии проведённых документов.
 
-```text
-ScheduleFunctionalCurrencyChange
-GetFunctionalCurrencyOnDate
-period overlap protection
-backdated change protection
-```
+### Этап 10 — Интеграция consuming contexts
 
----
+Подключать контексты последовательно: сначала существующий `price_lists`/Supplier Offer, затем Supply, Order, Payment, inventory valuation и reports по мере появления этих модулей. Явно решить судьбу локального `price_lists.MoneyVO`; не мигрировать все модели одним релизом.
 
-### Этап 10 — интеграция бизнес-контекстов
+### Этап 11 — Vue 3 Console
 
-Последовательно подключать:
-
-```text
-Supplier Offer
-Supply
-Order
-Payment
-Inventory valuation
-Reports
-```
-
-Не пытаться сразу мигрировать все модели.
-
----
-
-### Этап 11 — UI
-
-Добавить:
-
-```text
-Currency Policy
-Enabled Currencies
-Manual Rates
-Provider Status
-Functional Currency History
-```
-
-Display currency пользователя хранить отдельно.
-
----
+Добавить feature-модуль `frontends/apps/console/src/modules/currency/` с Currency Policy, Enabled Currencies, Manual Rates, Provider Status и Functional Currency History. Display currency пользователя хранится отдельно от functional currency tenant.
 
 ### Этап 12 — Hardening
 
-Обязательно протестировать:
-
-```text
-выходные
-отсутствующий курс
-inverse rate
-cross rate
-смена provider
-ревизия курса
-смена functional currency
-disabled currency
-same currency conversion
-ошибка API
-повторный import
-конкурирующие updates
-```
+Добавить `unittest` unit/architecture/HTTP tests и PostgreSQL 16 integration tests с отдельной `TEST_POSTGRES_URL`: global/tenant migrations, bootstrap двух tenants, rollback, schema isolation, weekend/missing/inverse/cross/identity rates, provider/rate revisions, functional-currency changes, disabled currency, failed/repeated import, optimistic locking и concurrent updates. Frontend проходит typecheck/build.
 
 ---
 
@@ -2619,13 +2473,12 @@ Sunday
 
 | Слой               | Ответственность                                                |
 | ------------------ | -------------------------------------------------------------- |
-| `shared`           | примитивы `Money`, `CurrencyCode`, immutable monetary snapshot |
+| `shared`           | примитивы `Money`, `CurrencyCodeVO` и базовые ошибки      |
 | `domain`           | правила валют, rate и functional currency                      |
-| `application`      | orchestration use cases                                        |
-| `ports`            | контракты storage/providers                                    |
-| `infrastructure`   | Django ORM, PostgreSQL, NBU, cache                             |
-| `contracts`        | публичный API Currency BC                                      |
-| `presentation`     | REST/UI/Admin                                                  |
+| `application`      | async orchestration, commands, queries, conversion DTO, facade и ports |
+| `infrastructure`   | async SQLAlchemy/asyncpg, PostgreSQL, httpx/NBU, optional cache       |
+| `presentation`     | FastAPI routers, Pydantic schemas, DI, jobs/CLI handlers              |
+| Vue Console        | HTTP API client, query state и UI currency settings                  |
 | consuming contexts | фиксация исторической стоимости документа                      |
 
 И самое важное архитектурное правило:
