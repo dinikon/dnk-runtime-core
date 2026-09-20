@@ -82,7 +82,8 @@ async def handle_jobs_root(_args: argparse.Namespace) -> int:
 
 async def handle_worker(_args: argparse.Namespace) -> int:
     """Runs the production scheduled-jobs polling worker until a signal arrives."""
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.WARNING)
+    logging.getLogger("src.modules").setLevel(logging.INFO)
     await db_helper.initialize_for_startup()
     settings = dnk_config.SCHEDULED_JOBS
     stop = asyncio.Event()
