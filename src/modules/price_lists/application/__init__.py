@@ -1,13 +1,3 @@
-from .service import (
-    PriceListService,
-    PriceListStateConflict,
-    cron_occurrences,
-    next_cron_occurrence,
-)
+"""Сценарии модуля прайс-листов."""
 
-__all__ = [
-    "PriceListService",
-    "PriceListStateConflict",
-    "cron_occurrences",
-    "next_cron_occurrence",
-]
+__all__ = []

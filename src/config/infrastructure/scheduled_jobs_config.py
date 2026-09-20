@@ -12,7 +12,7 @@ class ScheduledJobsSettings(BaseModel):
         description="Default due scheduled jobs batch size.",
     )
     concurrency: PositiveInt = Field(default=4, le=32)
-    job_timeout_seconds: PositiveInt = Field(default=900)
+    job_timeout_seconds: PositiveInt = Field(default=3600)
     recover_limit: PositiveInt = Field(
         default=100,
         description="Default stuck scheduled jobs recovery batch size.",

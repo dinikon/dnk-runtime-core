@@ -1,347 +1,212 @@
-from __future__ import annotations
-
-import re
-import zipfile
-from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from contextlib import aclosing, closing
+import asyncio
+import json
 from pathlib import Path
-from typing import Any, Iterator
-
+from queue import Queue, Full, Empty
+from threading import Event
+from typing import Iterator
 import yaml
-from defusedxml.ElementTree import iterparse
-from openpyxl import load_workbook
-
-from src.modules.price_lists.domain import (
-    MappingValidationError,
-    canonical_state_hash,
-    normalize_availability,
+import zipfile
+from xml.sax import SAXException
+from defusedxml.common import DefusedXmlException
+from src.modules.price_lists.application.sync_run.options import ImportOptions
+from src.modules.price_lists.application.sync_run.dto.parsed_row_dto import ParsedRow
+from src.modules.price_lists.application.sync_run.dto.source_dto import SourceInspection
+from src.modules.price_lists.domain.price_list.error import MappingValidationError
+from src.modules.price_lists.domain.price_list.preset import prom_xml_config
+from src.modules.price_lists.domain.offer.mapping import normalize_row
+from src.modules.price_lists.infrastructure.source.xml_stream import (
+    xml_records,
+    element_values,
 )
-
-PROM_XML_SOURCE = {"item_path": "yml_catalog.shop.offers.offer"}
-PROM_XML_MAPPING = {
-    "external_id": {"selector": "@id", "required": True, "trim": True},
-    "sku": {"selector": "vendorCode", "required": True, "trim": True},
-    "title": {"selector": "name", "required": True, "trim": True},
-    "purchase_price": {"selector": "price", "type": "decimal", "required": True},
-    "rrp": {"selector": "priceRRP", "type": "decimal"},
-    "currency": {"selector": "currencyId", "default": "UAH"},
-    "availability": {
-        "selector": "@available",
-        "default": "out_of_stock",
-        "map": {
-            "склад": "in_stock",
-            "true": "in_stock",
-            "false": "out_of_stock",
-            "": "out_of_stock",
-        },
-    },
-    "quantity": {"constant": None},
-}
-
-
-def prom_xml_config() -> tuple[dict[str, Any], dict[str, Any]]:
-    return dict(PROM_XML_SOURCE), {
-        key: dict(value) for key, value in PROM_XML_MAPPING.items()
-    }
-
-
-@dataclass(frozen=True, slots=True)
-class ParsedRow:
-    row_number: int
-    normalized: dict[str, Any]
-    errors: tuple[str, ...]
-
-
-def _local_name(tag: str) -> str:
-    return tag.rsplit("}", 1)[-1]
-
-
-def _path_value(value: Any, selector: str) -> Any:
-    current = value
-    for part in selector.split("."):
-        if isinstance(current, dict):
-            current = current.get(part)
-        else:
-            return None
-    return current
-
-
-def _extract(raw: Any, specification: dict[str, Any]) -> Any:
-    if "constant" in specification:
-        return specification["constant"]
-    selectors = specification.get("selectors") or [specification.get("selector")]
-    for selector in selectors:
-        if not selector:
-            continue
-        if isinstance(raw, dict):
-            if isinstance(selector, int):
-                row_values = list(raw.values())
-                value = row_values[selector] if selector < len(row_values) else None
-            else:
-                value = _path_value(raw, str(selector))
-        else:
-            if str(selector).startswith("@"):
-                value = raw.attrib.get(str(selector)[1:])
-            else:
-                node = raw
-                for part in str(selector).split("."):
-                    node = next(
-                        (child for child in node if _local_name(child.tag) == part),
-                        None,
-                    )
-                    if node is None:
-                        break
-                value = node.text if node is not None else None
-        if value not in (None, ""):
-            return value
-    return specification.get("default")
-
-
-def _decimal(value: Any) -> Decimal | None:
-    if value in (None, ""):
-        return None
-    normalized = re.sub(r"\s+", "", str(value)).replace(",", ".")
-    try:
-        result = Decimal(normalized)
-    except InvalidOperation as exc:
-        raise ValueError("must be a decimal") from exc
-    if result < 0:
-        raise ValueError("must not be negative")
-    return result
-
-
-def _integer(value: Any) -> int | None:
-    if value in (None, ""):
-        return None
-    result = int(Decimal(str(value).replace(",", ".")))
-    if result < 0:
-        raise ValueError("must not be negative")
-    return result
-
-
-def normalize_row(
-    raw: Any, mapping: dict[str, Any]
-) -> tuple[dict[str, Any], tuple[str, ...]]:
-    values: dict[str, Any] = {}
-    errors: list[str] = []
-    for field, specification in mapping.items():
-        specification = specification or {}
-        try:
-            value = _extract(raw, specification)
-            if isinstance(value, str) and specification.get("trim", True):
-                value = value.strip()
-            replacements = specification.get("replace") or {}
-            if isinstance(value, str) and isinstance(replacements, dict):
-                for old, new in replacements.items():
-                    value = value.replace(str(old), str(new))
-            if isinstance(value, str) and specification.get("lower"):
-                value = value.lower()
-            lookup = specification.get("map") or {}
-            if isinstance(lookup, dict):
-                value = lookup.get(value, lookup.get(str(value).casefold(), value))
-            if specification.get("type") == "decimal" or field in {
-                "purchase_price",
-                "rrp",
-            }:
-                value = _decimal(value)
-            elif specification.get("type") == "integer" or field == "quantity":
-                value = _integer(value)
-            if specification.get("required") and value in (None, ""):
-                errors.append(f"{field}: required")
-            values[field] = value
-        except (ValueError, TypeError) as exc:
-            errors.append(f"{field}: {exc}")
-            values[field] = None
-    for required in ("external_id", "sku", "title", "purchase_price"):
-        if values.get(required) in (None, "") and not any(
-            error.startswith(f"{required}:") for error in errors
-        ):
-            errors.append(f"{required}: required")
-    currency = str(values.get("currency") or "").strip().upper()
-    if not re.fullmatch(r"[A-Z]{3}", currency):
-        errors.append("currency: expected ISO 4217 code")
-    values["currency"] = currency
-    quantity = values.get("quantity")
-    values["availability"] = normalize_availability(
-        values.get("availability"), quantity
-    )
-    if not errors:
-        values["value_hash"] = canonical_state_hash(
-            purchase_price=values["purchase_price"],
-            rrp=values.get("rrp"),
-            currency=currency,
-            availability=values["availability"],
-            quantity=quantity,
-        )
-    return values, tuple(errors)
+from src.modules.price_lists.infrastructure.source.yaml_stream import YamlRecords
+from src.modules.price_lists.infrastructure.source.xlsx_stream import XlsxReader
 
 
 class SourceParser:
-    max_rows = 500_000
-    max_columns = 256
-    max_uncompressed_bytes = 256 * 1024 * 1024
+    """Потоковые XML/YAML/XLSX adapters с backpressure и отменой."""
 
-    def inspect(
-        self, path: Path, source_format: str, source_config: dict[str, Any]
-    ) -> dict[str, Any]:
-        if source_format == "xlsx":
-            self._validate_xlsx_archive(path)
-            # Remote files are intentionally stored under random extensionless
-            # temporary names. Passing a binary stream makes openpyxl validate
-            # the ZIP payload instead of rejecting the temporary filename.
-            with path.open("rb") as source:
-                workbook = load_workbook(source, read_only=True, data_only=True)
-                try:
-                    sheets = list(workbook.sheetnames)
-                    sheet = workbook[source_config.get("sheet_name") or sheets[0]]
-                    header_row = int(source_config.get("header_row", 1))
-                    rows = sheet.iter_rows(
-                        min_row=header_row, max_row=header_row, values_only=True
-                    )
-                    headers = [
-                        str(value).strip() for value in next(rows) if value is not None
-                    ]
-                    return {"sheets": sheets, "columns": headers}
-                finally:
-                    workbook.close()
+    def __init__(self, options: ImportOptions | None = None):
+        self.options = options or ImportOptions()
+
+    def raw_rows(self, path, source_format, config, stop=None):
+        """Разбирает один источник без хранения документа целиком."""
         if source_format == "xml":
-            paths: set[str] = set()
-            stack: list[str] = []
-            for event, node in iterparse(path, events=("start", "end")):
-                if event == "start":
-                    stack.append(_local_name(node.tag))
-                    if len(stack) > 64:
-                        raise MappingValidationError("XML nesting limit exceeded.")
-                    if len(paths) < 100:
-                        paths.add(".".join(stack))
-                else:
-                    stack.pop()
-                    node.clear()
-            return {"paths": sorted(paths)}
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-        return {"paths": self._yaml_paths(data)}
+            with path.open("rb") as source:
+                for index, node in enumerate(
+                    xml_records(
+                        source,
+                        str(config.get("item_path") or ""),
+                        self.options.max_record_bytes,
+                        stop,
+                    ),
+                    1,
+                ):
+                    yield index, element_values(node)
+        elif source_format == "yaml":
+            with path.open("rb") as source:
+                yield from YamlRecords(
+                    source,
+                    str(config.get("item_path") or ""),
+                    self.options.max_record_bytes,
+                    stop,
+                ).rows()
+        elif source_format == "xlsx":
+            yield from XlsxReader(path, self.options, stop).rows(config)
+        else:
+            raise MappingValidationError("Unsupported source format.")
 
     def rows(
         self,
         path: Path,
         source_format: str,
-        source_config: dict[str, Any],
-        mapping: dict[str, Any],
+        source_config: dict,
+        mapping: dict,
         *,
-        limit: int | None = None,
+        limit=None,
+        stop=None,
     ) -> Iterator[ParsedRow]:
-        raw_rows: Iterator[tuple[int, Any]]
-        if source_format == "xml":
-            raw_rows = self._xml_rows(path, source_config)
-        elif source_format == "yaml":
-            raw_rows = self._yaml_rows(path, source_config)
-        elif source_format == "xlsx":
-            raw_rows = self._xlsx_rows(path, source_config)
-        else:
-            raise MappingValidationError("Unsupported source format.")
-        for index, (row_number, raw) in enumerate(raw_rows):
-            if limit is not None and index >= limit:
-                break
-            values, errors = normalize_row(raw, mapping)
-            yield ParsedRow(row_number=row_number, normalized=values, errors=errors)
-
-    def _xml_rows(
-        self, path: Path, source_config: dict[str, Any]
-    ) -> Iterator[tuple[int, Any]]:
-        item_path = str(source_config.get("item_path") or "")
-        target_path = [part for part in item_path.split(".") if part]
-        if not target_path:
-            raise MappingValidationError("XML item_path is required.")
-        count = 0
-        stack: list[str] = []
-        for event, node in iterparse(path, events=("start", "end")):
-            if event == "start":
-                stack.append(_local_name(node.tag))
-                if len(stack) > 64:
-                    raise MappingValidationError("XML nesting limit exceeded.")
-                continue
-            if stack == target_path:
-                count += 1
-                if count > self.max_rows:
-                    raise MappingValidationError("Source row limit exceeded.")
-                yield count, node
-                node.clear()
-            stack.pop()
-
-    def _yaml_rows(
-        self, path: Path, source_config: dict[str, Any]
-    ) -> Iterator[tuple[int, Any]]:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-        item_path = str(source_config.get("item_path") or "")
-        selected = _path_value(data, item_path) if item_path else data
-        if not isinstance(selected, list):
-            raise MappingValidationError("YAML item_path must select a list.")
-        for index, row in enumerate(selected, start=1):
-            if index > self.max_rows:
-                raise MappingValidationError("Source row limit exceeded.")
-            if not isinstance(row, dict):
-                yield index, {}
-            else:
-                yield index, row
-
-    def _xlsx_rows(
-        self, path: Path, source_config: dict[str, Any]
-    ) -> Iterator[tuple[int, Any]]:
-        self._validate_xlsx_archive(path)
-        with path.open("rb") as source:
-            workbook = load_workbook(source, read_only=True, data_only=True)
-            try:
-                sheet_name = source_config.get("sheet_name") or workbook.sheetnames[0]
-                if sheet_name not in workbook.sheetnames:
-                    raise MappingValidationError(
-                        "Configured XLSX sheet does not exist."
-                    )
-                sheet = workbook[sheet_name]
-                header_row = int(source_config.get("header_row", 1))
-                data_start = int(source_config.get("data_start_row", header_row + 1))
-                header_values = next(
-                    sheet.iter_rows(
-                        min_row=header_row, max_row=header_row, values_only=True
-                    )
-                )
-                headers = [
-                    str(value).strip() if value is not None else ""
-                    for value in header_values
-                ]
-                if len(headers) > self.max_columns:
-                    raise MappingValidationError("XLSX column limit exceeded.")
-                for count, values in enumerate(
-                    sheet.iter_rows(min_row=data_start, values_only=True), start=0
-                ):
-                    if count >= self.max_rows:
-                        raise MappingValidationError("Source row limit exceeded.")
-                    if all(value is None for value in values):
-                        continue
-                    yield data_start + count, dict(zip(headers, values, strict=False))
-            finally:
-                workbook.close()
-
-    def _validate_xlsx_archive(self, path: Path) -> None:
+        """Синхронное ядро адаптера; async callers используют batches."""
         try:
-            with zipfile.ZipFile(path) as archive:
-                entries = archive.infolist()
-                if len(entries) > 10_000:
-                    raise MappingValidationError("XLSX archive entry limit exceeded.")
-                if (
-                    sum(entry.file_size for entry in entries)
-                    > self.max_uncompressed_bytes
-                ):
-                    raise MappingValidationError(
-                        "XLSX uncompressed size limit exceeded."
-                    )
-        except zipfile.BadZipFile as exc:
-            raise MappingValidationError("Invalid XLSX archive.") from exc
+            with closing(
+                self.raw_rows(path, source_format, source_config, stop)
+            ) as source:
+                count = 0
+                for number, raw in source:
+                    if stop and stop.is_set():
+                        return
+                    count += 1
+                    if count > self.options.max_rows:
+                        raise MappingValidationError("Source row limit exceeded.")
+                    values, errors = normalize_row(raw, mapping)
+                    yield ParsedRow(number, values, errors)
+                    if limit is not None and count >= limit:
+                        return
+        except (
+            yaml.YAMLError,
+            SAXException,
+            DefusedXmlException,
+            zipfile.BadZipFile,
+            KeyError,
+            ValueError,
+            OverflowError,
+        ) as exc:
+            raise MappingValidationError("Invalid or unsafe source document.") from exc
 
-    def _yaml_paths(self, value: Any, prefix: str = "") -> list[str]:
-        found: list[str] = []
-        if isinstance(value, dict):
-            for key, child in list(value.items())[:100]:
-                path = f"{prefix}.{key}" if prefix else str(key)
-                found.append(path)
-                found.extend(self._yaml_paths(child, path))
-        return found[:100]
+    def inspect(self, path, source_format, source_config):
+        """Ограниченное исследование структуры для preview."""
+        if source_format == "xlsx":
+            with closing(
+                XlsxReader(path, self.options).rows(source_config, inspection=True)
+            ) as rows:
+                return next(rows)[1]
+        paths = set()
+
+        def collect(value, prefix="", depth=0):
+            if depth > 64:
+                return
+            if isinstance(value, dict):
+                for key, child in value.items():
+                    if len(paths) >= 100:
+                        return
+                    name = f"{prefix}.{key}" if prefix else str(key)
+                    paths.add(name)
+                    collect(child, name, depth + 1)
+
+        with closing(self.raw_rows(path, source_format, source_config)) as rows:
+            for index, (_, raw) in enumerate(rows):
+                collect(raw, str(source_config.get("item_path") or ""))
+                if index >= 19:
+                    break
+        return {"paths": sorted(paths)}
+
+    async def inspect_source(self, path, source_format, source_config):
+        """Возвращает DTO структуры, не блокируя event loop."""
+        result = await asyncio.to_thread(
+            self.inspect, path, source_format, source_config
+        )
+        return SourceInspection(
+            tuple(result.get("sheets", ())),
+            tuple(result.get("columns", ())),
+            tuple(result.get("paths", ())),
+        )
+
+    async def batches(self, path, source_format, source_config, mapping, *, limit=None):
+        """Выдаёт ограниченные пакеты и завершает producer при закрытии."""
+        queue = Queue(maxsize=self.options.parser_queue_batches)
+        stop = Event()
+        sentinel = object()
+
+        def send(value):
+            while not stop.is_set():
+                try:
+                    queue.put(value, timeout=0.05)
+                    return
+                except Full:
+                    pass
+
+        def producer():
+            try:
+                with closing(
+                    self.rows(
+                        path,
+                        source_format,
+                        source_config,
+                        mapping,
+                        limit=limit,
+                        stop=stop,
+                    )
+                ) as source:
+                    batch = []
+                    size = 0
+                    for row in source:
+                        row_size = (
+                            len(
+                                json.dumps(
+                                    row.normalized, default=str, ensure_ascii=False
+                                ).encode()
+                            )
+                            + sum(len(e) for e in row.errors)
+                            + 128
+                        )
+                        if batch and (
+                            len(batch) >= self.options.batch_size
+                            or size + row_size > self.options.batch_max_bytes
+                        ):
+                            send(batch)
+                            batch = []
+                            size = 0
+                        if stop.is_set():
+                            return
+                        batch.append(row)
+                        size += row_size
+                    if batch:
+                        send(batch)
+            except BaseException as exc:
+                send(exc)
+            finally:
+                send(sentinel)
+
+        def receive():
+            while not stop.is_set():
+                try:
+                    return queue.get(timeout=0.05)
+                except Empty:
+                    pass
+            return sentinel
+
+        task = asyncio.create_task(asyncio.to_thread(producer))
+        try:
+            while True:
+                result = await asyncio.to_thread(receive)
+                if result is sentinel:
+                    break
+                if isinstance(result, BaseException):
+                    raise result
+                yield result
+        finally:
+            stop.set()
+            await asyncio.shield(task)
+
+
+__all__ = ["SourceParser", "ParsedRow", "prom_xml_config"]

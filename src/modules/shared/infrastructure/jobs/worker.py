@@ -50,7 +50,7 @@ class ScheduledJobWorker:
         recover_interval_seconds: int,
         heartbeat_path: Path,
         concurrency: int = 4,
-        job_timeout_seconds: float = 900,
+        job_timeout_seconds: float = 3600,
         shutdown_grace_seconds: float = 60,
     ) -> None:
         self.session_factory = session_factory

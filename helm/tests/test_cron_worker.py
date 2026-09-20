@@ -30,7 +30,7 @@ class CronWorkerDeploymentTests(HelmContractTests):
         self.assertEqual(env["SCHEDULED_JOBS__POLL_INTERVAL_SECONDS"], "2")
         self.assertEqual(env["SCHEDULED_JOBS__LOCK_TTL_SECONDS"], "300")
         self.assertEqual(env["SCHEDULED_JOBS__CONCURRENCY"], "4")
-        self.assertEqual(env["SCHEDULED_JOBS__JOB_TIMEOUT_SECONDS"], "900")
+        self.assertEqual(env["SCHEDULED_JOBS__JOB_TIMEOUT_SECONDS"], "3600")
         self.assertEqual(container["resources"]["limits"]["memory"], "1Gi")
         self.assertFalse(
             any(

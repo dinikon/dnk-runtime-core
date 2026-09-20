@@ -19,6 +19,8 @@ from src.modules.shared.infrastructure.persistence.base import TENANT_SCHEMA_ALI
 
 
 class PriceListModel(TenantSystemMixin, TenantBase):
+    """Статическая tenant-модель PriceListModel."""
+
     __tablename__ = "price_lists"
     __table_args__ = (
         sa.CheckConstraint(
@@ -78,12 +80,15 @@ class PriceListModel(TenantSystemMixin, TenantBase):
 
 
 class PartnerOfferModel(TenantSystemMixin, TenantBase):
+    """Статическая tenant-модель PartnerOfferModel."""
+
     __tablename__ = "partner_offers"
     __table_args__ = (
         sa.UniqueConstraint(
             "price_list_id", "external_id", name="uq_partner_offer_external_id"
         ),
         sa.Index("ix_partner_offers_price_list", "price_list_id"),
+        sa.Index("ix_partner_offers_list_id", "price_list_id", "id"),
         sa.Index("ix_partner_offers_search", "title", "sku", "external_id"),
     )
 
@@ -114,12 +119,15 @@ class PartnerOfferModel(TenantSystemMixin, TenantBase):
 
 
 class PriceListSyncRunModel(TenantBase):
+    """Статическая tenant-модель PriceListSyncRunModel."""
+
     __tablename__ = "price_list_sync_runs"
     __table_args__ = (
         sa.UniqueConstraint(
             "price_list_id", "scheduled_job_id", name="uq_price_list_run_job"
         ),
         sa.Index("ix_price_list_runs_list_started", "price_list_id", "started_at"),
+        sa.Index("ix_price_list_runs_cleanup", "status", "finished_at", "id"),
         sa.CheckConstraint(
             "status IN ('queued','downloading','parsing','applying',"
             "'succeeded','partial','failed','skipped')",
@@ -150,6 +158,8 @@ class PriceListSyncRunModel(TenantBase):
 
 
 class PartnerOfferStateModel(TenantBase):
+    """Статическая tenant-модель PartnerOfferStateModel."""
+
     __tablename__ = "partner_offer_states"
     __table_args__ = (
         sa.CheckConstraint("purchase_price >= 0", name="ck_offer_state_price"),
@@ -170,6 +180,8 @@ class PartnerOfferStateModel(TenantBase):
         sa.Index("ix_offer_states_offer_observed", "offer_id", "observed_at"),
         sa.Index("ix_offer_states_run", "sync_run_id"),
         sa.Index("ix_offer_states_observed", "observed_at"),
+        sa.Index("ix_offer_states_offer_observed_id", "offer_id", "observed_at", "id"),
+        sa.Index("ix_offer_states_observed_id", "observed_at", "id"),
     )
 
     id: Mapped[UUID] = mapped_column(StringUUID, primary_key=True)
@@ -194,6 +206,8 @@ class PartnerOfferStateModel(TenantBase):
 
 
 class PriceListSyncItemModel(TenantBase):
+    """Статическая tenant-модель PriceListSyncItemModel."""
+
     __tablename__ = "price_list_sync_items"
     __table_args__ = (
         sa.PrimaryKeyConstraint("sync_run_id", "row_number"),
@@ -221,6 +235,19 @@ class PriceListSyncItemModel(TenantBase):
     normalized_payload: Mapped[dict[str, Any]] = mapped_column(
         PortableJSON, default=dict, nullable=False
     )
+    quarantined: Mapped[bool] = mapped_column(
+        sa.Boolean, nullable=False, default=False, server_default=sa.false()
+    )
     validation_errors: Mapped[list[str]] = mapped_column(
         PortableJSON, default=list, nullable=False
     )
+
+
+sa.Index(
+    "ix_partner_offers_search_document",
+    sa.text(
+        "to_tsvector('simple', coalesce(title,'') || ' ' || coalesce(sku,'') || ' ' || coalesce(external_id,''))"
+    ),
+    postgresql_using="gin",
+    _table=PartnerOfferModel.__table__,
+)

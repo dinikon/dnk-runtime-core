@@ -1,4 +1,8 @@
 from __future__ import annotations
+from src.modules.price_lists.presentation.depends.application import (
+    get_synchronize_price_list_use_case,
+    get_cleanup_price_list_use_case,
+)
 
 import argparse
 import asyncio
@@ -100,8 +104,12 @@ async def handle_worker(_args: argparse.Namespace) -> int:
             pass
     dispatcher = build_scheduled_job_dispatcher(
         {
-            "price_list.sync": PriceListSyncJobHandler(db_helper.session_factory),
-            "price_list.cleanup": PriceListCleanupJobHandler(db_helper.session_factory),
+            "price_list.sync": PriceListSyncJobHandler(
+                get_synchronize_price_list_use_case(db_helper.session_factory)
+            ),
+            "price_list.cleanup": PriceListCleanupJobHandler(
+                get_cleanup_price_list_use_case(db_helper.session_factory)
+            ),
         }
     )
     worker = build_scheduled_job_worker(

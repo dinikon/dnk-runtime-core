@@ -25,6 +25,17 @@ application:
     sessionTtlSeconds: 432000
     sessionCookieName: dnk_session
   priceLists:
+    batchSize: 1000
+    maxErrorRatio: 0.5
+    maxRows: 2000000
+    maxDownloadBytes: 1073741824
+    maxUncompressedBytes: 4294967296
+    batchMaxBytes: 4194304
+    parserQueueBatches: 1
+    maxRecordBytes: 1048576
+    stringCacheBytes: 8388608
+    maxTempBytes: 4294967296
+    failedStagingRetentionDays: 7
     # Persistent Fernet key. Generate once with `openssl rand -base64 32 | tr '+/' '-_'`.
     sourceEncryptionKey:
       value: ''
@@ -218,7 +229,7 @@ workers:
       pullPolicy: Always
     replicas: 1
     concurrency: 4
-    jobTimeoutSeconds: 900
+    jobTimeoutSeconds: 3600
     pollIntervalSeconds: 2
     recoverIntervalSeconds: 30
     lockTtlSeconds: 300
