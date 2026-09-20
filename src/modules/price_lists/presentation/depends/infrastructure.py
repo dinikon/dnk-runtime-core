@@ -133,3 +133,35 @@ JobSchedulerDep = Annotated[ScheduledJobsAdapter, Depends(get_job_scheduler)]
 __all__ = [
     name for name in globals() if name.startswith("get_") or name.endswith("Dep")
 ]
+
+
+def get_sync_run_repository(uow: UoWDep, naming: TenantNamingDep, options: ImportOptionsDep):
+    """Создаёт repository lifecycle запусков в request UoW."""
+    return SqlAlchemySyncRunRepository(uow.session,naming,options)
+SyncRunRepositoryDep=Annotated[SqlAlchemySyncRunRepository,Depends(get_sync_run_repository)]
+
+
+def get_background_repositories(uow,options,clock):
+    """Создаёт фоновые persistence adapters без выбора tenant."""
+    naming=get_tenant_naming();identifiers=get_identifier_generator()
+    return dict(prices=SqlAlchemyPriceListRepository(uow.session,naming,options),offers=SqlAlchemyOfferRepository(uow.session,naming,options),runs=SqlAlchemySyncRunRepository(uow.session,naming,options),staging=SqlAlchemyStagingRepository(uow.session,naming,options),jobs=ScheduledJobsAdapter(build_scheduled_job_repository(uow.session),clock,identifiers))
+
+
+def get_background_transaction_factory(session_factory,assemble):
+    """Создаёт адаптер shared UoW с presentation composition callback."""
+    from src.modules.price_lists.infrastructure.transaction import SqlAlchemyImportTransactionFactory
+    return SqlAlchemyImportTransactionFactory(session_factory,assemble)
+
+
+def get_price_list_lock(session_factory):
+    """Создаёт межрепличную advisory-блокировку."""
+    from src.modules.price_lists.infrastructure.locking import PostgresPriceListLock
+    return PostgresPriceListLock(session_factory)
+
+
+def get_import_observer():
+    """Создаёт адаптер эксплуатационных метрик."""
+    from src.modules.price_lists.infrastructure.metrics import PrometheusImportObserver
+    return PrometheusImportObserver()
+
+__all__=[name for name in globals() if name.startswith('get_') or name.endswith('Dep')]

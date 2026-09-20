@@ -35,6 +35,7 @@ class PausePriceListUseCase(PriceListUseCase):
         price.transition("pause", command.actor_id, now)
         job_id = None
         canceled = None
+        await self.runs.skip_running(command.tenant_id, price.id, now)
         canceled = await self.jobs.cancel(command.tenant_id, price.id, now)
         await self.repository.save(command.tenant_id, price)
         return ActionDTO(status=price.status, job_id=job_id)

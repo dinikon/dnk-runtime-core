@@ -134,6 +134,7 @@ class SynchronizePriceListUseCase:
 
     async def synchronize(self, command, price, run):
         """Проводит фазы импорта с постоянным ограничением Python памяти."""
+        committed = False
         started = time.monotonic()
         counters = Counter(
             dict(
@@ -243,11 +244,12 @@ class SynchronizePriceListUseCase:
                     run.finished_at,
                 )
                 await tx.prices.save(command.tenant_id, current)
+            committed = True
             self.observer.phase(
                 "publish", price.source_format, time.monotonic() - phase
             )
         except BaseException as exc:
-            if not run.published:
+            if not committed:
                 try:
                     async with asyncio.timeout(5):
                         async with self.transactions() as tx:
@@ -293,7 +295,7 @@ class SynchronizePriceListUseCase:
         # Publication is already durable; cleanup errors must not fail a successful import.
         try:
             await self.clear_staging(command, run.id, keep_quarantine=True)
-        except (Exception, asyncio.CancelledError):
+        except Exception:
             logger.info("Staging cleanup deferred: run_id=%s", run.id)
 
     async def require_current(self, tx, command, *, fence=False):

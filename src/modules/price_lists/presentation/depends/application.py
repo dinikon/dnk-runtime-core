@@ -1,3 +1,9 @@
+from src.modules.price_lists.presentation.depends.infrastructure import SyncRunRepositoryDep,get_background_repositories,get_background_transaction_factory,get_price_list_lock,get_import_observer,get_source_fetcher,get_source_parser
+from src.modules.price_lists.domain.price_list.repository import PriceListRepository
+from src.modules.price_lists.domain.offer.repository import OfferRepository
+from src.modules.price_lists.domain.sync_run.repository import SyncRunRepository
+from src.modules.price_lists.application.sync_run.ports import StagingPort,JobSchedulerPort
+from src.modules.shared.application.persistence.unit_of_work_protocol import UnitOfWorkProtocol
 from src.modules.shared.presentation.jobs import build_scheduled_job_repository
 from dataclasses import dataclass
 from typing import Annotated
@@ -118,6 +124,7 @@ def get_command_dependencies(
     cipher: SourceCipherDep,
     preview: SourcePreviewDep,
     clock: ClockDep,
+    runs: SyncRunRepositoryDep,
 ):
     """Собирает порты для HTTP command use cases."""
     return dict(
@@ -128,6 +135,7 @@ def get_command_dependencies(
         cipher=cipher,
         preview=preview,
         clock=clock,
+        runs=runs,
     )
 
 
@@ -344,13 +352,13 @@ ListRunsUseCaseDep = Annotated[ListRunsUseCase, Depends(get_list_runs_use_case)]
 class ImportComponents:
     """Компоненты фоновой UoW, собранные в presentation."""
 
-    prices: object
-    offers: object
-    runs: object
-    staging: object
-    jobs: object
+    prices: PriceListRepository
+    offers: OfferRepository
+    runs: SyncRunRepository
+    staging: StagingPort
+    jobs: JobSchedulerPort
     offer_service: OfferService
-    uow: object
+    uow: UnitOfWorkProtocol
 
     async def commit(self):
         """Фиксирует текущую UoW."""
@@ -362,53 +370,22 @@ class ImportComponents:
 
 
 def get_background_transactions(session_factory, *, options=None, clock=None):
-    """Собирает repository/service для каждого фонового UoW."""
-    options = options or get_import_options()
-    clock = clock or default_clock
-    naming = get_tenant_naming()
-    ids = get_identifier_generator()
-
+    """Собирает domain service над repository каждой фоновой UoW."""
+    options=options or get_import_options();clock=clock or default_clock
     def assemble(uow):
-        offers = SqlAlchemyOfferRepository(uow.session, naming, options)
-        return ImportComponents(
-            SqlAlchemyPriceListRepository(uow.session, naming, options),
-            offers,
-            SqlAlchemySyncRunRepository(uow.session, naming, options),
-            SqlAlchemyStagingRepository(uow.session, naming, options),
-            ScheduledJobsAdapter(build_scheduled_job_repository(uow.session), clock, ids),
-            OfferService(offers, clock),
-            uow,
-        )
-
-    return SqlAlchemyImportTransactionFactory(session_factory, assemble)
+        ports=get_background_repositories(uow,options,clock)
+        return ImportComponents(**ports,offer_service=OfferService(ports['offers'],clock),uow=uow)
+    return get_background_transaction_factory(session_factory,assemble)
 
 
 def get_synchronize_price_list_use_case(session_factory):
     """Собирает CRON use case без HTTP dependency resolution."""
-    options = get_import_options()
-    return SynchronizePriceListUseCase(
-        get_background_transactions(session_factory, options=options),
-        HttpRemoteFileFetcher(options=options),
-        SourceParser(options),
-        get_source_cipher(),
-        get_calendar(),
-        get_identifier_generator(),
-        PostgresPriceListLock(session_factory),
-        default_clock,
-        options,
-        PrometheusImportObserver(),
-    )
+    options=get_import_options()
+    return SynchronizePriceListUseCase(get_background_transactions(session_factory,options=options),get_source_fetcher(options),get_source_parser(options),get_source_cipher(),get_calendar(),get_identifier_generator(),get_price_list_lock(session_factory),default_clock,options,get_import_observer())
 
 
 def get_cleanup_price_list_use_case(session_factory):
     """Собирает сценарий обслуживания staging."""
-    return CleanupPriceListUseCase(
-        get_background_transactions(session_factory),
-        default_clock,
-        get_import_options(),
-    )
+    return CleanupPriceListUseCase(get_background_transactions(session_factory),default_clock,get_import_options())
 
-
-__all__ = [
-    name for name in globals() if name.startswith("get_") or name.endswith("Dep")
-]
+__all__=[name for name in globals() if name.startswith('get_') or name.endswith('Dep')]

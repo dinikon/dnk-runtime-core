@@ -176,7 +176,12 @@ spec:
       volumes:
         {{- include "dnk.lifecycle.gateVolumes" $root | nindent 8 }}
         - name: tmp
+          {{- if eq $component "cron" }}
+          emptyDir:
+            sizeLimit: {{ mul (int $w.concurrency) (int $root.Values.application.priceLists.maxTempBytes) | quote }}
+          {{- else }}
           emptyDir: {}
+          {{- end }}
         {{- if $python }}
         - name: runtime-scripts
           configMap:

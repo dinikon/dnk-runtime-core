@@ -1,3 +1,4 @@
+from src.modules.price_lists.domain.sync_run.repository import SyncRunRepository
 from src.modules.price_lists.domain.price_list.repository import PriceListRepository
 from src.modules.price_lists.application.sync_run.ports import (
     JobSchedulerPort,
@@ -21,6 +22,7 @@ class PriceListUseCase:
         cipher: SourceCipher,
         preview: SourcePreview,
         clock: ClockPort,
+        runs: SyncRunRepository,
     ):
         self.repository = repository
         self.jobs = jobs
@@ -29,6 +31,7 @@ class PriceListUseCase:
         self.cipher = cipher
         self.preview = preview
         self.clock = clock
+        self.runs = runs
 
 
 __all__ = ["PriceListUseCase"]

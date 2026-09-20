@@ -1,3 +1,5 @@
+import json
+from sqlalchemy import text, JSON
 from collections import defaultdict
 from dataclasses import fields
 from datetime import datetime
@@ -77,6 +79,18 @@ class SessionRepository:
     async def insert_many(self, tenant_id, table, records):
         """Делит INSERT по настройке и bind budget драйвера."""
         if not records:
+            return
+        if self.session.bind.dialect.name == "postgresql" and self.session.bind.dialect.driver == "asyncpg":
+            # Start the physical transaction before bypassing the SQLAlchemy
+            # statement compiler; COPY remains covered by the shared UoW rollback.
+            connection=await self.session.connection()
+            await connection.execute(text("SELECT 1"))
+            raw=await connection.get_raw_connection()
+            columns=tuple(records[0])
+            json_columns={name for name in columns if isinstance(table.c[name].type,JSON)}
+            for start in range(0,len(records),self.options.batch_size):
+                batch=[tuple(json.dumps(row[name],ensure_ascii=False) if name in json_columns and row[name] is not None else row[name] for name in columns) for row in records[start:start+self.options.batch_size]]
+                await raw.driver_connection.copy_records_to_table(table.name,schema_name=self.naming.schema_name(tenant_id),columns=columns,records=batch)
             return
         width = len(records[0])
         limit = min(self.options.batch_size, max(1, 32000 // width))

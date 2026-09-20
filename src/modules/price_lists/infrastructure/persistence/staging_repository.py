@@ -67,8 +67,8 @@ class SqlAlchemyStagingRepository(SessionRepository):
             records.append(record)
         try:
             await self.insert_many(tenant_id, PriceListSyncItemModel.__table__, records)
-        except IntegrityError as exc:
-            if "uq_sync_item_external_id" in str(exc.orig):
+        except Exception as exc:
+            if getattr(exc,"constraint_name",None)=="uq_sync_item_external_id" or (isinstance(exc,IntegrityError) and "uq_sync_item_external_id" in str(exc.orig)):
                 raise DuplicateExternalIdError(
                     "Source contains duplicate external_id values."
                 ) from None
