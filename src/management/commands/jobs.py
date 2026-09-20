@@ -91,7 +91,9 @@ async def handle_worker(_args: argparse.Namespace) -> int:
         dnk_config.SQLALCHEMY_POOL_SIZE + dnk_config.SQLALCHEMY_MAX_OVERFLOW
         < 4 * settings.concurrency + 2
     ):
-        raise ValueError("Cron DB pool requires at least 4 * concurrency + 2 connections")
+        raise ValueError(
+            "Cron DB pool requires at least 4 * concurrency + 2 connections"
+        )
     loop = asyncio.get_running_loop()
     for event in (signal.SIGTERM, signal.SIGINT):
         try:

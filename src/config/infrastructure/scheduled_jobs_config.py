@@ -53,7 +53,9 @@ class ScheduledJobsSettings(BaseModel):
     @model_validator(mode="after")
     def validate_lease_intervals(self):
         if self.lock_heartbeat_seconds * 2 >= self.lock_ttl_seconds:
-            raise ValueError("lock_ttl_seconds must exceed twice lock_heartbeat_seconds")
+            raise ValueError(
+                "lock_ttl_seconds must exceed twice lock_heartbeat_seconds"
+            )
         return self
 
 

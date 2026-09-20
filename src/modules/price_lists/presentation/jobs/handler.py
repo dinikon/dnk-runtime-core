@@ -189,13 +189,19 @@ class PriceListSyncJobHandler:
                 async with asyncio.timeout(5):
                     async with self.session_factory() as session:
                         await SqlAlchemyPriceListRepository(session).finish_run(
-                            tenant_id=job.tenant_id, price_list_id=price_list_id,
-                            run_id=run_id, status="failed", checksum=None,
-                            counters={}, error="Synchronization interrupted; job may retry.",
+                            tenant_id=job.tenant_id,
+                            price_list_id=price_list_id,
+                            run_id=run_id,
+                            status="failed",
+                            checksum=None,
+                            counters={},
+                            error="Synchronization interrupted; job may retry.",
                         )
                         await session.commit()
             except Exception:
-                logger.warning("Could not record interrupted price-list run: %s", run_id)
+                logger.warning(
+                    "Could not record interrupted price-list run: %s", run_id
+                )
             raise
         except LostJobLease:
             async with self.session_factory() as session:
@@ -353,9 +359,12 @@ class PriceListSyncJobHandler:
             if connection.dialect.name != "postgresql":
                 yield True
                 return
-            acquired = bool(await connection.scalar(
-                text("SELECT pg_try_advisory_lock(:lock_key)"), {"lock_key": lock_key}
-            ))
+            acquired = bool(
+                await connection.scalar(
+                    text("SELECT pg_try_advisory_lock(:lock_key)"),
+                    {"lock_key": lock_key},
+                )
+            )
             try:
                 await connection.commit()
                 yield acquired
@@ -363,10 +372,12 @@ class PriceListSyncJobHandler:
                 if acquired:
                     try:
                         await connection.rollback()
-                        await asyncio.shield(connection.execute(
-                            text("SELECT pg_advisory_unlock(:lock_key)"),
-                            {"lock_key": lock_key},
-                        ))
+                        await asyncio.shield(
+                            connection.execute(
+                                text("SELECT pg_advisory_unlock(:lock_key)"),
+                                {"lock_key": lock_key},
+                            )
+                        )
                         await connection.commit()
                     except BaseException:
                         await connection.invalidate()
