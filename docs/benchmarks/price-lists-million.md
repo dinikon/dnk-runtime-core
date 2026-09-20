@@ -52,6 +52,6 @@ RSS отдельного прогона — **115.03 МиБ**, cgroup peak — *
 
 Это единичные измерения на прогретом/частично прогретом стенде, не перцентили и не гарантия времени ответа. После прогонов проверены миграции нового tenant и обновление с `0005`, сохранение quarantine, отсутствие Alembic drift, атомарная видимость, rollback, pause/lease fencing, повтор после commit, cursor и HTTP.
 
-Обязательный проектный `check` включает backend/PostgreSQL, 98 Helm-тестов, frontend lint, typecheck и production build. Три необязательных теста требуют отдельно предоставленных real-Core/партнёрских fixtures или специального Redis окружения; они пропускаются с явной причиной. Финальный результат check фиксируется в итоговом сообщении задачи.
+Обязательный проектный `check` прошёл: 371 backend-тест (3 необязательных пропуска), 98 Helm-тестов, frontend lint, typecheck и production build. Три необязательных теста требуют отдельно предоставленных real-Core/партнёрских fixtures или специального Redis окружения; они пропускаются с явной причиной.
 
 Артефакты: [основной отчёт](price-lists-million.json), [малый прогон](price-lists-small.json), [окончательный missing-прогон](price-lists-missing-final.json), [планы запросов](price-lists-query-plans.json). Повторение и обновление worker описаны в [инструкции эксплуатации](../operations/price-list-streaming.md).
