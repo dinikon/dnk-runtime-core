@@ -10,6 +10,7 @@ class CronCalendar:
     """Рассчитывает CRON occurrences в timezone источника."""
 
     def occurrences(self, expression, timezone, *, after, count=5):
+        """Вычисляет следующие календарные запуски с учётом timezone."""
         try:
             zone = ZoneInfo(timezone)
             if not croniter.is_valid(expression):
@@ -40,6 +41,7 @@ class IdentifierGenerator:
     """Генерирует UUIDv7 вне domain/application."""
 
     def new(self):
+        """Выдаёт новый идентификатор для команды или агрегата."""
         return EntityIdVO(uuid6.uuid7())
 
 

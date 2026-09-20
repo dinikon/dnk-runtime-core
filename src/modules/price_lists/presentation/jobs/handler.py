@@ -23,6 +23,7 @@ class PriceListSyncJobHandler:
         self.use_case = use_case
 
     async def handle(self, job: ScheduledJob) -> None:
+        """Проверяет envelope и вызывает соответствующий application use case."""
         payload = job.payload
         revision = payload.get("schedule_revision")
         trigger = payload.get("trigger") or "cron"
@@ -59,6 +60,7 @@ class PriceListCleanupJobHandler:
         self.use_case = use_case
 
     async def handle(self, job: ScheduledJob) -> None:
+        """Проверяет envelope и вызывает соответствующий application use case."""
         await self.use_case(
             CleanupPriceListCommand(
                 EntityIdVO.from_value(job.tenant_id),

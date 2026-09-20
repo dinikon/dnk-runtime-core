@@ -608,3 +608,44 @@ class PriceListBulkPostgresTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(response.status_code, 422, response.text)
             response = await client.get(f"/price-lists/{uuid4()}")
             self.assertEqual(response.status_code, 404, response.text)
+
+    async def test_publication_visibility_and_cursor_history_order(self):
+        await self.apply([self.row(0)])
+        original = SqlAlchemyOfferRepository.save_batch
+
+        async def observe(repo, *args):
+            await original(repo, *args)
+            page = await self.query()
+            self.assertEqual(page.items[0].purchase_price, Decimal("10.0000"))
+            self.assertEqual(await self.count(PartnerOfferStateModel), 1)
+
+        with patch.object(SqlAlchemyOfferRepository, "save_batch", observe):
+            await self.apply([self.row(0, "12")])
+        page = await self.query()
+        self.assertEqual(page.items[0].purchase_price, Decimal("12.0000"))
+        offer_id = page.items[0].id
+        async with self.sessions() as session:
+            repo = SqlAlchemyPriceListQueryRepository(
+                session, self.naming, self.options
+            )
+            first = await repo.offer_history(
+                OfferHistoryQuery(
+                    self.tenant_id, offer_id, {}, pagination="cursor", limit=1
+                )
+            )
+            self.assertTrue(first.has_more)
+            self.assertIsNone(first.total)
+            second = await repo.offer_history(
+                OfferHistoryQuery(
+                    self.tenant_id,
+                    offer_id,
+                    {},
+                    pagination="cursor",
+                    limit=1,
+                    cursor=first.next_cursor,
+                    include_total=True,
+                )
+            )
+            self.assertFalse(second.has_more)
+            self.assertEqual(second.total, 2)
+            self.assertNotEqual(first.items[0].id, second.items[0].id)
