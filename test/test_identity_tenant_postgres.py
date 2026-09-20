@@ -310,7 +310,7 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
             await self.migrator.upgrade(connection, schema)
             self.assertEqual(
                 await self.migrator.current(connection, schema),
-                ("0003_identity_cloud_access",),
+                (self.migrator.head(),),
             )
             foreign_keys = await connection.run_sync(
                 lambda conn: inspect(conn).get_foreign_keys(

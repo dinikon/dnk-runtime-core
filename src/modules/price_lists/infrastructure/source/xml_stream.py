@@ -1,5 +1,4 @@
 from collections import deque
-from pathlib import Path
 from xml.etree.ElementTree import Element
 from xml.sax.handler import ContentHandler, feature_namespaces, feature_external_ges
 from defusedxml.sax import make_parser

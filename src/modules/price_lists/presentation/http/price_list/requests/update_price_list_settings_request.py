@@ -1,5 +1,5 @@
 from typing import Any, Literal
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import Field, HttpUrl
 from src.modules.price_lists.presentation.http.price_list.requests.schedule_request import (
     ScheduleRequest,
 )

@@ -86,6 +86,12 @@ class JobSchedulerPort(Protocol):
         *,
         delete: bool = False,
     ) -> int: ...
+    async def terminal_jobs(
+        self, tenant_id: EntityIdVO, job_ids: list[EntityIdVO]
+    ) -> set[EntityIdVO]:
+        """Возвращает завершённые или удалённые задания из ограниченного пакета."""
+        ...
+
     async def require_lease(
         self,
         tenant_id: EntityIdVO,
@@ -151,6 +157,7 @@ class PriceListLock(Protocol):
 class ImportObserver(Protocol):
     """Порт эксплуатационных метрик без зависимости application от Prometheus."""
 
+    def batch(self, phase: str, source_format: str, rows: int) -> None: ...
     def phase(self, name: str, source_format: str, seconds: float) -> None: ...
     def completed(
         self,

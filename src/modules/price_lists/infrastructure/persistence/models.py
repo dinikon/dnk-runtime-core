@@ -44,26 +44,38 @@ class PriceListModel(TenantSystemMixin, TenantBase):
         sa.Index("ix_price_lists_status_next_sync", "status", "next_sync_at"),
     )
 
-    status: Mapped[str] = mapped_column(sa.String(16), default="draft")
+    status: Mapped[str] = mapped_column(
+        sa.String(16), default="draft", server_default="draft"
+    )
     source_format: Mapped[str] = mapped_column(sa.String(16), nullable=False)
     source_preset: Mapped[str | None] = mapped_column(sa.String(64))
     source_url_secret: Mapped[str] = mapped_column(LongText, nullable=False)
     source_url_display: Mapped[str] = mapped_column(sa.String(2048), nullable=False)
     source_config: Mapped[dict[str, Any]] = mapped_column(
-        PortableJSON, default=dict, nullable=False
+        PortableJSON, default=dict, server_default=sa.text("'{}'"), nullable=False
     )
     mapping_config: Mapped[dict[str, Any]] = mapped_column(
-        PortableJSON, default=dict, nullable=False
+        PortableJSON, default=dict, server_default=sa.text("'{}'"), nullable=False
     )
-    mapping_version: Mapped[int] = mapped_column(sa.Integer, default=1)
+    mapping_version: Mapped[int] = mapped_column(
+        sa.Integer, default=1, server_default=sa.text("1")
+    )
     cron_expression: Mapped[str | None] = mapped_column(sa.String(128))
-    timezone: Mapped[str] = mapped_column(sa.String(64), default="Europe/Kyiv")
-    new_item_policy: Mapped[str] = mapped_column(sa.String(32), default="create")
-    missing_item_policy: Mapped[str] = mapped_column(
-        sa.String(32), default="mark_out_of_stock"
+    timezone: Mapped[str] = mapped_column(
+        sa.String(64), default="Europe/Kyiv", server_default="Europe/Kyiv"
     )
-    missing_threshold: Mapped[int] = mapped_column(sa.Integer, default=2)
-    schedule_revision: Mapped[int] = mapped_column(sa.Integer, default=1)
+    new_item_policy: Mapped[str] = mapped_column(
+        sa.String(32), default="create", server_default="create"
+    )
+    missing_item_policy: Mapped[str] = mapped_column(
+        sa.String(32), default="mark_out_of_stock", server_default="mark_out_of_stock"
+    )
+    missing_threshold: Mapped[int] = mapped_column(
+        sa.Integer, default=2, server_default=sa.text("2")
+    )
+    schedule_revision: Mapped[int] = mapped_column(
+        sa.Integer, default=1, server_default=sa.text("1")
+    )
     next_sync_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
     last_sync_run_id: Mapped[UUID | None] = mapped_column(
         StringUUID,
@@ -102,7 +114,9 @@ class PartnerOfferModel(TenantSystemMixin, TenantBase):
     )
     sku: Mapped[str] = mapped_column(sa.String(255), nullable=False)
     external_id: Mapped[str] = mapped_column(sa.String(255), nullable=False)
-    lifecycle_status: Mapped[str] = mapped_column(sa.String(16), default="active")
+    lifecycle_status: Mapped[str] = mapped_column(
+        sa.String(16), default="active", server_default="active"
+    )
     current_state_id: Mapped[UUID | None] = mapped_column(
         StringUUID,
         sa.ForeignKey(
@@ -115,7 +129,9 @@ class PartnerOfferModel(TenantSystemMixin, TenantBase):
     first_seen_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True))
     last_seen_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True))
     missing_since: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
-    consecutive_missing_runs: Mapped[int] = mapped_column(sa.Integer, default=0)
+    consecutive_missing_runs: Mapped[int] = mapped_column(
+        sa.Integer, default=0, server_default=sa.text("0")
+    )
 
 
 class PriceListSyncRunModel(TenantBase):
@@ -152,7 +168,7 @@ class PriceListSyncRunModel(TenantBase):
     finished_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
     source_checksum: Mapped[str | None] = mapped_column(sa.String(64))
     counters: Mapped[dict[str, Any]] = mapped_column(
-        PortableJSON, default=dict, nullable=False
+        PortableJSON, default=dict, server_default=sa.text("'{}'"), nullable=False
     )
     error_summary: Mapped[str | None] = mapped_column(LongText)
 
@@ -177,7 +193,9 @@ class PartnerOfferStateModel(TenantBase):
             "(quantity > 0 AND availability = 'in_stock')",
             name="ck_offer_state_quantity_availability",
         ),
-        sa.Index("ix_offer_states_offer_observed", "offer_id", "observed_at"),
+        sa.Index(
+            "ix_offer_states_offer_observed", "offer_id", sa.text("observed_at DESC")
+        ),
         sa.Index("ix_offer_states_run", "sync_run_id"),
         sa.Index("ix_offer_states_observed", "observed_at"),
         sa.Index("ix_offer_states_offer_observed_id", "offer_id", "observed_at", "id"),
@@ -233,20 +251,20 @@ class PriceListSyncItemModel(TenantBase):
     quantity: Mapped[int | None] = mapped_column(sa.Integer)
     value_hash: Mapped[str | None] = mapped_column(sa.String(64))
     normalized_payload: Mapped[dict[str, Any]] = mapped_column(
-        PortableJSON, default=dict, nullable=False
+        PortableJSON, default=dict, server_default=sa.text("'{}'"), nullable=False
     )
     quarantined: Mapped[bool] = mapped_column(
         sa.Boolean, nullable=False, default=False, server_default=sa.false()
     )
     validation_errors: Mapped[list[str]] = mapped_column(
-        PortableJSON, default=list, nullable=False
+        PortableJSON, default=list, server_default=sa.text("'[]'"), nullable=False
     )
 
 
 sa.Index(
     "ix_partner_offers_search_document",
     sa.text(
-        "to_tsvector('simple', coalesce(title,'') || ' ' || coalesce(sku,'') || ' ' || coalesce(external_id,''))"
+        "to_tsvector('simple'::regconfig, (((COALESCE(title, ''::character varying)::text || ' '::text) || COALESCE(sku, ''::character varying)::text) || ' '::text) || COALESCE(external_id, ''::character varying)::text)"
     ),
     postgresql_using="gin",
     _table=PartnerOfferModel.__table__,

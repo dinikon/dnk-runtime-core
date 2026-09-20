@@ -3,22 +3,6 @@ from src.modules.price_lists.application.price_list.use_case.dependencies import
     PriceListUseCase,
 )
 from src.modules.price_lists.application.price_list.dto.action_dto import ActionDTO
-from src.modules.price_lists.domain.price_list.entity import PriceList
-from src.modules.price_lists.domain.price_list.error import (
-    PriceListStateConflict,
-    PriceListValidationError,
-)
-from src.modules.price_lists.domain.price_list.value_object.configuration import (
-    TitleVO,
-    SourceConfigurationVO,
-    MappingConfigurationVO,
-    ScheduleVO,
-)
-from src.modules.price_lists.domain.price_list.value_object.source_url import (
-    SourceUrlVO,
-    mask_source_url,
-)
-from src.modules.price_lists.domain.price_list.preset import prom_xml_config
 from src.modules.price_lists.application.price_list.command.resume_price_list_command import (
     ResumePriceListCommand,
 )
@@ -28,6 +12,7 @@ class ResumePriceListUseCase(PriceListUseCase):
     """Выполняет действие resume_price_list через внедрённые порты."""
 
     async def __call__(self, command: ResumePriceListCommand) -> ActionDTO:
+        """Выполняет сценарий через внедрённые доменные порты."""
         price = await self.repository.get(
             command.tenant_id, command.price_list_id, for_update=True
         )

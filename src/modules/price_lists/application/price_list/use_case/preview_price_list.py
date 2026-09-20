@@ -1,12 +1,6 @@
 from src.modules.price_lists.application.price_list.query.preview_price_list_query import (
     PreviewPriceListQuery,
 )
-from src.modules.price_lists.application.price_list.dto.price_list_dto import (
-    price_list_dto,
-)
-from src.modules.price_lists.application.price_list.dto.action_dto import (
-    SchedulePreviewDTO,
-)
 
 
 class PreviewPriceListUseCase:
@@ -17,6 +11,7 @@ class PreviewPriceListUseCase:
         self.preview = preview
 
     async def __call__(self, query: PreviewPriceListQuery):
+        """Выполняет сценарий через внедрённые доменные порты."""
         price = await self.repository.get(query.tenant_id, query.price_list_id)
         return await self.preview.inspect(
             self.preview.candidate(price, query.candidate), limit=query.limit

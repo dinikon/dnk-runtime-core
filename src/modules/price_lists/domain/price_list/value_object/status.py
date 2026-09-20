@@ -2,6 +2,8 @@ from enum import StrEnum
 
 
 class PriceListStatus(StrEnum):
+    """Допустимые состояния жизненного цикла прайса."""
+
     DRAFT = "draft"
     READY = "ready"
     ACTIVE = "active"
@@ -11,6 +13,8 @@ class PriceListStatus(StrEnum):
 
 
 class SourceFormat(StrEnum):
+    """Поддерживаемые форматы источника."""
+
     XML = "xml"
     YAML = "yaml"
     XLSX = "xlsx"

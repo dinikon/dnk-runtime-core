@@ -11,6 +11,7 @@ class SqlAlchemyImportTransactionFactory:
 
     @asynccontextmanager
     async def __call__(self):
+        """Выполняет сценарий через внедрённые доменные порты."""
         async with UnitOfWork(self.session_factory) as uow:
             yield self.assemble(uow)
 

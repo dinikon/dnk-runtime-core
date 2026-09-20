@@ -1,3 +1,17 @@
-"""SQLAlchemy adapters прайс-листов."""
+"""Регистрация статических tenant-моделей для Alembic и metadata."""
 
-__all__ = []
+from src.modules.price_lists.infrastructure.persistence.models import (
+    PriceListModel,
+    PartnerOfferModel,
+    PartnerOfferStateModel,
+    PriceListSyncRunModel,
+    PriceListSyncItemModel,
+)
+
+__all__ = [
+    "PriceListModel",
+    "PartnerOfferModel",
+    "PartnerOfferStateModel",
+    "PriceListSyncRunModel",
+    "PriceListSyncItemModel",
+]

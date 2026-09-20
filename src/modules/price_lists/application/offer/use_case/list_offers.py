@@ -13,6 +13,7 @@ class ListOffersUseCase:
         self.repository = repository
 
     async def __call__(self, query: ListOffersQuery):
+        """Выполняет сценарий через внедрённые доменные порты."""
         return await self.repository.list_offers(query)
 
 

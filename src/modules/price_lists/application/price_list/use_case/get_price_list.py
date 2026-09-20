@@ -4,9 +4,6 @@ from src.modules.price_lists.application.price_list.query.get_price_list_query i
 from src.modules.price_lists.application.price_list.dto.price_list_dto import (
     price_list_dto,
 )
-from src.modules.price_lists.application.price_list.dto.action_dto import (
-    SchedulePreviewDTO,
-)
 
 
 class GetPriceListUseCase:
@@ -16,6 +13,7 @@ class GetPriceListUseCase:
         self.repository = repository
 
     async def __call__(self, query: GetPriceListQuery):
+        """Выполняет сценарий через внедрённые доменные порты."""
         return price_list_dto(
             await self.repository.get(query.tenant_id, query.price_list_id)
         )

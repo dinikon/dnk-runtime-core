@@ -35,15 +35,31 @@ price_list_sync_phase_duration = Histogram(
 )
 
 
+price_list_sync_batch_rows = Histogram(
+    "price_list_sync_batch_rows",
+    "Rows per bounded import batch.",
+    ["phase", "format"],
+    buckets=(1, 10, 100, 500, 1000, 2000, 5000, 10000),
+)
+
+
 class PrometheusImportObserver:
     """Адаптер метрик с ограниченной кардинальностью labels."""
 
+    def batch(self, phase, source_format, rows):
+        """Измеряет пакеты без tenant/job labels."""
+        price_list_sync_batch_rows.labels(phase=phase, format=source_format).observe(
+            rows
+        )
+
     def phase(self, name, source_format, seconds):
+        """Измеряет длительность этапа импорта."""
         price_list_sync_phase_duration.labels(phase=name, format=source_format).observe(
             seconds
         )
 
     def completed(self, source_format, trigger, status, counters, seconds):
+        """Записывает итоговые счётчики запуска."""
         price_list_sync_runs.labels(
             status=status, format=source_format, trigger=trigger
         ).inc()
@@ -52,4 +68,5 @@ class PrometheusImportObserver:
             price_list_sync_rows.labels(result=name).inc(value)
 
     def downloaded(self, source_format, size):
+        """Учитывает объём скачанного источника."""
         price_list_sync_download_bytes.labels(format=source_format).inc(size)

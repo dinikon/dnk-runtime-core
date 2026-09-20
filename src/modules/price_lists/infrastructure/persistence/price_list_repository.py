@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import insert, select, update, delete
+from sqlalchemy import select, delete
 from src.modules.price_lists.domain.price_list.entity import PriceList
 from src.modules.price_lists.domain.price_list.value_object import PriceListIdVO
 from src.modules.price_lists.domain.sync_run.value_object import SyncRunIdVO
@@ -44,10 +44,12 @@ class SqlAlchemyPriceListRepository(SessionRepository):
     """Реализует command repository прайса на текущей UoW session."""
 
     async def get(self, tenant_id, price_list_id, *, for_update=False):
+        """Читает aggregate текущего tenant и проверяет его наличие."""
         table = PriceListModel.__table__
         statement = select(table).where(table.c.id == price_list_id.uuid)
         if for_update:
-            statement = statement.with_for_update()
+            # Lifecycle must remain writable while publication holds FK KEY SHARE locks.
+            statement = statement.with_for_update(key_share=True)
         result = await self.session.execute(
             statement.execution_options(**self.execution_options(tenant_id))
         )

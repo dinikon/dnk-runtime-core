@@ -6,9 +6,6 @@ from src.modules.price_lists.domain.offer.value_object.values import OfferValues
 from src.modules.price_lists.domain.offer.value_object.availability import (
     normalize_availability,
 )
-from src.modules.price_lists.domain.offer.value_object.state_hash import (
-    canonical_state_hash,
-)
 
 
 def _path_value(value: Any, selector: str) -> Any:
@@ -26,12 +23,15 @@ def _extract(raw: Any, specification: dict[str, Any]) -> Any:
         return specification["constant"]
     selectors = specification.get("selectors") or [specification.get("selector")]
     for selector in selectors:
-        if not selector:
+        if selector is None or selector == "":
             continue
+        value = None
         if isinstance(raw, dict):
             if isinstance(selector, int):
                 row_values = list(raw.values())
-                value = row_values[selector] if selector < len(row_values) else None
+                value = (
+                    row_values[selector] if 0 <= selector < len(row_values) else None
+                )
             else:
                 value = raw.get(str(selector), _path_value(raw, str(selector)))
         if value not in (None, ""):
@@ -50,6 +50,7 @@ def _integer(value):
 def normalize_row(
     raw: Any, mapping: dict[str, Any]
 ) -> tuple[dict[str, Any], tuple[str, ...]]:
+    """Применяет mapping и проверяет доменные значения одной строки."""
     values: dict[str, Any] = {}
     errors: list[str] = []
     for field, specification in mapping.items():

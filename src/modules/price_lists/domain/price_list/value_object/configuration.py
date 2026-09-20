@@ -46,7 +46,7 @@ def validate_mapping_config(mapping: dict[str, Any]) -> None:
     for field in ("external_id", "sku", "title", "purchase_price", "currency"):
         specification = mapping.get(field)
         if not isinstance(specification, dict) or not (
-            specification.get("selector")
+            specification.get("selector") is not None
             or specification.get("selectors")
             or "constant" in specification
         ):
@@ -55,8 +55,21 @@ def validate_mapping_config(mapping: dict[str, Any]) -> None:
         if not isinstance(specification, dict):
             raise PriceListValidationError("Mapping specifications must be objects.")
         selectors = specification.get("selectors") or [specification.get("selector")]
-        if len(selectors) > 5 or any(
-            selector is not None and len(str(selector)) > 255 for selector in selectors
+        if (
+            not isinstance(selectors, (list, tuple))
+            or len(selectors) > 5
+            or any(
+                selector is not None
+                and (
+                    isinstance(selector, bool)
+                    or not isinstance(selector, (str, int))
+                    or isinstance(selector, int)
+                    and selector < 0
+                    or isinstance(selector, str)
+                    and not 1 <= len(selector) <= 255
+                )
+                for selector in selectors
+            )
         ):
             raise PriceListValidationError("Mapping selector limit exceeded.")
 

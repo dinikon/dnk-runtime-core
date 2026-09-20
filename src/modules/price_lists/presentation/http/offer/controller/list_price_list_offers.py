@@ -1,5 +1,3 @@
-from decimal import Decimal
-from datetime import datetime
 from uuid import UUID
 from typing import Literal
 from fastapi import APIRouter, Query
@@ -8,16 +6,11 @@ from src.modules.shared.presentation.identity_context.depends import (
 )
 from src.modules.price_lists.presentation.depends.application import (
     ListOffersUseCaseDep,
-    OfferHistoryUseCaseDep,
 )
 from src.modules.price_lists.application.offer.query.list_offers_query import (
     ListOffersQuery,
 )
-from src.modules.price_lists.application.offer.query.offer_history_query import (
-    OfferHistoryQuery,
-)
 from src.modules.price_lists.domain.price_list.value_object import PriceListIdVO
-from src.modules.price_lists.domain.offer.value_object import OfferIdVO
 from src.modules.price_lists.presentation.http.boundary import (
     context_ids,
     dto_values,

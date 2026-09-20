@@ -21,6 +21,7 @@ class CleanupPriceListUseCase:
         self.options = options
 
     async def __call__(self, command: CleanupPriceListCommand) -> None:
+        """Выполняет сценарий через внедрённые доменные порты."""
         now = self.clock.now()
         next_at = (now + timedelta(days=1)).replace(
             hour=3, minute=0, second=0, microsecond=0
@@ -30,6 +31,31 @@ class CleanupPriceListUseCase:
                 command.tenant_id, command.job_id, command.lock_token, fence=True
             )
             await tx.jobs.schedule_cleanup(command.tenant_id, next_at)
+        after = None
+        while True:
+            async with self.transactions() as tx:
+                await tx.jobs.require_lease(
+                    command.tenant_id, command.job_id, command.lock_token
+                )
+                runs = await tx.runs.unfinished_batch(command.tenant_id, after)
+                if not runs:
+                    break
+                after = runs[-1].id
+                terminal = await tx.jobs.terminal_jobs(
+                    command.tenant_id,
+                    [
+                        run.scheduled_job_id
+                        for run in runs
+                        if run.scheduled_job_id is not None
+                    ],
+                )
+                for run in runs:
+                    if run.scheduled_job_id is None or run.scheduled_job_id in terminal:
+                        run.finish(now, error="Scheduled job ended before publication.")
+                        await tx.runs.save(command.tenant_id, run)
+                await tx.jobs.require_lease(
+                    command.tenant_id, command.job_id, command.lock_token, fence=True
+                )
         while True:
             async with self.transactions() as tx:
                 await tx.jobs.require_lease(

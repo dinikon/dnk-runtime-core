@@ -1,6 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
-from sqlalchemy import select, exists
+from sqlalchemy import select, exists, func, bindparam, String, true
+from sqlalchemy.dialects.postgresql import ARRAY
 from src.modules.price_lists.domain.offer.entity import Offer, OfferState
 from src.modules.price_lists.domain.offer.value_object import OfferIdVO, OfferStateIdVO
 from src.modules.price_lists.domain.price_list.value_object import PriceListIdVO
@@ -67,8 +68,10 @@ def offer_entity(row):
 class SqlAlchemyOfferRepository(SessionRepository):
     """Ограниченные выборки предложений и bulk append-only история."""
 
-    def selection(self):
-        offers = PartnerOfferModel.__table__
+    def selection(self, offers=None):
+        """Проецирует только предложение и его текущее состояние."""
+        if offers is None:
+            offers = PartnerOfferModel.__table__
         states = PartnerOfferStateModel.__table__
         return select(
             offers,
@@ -85,16 +88,40 @@ class SqlAlchemyOfferRepository(SessionRepository):
         offers = PartnerOfferModel.__table__
         found = {}
         for start in range(0, len(external_ids), min(self.read_limit, 16000)):
-            result = await self.session.execute(
-                self.selection()
-                .where(
-                    offers.c.price_list_id == price_list_id.uuid,
-                    offers.c.external_id.in_(
-                        external_ids[start : start + min(self.read_limit, 16000)]
-                    ),
+            identifiers = external_ids[start : start + min(self.read_limit, 16000)]
+            if self.session.bind.dialect.name == "postgresql":
+                # IN(1000 keys) can scan the entire growing list before its first
+                # COMMIT/ANALYZE. LATERAL LIMIT forces bounded unique-key lookups.
+                keys = select(
+                    func.unnest(bindparam("external_ids", type_=ARRAY(String))).label(
+                        "external_id"
+                    )
+                ).subquery("requested")
+                matched = (
+                    select(offers)
+                    .where(
+                        offers.c.price_list_id == price_list_id.uuid,
+                        offers.c.external_id == keys.c.external_id,
+                    )
+                    .limit(1)
+                    .lateral("matched")
                 )
-                .execution_options(**self.execution_options(tenant_id))
-            )
+                statement = self.selection(matched).select_from(
+                    keys.join(matched, true())
+                )
+                result = await self.session.execute(
+                    statement.execution_options(**self.execution_options(tenant_id)),
+                    {"external_ids": identifiers},
+                )
+            else:
+                result = await self.session.execute(
+                    self.selection()
+                    .where(
+                        offers.c.price_list_id == price_list_id.uuid,
+                        offers.c.external_id.in_(identifiers),
+                    )
+                    .execution_options(**self.execution_options(tenant_id))
+                )
             for row in result.mappings():
                 found[row["external_id"]] = offer_entity(row)
         return found

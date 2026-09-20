@@ -43,12 +43,40 @@ def sync_run_entity(row):
 class SqlAlchemySyncRunRepository(SessionRepository):
     """Repository прогресса и итогов синхронизации."""
 
+    async def unfinished_batch(self, tenant_id, after):
+        """Выбирает ограниченный пакет runs для восстановления после crash."""
+        table = PriceListSyncRunModel.__table__
+        statement = select(table).where(
+            table.c.status.in_(("queued", "downloading", "parsing", "applying"))
+        )
+        if after is not None:
+            statement = statement.where(table.c.id > after.uuid)
+        result = await self.session.execute(
+            statement.order_by(table.c.id)
+            .limit(self.read_limit)
+            .execution_options(**self.execution_options(tenant_id))
+        )
+        return [sync_run_entity(row) for row in result.mappings()]
+
     async def skip_running(self, tenant_id, price_list_id, now):
         """Фиксирует завершение активных runs при pause/archive."""
-        table=PriceListSyncRunModel.__table__
-        await self.session.execute(update(table).where(table.c.price_list_id==price_list_id.uuid,table.c.status.in_(("queued","downloading","parsing","applying"))).values(status="skipped",finished_at=now,error_summary="Synchronization superseded by lifecycle change.").execution_options(**self.execution_options(tenant_id)))
+        table = PriceListSyncRunModel.__table__
+        await self.session.execute(
+            update(table)
+            .where(
+                table.c.price_list_id == price_list_id.uuid,
+                table.c.status.in_(("queued", "downloading", "parsing", "applying")),
+            )
+            .values(
+                status="skipped",
+                finished_at=now,
+                error_summary="Synchronization superseded by lifecycle change.",
+            )
+            .execution_options(**self.execution_options(tenant_id))
+        )
 
     async def find_by_job(self, tenant_id, price_list_id, job_id):
+        """Находит предыдущий запуск этой задачи для идемпотентного повтора."""
         table = PriceListSyncRunModel.__table__
         result = await self.session.execute(
             select(table)

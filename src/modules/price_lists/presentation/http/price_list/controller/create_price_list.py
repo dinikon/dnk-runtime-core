@@ -1,5 +1,4 @@
-from uuid import UUID
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends
 from src.modules.identity.presentation.http.csrf import require_csrf
 from src.modules.shared.presentation.identity_context.depends import (
     AuthenticatedRequestContextDep,

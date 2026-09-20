@@ -125,43 +125,89 @@ def get_job_scheduler(
     uow: UoWDep, clock: ClockDep, identifiers: IdentifierGeneratorDep
 ):
     """Создаёт scheduled-jobs adapter на той же request UoW."""
-    return ScheduledJobsAdapter(build_scheduled_job_repository(uow.session), clock, identifiers)
+    return ScheduledJobsAdapter(
+        build_scheduled_job_repository(uow.session), clock, identifiers
+    )
 
 
 JobSchedulerDep = Annotated[ScheduledJobsAdapter, Depends(get_job_scheduler)]
 
-__all__ = [
-    name for name in globals() if name.startswith("get_") or name.endswith("Dep")
+
+def get_sync_run_repository(
+    uow: UoWDep, naming: TenantNamingDep, options: ImportOptionsDep
+):
+    """Создаёт repository lifecycle запусков в request UoW."""
+    return SqlAlchemySyncRunRepository(uow.session, naming, options)
+
+
+SyncRunRepositoryDep = Annotated[
+    SqlAlchemySyncRunRepository, Depends(get_sync_run_repository)
 ]
 
 
-def get_sync_run_repository(uow: UoWDep, naming: TenantNamingDep, options: ImportOptionsDep):
-    """Создаёт repository lifecycle запусков в request UoW."""
-    return SqlAlchemySyncRunRepository(uow.session,naming,options)
-SyncRunRepositoryDep=Annotated[SqlAlchemySyncRunRepository,Depends(get_sync_run_repository)]
-
-
-def get_background_repositories(uow,options,clock):
+def get_background_repositories(uow, options, clock):
     """Создаёт фоновые persistence adapters без выбора tenant."""
-    naming=get_tenant_naming();identifiers=get_identifier_generator()
-    return dict(prices=SqlAlchemyPriceListRepository(uow.session,naming,options),offers=SqlAlchemyOfferRepository(uow.session,naming,options),runs=SqlAlchemySyncRunRepository(uow.session,naming,options),staging=SqlAlchemyStagingRepository(uow.session,naming,options),jobs=ScheduledJobsAdapter(build_scheduled_job_repository(uow.session),clock,identifiers))
+    naming = get_tenant_naming()
+    identifiers = get_identifier_generator()
+    return dict(
+        prices=SqlAlchemyPriceListRepository(uow.session, naming, options),
+        offers=SqlAlchemyOfferRepository(uow.session, naming, options),
+        runs=SqlAlchemySyncRunRepository(uow.session, naming, options),
+        staging=SqlAlchemyStagingRepository(uow.session, naming, options),
+        jobs=ScheduledJobsAdapter(
+            build_scheduled_job_repository(uow.session), clock, identifiers
+        ),
+    )
 
 
-def get_background_transaction_factory(session_factory,assemble):
+def get_background_transaction_factory(session_factory, assemble):
     """Создаёт адаптер shared UoW с presentation composition callback."""
-    from src.modules.price_lists.infrastructure.transaction import SqlAlchemyImportTransactionFactory
-    return SqlAlchemyImportTransactionFactory(session_factory,assemble)
+    from src.modules.price_lists.infrastructure.transaction import (
+        SqlAlchemyImportTransactionFactory,
+    )
+
+    return SqlAlchemyImportTransactionFactory(session_factory, assemble)
 
 
 def get_price_list_lock(session_factory):
     """Создаёт межрепличную advisory-блокировку."""
     from src.modules.price_lists.infrastructure.locking import PostgresPriceListLock
+
     return PostgresPriceListLock(session_factory)
 
 
 def get_import_observer():
     """Создаёт адаптер эксплуатационных метрик."""
     from src.modules.price_lists.infrastructure.metrics import PrometheusImportObserver
+
     return PrometheusImportObserver()
 
-__all__=[name for name in globals() if name.startswith('get_') or name.endswith('Dep')]
+
+__all__ = [
+    "get_import_options",
+    "ImportOptionsDep",
+    "get_tenant_naming",
+    "TenantNamingDep",
+    "get_price_list_repository",
+    "PriceListRepositoryDep",
+    "get_query_repository",
+    "QueryRepositoryDep",
+    "get_identifier_generator",
+    "IdentifierGeneratorDep",
+    "get_calendar",
+    "CalendarDep",
+    "get_source_cipher",
+    "SourceCipherDep",
+    "get_source_fetcher",
+    "SourceFetcherDep",
+    "get_source_parser",
+    "SourceParserDep",
+    "get_job_scheduler",
+    "JobSchedulerDep",
+    "get_sync_run_repository",
+    "SyncRunRepositoryDep",
+    "get_background_repositories",
+    "get_background_transaction_factory",
+    "get_price_list_lock",
+    "get_import_observer",
+]

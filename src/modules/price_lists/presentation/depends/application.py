@@ -1,10 +1,22 @@
-from src.modules.price_lists.presentation.depends.infrastructure import SyncRunRepositoryDep,get_background_repositories,get_background_transaction_factory,get_price_list_lock,get_import_observer,get_source_fetcher,get_source_parser
+from src.modules.price_lists.presentation.depends.infrastructure import (
+    SyncRunRepositoryDep,
+    get_background_repositories,
+    get_background_transaction_factory,
+    get_price_list_lock,
+    get_import_observer,
+    get_source_fetcher,
+    get_source_parser,
+)
 from src.modules.price_lists.domain.price_list.repository import PriceListRepository
 from src.modules.price_lists.domain.offer.repository import OfferRepository
 from src.modules.price_lists.domain.sync_run.repository import SyncRunRepository
-from src.modules.price_lists.application.sync_run.ports import StagingPort,JobSchedulerPort
-from src.modules.shared.application.persistence.unit_of_work_protocol import UnitOfWorkProtocol
-from src.modules.shared.presentation.jobs import build_scheduled_job_repository
+from src.modules.price_lists.application.sync_run.ports import (
+    StagingPort,
+    JobSchedulerPort,
+)
+from src.modules.shared.application.persistence.unit_of_work_protocol import (
+    UnitOfWorkProtocol,
+)
 from dataclasses import dataclass
 from typing import Annotated
 from fastapi import Depends
@@ -19,7 +31,6 @@ from src.modules.price_lists.presentation.depends.infrastructure import (
     IdentifierGeneratorDep,
     JobSchedulerDep,
     get_import_options,
-    get_tenant_naming,
     get_source_cipher,
     get_calendar,
     get_identifier_generator,
@@ -27,20 +38,6 @@ from src.modules.price_lists.presentation.depends.infrastructure import (
 from src.modules.shared.presentation.time.depends import ClockDep, default_clock
 from src.modules.price_lists.application.price_list.source_preview import SourcePreview
 from src.modules.price_lists.domain.offer.service import OfferService
-from src.modules.price_lists.infrastructure.transaction import (
-    SqlAlchemyImportTransactionFactory,
-)
-from src.modules.price_lists.infrastructure.locking import PostgresPriceListLock
-from src.modules.price_lists.infrastructure.metrics import PrometheusImportObserver
-from src.modules.price_lists.presentation.depends.infrastructure import (
-    SqlAlchemyPriceListRepository,
-    SqlAlchemyOfferRepository,
-    SqlAlchemySyncRunRepository,
-    SqlAlchemyStagingRepository,
-    ScheduledJobsAdapter,
-    HttpRemoteFileFetcher,
-    SourceParser,
-)
 from src.modules.price_lists.application.sync_run.use_case.synchronize_price_list import (
     SynchronizePriceListUseCase,
 )
@@ -371,21 +368,86 @@ class ImportComponents:
 
 def get_background_transactions(session_factory, *, options=None, clock=None):
     """Собирает domain service над repository каждой фоновой UoW."""
-    options=options or get_import_options();clock=clock or default_clock
+    options = options or get_import_options()
+    clock = clock or default_clock
+
     def assemble(uow):
-        ports=get_background_repositories(uow,options,clock)
-        return ImportComponents(**ports,offer_service=OfferService(ports['offers'],clock),uow=uow)
-    return get_background_transaction_factory(session_factory,assemble)
+        ports = get_background_repositories(uow, options, clock)
+        return ImportComponents(
+            **ports, offer_service=OfferService(ports["offers"], clock), uow=uow
+        )
+
+    return get_background_transaction_factory(session_factory, assemble)
 
 
 def get_synchronize_price_list_use_case(session_factory):
     """Собирает CRON use case без HTTP dependency resolution."""
-    options=get_import_options()
-    return SynchronizePriceListUseCase(get_background_transactions(session_factory,options=options),get_source_fetcher(options),get_source_parser(options),get_source_cipher(),get_calendar(),get_identifier_generator(),get_price_list_lock(session_factory),default_clock,options,get_import_observer())
+    options = get_import_options()
+    return SynchronizePriceListUseCase(
+        get_background_transactions(session_factory, options=options),
+        get_source_fetcher(options),
+        get_source_parser(options),
+        get_source_cipher(),
+        get_calendar(),
+        get_identifier_generator(),
+        get_price_list_lock(session_factory),
+        default_clock,
+        options,
+        get_import_observer(),
+    )
 
 
 def get_cleanup_price_list_use_case(session_factory):
     """Собирает сценарий обслуживания staging."""
-    return CleanupPriceListUseCase(get_background_transactions(session_factory),default_clock,get_import_options())
+    return CleanupPriceListUseCase(
+        get_background_transactions(session_factory),
+        default_clock,
+        get_import_options(),
+    )
 
-__all__=[name for name in globals() if name.startswith('get_') or name.endswith('Dep')]
+
+__all__ = [
+    "get_source_preview",
+    "SourcePreviewDep",
+    "get_command_dependencies",
+    "CommandDependenciesDep",
+    "get_activate_price_list_use_case",
+    "ActivatePriceListUseCaseDep",
+    "get_archive_price_list_use_case",
+    "ArchivePriceListUseCaseDep",
+    "get_create_price_list_use_case",
+    "CreatePriceListUseCaseDep",
+    "get_delete_price_list_use_case",
+    "DeletePriceListUseCaseDep",
+    "get_get_price_list_use_case",
+    "GetPriceListUseCaseDep",
+    "get_list_price_lists_use_case",
+    "ListPriceListsUseCaseDep",
+    "get_pause_price_list_use_case",
+    "PausePriceListUseCaseDep",
+    "get_preview_price_list_use_case",
+    "PreviewPriceListUseCaseDep",
+    "get_preview_schedule_use_case",
+    "PreviewScheduleUseCaseDep",
+    "get_restore_price_list_use_case",
+    "RestorePriceListUseCaseDep",
+    "get_resume_price_list_use_case",
+    "ResumePriceListUseCaseDep",
+    "get_save_mapping_use_case",
+    "SaveMappingUseCaseDep",
+    "get_save_schedule_use_case",
+    "SaveScheduleUseCaseDep",
+    "get_sync_price_list_use_case",
+    "SyncPriceListUseCaseDep",
+    "get_update_settings_use_case",
+    "UpdateSettingsUseCaseDep",
+    "get_list_offers_use_case",
+    "ListOffersUseCaseDep",
+    "get_offer_history_use_case",
+    "OfferHistoryUseCaseDep",
+    "get_list_runs_use_case",
+    "ListRunsUseCaseDep",
+    "get_background_transactions",
+    "get_synchronize_price_list_use_case",
+    "get_cleanup_price_list_use_case",
+]

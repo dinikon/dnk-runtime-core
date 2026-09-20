@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO

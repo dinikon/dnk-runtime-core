@@ -157,10 +157,37 @@ class SqlAlchemyScheduledJobRepository:
         )
         return result.scalar_one_or_none() is not None
 
-    async def owns_current_lease(self, *, job_id: UUID, tenant_id: UUID, lock_token: str, for_update: bool = False) -> bool:
+    async def terminal_or_missing(
+        self, *, tenant_id: UUID, job_ids: list[UUID]
+    ) -> set[UUID]:
+        """Finds jobs that cannot be recovered or retried by a worker."""
+        if not job_ids:
+            return set()
+        result = await self._session.execute(
+            select(ScheduledJobModel.id).where(
+                ScheduledJobModel.tenant_id == tenant_id,
+                ScheduledJobModel.id.in_(job_ids),
+                ScheduledJobModel.status.in_(("scheduled", "running")),
+            )
+        )
+        return set(job_ids) - set(result.scalars())
+
+    async def owns_current_lease(
+        self,
+        *,
+        job_id: UUID,
+        tenant_id: UUID,
+        lock_token: str,
+        for_update: bool = False,
+    ) -> bool:
         """Fences business publication against cancellation and lease recovery."""
         from datetime import UTC
-        now = func.clock_timestamp() if self._session.bind.dialect.name == "postgresql" else datetime.now(UTC)
+
+        now = (
+            func.clock_timestamp()
+            if self._session.bind.dialect.name == "postgresql"
+            else datetime.now(UTC)
+        )
         statement = select(ScheduledJobModel.id).where(
             ScheduledJobModel.id == job_id,
             ScheduledJobModel.tenant_id == tenant_id,

@@ -1,9 +1,6 @@
 from src.modules.price_lists.application.price_list.query.preview_schedule_query import (
     PreviewScheduleQuery,
 )
-from src.modules.price_lists.application.price_list.dto.price_list_dto import (
-    price_list_dto,
-)
 from src.modules.price_lists.application.price_list.dto.action_dto import (
     SchedulePreviewDTO,
 )
@@ -17,6 +14,7 @@ class PreviewScheduleUseCase:
         self.clock = clock
 
     async def __call__(self, query: PreviewScheduleQuery):
+        """Выполняет сценарий через внедрённые доменные порты."""
         return SchedulePreviewDTO(
             tuple(
                 self.calendar.occurrences(

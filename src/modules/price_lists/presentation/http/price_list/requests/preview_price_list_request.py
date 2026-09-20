@@ -1,5 +1,5 @@
 from typing import Any, Literal
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, HttpUrl
 
 
 class PreviewPriceListRequest(BaseModel):

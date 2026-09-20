@@ -7,21 +7,11 @@ from src.modules.shared.presentation.identity_context.depends import (
 from src.modules.price_lists.presentation.depends.application import (
     DeletePriceListUseCaseDep,
 )
-from src.modules.price_lists.presentation.depends.infrastructure import (
-    IdentifierGeneratorDep,
-)
 from src.modules.price_lists.domain.price_list.value_object import PriceListIdVO
 from src.modules.price_lists.application.price_list.command.delete_price_list_command import (
     DeletePriceListCommand,
 )
-from src.modules.price_lists.presentation.http.boundary import (
-    context_ids,
-    dto_values,
-    http_errors,
-)
-from src.modules.price_lists.presentation.http.price_list.responses.schemas import (
-    ActionResponse,
-)
+from src.modules.price_lists.presentation.http.boundary import context_ids, http_errors
 from src.modules.price_lists.presentation.http.price_list.requests.delete_price_list_request import (
     DeletePriceListRequest,
 )

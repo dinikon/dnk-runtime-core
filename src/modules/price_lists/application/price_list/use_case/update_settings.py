@@ -1,24 +1,15 @@
-from datetime import timedelta
 from src.modules.price_lists.application.price_list.use_case.dependencies import (
     PriceListUseCase,
 )
 from src.modules.price_lists.application.price_list.dto.action_dto import ActionDTO
-from src.modules.price_lists.domain.price_list.entity import PriceList
-from src.modules.price_lists.domain.price_list.error import (
-    PriceListStateConflict,
-    PriceListValidationError,
-)
+from src.modules.price_lists.domain.price_list.error import PriceListStateConflict
 from src.modules.price_lists.domain.price_list.value_object.configuration import (
     TitleVO,
-    SourceConfigurationVO,
-    MappingConfigurationVO,
     ScheduleVO,
 )
 from src.modules.price_lists.domain.price_list.value_object.source_url import (
-    SourceUrlVO,
     mask_source_url,
 )
-from src.modules.price_lists.domain.price_list.preset import prom_xml_config
 from src.modules.price_lists.application.price_list.command.update_settings_command import (
     UpdateSettingsCommand,
 )
@@ -28,6 +19,7 @@ class UpdateSettingsUseCase(PriceListUseCase):
     """Выполняет действие update_settings через внедрённые порты."""
 
     async def __call__(self, command: UpdateSettingsCommand) -> ActionDTO:
+        """Выполняет сценарий через внедрённые доменные порты."""
         price = await self.repository.get(command.tenant_id, command.price_list_id)
         price.require_editable()
         title = TitleVO(command.title).value
@@ -103,7 +95,9 @@ class UpdateSettingsUseCase(PriceListUseCase):
         values["title"] = title
         if changed_source:
             values["mapping_version"] = current.mapping_version + 1
-        if command.source_url is not None:
+        if command.source_url is not None and candidate[
+            "source_url"
+        ] != self.cipher.decrypt(current.source_url_secret):
             values.update(
                 source_url_secret=self.cipher.encrypt(candidate["source_url"]),
                 source_url_display=mask_source_url(candidate["source_url"]),

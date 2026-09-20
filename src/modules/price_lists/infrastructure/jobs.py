@@ -1,7 +1,14 @@
+from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.shared.domain.jobs import ScheduledJob, ScheduledJobStatus
-from src.modules.shared.application.jobs.scheduled_job_repository_protocol import ScheduledJobRepositoryProtocol
-from src.modules.price_lists.application.sync_run.job_identity import deterministic_job_id,deterministic_cleanup_job_id
+from src.modules.shared.application.jobs.scheduled_job_repository_protocol import (
+    ScheduledJobRepositoryProtocol,
+)
+from src.modules.price_lists.application.sync_run.job_identity import (
+    deterministic_job_id,
+    deterministic_cleanup_job_id,
+)
 from src.modules.price_lists.domain.sync_run.error import LostJobLease
+
 
 class ScheduledJobsAdapter:
     """Адаптирует VO модуля к общему scheduled-jobs repository."""
@@ -72,11 +79,25 @@ class ScheduledJobsAdapter:
             return await self.repository.delete_matching(**arguments)
         return await self.repository.cancel_matching(**arguments, canceled_at=now)
 
+    async def terminal_jobs(self, tenant_id, job_ids):
+        """Проверяет завершение заданий через shared application protocol."""
+        return {
+            EntityIdVO(value)
+            for value in await self.repository.terminal_or_missing(
+                tenant_id=tenant_id.uuid, job_ids=[value.uuid for value in job_ids]
+            )
+        }
+
     async def require_lease(self, tenant_id, job_id, token, *, fence=False):
         """Fencing перед commit блокирует recovery на время публикации."""
         if not token:
             raise LostJobLease("Scheduled job has no lock token.")
-        if not await self.repository.owns_current_lease(job_id=job_id.uuid, tenant_id=tenant_id.uuid, lock_token=token, for_update=fence):
+        if not await self.repository.owns_current_lease(
+            job_id=job_id.uuid,
+            tenant_id=tenant_id.uuid,
+            lock_token=token,
+            for_update=fence,
+        ):
             raise LostJobLease("Scheduled job lease was lost.")
 
 

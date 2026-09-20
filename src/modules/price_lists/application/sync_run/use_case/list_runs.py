@@ -13,6 +13,7 @@ class ListRunsUseCase:
         self.repository = repository
 
     async def __call__(self, query: ListRunsQuery):
+        """Выполняет сценарий через внедрённые доменные порты."""
         return await self.repository.list_runs(query)
 
 

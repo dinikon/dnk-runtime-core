@@ -1,4 +1,3 @@
-from datetime import datetime
 from decimal import Decimal
 from sqlalchemy import select, delete, update, tuple_, or_, and_
 from sqlalchemy.exc import IntegrityError
@@ -68,7 +67,10 @@ class SqlAlchemyStagingRepository(SessionRepository):
         try:
             await self.insert_many(tenant_id, PriceListSyncItemModel.__table__, records)
         except Exception as exc:
-            if getattr(exc,"constraint_name",None)=="uq_sync_item_external_id" or (isinstance(exc,IntegrityError) and "uq_sync_item_external_id" in str(exc.orig)):
+            if getattr(exc, "constraint_name", None) == "uq_sync_item_external_id" or (
+                isinstance(exc, IntegrityError)
+                and "uq_sync_item_external_id" in str(exc.orig)
+            ):
                 raise DuplicateExternalIdError(
                     "Source contains duplicate external_id values."
                 ) from None

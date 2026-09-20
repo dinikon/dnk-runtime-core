@@ -1,4 +1,4 @@
-from contextlib import aclosing, closing
+from contextlib import closing
 import asyncio
 import json
 from pathlib import Path
@@ -93,11 +93,13 @@ class SourceParser:
         ) as exc:
             raise MappingValidationError("Invalid or unsafe source document.") from exc
 
-    def inspect(self, path, source_format, source_config):
+    def inspect(self, path, source_format, source_config, stop=None):
         """Ограниченное исследование структуры для preview."""
         if source_format == "xlsx":
             with closing(
-                XlsxReader(path, self.options).rows(source_config, inspection=True)
+                XlsxReader(path, self.options, stop).rows(
+                    source_config, inspection=True
+                )
             ) as rows:
                 return next(rows)[1]
         paths = set()
@@ -113,7 +115,7 @@ class SourceParser:
                     paths.add(name)
                     collect(child, name, depth + 1)
 
-        with closing(self.raw_rows(path, source_format, source_config)) as rows:
+        with closing(self.raw_rows(path, source_format, source_config, stop)) as rows:
             for index, (_, raw) in enumerate(rows):
                 collect(raw, str(source_config.get("item_path") or ""))
                 if index >= 19:
@@ -122,9 +124,16 @@ class SourceParser:
 
     async def inspect_source(self, path, source_format, source_config):
         """Возвращает DTO структуры, не блокируя event loop."""
-        result = await asyncio.to_thread(
-            self.inspect, path, source_format, source_config
+        stop = Event()
+        task = asyncio.create_task(
+            asyncio.to_thread(self.inspect, path, source_format, source_config, stop)
         )
+        try:
+            result = await asyncio.shield(task)
+        except asyncio.CancelledError:
+            stop.set()
+            await asyncio.gather(task, return_exceptions=True)
+            raise
         return SourceInspection(
             tuple(result.get("sheets", ())),
             tuple(result.get("columns", ())),

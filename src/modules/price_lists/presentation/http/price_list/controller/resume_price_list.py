@@ -1,14 +1,11 @@
 from uuid import UUID
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends
 from src.modules.identity.presentation.http.csrf import require_csrf
 from src.modules.shared.presentation.identity_context.depends import (
     AuthenticatedRequestContextDep,
 )
 from src.modules.price_lists.presentation.depends.application import (
     ResumePriceListUseCaseDep,
-)
-from src.modules.price_lists.presentation.depends.infrastructure import (
-    IdentifierGeneratorDep,
 )
 from src.modules.price_lists.domain.price_list.value_object import PriceListIdVO
 from src.modules.price_lists.application.price_list.command.resume_price_list_command import (

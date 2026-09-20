@@ -35,8 +35,6 @@ from src.modules.price_lists.application.sync_run.dto.sync_run_dto import SyncRu
 from src.modules.price_lists.domain.offer.value_object import OfferIdVO, OfferStateIdVO
 from src.modules.price_lists.domain.price_list.value_object import PriceListIdVO
 from src.modules.price_lists.domain.sync_run.value_object import SyncRunIdVO
-from src.modules.price_lists.domain.price_list.error import PriceListNotFoundError
-from src.modules.price_lists.domain.offer.error import OfferNotFoundError
 from src.modules.shared.application.pagination.errors import InvalidCursorError
 
 
@@ -44,6 +42,7 @@ class SqlAlchemyPriceListQueryRepository(SessionRepository):
     """Typed query adapter с совместимым offset и keyset режимом."""
 
     async def list(self, tenant_id, *, scope="current"):
+        """Возвращает DTO прайсов выбранного tenant и scope."""
         table = PriceListModel.__table__
         offers = PartnerOfferModel.__table__
         runs = PriceListSyncRunModel.__table__

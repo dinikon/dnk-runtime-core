@@ -1,6 +1,5 @@
 from collections import OrderedDict
 from contextlib import ExitStack
-import io
 from pathlib import PurePosixPath
 import struct
 import sys
@@ -24,6 +23,7 @@ class DiskStrings:
         self.count = 0
 
     def append(self, value):
+        """Добавляет запись в ограниченный дисковый индекс."""
         encoded = value.encode()
         offset = self.data.tell()
         if offset + len(encoded) + (self.count + 1) * 12 > self.max_bytes:
@@ -33,10 +33,12 @@ class DiskStrings:
         self.count += 1
 
     def prepare(self):
+        """Фиксирует буферы индекса перед чтением."""
         self.data.flush()
         self.index.flush()
 
     def get(self, index):
+        """Читает aggregate текущего tenant и проверяет его наличие."""
         if index in self.cache:
             self.cache.move_to_end(index)
             return self.cache[index]
@@ -56,6 +58,7 @@ class DiskStrings:
         return value
 
     def close(self):
+        """Закрывает принадлежащие адаптеру файлы."""
         self.data.close()
         self.index.close()
 
@@ -69,6 +72,7 @@ class XlsxReader:
         self.stop = stop
 
     def archive(self):
+        """Проверяет контейнер и ограничения распакованного XLSX."""
         try:
             archive = zipfile.ZipFile(self.path)
         except zipfile.BadZipFile:
@@ -85,7 +89,10 @@ class XlsxReader:
         return archive
 
     def metadata(self, archive):
+        """Читает ограниченные метаданные листов и внутренних ссылок."""
+
         def read(name):
+            """Читает ограниченный фрагмент и проверяет отмену."""
             with archive.open(name) as source:
                 data = source.read(self.options.max_record_bytes + 1)
                 if len(data) > self.options.max_record_bytes:

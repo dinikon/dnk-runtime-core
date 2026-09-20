@@ -57,7 +57,20 @@ class ScheduledJobRepositoryProtocol(Protocol):
         """Checks that a running job is still owned by the current worker."""
         ...
 
-    async def owns_current_lease(self, *, job_id: UUID, tenant_id: UUID, lock_token: str, for_update: bool = False) -> bool:
+    async def terminal_or_missing(
+        self, *, tenant_id: UUID, job_ids: list[UUID]
+    ) -> set[UUID]:
+        """Finds terminal or missing jobs in a bounded tenant-scoped batch."""
+        ...
+
+    async def owns_current_lease(
+        self,
+        *,
+        job_id: UUID,
+        tenant_id: UUID,
+        lock_token: str,
+        for_update: bool = False,
+    ) -> bool:
         """Checks the tenant, token and unexpired lease; optionally fences commit."""
         ...
 

@@ -16,6 +16,7 @@ class BoundedYamlStream:
         self.since_event = 0
 
     def read(self, size=-1):
+        """Читает ограниченный фрагмент и проверяет отмену."""
         if self.stop and self.stop.is_set():
             raise InterruptedError("Parsing cancelled")
         data = self.source.read(min(size if size >= 0 else 16384, 16384))
@@ -45,15 +46,18 @@ class YamlRecords:
         self.scalar_loader = yaml.SafeLoader("")
 
     def next(self):
+        """Учитывает размер события до построения записи."""
         event = next(self.events)
         self.source.since_event = 0
+        self.record_bytes += 64
         if isinstance(event, ev.ScalarEvent):
-            self.record_bytes += len(event.value.encode()) + 32
-            if self.record_bytes > self.max_bytes:
-                raise MappingValidationError("YAML record size limit exceeded.")
+            self.record_bytes += len(event.value.encode())
+        if self.record_bytes > self.max_bytes:
+            raise MappingValidationError("YAML record size limit exceeded.")
         return event
 
     def value(self, event, depth=0):
+        """Собирает одно ограниченное значение с проверкой aliases."""
         if depth > 64:
             raise MappingValidationError("YAML nesting limit exceeded.")
         if isinstance(event, ev.AliasEvent):
@@ -75,13 +79,42 @@ class YamlRecords:
             self.scalar_loader.constructed_objects.clear()
         elif isinstance(event, ev.MappingStartEvent):
             value = {}
+            merges = []
             next_event = self.next()
             while not isinstance(next_event, ev.MappingEndEvent):
+                tag = (
+                    (
+                        next_event.tag
+                        or self.scalar_loader.resolve(
+                            ScalarNode, next_event.value, next_event.implicit
+                        )
+                    )
+                    if isinstance(next_event, ev.ScalarEvent)
+                    else None
+                )
+                if tag == "tag:yaml.org,2002:merge":
+                    inherited = self.value(self.next(), depth + 1)
+                    inherited = (
+                        inherited if isinstance(inherited, list) else [inherited]
+                    )
+                    if not all(isinstance(item, dict) for item in inherited):
+                        raise MappingValidationError(
+                            "YAML merge must contain mappings."
+                        )
+                    merges.extend(inherited)
+                    next_event = self.next()
+                    continue
                 key = self.value(next_event, depth + 1)
                 if not isinstance(key, (str, int, float, bool, type(None))):
                     raise MappingValidationError("YAML mapping key must be scalar.")
                 value[key] = self.value(self.next(), depth + 1)
                 next_event = self.next()
+            if merges:
+                combined = {}
+                for inherited in reversed(merges):
+                    combined.update(inherited)
+                combined.update(value)
+                value = combined
         elif isinstance(event, ev.SequenceStartEvent):
             value = []
             next_event = self.next()
@@ -100,6 +133,7 @@ class YamlRecords:
         return value
 
     def scan(self, event, path, depth=0):
+        """Находит выбранную последовательность без накопления документа."""
         if depth > 64:
             raise MappingValidationError("YAML nesting limit exceeded.")
         if path == self.target:

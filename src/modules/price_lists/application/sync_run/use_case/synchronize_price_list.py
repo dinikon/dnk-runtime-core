@@ -1,7 +1,6 @@
 import asyncio
 from collections import Counter
 from contextlib import aclosing
-from datetime import timedelta
 import logging
 import time
 from src.modules.shared.application.jobs.scheduled_job_deferred import (
@@ -78,6 +77,9 @@ class SynchronizePriceListUseCase:
                     or price.schedule_revision != command.revision
                 ):
                     return
+                await tx.jobs.require_lease(
+                    command.tenant_id, command.job_id, command.lock_token, fence=True
+                )
                 if command.trigger != "manual" and price.cron_expression:
                     next_at = self.calendar.next(
                         price.cron_expression,
@@ -113,9 +115,7 @@ class SynchronizePriceListUseCase:
             await self.clear_staging(command, run.id)
             run.reset(self.clock.now())
             async with self.transactions() as tx:
-                await tx.jobs.require_lease(
-                    command.tenant_id, command.job_id, command.lock_token
-                )
+                await self.require_current(tx, command, fence=True)
                 await tx.runs.save(command.tenant_id, run)
             await self.synchronize(command, price, run)
 
@@ -177,20 +177,19 @@ class SynchronizePriceListUseCase:
                         counters["valid"] += len(rows) - rejected
                         run.counters = dict(counters)
                         async with self.transactions() as tx:
-                            await tx.jobs.require_lease(
-                                command.tenant_id, command.job_id, command.lock_token
-                            )
+                            await self.require_current(tx, command, fence=True)
                             await tx.staging.append(command.tenant_id, run.id, rows)
                             await tx.runs.save(command.tenant_id, run)
+                        self.observer.batch(
+                            "parse_stage", price.source_format, len(rows)
+                        )
                 self.observer.phase(
                     "parse_stage", price.source_format, time.monotonic() - phase
                 )
             run.validate(self.options.max_error_ratio)
             run.status = "applying"
             async with self.transactions() as tx:
-                await tx.jobs.require_lease(
-                    command.tenant_id, command.job_id, command.lock_token
-                )
+                await self.require_current(tx, command, fence=True)
                 await tx.runs.save(command.tenant_id, run)
             phase = time.monotonic()
             async with self.transactions() as tx:
@@ -212,6 +211,7 @@ class SynchronizePriceListUseCase:
                         command.tenant_id, price, run.id, values, ids
                     )
                     counters.update(changes)
+                    self.observer.batch("publish", price.source_format, len(rows))
                     await tx.staging.quarantine(command.tenant_id, run.id, quarantined)
                 if not counters["rejected"]:
                     after_id = None
@@ -234,6 +234,7 @@ class SynchronizePriceListUseCase:
                             ],
                         )
                         counters.update(changes)
+                        self.observer.batch("missing", price.source_format, len(offers))
                 current = await self.require_current(tx, command, fence=True)
                 run.counters = dict(counters)
                 run.finish(self.clock.now())

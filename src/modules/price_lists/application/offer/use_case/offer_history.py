@@ -13,6 +13,7 @@ class OfferHistoryUseCase:
         self.repository = repository
 
     async def __call__(self, query: OfferHistoryQuery):
+        """Выполняет сценарий через внедрённые доменные порты."""
         return await self.repository.offer_history(query)
 
 
