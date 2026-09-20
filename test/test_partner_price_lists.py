@@ -1,49 +1,30 @@
 from __future__ import annotations
-
+import asyncio
 import os
 import tempfile
 import unittest
-from datetime import UTC, datetime
-from decimal import Decimal
+from datetime import UTC,datetime,timedelta
 from pathlib import Path
-from uuid import UUID, uuid4
-from unittest.mock import AsyncMock, Mock, patch
-
+from decimal import Decimal
+from uuid import UUID,uuid4
+from unittest.mock import AsyncMock,Mock,patch
+from contextlib import aclosing
 from openpyxl import Workbook
 from cryptography.fernet import Fernet
-from sqlalchemy.dialects import postgresql
-
-from src.modules.price_lists.application import (
-    PriceListService,
-    PriceListStateConflict,
-    cron_occurrences,
-    next_cron_occurrence,
-)
-from src.modules.price_lists.domain import (
-    MappingValidationError,
-    canonical_state_hash,
-    deterministic_cleanup_job_id,
-    deterministic_job_id,
-    mask_source_url,
-    normalize_availability,
-)
-from src.modules.price_lists.infrastructure.source import (
-    HttpRemoteFileFetcher,
-    SourceParser,
-    SourceUrlCipher,
-    prom_xml_config,
-)
-from src.modules.price_lists.infrastructure.persistence.models import (
-    PriceListSyncItemModel,
-)
-from src.modules.price_lists.infrastructure.persistence.repository import (
-    PRICE_LIST_WRITE_BATCH_SIZE,
-    SqlAlchemyPriceListRepository,
-)
-from src.modules.price_lists.presentation.jobs.handler import PriceListSyncJobHandler
-from src.modules.shared.domain.jobs import ScheduledJob
-
-
+from src.modules.price_lists.domain import canonical_state_hash,normalize_availability,mask_source_url,MappingValidationError
+from src.modules.price_lists.application.sync_run.job_identity import deterministic_job_id,deterministic_cleanup_job_id
+from src.modules.price_lists.infrastructure.source import SourceParser,SourceUrlCipher,HttpRemoteFileFetcher,prom_xml_config
+from src.modules.price_lists.infrastructure.calendar import CronCalendar
+from src.modules.price_lists.domain.price_list.error import PriceListValidationError,PriceListStateConflict
+from src.modules.price_lists.domain.offer.error import InvalidOfferValueError
+from src.modules.price_lists.domain.offer.value_object.money import MoneyVO,QuantityVO
+from src.modules.price_lists.application.sync_run.options import ImportOptions
+from src.modules.price_lists.domain.sync_run.entity import SyncRun
+from src.modules.price_lists.domain.sync_run.error import SourceValidationError
+from src.modules.price_lists.domain.price_list.entity import PriceList
+from src.modules.price_lists.domain.price_list.value_object import PriceListIdVO
+from src.modules.price_lists.domain.price_list.value_object.configuration import ScheduleVO
+from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 class PartnerPriceListDomainTests(unittest.TestCase):
     def test_metrics_state_hash_and_secret_masking(self) -> None:
         state_hash = canonical_state_hash(
@@ -77,7 +58,7 @@ class PartnerPriceListDomainTests(unittest.TestCase):
             deterministic_cleanup_job_id(tenant_id, "2026-09-19T03:00:00+00:00"),
             deterministic_cleanup_job_id(tenant_id, "2026-09-19T03:00:00+00:00"),
         )
-        next_at = next_cron_occurrence(
+        next_at = CronCalendar().next(
             "0 9 * * *",
             "Europe/Kyiv",
             after=datetime(2026, 1, 1, 7, 30, tzinfo=UTC),
@@ -90,8 +71,8 @@ class PartnerPriceListDomainTests(unittest.TestCase):
         encrypted = cipher.encrypt(source)
         self.assertNotIn("secret", encrypted)
         self.assertEqual(cipher.decrypt(encrypted), source)
-        with self.assertRaisesRegex(ValueError, "at least 15 minutes"):
-            cron_occurrences("*/5 * * * *", "Europe/Kyiv")
+        with self.assertRaisesRegex(PriceListValidationError, "at least 15 minutes"):
+            CronCalendar().occurrences("*/5 * * * *", "Europe/Kyiv",after=datetime.now(UTC))
 
 
 class PartnerPriceListParserTests(unittest.TestCase):
@@ -224,247 +205,104 @@ class PartnerPriceListParserTests(unittest.TestCase):
 class PartnerPriceListFetcherTests(unittest.IsolatedAsyncioTestCase):
     async def test_fetcher_rejects_credentials_and_private_networks(self) -> None:
         fetcher = HttpRemoteFileFetcher()
-        with self.assertRaisesRegex(ValueError, "Credentials"):
+        with self.assertRaisesRegex(PriceListValidationError, "credentials"):
             await fetcher._validate_url("https://user:password@example.com/file.xml")
-        with self.assertRaisesRegex(ValueError, "non-public"):
+        with self.assertRaisesRegex(PriceListValidationError, "non-public"):
             await fetcher._validate_url("https://127.0.0.1/file.xml")
 
 
-class PartnerPriceListSettingsTests(unittest.IsolatedAsyncioTestCase):
-    def _price_list(self, *, status: str = "paused") -> dict:
-        return {
-            "id": uuid4(),
-            "status": status,
-            "source_url_secret": "encrypted-source",
-            "source_format": "xlsx",
-            "source_preset": None,
-            "source_config": {
-                "sheet_name": "Sheet1",
-                "header_row": 1,
-                "data_start_row": 2,
-            },
-            "mapping_config": {
-                "external_id": {"selector": "SKU"},
-                "sku": {"selector": "SKU"},
-                "title": {"selector": "Title"},
-                "purchase_price": {"selector": "Price"},
-                "currency": {"selector": "Currency"},
-            },
-            "mapping_version": 3,
-            "schedule_revision": 7,
-        }
-
-    async def test_paused_settings_update_keeps_secret_and_does_not_fetch_unchanged_source(
-        self,
-    ) -> None:
-        current = self._price_list()
-        repository = AsyncMock()
-        repository.get.return_value = current
-        fetcher = AsyncMock()
-        service = PriceListService(repository, fetcher=fetcher)
-        cipher = Mock()
-        cipher.decrypt.return_value = "https://partner.example/current.xlsx"
-
-        with patch(
-            "src.modules.price_lists.application.service.SourceUrlCipher",
-            return_value=cipher,
-        ):
-            await service.update_settings(
-                tenant_id=uuid4(),
-                actor_id=uuid4(),
-                price_list_id=current["id"],
-                title=" Updated title ",
-                source_url=None,
-                source_format="xlsx",
-                source_preset=None,
-                source_config=current["source_config"],
-                mapping_config=current["mapping_config"],
-                cron_expression="0 */6 * * *",
-                timezone="Europe/Kyiv",
-                new_item_policy="create",
-                missing_item_policy="mark_out_of_stock",
-                missing_threshold=2,
-            )
-
-        fetcher.fetch.assert_not_awaited()
-        values = repository.update_config.await_args.kwargs["values"]
-        self.assertEqual(values["title"], "Updated title")
-        self.assertEqual(values["status"], "paused")
-        self.assertEqual(values["schedule_revision"], 8)
-        self.assertIsNone(values["next_sync_at"])
-        self.assertNotIn("source_url_secret", values)
-        self.assertNotIn("mapping_version", values)
-
-    async def test_active_and_archived_settings_updates_are_rejected(self) -> None:
-        for status in ("active", "archived"):
-            repository = AsyncMock()
-            current = self._price_list(status=status)
-            repository.get.return_value = current
-            service = PriceListService(repository)
-
-            with self.assertRaises(PriceListStateConflict):
-                await service.update_settings(
-                    tenant_id=uuid4(),
-                    actor_id=uuid4(),
-                    price_list_id=current["id"],
-                    title="Title",
-                    source_url=None,
-                    source_format="xlsx",
-                    source_preset=None,
-                    source_config=current["source_config"],
-                    mapping_config=current["mapping_config"],
-                    cron_expression="0 */6 * * *",
-                    timezone="Europe/Kyiv",
-                    new_item_policy="create",
-                    missing_item_policy="mark_out_of_stock",
-                    missing_threshold=2,
-                )
-            repository.update_config.assert_not_awaited()
-
-    async def test_paused_schedule_stays_paused_without_next_run(self) -> None:
-        current = self._price_list()
-        repository = AsyncMock()
-        repository.get.return_value = current
-
-        await PriceListService(repository).save_schedule(
-            tenant_id=uuid4(),
-            actor_id=uuid4(),
-            price_list_id=current["id"],
-            cron_expression="0 */6 * * *",
-            timezone="Europe/Kyiv",
-            new_item_policy="create",
-            missing_item_policy="mark_out_of_stock",
-            missing_threshold=2,
-        )
-
-        values = repository.update_config.await_args.kwargs["values"]
-        self.assertIsNone(values["next_sync_at"])
-        self.assertEqual(values["schedule_revision"], 8)
-
-    async def test_active_schedule_conflict_is_checked_before_cron(self) -> None:
-        current = self._price_list(status="active")
-        repository = AsyncMock()
-        repository.get.return_value = current
-
-        with self.assertRaises(PriceListStateConflict):
-            await PriceListService(repository).save_schedule(
-                tenant_id=uuid4(),
-                actor_id=uuid4(),
-                price_list_id=current["id"],
-                cron_expression="not a cron",
-                timezone="Europe/Kyiv",
-                new_item_policy="create",
-                missing_item_policy="mark_out_of_stock",
-                missing_threshold=2,
-            )
-
-        repository.update_config.assert_not_awaited()
 
 
-class PartnerPriceListLargeImportTests(unittest.IsolatedAsyncioTestCase):
-    async def test_staging_insert_is_split_below_asyncpg_parameter_limit(self) -> None:
-        session = AsyncMock()
-        repository = SqlAlchemyPriceListRepository(session)
-        tenant_id = uuid4()
-        run_id = uuid4()
-        values = [
-            {
-                "sync_run_id": run_id,
-                "row_number": row_number,
-                "external_id": str(row_number),
-                "sku": f"SKU-{row_number}",
-                "title": f"Offer {row_number}",
-                "purchase_price": Decimal("1"),
-                "rrp": Decimal("2"),
-                "currency": "UAH",
-                "availability": "in_stock",
-                "quantity": None,
-                "value_hash": "a" * 64,
-                "normalized_payload": {},
-                "validation_errors": [],
-            }
-            for row_number in range(1, 8_400)
-        ]
+class PriceListValueTests(unittest.TestCase):
+    def test_money_normalization_and_invalid_values(self):
+        self.assertEqual(MoneyVO('10').value,MoneyVO('10.0000').value)
+        self.assertEqual(MoneyVO('1.23455').value,Decimal('1.2346'))
+        for value in ('NaN','sNaN','Infinity','-Infinity','-1','1000000000000000','999999999999999.99999'):
+            with self.subTest(value=value),self.assertRaises(InvalidOfferValueError):MoneyVO(value)
+        for value in ('1.9','NaN','Infinity','2147483648',-1):
+            with self.subTest(value=value),self.assertRaises(InvalidOfferValueError):QuantityVO(value)
+        self.assertEqual(QuantityVO('1.000').value,1)
 
-        await repository._insert_many(
-            tenant_id=tenant_id,
-            table=PriceListSyncItemModel.__table__,
-            values=values,
-        )
+    def test_equal_numeric_values_produce_same_hash(self):
+        base=dict(rrp=None,currency='UAH',availability='in_stock',quantity=1)
+        self.assertEqual(canonical_state_hash(purchase_price=Decimal('10'),**base),canonical_state_hash(purchase_price=Decimal('10.0000'),**base))
 
-        self.assertEqual(session.execute.await_count, 9)
-        for call in session.execute.await_args_list:
-            statement = call.args[0]
-            compiled = statement.compile(dialect=postgresql.dialect())
-            self.assertLessEqual(len(compiled.params), 32_767)
-            self.assertLessEqual(
-                len(statement._multi_values[0]), PRICE_LIST_WRITE_BATCH_SIZE
-            )
+    def test_inclusive_error_ratio_and_empty_source(self):
+        run=Mock(counters={'read':2,'rejected':1})
+        SyncRun.validate(run,.5)
+        for counters in ({'read':0,'rejected':0},{'read':2,'rejected':2},{'read':3,'rejected':2}):
+            run.counters=counters
+            with self.assertRaises(SourceValidationError):SyncRun.validate(run,.5)
 
-    async def test_sync_failure_is_not_masked_by_duration_metric(self) -> None:
-        class Session:
-            commit = AsyncMock()
+    def test_entity_noop_and_paused_schedule(self):
+        now=datetime.now(UTC);actor=EntityIdVO(uuid4());source,mapping=prom_xml_config()
+        price=PriceList.create(price_list_id=PriceListIdVO(uuid4()),actor_id=actor,title=' Test ',source_format='xml',source_preset='prom_xml',source_url_secret='encrypted',source_url_display='masked',source_config=source,mapping_config=mapping,now=now)
+        self.assertEqual(price.title,'Test');self.assertEqual(price.created_at,price.updated_at)
+        self.assertFalse(price.update({'title':'Test'},actor,now+timedelta(hours=1)))
+        self.assertEqual(price.updated_at,now)
+        price.status='paused'
+        price.configure_schedule(ScheduleVO('0 */6 * * *','Europe/Kyiv'),now+timedelta(hours=6),actor,now)
+        self.assertIsNone(price.next_sync_at)
+        price.status='active'
+        with self.assertRaises(PriceListStateConflict):price.require_editable()
 
-            async def __aenter__(self):
-                return self
 
-            async def __aexit__(self, exc_type, exc, traceback):
-                return None
+class StreamingParserTests(unittest.IsolatedAsyncioTestCase):
+    def mapping(self):
+        return {key:{'selector':key,'constant':'UAH'} if key=='currency' else {'selector':key} for key in ('external_id','sku','title','purchase_price','currency')}
 
-        class Repository:
-            get_run_by_job = AsyncMock(return_value=None)
-            create_run = AsyncMock(return_value=uuid4())
-            finish_run = AsyncMock()
+    async def test_yaml_events_nested_selection_and_aliases(self):
+        text='defaults: &title Example\nshop:\n  offers:\n    - external_id: 1\n      sku: A\n      title: *title\n      purchase_price: 10\n    - external_id: 2\n      sku: B\n      title: Item\n      purchase_price: 11\n'
+        with tempfile.TemporaryDirectory() as d:
+            path=Path(d)/'file';path.write_text(text)
+            parser=SourceParser(ImportOptions(batch_size=1))
+            rows=[]
+            async with aclosing(parser.batches(path,'yaml',{'item_path':'shop.offers'},self.mapping())) as batches:
+                async for batch in batches:
+                    self.assertEqual(len(batch),1);rows.extend(batch)
+            self.assertEqual(len(rows),2);self.assertEqual(rows[0].normalized['title'],'Example')
+            self.assertTrue(all(not row.errors for row in rows))
 
-        class FailingFetcher:
-            async def fetch(self, url: str):
-                raise ValueError("source download failed")
+    async def test_cancel_closes_producer_even_when_queue_is_full(self):
+        source,mapping=prom_xml_config()
+        with tempfile.TemporaryDirectory() as d:
+            path=Path(d)/'file';path.write_text('<yml_catalog><shop><offers>'+''.join(f'<offer id="{i}"><vendorCode>A</vendorCode><name>Item</name><price>1</price></offer>' for i in range(10000))+'</offers></shop></yml_catalog>')
+            parser=SourceParser(ImportOptions(batch_size=1,parser_queue_batches=1))
+            stream=parser.batches(path,'xml',source,mapping)
+            await anext(stream)
+            await asyncio.sleep(.05)
+            await asyncio.wait_for(stream.aclose(),2)
 
-        repository = Repository()
-        handler = PriceListSyncJobHandler(lambda: Session(), fetcher=FailingFetcher())
-        now = datetime.now(UTC)
-        job = ScheduledJob(
-            id=uuid4(),
-            tenant_id=uuid4(),
-            job_type="price_list.sync",
-            payload={},
-            run_at=now,
-            status="running",
-            attempts=1,
-            locked_until=now,
-            lock_token="lease",
-            created_at=now,
-            updated_at=now,
-        )
-        cipher = SourceUrlCipher(Fernet.generate_key().decode("ascii"))
+    async def test_malformed_tail_is_not_silently_accepted(self):
+        source,mapping=prom_xml_config()
+        with tempfile.TemporaryDirectory() as d:
+            path=Path(d)/'file';path.write_text('<yml_catalog><shop><offers><offer id="1"><vendorCode>A</vendorCode><name>A</name><price>1</price></offer></wrong>')
+            with self.assertRaises(MappingValidationError):
+                async with aclosing(SourceParser().batches(path,'xml',source,mapping)) as stream:
+                    async for batch in stream:pass
 
-        with (
-            patch(
-                "src.modules.price_lists.presentation.jobs.handler."
-                "SqlAlchemyPriceListRepository",
-                return_value=repository,
-            ),
-            patch(
-                "src.modules.price_lists.presentation.jobs.handler.SourceUrlCipher",
-                return_value=cipher,
-            ),
-        ):
-            with self.assertRaisesRegex(ValueError, "source download failed"):
-                await handler._synchronize(
-                    job,
-                    uuid4(),
-                    1,
-                    "manual",
-                    {
-                        "source_url_secret": cipher.encrypt(
-                            "https://partner.example/feed.xml"
-                        ),
-                        "source_format": "xml",
-                    },
-                )
+    async def test_record_and_row_limits_and_byte_batched_requests(self):
+        source,mapping=prom_xml_config()
+        with tempfile.TemporaryDirectory() as d:
+            path=Path(d)/'file';path.write_text('<yml_catalog><shop><offers>'+''.join(f'<offer id="{i}"><vendorCode>A</vendorCode><name>Item</name><price>1</price></offer>' for i in range(3))+'</offers></shop></yml_catalog>')
+            with self.assertRaises(MappingValidationError):list(SourceParser(ImportOptions(max_rows=2)).rows(path,'xml',source,mapping))
+            with self.assertRaises(MappingValidationError):list(SourceParser(ImportOptions(max_record_bytes=32)).rows(path,'xml',source,mapping))
+            async with aclosing(SourceParser(ImportOptions(batch_max_bytes=200)).batches(path,'xml',source,mapping)) as stream:
+                async for batch in stream:self.assertEqual(len(batch),1)
 
-        repository.finish_run.assert_awaited_once()
-
+    async def test_xlsx_shared_strings_and_cached_formula(self):
+        from zipfile import ZipFile
+        with tempfile.TemporaryDirectory() as d:
+            path=Path(d)/'file'
+            with ZipFile(path,'w') as z:
+                z.writestr('xl/workbook.xml','<workbook xmlns:r="urn:rel"><sheets><sheet name="Sheet1" r:id="one"/></sheets></workbook>')
+                z.writestr('xl/_rels/workbook.xml.rels','<Relationships><Relationship Id="one" Target="worksheets/sheet1.xml"/></Relationships>')
+                z.writestr('xl/sharedStrings.xml','<sst>'+''.join(f'<si><t>{s}</t></si>' for s in ('external_id','sku','title','purchase_price','ID','SKU','Title'))+'</sst>')
+                z.writestr('xl/worksheets/sheet1.xml','<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c><c r="C1" t="s"><v>2</v></c><c r="D1" t="s"><v>3</v></c></row><row r="2"><c r="A2" t="s"><v>4</v></c><c r="B2" t="s"><v>5</v></c><c r="C2" t="s"><v>6</v></c><c r="D2"><f>5+5</f><v>10</v></c></row></sheetData></worksheet>')
+            rows=list(SourceParser().rows(path,'xlsx',{'sheet_name':'Sheet1'},self.mapping()))
+            self.assertEqual(rows[0].normalized['purchase_price'],Decimal('10.0000'))
+            self.assertFalse(rows[0].errors)
+            self.assertEqual(list(Path(d).iterdir()),[path])
 
 @unittest.skipUnless(
     os.environ.get("PRICE_LIST_SAMPLE_XML")

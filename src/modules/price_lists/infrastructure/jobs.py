@@ -1,22 +1,13 @@
-from sqlalchemy import select, func
 from src.modules.shared.domain.jobs import ScheduledJob, ScheduledJobStatus
-from src.modules.shared.infrastructure.jobs.sqlalchemy_scheduled_job_repository import (
-    SqlAlchemyScheduledJobRepository,
-)
-from src.modules.shared.infrastructure.jobs.scheduled_job_model import ScheduledJobModel
-from src.modules.price_lists.application.sync_run.job_identity import (
-    deterministic_job_id,
-    deterministic_cleanup_job_id,
-)
+from src.modules.shared.application.jobs.scheduled_job_repository_protocol import ScheduledJobRepositoryProtocol
+from src.modules.price_lists.application.sync_run.job_identity import deterministic_job_id,deterministic_cleanup_job_id
 from src.modules.price_lists.domain.sync_run.error import LostJobLease
-
 
 class ScheduledJobsAdapter:
     """Адаптирует VO модуля к общему scheduled-jobs repository."""
 
-    def __init__(self, session, clock, identifiers):
-        self.session = session
-        self.repository = SqlAlchemyScheduledJobRepository(session)
+    def __init__(self, repository: ScheduledJobRepositoryProtocol, clock, identifiers):
+        self.repository = repository
         self.clock = clock
         self.identifiers = identifiers
 
@@ -85,17 +76,7 @@ class ScheduledJobsAdapter:
         """Fencing перед commit блокирует recovery на время публикации."""
         if not token:
             raise LostJobLease("Scheduled job has no lock token.")
-        statement = select(ScheduledJobModel.id).where(
-            ScheduledJobModel.id == job_id.uuid,
-            ScheduledJobModel.tenant_id == tenant_id.uuid,
-            ScheduledJobModel.status == "running",
-            ScheduledJobModel.lock_token == token,
-            ScheduledJobModel.locked_until > func.clock_timestamp(),
-        )
-        if fence:
-            statement = statement.with_for_update()
-        result = await self.session.execute(statement)
-        if result.scalar_one_or_none() is None:
+        if not await self.repository.owns_current_lease(job_id=job_id.uuid, tenant_id=tenant_id.uuid, lock_token=token, for_update=fence):
             raise LostJobLease("Scheduled job lease was lost.")
 
 

@@ -1,3 +1,4 @@
+from src.modules.shared.presentation.jobs import build_scheduled_job_repository
 from dataclasses import dataclass
 from typing import Annotated
 from fastapi import Depends
@@ -374,7 +375,7 @@ def get_background_transactions(session_factory, *, options=None, clock=None):
             offers,
             SqlAlchemySyncRunRepository(uow.session, naming, options),
             SqlAlchemyStagingRepository(uow.session, naming, options),
-            ScheduledJobsAdapter(uow.session, clock, ids),
+            ScheduledJobsAdapter(build_scheduled_job_repository(uow.session), clock, ids),
             OfferService(offers, clock),
             uow,
         )

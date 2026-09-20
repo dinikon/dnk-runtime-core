@@ -1,3 +1,4 @@
+from src.modules.shared.presentation.jobs import build_scheduled_job_repository
 from dataclasses import fields
 from typing import Annotated
 from fastapi import Depends
@@ -124,7 +125,7 @@ def get_job_scheduler(
     uow: UoWDep, clock: ClockDep, identifiers: IdentifierGeneratorDep
 ):
     """Создаёт scheduled-jobs adapter на той же request UoW."""
-    return ScheduledJobsAdapter(uow.session, clock, identifiers)
+    return ScheduledJobsAdapter(build_scheduled_job_repository(uow.session), clock, identifiers)
 
 
 JobSchedulerDep = Annotated[ScheduledJobsAdapter, Depends(get_job_scheduler)]

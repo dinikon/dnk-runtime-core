@@ -69,7 +69,10 @@ class XlsxReader:
         self.stop = stop
 
     def archive(self):
-        archive = zipfile.ZipFile(self.path)
+        try:
+            archive = zipfile.ZipFile(self.path)
+        except zipfile.BadZipFile:
+            raise MappingValidationError("Invalid XLSX archive.") from None
         entries = archive.infolist()
         if (
             len(entries) > 10000

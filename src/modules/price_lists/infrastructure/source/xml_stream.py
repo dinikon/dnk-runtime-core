@@ -1,7 +1,7 @@
 from collections import deque
 from pathlib import Path
 from xml.etree.ElementTree import Element
-from xml.sax.handler import ContentHandler, feature_namespaces
+from xml.sax.handler import ContentHandler, feature_namespaces, feature_external_ges
 from defusedxml.sax import make_parser
 from src.modules.price_lists.domain.price_list.error import MappingValidationError
 
@@ -62,6 +62,9 @@ def xml_records(source, target: str, max_bytes: int, stop=None):
     """Читает XML малыми блоками без накопления дерева документа."""
     handler = RecordHandler(target.split("."), max_bytes, stop)
     parser = make_parser()
+    # Prom feeds declare a DTD; ignore it without resolving external content.
+    parser.forbid_external = False
+    parser.setFeature(feature_external_ges, False)
     parser.setFeature(feature_namespaces, True)
     parser.setContentHandler(handler)
     while block := source.read(32768):
