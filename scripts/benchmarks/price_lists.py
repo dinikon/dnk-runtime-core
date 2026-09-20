@@ -249,17 +249,20 @@ async def execute(case, path, label):
 async def benchmark(args):
     cases = []
     started = time.monotonic()
-    report = dict(rows=args.rows, concurrency=4, results={})
+    formats = ("xml",) if args.missing_only else ("xml", "yaml", "xlsx", "xml")
+    report = dict(rows=args.rows, concurrency=len(formats), results={})
     with tempfile.TemporaryDirectory(
         prefix="dnk-price-benchmark-", dir=args.temp_dir
     ) as directory:
         directory = Path(directory)
-        paths = {fmt: directory / f"feed.{fmt}" for fmt in ("xml", "yaml", "xlsx")}
+        paths = {fmt: directory / f"feed.{fmt}" for fmt in dict.fromkeys(formats)}
         for fmt, writer in (
             ("xml", write_xml),
             ("yaml", write_yaml),
             ("xlsx", write_xlsx),
         ):
+            if fmt not in paths:
+                continue
             print(
                 json.dumps(dict(event="generate", format=fmt, rows=args.rows)),
                 flush=True,
@@ -280,7 +283,7 @@ async def benchmark(args):
 
         sampler = asyncio.create_task(sample_disk())
         try:
-            for fmt in ("xml", "yaml", "xlsx", "xml"):
+            for fmt in formats:
                 case = PriceListBulkPostgresTests(
                     "test_large_import_and_equivalent_repeat_have_bounded_queries"
                 )
@@ -335,7 +338,7 @@ async def benchmark(args):
                 [
                     (case, paths[fmt], f"initial-{index}-{fmt}")
                     for index, (case, fmt) in enumerate(
-                        zip(cases, ("xml", "yaml", "xlsx", "xml"), strict=True)
+                        zip(cases, formats, strict=True)
                     )
                 ],
                 directory / "worker.heartbeat",
@@ -346,24 +349,28 @@ async def benchmark(args):
             )
             if not args.initial_only:
                 case = cases[0]
-                repeat = await execute(case, paths["xml"], "unchanged")
-                report["results"]["unchanged"] = repeat
-                assert (
-                    repeat["states"] == args.rows and repeat["counters"]["changed"] == 0
-                )
-                await asyncio.to_thread(
-                    write_xml, paths["xml"], args.rows, changed=True
-                )
-                changed = await execute(case, paths["xml"], "one_percent_changed")
-                report["results"]["changed"] = changed
-                assert changed["counters"]["changed"] == (args.rows + 99) // 100
+                if not args.missing_only:
+                    repeat = await execute(case, paths["xml"], "unchanged")
+                    report["results"]["unchanged"] = repeat
+                    assert (
+                        repeat["states"] == args.rows
+                        and repeat["counters"]["changed"] == 0
+                    )
+                    await asyncio.to_thread(
+                        write_xml, paths["xml"], args.rows, changed=True
+                    )
+                    changed = await execute(case, paths["xml"], "one_percent_changed")
+                    report["results"]["changed"] = changed
+                    assert changed["counters"]["changed"] == (args.rows + 99) // 100
                 async with case.transactions() as tx:
                     price = await tx.prices.get(case.tenant_id, case.price_id)
                     price.update(
                         dict(missing_threshold=1), case.actor_id, datetime.now(UTC)
                     )
                     await tx.prices.save(case.tenant_id, price)
-                await asyncio.to_thread(write_xml, paths["xml"], 10, changed=True)
+                await asyncio.to_thread(
+                    write_xml, paths["xml"], 10, changed=not args.missing_only
+                )
                 missing = await execute(case, paths["xml"], "mass_missing")
                 report["results"]["missing"] = missing
                 assert missing["counters"]["missing"] == args.rows - 10
@@ -421,6 +428,11 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--temp-dir", default="/tmp")
     parser.add_argument("--initial-only", action="store_true")
+    parser.add_argument(
+        "--missing-only",
+        action="store_true",
+        help="One XML import followed by mass missing; isolates candidate pagination.",
+    )
     args = parser.parse_args()
     if not os.environ.get("TEST_POSTGRES_URL"):
         parser.error("TEST_POSTGRES_URL must target disposable PostgreSQL")

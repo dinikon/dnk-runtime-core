@@ -18,8 +18,10 @@ class RecordHandler(ContentHandler):
         self.ready = deque()
         self.size = 0
         self.paths = set()
+        self.event_serial = 0
 
     def startElementNS(self, name, qname, attrs):
+        self.event_serial += 1
         if self.stop and self.stop.is_set():
             raise InterruptedError("Parsing cancelled")
         self.path.append(name[1])
@@ -41,6 +43,7 @@ class RecordHandler(ContentHandler):
             self.nodes.append(node)
 
     def characters(self, content):
+        self.event_serial += 1
         if self.nodes:
             self.size += len(content.encode("utf-8"))
             if self.size > self.max_bytes:
@@ -49,6 +52,7 @@ class RecordHandler(ContentHandler):
             node.text = (node.text or "") + content
 
     def endElementNS(self, name, qname):
+        self.event_serial += 1
         if self.nodes:
             node = self.nodes.pop()
             if not self.nodes:
@@ -66,10 +70,18 @@ def xml_records(source, target: str, max_bytes: int, stop=None):
     parser.setFeature(feature_external_ges, False)
     parser.setFeature(feature_namespaces, True)
     parser.setContentHandler(handler)
+    pending_token_bytes = 0
     while block := source.read(32768):
         if stop and stop.is_set():
             return
+        serial = handler.event_serial
         parser.feed(block)
+        pending_token_bytes = (
+            pending_token_bytes + len(block) if serial == handler.event_serial else 0
+        )
+        # Expat buffers an unfinished attribute/comment before invoking SAX.
+        if pending_token_bytes > max_bytes + 32768:
+            raise MappingValidationError("XML token size limit exceeded.")
         while handler.ready:
             yield handler.ready.popleft()
     parser.close()

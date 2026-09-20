@@ -73,6 +73,35 @@ class XlsxReader:
 
     def archive(self):
         """Проверяет контейнер и ограничения распакованного XLSX."""
+        # ZipFile materializes the central directory in its constructor; reject
+        # an excessive directory before that allocation, including ZIP64 sentinels.
+        with self.path.open("rb") as source:
+            source.seek(0, 2)
+            size = source.tell()
+            source.seek(max(0, size - 65557))
+            tail = source.read(65557)
+        position = tail.rfind(b"PK\x05\x06")
+        if position < 0 or position + 22 > len(tail):
+            raise MappingValidationError("Invalid XLSX archive directory.")
+        (
+            _,
+            disk,
+            directory_disk,
+            disk_entries,
+            entries,
+            directory_size,
+            _,
+            comment_size,
+        ) = struct.unpack_from("<4s4H2LH", tail, position)
+        if (
+            disk
+            or directory_disk
+            or disk_entries != entries
+            or entries > 10000
+            or directory_size > 8 * 1024**2
+            or position + 22 + comment_size != len(tail)
+        ):
+            raise MappingValidationError("XLSX archive directory limit exceeded.")
         try:
             archive = zipfile.ZipFile(self.path)
         except zipfile.BadZipFile:

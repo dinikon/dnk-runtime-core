@@ -610,3 +610,73 @@ class SourceSafetyRegressionTests(unittest.IsolatedAsyncioTestCase):
         source = b"offers:\n  - [" + b"{}," * 1000 + b"{}]\n"
         with self.assertRaises(MappingValidationError):
             list(YamlRecords(BytesIO(source), "offers", 1000).rows())
+
+    async def test_cancelled_download_removes_partial_file(self):
+        import httpx
+        import asyncio
+        from unittest.mock import AsyncMock, patch
+        from src.modules.price_lists.infrastructure.source.fetcher import (
+            HttpRemoteFileFetcher,
+        )
+
+        original_client = httpx.AsyncClient
+        original_tempfile = tempfile.NamedTemporaryFile
+        created = []
+
+        class InterruptedBody(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                yield b"x" * 65536
+                raise asyncio.CancelledError()
+
+        def temporary(**kwargs):
+            target = original_tempfile(**kwargs)
+            created.append(target)
+            return target
+
+        def client(**kwargs):
+            return original_client(
+                transport=httpx.MockTransport(
+                    lambda request: httpx.Response(200, stream=InterruptedBody())
+                ),
+                **kwargs,
+            )
+
+        fetcher = HttpRemoteFileFetcher()
+        with (
+            patch.object(
+                fetcher, "_validate_url", AsyncMock(return_value="93.184.216.34")
+            ),
+            patch("httpx.AsyncClient", client),
+            patch("tempfile.NamedTemporaryFile", temporary),
+        ):
+            with self.assertRaises(asyncio.CancelledError):
+                await fetcher.fetch("https://example.com/prices")
+        self.assertEqual(len(created), 1)
+        self.assertTrue(created[0].closed)
+        self.assertFalse(Path(created[0].name).exists())
+
+    def test_unterminated_xml_attribute_is_rejected_before_full_read(self):
+        from io import BytesIO
+        from src.modules.price_lists.infrastructure.source.xml_stream import xml_records
+
+        source = BytesIO(b'<offers><offer id="' + b"x" * 500000 + b'"/></offers>')
+        with self.assertRaises(MappingValidationError):
+            list(xml_records(source, "offers.offer", 1024))
+        self.assertLess(source.tell(), 100000)
+
+    def test_xlsx_directory_budget_is_checked_before_zip_allocation(self):
+        import struct
+        from unittest.mock import patch
+        from src.modules.price_lists.infrastructure.source.xlsx_stream import XlsxReader
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "malformed.xlsx"
+            path.write_bytes(
+                struct.pack("<4s4H2LH", b"PK\x05\x06", 0, 0, 1, 1, 512 * 1024**2, 0, 0)
+            )
+            with patch(
+                "zipfile.ZipFile",
+                side_effect=AssertionError("Unbounded directory allocation"),
+            ):
+                with self.assertRaises(MappingValidationError):
+                    XlsxReader(path, ImportOptions()).archive()

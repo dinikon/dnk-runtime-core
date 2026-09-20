@@ -9,6 +9,7 @@ price_list_sync_duration = Histogram(
     "price_list_sync_duration_seconds",
     "Partner price-list synchronization duration.",
     ["format"],
+    buckets=(0.1, 0.5, 1, 5, 10, 30, 60, 120, 300, 600, 1200, 1800, 3600),
 )
 price_list_sync_rows = Counter(
     "price_list_sync_rows_total",
@@ -32,6 +33,7 @@ price_list_sync_phase_duration = Histogram(
     "price_list_sync_phase_duration_seconds",
     "Import phase duration.",
     ["phase", "format"],
+    buckets=(0.1, 0.5, 1, 5, 10, 30, 60, 120, 300, 600, 1200, 1800, 3600),
 )
 
 

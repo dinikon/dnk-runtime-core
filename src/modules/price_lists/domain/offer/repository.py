@@ -1,9 +1,18 @@
+from dataclasses import dataclass
 from typing import Protocol
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.price_lists.domain.price_list.value_object import PriceListIdVO
 from src.modules.price_lists.domain.offer.value_object import OfferIdVO
 from src.modules.price_lists.domain.sync_run.value_object import SyncRunIdVO
 from src.modules.price_lists.domain.offer.entity import Offer, OfferState
+
+
+@dataclass(slots=True, frozen=True)
+class MissingOfferBatch:
+    """Отсутствующие предложения и курсор просмотренного диапазона."""
+
+    items: tuple[Offer, ...]
+    after_id: OfferIdVO | None
 
 
 class OfferRepository(Protocol):
@@ -22,7 +31,7 @@ class OfferRepository(Protocol):
         run_id: SyncRunIdVO,
         after: OfferIdVO | None,
         limit: int,
-    ) -> list[Offer]: ...
+    ) -> MissingOfferBatch: ...
     async def save_batch(
         self,
         tenant_id: EntityIdVO,
@@ -32,4 +41,4 @@ class OfferRepository(Protocol):
     ) -> None: ...
 
 
-__all__ = ["OfferRepository"]
+__all__ = ["OfferRepository", "MissingOfferBatch"]

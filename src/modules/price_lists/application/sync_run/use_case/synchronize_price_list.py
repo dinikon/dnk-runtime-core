@@ -215,14 +215,20 @@ class SynchronizePriceListUseCase:
                     await tx.staging.quarantine(command.tenant_id, run.id, quarantined)
                 if not counters["rejected"]:
                     after_id = None
-                    while offers := await tx.offers.missing_batch(
-                        command.tenant_id,
-                        price.id,
-                        run.id,
-                        after_id,
-                        self.options.batch_size,
-                    ):
-                        after_id = offers[-1].id
+                    while True:
+                        batch = await tx.offers.missing_batch(
+                            command.tenant_id,
+                            price.id,
+                            run.id,
+                            after_id,
+                            self.options.batch_size,
+                        )
+                        if batch.after_id is None:
+                            break
+                        after_id = batch.after_id
+                        offers = batch.items
+                        if not offers:
+                            continue
                         changes = await tx.offer_service.apply_missing_batch(
                             command.tenant_id,
                             price,

@@ -649,3 +649,11 @@ class PriceListBulkPostgresTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(second.has_more)
             self.assertEqual(second.total, 2)
             self.assertNotEqual(first.items[0].id, second.items[0].id)
+
+    async def test_missing_scan_continues_after_a_fully_present_batch(self):
+        await self.apply([self.row(i) for i in range(1005)])
+        result, _ = await self.apply(
+            [self.row(i) for i in range(1000)], missing_threshold=1
+        )
+        self.assertEqual(result.counters["missing"], 5)
+        self.assertEqual(await self.count(PartnerOfferStateModel), 1010)

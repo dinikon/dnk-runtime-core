@@ -83,9 +83,22 @@ class HttpRemoteFileFetcher:
                             raise SourceDownloadError(
                                 "Remote source exceeds the size limit."
                             )
-                        target = tempfile.NamedTemporaryFile(
-                            prefix="dnk-price-list-", delete=False
+                        creation = asyncio.create_task(
+                            asyncio.to_thread(
+                                tempfile.NamedTemporaryFile,
+                                prefix="dnk-price-list-",
+                                delete=False,
+                            )
                         )
+                        try:
+                            target = await asyncio.shield(creation)
+                        except asyncio.CancelledError:
+                            target = await creation
+                            await asyncio.to_thread(target.close)
+                            await asyncio.to_thread(
+                                Path(target.name).unlink, missing_ok=True
+                            )
+                            raise
                         tmp_path = Path(target.name)
                         digest = hashlib.sha256()
                         size = 0
@@ -110,7 +123,7 @@ class HttpRemoteFileFetcher:
                                     await write
                                     raise
                         finally:
-                            target.close()
+                            await asyncio.to_thread(target.close)
                         return FetchResult(
                             tmp_path,
                             digest.hexdigest(),
@@ -122,7 +135,7 @@ class HttpRemoteFileFetcher:
             raise SourceDownloadError("Remote source could not be downloaded.")
         except BaseException as exc:
             if tmp_path is not None:
-                tmp_path.unlink(missing_ok=True)
+                await asyncio.to_thread(tmp_path.unlink, missing_ok=True)
             if isinstance(exc, (httpx.HTTPError, OSError, ValueError)):
                 raise SourceDownloadError(
                     "Remote source could not be downloaded."

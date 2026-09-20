@@ -1,3 +1,4 @@
+from src.modules.price_lists.domain.offer.repository import MissingOfferBatch
 from datetime import datetime
 from decimal import Decimal
 from sqlalchemy import select, exists, func, bindparam, String, true
@@ -130,23 +131,43 @@ class SqlAlchemyOfferRepository(SessionRepository):
         """Keyset anti-join без полного seen_ids в Python."""
         offers = PartnerOfferModel.__table__
         items = PriceListSyncItemModel.__table__
-        statement = self.selection().where(
-            offers.c.price_list_id == price_list_id.uuid,
-            ~exists(
-                select(1).where(
-                    items.c.sync_run_id == run_id.uuid,
-                    items.c.external_id == offers.c.external_id,
-                )
-            ),
+        # Bound the candidate range before the anti-join. A LIMIT applied only
+        # after NOT EXISTS can make PostgreSQL sort/rescan the entire price list.
+        keys_query = select(offers.c.id).where(
+            offers.c.price_list_id == price_list_id.uuid
         )
         if after is not None:
-            statement = statement.where(offers.c.id > after.uuid)
+            keys_query = keys_query.where(offers.c.id > after.uuid)
+        keys = (
+            (
+                await self.session.execute(
+                    keys_query.order_by(offers.c.id)
+                    .limit(min(limit, self.read_limit))
+                    .execution_options(**self.execution_options(tenant_id))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not keys:
+            return MissingOfferBatch((), None)
         result = await self.session.execute(
-            statement.order_by(offers.c.id)
-            .limit(min(limit, self.read_limit))
+            self.selection()
+            .where(
+                offers.c.id.in_(keys),
+                ~exists(
+                    select(1).where(
+                        items.c.sync_run_id == run_id.uuid,
+                        items.c.external_id == offers.c.external_id,
+                    )
+                ),
+            )
             .execution_options(**self.execution_options(tenant_id))
         )
-        return [offer_entity(row) for row in result.mappings()]
+        return MissingOfferBatch(
+            tuple(offer_entity(row) for row in result.mappings()),
+            identifier(keys[-1], OfferIdVO),
+        )
 
     async def save_batch(self, tenant_id, new, changed, states):
         """Соблюдает порядок FK: offers, states, current pointers."""
