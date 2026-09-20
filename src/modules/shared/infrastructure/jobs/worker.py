@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -23,6 +24,8 @@ from src.modules.shared.infrastructure.observability.metrics import (
     scheduled_job_worker_heartbeat,
     scheduled_job_worker_polls,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ScheduledJobWorker:
@@ -57,6 +60,21 @@ class ScheduledJobWorker:
         self.tenant_gate = TenantGate(session_factory)
 
     async def run(self, stop: asyncio.Event) -> None:
+        # A healthy import can take longer than the probe's maximum heartbeat
+        # age. Keep reporting event-loop liveness while the poll is in progress.
+        self._heartbeat()
+        processing = asyncio.create_task(self._run(stop))
+        try:
+            while not processing.done():
+                await asyncio.wait({processing}, timeout=self.poll_interval_seconds)
+                if not processing.done():
+                    self._heartbeat()
+            await processing
+        finally:
+            processing.cancel()
+            await asyncio.gather(processing, return_exceptions=True)
+
+    async def _run(self, stop: asyncio.Event) -> None:
         last_recovery = 0.0
         while not stop.is_set():
             now_monotonic = time.monotonic()
@@ -80,7 +98,9 @@ class ScheduledJobWorker:
         async with self.session_factory() as session:
             repository = SqlAlchemyScheduledJobRepository(session)
             jobs = await repository.claim_due_jobs(
-                limit=self.process_limit,
+                # Execution is serial: queued jobs must not consume their lease
+                # or attempts while a preceding import is still running.
+                limit=min(self.process_limit, 1),
                 now=now,
                 locked_until=now + timedelta(seconds=self.lock_ttl_seconds),
                 lock_token=lock_token,
@@ -88,6 +108,7 @@ class ScheduledJobWorker:
             await session.commit()
         scheduled_job_worker_polls.labels(result="claimed" if jobs else "idle").inc()
         for job in jobs:
+            logger.info("Scheduled job started: id=%s type=%s", job.id, job.job_type)
             lease_lost = asyncio.Event()
             heartbeat = asyncio.create_task(
                 self._extend_lease(job.id, lock_token, lease_lost)
@@ -104,9 +125,15 @@ class ScheduledJobWorker:
                         completed_at=datetime.now(UTC),
                     )
                     await session.commit()
+                logger.info("Scheduled job completed: id=%s", job.id)
             except TenantUnavailable:
                 continue
             except Exception as exc:
+                logger.warning(
+                    "Scheduled job failed: id=%s error_type=%s",
+                    job.id,
+                    type(exc).__name__,
+                )
                 failed_at = datetime.now(UTC)
                 retry_at = None
                 if job.attempts < self.max_attempts:

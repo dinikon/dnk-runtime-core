@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import asyncio
 import logging
 import time
 from collections import Counter
@@ -108,13 +109,21 @@ class PriceListSyncJobHandler:
             price_list_sync_download_bytes.labels(
                 format=price_list["source_format"]
             ).inc(fetched.size)
-            rows = list(
-                self.parser.rows(
-                    fetched.path,
-                    price_list["source_format"],
-                    price_list["source_config"],
-                    price_list["mapping_config"],
+            rows = await asyncio.to_thread(
+                lambda: list(
+                    self.parser.rows(
+                        fetched.path,
+                        price_list["source_format"],
+                        price_list["source_config"],
+                        price_list["mapping_config"],
+                    )
                 )
+            )
+            logger.info(
+                "Price-list source parsed: price_list_id=%s rows=%s bytes=%s",
+                price_list_id,
+                len(rows),
+                fetched.size,
             )
             source_external_ids = [
                 str(row.normalized["external_id"])
