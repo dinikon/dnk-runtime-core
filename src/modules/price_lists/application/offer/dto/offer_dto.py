@@ -1,4 +1,7 @@
 from dataclasses import dataclass
+from src.modules.price_lists.application.offer.dto.offer_conversion_dto import (
+    OfferConversionDTO,
+)
 from datetime import datetime
 from decimal import Decimal
 from src.modules.price_lists.domain.price_list.value_object import PriceListIdVO
@@ -26,8 +29,9 @@ class OfferDTO:
     recommended_retail_income: Decimal | None
     margin_percent: Decimal | None
     change_count: int
-    historical_conversion: dict | None = None
-    current_conversion: dict | None = None
+    historical_conversion: OfferConversionDTO | None = None
+    current_conversion: OfferConversionDTO | None = None
+    display_conversion: OfferConversionDTO | None = None
 
 
 @dataclass(slots=True, frozen=True)
@@ -47,7 +51,7 @@ class OfferStateDTO:
     change_reason: str
     recommended_retail_income: Decimal | None
     margin_percent: Decimal | None
-    historical_conversion: dict | None = None
+    historical_conversion: OfferConversionDTO | None = None
 
 
 @dataclass(slots=True, frozen=True)

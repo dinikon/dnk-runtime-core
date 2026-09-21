@@ -1,13 +1,21 @@
-from src.modules.currency.presentation.depends import (
-    CurrencyServicesDep,
-    build_currency_services,
+from src.modules.shared.presentation.identity_context.depends import (
+    AuthenticatedRequestContextDep,
+)
+from src.modules.shared.domain.value_object.entity_id import EntityIdVO
+from src.modules.identity.presentation.depends.display_currency import (
+    DisplayCurrencyPreferencesDep,
+)
+from src.modules.identity.domain.user.value_object import UserIdVO
+from src.modules.currency.presentation.depends.application import (
+    CurrencyComponentsDep,
+    build_currency_components,
 )
 from src.modules.shared.presentation.persistence.depends import UoWDep
-from src.modules.price_lists.application.offer.money import (
-    OfferMoneyService,
+from src.modules.price_lists.application.offer.service.money import OfferMoneyService
+from src.modules.price_lists.application.offer.service.publication import (
     ConvertedOfferService,
 )
-from src.modules.price_lists.infrastructure.persistence.money_snapshot import (
+from src.modules.price_lists.infrastructure.persistence.offer_money.repository import (
     SqlOfferMoneyRepository,
 )
 from src.modules.price_lists.presentation.depends.infrastructure import (
@@ -334,12 +342,25 @@ UpdateSettingsUseCaseDep = Annotated[
 ]
 
 
-def get_offer_money_service(
-    currency: CurrencyServicesDep, uow: UoWDep, options: ImportOptionsDep
+async def get_offer_money_service(
+    currency: CurrencyComponentsDep,
+    uow: UoWDep,
+    options: ImportOptionsDep,
+    context: AuthenticatedRequestContextDep,
+    users: DisplayCurrencyPreferencesDep,
 ):
+    preference = await users.get_display_currency(
+        tenant_id=EntityIdVO.from_value(context.principal.tenant_id),
+        user_id=UserIdVO.from_value(context.principal.user_id),
+    )
     return OfferMoneyService(
         currency.facade,
         SqlOfferMoneyRepository(uow.session, get_tenant_naming(), options),
+        currency.settings,
+        currency.clock,
+        preference,
+        failures=currency.facade.failures,
+        operation_id=currency.facade.operation_id,
     )
 
 
@@ -404,13 +425,20 @@ def get_background_transactions(session_factory, *, options=None, clock=None):
 
     def assemble(uow):
         ports = get_background_repositories(uow, options, clock)
+        currency = build_currency_components(
+            uow.session, clock, session_factory=session_factory
+        )
         return ImportComponents(
             **ports,
             offer_service=ConvertedOfferService(
                 OfferService(ports["offers"], clock),
                 OfferMoneyService(
-                    build_currency_services(uow.session, clock).facade,
+                    currency.facade,
                     SqlOfferMoneyRepository(uow.session, get_tenant_naming(), options),
+                    currency.settings,
+                    currency.clock,
+                    failures=currency.facade.failures,
+                    operation_id=currency.facade.operation_id,
                 ),
             ),
             uow=uow,

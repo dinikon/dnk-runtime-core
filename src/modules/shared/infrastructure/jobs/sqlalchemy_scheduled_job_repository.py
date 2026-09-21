@@ -70,6 +70,44 @@ class SqlAlchemyScheduledJobRepository:
         await self._session.flush()
         return bool(result.rowcount)
 
+    async def reconcile_schedule(
+        self, job: ScheduledJob, *, payload_contains: dict[str, object]
+    ) -> None:
+        """Reconcile one owner's timers without touching a running worker's lease."""
+        scope = (
+            ScheduledJobModel.tenant_id == job.tenant_id,
+            ScheduledJobModel.job_type == job.job_type,
+            ScheduledJobModel.payload.contains(payload_contains),
+        )
+        await self._session.execute(
+            update(ScheduledJobModel)
+            .where(
+                *scope,
+                ScheduledJobModel.id != job.id,
+                ScheduledJobModel.status == ScheduledJobStatus.SCHEDULED.value,
+            )
+            .values(status=ScheduledJobStatus.CANCELED.value, updated_at=job.updated_at)
+        )
+        await self.schedule_once(job)
+        await self._session.execute(
+            update(ScheduledJobModel)
+            .where(
+                *scope,
+                ScheduledJobModel.id == job.id,
+                ScheduledJobModel.status.in_(
+                    [ScheduledJobStatus.FAILED.value, ScheduledJobStatus.CANCELED.value]
+                ),
+            )
+            .values(
+                status=ScheduledJobStatus.SCHEDULED.value,
+                attempts=0,
+                locked_until=None,
+                lock_token=None,
+                last_error=None,
+                updated_at=job.updated_at,
+            )
+        )
+
     async def claim_due_jobs(
         self,
         *,

@@ -81,6 +81,9 @@ class GetCurrentUserUseCase:
             interface_language=user.interface_language,
             interface_theme=user.interface_theme,
             timezone=user.timezone,
+            display_currency=(
+                str(user.display_currency) if user.display_currency else None
+            ),
             emails=[
                 GetCurrentUserEmailDTO(
                     id=email.id.uuid,

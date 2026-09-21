@@ -1,4 +1,7 @@
 from __future__ import annotations
+from src.modules.currency.presentation.jobs.activate_functional_currency import (
+    FunctionalCurrencyActivationHandler,
+)
 from src.modules.price_lists.presentation.depends.application import (
     get_synchronize_price_list_use_case,
     get_cleanup_price_list_use_case,
@@ -104,6 +107,9 @@ async def handle_worker(_args: argparse.Namespace) -> int:
             pass
     dispatcher = build_scheduled_job_dispatcher(
         {
+            "currency.activate_functional": FunctionalCurrencyActivationHandler(
+                db_helper.session_factory
+            ),
             "price_list.sync": PriceListSyncJobHandler(
                 get_synchronize_price_list_use_case(db_helper.session_factory)
             ),

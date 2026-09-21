@@ -294,7 +294,11 @@ class SqlAlchemyPriceListQueryRepository(SessionRepository):
         for row in rows:
             values = {}
             for name in dto_class.__dataclass_fields__:
-                if name in ("historical_conversion", "current_conversion"):
+                if name in (
+                    "historical_conversion",
+                    "current_conversion",
+                    "display_conversion",
+                ):
                     continue
                 if name == "change_count":
                     values[name] = changes.get(row["id"], 0)

@@ -1,0 +1,1 @@
+"""Currency use case contracts."""

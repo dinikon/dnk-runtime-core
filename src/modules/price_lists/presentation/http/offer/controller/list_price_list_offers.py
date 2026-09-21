@@ -1,7 +1,15 @@
+from src.modules.price_lists.domain.offer.error import OfferNotFoundError
+from src.modules.price_lists.domain.price_list.error import PriceListNotFoundError
+from src.modules.shared.domain.domain_error import DomainError
+from sqlalchemy.exc import OperationalError
+from src.modules.price_lists.presentation.http.offer.responses.schemas import (
+    OfferResponse,
+    OfferStateResponse,
+)
 from datetime import date
 from uuid import UUID
 from typing import Literal
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, HTTPException
 from src.modules.shared.presentation.identity_context.depends import (
     AuthenticatedRequestContextDep,
 )
@@ -14,8 +22,6 @@ from src.modules.price_lists.application.offer.query.list_offers_query import (
 from src.modules.price_lists.domain.price_list.value_object import PriceListIdVO
 from src.modules.price_lists.presentation.http.boundary import (
     context_ids,
-    dto_values,
-    http_errors,
 )
 from src.modules.price_lists.presentation.http.offer.responses.schemas import (
     OffsetOffersResponse,
@@ -42,7 +48,7 @@ async def list_price_list_offers(
     business_date: date | None = None,
 ):
     """HTTP-запрос list_price_list_offers с совместимым offset и cursor режимом."""
-    with http_errors():
+    try:
         tenant_id, _ = context_ids(context)
         filters = dict(price_list_ids=[PriceListIdVO.from_value(price_list_id)], q=q)
         result = await use_case(
@@ -60,13 +66,13 @@ async def list_price_list_offers(
                 business_date=business_date,
             )
         )
-        values = dto_values(result)
+        items = [OfferResponse.from_dto(item) for item in result.items]
         if pagination == "offset":
             return OffsetOffersResponse(
-                items=values["items"], total=result.total, offset=offset, limit=limit
+                items=items, total=result.total, offset=offset, limit=limit
             )
         response = CursorOffersResponse(
-            items=values["items"],
+            items=items,
             limit=limit,
             next_cursor=result.next_cursor,
             has_more=result.has_more,
@@ -75,6 +81,12 @@ async def list_price_list_offers(
         return response.model_dump(
             mode="json", exclude={"total"} if not include_total else set()
         )
+    except (OfferNotFoundError, PriceListNotFoundError) as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except DomainError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except OperationalError as exc:
+        raise HTTPException(503, "Offer storage is temporarily unavailable.") from exc
 
 
 __all__ = ["router"]

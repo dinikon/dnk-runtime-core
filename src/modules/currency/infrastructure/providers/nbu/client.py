@@ -1,13 +1,14 @@
-import asyncio
 from decimal import Decimal
-import json
-
+import asyncio
 import httpx
-
-from src.modules.currency.domain.errors import ProviderUnavailable, ProviderRateInvalid
+import json
+from src.modules.currency.domain.provider.error import ProviderRateInvalid
+from src.modules.currency.domain.provider.error import ProviderUnavailable
 
 
 class NbuClient:
+    """Fetch bounded NBU responses with transient-error retries."""
+
     def __init__(self, settings, *, transport=None):
         self.settings, self.transport = settings, transport
 
@@ -48,3 +49,6 @@ class NbuClient:
                     if not retryable or attempt == self.settings.retry_count:
                         raise ProviderUnavailable("NBU could not be reached.") from exc
                     await asyncio.sleep(min(2**attempt, 8))
+
+
+__all__ = ["NbuClient"]

@@ -8,7 +8,7 @@ export interface CurrencyInfo {
 
 export interface CurrencyPolicy {
   default_transaction_currency: string;
-  provider_code: "NBU" | "MANUAL";
+  provider_code: string;
   rate_date_policy: "exact" | "previous_available";
   rounding_mode:
     "ROUND_HALF_UP" | "ROUND_HALF_EVEN" | "ROUND_DOWN" | "ROUND_UP";
@@ -16,6 +16,7 @@ export interface CurrencyPolicy {
   bridge_currency: string;
   business_timezone: string;
   version: number;
+  default_display_currency: string | null;
 }
 
 export interface CurrencyPeriod {
@@ -28,6 +29,8 @@ export interface CurrencyPeriod {
 
 export interface CurrencySettings {
   configured: boolean;
+  default_display_currency: string | null;
+  next_business_day_at: string;
   policy: CurrencyPolicy | null;
   enabled_currencies: string[];
   functional_currency: string | null;
@@ -68,6 +71,10 @@ export interface ConvertedMoney {
     provider_code: string;
     derivation: string;
     source_rate_ids: string[];
+    minor_units?: number | null;
+    rounding_mode?: string | null;
+    purpose?: string | null;
+    precision?: number | null;
   };
 }
 
@@ -86,3 +93,14 @@ export type InitializeInput = PolicyInput & {
   valid_from: string;
   reason: string;
 };
+
+export interface RateSource {
+  code: string;
+  local: boolean;
+  capabilities: {
+    historical_rates: boolean;
+    supported_currencies: boolean;
+    base_currency: string | null;
+    bulk_download: boolean;
+  };
+}

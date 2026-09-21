@@ -92,6 +92,7 @@ def _to_current_user_response(
         interface_language=result.interface_language,
         interface_theme=result.interface_theme,
         timezone=result.timezone,
+        display_currency=result.display_currency,
         emails=[
             CurrentUserEmailResponseSchema(
                 id=email.id,

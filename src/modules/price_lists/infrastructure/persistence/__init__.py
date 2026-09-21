@@ -1,6 +1,8 @@
 """Регистрация статических tenant-моделей для Alembic и metadata."""
 
-from .money_snapshot import OfferMoneySnapshotModel
+from src.modules.price_lists.infrastructure.persistence.offer_money.model import (
+    OfferMoneySnapshotModel,
+)
 
 from src.modules.price_lists.infrastructure.persistence.models import (
     PriceListModel,
@@ -11,6 +13,7 @@ from src.modules.price_lists.infrastructure.persistence.models import (
 )
 
 __all__ = [
+    "OfferMoneySnapshotModel",
     "PriceListModel",
     "PartnerOfferModel",
     "PartnerOfferStateModel",

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { formatDecimal } from "../model/format-money";
 import type { OfferConversion } from "../model/types";
 const props = defineProps<{
   value?: OfferConversion | null;
@@ -24,7 +25,14 @@ const reasons: Record<string, string> = {
       v-if="money"
       :title="`${money.conversion.provider_code} · ${money.conversion.derivation} · курс ${money.conversion.rate} · дата ${money.conversion.effective_date}`"
     >
-      {{ label ? `${label}: ` : "" }}{{ money.converted.amount }}
+      {{ label ? `${label}: ` : ""
+      }}{{
+        formatDecimal(
+          money.converted.amount,
+          money.conversion.minor_units,
+          money.conversion.rounding_mode ?? "ROUND_HALF_UP",
+        )
+      }}
       {{ money.converted.currency }}
     </span>
     <span v-else-if="value?.status === 'unavailable'"

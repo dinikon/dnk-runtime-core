@@ -12,6 +12,7 @@ class CurrentUserResponseSchema(BaseModel):
 
     id: UUID
     role: str = "member"
+    display_currency: str | None = None
     status: str
     last_name: str
     first_name: str

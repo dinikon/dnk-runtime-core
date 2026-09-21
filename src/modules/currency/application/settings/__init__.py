@@ -1,3 +1,1 @@
-from .service import CurrencySettingsService
-
-__all__ = ["CurrencySettingsService"]
+"""Currency settings application contracts."""

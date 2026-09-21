@@ -2,6 +2,7 @@ from src.modules.shared.domain.value_object.money import Money
 from src.modules.shared.domain.value_object.money_errors import (
     CurrencyMismatchError,
     InvalidMoneyError,
+    InexactMoneyDivisionError,
 )
 from src.modules.shared.domain.domain_error import DomainError, EntityIdTypeError
 from src.modules.shared.domain.value_object import (
@@ -14,6 +15,7 @@ __all__ = [
     "Money",
     "CurrencyMismatchError",
     "InvalidMoneyError",
+    "InexactMoneyDivisionError",
     "InvalidCurrencyCodeError",
     "CurrencyCodeVO",
     "EntityIdVO",

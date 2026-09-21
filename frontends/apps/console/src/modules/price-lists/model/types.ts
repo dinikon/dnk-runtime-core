@@ -62,6 +62,7 @@ export interface PreviewResult {
 export interface PartnerOffer {
   historical_conversion?: OfferConversion | null;
   current_conversion?: OfferConversion | null;
+  display_conversion?: OfferConversion | null;
   id: string;
   sku: string;
   external_id: string;

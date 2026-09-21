@@ -1,3 +1,13 @@
+from src.modules.currency.domain.functional_currency.value_object.id import (
+    FunctionalCurrencyPeriodIdVO,
+)
+from src.modules.shared.application.time.business_calendar import BusinessCalendar
+from src.modules.currency.application.conversion.dto.conversion_request import (
+    ConversionRequest,
+)
+from src.modules.currency.application.provider.dto.provider_status_dto import (
+    ProviderStatusDTO,
+)
 from dataclasses import FrozenInstanceError, replace
 from datetime import UTC, date, datetime
 from decimal import Decimal, localcontext
@@ -17,37 +27,45 @@ from src.modules.shared.domain.value_object.money_errors import (
     InvalidMoneyError,
     CurrencyMismatchError,
 )
-from src.modules.currency.domain.models import (
-    CurrencyInfo,
-    CurrencyPolicy,
+from src.modules.currency.domain.directory.entity import CurrencyInfo
+from src.modules.currency.domain.policy.entity import CurrencyPolicy
+from src.modules.currency.domain.exchange_rate.value_object.currency_pair import (
     CurrencyPair,
-    ProviderCode,
+)
+from src.modules.currency.domain.provider.value_object.provider_code import ProviderCode
+from src.modules.currency.domain.policy.value_object.rate_date_policy import (
     RateDatePolicy,
-    RoundingMode,
+)
+from src.modules.currency.domain.policy.value_object.rounding_mode import RoundingMode
+from src.modules.currency.domain.exchange_rate.value_object.rate_record import (
     RateRecord,
+)
+from src.modules.currency.domain.functional_currency.entity import (
     FunctionalCurrencyPeriod,
-    MoneyQuantizer,
+)
+from src.modules.currency.domain.conversion.quantizer import MoneyQuantizer
+from src.modules.currency.domain.conversion.value_object.conversion_purpose import (
     ConversionPurpose,
 )
-from src.modules.currency.domain.errors import (
-    CurrencyDisabled,
-    CurrencyPolicyNotConfigured,
-    ExchangeRateNotFound,
-    CrossRateUnavailable,
-    CurrencyPrecisionUndefined,
-    ProviderRateInvalid,
-    ProviderUnavailable,
+from src.modules.currency.domain.enabled_currency.error import CurrencyDisabled
+from src.modules.currency.domain.policy.error import CurrencyPolicyNotConfigured
+from src.modules.currency.domain.exchange_rate.error import ExchangeRateNotFound
+from src.modules.currency.domain.exchange_rate.error import CrossRateUnavailable
+from src.modules.currency.domain.conversion.error import CurrencyPrecisionUndefined
+from src.modules.currency.domain.provider.error import ProviderRateInvalid
+from src.modules.currency.domain.provider.error import ProviderUnavailable
+from src.modules.currency.domain.functional_currency.error import (
     FunctionalCurrencyChangeNotAllowed,
 )
-from src.modules.currency.application.conversion import (
-    ExchangeRateResolver,
-    MoneyConversionService,
+from src.modules.currency.domain.exchange_rate.service import ExchangeRateResolver
+from src.modules.currency.application.conversion.service import MoneyConversionService
+from test.currency_support import configuration_cases
+from src.modules.currency.application.functional_currency.command.schedule_functional_currency_change_command import (
+    ScheduleFunctionalCurrencyChange,
 )
-from src.modules.currency.application.settings import CurrencySettingsService
-from src.modules.currency.application.commands import ScheduleFunctionalCurrencyChange
 from src.modules.currency.infrastructure.providers.nbu.client import NbuClient
 from src.modules.currency.infrastructure.providers.nbu.mapper import map_rates
-from src.modules.price_lists.application.offer.money import OfferMoneyService
+from src.modules.price_lists.application.offer.service.money import OfferMoneyService
 
 USD, EUR, UAH = Code("USD"), Code("EUR"), Code("UAH")
 TENANT = EntityIdVO(uuid4())
@@ -151,9 +169,25 @@ def services(rows=(), policy=POLICY):
         close=AsyncMock(),
     )
     rates = LocalRates(list(rows))
-    resolver = ExchangeRateResolver(rates, policies, directory)
+    resolver = ExchangeRateResolver(rates, policies, directory, policies)
+    from src.modules.currency.application.policy.dto.currency_policy_dto import (
+        CurrencyPolicyDTO,
+    )
+
+    async def read_settings(*, tenant_id):
+        return CurrencyPolicyDTO.from_entity(await policies.get(tenant_id=tenant_id))
+
+    settings = SimpleNamespace(get=read_settings)
     facade = MoneyConversionService(
-        directory, policies, periods, resolver, SimpleNamespace(now=lambda: NOW)
+        directory,
+        policies,
+        periods,
+        resolver,
+        SimpleNamespace(now=lambda: NOW),
+        settings,
+        AsyncMock(),
+        TENANT,
+        policies,
     )
     return SimpleNamespace(
         directory=directory,
@@ -162,6 +196,7 @@ def services(rows=(), policy=POLICY):
         rates=rates,
         resolver=resolver,
         facade=facade,
+        clock=SimpleNamespace(now=lambda: NOW),
     )
 
 
@@ -323,16 +358,17 @@ class CurrencyConversionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_batch_quotes_and_local_business_date(self):
         data = services([rate(USD, UAH, "40")])
-        self.assertEqual(await data.facade.get_business_date(tenant_id=TENANT), DAY)
+        self.assertEqual(BusinessCalendar.date_at(NOW, POLICY.business_timezone), DAY)
         result = await data.facade.convert_many(
-            tenant_id=TENANT, items=[(Money(i, USD), DAY) for i in range(1000)]
+            tenant_id=TENANT,
+            items=[ConversionRequest(Money(i, USD), DAY) for i in range(1000)],
         )
         self.assertEqual(len(result), 1000)
         self.assertEqual(data.rates.calls, 1)
 
     async def test_future_change_checked_in_business_timezone(self):
         data = services()
-        service = CurrencySettingsService(
+        service = configuration_cases(
             data.directory,
             data.policies,
             data.periods,
@@ -342,11 +378,23 @@ class CurrencyConversionTests(unittest.IsolatedAsyncioTestCase):
         )
         with self.assertRaises(FunctionalCurrencyChangeNotAllowed):
             await service.schedule(
-                ScheduleFunctionalCurrencyChange(TENANT, TENANT, EUR, DAY, "Change")
+                ScheduleFunctionalCurrencyChange(
+                    TENANT,
+                    TENANT,
+                    EUR,
+                    DAY,
+                    "Change",
+                    id=FunctionalCurrencyPeriodIdVO(uuid4()),
+                )
             )
         period = await service.schedule(
             ScheduleFunctionalCurrencyChange(
-                TENANT, TENANT, EUR, date(2026, 9, 22), "Change"
+                TENANT,
+                TENANT,
+                EUR,
+                date(2026, 9, 22),
+                "Change",
+                id=FunctionalCurrencyPeriodIdVO(uuid4()),
             )
         )
         self.assertEqual(period.valid_from, date(2026, 9, 22))
@@ -414,24 +462,40 @@ class OfferMoneyTests(unittest.IsolatedAsyncioTestCase):
     async def test_snapshots_are_owned_and_dated_by_offer(self):
         data = services([rate(USD, UAH, "40")])
         snapshots = SimpleNamespace(add_many=AsyncMock())
-        service = OfferMoneyService(data.facade, snapshots)
-        await service.capture(TENANT, [self.state()])
+        service = OfferMoneyService(
+            data.facade,
+            snapshots,
+            data.policies,
+            data.clock,
+            failures=data.facade.failures,
+            operation_id=TENANT,
+        )
+        await service.capture(TENANT, [self.state()], operation_id=TENANT)
         record = snapshots.add_many.call_args.kwargs["records"][0]
-        self.assertEqual(record["business_date"], DAY.isoformat())
-        self.assertEqual(record["purchase_price"]["converted"]["amount"], "400")
-        self.assertEqual(record["rrp"]["converted"]["amount"], "600")
+        self.assertEqual(record.conversion.business_date, DAY)
+        self.assertEqual(
+            record.conversion.purchase_price.converted.amount, Decimal("400")
+        )
+        self.assertEqual(record.conversion.rrp.converted.amount, Decimal("600"))
         self.assertEqual(data.rates.calls, 1)
 
     async def test_expected_unavailability_does_not_mask_storage_failure(self):
         data = services()
         snapshots = SimpleNamespace(add_many=AsyncMock())
-        service = OfferMoneyService(data.facade, snapshots)
-        await service.capture(TENANT, [self.state()])
+        service = OfferMoneyService(
+            data.facade,
+            snapshots,
+            data.policies,
+            data.clock,
+            failures=data.facade.failures,
+            operation_id=TENANT,
+        )
+        await service.capture(TENANT, [self.state()], operation_id=TENANT)
         record = snapshots.add_many.call_args.kwargs["records"][0]
-        self.assertEqual(record["status"], "unavailable")
+        self.assertEqual(record.conversion.status, "unavailable")
         data.policies.get.side_effect = OSError("database unavailable")
         with self.assertRaises(OSError):
-            await service.capture(TENANT, [self.state()])
+            await service.capture(TENANT, [self.state()], operation_id=TENANT)
 
 
 class CurrencyManagementTests(unittest.IsolatedAsyncioTestCase):
@@ -456,7 +520,7 @@ class CurrencyManagementTests(unittest.IsolatedAsyncioTestCase):
         from unittest.mock import patch
 
         with patch(
-            "src.modules.currency.presentation.management.dnk_config",
+            "src.modules.currency.presentation.management.sync_rates.dnk_config",
             SimpleNamespace(
                 CURRENCY=SimpleNamespace(nbu=NbuSettings(sync_enabled=False))
             ),
@@ -464,13 +528,15 @@ class CurrencyManagementTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await sync_rates(args), 0)
 
     async def test_disabling_unknown_currency_is_rejected_before_storage(self):
-        from src.modules.currency.application.commands import SetEnabledCurrency
-        from src.modules.currency.domain.errors import CurrencyNotFound
+        from src.modules.currency.application.enabled_currency.command.set_enabled_currency_command import (
+            SetEnabledCurrency,
+        )
+        from src.modules.currency.domain.directory.error import CurrencyNotFound
 
         data = services()
         data.directory.get.side_effect = CurrencyNotFound("Unknown code")
         data.policies.set_enabled = AsyncMock()
-        service = CurrencySettingsService(
+        service = configuration_cases(
             data.directory,
             data.policies,
             data.periods,
@@ -497,10 +563,14 @@ class CurrencyManagementTests(unittest.IsolatedAsyncioTestCase):
         data.policies.enabled.return_value = set()
         data.periods.list_periods.return_value = []
         data.rates.provider_status = AsyncMock(
-            return_value={"last_import": None, "last_available_rate_date": None}
+            return_value=ProviderStatusDTO(None, None)
         )
         result = await GetCurrencySettingsUseCase(
-            data.policies, data.periods, data.rates, SimpleNamespace(now=lambda: NOW)
+            data.policies,
+            data.periods,
+            data.rates,
+            SimpleNamespace(now=lambda: NOW),
+            data.policies,
         )(GetCurrencySettingsQuery(TENANT))
         self.assertFalse(result.configured)
         self.assertIsNone(result.policy)

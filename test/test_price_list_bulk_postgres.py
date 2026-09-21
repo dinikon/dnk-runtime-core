@@ -1,3 +1,13 @@
+from src.modules.currency.domain.manual_rate.value_object.id import (
+    ManualExchangeRateIdVO,
+)
+from src.modules.currency.domain.functional_currency.value_object.id import (
+    FunctionalCurrencyPeriodIdVO,
+)
+from src.modules.price_lists.infrastructure.persistence.offer_money.mapper import (
+    conversion_payload,
+)
+
 """Real PostgreSQL contracts for streaming publication, fencing and keyset queries."""
 
 import asyncio
@@ -258,7 +268,8 @@ class PriceListBulkPostgresTests(unittest.IsolatedAsyncioTestCase):
         rows = [self.row(i) for i in range(1005)]
         first, queries = await self.apply(rows)
         self.assertEqual(first.counters["created"], 1005)
-        self.assertLess(queries, 60)
+        # Includes the one independent Currency failure-audit transaction.
+        self.assertLess(queries, 65)
         self.assertEqual(await self.count(PartnerOfferModel), 1005)
         self.assertEqual(await self.count(PartnerOfferStateModel), 1005)
         repeated, queries = await self.apply(
@@ -266,29 +277,43 @@ class PriceListBulkPostgresTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(repeated.counters["unchanged"], 1005)
         self.assertEqual(repeated.counters["changed"], 0)
-        self.assertLess(queries, 60)
+        # Includes the one independent Currency failure-audit transaction.
+        self.assertLess(queries, 65)
         self.assertEqual(await self.count(PartnerOfferStateModel), 1005)
         self.assertEqual(await self.count(PriceListSyncItemModel), 0)
 
     async def test_currency_snapshots_survive_rate_revisions_and_repeat_import(self):
         from datetime import date
         from sqlalchemy.dialects.postgresql import insert as pg_insert
-        from src.modules.currency.infrastructure.persistence.models import CurrencyModel
+        from src.modules.currency.infrastructure.persistence.directory.model import (
+            CurrencyModel,
+        )
         from src.modules.shared.infrastructure.events.integration_outbox_event_model import (
             IntegrationOutboxEventModel,
         )
         from src.modules.shared.infrastructure.persistence.unit_of_work import (
             UnitOfWork,
         )
-        from src.modules.currency.presentation.depends import build_currency_services
-        from src.modules.currency.application.commands import (
+        from test.currency_support import fixture_components
+        from src.modules.currency.application.settings.command.initialize_currency_command import (
             InitializeCurrency,
+        )
+        from src.modules.currency.application.manual_rate.command.set_manual_rate_command import (
             SetManualRate,
         )
-        from src.modules.currency.domain.models import CurrencyPair, ProviderCode
-        from src.modules.price_lists.application.offer.money import OfferMoneyService
-        from src.modules.price_lists.infrastructure.persistence.money_snapshot import (
+        from src.modules.currency.domain.exchange_rate.value_object.currency_pair import (
+            CurrencyPair,
+        )
+        from src.modules.currency.domain.provider.value_object.provider_code import (
+            ProviderCode,
+        )
+        from src.modules.price_lists.application.offer.service.money import (
+            OfferMoneyService,
+        )
+        from src.modules.price_lists.infrastructure.persistence.offer_money.repository import (
             SqlOfferMoneyRepository,
+        )
+        from src.modules.price_lists.infrastructure.persistence.offer_money.model import (
             OfferMoneySnapshotModel,
         )
         from test.test_currency import USD, EUR, UAH, POLICY
@@ -311,9 +336,7 @@ class PriceListBulkPostgresTests(unittest.IsolatedAsyncioTestCase):
                 .on_conflict_do_nothing()
             )
         async with UnitOfWork(self.sessions) as uow:
-            settings = build_currency_services(
-                uow.session, UtcClock(), self.naming
-            ).settings
+            settings = fixture_components(uow.session, UtcClock(), self.naming).settings
             await settings.initialize(
                 InitializeCurrency(
                     self.tenant_id,
@@ -323,6 +346,7 @@ class PriceListBulkPostgresTests(unittest.IsolatedAsyncioTestCase):
                     UAH,
                     date(2020, 1, 1),
                     "Initial",
+                    id=FunctionalCurrencyPeriodIdVO(uuid4()),
                 )
             )
             await settings.set_manual_rate(
@@ -332,6 +356,7 @@ class PriceListBulkPostgresTests(unittest.IsolatedAsyncioTestCase):
                     CurrencyPair(USD, UAH),
                     Decimal("40"),
                     date(2020, 1, 1),
+                    id=ManualExchangeRateIdVO(uuid4()),
                 )
             )
 
@@ -368,9 +393,7 @@ class PriceListBulkPostgresTests(unittest.IsolatedAsyncioTestCase):
             "exchange_rate_not_found",
         )
         async with UnitOfWork(self.sessions) as uow:
-            settings = build_currency_services(
-                uow.session, UtcClock(), self.naming
-            ).settings
+            settings = fixture_components(uow.session, UtcClock(), self.naming).settings
             await settings.set_manual_rate(
                 SetManualRate(
                     self.tenant_id,
@@ -378,6 +401,7 @@ class PriceListBulkPostgresTests(unittest.IsolatedAsyncioTestCase):
                     CurrencyPair(USD, UAH),
                     Decimal("42"),
                     date(2020, 1, 1),
+                    id=ManualExchangeRateIdVO(uuid4()),
                 )
             )
             await settings.set_manual_rate(
@@ -387,37 +411,43 @@ class PriceListBulkPostgresTests(unittest.IsolatedAsyncioTestCase):
                     CurrencyPair(EUR, UAH),
                     Decimal("50"),
                     date(2020, 1, 1),
+                    id=ManualExchangeRateIdVO(uuid4()),
                 )
             )
         repeated, _ = await self.apply(rows)
         self.assertEqual(repeated.counters["unchanged"], 2)
         self.assertEqual(await self.count(PartnerOfferStateModel), 2)
         async with self.sessions() as session:
+            currency = fixture_components(session, UtcClock(), self.naming)
             money = OfferMoneyService(
-                build_currency_services(session, UtcClock(), self.naming).facade,
+                currency.facade,
                 SqlOfferMoneyRepository(session, self.naming, self.options),
+                currency.reader,
+                currency.clock,
+                failures=currency.facade.failures,
+                operation_id=currency.facade.operation_id,
             )
             page = await self.query()
             enriched = await money.enrich(self.tenant_id, page)
             by_currency = {item.currency: item for item in enriched.items}
             self.assertEqual(
                 Decimal(
-                    by_currency["USD"].current_conversion["purchase_price"][
-                        "converted"
-                    ]["amount"]
+                    by_currency[
+                        "USD"
+                    ].current_conversion.purchase_price.converted.amount
                 ),
                 420,
             )
             self.assertEqual(
-                by_currency["USD"].historical_conversion["purchase_price"],
+                conversion_payload(
+                    by_currency["USD"].historical_conversion.purchase_price
+                ),
                 usd["purchase_price"],
             )
             self.assertEqual(
-                by_currency["EUR"].historical_conversion["status"], "unavailable"
+                by_currency["EUR"].historical_conversion.status, "unavailable"
             )
-            self.assertEqual(
-                by_currency["EUR"].current_conversion["status"], "converted"
-            )
+            self.assertEqual(by_currency["EUR"].current_conversion.status, "converted")
             after = list(
                 (
                     await session.execute(

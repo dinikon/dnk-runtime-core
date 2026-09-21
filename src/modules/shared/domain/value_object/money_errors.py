@@ -17,3 +17,9 @@ class CurrencyMismatchError(DomainError):
     """Arithmetic across currencies requires an explicit conversion."""
 
     code = "currency_mismatch"
+
+
+class InexactMoneyDivisionError(InvalidMoneyError):
+    """A repeating decimal requires an explicit calculation precision."""
+
+    code = "inexact_money_division"

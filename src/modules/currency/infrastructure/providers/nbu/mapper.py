@@ -1,11 +1,14 @@
 from datetime import datetime
 from decimal import Decimal, InvalidOperation, localcontext
-
-from src.modules.shared.domain.value_object.currency import CurrencyCodeVO
+from src.modules.currency.application.provider.dto.provider_rate_dto import (
+    ProviderRateDTO,
+)
+from src.modules.currency.domain.exchange_rate.value_object.currency_pair import (
+    CurrencyPair,
+)
+from src.modules.currency.domain.provider.error import ProviderRateInvalid
 from src.modules.shared.domain.domain_error import DomainError
-from src.modules.currency.domain.models import CurrencyPair
-from src.modules.currency.application.provider import ProviderRateDTO
-from src.modules.currency.domain.errors import ProviderRateInvalid
+from src.modules.shared.domain.value_object.currency import CurrencyCodeVO
 
 
 def map_rates(payload, *, start_date, end_date):
@@ -51,3 +54,6 @@ def map_rates(payload, *, start_date, end_date):
             "NBU returned an invalid or conflicting rate."
         ) from exc
     return list(rates.values())
+
+
+__all__ = ["map_rates"]

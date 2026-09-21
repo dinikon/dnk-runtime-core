@@ -37,6 +37,7 @@ export interface ConsoleUserEmail {
 }
 
 export interface ConsoleUser {
+  display_currency: string | null;
   id: string;
   role: "admin" | "member";
   status: string;

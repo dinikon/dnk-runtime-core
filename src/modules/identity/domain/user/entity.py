@@ -8,6 +8,7 @@ import uuid6
 from src.modules.identity.domain.user.value_object import UserEmailIdVO, UserIdVO
 from src.modules.shared import EntityIdVO
 from src.modules.shared import DomainError
+from src.modules.shared.domain.value_object.currency import CurrencyCodeVO
 
 
 @dataclass(slots=True)
@@ -55,6 +56,16 @@ class User:
     emails: list[UserEmail] = field(default_factory=list)
     role: str = "member"
     session_epoch: int = 0
+    display_currency: CurrencyCodeVO | None = None
+
+    def update_display_currency(
+        self, currency: CurrencyCodeVO | None, now: datetime
+    ) -> bool:
+        """Change the preference without materializing an inherited default."""
+        if self.display_currency == currency:
+            return False
+        self.display_currency, self.updated_at = currency, now
+        return True
 
     @classmethod
     def create_tenant_admin(

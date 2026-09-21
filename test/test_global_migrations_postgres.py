@@ -22,10 +22,10 @@ from src.modules.shared.infrastructure.persistence.tenant_migrations import (
 
 class GlobalMigrationsPostgresTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        value = os.environ.get("DNK_TEST_DATABASE_URL")
+        value = os.environ.get("TEST_POSTGRES_URL")
         if not value:
             self.skipTest(
-                "DNK_TEST_DATABASE_URL is required for isolated PostgreSQL migration tests"
+                "TEST_POSTGRES_URL is required for isolated PostgreSQL migration tests"
             )
         url = make_url(value).set(drivername="postgresql+asyncpg")
         self.name = "dnk_global_test_" + uuid4().hex

@@ -95,11 +95,4 @@ export function filtersToQuery(filters: OfferFilters): Record<string, string> {
   );
 }
 
-export function formatMoney(value: string | null, currency = "UAH"): string {
-  if (value === null) return "—";
-  return new Intl.NumberFormat("uk-UA", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 2,
-  }).format(Number(value));
-}
+export { formatMoney } from "@/modules/currency/model/format-money";

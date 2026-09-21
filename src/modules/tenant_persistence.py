@@ -19,6 +19,7 @@ HISTORICAL_TENANT_TABLE_NAMES = frozenset(
         "price_list_sync_runs",
         "price_list_sync_items",
         "currency_policy",
+        "currency_resolution_failure",
         "enabled_currency",
         "functional_currency_period",
         "manual_exchange_rate",

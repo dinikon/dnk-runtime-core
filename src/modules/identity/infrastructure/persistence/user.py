@@ -16,6 +16,10 @@ class UserModel(TenantBase):
     __tablename__ = "users"
     __table_args__ = (
         PrimaryKeyConstraint("id", name="pk_users"),
+        sa.CheckConstraint(
+            "display_currency IS NULL OR display_currency ~ '^[A-Z]{3}$'",
+            name="ck_users_display_currency",
+        ).ddl_if(dialect="postgresql"),
         Index("ix_users_status", "status"),
         sa.CheckConstraint("role IN ('admin', 'member')", name="ck_users_role"),
         sa.CheckConstraint("session_epoch >= 0", name="ck_users_session_epoch"),
@@ -77,6 +81,7 @@ class UserModel(TenantBase):
         nullable=False,
         server_default="Europe/Kyiv",
     )
+    display_currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
     last_login_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,

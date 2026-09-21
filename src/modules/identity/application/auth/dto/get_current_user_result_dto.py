@@ -21,6 +21,7 @@ class GetCurrentUserResultDTO:
     timezone: str
     emails: list[GetCurrentUserEmailDTO] = field(default_factory=list)
     role: str = "member"
+    display_currency: str | None = None
 
 
 __all__ = ["GetCurrentUserResultDTO"]

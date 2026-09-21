@@ -150,21 +150,36 @@ const sortIcon = (field: string) =>
           <TableCell class="text-right tabular-nums"
             >{{ formatMoney(offer.purchase_price, offer.currency ?? "UAH")
             }}<OfferMoneyValue
-              :value="offer.current_conversion"
+              :value="offer.display_conversion ?? offer.current_conversion"
               :label="
                 filters.businessDate ? 'На выбранную дату ≈' : 'Сейчас ≈'
               " /><OfferMoneyValue
+              v-if="
+                offer.display_conversion?.purchase_price?.converted.currency !==
+                offer.current_conversion?.purchase_price?.converted.currency
+              "
+              :value="offer.current_conversion"
+              label="В основной валюте" />
+            <OfferMoneyValue
               :value="offer.historical_conversion"
               label="При импорте"
           /></TableCell>
           <TableCell class="text-right tabular-nums"
             >{{ formatMoney(offer.rrp, offer.currency ?? "UAH")
             }}<OfferMoneyValue
-              :value="offer.current_conversion"
+              :value="offer.display_conversion ?? offer.current_conversion"
               kind="rrp"
               :label="
                 filters.businessDate ? 'На выбранную дату ≈' : 'Сейчас ≈'
               " /><OfferMoneyValue
+              v-if="
+                offer.display_conversion?.purchase_price?.converted.currency !==
+                offer.current_conversion?.purchase_price?.converted.currency
+              "
+              :value="offer.current_conversion"
+              kind="rrp"
+              label="В основной валюте" />
+            <OfferMoneyValue
               :value="offer.historical_conversion"
               kind="rrp"
               label="При импорте"
@@ -172,7 +187,7 @@ const sortIcon = (field: string) =>
           <TableCell
             class="text-right tabular-nums"
             :class="
-              Number(offer.recommended_retail_income) < 0
+              offer.recommended_retail_income?.startsWith('-')
                 ? 'text-destructive'
                 : ''
             "

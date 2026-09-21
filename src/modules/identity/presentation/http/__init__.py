@@ -1,3 +1,3 @@
-from src.modules.identity.presentation.http.router import router
+"""Identity HTTP entrypoints without eager router/DI imports."""
 
-__all__ = ["router"]
+__all__: list[str] = []

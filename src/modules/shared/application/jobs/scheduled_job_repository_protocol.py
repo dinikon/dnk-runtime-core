@@ -21,6 +21,16 @@ class ScheduledJobRepositoryProtocol(Protocol):
         """Persists a deterministic job unless its id already exists."""
         ...
 
+    async def reconcile_schedule(
+        self, job: ScheduledJob, *, payload_contains: dict[str, object]
+    ) -> None:
+        """Replace matching pending timers and rearm a failed/canceled deterministic job.
+
+        The caller serializes changes to the owning entity in the same UoW.
+        Running jobs keep their lease and must recheck the owner's current state.
+        """
+        ...
+
     async def claim_due_jobs(
         self,
         *,

@@ -2,6 +2,7 @@ from src.modules.shared.domain.value_object.money import Money
 from src.modules.shared.domain.value_object.money_errors import (
     CurrencyMismatchError,
     InvalidMoneyError,
+    InexactMoneyDivisionError,
 )
 from src.modules.shared.application.uuid import UUIdGeneratorProtocol
 from src.modules.shared.domain import (
@@ -19,6 +20,7 @@ __all__ = [
     "Money",
     "CurrencyMismatchError",
     "InvalidMoneyError",
+    "InexactMoneyDivisionError",
     "ClockPort",
     "CurrencyCodeVO",
     "EntityIdVO",

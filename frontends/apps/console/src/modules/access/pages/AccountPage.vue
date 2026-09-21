@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DisplayCurrencyPreference from "@/modules/currency/ui/DisplayCurrencyPreference.vue";
 import { onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { getApiErrorMessage } from "@/app/providers/http";
@@ -61,6 +62,7 @@ async function unlink() {
     <Alert v-if="error" variant="destructive" role="alert"
       ><AlertDescription>{{ error }}</AlertDescription></Alert
     >
+    <DisplayCurrencyPreference />
     <Card class="max-w-2xl"
       ><CardHeader
         ><CardTitle>Cloud account</CardTitle

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from src.modules.shared.domain.value_object.currency import CurrencyCodeVO
 
 from sqlalchemy import Select, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -52,6 +53,9 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
                 interface_language=user.interface_language,
                 interface_theme=user.interface_theme,
                 timezone=user.timezone,
+                display_currency=(
+                    str(user.display_currency) if user.display_currency else None
+                ),
                 last_active_at=user.last_active_at,
                 last_login_ip=user.last_login_ip,
                 initialized_at=user.initialized_at,
@@ -81,6 +85,35 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
                 )
                 .execution_options(schema_translate_map=schema_map)
             )
+
+    async def get_display_currency(
+        self, *, tenant_id: EntityIdVO, user_id: UserIdVO
+    ) -> CurrencyCodeVO | None:
+        """Read a preference only from the authenticated user's tenant."""
+        table = UserModel.__table__
+        value = await self._session.scalar(
+            select(table.c.display_currency)
+            .where(table.c.id == user_id.uuid)
+            .execution_options(schema_translate_map=self._schema_map(tenant_id))
+        )
+        return CurrencyCodeVO(value) if value else None
+
+    async def save_display_currency(self, user: User, *, tenant_id: EntityIdVO) -> None:
+        """Persist only the changed preference and its update timestamp."""
+        if user.tenant_id != tenant_id:
+            raise DomainError("User does not belong to the requested tenant.")
+        table = UserModel.__table__
+        await self._session.execute(
+            update(table)
+            .where(table.c.id == user.id.uuid)
+            .values(
+                display_currency=(
+                    str(user.display_currency) if user.display_currency else None
+                ),
+                updated_at=user.updated_at,
+            )
+            .execution_options(schema_translate_map=self._schema_map(tenant_id))
+        )
 
     async def get_by_id(
         self, user_id: UserIdVO, *, tenant_id: EntityIdVO
@@ -134,6 +167,11 @@ class SqlAlchemyUserRepository(UserRepositoryProtocol):
             interface_language=row["interface_language"],
             interface_theme=row["interface_theme"],
             timezone=row["timezone"],
+            display_currency=(
+                CurrencyCodeVO(row["display_currency"])
+                if row["display_currency"]
+                else None
+            ),
             last_login_at=row["last_login_at"],
             last_active_at=row["last_active_at"],
             last_login_ip=row["last_login_ip"],
