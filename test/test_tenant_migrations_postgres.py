@@ -19,6 +19,7 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.schema import CreateSchema, DropSchema
 
 import src.modules.persistence  # noqa: F401
+from src.modules.crm.infrastructure.persistence import CompanyModel, ContactModel
 from src.management.cli import build_parser
 from src.management.commands.tenant_migrations import handle
 from src.modules.identity.application.user import UserService
@@ -235,6 +236,112 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertIn(
                 "archived_at", {column["name"] for column in upgraded_columns}
+            )
+
+    async def test_crm_migration_constraints_indexes_and_round_trip(self):
+        schema = await self.new_schema()
+        other_schema = await self.new_schema()
+        actor_id = uuid4()
+        shared_contact_id = uuid4()
+        async with self.engine.begin() as connection:
+            for table_name in ("contacts", "companies"):
+                self.assertTrue(
+                    await connection.run_sync(
+                        lambda conn, name=table_name: inspect(conn).has_table(
+                            name, schema=schema
+                        )
+                    )
+                )
+            contact_indexes = await connection.run_sync(
+                lambda conn: inspect(conn).get_indexes("contacts", schema=schema)
+            )
+            company_indexes = await connection.run_sync(
+                lambda conn: inspect(conn).get_indexes("companies", schema=schema)
+            )
+            self.assertIn(
+                "ix_contacts_name", {item["name"] for item in contact_indexes}
+            )
+            self.assertIn(
+                "ix_companies_name", {item["name"] for item in company_indexes}
+            )
+            await connection.execute(
+                ContactModel.__table__.insert()
+                .values(
+                    id=shared_contact_id,
+                    first_name="Іван",
+                    last_name=None,
+                    middle_name=None,
+                    created_by=actor_id,
+                    updated_by=actor_id,
+                )
+                .execution_options(schema_translate_map={"tenant": schema})
+            )
+            await connection.execute(
+                ContactModel.__table__.insert()
+                .values(
+                    id=shared_contact_id,
+                    first_name="Олена",
+                    last_name=None,
+                    middle_name=None,
+                    created_by=actor_id,
+                    updated_by=actor_id,
+                )
+                .execution_options(schema_translate_map={"tenant": other_schema})
+            )
+            self.assertEqual(
+                await connection.scalar(
+                    select(func.count())
+                    .select_from(ContactModel.__table__)
+                    .execution_options(schema_translate_map={"tenant": schema})
+                ),
+                1,
+            )
+            self.assertEqual(
+                await connection.scalar(
+                    select(func.count())
+                    .select_from(ContactModel.__table__)
+                    .execution_options(schema_translate_map={"tenant": other_schema})
+                ),
+                1,
+            )
+            await connection.execute(
+                CompanyModel.__table__.insert()
+                .values(
+                    id=uuid4(),
+                    name="Acme",
+                    created_by=actor_id,
+                    updated_by=actor_id,
+                )
+                .execution_options(schema_translate_map={"tenant": schema})
+            )
+            with self.assertRaises(IntegrityError):
+                async with connection.begin_nested():
+                    await connection.execute(
+                        ContactModel.__table__.insert()
+                        .values(
+                            id=uuid4(),
+                            first_name="   ",
+                            created_by=actor_id,
+                            updated_by=actor_id,
+                        )
+                        .execution_options(schema_translate_map={"tenant": schema})
+                    )
+            await self.migrator.downgrade(
+                connection, schema, "0006_price_list_streaming"
+            )
+            for table_name in ("contacts", "companies"):
+                self.assertFalse(
+                    await connection.run_sync(
+                        lambda conn, name=table_name: inspect(conn).has_table(
+                            name, schema=schema
+                        )
+                    )
+                )
+            await self.migrator.upgrade(connection, schema)
+            self.assertTrue(
+                await connection.run_sync(
+                    lambda conn: inspect(conn).has_table("contacts", schema=schema)
+                )
             )
 
     async def test_price_list_streaming_upgrade_preserves_existing_quarantine(self):

@@ -21,6 +21,7 @@ existing local stack.
 - `identity`: email OTP, sessions, and tenant administrator provisioning.
 - `control_plane`: Runtime v1 provisioning, mTLS integration, readiness and access projection delivery.
 - `inventory`: Warehouse domain model and tenant-scoped persistence model; no HTTP API yet.
+- `crm`: tenant-scoped Contact and Company aggregates, CRUD/search HTTP API, and Console screens.
 - `shared`: database/UoW, tenant migrations, identifiers, audit fields, messaging, and jobs.
 
 Dynamic object modules are removed. Their earlier documentation is in [history](docs/history/index.md).
@@ -67,6 +68,7 @@ See [requirements and retries](docs/operations/ci-cd.md#образы-из-featur
 - [Documentation index](docs/index.md)
 - [Architecture](docs/architecture/overview.md)
 - [Inventory](docs/modules/inventory.md)
+- [CRM](docs/modules/crm.md)
 - [Tenant migrations](docs/data/tenant-migrations.md)
 - [HTTP API](docs/interfaces/http-api.md)
 - [Management CLI](docs/interfaces/management-cli.md)

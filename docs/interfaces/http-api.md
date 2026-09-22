@@ -53,6 +53,27 @@ Tenant context comes from the exact request Host. Session cookies are host-only,
 
 Invitation links expire after seven days. Duplicate local email or cloud identity conflicts rather than merging accounts. Members cannot manage other users. The last active administrator cannot be revoked or demoted. Unlink preserves permitted OTP access. Local revocation takes effect without Core connectivity and old sessions do not revive when access is restored.
 
+## Console CRM
+
+CRM routes are tenant-scoped from the authenticated request context. Clients cannot choose a `tenant_id`. Every
+authenticated tenant user can read and mutate CRM data; browser mutations require the shared CSRF token.
+
+| Method | Path                                              | Behavior                                                   |
+|--------|---------------------------------------------------|------------------------------------------------------------|
+| GET    | `/api/console/crm/contacts?q=&limit=25&offset=0`  | Search and page contacts; `{items, total, limit, offset}`  |
+| GET    | `/api/console/crm/contacts/{id}`                  | Get a contact or `404`                                     |
+| POST   | `/api/console/crm/contacts`                       | Create a contact and return it with `201`                  |
+| PUT    | `/api/console/crm/contacts/{id}`                  | Update a contact                                           |
+| DELETE | `/api/console/crm/contacts/{id}`                  | Hard-delete a contact and return `204`                     |
+| GET    | `/api/console/crm/companies?q=&limit=25&offset=0` | Search and page companies; `{items, total, limit, offset}` |
+| GET    | `/api/console/crm/companies/{id}`                 | Get a company or `404`                                     |
+| POST   | `/api/console/crm/companies`                      | Create a company and return it with `201`                  |
+| PUT    | `/api/console/crm/companies/{id}`                 | Update a company                                           |
+| DELETE | `/api/console/crm/companies/{id}`                 | Hard-delete a company and return `204`                     |
+
+`limit` must be between 1 and 100. Search is case-insensitive; results use fixed name-then-id ordering. Domain
+validation is `422`, missing records are `404`, and persistence conflicts are `409`. See [CRM](../modules/crm.md).
+
 ## Runtime to Core
 
 The outbox sends Instance-mTLS `PUT /internal/v1/tenants/{tenant_id}/access/{user_id}/` with `{event_id, version, available}`. Core replies `{status: 200, data: {applied, version?}}`; both applied and already-processed results acknowledge delivery. Roles stay local.

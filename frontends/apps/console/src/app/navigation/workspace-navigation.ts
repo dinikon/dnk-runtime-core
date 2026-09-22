@@ -1,9 +1,30 @@
-import { FileSpreadsheet, LifeBuoy, ShoppingBasket } from "@lucide/vue";
+import {
+  Building2,
+  FileSpreadsheet,
+  LifeBuoy,
+  ShoppingBasket,
+  Users,
+} from "@lucide/vue";
 
 import type { WorkspaceNavigation } from "./workspace-navigation.types";
 
 export const workspaceNavigation: WorkspaceNavigation = {
   navGroups: [
+    {
+      title: "CRM",
+      items: [
+        {
+          title: "Контакты",
+          url: "/crm/contacts",
+          icon: Users,
+        },
+        {
+          title: "Компании",
+          url: "/crm/companies",
+          icon: Building2,
+        },
+      ],
+    },
     {
       title: "Закупки",
       items: [
