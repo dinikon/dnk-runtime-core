@@ -1,10 +1,15 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 
+import { authApi } from "@/modules/auth/api/auth.api";
 import type { ConsoleUser } from "@/modules/auth/api/auth.contracts";
+
+export type SessionStatus = "idle" | "loading" | "ready" | "error";
 
 export const useUserStore = defineStore("user", () => {
   const user = ref<ConsoleUser | null>(null);
+  const sessionStatus = ref<SessionStatus>("idle");
+  let sessionPromise: Promise<ConsoleUser> | null = null;
 
   const primaryEmail = computed(
     () => user.value?.emails.find((email) => email.is_primary)?.email ?? null,
@@ -41,22 +46,57 @@ export const useUserStore = defineStore("user", () => {
     );
   });
   const isAuthenticated = computed(() => user.value !== null);
+  const isAdmin = computed(() => user.value?.role === "admin");
 
   function setUser(nextUser: ConsoleUser) {
     user.value = nextUser;
+    sessionStatus.value = "ready";
   }
 
   function clearUser() {
     user.value = null;
+    sessionStatus.value = "idle";
+    sessionPromise = null;
+  }
+
+  async function ensureCurrentUser() {
+    if (user.value && sessionStatus.value === "ready") {
+      return user.value;
+    }
+
+    if (sessionPromise) {
+      return sessionPromise;
+    }
+
+    sessionStatus.value = "loading";
+    sessionPromise = authApi
+      .getCurrentUser()
+      .then((currentUser) => {
+        setUser(currentUser);
+        return currentUser;
+      })
+      .catch((error: unknown) => {
+        user.value = null;
+        sessionStatus.value = "error";
+        throw error;
+      })
+      .finally(() => {
+        sessionPromise = null;
+      });
+
+    return sessionPromise;
   }
 
   return {
     avatarUrl,
     clearUser,
     displayName,
+    ensureCurrentUser,
     initials,
+    isAdmin,
     isAuthenticated,
     primaryEmail,
+    sessionStatus,
     setUser,
     user,
   };

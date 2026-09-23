@@ -17,7 +17,7 @@ modules.
 - Loads and stores the current console user session.
 - Provides tenant-scoped Contact and Company management in CRM.
 - Provides price-list and partner-offer workflows.
-- Provides profile and workspace access-management screens.
+- Provides profile and administrator-only workspace access-management screens.
 
 ## Main Flows
 
@@ -31,19 +31,17 @@ disabled entries. CRM has separate contact and company routes. Each CRM page own
 URL-backed search and pagination state, query/mutation wiring, and create, edit
 and delete dialogs while collection and form components remain presentational.
 
-The settings pages render their own settings layout. Profile settings update the
-current user's profile through the identity API. Workspace access settings manage
-users and invitations for administrators.
-
-Placeholder settings routes remain registered so direct links still render a
-settings page, but those routes are not linked from the settings sidebar.
+Profile settings update the current user's profile through the identity API and
+remain available from the user menu. Administrators enter a separate admin layout
+through the tenant menu. The first admin screen manages users and invitations;
+future admin navigation entries remain hidden until their pages are implemented.
 
 ## Internal Structure
 
 - `frontends/apps/console/src/app/`: Vue application shell, router and Pinia stores.
 - `frontends/apps/console/src/app/providers/http/`: shared Axios client and HTTP error helpers.
 - `frontends/apps/console/src/modules/`: feature modules with pages, API methods and backend contract types.
-- `frontends/apps/console/src/layouts/`: app, settings and auth layout shells.
+- `frontends/apps/console/src/layouts/`: workspace, admin and auth layout shells.
 - `frontends/apps/console/src/components/ui/`: shadcn-vue style primitives.
 - `frontends/apps/console/src/components/custom-ui/`: custom UI Kit components implemented from Figma.
 - `frontends/apps/console/src/shared/config/`: shared frontend runtime configuration.
@@ -65,11 +63,14 @@ Current API modules:
 ## Layout And UI System
 
 The main console shell uses `AppLayout`, which renders a shadcn sidebar provider,
-the app sidebar, a collapsible sidebar trigger and a page content slot.
+the app sidebar, a collapsible sidebar trigger and a page content slot. For
+administrators, the tenant header opens a menu that switches between the workspace
+and `/admin/users`. Members keep the tenant header as a dashboard link.
 
-Settings screens use `SettingsLayout`, which keeps the same shadcn sidebar
-structure but has settings-specific navigation, breadcrumbs and an internal
-scrolling content card.
+Administrative screens use `AdminLayout`, with their own sidebar navigation,
+breadcrumbs and content slot. Route metadata requires the `admin` role before the
+layout is mounted. The access page keeps tab, search, role and status state in the
+URL and uses client-side filtering over the current identity API collections.
 
 Login uses `AuthLayout`, a centered viewport shell without a sidebar.
 
@@ -146,20 +147,20 @@ above.
 
 Component responsibilities:
 
-| Component | Responsibility |
-| --- | --- |
-| `[EntityPlural]Page.vue` | Route-level orchestrator. Owns page state, query/mutation wiring, router integration, dialog open state, event handling and data flow. It should not render cards, list rows, form fields or all loading/empty/result branches inline. |
-| `[EntityPlural]Header.vue` | Page title, description and primary page action. It should not own search, filters or sorting. |
-| `[EntityPlural]Toolbar.vue` | List actions such as view mode, sort, filters, bulk actions and refresh. |
-| `[EntityPlural]SearchBar.vue` | Search input and search-related emits or `v-model`. Keep it separate when search is a first-class page control. |
-| `[EntityPlural]Body.vue` | Chooses the current data state: `Skeleton`, `Empty`, `Error` or `Results`. List, grid and kanban components should not receive `loading` or `empty` props. |
-| `[EntityPlural]Results.vue` | Chooses the concrete result view: `List`, `Grid` or `Kanban`. It represents loaded data, not pagination or fetching state. |
-| `[EntityPlural]List.vue`, `[EntityPlural]Grid.vue`, `[EntityPlural]Kanban.vue` | Render collection layout only. They do not know how data is loaded, paginated, created, updated or deleted. |
-| `[Entity]Card.vue`, `[Entity]ListItem.vue`, `[Entity]KanbanCard.vue` | Render one item. Use singular names for one entity and plural names for collections. |
-| `[Entity]Form.vue` | Owns fields and validation. It emits submitted values and does not call API clients directly. |
-| `Create[Entity]Dialog.vue`, `Edit[Entity]Dialog.vue` | Own modal UX, submit/cancel behavior and contain the form component. They emit submit events to the page or smart feature boundary. |
-| `Delete[Entity]Dialog.vue` or `Delete[Entity]ConfirmDialog.vue` | Owns delete confirmation UX. Delete is a confirm dialog, not a form. |
-| `[EntityPlural]Footer.vue` | Owns page navigation controls. Pagination belongs in the footer, not in `Results`. |
+| Component                                                                      | Responsibility                                                                                                                                                                                                                         |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `[EntityPlural]Page.vue`                                                       | Route-level orchestrator. Owns page state, query/mutation wiring, router integration, dialog open state, event handling and data flow. It should not render cards, list rows, form fields or all loading/empty/result branches inline. |
+| `[EntityPlural]Header.vue`                                                     | Page title, description and primary page action. It should not own search, filters or sorting.                                                                                                                                         |
+| `[EntityPlural]Toolbar.vue`                                                    | List actions such as view mode, sort, filters, bulk actions and refresh.                                                                                                                                                               |
+| `[EntityPlural]SearchBar.vue`                                                  | Search input and search-related emits or `v-model`. Keep it separate when search is a first-class page control.                                                                                                                        |
+| `[EntityPlural]Body.vue`                                                       | Chooses the current data state: `Skeleton`, `Empty`, `Error` or `Results`. List, grid and kanban components should not receive `loading` or `empty` props.                                                                             |
+| `[EntityPlural]Results.vue`                                                    | Chooses the concrete result view: `List`, `Grid` or `Kanban`. It represents loaded data, not pagination or fetching state.                                                                                                             |
+| `[EntityPlural]List.vue`, `[EntityPlural]Grid.vue`, `[EntityPlural]Kanban.vue` | Render collection layout only. They do not know how data is loaded, paginated, created, updated or deleted.                                                                                                                            |
+| `[Entity]Card.vue`, `[Entity]ListItem.vue`, `[Entity]KanbanCard.vue`           | Render one item. Use singular names for one entity and plural names for collections.                                                                                                                                                   |
+| `[Entity]Form.vue`                                                             | Owns fields and validation. It emits submitted values and does not call API clients directly.                                                                                                                                          |
+| `Create[Entity]Dialog.vue`, `Edit[Entity]Dialog.vue`                           | Own modal UX, submit/cancel behavior and contain the form component. They emit submit events to the page or smart feature boundary.                                                                                                    |
+| `Delete[Entity]Dialog.vue` or `Delete[Entity]ConfirmDialog.vue`                | Owns delete confirmation UX. Delete is a confirm dialog, not a form.                                                                                                                                                                   |
+| `[EntityPlural]Footer.vue`                                                     | Owns page navigation controls. Pagination belongs in the footer, not in `Results`.                                                                                                                                                     |
 
 Shared UI components must remain free of business meaning. For example,
 `shared/ui/pagination/PagePagination.vue` can render generic pagination, while
@@ -190,6 +191,7 @@ Reusable UI without domain terms? -> shared/ui
 
 - tenant resolution state;
 - current console user state;
+- deduplicated current-user session bootstrap for protected route guards;
 - email OTP challenge state;
 - auth and profile loading flags;
 - profile update mutation behavior.
@@ -243,7 +245,8 @@ code changes.
 ## Source Of Truth
 
 - `frontends/apps/console/src/app/router.ts`
-- `frontends/apps/console/src/app/stores/session.ts`
+- `frontends/apps/console/src/app/stores/tenant.ts`
+- `frontends/apps/console/src/app/stores/user.ts`
 - `frontends/apps/console/src/app/providers/http/`
 - `frontends/apps/console/src/modules/`
 - `frontends/apps/console/src/layouts/`

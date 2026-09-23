@@ -10,10 +10,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
-import { useCurrentUserQuery } from "@/modules/auth/queries/use-current-user-query";
 import WorkspaceSidebar from "./components/WorkspaceSidebar.vue";
-
-useCurrentUserQuery();
 </script>
 
 <template>

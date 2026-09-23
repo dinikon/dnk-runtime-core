@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ChevronsUpDown, LogOut } from "@lucide/vue";
+import { ChevronsUpDown, LogOut, UserRound } from "@lucide/vue";
 import { useRouter } from "vue-router";
 
+import { useUserStore } from "@/app/stores/user";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -17,7 +18,6 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { useUserStore } from "@/app/stores/user";
 import { useLogoutMutation } from "@/modules/auth/mutations/use-logout";
 
 const router = useRouter();
@@ -26,10 +26,7 @@ const logoutMutation = useLogoutMutation();
 const { isMobile } = useSidebar();
 
 async function logout() {
-  if (logoutMutation.isPending.value) {
-    return;
-  }
-
+  if (logoutMutation.isPending.value) return;
   await logoutMutation.mutateAsync();
   await router.push({ name: "login" });
 }
@@ -58,8 +55,8 @@ async function logout() {
               <span class="truncate font-medium">{{
                 userStore.displayName
               }}</span>
-              <span class="truncate text-xs">{{
-                userStore.primaryEmail ?? "No primary email"
+              <span class="truncate text-xs text-muted-foreground">{{
+                userStore.primaryEmail ?? "Нет основного email"
               }}</span>
             </div>
             <ChevronsUpDown class="ml-auto size-4" />
@@ -71,35 +68,30 @@ async function logout() {
           align="end"
           :side-offset="4"
         >
-          <DropdownMenuLabel class="p-0 font-normal">
-            <div class="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-              <Avatar class="h-8 w-8 rounded-lg">
-                <AvatarImage
-                  v-if="userStore.avatarUrl"
-                  :src="userStore.avatarUrl"
-                  :alt="userStore.displayName"
-                />
-                <AvatarFallback class="rounded-lg">{{
-                  userStore.initials
-                }}</AvatarFallback>
-              </Avatar>
-              <div class="grid flex-1 text-left text-sm leading-tight">
-                <span class="truncate font-semibold">{{
-                  userStore.displayName
-                }}</span>
-                <span class="truncate text-xs">{{
-                  userStore.primaryEmail ?? "No primary email"
-                }}</span>
-              </div>
+          <DropdownMenuLabel class="font-normal">
+            <div class="grid text-sm leading-tight">
+              <span class="truncate font-semibold">{{
+                userStore.displayName
+              }}</span>
+              <span class="truncate text-xs text-muted-foreground">{{
+                userStore.primaryEmail ?? "Нет основного email"
+              }}</span>
             </div>
           </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem as-child>
+            <RouterLink to="/settings/account">
+              <UserRound />
+              Профиль
+            </RouterLink>
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             :disabled="logoutMutation.isPending.value"
             @click="logout"
           >
             <LogOut />
-            {{ logoutMutation.isPending.value ? "Logging out..." : "Log out" }}
+            {{ logoutMutation.isPending.value ? "Выход…" : "Выйти" }}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
