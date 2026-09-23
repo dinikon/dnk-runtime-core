@@ -29,6 +29,7 @@ from src.modules.identity.infrastructure.adapter.session_store import (
     TokenManagerBackedSessionStore,
 )
 from src.modules.shared import EntityIdVO
+from src.modules.shared.domain.email import SystemEmailKind
 from src.modules.shared.application.persistence.tenant_schema_naming import (
     TenantSchemaNaming,
 )
@@ -158,6 +159,11 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
                 "guest@example.com",
                 "member",
             )
+            self.mail.send.assert_awaited_once_with(
+                SystemEmailKind.SEND_INVITATION,
+                "guest@example.com",
+                {"invitation_url": invite["invitation_url"]},
+            )
             secret = parse_qs(urlsplit(invite["invitation_url"]).fragment)["token"][0]
             self.assertFalse(
                 await service.users.exists_by_tenant_and_email(
@@ -165,6 +171,7 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
             otp = await service.request_invitation_otp("tenant.example", secret)
+            self.assertEqual(self.mail.send.await_count, 2)
             self.assertEqual(self.mail.send.call_args.args[1], "guest@example.com")
 
         async def accept():

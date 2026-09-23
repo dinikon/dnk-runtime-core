@@ -6,6 +6,7 @@ from enum import StrEnum
 class SystemEmailKind(StrEnum):
     """Виды системных email-писем, доступных бизнес-модулям."""
 
+    SEND_INVITATION = "send_invitation"
     SEND_OTP_CODE = "send_otp_code"
 
 

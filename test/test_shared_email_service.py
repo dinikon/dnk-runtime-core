@@ -18,6 +18,7 @@ from src.modules.shared.infrastructure.email.rendered_email_message import (
 )
 from src.modules.shared.domain.email import (
     EmailProviderNotImplementedError,
+    SendInvitationVariables,
     SendOtpCodeVariables,
     SystemEmailKind,
 )
@@ -87,6 +88,28 @@ class SharedEmailServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(rendered.recipient_email, "john@example.com")
         self.assertEqual(rendered.subject, "Your sign-in code")
         self.assertIn("123456", rendered.text_body)
+        self.assertIsNone(rendered.html_body)
+
+    async def test_system_email_service_renders_invitation_message(self) -> None:
+        transport = _EmailTransportStub()
+        service = SystemEmailService(transport)
+        invitation_url = (
+            "https://tenant.example/accept-invitation#token=invitation-token"
+        )
+        variables: SendInvitationVariables = {"invitation_url": invitation_url}
+
+        await service.send(
+            SystemEmailKind.SEND_INVITATION,
+            "guest@example.com",
+            variables,
+        )
+
+        rendered = transport.sent[0]
+        self.assertEqual(rendered.recipient_email, "guest@example.com")
+        self.assertEqual(rendered.subject, "You're invited to join a workspace")
+        self.assertIn(invitation_url, rendered.text_body)
+        self.assertIn("expires in 7 days", rendered.text_body)
+        self.assertIn("ignore this email", rendered.text_body)
         self.assertIsNone(rendered.html_body)
 
     async def test_resend_transport_raises_not_implemented_when_service_sends_email(

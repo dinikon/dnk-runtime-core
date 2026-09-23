@@ -42,7 +42,7 @@ Tenant context comes from the exact request Host. Session cookies are host-only,
 | POST | `/api/console/auth/logout` | End local session |
 | GET | `/api/console/users` | Admin; `{users: [...]}` |
 | PATCH | `/api/console/users/{user_id}` | Admin; optional `role: admin/member`, `status: active/revoked` |
-| GET / POST | `/api/console/invitations` | Admin; list or create `{email, role}` and receive `invitation_url` |
+| GET / POST | `/api/console/invitations` | Admin; list or create `{email, role}`, send the invitation email, and receive `invitation_url` |
 | DELETE | `/api/console/invitations/{invitation_id}` | Admin; revoke invitation |
 | POST | `/api/console/invitations/request-otp` | `{invitation_token}`; code goes only to the invitation email |
 | POST | `/api/console/invitations/accept` | `{invitation_token, token, code, first_name, last_name}`; create local user after OTP |
@@ -51,7 +51,7 @@ Tenant context comes from the exact request Host. Session cookies are host-only,
 | GET | `/api/auth/cloud/callback/` | Exact registered query callback; local login or explicit link |
 | DELETE | `/api/auth/cloud/link/` | Unlink and invalidate local sessions |
 
-Invitation links expire after seven days. Duplicate local email or cloud identity conflicts rather than merging accounts. Members cannot manage other users. The last active administrator cannot be revoked or demoted. Unlink preserves permitted OTP access. Local revocation takes effect without Core connectivity and old sessions do not revive when access is restored.
+Invitation links expire after seven days. Creating an invitation attempts email delivery after persisting it and still returns `invitation_url` when delivery fails, so an administrator can share the link manually. Duplicate local email or cloud identity conflicts rather than merging accounts. Members cannot manage other users. The last active administrator cannot be revoked or demoted. Unlink preserves permitted OTP access. Local revocation takes effect without Core connectivity and old sessions do not revive when access is restored.
 
 ## Console CRM
 
