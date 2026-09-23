@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 import hashlib
+import logging
 import secrets
 from uuid import UUID, uuid4
 
@@ -10,7 +11,13 @@ from src.modules.identity.domain.access import IdentityAccessError
 from src.modules.identity.application.ports.access import Invitation
 from src.modules.identity.domain.user import User, UserIdVO
 from src.modules.shared import EntityIdVO
-from src.modules.shared.domain.email import SystemEmailKind
+from src.modules.shared.domain.email import (
+    EmailDeliveryError,
+    SendInvitationVariables,
+    SystemEmailKind,
+)
+
+log = logging.getLogger(__name__)
 
 
 def token_digest(token: str) -> str:
@@ -195,9 +202,23 @@ class IdentityAccessService:
         await self.access.add_invitation(context.tenant_id, invitation)
         await self.uow.commit()
         scheme = "http" if self.settings.allow_insecure_http else "https"
+        invitation_url = f"{scheme}://{context.host}/accept-invitation#token={token}"
+        variables: SendInvitationVariables = {"invitation_url": invitation_url}
+        try:
+            await self.email.send(
+                SystemEmailKind.SEND_INVITATION,
+                email,
+                variables,
+            )
+        except EmailDeliveryError:
+            log.exception(
+                "Failed to deliver invitation email to '%s' for tenant '%s'.",
+                email,
+                context.tenant_id,
+            )
         return {
             **self.invitation_view(invitation),
-            "invitation_url": f"{scheme}://{context.host}/accept-invitation#token={token}",
+            "invitation_url": invitation_url,
         }
 
     async def revoke_invitation(self, host, session_token, invitation_id):

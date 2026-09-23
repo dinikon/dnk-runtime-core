@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Literal, Protocol, overload
 
 from src.modules.shared.domain.email import (
+    SendInvitationVariables,
     SendOtpCodeVariables,
     SystemEmailKind,
 )
@@ -10,6 +11,14 @@ from src.modules.shared.domain.email import (
 
 class EmailServicePort(Protocol):
     """Порт отправки системных email-писем по typed kind/payload."""
+
+    @overload
+    async def send(
+        self,
+        kind: Literal[SystemEmailKind.SEND_INVITATION],
+        recipient_email: str,
+        variables: SendInvitationVariables,
+    ) -> None: ...
 
     @overload
     async def send(
