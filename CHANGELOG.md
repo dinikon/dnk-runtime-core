@@ -1,3 +1,10 @@
+## v2.2.0 (2026-09-24)
+
+### Feat
+
+- **access**: split member management into role and status dialogs
+- **access**: introduce admin UI for managing users and invitations
+
 ## v2.1.0 (2026-09-24)
 
 ### Feat
