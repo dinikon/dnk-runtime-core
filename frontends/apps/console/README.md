@@ -20,7 +20,8 @@ Optional environment:
 ## Source Of Truth
 
 - `src/app/router.ts`
-- `src/app/stores/session.ts`
+- `src/app/stores/tenant.ts`
+- `src/app/stores/user.ts`
 - `src/app/providers/http/`
 - `src/modules/`
 - `src/layouts/`

@@ -4,12 +4,18 @@ import { computed, onMounted } from "vue";
 import { useTenantStore } from "@/app/stores/tenant";
 
 const tenantStore = useTenantStore();
+const props = defineProps<{
+  subtitle?: string;
+}>();
 
 const tenantName = computed(() => tenantStore.tenantName);
 const tenantStatus = computed(() =>
   tenantStore.isResolvingTenant && !tenantStore.tenant
     ? "loading"
     : tenantStore.tenantStatus,
+);
+const tenantSubtitle = computed(
+  () => props.subtitle ?? `Status: ${tenantStatus.value}`,
 );
 
 onMounted(() => {
@@ -22,6 +28,8 @@ onMounted(() => {
 <template>
   <div class="grid flex-1 text-left text-sm leading-tight">
     <span class="truncate font-medium">{{ tenantName }}</span>
-    <span class="truncate text-xs">Status: {{ tenantStatus }}</span>
+    <span class="truncate text-xs text-muted-foreground">{{
+      tenantSubtitle
+    }}</span>
   </div>
 </template>

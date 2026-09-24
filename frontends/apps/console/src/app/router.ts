@@ -1,6 +1,9 @@
+import type { Pinia } from "pinia";
 import { createRouter, createWebHistory } from "vue-router";
 
-import { AppLayout } from "@/layouts";
+import { useUserStore } from "@/app/stores/user";
+import { AdminLayout, AppLayout } from "@/layouts";
+import { accessRoutes } from "@/modules/access/routes";
 import { authRoutes } from "@/modules/auth/routes";
 import { crmRoutes } from "@/modules/crm";
 import { dashboardRoutes } from "@/modules/dashboard";
@@ -20,6 +23,7 @@ export const router = createRouter({
     {
       path: "/",
       component: AppLayout,
+      meta: { requiresAuth: true },
       children: [
         {
           path: "",
@@ -30,8 +34,7 @@ export const router = createRouter({
         ...priceListRoutes,
         {
           path: "settings/members",
-          name: "members",
-          component: () => import("@/modules/access/pages/MembersPage.vue"),
+          redirect: { name: "admin-users" },
         },
         {
           path: "settings/account",
@@ -41,8 +44,50 @@ export const router = createRouter({
       ],
     },
     {
+      path: "/admin",
+      component: AdminLayout,
+      meta: { requiresAuth: true, requiredRole: "admin" },
+      children: [
+        {
+          path: "",
+          redirect: { name: "admin-users" },
+        },
+        ...accessRoutes,
+      ],
+    },
+    {
       path: "/:pathMatch(.*)*",
       redirect: "/dashboard",
     },
   ],
 });
+
+export function installRouterGuards(pinia: Pinia) {
+  router.beforeEach(async (to) => {
+    if (!to.matched.some((record) => record.meta.requiresAuth)) {
+      return true;
+    }
+
+    const userStore = useUserStore(pinia);
+
+    try {
+      await userStore.ensureCurrentUser();
+    } catch {
+      return {
+        name: "login",
+        query: { redirect: to.fullPath },
+      };
+    }
+
+    const requiredRole = [...to.matched]
+      .reverse()
+      .map((record) => record.meta.requiredRole)
+      .find((role) => role !== undefined);
+
+    if (requiredRole && userStore.user?.role !== requiredRole) {
+      return { name: "dashboard" };
+    }
+
+    return true;
+  });
+}
