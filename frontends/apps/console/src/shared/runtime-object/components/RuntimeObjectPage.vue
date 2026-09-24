@@ -64,7 +64,7 @@ const queryState = useRuntimeObjectQueryState();
 
 const isMinimumLoadingVisible = ref(true);
 let loadingStartedAt = Date.now();
-let loadingTimeoutId: ReturnType<typeof window.setTimeout> | null = null;
+let loadingTimeoutId: number | null = null;
 
 const filterSheetOpen = ref(false);
 const formSheetOpen = ref(false);

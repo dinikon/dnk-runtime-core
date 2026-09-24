@@ -18,7 +18,12 @@ The adapter and migrator never commit. PostgreSQL DDL, Alembic version writes, t
 
 ## Revisions
 
-Files live in `migrations/tenant/versions/`; each tenant schema has its own `alembic_version`. The first revision is `0001_warehouses`; `0002_identity_users` adds tenant-local `users` and `user_emails` with a same-schema foreign key. `0003_identity_cloud_access` adds roles, session epochs, cloud identities, invitations and live normalized-email uniqueness. Revisions contain no fixed tenant names and do not import current ORM models.
+Files live in `migrations/tenant/versions/`; each tenant schema has its own `alembic_version`. The first revision is
+`0001_warehouses`; `0002_identity_users` adds tenant-local `users` and `user_emails` with a same-schema foreign key.
+`0003_identity_cloud_access` adds roles, session epochs, cloud identities, invitations and live normalized-email
+uniqueness. Revisions `0004` through `0006` add partner price-list ingestion and management. Revision
+`0007_crm_contacts_companies` adds the static CRM `contacts` and `companies` tables, validation checks and stable-sort
+indexes. Revisions contain no fixed tenant names and do not import current ORM models.
 
 The migration environment uses transaction-local `search_path` (through PostgreSQL `set_config(..., true)`) and explicitly sets `version_table_schema`. Successful execution restores the previous path. Failed transactions are rolled back by the owner. Migration files must preserve transactional execution: no internal commit, autocommit block or nontransactional DDL in onboarding revisions.
 
@@ -62,6 +67,7 @@ Control Plane v1 targets a fresh database. Migration or adoption of existing ins
 ## Related
 
 - [Inventory](../modules/inventory.md)
+- [CRM](../modules/crm.md)
 - [Tenancy](../modules/tenancy.md)
 - [Persistence and UoW](../architecture/persistence-and-uow.md)
 - [Historical dynamic schema](../history/data/runtime-schema.md)

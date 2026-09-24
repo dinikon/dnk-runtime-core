@@ -96,7 +96,7 @@ The default theme is `system`, and `PATCH /me` requires an explicit non-null the
 
 Revision `0003_identity_cloud_access` adds role, session epoch, cloud bindings, invitations and unique live normalized email. This release targets fresh databases; no legacy import or automatic reset is performed.
 
-Owner bootstrap creates an admin and exact `(issuer, sub)` binding. Invitations create a local user only after OTP verification of the fixed email, followed by explicit cloud linking in a local session. Matching cloud email never links accounts. A conflicting identity is not overwritten. Local access, the Core projection version and outbox commit in one UoW.
+Owner bootstrap creates an admin and exact `(issuer, sub)` binding. Creating an invitation persists it before attempting to send its seven-day link by email; delivery failure is logged while the response still exposes the same link for manual sharing. Invitations create a local user only after OTP verification of the fixed email, followed by explicit cloud linking in a local session. Matching cloud email never links accounts. A conflicting identity is not overwritten. Local access, the Core projection version and outbox commit in one UoW.
 
 Every session consumer checks current user status and epoch. Revocation or unlink invalidates prior sessions permanently; restoring access does not revive them. Admin operations protect the last active administrator. Cloud tokens are discarded after identity validation; subsequent requests use local sessions. Secure, HttpOnly, host-only SameSite=Lax cookies are the default; insecure HTTP requires an explicit local-development setting. See [HTTP API](../interfaces/http-api.md) for added routes and CSRF requirements.
 

@@ -1,0 +1,1 @@
+export { crmRoutes } from "./routes";

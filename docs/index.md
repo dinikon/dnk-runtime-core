@@ -17,6 +17,7 @@ This documentation describes the current implementation of `dnk-runtime-core` as
 - [Control Plane integration](modules/control-plane.md)
 - [Identity](modules/identity.md)
 - [Inventory](modules/inventory.md)
+- [CRM](modules/crm.md)
 - [Shared](modules/shared.md)
 
 ## Roadmap-границы модулей
@@ -27,6 +28,7 @@ This documentation describes the current implementation of `dnk-runtime-core` as
 - [Campaigns](modules/campaigns.md)
 - [External Events](modules/external-events.md)
 - [Commerce Core: каталог, склад, заказы и интеграции](plan/commerce-domain-and-integrations.md)
+- [Каталог, контент, ценообразование и каналы: техническая спецификация](plan/catalog-content-pricing-channels.md)
 
 ## Interfaces
 
@@ -58,7 +60,7 @@ This documentation describes the current implementation of `dnk-runtime-core` as
 - [Standalone Helm deployment](../helm/README.md)
 - [Cron concurrency, probes and PostgreSQL tuning](operations/cron-and-postgresql.md)
 
-- [CRM removal runbook](operations/remove-crm.md)
+- [Historical CRM removal runbook](operations/remove-crm.md)
 - [Custom object module removal](operations/remove-custom-object.md)
 - [Workflow and communication removal](operations/remove-workflow-communication.md)
 

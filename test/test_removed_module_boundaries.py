@@ -134,25 +134,29 @@ class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(object_feature_response.status_code, 404)
         self.assertNotIn("object_feature_config", Base.metadata.tables)
 
-    async def test_crm_module_and_http_surface_are_absent(self) -> None:
-        self.assertFalse((PROJECT_ROOT / "src/modules/crm").exists())
-
+    def test_crm_is_static_and_exposes_only_current_crud_surface(self) -> None:
+        self.assertTrue((PROJECT_ROOT / "src/modules/crm").is_dir())
+        self.assertFalse(
+            (
+                PROJECT_ROOT / "src/modules/crm/application/contact/integration_events"
+            ).exists()
+        )
         app = create_app()
         openapi_paths = set(app.openapi()["paths"])
-        self.assertFalse(
-            any(path.startswith("/api/console/crm/") for path in openapi_paths)
+        self.assertTrue(
+            {
+                "/api/console/crm/contacts",
+                "/api/console/crm/contacts/{contact_id}",
+                "/api/console/crm/companies",
+                "/api/console/crm/companies/{company_id}",
+            }.issubset(openapi_paths)
         )
-
-        transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(
-            transport=transport,
-            base_url="http://testserver",
-        ) as client:
-            contacts_response = await client.get("/api/console/crm/contacts")
-            companies_response = await client.get("/api/console/crm/companies")
-
-        self.assertEqual(contacts_response.status_code, 404)
-        self.assertEqual(companies_response.status_code, 404)
+        self.assertFalse(
+            any(
+                path.startswith("/api/console/crm/contact-points")
+                for path in openapi_paths
+            )
+        )
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
-> Backend update: dynamic schema/object APIs have been removed. Any descriptions below of runtime-object or data-model screens are historical and those capabilities are unavailable. Inventory has no HTTP API or UI in this version; frontend implementation is outside this change.
+> Dynamic schema/object APIs remain removed. CRM uses static backend contracts and tenant tables. Inventory still has
+> no HTTP API or UI in this version.
 
 # Console Frontend
 
@@ -14,9 +15,9 @@ modules.
 - Resolves the current tenant before showing the login flow.
 - Authenticates console users through email OTP.
 - Loads and stores the current console user session.
-- Displays runtime objects in the main console.
-- Provides settings screens for the current user profile and workspace data model.
-- Allows custom object and custom field creation and deletion through the schema registry API.
+- Provides tenant-scoped Contact and Company management in CRM.
+- Provides price-list and partner-offer workflows.
+- Provides profile and workspace access-management screens.
 
 ## Main Flows
 
@@ -26,14 +27,13 @@ before redirecting to the console home page.
 
 The console home page renders the main application layout. The sidebar exposes
 the current workspace navigation and keeps unavailable sections visible as
-disabled entries. The page content shows the object browser, which loads
-available runtime objects. Shared runtime-record components remain available, but no generic custom-record API client
-is currently wired.
+disabled entries. CRM has separate contact and company routes. Each CRM page owns
+URL-backed search and pagination state, query/mutation wiring, and create, edit
+and delete dialogs while collection and form components remain presentational.
 
 The settings pages render their own settings layout. Profile settings update the
-current user's profile through the identity API. Data model settings list runtime
-objects, describe an object schema, create custom objects, create custom fields
-and delete custom objects or fields.
+current user's profile through the identity API. Workspace access settings manage
+users and invitations for administrators.
 
 Placeholder settings routes remain registered so direct links still render a
 settings page, but those routes are not linked from the settings sidebar.
@@ -58,8 +58,9 @@ URL defaults to `/api`. Backend methods and contract types live in their owning
 Current API modules:
 
 - `authApi`: tenant resolve, email OTP request and confirmation, current user load and profile update.
-- `schemaRegistryApi`: runtime object listing, object schema loading, custom object mutation and custom field mutation.
-- `crmContactsApi`: contact field description and contact CRUD helpers.
+- `crmContactsApi`: tenant-scoped contact list, search and CRUD.
+- `crmCompaniesApi`: tenant-scoped company list, search and CRUD.
+- `priceListsApi`: price-list setup, synchronization actions, offers and history.
 
 ## Layout And UI System
 
@@ -185,7 +186,7 @@ Reusable UI without domain terms? -> shared/ui
 
 ## State And Session
 
-`useSessionStore` is the current session state boundary. It owns:
+`useTenantStore` and `useUserStore` are the current session boundaries. Together they own:
 
 - tenant resolution state;
 - current console user state;
@@ -193,7 +194,7 @@ Reusable UI without domain terms? -> shared/ui
 - auth and profile loading flags;
 - profile update mutation behavior.
 
-The store calls the identity API directly and keeps the frontend auth flow
+The stores call the identity API directly and keep the frontend auth flow
 independent from router metadata beyond the `/login` route entry.
 
 ## Commands And Environment
@@ -235,6 +236,7 @@ code changes.
 - [Console app README](../../frontends/apps/console/README.md)
 - [HTTP API](../interfaces/http-api.md)
 - [Identity module](../modules/identity.md)
+- [CRM module](../modules/crm.md)
 - [Schema Registry module](../history/modules/schema-registry.md)
 - [Runtime schema](../history/data/runtime-schema.md)
 
