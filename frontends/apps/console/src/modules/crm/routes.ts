@@ -2,6 +2,10 @@ import type { RouteRecordRaw } from "vue-router";
 
 export const crmRoutes: RouteRecordRaw[] = [
   {
+    path: "crm",
+    redirect: { name: "crm-contacts" },
+  },
+  {
     path: "crm/contacts",
     name: "crm-contacts",
     component: () => import("./pages/ContactsPage.vue"),
