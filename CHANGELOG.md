@@ -1,3 +1,10 @@
+## v2.1.0-rc.1 (2026-09-24)
+
+### Feat
+
+- **identity**: enable invitation email delivery with fallback link sharing
+- **crm**: initialize tenant-scoped CRM module with migrations, API, and UI
+
 ## v2.0.0 (2026-09-20)
 
 ### BREAKING CHANGE
