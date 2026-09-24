@@ -2,7 +2,6 @@ import { useMutation, useQueryClient } from "@tanstack/vue-query";
 
 import { useUserStore } from "@/app/stores/user";
 import { authApi } from "@/modules/auth/api/auth.api";
-import { authQueryKeys } from "@/modules/auth/model/auth.query-keys";
 
 export function useLogoutMutation() {
   const queryClient = useQueryClient();
@@ -20,7 +19,7 @@ export function useLogoutMutation() {
       }
     },
     onSettled: () => {
-      queryClient.removeQueries({ queryKey: authQueryKeys.all });
+      queryClient.clear();
     },
   });
 }
