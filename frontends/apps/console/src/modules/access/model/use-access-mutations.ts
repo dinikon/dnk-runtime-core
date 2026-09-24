@@ -28,7 +28,7 @@ export function useUpdateMemberMutation() {
 export function useRevokeInvitationMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: accessApi.revokeInvitation,
+    mutationFn: (id: string) => accessApi.revokeInvitation(id),
     onSuccess: () =>
       queryClient.invalidateQueries({
         queryKey: accessQueryKeys.invitations(),

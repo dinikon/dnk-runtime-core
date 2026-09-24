@@ -15,7 +15,8 @@ import type {
   InvitationInput,
   InvitationResult,
   Member,
-  MemberUpdate,
+  MemberStatus,
+  Role,
 } from "../model/access.types";
 import ConfirmAccessActionDialog from "../ui/common/ConfirmAccessActionDialog.vue";
 import UsersCollectionBody from "../ui/common/UsersCollectionBody.vue";
@@ -24,19 +25,23 @@ import UsersToolbar from "../ui/common/UsersToolbar.vue";
 import InvitationResultsDialog from "../ui/invitations/InvitationResultsDialog.vue";
 import InvitationsTable from "../ui/invitations/InvitationsTable.vue";
 import InviteUsersPanel from "../ui/invitations/InviteUsersPanel.vue";
-import ManageMemberDialog from "../ui/members/ManageMemberDialog.vue";
+import ChangeMemberRoleDialog from "../ui/members/ChangeMemberRoleDialog.vue";
+import ChangeMemberStatusDialog from "../ui/members/ChangeMemberStatusDialog.vue";
 import MembersTable from "../ui/members/MembersTable.vue";
 import UsersHeader from "../ui/page/UsersHeader.vue";
 
 const membersQuery = useMembersQuery();
 const invitationsQuery = useInvitationsQuery();
 const inviteMutation = useInviteMemberMutation();
-const updateMemberMutation = useUpdateMemberMutation();
+const updateMemberRoleMutation = useUpdateMemberMutation();
+const updateMemberStatusMutation = useUpdateMemberMutation();
 const revokeInvitationMutation = useRevokeInvitationMutation();
 const { role, search, status, tab } = useUsersPageState();
 
-const managingMember = ref<Member | null>(null);
-const memberUpdateError = ref("");
+const roleMember = ref<Member | null>(null);
+const roleUpdateError = ref("");
+const statusMember = ref<Member | null>(null);
+const statusUpdateError = ref("");
 const revokingInvitation = ref<Invitation | null>(null);
 const invitationActionError = ref("");
 const inviteResults = ref<InvitationResult[]>([]);
@@ -103,33 +108,68 @@ async function inviteUsers(items: InvitationInput[]) {
   resultsOpen.value = true;
 }
 
-function openMember(member: Member) {
-  memberUpdateError.value = "";
-  managingMember.value = member;
+function isOnlyActiveAdmin(member: Member | null) {
+  return (
+    activeAdminCount.value === 1 &&
+    member?.role === "admin" &&
+    member.status === "active"
+  );
 }
 
-async function updateMember(update: MemberUpdate) {
-  if (!managingMember.value) return;
-  memberUpdateError.value = "";
+function openRoleDialog(member: Member) {
+  roleUpdateError.value = "";
+  roleMember.value = member;
+}
+
+function openStatusDialog(member: Member) {
+  statusUpdateError.value = "";
+  statusMember.value = member;
+}
+
+async function updateMemberRole(nextRole: Role) {
+  const member = roleMember.value;
+  if (!member) return;
+  roleUpdateError.value = "";
   try {
-    await updateMemberMutation.mutateAsync({
-      id: managingMember.value.id,
-      update,
+    await updateMemberRoleMutation.mutateAsync({
+      id: member.id,
+      update: { role: nextRole },
     });
-    managingMember.value = null;
+    roleMember.value = null;
   } catch (error) {
-    memberUpdateError.value = getApiErrorMessage(
+    roleUpdateError.value = getApiErrorMessage(
       error,
-      "Не удалось изменить доступ пользователя.",
+      "Не удалось изменить роль пользователя.",
+    );
+  }
+}
+
+async function updateMemberStatus(nextStatus: MemberStatus) {
+  const member = statusMember.value;
+  if (!member) return;
+  statusUpdateError.value = "";
+  try {
+    await updateMemberStatusMutation.mutateAsync({
+      id: member.id,
+      update: { status: nextStatus },
+    });
+    statusMember.value = null;
+  } catch (error) {
+    statusUpdateError.value = getApiErrorMessage(
+      error,
+      nextStatus === "revoked"
+        ? "Не удалось уволить пользователя."
+        : "Не удалось восстановить пользователя.",
     );
   }
 }
 
 async function revokeInvitation() {
-  if (!revokingInvitation.value) return;
+  const invitation = revokingInvitation.value;
+  if (!invitation) return;
   invitationActionError.value = "";
   try {
-    await revokeInvitationMutation.mutateAsync(revokingInvitation.value.id);
+    await revokeInvitationMutation.mutateAsync(invitation.id);
     revokingInvitation.value = null;
   } catch (error) {
     invitationActionError.value = getApiErrorMessage(
@@ -176,7 +216,11 @@ async function revokeInvitation() {
           "
           @retry="membersQuery.refetch()"
         >
-          <MembersTable :items="filteredMembers" @manage="openMember" />
+          <MembersTable
+            :items="filteredMembers"
+            @change-role="openRoleDialog"
+            @change-status="openStatusDialog"
+          />
         </UsersCollectionBody>
 
         <UsersCollectionBody
@@ -204,22 +248,37 @@ async function revokeInvitation() {
       </section>
     </div>
 
-    <ManageMemberDialog
-      :open="managingMember !== null"
-      :member="managingMember"
-      :pending="updateMemberMutation.isPending.value"
-      :error="memberUpdateError"
-      :only-active-admin="
-        activeAdminCount === 1 &&
-        managingMember?.role === 'admin' &&
-        managingMember.status === 'active'
-      "
+    <ChangeMemberRoleDialog
+      :open="roleMember !== null"
+      :member="roleMember"
+      :pending="updateMemberRoleMutation.isPending.value"
+      :error="roleUpdateError"
+      :only-active-admin="isOnlyActiveAdmin(roleMember)"
       @update:open="
         (open) => {
-          if (!open) managingMember = null;
+          if (!open) {
+            roleMember = null;
+            roleUpdateError = '';
+          }
         }
       "
-      @save="updateMember"
+      @save="updateMemberRole"
+    />
+    <ChangeMemberStatusDialog
+      :open="statusMember !== null"
+      :member="statusMember"
+      :pending="updateMemberStatusMutation.isPending.value"
+      :error="statusUpdateError"
+      :only-active-admin="isOnlyActiveAdmin(statusMember)"
+      @update:open="
+        (open) => {
+          if (!open) {
+            statusMember = null;
+            statusUpdateError = '';
+          }
+        }
+      "
+      @confirm="updateMemberStatus"
     />
     <InvitationResultsDialog
       v-model:open="resultsOpen"

@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import { Cloud, CloudOff, Settings2 } from "@lucide/vue";
+import {
+  Cloud,
+  CloudOff,
+  RotateCcw,
+  ShieldCheck,
+  UserMinus,
+} from "@lucide/vue";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +24,8 @@ defineProps<{
   items: Member[];
 }>();
 defineEmits<{
-  manage: [member: Member];
+  "change-role": [member: Member];
+  "change-status": [member: Member];
 }>();
 
 function roleLabel(role: Member["role"]) {
@@ -28,7 +35,7 @@ function roleLabel(role: Member["role"]) {
 
 <template>
   <div class="overflow-x-auto rounded-lg border">
-    <Table class="min-w-[820px]">
+    <Table class="min-w-[980px]">
       <TableHeader>
         <TableRow>
           <TableHead>Пользователь</TableHead>
@@ -72,14 +79,27 @@ function roleLabel(role: Member["role"]) {
             </span>
           </TableCell>
           <TableCell class="text-right">
-            <Button
-              variant="outline"
-              size="sm"
-              @click="$emit('manage', member)"
-            >
-              <Settings2 />
-              Управление доступом
-            </Button>
+            <div class="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                @click="$emit('change-role', member)"
+              >
+                <ShieldCheck />
+                Изменить роль
+              </Button>
+              <Button
+                :variant="
+                  member.status === 'active' ? 'destructive' : 'outline'
+                "
+                size="sm"
+                @click="$emit('change-status', member)"
+              >
+                <UserMinus v-if="member.status === 'active'" />
+                <RotateCcw v-else />
+                {{ member.status === "active" ? "Уволить" : "Восстановить" }}
+              </Button>
+            </div>
           </TableCell>
         </TableRow>
       </TableBody>

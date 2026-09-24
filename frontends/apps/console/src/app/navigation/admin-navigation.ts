@@ -22,20 +22,7 @@ export const adminNavigation: AdminNavigationGroup[] = [
         title: "Пользователи",
         icon: Users,
         url: "/admin/users",
-        defaultOpen: true,
         requiredRole: "admin",
-        items: [
-          {
-            title: "Участники",
-            url: "/admin/users?tab=members",
-            requiredRole: "admin",
-          },
-          {
-            title: "Приглашения",
-            url: "/admin/users?tab=invitations",
-            requiredRole: "admin",
-          },
-        ],
       },
     ],
   },

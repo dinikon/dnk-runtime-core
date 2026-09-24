@@ -69,8 +69,9 @@ and `/admin/users`. Members keep the tenant header as a dashboard link.
 
 Administrative screens use `AdminLayout`, with their own sidebar navigation,
 breadcrumbs and content slot. Route metadata requires the `admin` role before the
-layout is mounted. The access page keeps tab, search, role and status state in the
-URL and uses client-side filtering over the current identity API collections.
+layout is mounted. The sidebar exposes one Users link; member and invitation views
+remain page-level tabs. The access page keeps tab, search, role and status state in
+the URL and uses client-side filtering over the current identity API collections.
 
 Login uses `AuthLayout`, a centered viewport shell without a sidebar.
 
