@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import type { SidebarProps } from "@/components/ui/sidebar";
-import { computed } from "vue";
+import { computed, watch } from "vue";
 import { useUserStore } from "@/app/stores/user";
 
 import { Command, Users, UserRound } from "@lucide/vue";
-import { RouterLink } from "vue-router";
+import { RouterLink, useRoute } from "vue-router";
 
 import { workspaceNavigation } from "@/app/navigation";
 import WorkspaceNavMain from "./WorkspaceNavMain.vue";
@@ -19,12 +19,20 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 
 const props = withDefaults(defineProps<SidebarProps>(), {
   variant: "inset",
 });
+const route = useRoute();
+const { isMobile, setOpenMobile } = useSidebar();
 const userStore = useUserStore();
+
+watch(() => route.path, () => {
+  if (isMobile.value) setOpenMobile(false);
+});
+
 const navGroups = computed(() => [
   ...workspaceNavigation.navGroups,
   {
