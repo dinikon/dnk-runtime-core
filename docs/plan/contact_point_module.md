@@ -1,1882 +1,583 @@
-Ниже я бы зафиксировал финальную архитектуру `ContactPoints` для FastAPI + SQLAlchemy 2.x + PostgreSQL с DDD + Clean Architecture. Основная цель — сделать MVP небольшим, но не заложить решений, которые придётся ломать при появлении Custom Objects, Record Registry, дедупликации и omnichannel.
+# Модуль `contact_points`
 
-# 1. Граница модуля
+План для текущего `dnk-runtime-core`. Классы нового модуля ниже — проектируемые контракты;
+ссылки на существующие исходники фиксируют архитектурную основу. Реализация не восстанавливает
+удалённые `contact_point`, `schema_registry` или `runtime_data`.
 
-`ContactPoints` отвечает только за стабильные контактные идентификаторы клиента:
+## 1. Основа в текущем приложении
 
-```text
-PHONE
-EMAIL
-```
+- [Стиль модулей](../develop-style.md): структура по поддоменам, command/query/use case,
+  доменные VO, инфраструктурные адаптеры и DI в `presentation/depends`.
+- [CRM](../modules/crm.md): статические Company и Contact внутри tenant, CRUD под `/api/console/crm`.
+  Сейчас у них нет телефонов или email; Lead в этой интеграции отсутствует.
+- [Shared UoW protocol](../../src/modules/shared/application/persistence/unit_of_work_protocol.py),
+  [реализация](../../src/modules/shared/infrastructure/persistence/unit_of_work.py) и
+  [HTTP dependency](../../src/modules/shared/presentation/persistence/depends.py): общая session,
+  commit/rollback на выходе из контекста.
+- [CRM infrastructure dependencies](../../src/modules/crm/presentation/depends/infrastructure.py) и
+  [application dependencies](../../src/modules/crm/presentation/depends/application.py): образец сборки.
+- [Tenant migrations](../data/tenant-migrations.md): `TenantBase`, регистрация моделей и Alembic.
+- [Shared outbox port](../../src/modules/shared/application/events/outbox_repository_protocol.py) и
+  [publisher builder](../../src/modules/shared/presentation/events/outbox_publisher_builder.py):
+  outbox/RabbitMQ уже существуют.
 
-Не включать сюда:
+## 2. Граница первой версии
 
-```text
-Website       → WebPresence
-Telegram      ┐
-WhatsApp      │
-Facebook      ├→ Communication / ChannelIdentity
-Instagram     │
-Viber         ┘
-Conversation  → Communication
-```
+`contact_points` хранит единый справочник phone/email **внутри tenant** и связи с объектами.
+Одна точка может принадлежать нескольким объектам. Company и Contact подключаются первыми;
+следующие модули используют тот же application API через собственные адаптеры.
 
-То есть ответственность модуля:
+Первая версия включает общую модель ContactPoint, отдельную ContactPointBinding, нормализацию,
+дедупликацию, чтение связей в обе стороны, настраиваемые подписи отдельно для phone/email,
+два компонента ввода и атомарное сохранение вместе с CRM-карточкой.
 
-```text
-ContactPoints
+Отправка сообщений, социальные профили, подтверждение владения, глобальный CRM-поиск,
+Lead и Record Registry не входят в реализацию. `is_primary`, status, произвольный JSON metadata,
+source и фоновые удаления точек — возможные расширения по отдельному требованию,
+а не зависимости для запуска первой версии.
 
-"Какие phone/email связаны с CRM-объектом
-и с какими CRM-объектами связан данный phone/email?"
-```
+## 3. Domain и persistence
 
-Не:
+### ContactPoint
 
-```text
-"Как отправить клиенту сообщение?"
-```
+Отдельный aggregate root: `id`, `type`, `canonical_value`, `country_code` для телефона,
+`created_at`, `updated_at`, `created_by`, `updated_by`.
 
----
+- Тип — `phone | email`; `(type, canonical_value)` уникален внутри tenant.
+- Тип и canonical value неизменяемы после создания.
+- Номер хранится в E.164, email — в нормализованном виде.
+- После удаления последнего binding точка остаётся для повторного использования.
 
-# 2. Основная модель
+### ContactPointBinding
 
-Целевая конструкция:
-
-```text
-Contact
-Company
-Lead
-Custom Object (future)
-      │
-      │ TargetRef
-      ▼
-ContactPointBinding
-      │
-      ▼
-ContactPoint
-```
-
-Например:
-
-```text
-ContactPoint
-PHONE
-+380501234567
-       │
-       ├── Contact #123
-       ├── Company #50
-       └── Lead #900
-```
-
-Один физический endpoint хранится один раз внутри tenant.
-
----
-
-# 3. Два Aggregate Root
-
-Я бы **не делал Binding дочерней коллекцией ContactPoint Aggregate**.
-
-Лучше два отдельных aggregate:
-
-```text
-ContactPoint
-```
-
-и
-
-```text
-ContactPointBinding
-```
-
-Причина: один `ContactPoint` потенциально может иметь сотни связей. Не нужно загружать и блокировать весь aggregate ради добавления ещё одного Lead.
-
-### Aggregate `ContactPoint`
-
-Отвечает за:
-
-```text
-id
-type
-canonical_value
-status
-metadata
-created_at
-```
-
-Главный invariant:
-
-```text
-(type, canonical_value) unique внутри tenant
-```
-
-### Aggregate `ContactPointBinding`
-
-Отвечает за:
-
-```text
-ContactPoint ↔ CRM Object
-```
-
-и хранит:
-
-```text
-target
-label
-primary
-original_value
-source
-```
-
----
-
-# 4. Важный invariant: ContactPoint immutable
-
-После создания:
-
-```text
-PHONE +380501234567
-```
-
-нельзя сделать:
-
-```text
-PHONE +380671112233
-```
-
-через обычный UPDATE.
-
-Потому что этот ContactPoint может использовать:
-
-```text
-Contact A
-Company B
-Lead C
-```
-
-Редактирование номера у Contact должно означать:
-
-```text
-старый Binding
-    ↓
-detach
-
-resolve/create нового ContactPoint
-    ↓
-attach
-```
-
-Сам:
-
-```text
-ContactPoint.canonical_value
-```
-
-не изменяется.
-
-Это один из ключевых архитектурных принципов модуля.
-
----
-
-# 5. Domain модели
-
-Примерно:
+Отдельный aggregate root: `id`, `contact_point_id`, `target`, optional `label_id`, `position`,
+audit-поля. Это не коллекция внутри ContactPoint: привязка не загружает всех владельцев номера.
 
 ```python
-class ContactPoint:
-    id: ContactPointId
-    type: ContactPointType
-    canonical_value: ContactPointValue
-    status: ContactPointStatus
+@dataclass(slots=True, frozen=True)
+class ContactPointTargetVO:
+    model_key: str
+    record_id: EntityIdVO
 ```
 
-и:
+Ключи `crm.contact` и `crm.company` — устойчивые идентификаторы интеграции, не имена классов
+или таблиц. Tenant передаётся отдельно. Domain/application используют VO, а не голые UUID.
+
+Уникальность binding: `(model_key, record_id, contact_point_id)`. Редактирование значения
+находит/создаёт новую точку и меняет `contact_point_id` существующего binding, сохраняя его id.
+Другие связи и исходная точка не изменяются. Порядок массива хранится в `position`.
+
+### ContactPointLabel
+
+Отдельная сущность настроек: `id`, `type`, `name`, `is_active`, audit-поля. Binding хранит
+`label_id`, а не произвольную строку вместо справочника. Тип подписи совпадает с типом точки.
+Начальные подписи каждого типа: «Рабочий», «Личный», «Другой». Выбор подписи необязателен.
+
+Администратор переименовывает и архивирует подписи. Архивная подпись сохраняется у старых связей,
+но не назначается новым. Физическое удаление используемой подписи не предоставляется.
+
+### Общие правила
+
+- Entities: `@dataclass(slots=True)`; VO и commands: `@dataclass(slots=True, frozen=True)`.
+- `ContactPointIdVO`, `ContactPointBindingIdVO`, `ContactPointLabelIdVO` наследуют shared
+  `EntityIdVO` и находятся в `domain/<subdomain>/value_object`.
+- Domain errors наследуют `DomainError`; NotFound — специализированная ошибка.
+- Таблицы `contact_points`, `contact_point_bindings`, `contact_point_labels` используют
+  `TenantBase`, shared `StringUUID`, `AudienceMixin` и actor-поля по образцу CRM.
+- Колонки `tenant_id` в этих таблицах нет; справочник не размещается в `public`.
+- FK binding → point и binding → label находятся внутри tenant-схемы. FK на полиморфный target нет.
+- Добавить индекс `(model_key, record_id, position, id)` и индекс по `contact_point_id`,
+  CHECK для допустимого типа и неотрицательной позиции. Тип подписи проверяет domain service.
+- `contact_point_type` в binding ради primary-индекса не добавлять: primary не входит в первую версию.
+
+### Что переиспользуется через Shared, а что остаётся в модуле
+
+**В первой версии новые contact-specific VO в Shared не выносить.** Использовать уже имеющиеся
+`EntityIdVO`, `DomainError`, `ClockPort` и общие инфраструктурные примитивы. Shared не должен
+импортировать `contact_points` или становиться общим хранилищем предметных типов всех модулей.
+
+| Тип/контракт | Владелец и способ использования |
+| --- | --- |
+| `EntityIdVO`, общие ошибки и время | Существующий Shared; переиспользуются напрямую |
+| `ContactPointIdVO`, `ContactPointBindingIdVO`, `ContactPointLabelIdVO` | Domain `contact_points`; не переносить в Shared ради межмодульного вызова |
+| `ContactPointValueVO`, canonical phone/email, тип и контекст нормализации | Domain `contact_points`; этот модуль владеет правилами нормализации и уникальности |
+| `ContactPointTargetVO` | Domain `contact_points`; общий `RecordRef` в Shared пока не требуется |
+| CRM `ContactPointsPort` и входные/выходные DTO этого порта | Application CRM; определяют потребности CRM без зависимости на внутренние VO другого модуля |
+| Публичные commands/query/DTO `contact_points` | Application `contact_points`; используются адаптером через явные публичные экспорты |
+
+Межмодульное взаимодействие — **Protocol + типизированные данные + адаптер**, а не только
+интерфейс без контракта данных. CRM use case оперирует собственным портом/DTO; infrastructure
+adapter переводит их в публичные commands/query `contact_points` и возвращает CRM-owned DTO.
+Если публичный command содержит VO модуля, адаптер вправе использовать его публичный экспорт;
+это не требует переноса VO в Shared. Domain CRM не импортирует contact_points entities или VO.
+Через границу не передаются ORM-объекты, repositories или session.
+
+Переиспользование операций нормализации идёт через владельца `contact_points`. Например,
+email для входа в систему и контактный email могут иметь разные правила сравнения: совпадение
+названия поля не является основанием объединять их в Shared EmailVO.
+
+Вынос общего VO допустим отдельным изменением, когда как минимум два независимых модуля
+нуждаются в одной семантике и одинаковых инвариантах, тип не зависит от lifecycle contact_points,
+а зависимости направлены только в Shared. Тогда извлекается минимальный нейтральный примитив
+с общими тестами. CountryCodeVO или общий RecordRef — возможные кандидаты при появлении таких
+потребителей; специализированные идентификаторы точек и bindings остаются у своего владельца.
+
+## 4. Нормализация и repository contracts
+
+Синхронный порт normalizer и VO контекста/результата находятся в domain; реализации
+`phonenumbers` и `email-validator` — в infrastructure. Сопоставление типа и стратегии
+собирается в DI и передаётся сервису, без глобального service locator.
+
+- Телефон: страна передаётся явно, проверяются валидность и соответствие стране, результат — E.164.
+  UI начинает с `UA`. Международный номер может определить страну в UI; неоднозначность
+  требует выбора. Добавочные номера не поддерживаются в первой версии.
+- Email: trim, синтаксис `local@domain.tld`, нормализация домена/IDN; не ограничивать `.com`.
+  Сохранять регистр локальной части согласно ранее выбранной политике. DNS-проверку отключить.
+  Не объединять Gmail-точки или `+alias`.
+- Display formatting вычисляется отдельно. Исходный ввод не является ключом дедупликации;
+  `original_value` в binding можно добавить при требовании к импорту.
+- Ошибки библиотек переводятся в domain errors. Domain/application не импортируют реализации
+  библиотек, SQLAlchemy, FastAPI или Pydantic.
+
+Repository получает `(session, naming)`. **Каждая операция** принимает tenant явно:
 
 ```python
-class ContactPointBinding:
-    id: ContactPointBindingId
-    contact_point_id: ContactPointId
-    target: ContactPointTarget
-    label: str | None
-    original_value: str | None
-    is_primary: bool
-    source: ContactPointSource
-```
-
----
-
-# 6. Value Objects
-
-В domain слое:
-
-```text
-ContactPointId
-ContactPointBindingId
-ContactPointType
-ContactPointValue
-CanonicalPhone
-CanonicalEmail
-ContactPointTarget
-ContactPointLabel
-```
-
-Особенно важен:
-
-```python
-@dataclass(frozen=True, slots=True)
-class ContactPointTarget:
-    object_type: str
-    object_id: UUID
-```
-
-Сегодня:
-
-```python
-ContactPointTarget(
-    object_type="contact",
-    object_id=...
-)
-```
-
-Позже:
-
-```text
-object_type + object_id
-        ↓
-RecordId
-```
-
-Application API при этом менять не потребуется.
-
----
-
-# 7. ContactPointType
-
-На MVP:
-
-```python
-class ContactPointType(StrEnum):
-    PHONE = "phone"
-    EMAIL = "email"
-```
-
-Не добавлять туда:
-
-```text
-telegram
-whatsapp
-website
-facebook
-```
-
-При этом domain-код не должен содержать:
-
-```python
-if type == "phone":
-...
-elif type == "email":
-...
-```
-
-по всему проекту.
-
-Используем Strategy + Registry.
-
----
-
-# 8. Normalizer Strategy
-
-Контракт:
-
-```python
-class ContactPointNormalizer(Protocol):
-
-    def normalize(
-        self,
-        value: str,
-        context: NormalizationContext,
-    ) -> NormalizedContactPoint:
-        ...
-```
-
-Registry:
-
-```python
-class ContactPointNormalizerRegistry:
-
-    def get(
-        self,
-        point_type: ContactPointType,
-    ) -> ContactPointNormalizer:
-        ...
-```
-
-Реализации:
-
-```text
-PhoneNormalizer
-EmailNormalizer
-```
-
-Таким образом позже можно подключать дополнительные стратегии без изменения application handlers.
-
----
-
-# 9. Phone normalization
-
-Использовать:
-
-```text
-phonenumbers
-```
-
-Canonical representation:
-
-```text
-E.164
-```
-
-Например:
-
-```text
-050 123 45 67
-(050)123-45-67
-+38 050 123 45 67
-
-       ↓
-
-+380501234567
-```
-
-Normalizer должен принимать context:
-
-```python
-NormalizationContext(
-    default_region="UA",
-)
-```
-
-Результат:
-
-```python
-NormalizedContactPoint(
-    canonical_value="+380501234567",
-    display_value="+380 50 123 45 67",
-)
-```
-
-Но `display_value` необязательно хранить: его можно получать при чтении.
-
----
-
-# 10. Email normalization
-
-Использовать:
-
-```text
-email-validator
-```
-
-На MVP:
-
-```text
-trim
-validation
-domain normalization
-case normalization согласно политике CRM
-IDN normalization
-```
-
-Например:
-
-```text
-" Denis@Example.COM "
-        ↓
-"denis@example.com"
-```
-
-Не реализовывать provider-specific magic:
-
-```text
-Gmail dots
-+alias
-```
-
-То есть:
-
-```text
-denis+shop@gmail.com
-denis@gmail.com
-```
-
-не должны автоматически считаться одним endpoint.
-
----
-
-# 11. Почему raw_value лучше хранить в Binding
-
-Не стоит делать:
-
-```text
-ContactPoint.raw_value
-```
-
-главным полем.
-
-Например:
-
-```text
-Contact A ввёл:
-0501234567
-
-Company B:
-+38 (050) 123-45-67
-```
-
-Оба относятся к:
-
-```text
-ContactPoint
-+380501234567
-```
-
-Поэтому:
-
-```text
-ContactPoint
-    canonical_value
-```
-
-а:
-
-```text
-ContactPointBinding
-    original_value
-```
-
-Это позволит сохранить исходное представление конкретного объекта.
-
----
-
-# 12. SQLAlchemy модели
-
-## contact_points
-
-```text
-contact_points
-────────────────────────
-
-id                  UUID PK
-type                VARCHAR
-canonical_value     VARCHAR
-status              VARCHAR
-metadata            JSONB
-created_at          TIMESTAMPTZ
-updated_at          TIMESTAMPTZ
-```
-
-Constraint:
-
-```text
-UNIQUE(type, canonical_value)
-```
-
-если schema-per-tenant.
-
-Если shared schema:
-
-```text
-UNIQUE(
-    tenant_id,
-    type,
-    canonical_value
-)
-```
-
-Я бы держал `ContactPoint` именно внутри tenant schema, если ваша CRM уже использует schema-per-tenant.
-
-Не делать глобальный каталог клиентов в `public`.
-
----
-
-# 13. contact_point_bindings
-
-```text
-contact_point_bindings
-────────────────────────────────
-
-id                  UUID PK
-
-contact_point_id    UUID FK
-
-contact_point_type  VARCHAR
-
-target_type         VARCHAR
-target_id           UUID
-
-label               VARCHAR NULL
-
-original_value      VARCHAR NULL
-
-is_primary          BOOLEAN
-
-source              VARCHAR NULL
-
-created_at          TIMESTAMPTZ
-updated_at          TIMESTAMPTZ
-```
-
-Основной constraint:
-
-```text
-UNIQUE(
-    contact_point_id,
-    target_type,
-    target_id
-)
-```
-
-То есть один и тот же телефон нельзя дважды добавить одному Contact.
-
----
-
-# 14. Зачем дублировать `contact_point_type` в Binding
-
-Потому что нам нужен DB invariant:
-
-```text
-Contact может иметь максимум
-один primary PHONE
-
-и максимум
-один primary EMAIL
-```
-
-Тогда PostgreSQL partial unique index:
-
-```sql
-CREATE UNIQUE INDEX uq_contact_point_primary
-ON contact_point_bindings (
-    target_type,
-    target_id,
-    contact_point_type
-)
-WHERE is_primary = TRUE;
-```
-
-Без `contact_point_type` это пришлось бы проверять JOIN-запросом на application уровне.
-
-Чтобы исключить рассинхронизацию:
-
-```text
-binding.contact_point_type
-```
-
-и
-
-```text
-contact_point.type
-```
-
-можно использовать composite FK либо проверять через repository/application service.
-
-Для первой версии допустим application invariant + integration tests.
-
----
-
-# 15. Правило primary
-
-Я бы установил invariant:
-
-> Если у объекта существует хотя бы один ContactPoint определённого типа, один из них должен быть primary.
-
-Например:
-
-```text
-Contact
-
-PHONE
-+380501111111 ← primary
-+380502222222
-
-EMAIL
-x@example.com ← primary
-y@example.com
-```
-
-Правила:
-
-```text
-первый PHONE → автоматически primary
-второй PHONE → secondary
-
-SetPrimary → старый primary снимается
-
-удаляем primary →
-следующий автоматически становится primary
-```
-
-Так downstream-коду не приходится постоянно решать:
-
-> какой телефон использовать?
-
----
-
-# 16. Label
-
-Не делать PostgreSQL ENUM:
-
-```text
-PERSONAL
-WORK
-MOBILE
-HOME
-OTHER
-```
-
-Лучше:
-
-```text
-label VARCHAR
-```
-
-а допустимые значения определять domain policy / registry.
-
-Например:
-
-```text
-PHONE:
-    mobile
-    work
-    home
-    other
-
-EMAIL:
-    personal
-    work
-    other
-```
-
-Позже labels можно сделать tenant-configurable без database migration.
-
----
-
-# 17. Source
-
-Полезно заложить уже сейчас:
-
-```text
-manual
-import
-api
-lead
-integration
-migration
-```
-
-Например:
-
-```python
-source="lead"
-```
-
-Это даст ответ:
-
-> откуда вообще появился этот номер?
-
-Но не нужно превращать `source` в сложный audit log.
-
----
-
-# 18. Repository Ports
-
-Domain/Application слой не знает SQLAlchemy.
-
-```python
-class ContactPointRepository(Protocol):
-
+class ContactPointRepositoryProtocol(Protocol):
     async def get(
-        self,
-        point_id: ContactPointId,
-    ) -> ContactPoint | None:
-        ...
+        self, tenant_id: EntityIdVO, point_id: ContactPointIdVO
+    ) -> ContactPoint: ...
 
     async def find_by_canonical(
         self,
+        tenant_id: EntityIdVO,
         point_type: ContactPointType,
-        value: ContactPointValue,
-    ) -> ContactPoint | None:
-        ...
+        canonical_value: ContactPointValueVO,
+    ) -> ContactPoint | None: ...
 
-    async def add(
-        self,
-        entity: ContactPoint,
-    ) -> None:
-        ...
+    async def get_or_create(
+        self, tenant_id: EntityIdVO, candidate: ContactPoint
+    ) -> ContactPoint: ...
 ```
 
-Отдельно:
+`get` поднимает NotFound, `find_by_canonical` допускает отсутствие. Binding/label repositories
+следуют тем же правилам. Query repository поддерживает batch read нескольких target без N+1.
+
+SQLAlchemy Core statements применяют локальный `schema_translate_map` через `TenantSchemaNaming`,
+как CRM repositories. Не менять engine options или `search_path` в бизнес-коде, не хранить
+текущий tenant в repository instance. Rows явно преобразуются в entity/DTO.
+
+`get_or_create`: `INSERT ... ON CONFLICT DO NOTHING RETURNING ...`, при конфликте — чтение
+существующей точки. Unique constraint защищает параллельные создания. Не продолжать работу
+после обычного `IntegrityError` в аварийной транзакции и не откатывать всю карточку ради resolve.
+
+## 5. UoW: общая граница транзакции
+
+**Не создавать ContactPointsUnitOfWork, новый UnitOfWorkProtocol или UoW с полями
+`contact_points`/`bindings`.** Shared protocol уже предоставляет session, context manager,
+commit/rollback. Репозитории создаются отдельно в dependency factories. Хотя shared protocol
+типизирует `AsyncSession`, use cases нового модуля получают repository/service protocols
+и не используют session напрямую.
+
+HTTP использует существующий `UoWDep = Annotated[UnitOfWorkProtocol, Depends(get_uow)]`:
+
+1. `get_uow` берёт session factory из `app.state.db` либо shared `db_helper`.
+2. При наличии `request.state.tenant_connection` dependency создаёт session на этом connection.
+   Модуль не открывает обходное соединение и не дублирует tenant admission gate.
+3. Стандартное кеширование FastAPI dependency даёт одну UoW всем repository factories запроса.
+4. CRM, points, bindings, labels и при необходимости outbox используют **один экземпляр session**.
+5. Выход из контекста делает commit при успехе, rollback при исключении; session закрывается в finally.
+
+Граница бизнес-транзакции — вся карточка, а не каждый вложенный use case:
+
+```text
+HTTP create/update Contact или Company
+  └─ shared get_uow
+      └─ CRM use case
+          ├─ create / lock + update CRM aggregate
+          └─ CRM-owned port → infrastructure adapter
+              └─ contact_points use case
+                  ├─ normalize + resolve points
+                  └─ synchronize bindings
+      └─ общий commit при успешном выходе
+         либо rollback всех изменений при исключении
+```
+
+В use cases, repositories и межмодульном адаптере не вызывать `commit`, `rollback`,
+`session.close` и не открывать вложенный UoW. Execution/flush допустимы внутри repository;
+flush и возврат DTO из вложенного use case не означают commit.
+
+В приложении есть специальные сценарии с явными commit, например Control Plane acceptance
+и некоторые identity flows. Их границы не переносить в составное сохранение CRM-карточки.
+
+При переводе ошибки в HTTP **поднимать** `HTTPException`, как CRM `http_errors`, а не поглощать
+исключение и возвращать обычный response: UoW должна увидеть ошибку. Не считать возврат use case
+гарантией durable success: финализация yield-dependency происходит отдельно. Изменение lifecycle
+shared dependency не входит в модуль; интеграционный тест проверяет завершение запроса и состояние БД.
+
+Для будущего CLI/worker внешний entrypoint открывает shared UoW и собирает зависимости
+на её session. Самостоятельная операция получает внешнюю транзакцию; вложенные операции
+сохранения карточки используют уже открытую.
+
+## 6. Dependency injection
+
+Сборка выполняется в `presentation/depends`:
+
+| Файл | Ответственность |
+| --- | --- |
+| `contact_points/presentation/depends/infrastructure.py` | Repositories, TenantSchemaNaming, normalizers |
+| `contact_points/presentation/depends/application.py` | Domain services и отдельные use cases |
+| `crm/presentation/depends/infrastructure.py` | CRM adapter к готовым contact_points use cases |
+| `crm/presentation/depends/application.py` | CRM use cases с repository, ClockPort и новым портом |
+
+Ниже эскизы будущих factories; импорты проектируемых классов сокращены.
 
 ```python
-class ContactPointBindingRepository(Protocol):
+from typing import Annotated
+from fastapi import Depends
 
-    async def get(...): ...
+from src.config import dnk_config
+from src.modules.shared.application.persistence.tenant_schema_naming import TenantSchemaNaming
+from src.modules.shared.presentation.persistence.depends import UoWDep
 
-    async def add(...): ...
 
-    async def remove(...): ...
+def get_tenant_naming() -> TenantSchemaNaming:
+    return TenantSchemaNaming(dnk_config.SCHEMA_PREFIX)
 
-    async def list_by_target(...): ...
 
-    async def list_by_contact_point(...): ...
+TenantNamingDep = Annotated[TenantSchemaNaming, Depends(get_tenant_naming)]
 
-    async def find_binding(...): ...
 
-    async def unset_primary(...): ...
-```
+def get_contact_point_repository(uow: UoWDep, naming: TenantNamingDep):
+    return SqlAlchemyContactPointRepository(uow.session, naming)
 
----
 
-# 19. Unit Of Work
-
-Application handlers работают через:
-
-```python
-class UnitOfWork(Protocol):
-
-    contact_points: ContactPointRepository
-    bindings: ContactPointBindingRepository
-
-    async def commit(self) -> None:
-        ...
-
-    async def rollback(self) -> None:
-        ...
-```
-
-Infrastructure:
-
-```text
-SqlAlchemyUnitOfWork
-```
-
-использует:
-
-```python
-AsyncSession
-```
-
-Каждый command handler = одна transaction boundary.
-
----
-
-# 20. Основной Application Service — Resolver
-
-Нужен отдельный:
-
-```text
-ContactPointResolver
-```
-
-Он реализует:
-
-```text
-raw value
-    ↓
-Normalizer
-    ↓
-canonical value
-    ↓
-find ContactPoint
-    ↓
-exists?
- ┌────┴─────┐
- yes        no
- │           │
- return    create
-```
-
-API:
-
-```python
-async def resolve(
-    point_type: ContactPointType,
-    value: str,
-) -> ContactPoint:
-    ...
-```
-
-Никто снаружи модуля не должен делать:
-
-```text
-ContactPoint(...)
-repository.add(...)
-```
-
-для обычного пользовательского сценария.
-
-Только:
-
-```text
-resolver.resolve(...)
-```
-
----
-
-# 21. Race condition при Resolve
-
-Это нужно решить сразу.
-
-Два параллельных request:
-
-```text
-request A → +380...
-request B → +380...
-```
-
-оба могут не найти ContactPoint и попытаться создать.
-
-Поэтому source of truth — DB unique constraint:
-
-```text
-UNIQUE(type, canonical_value)
-```
-
-Repository можно реализовать через PostgreSQL:
-
-```text
-INSERT ... ON CONFLICT DO NOTHING
-```
-
-затем прочитать существующую запись.
-
-Не использовать схему:
-
-```python
-if not exists:
-    insert()
-```
-
-как единственную защиту.
-
----
-
-# 22. Command handlers
-
-Минимальный набор:
-
-```text
-AttachContactPoint
-ReplaceContactPoint
-DetachContactPoint
-SetPrimaryContactPoint
-ChangeContactPointLabel
-```
-
-Queries:
-
-```text
-GetTargetContactPoints
-ResolveContactPointTargets
-FindContactPoint
-```
-
----
-
-# 23. AttachContactPoint
-
-Command:
-
-```python
-AttachContactPointCommand(
-    target=ContactPointTarget(
-        object_type="contact",
-        object_id=contact_id,
-    ),
-    type=ContactPointType.PHONE,
-    value="0501234567",
-    label="mobile",
-    is_primary=False,
-    source="manual",
-)
-```
-
-Handler:
-
-```text
-validate target
-      ↓
-normalize
-      ↓
-resolve ContactPoint
-      ↓
-check Binding
-      ↓
-determine primary
-      ↓
-create Binding
-      ↓
-commit
-      ↓
-publish events
-```
-
----
-
-# 24. ReplaceContactPoint
-
-Редактирование UI должно использовать именно этот use case.
-
-Например пользователь меняет:
-
-```text
-0501111111
-```
-
-на:
-
-```text
-0672222222
-```
-
-Handler:
-
-```text
-old Binding
-      ↓
-resolve new ContactPoint
-      ↓
-create/update Binding
-      ↓
-preserve:
-    label
-    primary
-    source rules
-      ↓
-remove old Binding
-```
-
-Не:
-
-```sql
-UPDATE contact_points
-SET canonical_value = ...
-```
-
----
-
-# 25. DetachContactPoint
-
-Удаляет только:
-
-```text
-ContactPointBinding
-```
-
-Не удаляет:
-
-```text
-ContactPoint
-```
-
-потому что он может использоваться другими объектами.
-
-Например:
-
-```text
-+380501234567
- ├ Contact
- └ Lead
-```
-
-удаление телефона из Contact не должно уничтожить endpoint Lead.
-
----
-
-# 26. Garbage collection
-
-Не делать synchronously.
-
-После detach могут оставаться:
-
-```text
-ContactPoint
-bindings = 0
-```
-
-Это нормально.
-
-Позже можно реализовать maintenance job:
-
-```text
-delete orphan ContactPoints
-older than N days
-```
-
-Но даже это не обязательно, если объём небольшой.
-
----
-
-# 27. SetPrimaryContactPoint
-
-Отдельный command.
-
-Transaction:
-
-```text
-SELECT bindings
-FOR UPDATE
-
-       ↓
-
-old primary = false
-
-       ↓
-
-new primary = true
-
-       ↓
-
-COMMIT
-```
-
-Дополнительно PostgreSQL partial unique index защищает invariant.
-
----
-
-# 28. Target validation
-
-ContactPoints module не должен импортировать:
-
-```python
-from contacts import Contact
-from companies import Company
-from leads import Lead
-```
-
-Нужен application port:
-
-```python
-class ContactPointTargetResolver(Protocol):
-
-    async def exists(
-        self,
-        target: ContactPointTarget,
-    ) -> bool:
-        ...
-```
-
-Infrastructure adapter уже может обращаться к нужным модулям.
-
-Позже:
-
-```text
-TargetResolver
-     ↓
-Record Registry
-```
-
-И ContactPoints вообще не изменится.
-
----
-
-# 29. Никаких прямых dependencies на Contact/Lead/Company
-
-Запрещённая зависимость:
-
-```text
-contact_points
-     ↓
-contacts
-     ↓
-companies
-     ↓
-leads
-```
-
-Правильная:
-
-```text
-Contacts ───┐
-Companies ──┼──► ContactPoints Application API
-Leads ──────┘
-```
-
-А ContactPoints знает только:
-
-```text
-ContactPointTarget
-```
-
----
-
-# 30. Lead
-
-У Lead остаётся:
-
-```text
-contact_id nullable
-company_id nullable
-```
-
-И параллельно:
-
-```text
-Lead
- ↓
-ContactPointBinding
- ↓
-PHONE / EMAIL
-```
-
-Это разные связи.
-
-Например:
-
-```text
-Lead #500
-phone = +380...
-contact = Contact #100
-```
-
-ContactPoint означает:
-
-> Lead поступил с этим номером.
-
-`contact_id` означает:
-
-> Lead идентифицирован как существующий Contact.
-
-ContactPoint Binding после матчинга удалять нельзя.
-
----
-
-# 31. Поиск
-
-ContactPoints должен давать reverse lookup:
-
-```python
-ResolveContactPointTargetsQuery(
-    type=PHONE,
-    value="0501234567",
-)
-```
-
-Pipeline:
-
-```text
-normalize
-   ↓
-ContactPoint lookup
-   ↓
-Bindings
-   ↓
-TargetRef[]
-```
-
-Результат:
-
-```text
-[
-    Contact #123,
-    Company #50,
-    Lead #900
+ContactPointRepositoryDep = Annotated[
+    SqlAlchemyContactPointRepository, Depends(get_contact_point_repository)
 ]
 ```
 
----
-
-# 32. Global CRM Search — не обязанность ContactPoints
-
-Поиск:
-
-```text
-Иван Иванов
-+380501234567
-ivan@example.com
-```
-
-лучше делать отдельным:
-
-```text
-CRM Search / Customer Search
-```
-
-Он комбинирует:
-
-```text
-Contact search
-Company search
-ContactPoint search
-```
-
-Например:
-
-```text
-CustomerSearchService
-
-          ┌─ Contacts
-query ────┼─ Companies
-          └─ ContactPoints
-```
-
-ContactPoints предоставляет только свой Search Port.
-
----
-
-# 33. FastAPI endpoints
-
-Я бы сделал API вокруг Binding, а не отдельных `/phones` и `/emails`.
-
-Например:
-
-```text
-GET
-/api/v1/{target_type}/{target_id}/contact-points
-```
-
-```text
-POST
-/api/v1/{target_type}/{target_id}/contact-points
-```
-
-Payload:
-
-```json
-{
-  "type": "phone",
-  "value": "0501234567",
-  "label": "mobile",
-  "is_primary": true
-}
-```
-
-Редактирование:
-
-```text
-PUT
-/api/v1/contact-point-bindings/{binding_id}
-```
-
-Удаление:
-
-```text
-DELETE
-/api/v1/contact-point-bindings/{binding_id}
-```
-
-Primary:
-
-```text
-POST
-/api/v1/contact-point-bindings/{binding_id}/make-primary
-```
-
-Reverse lookup:
-
-```text
-GET
-/api/v1/contact-points/resolve
-    ?type=phone
-    &value=0501234567
-```
-
----
-
-# 34. Pydantic только на Presentation boundary
-
-Например:
-
-```text
-presentation/
-    api/
-        schemas.py
-```
-
-Pydantic:
+Binding и label factories получают тот же shared `UoWDep`. Не добавлять `use_cache=False`,
+альтернативный `get_uow` или ручной вызов yield-dependency. Naming создаётся в composition root
+по shared контракту без импорта приватной factory из CRM infrastructure.
 
 ```python
-class AttachContactPointRequest(BaseModel):
-    type: Literal["phone", "email"]
-    value: str
-    label: str | None = None
-    is_primary: bool = False
+from src.modules.shared.presentation.time.depends import ClockDep
+
+
+def get_contact_point_resolver(
+    repository: ContactPointRepositoryDep,
+    normalizers: ContactPointNormalizersDep,
+    clock: ClockDep,
+):
+    return ContactPointResolver(repository, normalizers, clock)
+
+
+ContactPointResolverDep = Annotated[
+    ContactPointResolver, Depends(get_contact_point_resolver)
+]
+
+
+def get_sync_target_contact_points_use_case(
+    resolver: ContactPointResolverDep,
+    bindings: ContactPointBindingRepositoryDep,
+    labels: ContactPointLabelRepositoryDep,
+    clock: ClockDep,
+):
+    return SyncTargetContactPointsUseCase(resolver, bindings, labels, clock)
+
+
+SyncTargetContactPointsUseCaseDep = Annotated[
+    SyncTargetContactPointsUseCase, Depends(get_sync_target_contact_points_use_case)
+]
 ```
 
-Но Domain:
+`Depends`/dependency aliases не переходят в конструкторы domain/application. Use case принимает
+Protocol/ClockPort и вызывается через `async def __call__(command)`. Controller получает
+`<UseCase>Dep`, создаёт frozen command, переводит DTO в response schema. Public classes и aliases
+экспортируются через `__all__`; factories и use cases имеют короткие docstring.
+
+HTTP create-id генерирует controller через существующий `UuidDep`. Для sync он выдаёт candidate
+point-id каждой строке и binding-id новым строкам; адаптер передаёт их в command. Если точка уже
+существует, resolver использует её id. Существующий binding-id проверяется на принадлежность target.
+Не создавать generator или clock внутри use case/repository.
+
+## 7. Межмодульный адаптер и проверка target
 
 ```text
-НЕ импортирует Pydantic
-НЕ импортирует FastAPI
-НЕ импортирует SQLAlchemy
+CRM application → CRM-owned ContactPointsPort
+                         ▲
+CRM infrastructure adapter → contact_points public application contracts
+                                      ↓
+                              contact_points domain
 ```
 
-Это принципиально для Clean Architecture.
+CRM-owned port предоставляет sync, batch read и удаление связей. Адаптер получает готовые
+contact_points use cases через CRM dependency factory. CRM repository и их repositories
+сходятся на одном shared `get_uow`. Адаптер переводит DTO/VO и не делает HTTP-запрос к своему API.
 
----
-
-# 35. Domain Events
-
-Заложить сразу:
-
-```text
-ContactPointCreated
-ContactPointAttached
-ContactPointDetached
-ContactPointReplaced
-ContactPointPrimaryChanged
-```
-
-Например:
+Пример сборки адаптера в `crm/presentation/depends/infrastructure.py` и передачи в
+CRM use case из `crm/presentation/depends/application.py`:
 
 ```python
-@dataclass(frozen=True)
-class ContactPointAttached:
-    binding_id: UUID
-    contact_point_id: UUID
-    target: ContactPointTarget
+def get_crm_contact_points_port(
+    sync: SyncTargetContactPointsUseCaseDep,
+    read: GetTargetsContactPointsUseCaseDep,
+    remove: RemoveTargetContactPointsUseCaseDep,
+) -> ContactPointsPort:
+    return ContactPointsApplicationAdapter(sync, read, remove)
+
+
+CrmContactPointsDep = Annotated[
+    ContactPointsPort, Depends(get_crm_contact_points_port)
+]
+
+
+def get_update_contact_use_case(
+    repository: ContactRepositoryDep,
+    clock: ClockDep,
+    contact_points: CrmContactPointsDep,
+):
+    return UpdateContactUseCase(repository, clock, contact_points)
 ```
 
-Пока subscribers могут отсутствовать.
+`GetTargetsContactPointsUseCaseDep` здесь обозначает dependency пакетного query.
+Импорт dependency aliases другого модуля выполняется только в presentation composition root.
+Сам `ContactPointsApplicationAdapter` импортирует публичные application contracts, а не
+`presentation/depends`. Так инфраструктура не зависит от FastAPI-сборки.
 
-Позже:
+Для преобразования ContactIdVO/CompanyIdVO в общий target использовать
+`EntityIdVO.from_value(typed_id.uuid)`: shared VO намеренно не принимает другой специализированный
+IdVO напрямую. `model_key` задаётся интеграцией CRM, не произвольным payload пользователя.
+
+**В первой версии существование, доступ и блокировку target обеспечивает модуль-владелец.**
+ContactPoints не импортирует CRM domain, repositories или presentation. Не создавать обратный
+TargetResolver с зависимостью на CRM use cases: это породит цикл.
+
+- Create: CRM создаёт объект и синхронизирует точки на той же session.
+- Update: CRM получает объект `for_update=True`, обновляет данные и синхронизирует массивы.
+- Delete: дополнить текущий CRM delete последовательностью lock → удалить bindings через порт →
+  удалить объект, всё в одной UoW.
+- Блокировка target сериализует update/delete даже при отсутствии bindings. Блокировки только
+  существующих bindings недостаточно. Будущие writers обязаны соблюдать тот же порядок.
+
+Целостность полиморфного target обеспечивают эти сценарии и их тесты. Если позже появится
+универсальный внешний HTTP API bindings, отдельно добавить порт проверки target/доступа/блокировки
+и адаптеры владельцев без обхода указанной дисциплины.
+
+## 8. Application и HTTP API
+
+Основные операции:
+
+- `SyncTargetContactPointsUseCase`: resolve/create, создание/rebind, изменение label/position,
+  удаление отсутствующих bindings для переданных массивов.
+- `GetTargetContactPointsUseCase` и batch query нескольких target.
+- `RemoveTargetContactPointsUseCase`: очистка связей перед удалением владельца.
+- `ResolveContactPointTargetsUseCase`: нормализовать значение и вернуть target refs внутри tenant,
+  не создавая точку при отсутствии совпадения. Данные CRM добавляет потребитель.
+- Отдельные list/create/update use cases подписей; архивирование входит в update.
+
+Отдельные attach/detach/replace HTTP-запросы для каждой строки формы не нужны: они нарушат
+сохранение вместе с карточкой. Эти действия выполняются внутри sync.
+
+Существующие CRM POST/PUT и GET/list расширяются `phones` и `emails`:
+
+- входная строка: `binding_id` для существующей связи, `value`, optional `label_id`,
+  `country_code` для телефона; ответ также содержит `contact_point_id`;
+- omitted-array при update означает «не изменять», `[]` — «очистить»; при create omitted означает
+  пустой список; `null` вместо массива отклоняется;
+- при переводе Pydantic request в command сохранять отличие omitted от `[]`;
+- ошибка строки откатывает всю карточку; ошибка содержит массив, индекс и поле;
+- чужой binding нельзя переназначить текущему target.
+
+Роутер модуля подключается через `src/modules/router.py` под существующим `/api/console`:
+
+| Method | Path | Доступ |
+| --- | --- | --- |
+| GET | `/api/console/contact-points/labels?type=phone` | Участник tenant |
+| POST | `/api/console/contact-points/labels` | Администратор tenant |
+| PATCH | `/api/console/contact-points/labels/{label_id}` | Администратор tenant |
+
+Tenant и actor извлекаются из `AuthenticatedRequestContextDep`, не принимаются из тела.
+Роль admin проверяется сервером на presentation boundary. Mutations используют `require_csrf`.
+Ошибки: validation 422, not found 404, conflict 409, недостаточные права 403.
+`/api/v1/...` и новый механизм аутентификации не вводятся.
+
+## 9. События и outbox
+
+Новый event bus не нужен: shared уже содержит порты, repositories и RabbitMQ publisher.
+Integration events подключаются при согласованном потребителе; первая версия не требует subscribers.
+Если события включаются, порядок такой:
 
 ```text
-ContactPointAttached
-       │
-       ├── Audit
-       ├── Search Index
-       ├── Deduplication
-       ├── Customer 360
-       └── Timeline
+domain operation
+  → запись points/bindings
+  → запись IntegrationEvent через shared OutboxRepositoryProtocol на той же session
+  → commit внешней UoW
+  → existing shared outbox worker публикует событие с повторными попытками
 ```
 
----
+Не публиковать в брокер из handler после собственного commit, не создавать модульный event bus
+и не импортировать shared RabbitMQ adapter в бизнес-модуль. `SqlAlchemyOutboxRepository(uow.session)`
+собирается на presentation boundary, application видит порт. Перевод IdVO в UUID существующего
+shared IntegrationEvent происходит на границе событий. Ошибка карточки откатывает и outbox.
 
-# 36. Transaction + events
+## 10. Структура модуля
 
-Правильный flow:
+Использовать структуру по поддоменам из develop-style, не общие `entities/repositories/handlers`:
 
 ```text
-Handler
-   ↓
-Domain operation
-   ↓
-Repository
-   ↓
-COMMIT
-   ↓
-Domain Events
+src/modules/contact_points/
+├── domain/
+│   ├── contact_point/
+│   │   ├── entity.py, error.py, repository.py, service.py, normalization.py
+│   │   └── value_object/
+│   ├── binding/
+│   │   ├── entity.py, error.py, repository.py, service.py
+│   │   └── value_object/
+│   └── label/
+│       ├── entity.py, error.py, repository.py
+│       └── value_object/
+├── application/
+│   ├── contact_point/{command,dto,query,use_case}/
+│   ├── binding/{command,dto,query,use_case}/
+│   └── label/{command,dto,query,use_case}/
+├── infrastructure/
+│   ├── persistence/
+│   │   ├── models.py
+│   │   ├── contact_point_repository.py
+│   │   ├── binding_repository.py
+│   │   └── label_repository.py
+│   └── normalization/{phone.py,email.py}
+└── presentation/
+    ├── depends/{infrastructure.py,application.py}
+    └── http/
+        ├── router.py, boundary.py
+        └── label/{controller,requests,responses}/
 ```
 
-Если в будущем события должны гарантированно попадать в Kafka/RabbitMQ, добавить:
+Добавить `__init__.py` и публичные экспорты. Queries используют `query/repository.py`, когда
+нужен отдельный read contract. Pydantic находится в requests/responses. Модульного `unit_of_work.py` нет.
+
+## 11. Console
+
+### Виджет и композиция компонентов
+
+Реализовать `ContactPointsWidget` в `frontends/apps/console/src/modules/contact-points/ui/`.
+Это составной предметный виджет для форм Company, Contact и будущих владельцев. Он объединяет
+два независимо переиспользуемых компонента `PhoneContactPointsField` и `EmailContactPointsField`.
+Экспортировать виджет, оба поля и frontend-типы через публичный `index.ts` модуля.
 
 ```text
-Transactional Outbox
+ContactFormDialog / CompanyFormDialog / форма будущего объекта
+  └─ ContactPointsWidget
+      ├─ PhoneContactPointsField
+      │   └─ строки: страна + телефон + подпись + удалить
+      └─ EmailContactPointsField
+          └─ строки: email + подпись + удалить
 ```
 
-Для MVP отдельную outbox infrastructure можно не вводить, если нет message broker.
-
----
-
-# 37. Структура проекта
-
-Я бы сделал модуль так:
-
-```text
-src/
-└── modules/
-    └── contact_points/
-
-        domain/
-        ├── entities/
-        │   ├── contact_point.py
-        │   └── contact_point_binding.py
-        │
-        ├── value_objects/
-        │   ├── contact_point_id.py
-        │   ├── binding_id.py
-        │   ├── contact_point_value.py
-        │   └── target.py
-        │
-        ├── enums/
-        │   ├── contact_point_type.py
-        │   └── contact_point_status.py
-        │
-        ├── events/
-        │   ├── created.py
-        │   ├── attached.py
-        │   ├── detached.py
-        │   └── primary_changed.py
-        │
-        ├── repositories/
-        │   ├── contact_point.py
-        │   └── binding.py
-        │
-        ├── services/
-        │   └── normalization.py
-        │
-        └── exceptions.py
-
-        application/
-        ├── commands/
-        │   ├── attach.py
-        │   ├── replace.py
-        │   ├── detach.py
-        │   ├── set_primary.py
-        │   └── change_label.py
-        │
-        ├── queries/
-        │   ├── get_for_target.py
-        │   └── resolve_targets.py
-        │
-        ├── handlers/
-        │   ├── attach.py
-        │   ├── replace.py
-        │   ├── detach.py
-        │   ├── set_primary.py
-        │   └── resolve_targets.py
-        │
-        ├── services/
-        │   └── resolver.py
-        │
-        ├── ports/
-        │   ├── unit_of_work.py
-        │   ├── target_resolver.py
-        │   └── event_bus.py
-        │
-        └── dto/
-            ├── contact_point.py
-            └── binding.py
-
-        infrastructure/
-        ├── persistence/
-        │   └── sqlalchemy/
-        │       ├── models.py
-        │       ├── repositories.py
-        │       └── unit_of_work.py
-        │
-        ├── normalization/
-        │   ├── phone.py
-        │   ├── email.py
-        │   └── registry.py
-        │
-        └── events/
-            └── event_bus.py
-
-        presentation/
-        └── api/
-            ├── router.py
-            ├── schemas.py
-            ├── dependencies.py
-            └── mappers.py
-```
-
----
-
-# 38. Dependency direction
-
-Получается:
-
-```text
-Presentation
-      ↓
-Application
-      ↓
-Domain
-```
-
-И:
-
-```text
-Infrastructure
-      ↓
-Application Ports / Domain Ports
-```
-
-Никогда:
-
-```text
-Domain → SQLAlchemy
-Domain → FastAPI
-Domain → Pydantic
-```
-
----
-
-# 39. SQLAlchemy
-
-Использовать SQLAlchemy 2.x async:
-
-```python
-AsyncSession
-async_sessionmaker
-Mapped[]
-mapped_column()
-```
-
-ORM model — это persistence model, а не domain entity.
-
-То есть не нужно:
-
-```python
-class ContactPoint(Base, DomainEntity):
-```
-
-Лучше:
-
-```text
-SQLAlchemyContactPointModel
-        ↕ mapper
-Domain ContactPoint
-```
-
-Да, это немного больше кода, но для модульной CRM архитектура будет значительно чище.
-
----
-
-# 40. Repository mapper
-
-Infrastructure:
-
-```text
-ORM
- ↓
-Domain mapper
- ↓
-Entity
-```
-
-Например:
-
-```python
-ContactPointMapper.to_domain(model)
-ContactPointMapper.to_model(entity)
-```
-
-Application handlers не должны получать SQLAlchemy ORM objects.
-
----
-
-# 41. Миграция существующих Contact / Company / Lead
-
-Проводить поэтапно.
-
-**Этап 1.** Создать `ContactPoints` tables, domain и API.
-
-**Этап 2.** Backfill существующих:
-
-```text
-Contact.phone
-Contact.email
-
-Company.phone
-Company.email
-
-Lead.phone
-Lead.email
-```
-
-Pipeline:
-
-```text
-legacy value
-    ↓
-normalize
-    ↓
-resolve
-    ↓
-binding
-```
-
-Одинаковое значение:
-
-```text
-Contact A
-Company B
-Lead C
-```
-
-создаёт один `ContactPoint` и три Binding.
-
-**Этап 3.** Включить dual-write на короткий migration period.
-
-**Этап 4.** Переключить read на ContactPoints.
-
-**Этап 5.** Запретить изменение legacy fields.
-
-**Этап 6.** Удалить:
-
-```text
-phone
-email
-```
-
-из Contact / Company / Lead либо оставить только denormalized read cache, если появится реальная необходимость.
-
----
-
-# 42. Ошибочные legacy значения
-
-Migration job не должен молча выбрасывать:
-
-```text
-+380 abc
-foo@
-1234
-```
-
-Нужен migration report:
-
-```text
-processed
-created_points
-created_bindings
-duplicates
-invalid_phone
-invalid_email
-errors
-```
-
-Invalid legacy values оставить для ручной обработки.
-
----
-
-# 43. Custom Objects
-
-Пока:
-
-```text
-ContactPointTarget
-
-object_type
-object_id
-```
-
-Например:
-
-```text
-contact / UUID
-company / UUID
-lead / UUID
-```
-
-Когда появится:
-
-```text
-Record Registry
-```
-
-делаем:
-
-```text
-contact_point_bindings
-
-target_type
-target_id
-
-        ↓ migration
-
-record_id
-```
-
-А Domain VO:
-
-```text
-ContactPointTarget
-```
-
-может остаться API abstraction или быть заменён внутри на:
-
-```text
-RecordId
-```
-
-Ни FastAPI API, ни ContactPoint Aggregate переписывать не придётся.
-
----
-
-# 44. Что понадобится в Record Registry позже
-
-Целевая модель:
-
-```text
-Record
-────────────────
-
-id
-object_type
-object_id
-```
-
-И:
-
-```text
-ContactPointBinding
-
-record_id FK
-contact_point_id FK
-```
-
-После этого такие горизонтальные модули:
-
-```text
-ContactPoints
-Files
-Tags
-Notes
-Comments
-Tasks
-Activities
-Audit
-```
-
-смогут привязываться одинаково:
-
-```text
-Horizontal Module
-       ↓
-    RecordId
-```
-
----
-
-# 45. Что сознательно не делать в ContactPoints
-
-Не добавлять туда:
-
-```text
-SMS sending
-Email sending
-WhatsApp
-Telegram
-Chats
-Conversations
-Open Channels
-Websites
-Social profiles
-Marketing consent
-Message history
-```
-
-Это отдельные bounded contexts.
-
-Позже:
-
-```text
-Communication
-      │
-      ├── SMS → ContactPoint PHONE
-      └── Email → ContactPoint EMAIL
-```
-
-То есть Communication **потребляет ContactPoints**, а не наоборот.
-
----
-
-# 46. Tests
-
-Нужны четыре уровня:
-
-```text
-Domain unit tests
-Application handler tests
-PostgreSQL repository integration tests
-FastAPI API tests
-```
-
-Отдельно обязательно протестировать concurrency:
-
-```text
-два параллельных resolve одного телефона
-два параллельных attach
-два одновременных SetPrimary
-```
-
-И invariants:
-
-```text
-один ContactPoint на canonical value
-
-один Binding на:
-ContactPoint + target
-
-не больше одного primary:
-target + point type
-
-ContactPoint value immutable
-
-detach одного Binding
-не удаляет ContactPoint
-```
-
----
-
-# 47. Реализация по итерациям
-
-Я бы реализовывал модуль в таком порядке:
-
-1. **Domain Core** — `ContactPoint`, `Binding`, VO, enums, invariants, repository ports.
-2. **Normalization** — `PhoneNormalizer`, `EmailNormalizer`, registry, `phonenumbers`, `email-validator`.
-3. **Persistence** — SQLAlchemy models, migrations, indexes, repositories, UoW.
-4. **Application** — Resolve, Attach, Replace, Detach, SetPrimary, List, Reverse Lookup.
-5. **FastAPI** — Pydantic schemas, routers, error mapping, DI.
-6. **Migration** — backfill Contact/Company/Lead, migration report, temporary dual-write.
-7. **Search integration** — поиск Contact/Company/Lead по normalized phone/email.
-8. **Events & integrations** — audit/timeline/search index subscribers по мере необходимости.
-9. **Record Registry migration** — когда появятся Custom Objects и другие горизонтальные capabilities.
-
-После **этапа 6** модуль уже можно считать production MVP.
-
----
-
-## Итоговая архитектура
-
-В первой production-версии:
-
-```text
-              Contact / Company / Lead
-                         │
-                         │
-                ContactPointTarget
-                         │
-                         ▼
-               ContactPointBinding
-                │               │
-             primary          label
-                │
-                ▼
-                 ContactPoint
-                /            \
-             PHONE          EMAIL
-               │              │
-        PhoneNormalizer EmailNormalizer
-```
-
-Позже:
-
-```text
-Contact / Company / Lead / CustomObject
-                  │
-                  ▼
-                Record
-                  │
-                  ▼
-         ContactPointBinding
-                  │
-                  ▼
-            ContactPoint
-```
-
-А сбоку независимо развивается:
-
-```text
-Communication
-    │
-    ├── SMS ────────► PHONE
-    ├── Email ──────► EMAIL
-    ├── WhatsApp
-    ├── Telegram
-    └── Facebook
-```
-
-Главные решения, которые стоит зафиксировать сейчас: **`ContactPoint` immutable, уникален по canonical value внутри tenant; принадлежность объекту всегда через отдельный `Binding`; `PHONE/EMAIL` остаются единственными ContactPoint types; Domain не знает Contact/Company/Lead; изменение номера — rebind, а не update глобального ContactPoint; будущий переход на `RecordId` предусмотрен через `ContactPointTarget` abstraction.** Такой модуль можно реализовать сейчас без большого платформенного рефакторинга и впоследствии дорастить до общей CRM object architecture.
+Виджет и поля **составляются из существующих простых shadcn-vue компонентов** из
+`@/components/ui`; предметные правила не добавляются в базовые UI components.
+
+| Элемент виджета | Переиспользуемые компоненты |
+| --- | --- |
+| Группа телефонов/email | `FieldSet`, `FieldLegend`, `FieldGroup` |
+| Строка и сообщения валидации | `Field`, `FieldLabel`, `FieldError` |
+| Телефон с кодом страны | `InputGroup`, `InputGroupAddon`, `InputGroupInput` с `type="tel"` |
+| Поиск и выбор страны | Существующий `Combobox` с его `Anchor`, `Input`, `List`, `Group`, `Item`, `Empty`; trigger находится в addon |
+| Email | `Input` с `type="email"` |
+| Подпись связи | `Select`, `SelectTrigger`, `SelectValue`, `SelectContent`, `SelectGroup`, `SelectItem` |
+| Добавление/удаление строки | `Button`, иконки из используемого `@lucide/vue`, `Tooltip` для кнопки удаления |
+| Ошибка загрузки справочника и повтор | `Alert`, `AlertDescription`, `Button`; во время загрузки — `Spinner` |
+
+Перечисленные примитивы уже есть в проекте. Использовать их текущие public exports и Vue API;
+не устанавливать React-версию shadcn и не копировать существующие controls в новый модуль.
+Внутри `InputGroup` использовать `InputGroupInput`, а не обычный `Input`. Страны показывать
+с названием, кодом и флагом; поиск должен работать по названию и телефонному коду.
+
+### Контракт и управление состоянием
+
+- `ContactPointsWidget` получает `v-model:phones` и `v-model:emails`; отдельные поля получают
+  массив через обычный `v-model`. Дополнительные props: options подписей по типам, `disabled`,
+  `pending`, состояние загрузки/ошибки options и построчные ошибки. Повтор загрузки — событие родителю.
+- Frontend draft-строка содержит стабильный `clientKey`, optional `bindingId`, `value`,
+  optional `labelId`; телефон также содержит `countryCode`. `clientKey` служит ключом рендера
+  и ошибок, не отправляется в API. Не использовать индекс массива как Vue key.
+- Виджет не знает `model_key`, tenant, id владельца, CRM API или backend VO. Он выдаёт обновлённые
+  массивы без прямой мутации props и без HTTP-запросов. Это позволяет использовать его до создания объекта.
+- CRM-контейнер получает справочники через query hooks нового модуля, передаёт options и
+  сохраняет карточку вместе с массивами существующей CRM mutation. Только контейнер отвечает
+  за загрузку, сохранение, уведомления и invalidation соответствующих query caches.
+- Новая строка телефона начинается с `UA`, email — с пустого значения; подпись изначально не выбрана.
+  Пустой массив допустим. Добавленная пустая строка требует заполнения или явного удаления;
+  её нельзя молча отбросить при сохранении.
+- Поля выполняют предварительную валидацию на blur и при попытке сохранения; форма получает
+  событие `validation-change` с текущей валидностью и передаёт признак попытки submit для показа ошибок.
+  Серверная валидация остаётся окончательной. Ответные ошибки по индексам сопоставляются с
+  `clientKey` снимка отправленных массивов, чтобы не попадать на другую строку после удаления.
+- При `pending` блокировать изменения строк и повторное сохранение. Отмена отбрасывает черновик,
+  ошибка сохранения оставляет ввод. Архивная подпись существующей строки отображается, но не
+  предлагается для новых назначений. Ошибка загрузки options не очищает текущие labelId или массивы.
+
+### Интеграция, доступность и настройки
+
+Встроить виджет в существующие create/edit dialogs Company и Contact. Backend GET/list читает
+массивы пакетно. На узком экране элементы строки переносятся вертикально без горизонтального скролла.
+Использовать существующие semantic tokens, размеры и варианты компонентов.
+
+Каждая строка получает уникальные id и связанные labels; ошибки используют `data-invalid`,
+`aria-invalid`, `aria-describedby`. Кнопки добавить/удалить имеют `type="button"`, у удаления есть
+доступное текстовое имя. После добавления фокус переходит в новую строку, после удаления —
+в соседнюю строку или кнопку добавления. Выбор страны и подписи доступен с клавиатуры.
+
+Добавить `/admin/contact-points` в существующий AdminLayout и навигацию с вкладками «Телефоны»
+и «Email» на компонентах `Tabs`, `TabsList`, `TabsTrigger`, `TabsContent`.
+Подписями управляет администратор там; шестерёнка в строке не нужна.
+После изменений обновлять соответствующие TanStack Query caches.
+
+## 12. Миграция и внедрение
+
+1. Зарегистрировать модели и исторические имена таблиц в `src/modules/tenant_persistence.py`.
+2. Добавить tenant revision после текущего `0007_crm_contacts_companies` (проверить head перед
+   реализацией). Явный DDL, без импорта runtime ORM и фиксированной tenant-схемы.
+3. Создать три таблицы, ограничения и начальные подписи. Seed ревизии использует фиксированные
+   UUID и timestamp. Для миграционных подписей actor-поля допускают null, поскольку у DDL нет
+   пользователя; обычные операции записывают actor из контекста. Points/bindings создаются с actor.
+4. Новые tenant получают схему через существующий bootstrap до head; существующие — через
+   `dnk-manage tenant-migrations upgrade`. Ревизия не делает commit/autocommit.
+5. Выполнить upgrade существующих tenant перед запуском кода, требующего новые таблицы.
+   CRM-данные сохраняются; у существующих карточек изначально пустые массивы.
+
+Backfill/dual-write не нужны: текущие Contact/Company не имеют legacy phone/email, Lead отсутствует.
+Не переносить identity `user_emails` — это другой bounded context. Внешний импорт и Record Registry
+требуют отдельного плана: target abstraction не гарантирует миграцию без изменения API.
+
+Обновить документацию CRM/HTTP и boundary tests: разрешить новый `contact_points` и его маршруты,
+сохранив запрет на старый `contact_point`, динамические модули и legacy attach routes.
+
+## 13. Проверки и порядок реализации
+
+- Domain: нормализация, страна, регистр email, immutable canonical value, rebind с прежним id,
+  типы подписей, позиции и дубликаты.
+- Use cases: sync, omitted/empty массивы, ошибки строк, чужой binding, удаление владельца,
+  batch read и reverse lookup без создания точек.
+- DI smoke: CRM, points, bindings и labels получают одну UoW/session; use cases получают готовые
+  Protocol dependencies; вложенные операции не коммитят.
+- PostgreSQL: ошибка после записи CRM/части bindings откатывает весь запрос; параллельный resolve
+  даёт одну точку; update/delete одного владельца не оставляют висящих связей; одинаковые UUID
+  и значения в разных tenant изолированы.
+- HTTP: CSRF, tenant/actor из контекста, admin-only изменения labels, корректные 4xx,
+  атомарное сохранение карточки и отсутствие частичного успеха.
+- Миграции: новый tenant, upgrade существующего без потери CRM-данных, initial labels и rollback
+  bootstrap. Использовать disposable PostgreSQL через `TEST_POSTGRES_URL`.
+- Архитектурные проверки: отсутствие SQLAlchemy/FastAPI/Pydantic в domain/application нового модуля,
+  отсутствие импорта CRM из contact_points и contact_points из Shared, соблюдение направлений адаптеров;
+  CRM application использует собственный порт/DTO, преобразование публичных контрактов тестируется у адаптера.
+- Console: typecheck/lint/build, браузерная проверка форм, отмены, ошибок, административных вкладок
+  и мобильной компоновки. Проверить каждое поле отдельно и в общем виджете, отсутствие HTTP mutations
+  при редактировании черновика, стабильность строк/ошибок после удаления, keyboard focus, пустые строки,
+  загрузку/сбой справочника и сохранение архивной подписи. При подключении integration events — тест атомарности outbox.
+
+Порядок: domain/contracts → normalizers → persistence/migration → use cases/DI → CRM adapter
+и атомарные сценарии → HTTP/Console → проверки и документация. Отдельный UoW, broker,
+Record Registry или восстановление dynamic objects для этого не требуются.
