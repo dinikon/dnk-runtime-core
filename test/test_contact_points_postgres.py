@@ -38,7 +38,7 @@ from src.modules.contact_points.infrastructure.persistence import (
     ContactPointBindingModel,
     ContactPointLabelModel,
 )
-from src.modules.contact_points.infrastructure.persistence.binding_repository import (
+from src.modules.contact_points.infrastructure.persistence.repository.binding_repository import (
     SqlAlchemyContactPointBindingRepository,
 )
 from src.modules.contact_points.presentation.depends.application import (

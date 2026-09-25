@@ -3,13 +3,9 @@ from src.modules.contact_points.infrastructure.persistence.models import (
     ContactPointBindingModel,
     ContactPointLabelModel,
 )
-from src.modules.contact_points.infrastructure.persistence.contact_point_repository import (
+from src.modules.contact_points.infrastructure.persistence.repository import (
     SqlAlchemyContactPointRepository,
-)
-from src.modules.contact_points.infrastructure.persistence.binding_repository import (
     SqlAlchemyContactPointBindingRepository,
-)
-from src.modules.contact_points.infrastructure.persistence.label_repository import (
     SqlAlchemyContactPointLabelRepository,
 )
 from src.modules.contact_points.infrastructure.persistence.mappers import (
