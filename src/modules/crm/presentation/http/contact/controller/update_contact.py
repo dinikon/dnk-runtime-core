@@ -1,3 +1,5 @@
+from src.modules.shared.presentation.uuid.depends import UuidDep
+from src.modules.crm.presentation.http.contact_points import contact_point_inputs
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -30,6 +32,7 @@ async def update_contact(
     payload: UpdateContactRequest,
     context: AuthenticatedRequestContextDep,
     use_case: UpdateContactUseCaseDep,
+    uuid_generator: UuidDep,
 ):
     """Полностью обновляет ФИО контакта текущего tenant."""
     with http_errors():
@@ -39,7 +42,8 @@ async def update_contact(
                 tenant_id=tenant_id,
                 actor_id=actor_id,
                 contact_id=ContactIdVO.from_value(contact_id),
-                **payload.model_dump(mode="json"),
+                **payload.model_dump(mode="json", exclude={"phones", "emails"}),
+                **contact_point_inputs(payload, uuid_generator),
             )
         )
         return ContactResponse(**dto_values(result))

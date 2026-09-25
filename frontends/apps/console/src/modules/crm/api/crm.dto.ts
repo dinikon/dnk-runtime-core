@@ -1,3 +1,4 @@
+import type { ContactPointDto } from "@/modules/contact-points";
 export interface ContactDto {
   id: string;
   first_name: string;
@@ -7,6 +8,8 @@ export interface ContactDto {
   updated_at: string;
   created_by: string;
   updated_by: string;
+  phones: ContactPointDto[];
+  emails: ContactPointDto[];
 }
 
 export interface CompanyDto {
@@ -16,6 +19,8 @@ export interface CompanyDto {
   updated_at: string;
   created_by: string;
   updated_by: string;
+  phones: ContactPointDto[];
+  emails: ContactPointDto[];
 }
 
 export interface PageDto<T> {

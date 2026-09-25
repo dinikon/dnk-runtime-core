@@ -327,11 +327,13 @@ dependencies = [
     { name = "croniter" },
     { name = "cryptography" },
     { name = "defusedxml" },
+    { name = "email-validator" },
     { name = "fastapi", extra = ["standard"] },
     { name = "faststream", extra = ["rabbit"] },
     { name = "httpx" },
     { name = "jsonpath-ng" },
     { name = "openpyxl" },
+    { name = "phonenumbers" },
     { name = "prometheus-client" },
     { name = "pydantic" },
     { name = "pyyaml" },
@@ -354,11 +356,13 @@ requires-dist = [
     { name = "croniter", specifier = ">=6.0.0,<7" },
     { name = "cryptography", specifier = ">=45,<49" },
     { name = "defusedxml", specifier = ">=0.7.1,<1" },
+    { name = "email-validator", specifier = ">=2.3,<3" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.138.1" },
     { name = "faststream", extras = ["rabbit"], specifier = ">=0.6.7" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "jsonpath-ng", specifier = ">=1.8.0" },
     { name = "openpyxl", specifier = ">=3.1.5,<4" },
+    { name = "phonenumbers", specifier = ">=9,<10" },
     { name = "prometheus-client", specifier = ">=0.22,<1" },
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "pyyaml", specifier = ">=6.0.3,<7" },
@@ -783,6 +787,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/fa/36/e27608899f9b8d4dff0617b2d9ab17ca5608956ca44461ac14ac48b44015/pathspec-1.0.4.tar.gz", hash = "sha256:0210e2ae8a21a9137c0d470578cb0e595af87edaa6ebf12ff176f14a02e0e645", size = 131200, upload-time = "2026-01-27T03:59:46.938Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ef/3c/2c197d226f9ea224a9ab8d197933f9da0ae0aac5b6e0f884e2b8d9c8e9f7/pathspec-1.0.4-py3-none-any.whl", hash = "sha256:fb6ae2fd4e7c921a165808a552060e722767cfa526f99ca5156ed2ce45a5c723", size = 55206, upload-time = "2026-01-27T03:59:45.137Z" },
+]
+
+[[package]]
+name = "phonenumbers"
+version = "9.0.40"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b4/39/66db12a16eec873aa12411fc6da0fe052a86413fe117e208b51836b41740/phonenumbers-9.0.40.tar.gz", hash = "sha256:a0dd1bc98efa0b6f5839c7b1fface2ebdf0a811645dd8211ae3f037a17ec07ac", size = 2311069, upload-time = "2026-09-24T06:59:03.882Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/74/da/c266478ebea2b8d3176484e06756960d94d27cce2d7dc5ca3be6151cb9e3/phonenumbers-9.0.40-py2.py3-none-any.whl", hash = "sha256:189c028c4acd41ee80782e50f74a91260bd76d9115c83be94302509e1cdb5e84", size = 2594747, upload-time = "2026-09-24T06:59:00.564Z" },
 ]
 
 [[package]]

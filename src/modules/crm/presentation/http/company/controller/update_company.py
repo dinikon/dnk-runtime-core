@@ -1,3 +1,5 @@
+from src.modules.shared.presentation.uuid.depends import UuidDep
+from src.modules.crm.presentation.http.contact_points import contact_point_inputs
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -30,6 +32,7 @@ async def update_company(
     payload: UpdateCompanyRequest,
     context: AuthenticatedRequestContextDep,
     use_case: UpdateCompanyUseCaseDep,
+    uuid_generator: UuidDep,
 ):
     """Полностью обновляет название компании текущего tenant."""
     with http_errors():
@@ -39,7 +42,8 @@ async def update_company(
                 tenant_id=tenant_id,
                 actor_id=actor_id,
                 company_id=CompanyIdVO.from_value(company_id),
-                **payload.model_dump(mode="json"),
+                **payload.model_dump(mode="json", exclude={"phones", "emails"}),
+                **contact_point_inputs(payload, uuid_generator),
             )
         )
         return CompanyResponse(**dto_values(result))

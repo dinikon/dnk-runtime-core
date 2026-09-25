@@ -240,6 +240,7 @@ code changes.
 - [HTTP API](../interfaces/http-api.md)
 - [Identity module](../modules/identity.md)
 - [CRM module](../modules/crm.md)
+- [Contact points and reusable fields](../modules/contact-points.md)
 - [Schema Registry module](../history/modules/schema-registry.md)
 - [Runtime schema](../history/data/runtime-schema.md)
 

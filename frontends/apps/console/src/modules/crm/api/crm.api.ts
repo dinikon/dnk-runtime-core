@@ -1,3 +1,4 @@
+import { contactPointPayload } from "@/modules/contact-points";
 import { httpClient } from "@/app/providers/http/http-client";
 import type { CompanyDto, ContactDto, PageDto } from "./crm.dto";
 import { mapCompany, mapContact, mapPage } from "./crm.mapper";
@@ -15,6 +16,8 @@ function contactPayload(input: ContactInput) {
     first_name: input.firstName,
     last_name: input.lastName,
     middle_name: input.middleName,
+    phones: contactPointPayload(input.phones, "phone"),
+    emails: contactPointPayload(input.emails, "email"),
   };
 }
 
@@ -70,14 +73,22 @@ export const crmCompaniesApi = {
   async create(input: CompanyInput): Promise<Company> {
     const { data } = await httpClient.post<CompanyDto>(
       "/console/crm/companies",
-      { name: input.name },
+      {
+        name: input.name,
+        phones: contactPointPayload(input.phones, "phone"),
+        emails: contactPointPayload(input.emails, "email"),
+      },
     );
     return mapCompany(data);
   },
   async update(id: string, input: CompanyInput): Promise<Company> {
     const { data } = await httpClient.put<CompanyDto>(
       `/console/crm/companies/${id}`,
-      { name: input.name },
+      {
+        name: input.name,
+        phones: contactPointPayload(input.phones, "phone"),
+        emails: contactPointPayload(input.emails, "email"),
+      },
     );
     return mapCompany(data);
   },

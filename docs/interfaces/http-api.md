@@ -74,6 +74,24 @@ authenticated tenant user can read and mutate CRM data; browser mutations requir
 `limit` must be between 1 and 100. Search is case-insensitive; results use fixed name-then-id ordering. Domain
 validation is `422`, missing records are `404`, and persistence conflicts are `409`. See [CRM](../modules/crm.md).
 
+CRM POST/PUT also accept `phones` and `emails`. Omitted arrays preserve existing bindings, empty arrays clear
+them, and `null` is rejected. Phone rows require `country_code`; both kinds accept `value`, optional `binding_id`
+and `label_id`. Responses include `contact_point_id` and normalized values. Changing a value rebinds the same
+binding without changing other owners. Any invalid row rolls back the whole CRM request. See the
+[contact-points contract](../modules/contact-points.md) for examples and normalization rules.
+
+## Console contact-point labels
+
+| Method | Path | Access / result |
+| --- | --- | --- |
+| GET | `/api/console/contact-points/labels?type=phone` | Tenant member; labels, including archived; optional phone/email filter |
+| POST | `/api/console/contact-points/labels` | Tenant admin; `{type, name}`; `201` |
+| PATCH | `/api/console/contact-points/labels/{id}` | Tenant admin; optional `{name, is_active}`; `200` |
+
+Mutations require CSRF. Tenant and actor come from authenticated context. Validation is `422`, a missing label
+is `404`, and non-admin mutation is `403`. Explicit null update fields are invalid; omitted fields are preserved.
+There is no standalone attach/detach HTTP endpoint: bindings are synchronized atomically with their owner.
+
 ## Runtime to Core
 
 The outbox sends Instance-mTLS `PUT /internal/v1/tenants/{tenant_id}/access/{user_id}/` with `{event_id, version, available}`. Core replies `{status: 200, data: {applied, version?}}`; both applied and already-processed results acknowledge delivery. Roles stay local.

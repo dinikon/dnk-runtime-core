@@ -1,7 +1,8 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from src.modules.crm.presentation.http.contact_points import ContactPointResponse
 
 
 class CompanyResponse(BaseModel):
@@ -13,6 +14,8 @@ class CompanyResponse(BaseModel):
     updated_at: datetime
     created_by: UUID
     updated_by: UUID
+    phones: list[ContactPointResponse] = Field(default_factory=list)
+    emails: list[ContactPointResponse] = Field(default_factory=list)
 
 
 class CompanyListResponse(BaseModel):

@@ -1,3 +1,12 @@
+from src.modules.crm.application.contact_points.port import ContactPointsPort
+from src.modules.crm.infrastructure.contact_points_adapter import (
+    ContactPointsApplicationAdapter,
+)
+from src.modules.contact_points.presentation.depends.application import (
+    SyncTargetContactPointsUseCaseDep,
+    GetTargetsContactPointsUseCaseDep,
+    RemoveTargetContactPointsUseCaseDep,
+)
 from typing import Annotated
 
 from fastapi import Depends
@@ -49,3 +58,16 @@ __all__ = [
     "get_contact_repository",
     "get_tenant_naming",
 ]
+
+
+def get_crm_contact_points_port(
+    sync: SyncTargetContactPointsUseCaseDep,
+    read: GetTargetsContactPointsUseCaseDep,
+    remove: RemoveTargetContactPointsUseCaseDep,
+) -> ContactPointsPort:
+    """Собирает межмодульный адаптер на общем графе request dependencies."""
+    return ContactPointsApplicationAdapter(sync, read, remove)
+
+
+CrmContactPointsDep = Annotated[ContactPointsPort, Depends(get_crm_contact_points_port)]
+__all__ += ["CrmContactPointsDep", "get_crm_contact_points_port"]
