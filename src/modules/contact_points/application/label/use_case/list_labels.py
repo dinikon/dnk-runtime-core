@@ -20,10 +20,12 @@ class ListContactPointLabelsUseCase:
         self, query: ListContactPointLabelsQuery
     ) -> tuple[ContactPointLabelDTO, ...]:
         """Читает настройки только текущего tenant."""
-        return tuple(
-            label_dto(label)
-            for label in await self.repository.list(query.tenant_id, query.type)
+        labels = await self.repository.list(query.tenant_id, query.type)
+        ordered = sorted(
+            labels,
+            key=lambda label: (label.type, label.name.value.casefold(), str(label.id)),
         )
+        return tuple(label_dto(label) for label in ordered)
 
 
 __all__ = ["ListContactPointLabelsUseCase"]

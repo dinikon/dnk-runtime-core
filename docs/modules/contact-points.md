@@ -23,6 +23,15 @@ Future owners must follow the same locking and cleanup discipline, with their ow
 
 All repositories are constructed by presentation dependencies on the same cached shared `UoWDep.session`.
 Tenant is explicit on every repository operation and translated to a schema by `TenantSchemaNaming`.
+The three repositories have plain `(session, naming)` constructors and use SQLAlchemy Core. A stateless
+`tenant_execution_options` function scopes every statement; no repository base class or tenant state is needed.
+`ContactPointMapper`, `ContactPointBindingMapper` and `ContactPointLabelMapper` explicitly map persisted fields
+(including audit) into domain objects and produce insert/update values. Binding JOIN queries use fixed aliases;
+the binding mapper assembles the domain projection through the point mapper. Invalid persisted types, identifiers
+or timezone-less timestamps raise `ContactPointPersistenceMappingError` with the original cause. No ORM instances
+or reflection-based field mapping are used. Display sorting belongs to `ListContactPointLabelsUseCase`; repository
+reads keep the stable id order required for label locks.
+
 Only the outer shared UoW commits/rolls back. Sync validates the supplied arrays, normalizes values, resolves points
 with PostgreSQL `ON CONFLICT`, then replaces target bindings atomically. Stable point resolution order avoids
 opposing uniqueness locks. The owner lock serializes replacements, including swaps of two addresses.
@@ -80,10 +89,10 @@ There is no backfill from identity emails and no restoration of the removed lega
 Focused tests:
 
 ```sh
-uv run python -m unittest test.test_contact_points test.test_crm test.test_crm_http test.test_removed_module_boundaries
+uv run python -m unittest test.test_contact_point_mappers test.test_contact_points test.test_crm test.test_crm_http test.test_removed_module_boundaries
 TEST_POSTGRES_URL=postgresql+asyncpg://... uv run python -m unittest test.test_contact_points_postgres test.test_tenant_migrations_postgres
 ```
 
 Use a disposable PostgreSQL database. Integration coverage includes shared session identity, atomic rollback,
-concurrent resolve/update/delete, tenant isolation, immutable shared values, archival permissions/CSRF, reverse
+concurrent resolve/update/delete, identical UUIDs across tenant schemas on one session/repository instance, immutable shared values, archival permissions/CSRF, reverse
 lookup and transactional migrations. See [the implementation plan](../plan/contact_point_module.md) for scope.

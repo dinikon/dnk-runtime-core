@@ -173,7 +173,11 @@ class ContactPointsPostgresTests(unittest.IsolatedAsyncioTestCase):
             return {
                 "same_session": all(
                     repository.session is uow.session
-                    for repository in (contacts, companies, points, bindings, labels)
+                    for repository in (contacts, companies)
+                )
+                and all(
+                    repository._session is uow.session
+                    for repository in (points, bindings, labels)
                 )
             }
 
@@ -245,6 +249,138 @@ class ContactPointsPostgresTests(unittest.IsolatedAsyncioTestCase):
                 .all()
             )
         self.assertEqual(before, after)
+
+    async def test_same_ids_in_two_tenants_through_one_session_and_repositories(self):
+        from datetime import UTC, datetime, timedelta
+        from src.modules.contact_points.domain.contact_point.entity import ContactPoint
+        from src.modules.contact_points.domain.contact_point.value_object.identifier import (
+            ContactPointIdVO,
+        )
+        from src.modules.contact_points.domain.contact_point.value_object.value import (
+            NormalizationContext,
+        )
+        from src.modules.contact_points.domain.binding.entity import ContactPointBinding
+        from src.modules.contact_points.domain.binding.value_object.identifier import (
+            ContactPointBindingIdVO,
+        )
+        from src.modules.contact_points.domain.binding.value_object.target import (
+            ContactPointTargetVO,
+        )
+        from src.modules.contact_points.domain.label.entity import ContactPointLabel
+        from src.modules.contact_points.domain.label.value_object.identifier import (
+            ContactPointLabelIdVO,
+        )
+        from src.modules.contact_points.infrastructure.normalization.phone import (
+            PhoneNormalizer,
+        )
+        from src.modules.contact_points.infrastructure.persistence import (
+            SqlAlchemyContactPointLabelRepository,
+        )
+
+        point_id = ContactPointIdVO.from_value(uuid4())
+        binding_id = ContactPointBindingIdVO.from_value(uuid4())
+        label_id = ContactPointLabelIdVO.from_value(uuid4())
+        target = ContactPointTargetVO("crm.contact", EntityIdVO.from_value(uuid4()))
+        now = datetime.now(UTC)
+        expected = {}
+        async with UnitOfWork(self.sessions) as uow:
+            points = SqlAlchemyContactPointRepository(uow.session, self.naming)
+            bindings = SqlAlchemyContactPointBindingRepository(uow.session, self.naming)
+            labels = SqlAlchemyContactPointLabelRepository(uow.session, self.naming)
+            for tenant, value, name, time in (
+                (self.tenant, "0501234567", "First tenant", now),
+                (self.other, "0672222222", "Other tenant", now + timedelta(seconds=1)),
+            ):
+                actor = EntityIdVO.from_value(uuid4())
+                point = ContactPoint.create(
+                    point_id=point_id,
+                    point_type=ContactPointType.PHONE,
+                    normalized=PhoneNormalizer().normalize(
+                        value, NormalizationContext("UA")
+                    ),
+                    actor_id=actor,
+                    now=time,
+                )
+                label = ContactPointLabel.create(
+                    label_id=label_id,
+                    point_type=ContactPointType.PHONE,
+                    name=name,
+                    actor_id=actor,
+                    now=time,
+                )
+                binding = ContactPointBinding.create(
+                    binding_id=binding_id,
+                    point_id=point_id,
+                    target=target,
+                    label_id=label_id,
+                    position=0,
+                    actor_id=actor,
+                    now=time,
+                )
+                await labels.add(tenant, label)
+                self.assertEqual(await points.get_or_create(tenant, point), point)
+                await bindings.replace_for_target(tenant, target, (binding,))
+                expected[tenant] = (point, binding, label)
+
+            # The instances and session stay the same while the schema alternates.
+            for tenant in (self.tenant, self.other, self.tenant):
+                point, binding, label = expected[tenant]
+                self.assertEqual(await points.get(tenant, point_id), point)
+                self.assertEqual(
+                    await points.find_by_canonical(
+                        tenant, point.type, point.canonical_value
+                    ),
+                    point,
+                )
+                self.assertEqual(
+                    await points.get_or_create(
+                        tenant, replace(point, id=ContactPointIdVO.from_value(uuid4()))
+                    ),
+                    point,
+                )
+                self.assertEqual(await labels.get(tenant, label_id), label)
+                self.assertEqual(
+                    next(
+                        item
+                        for item in await labels.list(tenant)
+                        if item.id == label_id
+                    ),
+                    label,
+                )
+                rows = await bindings.list_for_targets(tenant, (target,))
+                self.assertEqual(len(rows), 1)
+                self.assertEqual(rows[0].binding, binding)
+                self.assertEqual(rows[0].point, point)
+                self.assertEqual(
+                    await bindings.list_targets(tenant, point_id), (target,)
+                )
+
+            self.assertIsNone(
+                await points.find_by_canonical(
+                    self.other,
+                    ContactPointType.PHONE,
+                    expected[self.tenant][0].canonical_value,
+                )
+            )
+            label = expected[self.tenant][2]
+            label.update(
+                name="Renamed",
+                is_active=False,
+                actor_id=EntityIdVO.from_value(self.actor),
+                now=now + timedelta(days=1),
+            )
+            await labels.save(self.tenant, label)
+            self.assertEqual(await labels.get(self.tenant, label_id), label)
+            self.assertEqual(
+                await labels.get(self.other, label_id), expected[self.other][2]
+            )
+            await bindings.remove_target(self.tenant, target)
+            self.assertEqual(
+                await bindings.list_for_targets(self.tenant, (target,)), ()
+            )
+            self.assertEqual(
+                len(await bindings.list_for_targets(self.other, (target,))), 1
+            )
 
     async def test_shared_phone_rebind_and_delete_preserve_other_owner_and_orphans(
         self,

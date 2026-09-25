@@ -12,6 +12,11 @@ from src.modules.contact_points.infrastructure.persistence.binding_repository im
 from src.modules.contact_points.infrastructure.persistence.label_repository import (
     SqlAlchemyContactPointLabelRepository,
 )
+from src.modules.contact_points.infrastructure.persistence.mappers import (
+    ContactPointMapper,
+    ContactPointBindingMapper,
+    ContactPointLabelMapper,
+)
 
 __all__ = [
     "ContactPointModel",
@@ -20,4 +25,7 @@ __all__ = [
     "SqlAlchemyContactPointRepository",
     "SqlAlchemyContactPointBindingRepository",
     "SqlAlchemyContactPointLabelRepository",
+    "ContactPointMapper",
+    "ContactPointBindingMapper",
+    "ContactPointLabelMapper",
 ]
