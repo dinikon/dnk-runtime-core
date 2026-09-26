@@ -1,3 +1,4 @@
+from src.modules.crm.domain.error import InvalidCrmContactPointError
 from contextlib import contextmanager
 from dataclasses import fields, is_dataclass
 
@@ -46,6 +47,17 @@ def http_errors():
         yield
     except (ContactNotFoundError, CompanyNotFoundError) as exc:
         raise HTTPException(404, str(exc)) from exc
+    except InvalidCrmContactPointError as exc:
+        raise HTTPException(
+            422,
+            [
+                {
+                    "loc": ["body", exc.array, exc.index, exc.field],
+                    "msg": str(exc),
+                    "type": "contact_point_validation",
+                }
+            ],
+        ) from exc
     except DomainError as exc:
         raise HTTPException(422, str(exc)) from exc
     except IntegrityError as exc:

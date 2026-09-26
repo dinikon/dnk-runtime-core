@@ -109,10 +109,7 @@ class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
 
         app = create_app()
         openapi_paths = set(app.openapi()["paths"])
-        removed_route_prefixes = (
-            "/api/console/contact-points",
-            "/api/console/config/objects/features",
-        )
+        removed_route_prefixes = ("/api/console/config/objects/features",)
         for prefix in removed_route_prefixes:
             self.assertFalse(any(path.startswith(prefix) for path in openapi_paths))
 
@@ -131,6 +128,7 @@ class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(contact_point_response.status_code, 404)
+        self.assertIn("/api/console/contact-points/labels", openapi_paths)
         self.assertEqual(object_feature_response.status_code, 404)
         self.assertNotIn("object_feature_config", Base.metadata.tables)
 

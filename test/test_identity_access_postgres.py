@@ -18,7 +18,7 @@ from src.modules.identity.application.cloud_auth_service import CloudAuthService
 from src.modules.identity.application.ports.cloud import CloudConnection
 from src.modules.identity.application.auth.service import OtpService, SessionService
 from src.modules.identity.domain.access import IdentityAccessError
-from src.modules.identity.domain.user import User, UserIdVO
+from src.modules.identity.domain.user import User
 from src.modules.identity.infrastructure.repository.access_repository import (
     AccessRepository,
 )
@@ -35,7 +35,7 @@ from src.modules.shared.application.persistence.tenant_schema_naming import (
 )
 from src.modules.shared.application.tokens import TokenManager
 from src.modules.shared.infrastructure.tokens import InMemoryTokenBackend
-from src.modules.shared.infrastructure.persistence.unit_of_work import UnitOfWork
+from modules.shared.infrastructure.persistence.unit_of_work.sqlalchemy import UnitOfWork
 from src.modules.shared.infrastructure.persistence.tenant_migrations import (
     TenantMigrator,
 )

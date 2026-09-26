@@ -1,3 +1,4 @@
+from src.modules.crm.presentation.depends.infrastructure import CrmContactPointsDep
 from typing import Annotated
 
 from fastapi import Depends
@@ -23,29 +24,43 @@ from src.modules.crm.presentation.depends.infrastructure import (
 from src.modules.shared.presentation.time.depends import ClockDep
 
 
-def get_create_contact_use_case(repository: ContactRepositoryDep, clock: ClockDep):
+def get_create_contact_use_case(
+    repository: ContactRepositoryDep,
+    clock: ClockDep,
+    contact_points: CrmContactPointsDep,
+):
     """Собирает CreateContactUseCase."""
-    return CreateContactUseCase(repository, clock)
+    return CreateContactUseCase(repository, clock, contact_points)
 
 
-def get_get_contact_use_case(repository: ContactRepositoryDep):
+def get_get_contact_use_case(
+    repository: ContactRepositoryDep, contact_points: CrmContactPointsDep
+):
     """Собирает GetContactUseCase."""
-    return GetContactUseCase(repository)
+    return GetContactUseCase(repository, contact_points)
 
 
-def get_list_contacts_use_case(repository: ContactRepositoryDep):
+def get_list_contacts_use_case(
+    repository: ContactRepositoryDep, contact_points: CrmContactPointsDep
+):
     """Собирает ListContactsUseCase."""
-    return ListContactsUseCase(repository)
+    return ListContactsUseCase(repository, contact_points)
 
 
-def get_update_contact_use_case(repository: ContactRepositoryDep, clock: ClockDep):
+def get_update_contact_use_case(
+    repository: ContactRepositoryDep,
+    clock: ClockDep,
+    contact_points: CrmContactPointsDep,
+):
     """Собирает UpdateContactUseCase."""
-    return UpdateContactUseCase(repository, clock)
+    return UpdateContactUseCase(repository, clock, contact_points)
 
 
-def get_delete_contact_use_case(repository: ContactRepositoryDep):
+def get_delete_contact_use_case(
+    repository: ContactRepositoryDep, contact_points: CrmContactPointsDep
+):
     """Собирает DeleteContactUseCase."""
-    return DeleteContactUseCase(repository)
+    return DeleteContactUseCase(repository, contact_points)
 
 
 CreateContactUseCaseDep = Annotated[
@@ -63,29 +78,43 @@ DeleteContactUseCaseDep = Annotated[
 ]
 
 
-def get_create_company_use_case(repository: CompanyRepositoryDep, clock: ClockDep):
+def get_create_company_use_case(
+    repository: CompanyRepositoryDep,
+    clock: ClockDep,
+    contact_points: CrmContactPointsDep,
+):
     """Собирает CreateCompanyUseCase."""
-    return CreateCompanyUseCase(repository, clock)
+    return CreateCompanyUseCase(repository, clock, contact_points)
 
 
-def get_get_company_use_case(repository: CompanyRepositoryDep):
+def get_get_company_use_case(
+    repository: CompanyRepositoryDep, contact_points: CrmContactPointsDep
+):
     """Собирает GetCompanyUseCase."""
-    return GetCompanyUseCase(repository)
+    return GetCompanyUseCase(repository, contact_points)
 
 
-def get_list_companies_use_case(repository: CompanyRepositoryDep):
+def get_list_companies_use_case(
+    repository: CompanyRepositoryDep, contact_points: CrmContactPointsDep
+):
     """Собирает ListCompaniesUseCase."""
-    return ListCompaniesUseCase(repository)
+    return ListCompaniesUseCase(repository, contact_points)
 
 
-def get_update_company_use_case(repository: CompanyRepositoryDep, clock: ClockDep):
+def get_update_company_use_case(
+    repository: CompanyRepositoryDep,
+    clock: ClockDep,
+    contact_points: CrmContactPointsDep,
+):
     """Собирает UpdateCompanyUseCase."""
-    return UpdateCompanyUseCase(repository, clock)
+    return UpdateCompanyUseCase(repository, clock, contact_points)
 
 
-def get_delete_company_use_case(repository: CompanyRepositoryDep):
+def get_delete_company_use_case(
+    repository: CompanyRepositoryDep, contact_points: CrmContactPointsDep
+):
     """Собирает DeleteCompanyUseCase."""
-    return DeleteCompanyUseCase(repository)
+    return DeleteCompanyUseCase(repository, contact_points)
 
 
 CreateCompanyUseCaseDep = Annotated[

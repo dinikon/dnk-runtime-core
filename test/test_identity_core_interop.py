@@ -27,7 +27,7 @@ from src.modules.identity.application.cloud_auth_service import CloudAuthService
 from src.modules.identity.application.ports.cloud import CloudConnection
 from src.modules.identity.domain.access import IdentityAccessError
 from src.modules.identity.infrastructure.adapter.oidc_client import OidcClient
-from src.modules.shared.infrastructure.persistence.unit_of_work import UnitOfWork
+from modules.shared.infrastructure.persistence.unit_of_work.sqlalchemy import UnitOfWork
 from test import test_identity_access_postgres as access_fixtures
 
 

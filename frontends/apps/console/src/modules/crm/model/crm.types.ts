@@ -1,3 +1,4 @@
+import type { ContactPointArrays } from "@/modules/contact-points";
 export interface AuditFields {
   id: string;
   createdAt: string;
@@ -6,24 +7,24 @@ export interface AuditFields {
   updatedBy: string;
 }
 
-export interface Contact extends AuditFields {
+export interface Contact extends AuditFields, ContactPointArrays {
   firstName: string;
   lastName: string | null;
   middleName: string | null;
   displayName: string;
 }
 
-export interface Company extends AuditFields {
+export interface Company extends AuditFields, ContactPointArrays {
   name: string;
 }
 
-export interface ContactInput {
+export interface ContactInput extends ContactPointArrays {
   firstName: string;
   lastName: string | null;
   middleName: string | null;
 }
 
-export interface CompanyInput {
+export interface CompanyInput extends ContactPointArrays {
   name: string;
 }
 

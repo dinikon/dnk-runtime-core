@@ -1,3 +1,4 @@
+import { mapContactPoint } from "@/modules/contact-points";
 import type { CompanyDto, ContactDto, PageDto } from "./crm.dto";
 import type { Company, Contact, Page } from "../model/crm.types";
 
@@ -14,6 +15,8 @@ export function mapContact(dto: ContactDto): Contact {
     updatedAt: dto.updated_at,
     createdBy: dto.created_by,
     updatedBy: dto.updated_by,
+    phones: dto.phones.map(mapContactPoint),
+    emails: dto.emails.map(mapContactPoint),
   };
 }
 
@@ -25,6 +28,8 @@ export function mapCompany(dto: CompanyDto): Company {
     updatedAt: dto.updated_at,
     createdBy: dto.created_by,
     updatedBy: dto.updated_by,
+    phones: dto.phones.map(mapContactPoint),
+    emails: dto.emails.map(mapContactPoint),
   };
 }
 

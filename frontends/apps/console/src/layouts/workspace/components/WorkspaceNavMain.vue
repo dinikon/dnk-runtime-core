@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { WorkspaceNavigationGroup } from "@/app/navigation";
 import { ChevronRight } from "@lucide/vue";
-import { RouterLink } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 
 import {
   Collapsible,
@@ -23,6 +23,20 @@ import {
 defineProps<{
   groups: WorkspaceNavigationGroup[];
 }>();
+
+const route = useRoute();
+const router = useRouter();
+
+function isActive(url: string) {
+  return router.resolve(url).path === route.path;
+}
+
+function isItemActive(item: WorkspaceNavigationGroup["items"][number]) {
+  return (
+    isActive(item.url) ||
+    Boolean(item.items?.some((subItem) => isActive(subItem.url)))
+  );
+}
 </script>
 
 <template>
@@ -33,10 +47,14 @@ defineProps<{
         v-for="item in group.items"
         :key="item.title"
         as-child
-        :default-open="item.defaultOpen"
+        :default-open="item.defaultOpen || isItemActive(item)"
       >
         <SidebarMenuItem>
-          <SidebarMenuButton as-child :tooltip="item.title">
+          <SidebarMenuButton
+            as-child
+            :is-active="isItemActive(item)"
+            :tooltip="item.title"
+          >
             <a
               v-if="item.external"
               :href="item.url"
@@ -55,7 +73,7 @@ defineProps<{
             <CollapsibleTrigger as-child>
               <SidebarMenuAction class="data-[state=open]:rotate-90">
                 <ChevronRight />
-                <span class="sr-only">Toggle {{ item.title }}</span>
+                <span class="sr-only">Переключить {{ item.title }}</span>
               </SidebarMenuAction>
             </CollapsibleTrigger>
             <CollapsibleContent>
@@ -64,7 +82,10 @@ defineProps<{
                   v-for="subItem in item.items"
                   :key="subItem.title"
                 >
-                  <SidebarMenuSubButton as-child>
+                  <SidebarMenuSubButton
+                    as-child
+                    :is-active="isActive(subItem.url)"
+                  >
                     <a
                       v-if="subItem.external"
                       :href="subItem.url"

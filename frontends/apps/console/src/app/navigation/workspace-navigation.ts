@@ -17,11 +17,19 @@ export const workspaceNavigation: WorkspaceNavigation = {
           title: "Контакты",
           url: "/crm/contacts",
           icon: Users,
-        },
-        {
-          title: "Компании",
-          url: "/crm/companies",
-          icon: Building2,
+          defaultOpen: true,
+          items: [
+            {
+              title: "Контакты",
+              url: "/crm/contacts",
+              icon: Users,
+            },
+            {
+              title: "Компании",
+              url: "/crm/companies",
+              icon: Building2,
+            },
+          ],
         },
       ],
     },

@@ -23,7 +23,10 @@ Files live in `migrations/tenant/versions/`; each tenant schema has its own `ale
 `0003_identity_cloud_access` adds roles, session epochs, cloud identities, invitations and live normalized-email
 uniqueness. Revisions `0004` through `0006` add partner price-list ingestion and management. Revision
 `0007_crm_contacts_companies` adds the static CRM `contacts` and `companies` tables, validation checks and stable-sort
-indexes. Revisions contain no fixed tenant names and do not import current ORM models.
+indexes. Revision `0008_contact_points` creates the tenant-local directory, bindings and labels with same-schema
+foreign keys. It seeds six labels with fixed identifiers and timestamps; seed actors are null. Upgrade existing
+tenants before running code that reads the new CRM arrays. Existing CRM rows are preserved with empty arrays.
+Revisions contain no fixed tenant names and do not import current ORM models.
 
 The migration environment uses transaction-local `search_path` (through PostgreSQL `set_config(..., true)`) and explicitly sets `version_table_schema`. Successful execution restores the previous path. Failed transactions are rolled back by the owner. Migration files must preserve transactional execution: no internal commit, autocommit block or nontransactional DDL in onboarding revisions.
 

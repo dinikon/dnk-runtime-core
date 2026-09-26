@@ -1,6 +1,7 @@
 """Регистрация статических tenant-моделей и их исторических имён."""
 
 import src.modules.crm.infrastructure.persistence  # noqa: F401
+import src.modules.contact_points.infrastructure.persistence  # noqa: F401
 import src.modules.inventory.infrastructure.persistence  # noqa: F401
 import src.modules.identity.infrastructure.persistence  # noqa: F401
 import src.modules.price_lists.infrastructure.persistence  # noqa: F401
@@ -11,6 +12,9 @@ HISTORICAL_TENANT_TABLE_NAMES = frozenset(
         "warehouses",
         "contacts",
         "companies",
+        "contact_points",
+        "contact_point_bindings",
+        "contact_point_labels",
         "users",
         "user_emails",
         "cloud_identities",

@@ -14,7 +14,11 @@ domain model and HTTP contracts are owned by the application and do not use the 
 - Names are not unique. A no-op update preserves `updated_at` and `updated_by`.
 - Deletion is physical and irreversible.
 
-Contact points, contact-company relationships, phones, email addresses, statuses and tags are outside this version.
+Phone/email arrays are owned by [contact_points](contact-points.md). CRM application uses its own
+`ContactPointsPort` and DTOs; an infrastructure adapter calls the public contact_points application API.
+Create/update saves the aggregate and bindings in the same shared request UoW. Update/delete lock the owner;
+delete removes its bindings before deleting the owner. Shared contact points remain available for other owners.
+Contact-company relationships, statuses and tags are outside this version.
 
 ## Persistence
 
@@ -51,12 +55,23 @@ case-insensitive across the displayed full name and each name part; company sear
 All authenticated tenant users may use the module. Mutations use the shared CSRF protection. Domain validation,
 missing rows and persistence conflicts are returned as `422`, `404` and `409` respectively.
 
+POST/PUT accept optional `phones` and `emails` arrays. On update, an omitted array is preserved, `[]` clears it,
+and `null` is invalid. A row has `value`, optional `binding_id`/`label_id`, and an explicit `country_code` for phones.
+GET, list and mutation responses include both arrays with `binding_id`, `contact_point_id`, canonical `value`,
+`label_id` and `country_code`. Reads enrich a whole page with one binding query. An invalid row returns `422`
+with `detail[].loc = ["body", "phones" | "emails", index, field]` and rolls back the entire card.
+
 ## Console
 
 The Console routes are `/crm/contacts` and `/crm/companies`. Each page provides debounced URL-backed search,
 server pagination, loading/error/empty states, create and edit dialogs, and an irreversible delete confirmation.
 Successful mutations invalidate the aggregate's TanStack Query keys and show a `vue-sonner` notification. Deleting
 the final row of a page moves to the previous available page.
+
+Dialogs compose the reusable `ContactPointsWidget`, with independently exported phone and email fields built
+from existing shadcn-vue primitives. Draft edits do not issue mutations; all changes are saved with the card.
+Phone country defaults to UA; the server validates country and stores E.164. Labels are optional, loaded through
+the contact-points query hook and administered at `/admin/contact-points`. Archived labels remain on existing rows.
 
 ## Related
 

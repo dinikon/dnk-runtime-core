@@ -20,6 +20,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "embla-carousel-vue": "^8.6.0",
+    "libphonenumber-js": "^1.13.14",
     "pinia": "^3.0.0",
     "reka-ui": "^2.9.8",
     "tailwind-merge": "^3.5.0",

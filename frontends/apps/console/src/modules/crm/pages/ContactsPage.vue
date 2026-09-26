@@ -1,4 +1,9 @@
 <script setup lang="ts">
+import {
+  useContactPointLabels,
+  contactPointServerErrors,
+} from "@/modules/contact-points";
+import type { ContactPointErrors } from "@/modules/contact-points";
 import { computed, ref } from "vue";
 import { Button } from "@/components/ui/button";
 import { useCrmListState } from "../model/use-crm-list-state";
@@ -23,6 +28,8 @@ const createMutation = useCreateContact();
 const updateMutation = useUpdateContact();
 const deleteMutation = useDeleteContact();
 const formOpen = ref(false);
+const labels = useContactPointLabels(formOpen);
+const pointErrors = ref<ContactPointErrors>({});
 const editing = ref<Contact | null>(null);
 const deleting = ref<Contact | null>(null);
 const items = computed(() => contacts.data.value?.items ?? []);
@@ -32,23 +39,27 @@ const formPending = computed(
 );
 
 function openCreate() {
+  pointErrors.value = {};
   editing.value = null;
   formOpen.value = true;
 }
 
 function openEdit(contact: Contact) {
+  pointErrors.value = {};
   editing.value = contact;
   formOpen.value = true;
 }
 
 async function submitForm(input: ContactInput) {
+  pointErrors.value = {};
   try {
     if (editing.value) {
       await updateMutation.mutateAsync({ id: editing.value.id, input });
     } else {
       await createMutation.mutateAsync(input);
     }
-  } catch {
+  } catch (cause) {
+    pointErrors.value = contactPointServerErrors(cause, input);
     return;
   }
   formOpen.value = false;
@@ -108,6 +119,14 @@ async function confirmDelete() {
       :open="formOpen"
       :contact="editing"
       :pending="formPending"
+      :labels="labels.data.value ?? []"
+      :labels-loading="labels.isFetching.value"
+      :labels-error="labels.isError.value"
+      :point-errors="pointErrors"
+      @retry-labels="labels.refetch()"
+      @clear-point-errors="
+        (keys) => keys.forEach((key) => delete pointErrors[key])
+      "
       @update:open="formOpen = $event"
       @submit="submitForm"
     />

@@ -1,7 +1,8 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import ConfigDict
+from src.modules.crm.presentation.http.contact_points import ContactPointsRequest
 
 
-class CreateContactRequest(BaseModel):
+class CreateContactRequest(ContactPointsRequest):
     """HTTP-поля создания контакта."""
 
     model_config = ConfigDict(extra="forbid")

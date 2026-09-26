@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { computed } from "vue";
+import { useRoute } from "vue-router";
+import { adminNavigation } from "@/app/navigation/admin-navigation";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -13,6 +16,14 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import AdminSidebar from "./components/AdminSidebar.vue";
+
+const route = useRoute();
+const pageTitle = computed(
+  () =>
+    adminNavigation
+      .flatMap((group) => group.items)
+      .find((item) => item.url === route.path)?.title ?? "Настройки",
+);
 </script>
 
 <template>
@@ -37,7 +48,7 @@ import AdminSidebar from "./components/AdminSidebar.vue";
               </BreadcrumbItem>
               <BreadcrumbSeparator />
               <BreadcrumbItem>
-                <BreadcrumbPage>Пользователи</BreadcrumbPage>
+                <BreadcrumbPage>{{ pageTitle }}</BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>

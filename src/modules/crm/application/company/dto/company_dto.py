@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from src.modules.crm.application.contact_points.port import ContactPointDTO
 from datetime import datetime
 
 from src.modules.crm.domain.company.entity import Company
@@ -16,6 +17,8 @@ class CompanyDTO:
     updated_at: datetime
     created_by: EntityIdVO
     updated_by: EntityIdVO
+    phones: tuple[ContactPointDTO, ...] = ()
+    emails: tuple[ContactPointDTO, ...] = ()
 
 
 @dataclass(slots=True, frozen=True)

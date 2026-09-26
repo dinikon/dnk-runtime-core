@@ -1,3 +1,4 @@
+from src.modules.crm.presentation.http.contact_points import contact_point_inputs
 from fastapi import APIRouter, Depends
 
 from src.modules.crm.application.company.command import CreateCompanyCommand
@@ -39,7 +40,8 @@ async def create_company(
                 tenant_id=tenant_id,
                 actor_id=actor_id,
                 company_id=CompanyIdVO.from_value(uuid_generator.new()),
-                **payload.model_dump(mode="json"),
+                **payload.model_dump(mode="json", exclude={"phones", "emails"}),
+                **contact_point_inputs(payload, uuid_generator),
             )
         )
         return CompanyResponse(**dto_values(result))

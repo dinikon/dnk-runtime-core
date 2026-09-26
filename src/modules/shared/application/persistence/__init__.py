@@ -1,4 +1,4 @@
-from src.modules.shared.application.persistence.unit_of_work_protocol import (
+from modules.shared.infrastructure.persistence.unit_of_work.protocol import (
     UnitOfWorkProtocol,
 )
 

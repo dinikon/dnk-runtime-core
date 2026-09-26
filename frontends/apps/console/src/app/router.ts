@@ -53,6 +53,12 @@ export const router = createRouter({
           redirect: { name: "admin-users" },
         },
         ...accessRoutes,
+        {
+          path: "contact-points",
+          name: "admin-contact-points",
+          component: () =>
+            import("@/modules/contact-points/pages/ContactPointSettingsPage.vue"),
+        },
       ],
     },
     {

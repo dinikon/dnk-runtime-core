@@ -1,3 +1,6 @@
+from src.modules.crm.application.contact_points.port import ContactPointsDTO
+from src.modules.crm.application.contact.dto import ContactPageDTO
+from src.modules.crm.application.company.dto import CompanyPageDTO
 import unittest
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -172,19 +175,31 @@ class CrmDomainTests(unittest.TestCase):
                 self.company(name=name)
 
 
+class EmptyContactPoints:
+    async def sync(self, *args):
+        pass
+
+    async def get_many(self, tenant_id, model_key, ids):
+        return {identifier: ContactPointsDTO() for identifier in ids}
+
+    async def remove(self, *args):
+        pass
+
+
 class CrmUseCaseTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.now = datetime(2026, 9, 22, 10, 0, tzinfo=UTC)
         self.clock = FixedClock(self.now)
         self.tenant_id = EntityIdVO.from_value(uuid4())
         self.actor_id = EntityIdVO.from_value(uuid4())
+        self.points = EmptyContactPoints()
 
     async def test_contact_create_update_noop_and_delete(self):
         repository = SimpleNamespace(
             add=AsyncMock(), save=AsyncMock(), get=AsyncMock(), delete=AsyncMock()
         )
         contact_id = ContactIdVO.from_value(uuid4())
-        created = await CreateContactUseCase(repository, self.clock)(
+        created = await CreateContactUseCase(repository, self.clock, self.points)(
             CreateContactCommand(
                 self.tenant_id,
                 self.actor_id,
@@ -199,7 +214,7 @@ class CrmUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(repository.add.await_args.args[0], self.tenant_id)
         entity = repository.add.await_args.args[1]
         repository.get.return_value = entity
-        result = await UpdateContactUseCase(repository, self.clock)(
+        result = await UpdateContactUseCase(repository, self.clock, self.points)(
             UpdateContactCommand(
                 self.tenant_id,
                 self.actor_id,
@@ -211,7 +226,7 @@ class CrmUseCaseTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(result.id, contact_id)
         repository.save.assert_not_awaited()
-        await DeleteContactUseCase(repository)(
+        await DeleteContactUseCase(repository, self.points)(
             DeleteContactCommand(self.tenant_id, contact_id)
         )
         repository.delete.assert_awaited_once_with(self.tenant_id, contact_id)
@@ -221,20 +236,20 @@ class CrmUseCaseTests(unittest.IsolatedAsyncioTestCase):
             add=AsyncMock(), save=AsyncMock(), get=AsyncMock(), delete=AsyncMock()
         )
         company_id = CompanyIdVO.from_value(uuid4())
-        await CreateCompanyUseCase(repository, self.clock)(
+        await CreateCompanyUseCase(repository, self.clock, self.points)(
             CreateCompanyCommand(self.tenant_id, self.actor_id, company_id, "Acme")
         )
         entity = repository.add.await_args.args[1]
         repository.get.return_value = entity
         self.clock.value += timedelta(hours=1)
-        result = await UpdateCompanyUseCase(repository, self.clock)(
+        result = await UpdateCompanyUseCase(repository, self.clock, self.points)(
             UpdateCompanyCommand(
                 self.tenant_id, self.actor_id, company_id, "Acme Group"
             )
         )
         self.assertEqual(result.name, "Acme Group")
         repository.save.assert_awaited_once_with(self.tenant_id, entity)
-        await DeleteCompanyUseCase(repository)(
+        await DeleteCompanyUseCase(repository, self.points)(
             DeleteCompanyCommand(self.tenant_id, company_id)
         )
         repository.delete.assert_awaited_once_with(self.tenant_id, company_id)
@@ -244,14 +259,15 @@ class CrmUseCaseTests(unittest.IsolatedAsyncioTestCase):
         contact_id = ContactIdVO.from_value(uuid4())
         contact_repository.get.side_effect = ContactNotFoundError("missing")
         with self.assertRaises(ContactNotFoundError):
-            await GetContactUseCase(contact_repository)(
+            await GetContactUseCase(contact_repository, self.points)(
                 GetContactQuery(self.tenant_id, contact_id)
             )
-        contact_page = SimpleNamespace(items=(), total=0, limit=25, offset=0)
+        contact_page = ContactPageDTO(items=(), total=0, limit=25, offset=0)
         contact_repository.list.return_value = contact_page
         contact_query = ListContactsQuery(self.tenant_id, "ivan", 25, 0)
-        self.assertIs(
-            await ListContactsUseCase(contact_repository)(contact_query), contact_page
+        self.assertEqual(
+            await ListContactsUseCase(contact_repository, self.points)(contact_query),
+            contact_page,
         )
         contact_repository.list.assert_awaited_once_with(contact_query)
 
@@ -259,14 +275,15 @@ class CrmUseCaseTests(unittest.IsolatedAsyncioTestCase):
         company_id = CompanyIdVO.from_value(uuid4())
         company_repository.get.side_effect = CompanyNotFoundError("missing")
         with self.assertRaises(CompanyNotFoundError):
-            await GetCompanyUseCase(company_repository)(
+            await GetCompanyUseCase(company_repository, self.points)(
                 GetCompanyQuery(self.tenant_id, company_id)
             )
-        company_page = SimpleNamespace(items=(), total=0, limit=25, offset=0)
+        company_page = CompanyPageDTO(items=(), total=0, limit=25, offset=0)
         company_repository.list.return_value = company_page
         company_query = ListCompaniesQuery(self.tenant_id, "acme", 25, 0)
-        self.assertIs(
-            await ListCompaniesUseCase(company_repository)(company_query), company_page
+        self.assertEqual(
+            await ListCompaniesUseCase(company_repository, self.points)(company_query),
+            company_page,
         )
         company_repository.list.assert_awaited_once_with(company_query)
 
