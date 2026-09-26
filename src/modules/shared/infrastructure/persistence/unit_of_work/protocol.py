@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 class UnitOfWorkProtocol(Protocol):
     """Порт request-scoped Unit of Work с SQLAlchemy session."""
 
-    session: AsyncSession
+    @property
+    def session(self) -> AsyncSession: ...
 
     async def __aenter__(self) -> "UnitOfWorkProtocol":
         """Открывает UoW context и возвращает себя."""

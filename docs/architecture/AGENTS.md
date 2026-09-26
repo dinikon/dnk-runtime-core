@@ -83,6 +83,15 @@ presentation → application
 
 Infrastructure является адаптером для интерфейсов, объявленных во внутренних слоях.
 
+Внешняя сборка зависимостей (`presentation/depends`, composition root) может
+импортировать конкретные Infrastructure adapters, чтобы связать их с Application.
+В ней открывается UoW и его сессия передаётся репозиториям.
+
+Контракты Application не импортируют SQLAlchemy и не раскрывают `AsyncSession`,
+ORM models или session factory. Контракт UoW предоставляет управление транзакцией;
+дополнительные зависимости в нём допустимы только как абстрактные порты без
+инфраструктурных типов. Создание сессии и подключение репозиториев остаются снаружи.
+
 ---
 
 # 2. Структура модуля
@@ -632,9 +641,14 @@ Application отвечает за use cases.
 вызывает domain methods;
 координирует repositories;
 координирует external ports;
-управляет transaction boundary через UoW;
+при необходимости явно управляет commit/rollback через контракт UoW;
 возвращает DTO/result.
 ```
+
+По умолчанию UoW открывается во внешней сборке Depends, передаёт свою сессию
+репозиториям и завершает транзакцию после выполнения процесса: commit при успехе,
+rollback при исключении. Обычный Use Case получает только необходимые порты.
+UoW передаётся в Use Case только при необходимости управлять моментом commit/rollback.
 
 Application не должен содержать бизнес-инварианты.
 
@@ -674,41 +688,49 @@ Command не содержит SQLAlchemy model или HTTP Request.
 
 # 13. Command Handler
 
+Обычный handler работает внутри UoW, уже открытого в Depends.
+
 ```python
 class ConfirmOrderHandler:
 
     def __init__(
         self,
         *,
-        uow: UnitOfWorkProtocol,
         repository: OrderRepositoryProtocol,
-        payment_gateway: PaymentGatewayProtocol,
+        outbox: OutboxRepositoryProtocol,
     ) -> None:
-        self._uow = uow
         self._repository = repository
-        self._payment_gateway = payment_gateway
+        self._outbox = outbox
 
     async def execute(
         self,
         command: ConfirmOrderCommand,
     ) -> None:
 
-        async with self._uow:
+        order = await self._repository.get(
+            tenant_id=command.tenant_id,
+            order_id=command.order_id,
+        )
 
-            order = await self._repository.get(
-                tenant_id=command.tenant_id,
-                order_id=command.order_id,
+        order.confirm()
+
+        await self._repository.save(
+            tenant_id=command.tenant_id,
+            order=order,
+        )
+
+        for event in order.pull_events():
+            await self._outbox.add(
+                order_event_to_integration_event(
+                    event,
+                    tenant_id=command.tenant_id,
+                )
             )
-
-            order.confirm()
-
-            await self._repository.save(
-                tenant_id=command.tenant_id,
-                order=order,
-            )
-
-            await self._uow.commit()
 ```
+
+`order_event_to_integration_event` в примере — Application mapping доменного
+события в контракт интеграционного сообщения. Он не выполняет I/O.
+Order Repository и Outbox Repository используют одну сессию и транзакцию UoW.
 
 Handler отвечает за сценарий:
 
@@ -719,10 +741,12 @@ invoke domain
 ↓
 persist
 ↓
-commit
+записать сообщения в Outbox
 ```
 
-Но не реализует правило `можно ли подтвердить заказ`.
+Commit выполняется при успешном завершении внешнего UoW context.
+При исключении откатываются и изменения заказа, и сообщения Outbox.
+Handler не реализует правило `можно ли подтвердить заказ`.
 
 ---
 
@@ -779,6 +803,11 @@ class OrderApplicationService:
 Application Service координирует.
 
 Domain принимает решения.
+
+Пример показывает координацию внутри уже открытого внешней сборкой UoW.
+Если сценарий создаёт интеграционные сообщения, до завершения UoW он также
+записывает их в Outbox, как в §13. Вложенный Application Service не открывает
+новый UoW и не коммитит общую транзакцию самостоятельно.
 
 ---
 
@@ -1352,61 +1381,121 @@ commit()
 rollback()
 ```
 
-Transaction boundary принадлежит Application/UoW.
+По умолчанию жизненным циклом UoW управляет внешняя сборка зависимостей.
+
+1. При сборке Depends открывается UoW и создаётся его SQLAlchemy session.
+2. Репозитории процесса, включая Outbox Repository, получают **эту же сессию**.
+3. Use Case выполняется через переданные ему абстрактные порты.
+4. После успешного выполнения процесса UoW коммитит транзакцию; при исключении
+   откатывает её. Ошибка commit не должна превращаться в успешный результат.
+5. Сессия закрывается при выходе из UoW context независимо от результата.
+
+Один процесс не должен случайно получить разные UoW/session через разные Depends.
+Все его репозитории собираются от одной общей зависимости `get_uow` с обычным
+кешированием Depends. Фоновые задачи и CLI открывают собственный UoW во внешней
+сборке на время процесса; request-scoped сессия в фоновую задачу не передаётся.
+
+**Application-контракт UoW не зависит от SQLAlchemy:**
 
 ```python
-class UnitOfWork:
+from typing import Protocol
 
-    async def __aenter__(self):
-        self.session = (
-            self._session_factory()
-        )
-        return self
 
-    async def __aexit__(
-        self,
-        exc_type,
-        exc,
-        tb,
-    ):
-        try:
-            if (
-                self.session
-                and self.session.in_transaction()
-            ):
-                await self.session.rollback()
-        finally:
-            if self.session:
-                await self.session.close()
+class UnitOfWorkProtocol(Protocol):
+    async def commit(self) -> None:
+        ...
 
-    async def commit(self):
-        await self.session.commit()
-
-    async def rollback(self):
-        await self.session.rollback()
+    async def rollback(self) -> None:
+        ...
 ```
 
-Использование:
+В этом контракте нет `session`, `AsyncSession`, session factory или методов
+открытия контекста. Application получает только управление уже открытой
+транзакцией. Если контракту нужны дополнительные зависимости, они описываются
+абстрактными портами внутренних слоёв.
+
+Конкретный `UnitOfWork` находится в Infrastructure. Его контекстный менеджер
+реализует описанные выше commit/rollback/close, а `session` доступна внешней
+сборке для создания репозиториев. Например, в `presentation/depends`:
 
 ```python
-async with uow:
+async def get_uow(request: Request) -> AsyncGenerator[UnitOfWork, None]:
+    async with UnitOfWork(request.app.state.db) as uow:
+        yield uow
 
-    order = await repository.get(
-        tenant_id,
-        order_id,
-    )
 
-    order.confirm()
+UoWDep = Annotated[UnitOfWork, Depends(get_uow)]
 
-    await repository.save(
-        tenant_id,
-        order,
-    )
 
-    await uow.commit()
+def get_order_repository(
+    uow: UoWDep,
+    naming: TenantNamingDep,
+) -> OrderRepositoryProtocol:
+    assert uow.session is not None
+    return SqlAlchemyOrderRepository(uow.session, naming)
+
+
+def get_outbox_repository(uow: UoWDep) -> OutboxRepositoryProtocol:
+    assert uow.session is not None
+    return SqlAlchemyOutboxRepository(uow.session)
+
+
+OrderRepositoryDep = Annotated[
+    OrderRepositoryProtocol, Depends(get_order_repository)
+]
+OutboxRepositoryDep = Annotated[
+    OutboxRepositoryProtocol, Depends(get_outbox_repository)
+]
+
+
+def get_confirm_order_handler(
+    repository: OrderRepositoryDep,
+    outbox: OutboxRepositoryDep,
+) -> ConfirmOrderHandler:
+    return ConfirmOrderHandler(repository=repository, outbox=outbox)
 ```
 
-Commit должен быть явным.
+Здесь `request.app.state.db` — настроенная внешним bootstrap фабрика сессий.
+Это сокращённый пример сборки; выбор tenant connection также остаётся снаружи.
+Конкретный тип `UnitOfWork` в `UoWDep` нужен сборке, а не Application.
+
+**UoW передаётся в Use Case только при необходимости явно контролировать commit
+или rollback**, например, зафиксировать данные перед следующим шагом процесса.
+Тогда параметр Use Case имеет тип `UnitOfWorkProtocol`, а Depends передаёт тот же
+уже открытый UoW, с которым связаны репозитории. Use Case вызывает
+`await self._uow.commit()` / `await self._uow.rollback()`, не открывает UoW повторно
+и не обращается к его сессии.
+
+Явный commit завершает текущую транзакцию: последующий rollback не отменяет уже
+зафиксированные изменения. Все сообщения Outbox для этих изменений должны быть
+записаны до этого commit. Если после явного commit/rollback сценарий продолжает
+работу с БД, дальнейшие изменения относятся к следующей транзакции и завершаются
+внешним UoW по тем же правилам. Ошибки должны доходить до границы UoW; если Use Case
+перехватывает ошибку и возвращает результат, он обязан обеспечить rollback
+незавершённых изменений, которые нельзя фиксировать.
+
+**Запись сообщения в Outbox должна происходить в одной транзакции с изменением
+агрегата, до commit.** Это правило действует и при автоматическом завершении UoW,
+и при явном commit из Use Case.
+
+```text
+изменить Aggregate
+↓
+сохранить Aggregate в общей транзакции
+↓
+записать сообщения в Outbox в этой же транзакции
+↓
+commit
+↓
+отдельный publisher доставляет зафиксированные сообщения
+```
+
+Запись Outbox после commit или через независимую сессию запрещена: изменение
+агрегата и сообщение должны либо сохраниться вместе, либо вместе откатиться.
+Создание Domain Event происходит в Domain, преобразование в интеграционное
+сообщение — в Application, запись через порт Outbox — в общей транзакции.
+Отправка в брокер выполняется отдельно после успешного commit. Publisher должен
+поддерживать повторные попытки, а потребители — идемпотентную обработку.
 
 ---
 
@@ -1514,6 +1603,9 @@ POST /orders/{id}/confirm
 Presentation
         │
         ▼
+Depends: открыть UoW и собрать repositories на его session
+        │
+        ▼
 ConfirmOrderCommand
         │
         ▼
@@ -1532,11 +1624,18 @@ order.confirm()
 OrderRepository.save()
         │
         ▼
-UnitOfWork.commit()
+OutboxRepository.add() в той же транзакции
         │
         ▼
-Domain Events / Outbox
+UnitOfWork.commit() при успешном завершении процесса
+        │
+        ▼
+Отдельный publisher: доставка сообщений из Outbox
 ```
+
+При исключении до commit UoW откатывает и изменения агрегата, и записи Outbox.
+Если Use Case должен контролировать момент commit, ему передаётся
+`UnitOfWorkProtocol` по правилу §25; порядок записи Outbox остаётся тем же.
 
 ---
 
@@ -1669,8 +1768,8 @@ OrderEligibilityPolicy
 запросить inventory
 вызвать domain
 сохранить order
-отправить command
-commit
+записать интеграционное сообщение в Outbox
+при необходимости явно управлять commit через порт UoW
 ```
 
 это Application Service / Handler.
@@ -1692,7 +1791,7 @@ external API
 
 # 32. Что агенту запрещено делать
 
-1. Не импортировать SQLAlchemy в Domain.
+1. Не импортировать SQLAlchemy в Domain или Application, включая контракты UoW.
 
 2. Не отдавать ORM models из Repository наружу.
 
@@ -1718,13 +1817,22 @@ external API
 
 13. Не восстанавливать Aggregate Root для обычного списка/таблицы, если достаточно Query Repository.
 
-14. Не передавать `AsyncSession` в Domain или Application Service.
+14. Не передавать `AsyncSession` в Domain, Use Case или Application Service;
+    не объявлять `session` или session factory в Application-контракте UoW.
 
 15. Не использовать infrastructure exceptions как часть публичного Domain API.
 
 16. Не создавать generic CRUD repository как основную абстракцию DDD.
 
 17. Не создавать слой abstraction только ради abstraction.
+
+18. Не открывать UoW повторно внутри Use Case, если он уже открыт внешней сборкой.
+    Не передавать UoW в Use Case без необходимости явно управлять commit/rollback.
+
+19. Не подключать репозитории одного атомарного процесса к разным сессиям UoW.
+
+20. Не записывать сообщения Outbox после commit изменения агрегата или
+    в независимой транзакции. Доставка сообщений выполняется после commit.
 
 ---
 
@@ -2015,7 +2123,9 @@ Use Case
    │       │ Aggregate / Domain
    │       │ Command Handler
    │       │ Domain Repository
-   │       │ UoW
+   │       │ UoW во внешней сборке Depends
+   │       │ Outbox в общей транзакции, если нужны сообщения
+   │       │ UoW port в Use Case только для явного commit/rollback
    │       │
    │       └── NO
    │            ↓

@@ -10,8 +10,8 @@
   доменные VO, инфраструктурные адаптеры и DI в `presentation/depends`.
 - [CRM](../modules/crm.md): статические Company и Contact внутри tenant, CRUD под `/api/console/crm`.
   Сейчас у них нет телефонов или email; Lead в этой интеграции отсутствует.
-- [Shared UoW protocol](../../src/modules/shared/application/persistence/unit_of_work_protocol.py),
-  [реализация](../../src/modules/shared/infrastructure/persistence/unit_of_work.py) и
+- [Shared UoW protocol](../../src/modules/shared/infrastructure/persistence/unit_of_work/protocol.py),
+  [реализация](../../src/modules/shared/infrastructure/persistence/unit_of_work/sqlalchemy.py) и
   [HTTP dependency](../../src/modules/shared/presentation/persistence/depends.py): общая session,
   commit/rollback на выходе из контекста.
 - [CRM infrastructure dependencies](../../src/modules/crm/presentation/depends/infrastructure.py) и
@@ -456,7 +456,7 @@ src/modules/contact_points/
 ```
 
 Добавить `__init__.py` и публичные экспорты. Queries используют `query/repository.py`, когда
-нужен отдельный read contract. Pydantic находится в requests/responses. Модульного `unit_of_work.py` нет.
+нужен отдельный read contract. Pydantic находится в requests/responses. Модульного `sqlalchemy.py` нет.
 
 ## 11. Console
 

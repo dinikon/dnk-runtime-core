@@ -15,7 +15,7 @@ from src.modules.shared.infrastructure.persistence.tenant_base import TenantBase
 from src.modules.shared.infrastructure.persistence.tenant_system_mixin import (
     TenantSystemMixin,
 )
-from src.modules.shared.infrastructure.persistence.unit_of_work import UnitOfWork
+from modules.shared.infrastructure.persistence.unit_of_work.sqlalchemy import UnitOfWork
 
 _LAZY_EXPORTS: dict[str, str] = {
     "DatabaseHelper": "src.modules.shared.infrastructure.persistence.database_helper",
