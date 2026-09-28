@@ -6,39 +6,44 @@
 
 Проект строится по принципам **Domain-Driven Design + Clean Architecture**.
 
-Основная единица организации кода — **бизнес-модуль / bounded context**.
+В `src/modules/` находятся бизнес-модули. Каждый модуль описывает отдельный
+контекст предметной области (**bounded context**) и объединяет тесно связанные
+Aggregate Roots, которые сохраняют самостоятельность.
+
+Например, модуль `crm` описывает CRM-контекст, а `Contact` и `Company` — два
+самостоятельных корня агрегатов внутри него. У каждого свои идентификатор,
+жизненный цикл, инварианты и контракт репозитория. Принадлежность одному контексту
+не делает компанию частью агрегата контакта или контакт частью агрегата компании.
 
 Примеры ниже — сокращённый псевдокод: импорты и вспомогательные реализации могут
 быть опущены. Docstring внутри классов и методов объясняют их назначение и
 поведение на русском языке; комментарии поясняют короткие вызовы и антипримеры.
 `...` обозначает пропущенную реализацию, а не готовый production-код.
 
-Например:
-
 ```text
 src/modules/
+├── crm/
 ├── orders/
 ├── catalog/
-├── customers/
 ├── payments/
 └── contact_points/
 ```
 
-Каждый модуль делится на четыре слоя:
+Каждый бизнес-модуль делится на четыре слоя. Внутри каждого слоя код группируется
+по Aggregate Root, к которому он относится:
 
 ```text
-module/
-├── domain/
-├── application/
-├── infrastructure/
-└── presentation/
+src/modules/<module>/<layer>/<aggregate_root>/<responsibility>/
 ```
 
-Важно: Aggregate Root существует только в `domain`.
+Например, `src/modules/crm/application/contact/command/` содержит команды и
+обработчики сценариев контакта. `company/` находится рядом с `contact/` внутри
+того же слоя, а не становится отдельным модулем со своими четырьмя слоями.
 
-Не создавать отдельные версии Aggregate Root в `application`, `infrastructure` или `presentation`.
-
-Остальные слои работают с Aggregate Root через публичные domain-контракты.
+Класс Aggregate Root и его бизнес-инварианты определяются в `domain/<aggregate_root>/`.
+Одноимённые каталоги в остальных слоях содержат сценарии Application, адаптеры
+Infrastructure и интерфейсы Presentation этого агрегата. Это организация кода
+вокруг одного Aggregate Root, а не четыре независимые реализации бизнес-модели.
 
 #### Направление зависимостей
 
@@ -101,98 +106,107 @@ ORM models или session factory. Контракт UoW предоставляе
 
 #### Структура модуля
 
-Пример полного модуля `Orders`:
+Целевая структура модуля CRM с самостоятельными агрегатами `Contact` и `Company`:
 
 ```text
-src/modules/orders/
-│
+src/modules/crm/
 ├── domain/
-│   ├── order/
+│   ├── contact/
 │   │   ├── aggregate.py
-│   │   ├── entity/
-│   │   │   └── order_item.py
 │   │   ├── value_object/
-│   │   │   ├── identifier.py
-│   │   │   ├── status.py
-│   │   │   ├── number.py
-│   │   │   └── quantity.py
+│   │   │   └── identifier.py
 │   │   ├── event/
-│   │   │   ├── order_created.py
-│   │   │   └── order_confirmed.py
 │   │   ├── error.py
 │   │   └── repository.py
-│   │
-│   ├── service/
-│   │   ├── pricing_service.py
-│   │   └── order_policy.py
-│   │
-│   └── shared/
-│
+│   └── company/
+│       ├── aggregate.py
+│       ├── value_object/
+│       │   └── identifier.py
+│       ├── event/
+│       ├── error.py
+│       └── repository.py
 ├── application/
-│   ├── command/
-│   │   ├── create_order/
-│   │   │   ├── command.py
-│   │   │   ├── handler.py
-│   │   │   └── dto.py
-│   │   │
-│   │   ├── add_order_item/
-│   │   │   ├── command.py
-│   │   │   └── handler.py
-│   │   │
-│   │   └── confirm_order/
-│   │       ├── command.py
-│   │       └── handler.py
-│   │
-│   ├── query/
-│   │   ├── get_order/
-│   │   │   ├── query.py
-│   │   │   ├── handler.py
-│   │   │   └── dto.py
-│   │   │
-│   │   └── list_orders/
-│   │       ├── query.py
-│   │       ├── handler.py
-│   │       └── dto.py
-│   │
-│   ├── service/
-│   │   └── order_application_service.py
-│   │
-│   ├── port/
-│   │   ├── query_repository.py
-│   │   ├── payment_gateway.py
-│   │   └── inventory_gateway.py
-│   │
-│   └── unit_of_work.py
-│
+│   ├── contact/
+│   │   ├── command/
+│   │   │   └── create_contact/
+│   │   │       ├── command.py
+│   │   │       └── handler.py
+│   │   ├── query/
+│   │   │   └── get_contact/
+│   │   │       ├── query.py
+│   │   │       ├── handler.py
+│   │   │       └── dto.py
+│   │   └── port/
+│   │       └── query_repository.py
+│   └── company/
+│       ├── command/
+│       │   └── create_company/
+│       │       ├── command.py
+│       │       └── handler.py
+│       ├── query/
+│       │   └── get_company/
+│       │       ├── query.py
+│       │       ├── handler.py
+│       │       └── dto.py
+│       └── port/
+│           └── query_repository.py
 ├── infrastructure/
-│   ├── persistence/
-│   │   ├── models.py
-│   │   ├── mappers.py
-│   │   ├── repository.py
-│   │   ├── query_repository.py
-│   │   └── migrations/
-│   │
-│   ├── payment/
-│   │   └── stripe_gateway.py
-│   │
-│   └── inventory/
-│       └── inventory_gateway.py
-│
+│   ├── contact/
+│   │   └── persistence/
+│   │       ├── mapper.py
+│   │       ├── repository.py
+│   │       └── query_repository.py
+│   ├── company/
+│   │   └── persistence/
+│   │       ├── mapper.py
+│   │       ├── repository.py
+│   │       └── query_repository.py
+│   └── persistence/
+│       └── models/
+│           ├── contact.py
+│           ├── company.py
+│           └── contact_company.py
 └── presentation/
-    ├── http/
-    │   ├── router.py
-    │   ├── request.py
-    │   └── response.py
-    │
-    └── consumer/
-        └── events.py
+    ├── contact/
+    │   ├── depends.py
+    │   └── http/
+    │       ├── router.py
+    │       ├── request.py
+    │       └── response.py
+    ├── company/
+    │   ├── depends.py
+    │   └── http/
+    │       ├── router.py
+    │       ├── request.py
+    │       └── response.py
+    └── depends/
 ```
 
-Не обязательно создавать все каталоги заранее.
+Основной порядок каталогов: **модуль → слой → Aggregate Root → назначение**.
+Поэтому команда контакта находится в `crm/application/contact/command/`,
+а не в `crm/contact/application/command/` или `crm/application/command/contact/`.
 
-Создавать только те элементы, которые реально необходимы модулю.
+Общие для нескольких агрегатов элементы остаются на уровне соответствующего слоя:
+например, сборка зависимостей в `presentation/depends/` и сохранённые SQL-модели
+CRM в `infrastructure/persistence/models/`. Каждая SQL-модель находится в отдельном
+файле и импортируется напрямую; `__init__.py` не используется для реэкспортов.
+Общая папка хранения не объединяет агрегаты и не определяет их границы.
+Таблица связи `contact_companies` сама по себе не означает отдельный Aggregate Root.
 
-### Domain layer
+Взаимодействие самостоятельных агрегатов внутри контекста координируется в
+Application через их контракты. Каждый агрегат изменяет своё состояние через
+собственные domain-методы и ссылается на другие агрегаты по идентификаторам.
+Чистые правила, относящиеся к нескольким агрегатам, могут находиться в Domain Service
+или Policy; принадлежность одному модулю не отменяет границы агрегатов.
+
+Дерево описывает целевую организацию кода. Сейчас CRM находится на этапе
+перестройки: сохранены только SQL-модели; актуальное состояние описано в
+[документации CRM](../modules/crm.md). Не создавать пустые каталоги заранее —
+добавлять элементы по мере реализации соответствующего поведения.
+
+### Слои модуля
+
+#### Domain layer
 
 `domain` содержит бизнес-модель и правила предметной области.
 
@@ -213,9 +227,10 @@ PostgreSQL
 
 Domain должен быть максимально обычным Python.
 
-#### Aggregate Root
+##### Aggregate Root
 
-Для `Orders` Aggregate Root — `Order`.
+В модуле `Orders` одним из Aggregate Roots может быть `Order`.
+Далее показан его код из `src/modules/orders/domain/order/aggregate.py`.
 
 ```python
 @dataclass(slots=True)
@@ -354,7 +369,7 @@ order.status = OrderStatus.CONFIRMED
 order.confirm()
 ```
 
-#### Entity внутри Aggregate
+##### Entity внутри Aggregate
 
 Например `OrderItem`.
 
@@ -415,7 +430,7 @@ OrderItemRepository.get(item_id)
 OrderRepository.get(order_id)
 ```
 
-#### Value Objects
+##### Value Objects
 
 Value Object должен описывать значение, а не строку/число технически.
 
@@ -458,7 +473,7 @@ class OrderStatus(StrEnum):
 
 Value Objects желательно делать immutable.
 
-#### Domain Errors
+##### Domain Errors
 
 Ошибки бизнес-правил принадлежат Domain.
 
@@ -494,7 +509,7 @@ ValueError
 
 как публичные бизнес-ошибки domain layer.
 
-#### Domain Events
+##### Domain Events
 
 Domain Event описывает факт, который уже произошёл.
 
@@ -533,7 +548,7 @@ Domain Event не должен сам:
 писать в БД
 ```
 
-#### Domain Repository
+##### Domain Repository
 
 Domain Repository работает с Aggregate Root.
 
@@ -587,7 +602,7 @@ OrderDTO
 
 Domain Repository предназначен для изменения бизнес-состояния.
 
-#### Domain Service
+##### Domain Service
 
 Domain Service нужен, если бизнес-операция:
 
@@ -653,7 +668,7 @@ class OrderConfirmationPolicy:
             raise ZeroTotalOrderError()
 ```
 
-#### Aggregate boundary
+##### Aggregate boundary
 
 При проектировании нового функционала агент сначала должен определить Aggregate Root.
 
@@ -696,7 +711,7 @@ payment.order: Order
 
 Связи между Aggregate Roots осуществляются через IDs.
 
-#### Domain snapshots
+##### Domain snapshots
 
 Если Domain Order должен использовать информацию из другого context, но она нужна для принятия domain decision, использовать специализированный immutable snapshot.
 
@@ -723,7 +738,7 @@ CustomerAggregate
 
 из другого bounded context.
 
-### Application layer
+#### Application layer
 
 Application отвечает за use cases.
 
@@ -761,7 +776,7 @@ if order.status == "draft" and len(order.items) > 0:
 order.confirm()
 ```
 
-#### Command
+##### Command
 
 Command описывает намерение изменить систему.
 
@@ -779,7 +794,7 @@ class ConfirmOrderCommand:
 
 Command не содержит SQLAlchemy model или HTTP Request.
 
-#### Command Handler
+##### Command Handler
 
 Обычный handler работает внутри UoW, уже открытого в Depends.
 
@@ -844,7 +859,7 @@ Commit выполняется при успешном завершении вн�
 При исключении откатываются и изменения заказа, и сообщения Outbox.
 Handler не реализует правило `можно ли подтвердить заказ`.
 
-#### Application Service
+##### Application Service
 
 Application Service используется, когда use case сложнее простого handler.
 
@@ -906,7 +921,7 @@ Domain принимает решения.
 записывает их в Outbox, как в разделе [Command Handler](#command-handler). Вложенный Application Service не открывает
 новый UoW и не коммитит общую транзакцию самостоятельно.
 
-#### External Ports
+##### External Ports
 
 Application не должен импортировать конкретные Stripe, Nova Poshta, Prom, Redis и т.п.
 
@@ -958,7 +973,7 @@ PaymentGatewayProtocol
 StripePaymentGateway
 ```
 
-#### Query side
+##### Query side
 
 Query не должен загружать Aggregate Root только ради отображения страницы.
 
@@ -984,7 +999,7 @@ JSON
 
 Read-side может напрямую читать projection.
 
-##### Query DTO
+###### Query DTO
 
 ```python
 @dataclass(
@@ -1010,16 +1025,17 @@ class OrderListItemDTO:
 
 DTO может быть специально оптимизирован под конкретный экран/API.
 
-##### Query Repository Protocol
+###### Query Repository Protocol
 
 Query Repository следует располагать в Application layer.
 
 Например:
 
 ```text
-application/
-└── port/
-    └── query_repository.py
+src/modules/orders/application/
+└── order/
+    └── port/
+        └── query_repository.py
 ```
 
 ```python
@@ -1063,7 +1079,7 @@ search results
 
 Это application/read concern.
 
-##### Query Handler
+###### Query Handler
 
 ```python
 @dataclass(
@@ -1110,9 +1126,9 @@ class GetOrderHandler:
 
 Query Handler не должен загружать Aggregate Root без необходимости.
 
-### Infrastructure layer
+#### Infrastructure layer
 
-#### Infrastructure persistence model
+##### Infrastructure persistence model
 
 SQLAlchemy Model — это persistence representation, а не Domain Entity.
 
@@ -1159,7 +1175,7 @@ OrderModel
 
 в Application или Domain.
 
-#### Persistence Mapper
+##### Persistence Mapper
 
 Mapper является единственной точкой преобразования persistence representation → Domain.
 
@@ -1227,7 +1243,7 @@ Mapper:
 не содержит business rules.
 ```
 
-#### Domain Repository implementation
+##### Domain Repository implementation
 
 ```python
 class SqlAlchemyOrderRepository:
@@ -1308,7 +1324,7 @@ Repository отвечает за persistence mechanics.
 
 Aggregate отвечает за business rules.
 
-##### Сохранение Aggregate
+###### Сохранение Aggregate
 
 При сохранении repository сам разбирает Aggregate на persistence representation.
 
@@ -1367,7 +1383,7 @@ async def save(
 
 Domain не знает, каким способом Aggregate сохраняется.
 
-#### Query Repository implementation
+##### Query Repository implementation
 
 Infrastructure может выполнять оптимизированный SQL напрямую.
 
@@ -1477,7 +1493,7 @@ read replicas
 
 Потому что Query Repository не отвечает за восстановление domain state.
 
-##### Query Mapper
+###### Query Mapper
 
 ```python
 class OrderQueryMapper:
@@ -1525,7 +1541,7 @@ to_domain()
 
 если Domain Entity фактически не создаётся.
 
-#### Unit of Work
+##### Unit of Work
 
 Repository не делает:
 
@@ -1658,7 +1674,7 @@ commit
 Отправка в брокер выполняется отдельно после успешного commit. Publisher должен
 поддерживать повторные попытки, а потребители — идемпотентную обработку.
 
-### Presentation layer
+#### Presentation layer
 
 HTTP слой должен быть максимально тонким.
 
