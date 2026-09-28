@@ -19,7 +19,8 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.schema import CreateSchema, DropSchema
 
 import src.modules.persistence  # noqa: F401
-from src.modules.crm.infrastructure.persistence import CompanyModel, ContactModel
+from src.modules.crm.infrastructure.persistence.models.company import CompanyModel
+from src.modules.crm.infrastructure.persistence.models.contact import ContactModel
 from src.management.cli import build_parser
 from src.management.commands.tenant_migrations import handle
 from src.modules.identity.application.user import UserService

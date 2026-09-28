@@ -43,7 +43,7 @@ from src.modules.contact_points.infrastructure.persistence import (
 from src.modules.contact_points.domain.contact_point.value_object.value import (
     ContactPointType,
 )
-from src.modules.crm.infrastructure.persistence import ContactModel
+from src.modules.crm.infrastructure.persistence.models.contact import ContactModel
 
 TEST_URL = os.environ.get("TEST_POSTGRES_URL")
 

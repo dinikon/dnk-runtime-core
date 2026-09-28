@@ -38,8 +38,9 @@ class ArchitectureBoundariesTests(unittest.TestCase):
 
     def test_crm_entry_modules_import_without_order_dependencies(self):
         for name in (
-            "src.modules.crm.infrastructure.persistence.models",
-            "src.modules.crm.links.infrastructure.persistence.models",
+            "src.modules.crm.infrastructure.persistence.models.company",
+            "src.modules.crm.infrastructure.persistence.models.contact",
+            "src.modules.crm.infrastructure.persistence.models.contact_company",
             "src.modules.tenant_persistence",
         ):
             with self.subTest(module=name):

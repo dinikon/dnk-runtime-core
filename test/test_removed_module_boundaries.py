@@ -133,11 +133,13 @@ class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("object_feature_config", Base.metadata.tables)
 
     async def test_crm_api_is_absent_but_sql_models_remain(self) -> None:
-        from src.modules.crm.infrastructure.persistence import (
+        from src.modules.crm.infrastructure.persistence.models.company import (
             CompanyModel,
+        )
+        from src.modules.crm.infrastructure.persistence.models.contact import (
             ContactModel,
         )
-        from src.modules.crm.links.infrastructure.persistence.models import (
+        from src.modules.crm.infrastructure.persistence.models.contact_company import (
             ContactCompanyModel,
         )
         from src.modules.shared.infrastructure.persistence.tenant_migration_metadata import (

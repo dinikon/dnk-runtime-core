@@ -1,9 +1,12 @@
 # CRM
 
-CRM backend is being rebuilt. Only SQLAlchemy models and their package exports remain:
+CRM backend is being rebuilt. Only SQLAlchemy models remain:
 
-- `ContactModel` and `CompanyModel` in `src/modules/crm/infrastructure/persistence/models.py`.
-- `ContactCompanyModel` in `src/modules/crm/links/infrastructure/persistence/models.py`.
+- `ContactModel` in `src/modules/crm/infrastructure/persistence/models/contact.py`.
+- `CompanyModel` in `src/modules/crm/infrastructure/persistence/models/company.py`.
+- `ContactCompanyModel` in `src/modules/crm/infrastructure/persistence/models/contact_company.py`.
+
+Models are imported directly from their individual files; package initializers do not re-export them.
 
 The `contacts`, `companies` and `contact_companies` tables retain their columns, constraints,
 indexes and foreign keys. All three models remain registered through `src/modules/tenant_persistence.py`

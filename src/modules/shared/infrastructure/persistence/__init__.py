@@ -8,6 +8,9 @@ from src.modules.shared.infrastructure.persistence.base import Base, TENANT_SCHE
 from src.modules.shared.infrastructure.persistence.database_startup_error import (
     DatabaseStartupError,
 )
+from src.modules.shared.infrastructure.persistence.entity_audit_mixin import (
+    EntityAuditMixin,
+)
 from src.modules.shared.infrastructure.persistence.long_text import LongText
 from src.modules.shared.infrastructure.persistence.portable_json import PortableJSON
 from src.modules.shared.infrastructure.persistence.string_uuid import StringUUID
@@ -29,6 +32,7 @@ __all__ = [
     "Base",
     "DatabaseHelper",
     "DatabaseStartupError",
+    "EntityAuditMixin",
     "LongText",
     "PortableJSON",
     "StringUUID",

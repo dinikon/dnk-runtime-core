@@ -1,7 +1,10 @@
 from uuid import UUID
+
 import sqlalchemy as sa
 from sqlalchemy.orm import Mapped, mapped_column
-from src.modules.shared.infrastructure.persistence import StringUUID, TenantBase
+
+from src.modules.shared.infrastructure.persistence.string_uuid import StringUUID
+from src.modules.shared.infrastructure.persistence.tenant_base import TenantBase
 
 
 class ContactCompanyModel(TenantBase):

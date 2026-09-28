@@ -1,6 +1,8 @@
 """Регистрация статических tenant-моделей и их исторических имён."""
 
-import src.modules.crm.infrastructure.persistence  # noqa: F401
+import src.modules.crm.infrastructure.persistence.models.company  # noqa: F401
+import src.modules.crm.infrastructure.persistence.models.contact  # noqa: F401
+import src.modules.crm.infrastructure.persistence.models.contact_company  # noqa: F401
 import src.modules.contact_points.infrastructure.persistence  # noqa: F401
 import src.modules.inventory.infrastructure.persistence  # noqa: F401
 import src.modules.identity.infrastructure.persistence  # noqa: F401
@@ -27,5 +29,3 @@ HISTORICAL_TENANT_TABLE_NAMES = frozenset(
         "price_list_sync_items",
     }
 )
-
-import src.modules.crm.links.infrastructure.persistence.models  # noqa: F401
