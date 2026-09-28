@@ -5,7 +5,7 @@ domain model and HTTP contracts are owned by the application and do not use the 
 
 ## Domain model
 
-`Contact` and `Company` are independent aggregates.
+`Contact` and `Company` are independent aggregates. Contact owns an immutable set of CompanyIdVO references, changed only through link_company, unlink_company and replace_companies. A link has no separate entity or repository. Duplicate selections and stale membership snapshots are domain errors.
 
 - A contact has required `first_name`, optional `last_name` and `middle_name`, and audit fields.
 - A company has required display `name` and the same audit fields.
@@ -18,7 +18,7 @@ Phone/email arrays are owned by [contact_points](contact-points.md). CRM applica
 `ContactPointsPort` and DTOs; an infrastructure adapter calls the public contact_points application API.
 Create/update saves the aggregate and bindings in the same shared request UoW. Update/delete lock the owner;
 delete removes its bindings before deleting the owner. Shared contact points remain available for other owners.
-Contact-company relationships, statuses and tags are outside this version.
+Contact-company membership is owned by Contact; Company exposes its reverse projection. Statuses and tags are outside this version.
 
 ## Persistence
 
@@ -65,13 +65,39 @@ with `detail[].loc = ["body", "phones" | "emails", index, field]` and rolls back
 
 The Console routes are `/crm/contacts` and `/crm/companies`. Each page provides debounced URL-backed search,
 server pagination, loading/error/empty states, create and edit dialogs, and an irreversible delete confirmation.
-Successful mutations invalidate the aggregate's TanStack Query keys and show a `vue-sonner` notification. Deleting
+Successful mutations invalidate both CRM aggregates' TanStack Query keys and show a `vue-sonner` notification. Deleting
 the final row of a page moves to the previous available page.
 
 Dialogs compose the reusable `ContactPointsWidget`, with independently exported phone and email fields built
 from existing shadcn-vue primitives. Draft edits do not issue mutations; all changes are saved with the card.
 Phone country defaults to UA; the server validates country and stores E.164. Labels are optional, loaded through
 the contact-points query hook and administered at `/admin/contact-points`. Archived labels remain on existing rows.
+
+## Contact–company links
+
+Both create/edit dialogs support multiple links, removal of a link without deleting its target, and navigation to the linked card.
+Cards open at `/crm/contacts?card=<id>` or `/crm/companies?card=<id>`. Details are fetched before editing; query-cache refreshes do not replace an open draft.
+Closing or navigating away from a modified card asks to discard changes. All edits, including phones/emails and links, are submitted once with the card.
+
+POST/PUT contacts accept `company_ids`; companies accept `contact_ids`. Omission preserves membership; `[]` clears it; `null` is invalid.
+PUT with a membership array also requires `expected_company_ids` or `expected_contact_ids`, containing the original IDs from the loaded card.
+A changed current set returns `409`, rolling back the entire card. The UI retains the draft and offers explicit reload. Snapshot comparison uses sets, so reordering is a no-op.
+GET details and POST/PUT responses include `companies` or `contacts` with `{id, name}` summaries. List response shapes are unchanged.
+
+Candidate endpoints are `GET /contacts/{id}/available-companies` and `GET /companies/{id}/available-contacts` below the CRM prefix.
+They accept the usual search/pagination parameters and exclude stored links before counting/pagination. The UI also excludes draft selections and allows reselecting locally removed items.
+For unsaved owners the normal opposite-object list supplies candidates. All existing same-tenant objects are eligible; cross-tenant and missing IDs return `404`.
+
+Migration `0009_crm_contact_companies` creates tenant-local `contact_companies` with a composite primary key, cascading same-schema foreign keys and a company-first reverse index.
+ContactRepository persists only the membership delta. Company edits coordinate Contact aggregates, preserving their other memberships; Company deletion unlinks through those aggregates before deleting the company.
+Commands acquire Contact locks in UUID order before Company locks and recheck reverse membership after locking. A deletion whose initially observed set changed returns `409` for retry.
+
+One cached HTTP UoW/session includes CRM, contact_points and all links. The original request-scoped dependency is retained: commit failures roll back, but the HTTP response may already have been sent.
+The existing UoW protocol remains in Infrastructure and is re-exported by Application, exposing the SQLAlchemy session, context management and commit/rollback. No ordinary CRM use case or repository commits, and no events/outbox are needed for these local operations.
+Separate query repositories map SQL rows directly to DTOs, without reconstructing Contact or Company.
+
+Tests: `test_crm_relations.py` covers Domain/Application; `test_crm_relations_postgres.py` covers actual HTTP/DI, rollback, concurrency, candidate pagination, schema constraints and isolation with identical UUIDs.
+Run PostgreSQL tests only with `TEST_POSTGRES_URL` pointing to a disposable database. HTTPS HTTP fixtures require `AUTH='{"allow_insecure_http":false}'` if local development configuration enables insecure HTTP.
 
 ## Related
 

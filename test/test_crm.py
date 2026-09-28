@@ -1,3 +1,11 @@
+from src.modules.crm.infrastructure.persistence.contact_query_repository import (
+    SqlAlchemyContactQueryRepository,
+)
+from src.modules.crm.infrastructure.persistence.company_query_repository import (
+    SqlAlchemyCompanyQueryRepository,
+)
+from src.modules.crm.application.contact.dto import contact_dto
+from src.modules.crm.application.company.dto import company_dto
 from src.modules.crm.application.contact_points.port import ContactPointsDTO
 from src.modules.crm.application.contact.dto import ContactPageDTO
 from src.modules.crm.application.company.dto import CompanyPageDTO
@@ -199,7 +207,13 @@ class CrmUseCaseTests(unittest.IsolatedAsyncioTestCase):
             add=AsyncMock(), save=AsyncMock(), get=AsyncMock(), delete=AsyncMock()
         )
         contact_id = ContactIdVO.from_value(uuid4())
-        created = await CreateContactUseCase(repository, self.clock, self.points)(
+        read = AsyncMock(
+            side_effect=lambda query: contact_dto(repository.add.await_args.args[1])
+        )
+        companies = SimpleNamespace(get=AsyncMock())
+        created = await CreateContactUseCase(
+            repository, self.clock, self.points, read, companies
+        )(
             CreateContactCommand(
                 self.tenant_id,
                 self.actor_id,
@@ -214,7 +228,9 @@ class CrmUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(repository.add.await_args.args[0], self.tenant_id)
         entity = repository.add.await_args.args[1]
         repository.get.return_value = entity
-        result = await UpdateContactUseCase(repository, self.clock, self.points)(
+        result = await UpdateContactUseCase(
+            repository, self.clock, self.points, read, companies
+        )(
             UpdateContactCommand(
                 self.tenant_id,
                 self.actor_id,
@@ -236,28 +252,36 @@ class CrmUseCaseTests(unittest.IsolatedAsyncioTestCase):
             add=AsyncMock(), save=AsyncMock(), get=AsyncMock(), delete=AsyncMock()
         )
         company_id = CompanyIdVO.from_value(uuid4())
-        await CreateCompanyUseCase(repository, self.clock, self.points)(
+        read = AsyncMock(
+            side_effect=lambda query: company_dto(repository.add.await_args.args[1])
+        )
+        links = SimpleNamespace(
+            lock_contacts=AsyncMock(return_value={}),
+            apply=AsyncMock(),
+            queries=SimpleNamespace(linked_contact_ids=AsyncMock(return_value=())),
+        )
+        await CreateCompanyUseCase(repository, self.clock, self.points, read, links)(
             CreateCompanyCommand(self.tenant_id, self.actor_id, company_id, "Acme")
         )
         entity = repository.add.await_args.args[1]
         repository.get.return_value = entity
         self.clock.value += timedelta(hours=1)
-        result = await UpdateCompanyUseCase(repository, self.clock, self.points)(
-            UpdateCompanyCommand(
-                self.tenant_id, self.actor_id, company_id, "Acme Group"
-            )
-        )
+        result = await UpdateCompanyUseCase(
+            repository, self.clock, self.points, read, links
+        )(UpdateCompanyCommand(self.tenant_id, self.actor_id, company_id, "Acme Group"))
         self.assertEqual(result.name, "Acme Group")
         repository.save.assert_awaited_once_with(self.tenant_id, entity)
-        await DeleteCompanyUseCase(repository, self.points)(
-            DeleteCompanyCommand(self.tenant_id, company_id)
+        await DeleteCompanyUseCase(repository, self.points, links)(
+            DeleteCompanyCommand(self.tenant_id, company_id, self.actor_id)
         )
         repository.delete.assert_awaited_once_with(self.tenant_id, company_id)
 
     async def test_get_list_and_not_found_are_propagated(self):
-        contact_repository = SimpleNamespace(get=AsyncMock(), list=AsyncMock())
+        contact_repository = SimpleNamespace(
+            get_details=AsyncMock(return_value=None), list=AsyncMock()
+        )
         contact_id = ContactIdVO.from_value(uuid4())
-        contact_repository.get.side_effect = ContactNotFoundError("missing")
+        contact_repository.get_details.return_value = None
         with self.assertRaises(ContactNotFoundError):
             await GetContactUseCase(contact_repository, self.points)(
                 GetContactQuery(self.tenant_id, contact_id)
@@ -271,9 +295,11 @@ class CrmUseCaseTests(unittest.IsolatedAsyncioTestCase):
         )
         contact_repository.list.assert_awaited_once_with(contact_query)
 
-        company_repository = SimpleNamespace(get=AsyncMock(), list=AsyncMock())
+        company_repository = SimpleNamespace(
+            get_details=AsyncMock(return_value=None), list=AsyncMock()
+        )
         company_id = CompanyIdVO.from_value(uuid4())
-        company_repository.get.side_effect = CompanyNotFoundError("missing")
+        company_repository.get_details.return_value = None
         with self.assertRaises(CompanyNotFoundError):
             await GetCompanyUseCase(company_repository, self.points)(
                 GetCompanyQuery(self.tenant_id, company_id)
@@ -362,7 +388,9 @@ class CrmPersistenceTests(unittest.IsolatedAsyncioTestCase):
             scalar=AsyncMock(return_value=1),
             execute=AsyncMock(return_value=contact_result),
         )
-        repository = SqlAlchemyContactRepository(session, TenantSchemaNaming("dnk_"))
+        repository = SqlAlchemyContactQueryRepository(
+            session, TenantSchemaNaming("dnk_")
+        )
         page = await repository.list(
             ListContactsQuery(tenant_id, q="Петренко Іван", limit=10, offset=20)
         )
@@ -387,7 +415,9 @@ class CrmPersistenceTests(unittest.IsolatedAsyncioTestCase):
             ]
         )
         session.execute.return_value = company_result
-        companies = SqlAlchemyCompanyRepository(session, TenantSchemaNaming("dnk_"))
+        companies = SqlAlchemyCompanyQueryRepository(
+            session, TenantSchemaNaming("dnk_")
+        )
         page = await companies.list(
             ListCompaniesQuery(tenant_id, q="acme", limit=25, offset=0)
         )

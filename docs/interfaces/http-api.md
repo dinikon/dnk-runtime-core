@@ -97,3 +97,10 @@ There is no standalone attach/detach HTTP endpoint: bindings are synchronized at
 The outbox sends Instance-mTLS `PUT /internal/v1/tenants/{tenant_id}/access/{user_id}/` with `{event_id, version, available}`. Core replies `{status: 200, data: {applied, version?}}`; both applied and already-processed results acknowledge delivery. Roles stay local.
 
 See [Control Plane integration](../modules/control-plane.md), [Identity](../modules/identity.md) and [configuration](configuration.md).
+
+
+## CRM relationship editing
+
+Contact/company POST and PUT support `company_ids` / `contact_ids`. For PUT, include the corresponding `expected_company_ids` / `expected_contact_ids` from the original detail response whenever changing membership. Omission preserves links, an empty array clears them, and null/duplicate IDs are invalid. A stale original set returns 409 and rolls back all card changes.
+
+Detail and mutation responses expose `companies` / `contacts` as `{id, name}` summaries. Candidate queries are `GET /api/console/crm/contacts/{id}/available-companies` and `GET /api/console/crm/companies/{id}/available-contacts`, with `q`, `limit` (1–100), and `offset`; stored links are excluded before pagination. Authentication, CSRF on mutations, and tenant derivation follow the existing CRM contract. See [CRM](../modules/crm.md).

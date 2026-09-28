@@ -1,10 +1,16 @@
 <script setup lang="ts">
+import { getApiErrorStatus } from "@/app/providers/http";
+import { useCrmCard } from "../model/use-crm-card";
+import { crmContactsApi } from "../api/crm.api";
+import DiscardCrmChangesDialog from "../ui/common/DiscardCrmChangesDialog.vue";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Spinner } from "@/components/ui/spinner";
 import {
   useContactPointLabels,
   contactPointServerErrors,
 } from "@/modules/contact-points";
 import type { ContactPointErrors } from "@/modules/contact-points";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { Button } from "@/components/ui/button";
 import { useCrmListState } from "../model/use-crm-list-state";
 import { useContactsQuery } from "../model/use-contacts-query";
@@ -27,10 +33,7 @@ const contacts = useContactsQuery(params);
 const createMutation = useCreateContact();
 const updateMutation = useUpdateContact();
 const deleteMutation = useDeleteContact();
-const formOpen = ref(false);
-const labels = useContactPointLabels(formOpen);
 const pointErrors = ref<ContactPointErrors>({});
-const editing = ref<Contact | null>(null);
 const deleting = ref<Contact | null>(null);
 const items = computed(() => contacts.data.value?.items ?? []);
 const total = computed(() => contacts.data.value?.total ?? 0);
@@ -38,17 +41,26 @@ const formPending = computed(
   () => createMutation.isPending.value || updateMutation.isPending.value,
 );
 
-function openCreate() {
-  pointErrors.value = {};
-  editing.value = null;
-  formOpen.value = true;
-}
-
-function openEdit(contact: Contact) {
-  pointErrors.value = {};
-  editing.value = contact;
-  formOpen.value = true;
-}
+const {
+  editing,
+  formOpen,
+  dirty,
+  loading,
+  loadError,
+  conflict,
+  discardOpen,
+  decideDiscard,
+  openCreate,
+  openEdit,
+  close,
+  saved,
+  reload,
+  navigate,
+} = useCrmCard("contacts", crmContactsApi.get, formPending);
+const labels = useContactPointLabels(formOpen);
+watch(formOpen, (open) => {
+  if (open) pointErrors.value = {};
+});
 
 async function submitForm(input: ContactInput) {
   pointErrors.value = {};
@@ -60,10 +72,10 @@ async function submitForm(input: ContactInput) {
     }
   } catch (cause) {
     pointErrors.value = contactPointServerErrors(cause, input);
+    conflict.value = getApiErrorStatus(cause) === 409;
     return;
   }
-  formOpen.value = false;
-  editing.value = null;
+  await saved();
 }
 
 async function confirmDelete() {
@@ -115,6 +127,18 @@ async function confirmDelete() {
       :page-size="pageSize"
       @update:page="setPage"
     />
+    <Alert v-if="loading || loadError" role="status">
+      <AlertDescription
+        ><Spinner v-if="loading" />{{
+          loading ? "Загрузка карточки…" : loadError
+        }}
+        <Button v-if="loadError" variant="outline" @click="reload"
+          >Повторить</Button
+        >
+        <Button v-if="loadError" variant="ghost" @click="close">Закрыть</Button>
+      </AlertDescription>
+    </Alert>
+
     <ContactFormDialog
       :open="formOpen"
       :contact="editing"
@@ -123,13 +147,18 @@ async function confirmDelete() {
       :labels-loading="labels.isFetching.value"
       :labels-error="labels.isError.value"
       :point-errors="pointErrors"
+      :conflict="conflict"
+      @reload="reload"
+      @navigate="navigate"
+      @dirty-change="dirty = $event"
       @retry-labels="labels.refetch()"
       @clear-point-errors="
         (keys) => keys.forEach((key) => delete pointErrors[key])
       "
-      @update:open="formOpen = $event"
+      @update:open="!$event && close()"
       @submit="submitForm"
     />
+    <DiscardCrmChangesDialog :open="discardOpen" @decide="decideDiscard" />
     <DeleteCrmEntityDialog
       :open="deleting !== null"
       label="контакт"

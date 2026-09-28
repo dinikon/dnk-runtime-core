@@ -1,3 +1,4 @@
+from src.modules.crm.domain.company.value_object import CompanyIdVO
 from dataclasses import dataclass
 from src.modules.crm.application.contact_points.port import ContactPointInputDTO
 
@@ -17,6 +18,8 @@ class UpdateContactCommand:
     middle_name: str | None = None
     phones: tuple[ContactPointInputDTO, ...] | None = None
     emails: tuple[ContactPointInputDTO, ...] | None = None
+    company_ids: tuple[CompanyIdVO, ...] | None = None
+    expected_company_ids: tuple[CompanyIdVO, ...] | None = None
 
 
 __all__ = ["UpdateContactCommand"]

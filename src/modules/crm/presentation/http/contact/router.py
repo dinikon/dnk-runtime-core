@@ -1,3 +1,6 @@
+from src.modules.crm.presentation.http.contact.controller.list_available_companies import (
+    router as available_router,
+)
 from fastapi import APIRouter
 
 from src.modules.crm.presentation.http.contact.controller import (
@@ -10,6 +13,7 @@ from src.modules.crm.presentation.http.contact.controller import (
 
 router = APIRouter()
 for action_router in (
+    available_router,
     create_contact_router,
     list_contacts_router,
     get_contact_router,

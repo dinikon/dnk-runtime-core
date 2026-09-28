@@ -1,9 +1,7 @@
 from datetime import datetime
 
-from sqlalchemy import delete, func, insert, select, update
+from sqlalchemy import delete, insert, select, update
 
-from src.modules.crm.application.company.dto import CompanyPageDTO, company_dto
-from src.modules.crm.application.company.query import ListCompaniesQuery
 from src.modules.crm.domain.company import (
     Company,
     CompanyIdVO,
@@ -43,14 +41,16 @@ def company_values(company: Company) -> dict[str, object]:
 
 
 class SqlAlchemyCompanyRepository(CrmSessionRepository):
-    """Реализует command/query CRM company repositories через SQLAlchemy."""
+    """Реализует command CRM company repository через SQLAlchemy."""
 
-    async def get(self, tenant_id, company_id, *, for_update=False):
+    async def get(self, tenant_id, company_id, *, for_update=False, for_share=False):
         """Читает одну компанию текущего tenant."""
         table = CompanyModel.__table__
         statement = select(table).where(table.c.id == company_id.uuid)
         if for_update:
             statement = statement.with_for_update()
+        elif for_share:
+            statement = statement.with_for_update(read=True)
         result = await self.session.execute(
             statement.execution_options(**self.execution_options(tenant_id))
         )
@@ -91,33 +91,6 @@ class SqlAlchemyCompanyRepository(CrmSessionRepository):
         )
         if not result.rowcount:
             raise CompanyNotFoundError("Company not found.")
-
-    async def list(self, query: ListCompaniesQuery) -> CompanyPageDTO:
-        """Ищет компании и возвращает offset-страницу со stable sort."""
-        table = CompanyModel.__table__
-        q = query.q.strip()
-        clause = table.c.name.ilike(f"%{q}%") if q else None
-        options = self.execution_options(query.tenant_id)
-        count_statement = select(func.count()).select_from(table)
-        list_statement = select(table)
-        if clause is not None:
-            count_statement = count_statement.where(clause)
-            list_statement = list_statement.where(clause)
-        total = int(
-            await self.session.scalar(count_statement.execution_options(**options)) or 0
-        )
-        result = await self.session.execute(
-            list_statement.order_by(func.lower(table.c.name), table.c.id)
-            .offset(query.offset)
-            .limit(query.limit)
-            .execution_options(**options)
-        )
-        return CompanyPageDTO(
-            items=tuple(company_dto(company_entity(row)) for row in result.mappings()),
-            total=total,
-            limit=query.limit,
-            offset=query.offset,
-        )
 
 
 __all__ = ["SqlAlchemyCompanyRepository", "company_entity", "company_values"]

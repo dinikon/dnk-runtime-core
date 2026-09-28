@@ -1,3 +1,9 @@
+from src.modules.crm.infrastructure.persistence.contact_query_repository import (
+    SqlAlchemyContactQueryRepository,
+)
+from src.modules.crm.infrastructure.persistence.company_query_repository import (
+    SqlAlchemyCompanyQueryRepository,
+)
 from src.modules.crm.application.contact_points.port import ContactPointsPort
 from src.modules.crm.infrastructure.contact_points_adapter import (
     ContactPointsApplicationAdapter,
@@ -71,3 +77,21 @@ def get_crm_contact_points_port(
 
 CrmContactPointsDep = Annotated[ContactPointsPort, Depends(get_crm_contact_points_port)]
 __all__ += ["CrmContactPointsDep", "get_crm_contact_points_port"]
+
+
+def get_contact_query_repository(uow: UoWDep, naming: TenantNamingDep):
+    return SqlAlchemyContactQueryRepository(uow.session, naming)
+
+
+ContactQueryRepositoryDep = Annotated[
+    SqlAlchemyContactQueryRepository, Depends(get_contact_query_repository)
+]
+
+
+def get_company_query_repository(uow: UoWDep, naming: TenantNamingDep):
+    return SqlAlchemyCompanyQueryRepository(uow.session, naming)
+
+
+CompanyQueryRepositoryDep = Annotated[
+    SqlAlchemyCompanyQueryRepository, Depends(get_company_query_repository)
+]

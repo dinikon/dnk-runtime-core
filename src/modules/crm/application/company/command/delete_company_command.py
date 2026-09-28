@@ -10,6 +10,7 @@ class DeleteCompanyCommand:
 
     tenant_id: EntityIdVO
     company_id: CompanyIdVO
+    actor_id: EntityIdVO
 
 
 __all__ = ["DeleteCompanyCommand"]

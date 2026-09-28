@@ -24,3 +24,11 @@ Integration tests require disposable services. `TEST_POSTGRES_URL` selects tenan
 Set `CORE_REPOSITORY_PATH` to an installed Core checkout to include cross-repository OIDC tests. Core runs with its real Django implementation and a disposable SQLite test database; Runtime uses PostgreSQL. HTTPS mode also accepts `CORE_INTEROP_BIND`, `CORE_INTEROP_PUBLIC_ORIGIN` and `CORE_INTEROP_CA_FILE` for a test TLS proxy. The separate live installation harness and release checks are documented in [Control Plane deployment](../deployment/control-plane-v1.md).
 
 Format/compile checks: `uv run black --check src test migrations` and `uv run python -m compileall src migrations`.
+
+
+## CRM contact–company membership
+
+- `test/test_crm_relations.py`: immutable membership, typed IDs, duplicates, no-op audit, optimistic membership checks, reverse-side application orchestration.
+- `test/test_crm_relations_postgres.py`: real HTTP/UoW, tenant isolation including identical UUIDs, candidate filtering/counting, incremental persistence, failures after partial writes and at commit, opposite-side concurrency, overlapping batches, deletion races and migration round trips. Requires disposable `TEST_POSTGRES_URL`.
+- `test/test_architecture_boundaries.py`: inward CRM dependencies and absence of CRM repository/use-case commits.
+- Console browser checks: draft selection/save/discard, unlink/reselect, navigation/Back, conflict recovery and desktop/mobile layout.

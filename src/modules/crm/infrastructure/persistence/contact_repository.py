@@ -1,9 +1,8 @@
+from src.modules.crm.domain.company.value_object import CompanyIdVO
 from datetime import datetime
 
-from sqlalchemy import delete, func, insert, or_, select, update
+from sqlalchemy import delete, insert, select, update
 
-from src.modules.crm.application.contact.dto import ContactPageDTO, contact_dto
-from src.modules.crm.application.contact.query import ListContactsQuery
 from src.modules.crm.domain.contact import (
     Contact,
     ContactIdVO,
@@ -15,13 +14,17 @@ from src.modules.crm.infrastructure.persistence.base import (
     checked,
     identifier,
 )
-from src.modules.crm.infrastructure.persistence.models import ContactModel
+from src.modules.crm.infrastructure.persistence.models import (
+    ContactModel,
+    ContactCompanyModel,
+)
 
 
-def contact_entity(row) -> Contact:
+def contact_entity(row, company_ids=()) -> Contact:
     """Явно мапит persistence row в Contact aggregate."""
     return Contact(
         id=identifier(row["id"], ContactIdVO),
+        _company_ids=frozenset(company_ids),
         name=ContactNameVO(
             first_name=checked(row["first_name"], str),
             last_name=checked(row["last_name"], str, optional=True),
@@ -49,7 +52,60 @@ def contact_values(contact: Contact) -> dict[str, object]:
 
 
 class SqlAlchemyContactRepository(CrmSessionRepository):
-    """Реализует command/query CRM contact repositories через SQLAlchemy."""
+    """Реализует command CRM contact repository через SQLAlchemy."""
+
+    def __init__(self, session, naming):
+        super().__init__(session, naming)
+        self._original_links = {}
+
+    async def _load_links(self, tenant_id, contact_id):
+        table = ContactCompanyModel.__table__
+        result = await self.session.scalars(
+            select(table.c.company_id)
+            .where(table.c.contact_id == contact_id.uuid)
+            .execution_options(**self.execution_options(tenant_id))
+        )
+        return frozenset(CompanyIdVO.from_value(value) for value in result)
+
+    async def get_many(self, tenant_id, contact_ids, *, for_update=False):
+        # All commands acquire Contact locks before Company locks, in UUID order.
+        contacts = []
+        for contact_id in sorted(set(contact_ids), key=lambda value: value.uuid):
+            try:
+                contacts.append(
+                    await self.get(tenant_id, contact_id, for_update=for_update)
+                )
+            except ContactNotFoundError:
+                continue
+        return tuple(contacts)
+
+    async def _save_links(self, tenant_id, contact):
+        key = (tenant_id, contact.id)
+        previous = self._original_links.get(key)
+        if previous is None:
+            previous = await self._load_links(tenant_id, contact.id)
+        removed = previous - contact.company_ids
+        added = contact.company_ids - previous
+        table = ContactCompanyModel.__table__
+        options = self.execution_options(tenant_id)
+        if removed:
+            await self.session.execute(
+                delete(table)
+                .where(
+                    table.c.contact_id == contact.id.uuid,
+                    table.c.company_id.in_([value.uuid for value in removed]),
+                )
+                .execution_options(**options)
+            )
+        if added:
+            await self.session.execute(
+                insert(table).execution_options(**options),
+                [
+                    {"contact_id": contact.id.uuid, "company_id": value.uuid}
+                    for value in sorted(added, key=lambda value: value.uuid)
+                ],
+            )
+        self._original_links[key] = contact.company_ids
 
     async def get(self, tenant_id, contact_id, *, for_update=False):
         """Читает один контакт текущего tenant."""
@@ -63,7 +119,9 @@ class SqlAlchemyContactRepository(CrmSessionRepository):
         row = result.mappings().one_or_none()
         if row is None:
             raise ContactNotFoundError("Contact not found.")
-        return contact_entity(row)
+        links = await self._load_links(tenant_id, contact_id)
+        self._original_links[(tenant_id, contact_id)] = links
+        return contact_entity(row, links)
 
     async def add(self, tenant_id, contact):
         """Добавляет контакт в tenant-схему."""
@@ -72,6 +130,9 @@ class SqlAlchemyContactRepository(CrmSessionRepository):
             .values(contact_values(contact))
             .execution_options(**self.execution_options(tenant_id))
         )
+
+        self._original_links[(tenant_id, contact.id)] = frozenset()
+        await self._save_links(tenant_id, contact)
 
     async def save(self, tenant_id, contact):
         """Сохраняет изменяемые поля и update audit."""
@@ -88,6 +149,8 @@ class SqlAlchemyContactRepository(CrmSessionRepository):
         if not result.rowcount:
             raise ContactNotFoundError("Contact not found.")
 
+        await self._save_links(tenant_id, contact)
+
     async def delete(self, tenant_id, contact_id):
         """Физически удаляет контакт текущего tenant."""
         result = await self.session.execute(
@@ -97,51 +160,6 @@ class SqlAlchemyContactRepository(CrmSessionRepository):
         )
         if not result.rowcount:
             raise ContactNotFoundError("Contact not found.")
-
-    async def list(self, query: ListContactsQuery) -> ContactPageDTO:
-        """Ищет контакты и возвращает offset-страницу со stable sort."""
-        table = ContactModel.__table__
-        clauses = []
-        q = query.q.strip()
-        if q:
-            pattern = f"%{q}%"
-            display_name = func.concat_ws(
-                " ", table.c.last_name, table.c.first_name, table.c.middle_name
-            )
-            clauses.append(
-                or_(
-                    table.c.first_name.ilike(pattern),
-                    table.c.last_name.ilike(pattern),
-                    table.c.middle_name.ilike(pattern),
-                    display_name.ilike(pattern),
-                )
-            )
-        options = self.execution_options(query.tenant_id)
-        count_statement = select(func.count()).select_from(table)
-        list_statement = select(table)
-        if clauses:
-            count_statement = count_statement.where(*clauses)
-            list_statement = list_statement.where(*clauses)
-        total = int(
-            await self.session.scalar(count_statement.execution_options(**options)) or 0
-        )
-        result = await self.session.execute(
-            list_statement.order_by(
-                func.lower(func.coalesce(table.c.last_name, "")),
-                func.lower(table.c.first_name),
-                func.lower(func.coalesce(table.c.middle_name, "")),
-                table.c.id,
-            )
-            .offset(query.offset)
-            .limit(query.limit)
-            .execution_options(**options)
-        )
-        return ContactPageDTO(
-            items=tuple(contact_dto(contact_entity(row)) for row in result.mappings()),
-            total=total,
-            limit=query.limit,
-            offset=query.offset,
-        )
 
 
 __all__ = ["SqlAlchemyContactRepository", "contact_entity", "contact_values"]

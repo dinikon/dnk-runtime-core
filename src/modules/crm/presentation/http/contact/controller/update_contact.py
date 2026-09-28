@@ -1,3 +1,4 @@
+from src.modules.crm.presentation.http.links import link_inputs, CompanyIdVO
 from src.modules.shared.presentation.uuid.depends import UuidDep
 from src.modules.crm.presentation.http.contact_points import contact_point_inputs
 from uuid import UUID
@@ -13,7 +14,7 @@ from src.modules.crm.presentation.http.boundary import (
     http_errors,
 )
 from src.modules.crm.presentation.http.contact.requests import UpdateContactRequest
-from src.modules.crm.presentation.http.contact.responses import ContactResponse
+from src.modules.crm.presentation.http.contact.responses import ContactDetailsResponse
 from src.modules.identity.presentation.http.csrf import require_csrf
 from src.modules.shared.presentation.identity_context.depends import (
     AuthenticatedRequestContextDep,
@@ -24,7 +25,7 @@ router = APIRouter()
 
 @router.put(
     "/{contact_id}",
-    response_model=ContactResponse,
+    response_model=ContactDetailsResponse,
     dependencies=[Depends(require_csrf)],
 )
 async def update_contact(
@@ -42,11 +43,15 @@ async def update_contact(
                 tenant_id=tenant_id,
                 actor_id=actor_id,
                 contact_id=ContactIdVO.from_value(contact_id),
-                **payload.model_dump(mode="json", exclude={"phones", "emails"}),
+                **payload.model_dump(
+                    mode="json",
+                    exclude={"phones", "emails", "company_ids", "expected_company_ids"},
+                ),
                 **contact_point_inputs(payload, uuid_generator),
+                **link_inputs(payload, "company_ids", CompanyIdVO),
             )
         )
-        return ContactResponse(**dto_values(result))
+        return ContactDetailsResponse(**dto_values(result))
 
 
 __all__ = ["router"]

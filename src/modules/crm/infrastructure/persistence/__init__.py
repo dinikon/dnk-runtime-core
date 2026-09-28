@@ -6,11 +6,16 @@ from src.modules.crm.infrastructure.persistence.contact_repository import (
     SqlAlchemyContactRepository,
     contact_entity,
 )
-from src.modules.crm.infrastructure.persistence.models import CompanyModel, ContactModel
+from src.modules.crm.infrastructure.persistence.models import (
+    CompanyModel,
+    ContactModel,
+    ContactCompanyModel,
+)
 
 __all__ = [
     "CompanyModel",
     "ContactModel",
+    "ContactCompanyModel",
     "SqlAlchemyCompanyRepository",
     "SqlAlchemyContactRepository",
     "company_entity",

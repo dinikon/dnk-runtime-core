@@ -1,3 +1,4 @@
+from src.modules.crm.application.links.dto import CrmLinkDTO
 from dataclasses import dataclass
 from src.modules.crm.application.contact_points.port import ContactPointDTO
 from datetime import datetime
@@ -21,6 +22,11 @@ class ContactDTO:
     updated_by: EntityIdVO
     phones: tuple[ContactPointDTO, ...] = ()
     emails: tuple[ContactPointDTO, ...] = ()
+
+
+@dataclass(slots=True, frozen=True)
+class ContactDetailsDTO(ContactDTO):
+    companies: tuple[CrmLinkDTO, ...] = ()
 
 
 @dataclass(slots=True, frozen=True)

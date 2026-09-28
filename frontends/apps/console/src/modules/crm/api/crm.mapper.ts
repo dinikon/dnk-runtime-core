@@ -44,3 +44,15 @@ export function mapPage<TDto, TModel>(
     offset: dto.offset,
   };
 }
+
+export function mapContactDetails(
+  dto: import("./crm.dto").ContactDetailsDto,
+): import("../model/crm.types").ContactDetails {
+  return { ...mapContact(dto), companies: dto.companies };
+}
+
+export function mapCompanyDetails(
+  dto: import("./crm.dto").CompanyDetailsDto,
+): import("../model/crm.types").CompanyDetails {
+  return { ...mapCompany(dto), contacts: dto.contacts };
+}

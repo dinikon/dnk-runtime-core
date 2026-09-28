@@ -1,3 +1,4 @@
+from src.modules.crm.presentation.http.links import link_inputs, ContactIdVO
 from src.modules.crm.presentation.http.contact_points import contact_point_inputs
 from fastapi import APIRouter, Depends
 
@@ -10,7 +11,7 @@ from src.modules.crm.presentation.http.boundary import (
     http_errors,
 )
 from src.modules.crm.presentation.http.company.requests import CreateCompanyRequest
-from src.modules.crm.presentation.http.company.responses import CompanyResponse
+from src.modules.crm.presentation.http.company.responses import CompanyDetailsResponse
 from src.modules.identity.presentation.http.csrf import require_csrf
 from src.modules.shared.presentation.identity_context.depends import (
     AuthenticatedRequestContextDep,
@@ -23,7 +24,7 @@ router = APIRouter()
 @router.post(
     "",
     status_code=201,
-    response_model=CompanyResponse,
+    response_model=CompanyDetailsResponse,
     dependencies=[Depends(require_csrf)],
 )
 async def create_company(
@@ -40,11 +41,15 @@ async def create_company(
                 tenant_id=tenant_id,
                 actor_id=actor_id,
                 company_id=CompanyIdVO.from_value(uuid_generator.new()),
-                **payload.model_dump(mode="json", exclude={"phones", "emails"}),
+                **payload.model_dump(
+                    mode="json",
+                    exclude={"phones", "emails", "contact_ids", "expected_contact_ids"},
+                ),
                 **contact_point_inputs(payload, uuid_generator),
+                **link_inputs(payload, "contact_ids", ContactIdVO),
             )
         )
-        return CompanyResponse(**dto_values(result))
+        return CompanyDetailsResponse(**dto_values(result))
 
 
 __all__ = ["router"]

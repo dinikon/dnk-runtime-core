@@ -1,3 +1,4 @@
+from src.modules.crm.domain.links import CrmLinksChangedError
 from src.modules.crm.domain.error import InvalidCrmContactPointError
 from contextlib import contextmanager
 from dataclasses import fields, is_dataclass
@@ -58,6 +59,8 @@ def http_errors():
                 }
             ],
         ) from exc
+    except CrmLinksChangedError as exc:
+        raise HTTPException(409, str(exc)) from exc
     except DomainError as exc:
         raise HTTPException(422, str(exc)) from exc
     except IntegrityError as exc:

@@ -10,7 +10,7 @@ from src.modules.crm.presentation.http.boundary import (
     dto_values,
     http_errors,
 )
-from src.modules.crm.presentation.http.contact.responses import ContactResponse
+from src.modules.crm.presentation.http.contact.responses import ContactDetailsResponse
 from src.modules.shared.presentation.identity_context.depends import (
     AuthenticatedRequestContextDep,
 )
@@ -18,7 +18,7 @@ from src.modules.shared.presentation.identity_context.depends import (
 router = APIRouter()
 
 
-@router.get("/{contact_id}", response_model=ContactResponse)
+@router.get("/{contact_id}", response_model=ContactDetailsResponse)
 async def get_contact(
     contact_id: UUID,
     context: AuthenticatedRequestContextDep,
@@ -30,7 +30,7 @@ async def get_contact(
         result = await use_case(
             GetContactQuery(tenant_id, ContactIdVO.from_value(contact_id))
         )
-        return ContactResponse(**dto_values(result))
+        return ContactDetailsResponse(**dto_values(result))
 
 
 __all__ = ["router"]

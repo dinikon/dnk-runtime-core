@@ -10,7 +10,7 @@ from src.modules.crm.presentation.http.boundary import (
     dto_values,
     http_errors,
 )
-from src.modules.crm.presentation.http.company.responses import CompanyResponse
+from src.modules.crm.presentation.http.company.responses import CompanyDetailsResponse
 from src.modules.shared.presentation.identity_context.depends import (
     AuthenticatedRequestContextDep,
 )
@@ -18,7 +18,7 @@ from src.modules.shared.presentation.identity_context.depends import (
 router = APIRouter()
 
 
-@router.get("/{company_id}", response_model=CompanyResponse)
+@router.get("/{company_id}", response_model=CompanyDetailsResponse)
 async def get_company(
     company_id: UUID,
     context: AuthenticatedRequestContextDep,
@@ -30,7 +30,7 @@ async def get_company(
         result = await use_case(
             GetCompanyQuery(tenant_id, CompanyIdVO.from_value(company_id))
         )
-        return CompanyResponse(**dto_values(result))
+        return CompanyDetailsResponse(**dto_values(result))
 
 
 __all__ = ["router"]

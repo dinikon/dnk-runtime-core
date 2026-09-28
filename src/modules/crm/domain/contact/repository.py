@@ -16,6 +16,14 @@ class ContactRepositoryProtocol(Protocol):
         for_update: bool = False,
     ) -> Contact: ...
 
+    async def get_many(
+        self,
+        tenant_id: EntityIdVO,
+        contact_ids: tuple[ContactIdVO, ...],
+        *,
+        for_update: bool = False,
+    ) -> tuple[Contact, ...]: ...
+
     async def add(self, tenant_id: EntityIdVO, contact: Contact) -> None: ...
 
     async def save(self, tenant_id: EntityIdVO, contact: Contact) -> None: ...

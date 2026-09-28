@@ -29,3 +29,14 @@ export interface PageDto<T> {
   limit: number;
   offset: number;
 }
+
+export interface CrmLinkDto {
+  id: string;
+  name: string;
+}
+export interface ContactDetailsDto extends ContactDto {
+  companies: CrmLinkDto[];
+}
+export interface CompanyDetailsDto extends CompanyDto {
+  contacts: CrmLinkDto[];
+}

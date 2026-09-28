@@ -1,3 +1,8 @@
+export interface CrmLink {
+  id: string;
+  name: string;
+}
+
 import type { ContactPointArrays } from "@/modules/contact-points";
 export interface AuditFields {
   id: string;
@@ -18,13 +23,24 @@ export interface Company extends AuditFields, ContactPointArrays {
   name: string;
 }
 
+export interface ContactDetails extends Contact {
+  companies: CrmLink[];
+}
+export interface CompanyDetails extends Company {
+  contacts: CrmLink[];
+}
+
 export interface ContactInput extends ContactPointArrays {
+  companyIds: string[];
+  expectedCompanyIds?: string[];
   firstName: string;
   lastName: string | null;
   middleName: string | null;
 }
 
 export interface CompanyInput extends ContactPointArrays {
+  contactIds: string[];
+  expectedContactIds?: string[];
   name: string;
 }
 

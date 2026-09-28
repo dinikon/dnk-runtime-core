@@ -14,6 +14,7 @@ class CompanyRepositoryProtocol(Protocol):
         company_id: CompanyIdVO,
         *,
         for_update: bool = False,
+        for_share: bool = False,
     ) -> Company: ...
 
     async def add(self, tenant_id: EntityIdVO, company: Company) -> None: ...

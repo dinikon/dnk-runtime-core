@@ -22,9 +22,11 @@ async def delete_company(
 ):
     """Физически удаляет компанию текущего tenant."""
     with http_errors():
-        tenant_id, _ = context_ids(context)
+        tenant_id, actor_id = context_ids(context)
         await use_case(
-            DeleteCompanyCommand(tenant_id, CompanyIdVO.from_value(company_id))
+            DeleteCompanyCommand(
+                tenant_id, CompanyIdVO.from_value(company_id), actor_id
+            )
         )
         return Response(status_code=204)
 

@@ -11,6 +11,7 @@ HISTORICAL_TENANT_TABLE_NAMES = frozenset(
     {
         "warehouses",
         "contacts",
+        "contact_companies",
         "companies",
         "contact_points",
         "contact_point_bindings",

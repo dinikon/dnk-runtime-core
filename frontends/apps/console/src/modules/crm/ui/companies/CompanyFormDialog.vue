@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import CrmLinksField from "../common/CrmLinksField.vue";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import type { CrmLink } from "../../model/crm.types";
 import {
   ContactPointsWidget,
   validateContactPoints,
@@ -26,11 +29,12 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
-import type { Company, CompanyInput } from "../../model/crm.types";
+import type { CompanyDetails, CompanyInput } from "../../model/crm.types";
 
 const props = defineProps<{
   open: boolean;
-  company: Company | null;
+  company: CompanyDetails | null;
+  conflict: boolean;
   pending: boolean;
   labels: ContactPointLabel[];
   labelsLoading: boolean;
@@ -41,6 +45,9 @@ const emit = defineEmits<{
   "update:open": [value: boolean];
   submit: [input: CompanyInput];
   retryLabels: [];
+  reload: [];
+  navigate: [id: string];
+  dirtyChange: [value: boolean];
   clearPointErrors: [keys: string[]];
 }>();
 
@@ -49,6 +56,17 @@ const attempted = ref(false);
 const phones = ref<ContactPointDraft[]>([]);
 const emails = ref<ContactPointDraft[]>([]);
 const pointsValid = ref(true);
+const related = ref<CrmLink[]>([]);
+const originalDraft = ref("");
+const draft = computed(() =>
+  JSON.stringify({
+    name: name.value,
+    phones: phones.value,
+    emails: emails.value,
+    related: related.value.map((item) => item.id).sort(),
+  }),
+);
+watch(draft, (value) => emit("dirtyChange", value !== originalDraft.value));
 watch([phones, emails], (current, previous) => {
   const rows = new Map(current.flat().map((row) => [row.clientKey, row]));
   const changed = previous
@@ -77,6 +95,9 @@ watch(
     attempted.value = false;
     phones.value = (company?.phones ?? []).map((row) => ({ ...row }));
     emails.value = (company?.emails ?? []).map((row) => ({ ...row }));
+    related.value = (company?.contacts ?? []).map((row) => ({ ...row }));
+    originalDraft.value = draft.value;
+    emit("dirtyChange", false);
   },
   { immediate: true },
 );
@@ -92,6 +113,10 @@ function submit() {
   )
     return;
   emit("submit", {
+    contactIds: related.value.map((item) => item.id),
+    ...(props.company
+      ? { expectedContactIds: props.company.contacts.map((item) => item.id) }
+      : {}),
     name: name.value.trim(),
     phones: phones.value.map((row) => ({ ...row })),
     emails: emails.value.map((row) => ({ ...row })),
@@ -131,6 +156,28 @@ function submit() {
             </FieldError>
           </Field>
         </FieldGroup>
+        <CrmLinksField
+          v-model="related"
+          :original="company?.contacts ?? []"
+          kind="contacts"
+          :owner-id="company?.id"
+          :pending="pending"
+          @navigate="emit('navigate', $event)"
+        />
+        <Alert v-if="conflict" role="alert">
+          <AlertTitle>Карточка изменена другим пользователем</AlertTitle>
+          <AlertDescription>
+            Изменения не сохранены. Загрузите актуальную карточку и повторите
+            редактирование.
+            <Button
+              type="button"
+              variant="outline"
+              :disabled="pending"
+              @click="emit('reload')"
+              >Загрузить актуальную карточку</Button
+            >
+          </AlertDescription>
+        </Alert>
         <ContactPointsWidget
           v-model:phones="phones"
           v-model:emails="emails"

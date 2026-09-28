@@ -27,7 +27,7 @@ export function useCrmListState() {
     const q = value.trim();
     if (q === queryValue(route.query.q)) return;
     await router.replace({
-      query: q ? { q } : {},
+      query: { ...route.query, q: q || undefined, page: undefined },
     });
   });
 
@@ -43,6 +43,8 @@ export function useCrmListState() {
     const q = debouncedSearch.value.trim();
     await router.replace({
       query: {
+        ...route.query,
+        page: undefined,
         ...(q ? { q } : {}),
         ...(value > 1 ? { page: String(value) } : {}),
       },

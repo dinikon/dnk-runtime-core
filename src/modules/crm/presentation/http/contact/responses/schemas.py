@@ -1,3 +1,4 @@
+from src.modules.crm.presentation.http.links import CrmLinkResponse
 from datetime import datetime
 from uuid import UUID
 
@@ -18,6 +19,10 @@ class ContactResponse(BaseModel):
     updated_by: UUID
     phones: list[ContactPointResponse] = Field(default_factory=list)
     emails: list[ContactPointResponse] = Field(default_factory=list)
+
+
+class ContactDetailsResponse(ContactResponse):
+    companies: list[CrmLinkResponse] = Field(default_factory=list)
 
 
 class ContactListResponse(BaseModel):
