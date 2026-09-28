@@ -13,7 +13,7 @@ from src.modules.shared.application.events.publish_outbox_result_dto import (
     PublishOutboxResultDTO,
 )
 from src.modules.shared.application.events.use_case import PublishOutboxEventsUseCase
-from src.modules.shared.application.persistence import UnitOfWorkProtocol
+from src.modules.shared.infrastructure.persistence import UnitOfWork
 from src.modules.shared.domain.time import ClockPort
 from src.modules.shared.infrastructure.events.rabbitmq_integration_event_publisher import (
     RabbitMQIntegrationEventPublisher,
@@ -31,7 +31,7 @@ from src.modules.shared.infrastructure.time import UtcClock
 
 UnitOfWorkFactory = Callable[
     [],
-    AbstractAsyncContextManager[UnitOfWorkProtocol],
+    AbstractAsyncContextManager[UnitOfWork],
 ]
 PublishOnce = Callable[[], Awaitable[PublishOutboxResultDTO]]
 

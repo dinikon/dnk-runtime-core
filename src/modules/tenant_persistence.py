@@ -27,3 +27,5 @@ HISTORICAL_TENANT_TABLE_NAMES = frozenset(
         "price_list_sync_items",
     }
 )
+
+import src.modules.crm.links.infrastructure.persistence.models  # noqa: F401

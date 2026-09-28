@@ -35,7 +35,9 @@ from src.modules.shared.application.persistence.tenant_schema_naming import (
 )
 from src.modules.shared.application.tokens import TokenManager
 from src.modules.shared.infrastructure.tokens import InMemoryTokenBackend
-from modules.shared.infrastructure.persistence.unit_of_work.sqlalchemy import UnitOfWork
+from src.modules.shared.infrastructure.persistence.unit_of_work.sqlalchemy import (
+    UnitOfWork,
+)
 from src.modules.shared.infrastructure.persistence.tenant_migrations import (
     TenantMigrator,
 )

@@ -1,5 +1,9 @@
 # Архитектурные правила проекта
 
+## Бекенд
+
+### Основы архитектуры
+
 Проект строится по принципам **Domain-Driven Design + Clean Architecture**.
 
 Основная единица организации кода — **бизнес-модуль / bounded context**.
@@ -36,9 +40,7 @@ module/
 
 Остальные слои работают с Aggregate Root через публичные domain-контракты.
 
----
-
-# 1. Направление зависимостей
+#### Направление зависимостей
 
 Допустимое направление:
 
@@ -97,9 +99,7 @@ ORM models или session factory. Контракт UoW предоставляе
 дополнительные зависимости в нём допустимы только как абстрактные порты без
 инфраструктурных типов. Создание сессии и подключение репозиториев остаются снаружи.
 
----
-
-# 2. Структура модуля
+#### Структура модуля
 
 Пример полного модуля `Orders`:
 
@@ -192,9 +192,7 @@ src/modules/orders/
 
 Создавать только те элементы, которые реально необходимы модулю.
 
----
-
-# 3. Domain layer
+### Domain layer
 
 `domain` содержит бизнес-модель и правила предметной области.
 
@@ -215,9 +213,7 @@ PostgreSQL
 
 Domain должен быть максимально обычным Python.
 
----
-
-# 4. Aggregate Root
+#### Aggregate Root
 
 Для `Orders` Aggregate Root — `Order`.
 
@@ -358,9 +354,7 @@ order.status = OrderStatus.CONFIRMED
 order.confirm()
 ```
 
----
-
-# 5. Entity внутри Aggregate
+#### Entity внутри Aggregate
 
 Например `OrderItem`.
 
@@ -421,9 +415,7 @@ OrderItemRepository.get(item_id)
 OrderRepository.get(order_id)
 ```
 
----
-
-# 6. Value Objects
+#### Value Objects
 
 Value Object должен описывать значение, а не строку/число технически.
 
@@ -466,9 +458,7 @@ class OrderStatus(StrEnum):
 
 Value Objects желательно делать immutable.
 
----
-
-# 7. Domain Errors
+#### Domain Errors
 
 Ошибки бизнес-правил принадлежат Domain.
 
@@ -504,9 +494,7 @@ ValueError
 
 как публичные бизнес-ошибки domain layer.
 
----
-
-# 8. Domain Events
+#### Domain Events
 
 Domain Event описывает факт, который уже произошёл.
 
@@ -545,9 +533,7 @@ Domain Event не должен сам:
 писать в БД
 ```
 
----
-
-# 9. Domain Repository
+#### Domain Repository
 
 Domain Repository работает с Aggregate Root.
 
@@ -601,9 +587,7 @@ OrderDTO
 
 Domain Repository предназначен для изменения бизнес-состояния.
 
----
-
-# 10. Domain Service
+#### Domain Service
 
 Domain Service нужен, если бизнес-операция:
 
@@ -669,9 +653,77 @@ class OrderConfirmationPolicy:
             raise ZeroTotalOrderError()
 ```
 
----
+#### Aggregate boundary
 
-# 11. Application layer
+При проектировании нового функционала агент сначала должен определить Aggregate Root.
+
+Например:
+
+```text
+Order
+ ├── OrderItem
+ ├── OrderDiscount
+ └── OrderAddressSnapshot
+```
+
+Если `OrderItem` не может существовать независимо:
+
+```text
+OrderItem lifecycle = Order lifecycle
+```
+
+значит он находится внутри Aggregate.
+
+Другой Aggregate:
+
+```text
+Payment
+```
+
+может ссылаться:
+
+```python
+# Другой агрегат хранит идентификатор заказа как ссылку на его границу.
+order_id: OrderIdVO
+```
+
+но не должен содержать прямой Python reference:
+
+```python
+# Антипример: прямая ссылка на объект связывает жизненные циклы разных агрегатов.
+payment.order: Order
+```
+
+Связи между Aggregate Roots осуществляются через IDs.
+
+#### Domain snapshots
+
+Если Domain Order должен использовать информацию из другого context, но она нужна для принятия domain decision, использовать специализированный immutable snapshot.
+
+Например:
+
+```python
+@dataclass(
+    frozen=True,
+    slots=True,
+)
+class CustomerOrderSnapshot:
+    """Хранит неизменяемый снимок данных клиента, нужных для бизнес-решения Order."""
+    customer_id: EntityIdVO
+    is_blocked: bool
+    customer_type: CustomerType
+```
+
+А не передавать:
+
+```python
+# Антипример: чужой агрегат не передаётся в Domain вместо специализированного снимка.
+CustomerAggregate
+```
+
+из другого bounded context.
+
+### Application layer
 
 Application отвечает за use cases.
 
@@ -709,9 +761,7 @@ if order.status == "draft" and len(order.items) > 0:
 order.confirm()
 ```
 
----
-
-# 12. Command
+#### Command
 
 Command описывает намерение изменить систему.
 
@@ -729,9 +779,7 @@ class ConfirmOrderCommand:
 
 Command не содержит SQLAlchemy model или HTTP Request.
 
----
-
-# 13. Command Handler
+#### Command Handler
 
 Обычный handler работает внутри UoW, уже открытого в Depends.
 
@@ -796,9 +844,7 @@ Commit выполняется при успешном завершении вн�
 При исключении откатываются и изменения заказа, и сообщения Outbox.
 Handler не реализует правило `можно ли подтвердить заказ`.
 
----
-
-# 14. Application Service
+#### Application Service
 
 Application Service используется, когда use case сложнее простого handler.
 
@@ -857,12 +903,62 @@ Domain принимает решения.
 
 Пример показывает координацию внутри уже открытого внешней сборкой UoW.
 Если сценарий создаёт интеграционные сообщения, до завершения UoW он также
-записывает их в Outbox, как в §13. Вложенный Application Service не открывает
+записывает их в Outbox, как в разделе [Command Handler](#command-handler). Вложенный Application Service не открывает
 новый UoW и не коммитит общую транзакцию самостоятельно.
 
----
+#### External Ports
 
-# 15. Query side
+Application не должен импортировать конкретные Stripe, Nova Poshta, Prom, Redis и т.п.
+
+Контракт:
+
+```python
+class PaymentGatewayProtocol(
+    Protocol
+):
+
+    """Определяет независимый от платёжного провайдера контракт авторизации."""
+    async def authorize(
+        self,
+        payment: PaymentRequest,
+    ) -> PaymentAuthorization:
+        """Запрашивает авторизацию платежа и возвращает результат в терминах Application."""
+        ...
+```
+
+Infrastructure:
+
+```python
+class StripePaymentGateway(
+    PaymentGatewayProtocol
+):
+    """Адаптирует платёжный API Stripe к контракту Application."""
+
+    async def authorize(
+        self,
+        payment: PaymentRequest,
+    ) -> PaymentAuthorization:
+        """Вызывает API провайдера; вызов и преобразование ответа в примере опущены."""
+
+        response = await self._client...
+        ...
+```
+
+Application зависит от:
+
+```python
+# Application обращается к абстрактному порту платёжного провайдера.
+PaymentGatewayProtocol
+```
+
+а не от:
+
+```python
+# Антипример: конкретный адаптер не должен становиться зависимостью Application.
+StripePaymentGateway
+```
+
+#### Query side
 
 Query не должен загружать Aggregate Root только ради отображения страницы.
 
@@ -888,9 +984,7 @@ JSON
 
 Read-side может напрямую читать projection.
 
----
-
-# 16. Query DTO
+##### Query DTO
 
 ```python
 @dataclass(
@@ -916,9 +1010,7 @@ class OrderListItemDTO:
 
 DTO может быть специально оптимизирован под конкретный экран/API.
 
----
-
-# 17. Query Repository Protocol
+##### Query Repository Protocol
 
 Query Repository следует располагать в Application layer.
 
@@ -971,9 +1063,311 @@ search results
 
 Это application/read concern.
 
----
+##### Query Handler
 
-# 18. Query Repository implementation
+```python
+@dataclass(
+    frozen=True,
+    slots=True,
+)
+class GetOrderQuery:
+    """Передаёт параметры чтения деталей конкретного заказа в контексте tenant."""
+    tenant_id: EntityIdVO
+    order_id: OrderIdVO
+```
+
+Handler:
+
+```python
+class GetOrderHandler:
+
+    """Выполняет сценарий чтения через порт проекций Application."""
+    def __init__(
+        self,
+        repository: OrderQueryRepositoryProtocol,
+    ) -> None:
+        """Принимает порт чтения готовых DTO заказов."""
+        self._repository = repository
+
+    async def execute(
+        self,
+        query: GetOrderQuery,
+    ) -> OrderDetailsDTO:
+
+        """Возвращает детали заказа или преобразует отсутствие результата в ошибку."""
+        result = (
+            await self._repository.get_details(
+                tenant_id=query.tenant_id,
+                order_id=query.order_id,
+            )
+        )
+
+        if result is None:
+            raise OrderNotFoundError()
+
+        return result
+```
+
+Query Handler не должен загружать Aggregate Root без необходимости.
+
+### Infrastructure layer
+
+#### Infrastructure persistence model
+
+SQLAlchemy Model — это persistence representation, а не Domain Entity.
+
+```python
+class OrderModel(
+    AudienceMixin,
+    TenantBase,
+):
+    """Описывает хранение полей заказа в SQLAlchemy, не реализуя бизнес-поведение."""
+    __tablename__ = "orders"
+
+    id: Mapped[UUID] = mapped_column(
+        StringUUID,
+        primary_key=True,
+    )
+
+    number: Mapped[str] = mapped_column(
+        sa.String(50),
+        nullable=False,
+    )
+
+    customer_id: Mapped[UUID] = mapped_column(
+        StringUUID,
+        nullable=False,
+    )
+
+    status: Mapped[str] = mapped_column(
+        sa.String(30),
+        nullable=False,
+    )
+
+    currency: Mapped[str] = mapped_column(
+        sa.String(3),
+        nullable=False,
+    )
+```
+
+Нельзя передавать:
+
+```python
+# Антипример: ORM-модель не должна выходить за пределы Infrastructure.
+OrderModel
+```
+
+в Application или Domain.
+
+#### Persistence Mapper
+
+Mapper является единственной точкой преобразования persistence representation → Domain.
+
+```python
+class OrderMapper:
+    """Преобразует представление хранения в Domain и обратно без выполнения I/O."""
+
+    @staticmethod
+    def to_domain(
+        order_row: Mapping[str, Any],
+        item_rows: Sequence[
+            Mapping[str, Any]
+        ],
+    ) -> Order:
+
+        """Восстанавливает сохранённый агрегат с позициями, не создавая событие OrderCreated."""
+        return Order(
+            id=OrderIdVO.from_value(
+                order_row["id"]
+            ),
+            customer_id=EntityIdVO.from_value(
+                order_row["customer_id"]
+            ),
+            status=OrderStatus(
+                order_row["status"]
+            ),
+            items=[
+                OrderItemMapper.to_domain(row)
+                for row in item_rows
+            ],
+            created_at=order_row[
+                "created_at"
+            ],
+            updated_at=order_row[
+                "updated_at"
+            ],
+        )
+
+    @staticmethod
+    def to_insert_values(
+        order: Order,
+    ) -> dict[str, Any]:
+
+        """Извлекает поля заказа в словарь для вставки; сам INSERT не выполняет."""
+        return {
+            "id": order.id.uuid,
+            "customer_id":
+                order.customer_id.uuid,
+            "status":
+                order.status.value,
+            "created_at":
+                order.created_at,
+            "updated_at":
+                order.updated_at,
+        }
+```
+
+Mapper:
+
+```text
+не делает SELECT;
+не делает INSERT;
+не вызывает Repository;
+не делает commit;
+не содержит business rules.
+```
+
+#### Domain Repository implementation
+
+```python
+class SqlAlchemyOrderRepository:
+
+    """Загружает агрегат из таблиц, скрывая SQL и ORM от внутренних слоёв."""
+    def __init__(
+        self,
+        session: AsyncSession,
+        naming: TenantSchemaNaming,
+    ) -> None:
+        """Принимает сессию внешнего UoW и правила выбора схемы tenant."""
+        self._session = session
+        self._naming = naming
+
+    async def get(
+        self,
+        tenant_id: EntityIdVO,
+        order_id: OrderIdVO,
+    ) -> Order:
+
+        """Читает заказ и его позиции в контексте tenant, затем восстанавливает агрегат."""
+        orders = OrderModel.__table__
+        items = OrderItemModel.__table__
+
+        order_result = (
+            await self._session.execute(
+                select(orders)
+                .where(
+                    orders.c.id
+                    == order_id.uuid
+                )
+                .execution_options(
+                    **tenant_execution_options(
+                        self._naming,
+                        tenant_id,
+                    )
+                )
+            )
+        )
+
+        order_row = (
+            order_result
+            .mappings()
+            .one_or_none()
+        )
+
+        if order_row is None:
+            raise OrderNotFoundError()
+
+        item_result = (
+            await self._session.execute(
+                select(items)
+                .where(
+                    items.c.order_id
+                    == order_id.uuid
+                )
+                .order_by(
+                    items.c.position
+                )
+                .execution_options(
+                    **tenant_execution_options(
+                        self._naming,
+                        tenant_id,
+                    )
+                )
+            )
+        )
+
+        return OrderMapper.to_domain(
+            order_row,
+            tuple(
+                item_result.mappings()
+            ),
+        )
+```
+
+Repository отвечает за persistence mechanics.
+
+Aggregate отвечает за business rules.
+
+##### Сохранение Aggregate
+
+При сохранении repository сам разбирает Aggregate на persistence representation.
+
+```python
+async def save(
+    self,
+    tenant_id: EntityIdVO,
+    order: Order,
+) -> None:
+
+    """Обновляет заказ и заменяет его позиции в общей транзакции, не выполняя commit."""
+    orders = OrderModel.__table__
+    items = OrderItemModel.__table__
+
+    await self._session.execute(
+        update(orders)
+        .where(
+            orders.c.id
+            == order.id.uuid
+        )
+        .values(
+            OrderMapper.to_update_values(
+                order
+            )
+        )
+        .execution_options(
+            **tenant_execution_options(
+                self._naming,
+                tenant_id,
+            )
+        )
+    )
+
+    await self._session.execute(
+        delete(items)
+        .where(
+            items.c.order_id
+            == order.id.uuid
+        )
+        .execution_options(...)
+    )
+
+    await self._session.execute(
+        insert(items)
+        .execution_options(...),
+        [
+            OrderItemMapper
+            .to_insert_values(
+                order.id,
+                item,
+            )
+            for item in order.items
+        ],
+    )
+```
+
+Domain не знает, каким способом Aggregate сохраняется.
+
+#### Query Repository implementation
 
 Infrastructure может выполнять оптимизированный SQL напрямую.
 
@@ -1083,9 +1477,7 @@ read replicas
 
 Потому что Query Repository не отвечает за восстановление domain state.
 
----
-
-# 19. Query Mapper
+##### Query Mapper
 
 ```python
 class OrderQueryMapper:
@@ -1133,321 +1525,7 @@ to_domain()
 
 если Domain Entity фактически не создаётся.
 
----
-
-# 20. Query Handler
-
-```python
-@dataclass(
-    frozen=True,
-    slots=True,
-)
-class GetOrderQuery:
-    """Передаёт параметры чтения деталей конкретного заказа в контексте tenant."""
-    tenant_id: EntityIdVO
-    order_id: OrderIdVO
-```
-
-Handler:
-
-```python
-class GetOrderHandler:
-
-    """Выполняет сценарий чтения через порт проекций Application."""
-    def __init__(
-        self,
-        repository: OrderQueryRepositoryProtocol,
-    ) -> None:
-        """Принимает порт чтения готовых DTO заказов."""
-        self._repository = repository
-
-    async def execute(
-        self,
-        query: GetOrderQuery,
-    ) -> OrderDetailsDTO:
-
-        """Возвращает детали заказа или преобразует отсутствие результата в ошибку."""
-        result = (
-            await self._repository.get_details(
-                tenant_id=query.tenant_id,
-                order_id=query.order_id,
-            )
-        )
-
-        if result is None:
-            raise OrderNotFoundError()
-
-        return result
-```
-
-Query Handler не должен загружать Aggregate Root без необходимости.
-
----
-
-# 21. Infrastructure persistence model
-
-SQLAlchemy Model — это persistence representation, а не Domain Entity.
-
-```python
-class OrderModel(
-    AudienceMixin,
-    TenantBase,
-):
-    """Описывает хранение полей заказа в SQLAlchemy, не реализуя бизнес-поведение."""
-    __tablename__ = "orders"
-
-    id: Mapped[UUID] = mapped_column(
-        StringUUID,
-        primary_key=True,
-    )
-
-    number: Mapped[str] = mapped_column(
-        sa.String(50),
-        nullable=False,
-    )
-
-    customer_id: Mapped[UUID] = mapped_column(
-        StringUUID,
-        nullable=False,
-    )
-
-    status: Mapped[str] = mapped_column(
-        sa.String(30),
-        nullable=False,
-    )
-
-    currency: Mapped[str] = mapped_column(
-        sa.String(3),
-        nullable=False,
-    )
-```
-
-Нельзя передавать:
-
-```python
-# Антипример: ORM-модель не должна выходить за пределы Infrastructure.
-OrderModel
-```
-
-в Application или Domain.
-
----
-
-# 22. Persistence Mapper
-
-Mapper является единственной точкой преобразования persistence representation → Domain.
-
-```python
-class OrderMapper:
-    """Преобразует представление хранения в Domain и обратно без выполнения I/O."""
-
-    @staticmethod
-    def to_domain(
-        order_row: Mapping[str, Any],
-        item_rows: Sequence[
-            Mapping[str, Any]
-        ],
-    ) -> Order:
-
-        """Восстанавливает сохранённый агрегат с позициями, не создавая событие OrderCreated."""
-        return Order(
-            id=OrderIdVO.from_value(
-                order_row["id"]
-            ),
-            customer_id=EntityIdVO.from_value(
-                order_row["customer_id"]
-            ),
-            status=OrderStatus(
-                order_row["status"]
-            ),
-            items=[
-                OrderItemMapper.to_domain(row)
-                for row in item_rows
-            ],
-            created_at=order_row[
-                "created_at"
-            ],
-            updated_at=order_row[
-                "updated_at"
-            ],
-        )
-
-    @staticmethod
-    def to_insert_values(
-        order: Order,
-    ) -> dict[str, Any]:
-
-        """Извлекает поля заказа в словарь для вставки; сам INSERT не выполняет."""
-        return {
-            "id": order.id.uuid,
-            "customer_id":
-                order.customer_id.uuid,
-            "status":
-                order.status.value,
-            "created_at":
-                order.created_at,
-            "updated_at":
-                order.updated_at,
-        }
-```
-
-Mapper:
-
-```text
-не делает SELECT;
-не делает INSERT;
-не вызывает Repository;
-не делает commit;
-не содержит business rules.
-```
-
----
-
-# 23. Domain Repository implementation
-
-```python
-class SqlAlchemyOrderRepository:
-
-    """Загружает агрегат из таблиц, скрывая SQL и ORM от внутренних слоёв."""
-    def __init__(
-        self,
-        session: AsyncSession,
-        naming: TenantSchemaNaming,
-    ) -> None:
-        """Принимает сессию внешнего UoW и правила выбора схемы tenant."""
-        self._session = session
-        self._naming = naming
-
-    async def get(
-        self,
-        tenant_id: EntityIdVO,
-        order_id: OrderIdVO,
-    ) -> Order:
-
-        """Читает заказ и его позиции в контексте tenant, затем восстанавливает агрегат."""
-        orders = OrderModel.__table__
-        items = OrderItemModel.__table__
-
-        order_result = (
-            await self._session.execute(
-                select(orders)
-                .where(
-                    orders.c.id
-                    == order_id.uuid
-                )
-                .execution_options(
-                    **tenant_execution_options(
-                        self._naming,
-                        tenant_id,
-                    )
-                )
-            )
-        )
-
-        order_row = (
-            order_result
-            .mappings()
-            .one_or_none()
-        )
-
-        if order_row is None:
-            raise OrderNotFoundError()
-
-        item_result = (
-            await self._session.execute(
-                select(items)
-                .where(
-                    items.c.order_id
-                    == order_id.uuid
-                )
-                .order_by(
-                    items.c.position
-                )
-                .execution_options(
-                    **tenant_execution_options(
-                        self._naming,
-                        tenant_id,
-                    )
-                )
-            )
-        )
-
-        return OrderMapper.to_domain(
-            order_row,
-            tuple(
-                item_result.mappings()
-            ),
-        )
-```
-
-Repository отвечает за persistence mechanics.
-
-Aggregate отвечает за business rules.
-
----
-
-# 24. Сохранение Aggregate
-
-При сохранении repository сам разбирает Aggregate на persistence representation.
-
-```python
-async def save(
-    self,
-    tenant_id: EntityIdVO,
-    order: Order,
-) -> None:
-
-    """Обновляет заказ и заменяет его позиции в общей транзакции, не выполняя commit."""
-    orders = OrderModel.__table__
-    items = OrderItemModel.__table__
-
-    await self._session.execute(
-        update(orders)
-        .where(
-            orders.c.id
-            == order.id.uuid
-        )
-        .values(
-            OrderMapper.to_update_values(
-                order
-            )
-        )
-        .execution_options(
-            **tenant_execution_options(
-                self._naming,
-                tenant_id,
-            )
-        )
-    )
-
-    await self._session.execute(
-        delete(items)
-        .where(
-            items.c.order_id
-            == order.id.uuid
-        )
-        .execution_options(...)
-    )
-
-    await self._session.execute(
-        insert(items)
-        .execution_options(...),
-        [
-            OrderItemMapper
-            .to_insert_values(
-                order.id,
-                item,
-            )
-            for item in order.items
-        ],
-    )
-```
-
-Domain не знает, каким способом Aggregate сохраняется.
-
----
-
-# 25. Unit of Work
+#### Unit of Work
 
 Repository не делает:
 
@@ -1580,63 +1658,7 @@ commit
 Отправка в брокер выполняется отдельно после успешного commit. Publisher должен
 поддерживать повторные попытки, а потребители — идемпотентную обработку.
 
----
-
-# 26. External Ports
-
-Application не должен импортировать конкретные Stripe, Nova Poshta, Prom, Redis и т.п.
-
-Контракт:
-
-```python
-class PaymentGatewayProtocol(
-    Protocol
-):
-
-    """Определяет независимый от платёжного провайдера контракт авторизации."""
-    async def authorize(
-        self,
-        payment: PaymentRequest,
-    ) -> PaymentAuthorization:
-        """Запрашивает авторизацию платежа и возвращает результат в терминах Application."""
-        ...
-```
-
-Infrastructure:
-
-```python
-class StripePaymentGateway(
-    PaymentGatewayProtocol
-):
-    """Адаптирует платёжный API Stripe к контракту Application."""
-
-    async def authorize(
-        self,
-        payment: PaymentRequest,
-    ) -> PaymentAuthorization:
-        """Вызывает API провайдера; вызов и преобразование ответа в примере опущены."""
-
-        response = await self._client...
-        ...
-```
-
-Application зависит от:
-
-```python
-# Application обращается к абстрактному порту платёжного провайдера.
-PaymentGatewayProtocol
-```
-
-а не от:
-
-```python
-# Антипример: конкретный адаптер не должен становиться зависимостью Application.
-StripePaymentGateway
-```
-
----
-
-# 27. Presentation layer
+### Presentation layer
 
 HTTP слой должен быть максимально тонким.
 
@@ -1680,9 +1702,9 @@ mapping application errors → transport errors
 
 Presentation не содержит бизнес-правил.
 
----
+### Потоки Command и Query
 
-# 28. Полный путь Command
+#### Полный путь Command
 
 Для изменения заказа поток должен выглядеть так:
 
@@ -1725,11 +1747,9 @@ UnitOfWork.commit() при успешном завершении процесс�
 
 При исключении до commit UoW откатывает и изменения агрегата, и записи Outbox.
 Если Use Case должен контролировать момент commit, ему передаётся
-`UnitOfWorkProtocol` по правилу §25; порядок записи Outbox остаётся тем же.
+`UnitOfWorkProtocol` по правилу раздела [Unit of Work](#unit-of-work); порядок записи Outbox остаётся тем же.
 
----
-
-# 29. Полный путь Query
+#### Полный путь Query
 
 Чтение:
 
@@ -1768,9 +1788,7 @@ Order Aggregate
 
 Это нормально.
 
----
-
-# 30. Command и Query repository нельзя смешивать концептуально
+#### Command и Query repository нельзя смешивать концептуально
 
 Write Repository:
 
@@ -1831,9 +1849,88 @@ OrderStatisticsQueryRepository
     → Analytics, если понадобится
 ```
 
----
+#### Эталонная архитектура Orders
 
-# 31. Где находится бизнес-логика
+Финально модуль должен восприниматься следующим образом:
+
+```text
+                        ORDERS
+                           │
+             ┌─────────────┴─────────────┐
+             │                           │
+         WRITE SIDE                  READ SIDE
+             │                           │
+             ▼                           ▼
+        Application                  Application
+         Commands                      Queries
+             │                           │
+             ▼                           ▼
+      Domain Aggregate            Query Repository
+             │                           │
+       Order Repository                  ▼
+             │                      optimized SQL
+             ▼                           │
+       Infrastructure                    ▼
+        persistence                    DTO
+             │                           │
+             └───────────┬───────────────┘
+                         ▼
+                     PostgreSQL
+```
+
+Write path защищает бизнес-инварианты.
+
+Read path оптимизирован под получение данных.
+
+Их не нужно искусственно заставлять использовать одинаковую модель.
+
+### Межмодульное взаимодействие
+
+Например:
+
+```text
+Orders
+Inventory
+Payments
+Customers
+```
+
+Orders не должен импортировать internal Entity другого bounded context.
+
+Плохо:
+
+```python
+# Антипример: импорт внутреннего агрегата склада нарушает границу бизнес-модулей.
+from modules.inventory.domain.stock.aggregate import Stock
+```
+
+Предпочтительно:
+
+```python
+# Порт изолирует Orders от внутренней реализации складского модуля.
+InventoryGatewayProtocol
+```
+
+или application contract:
+
+```python
+# Контракт передаёт только согласованные данные о доступности товаров.
+InventoryAvailability
+```
+
+или событие:
+
+```text
+OrderConfirmed
+        ↓
+Inventory Reservation Handler
+```
+
+Bounded Context должен сохранять автономность.
+
+### Правила разработки
+
+#### Где находится бизнес-логика
 
 При принятии решения агент должен использовать следующий приоритет.
 
@@ -1884,9 +1981,7 @@ external API
 
 это Infrastructure.
 
----
-
-# 32. Что агенту запрещено делать
+#### Что агенту запрещено делать
 
 1. Не импортировать SQLAlchemy в Domain или Application, включая контракты UoW.
 
@@ -1931,9 +2026,7 @@ external API
 20. Не записывать сообщения Outbox после commit изменения агрегата или
     в независимой транзакции. Доставка сообщений выполняется после commit.
 
----
-
-# 33. Именование
+#### Именование
 
 Использовать явные названия.
 
@@ -1984,9 +2077,7 @@ orders_router
 
 Из названия класса должно быть понятно, какую архитектурную роль он выполняет.
 
----
-
-# 34. DTO naming
+##### DTO naming
 
 Не использовать один универсальный:
 
@@ -2010,9 +2101,7 @@ OrderStatisticsDTO
 
 Read model создаётся под потребность consumer.
 
----
-
-# 35. Mapper naming
+##### Mapper naming
 
 Для восстановления Domain:
 
@@ -2045,129 +2134,7 @@ OrderQueryMapper.to_projection()
 to_domain()
 ```
 
----
-
-# 36. Aggregate boundary
-
-При проектировании нового функционала агент сначала должен определить Aggregate Root.
-
-Например:
-
-```text
-Order
- ├── OrderItem
- ├── OrderDiscount
- └── OrderAddressSnapshot
-```
-
-Если `OrderItem` не может существовать независимо:
-
-```text
-OrderItem lifecycle = Order lifecycle
-```
-
-значит он находится внутри Aggregate.
-
-Другой Aggregate:
-
-```text
-Payment
-```
-
-может ссылаться:
-
-```python
-# Другой агрегат хранит идентификатор заказа как ссылку на его границу.
-order_id: OrderIdVO
-```
-
-но не должен содержать прямой Python reference:
-
-```python
-# Антипример: прямая ссылка на объект связывает жизненные циклы разных агрегатов.
-payment.order: Order
-```
-
-Связи между Aggregate Roots осуществляются через IDs.
-
----
-
-# 37. Межмодульное взаимодействие
-
-Например:
-
-```text
-Orders
-Inventory
-Payments
-Customers
-```
-
-Orders не должен импортировать internal Entity другого bounded context.
-
-Плохо:
-
-```python
-# Антипример: импорт внутреннего агрегата склада нарушает границу бизнес-модулей.
-from modules.inventory.domain.stock.aggregate import Stock
-```
-
-Предпочтительно:
-
-```python
-# Порт изолирует Orders от внутренней реализации складского модуля.
-InventoryGatewayProtocol
-```
-
-или application contract:
-
-```python
-# Контракт передаёт только согласованные данные о доступности товаров.
-InventoryAvailability
-```
-
-или событие:
-
-```text
-OrderConfirmed
-        ↓
-Inventory Reservation Handler
-```
-
-Bounded Context должен сохранять автономность.
-
----
-
-# 38. Domain snapshots
-
-Если Domain Order должен использовать информацию из другого context, но она нужна для принятия domain decision, использовать специализированный immutable snapshot.
-
-Например:
-
-```python
-@dataclass(
-    frozen=True,
-    slots=True,
-)
-class CustomerOrderSnapshot:
-    """Хранит неизменяемый снимок данных клиента, нужных для бизнес-решения Order."""
-    customer_id: EntityIdVO
-    is_blocked: bool
-    customer_type: CustomerType
-```
-
-А не передавать:
-
-```python
-# Антипример: чужой агрегат не передаётся в Domain вместо специализированного снимка.
-CustomerAggregate
-```
-
-из другого bounded context.
-
----
-
-# 39. Общий принцип написания кода
+#### Общий принцип написания кода
 
 Предпочитать:
 
@@ -2221,9 +2188,7 @@ await repository.save(
 )
 ```
 
----
-
-# 40. Алгоритм агента при реализации новой функции
+#### Алгоритм агента при реализации новой функции
 
 Перед написанием кода агент должен определить:
 
@@ -2276,51 +2241,12 @@ persistence или presentation?
 
 Если ответа нет — архитектура класса, вероятно, выбрана неправильно.
 
----
-
-# 41. Эталонная архитектура Orders
-
-Финально модуль должен восприниматься следующим образом:
-
-```text
-                        ORDERS
-                           │
-             ┌─────────────┴─────────────┐
-             │                           │
-         WRITE SIDE                  READ SIDE
-             │                           │
-             ▼                           ▼
-        Application                  Application
-         Commands                      Queries
-             │                           │
-             ▼                           ▼
-      Domain Aggregate            Query Repository
-             │                           │
-       Order Repository                  ▼
-             │                      optimized SQL
-             ▼                           │
-       Infrastructure                    ▼
-        persistence                    DTO
-             │                           │
-             └───────────┬───────────────┘
-                         ▼
-                     PostgreSQL
-```
-
-Write path защищает бизнес-инварианты.
-
-Read path оптимизирован под получение данных.
-
-Их не нужно искусственно заставлять использовать одинаковую модель.
-
----
-
-# 42. Стандарты и примеры логирования
+### Стандарты и примеры логирования
 
 Логи описывают выполнение сценариев и технические сбои. Они не заменяют Domain
 Events, Outbox, метрики или отдельный аудит бизнес-действий.
 
-## 42.1. Ответственность слоёв
+#### Ответственность слоёв
 
 | Слой | Что логировать |
 | --- | --- |
@@ -2336,7 +2262,7 @@ Application не импортирует инфраструктурный ада�
 уровней, handlers, formatter и фильтров выполняется один раз в bootstrap.
 Не вызывать `basicConfig()` внутри handler, repository или при импорте модуля.
 
-## 42.2. Уровни и события
+#### Уровни и события
 
 | Уровень | Назначение | Пример события |
 | --- | --- | --- |
@@ -2355,7 +2281,7 @@ Application не импортирует инфраструктурный ада�
 Динамические значения передаются отдельными полями, а не включаются в имя события.
 Сообщение коротко описывает факт; docstring и пояснения в примерах пишутся по-русски.
 
-## 42.3. Формат и контекст
+#### Формат и контекст
 
 В production использовать структурированный JSON, одна запись на строку.
 Для локальной разработки допустим читаемый текст с теми же полями контекста.
@@ -2384,7 +2310,7 @@ Request/trace context передаётся явно или через `contextva
 Корреляция фонового сообщения переносится через его envelope, а не через живой
 объект HTTP Request или request-scoped session.
 
-## 42.4. Ошибки, транзакции и безопасные данные
+#### Ошибки, транзакции и безопасные данные
 
 Одно исключение со stack trace записывается один раз на выбранной границе
 обработки: HTTP middleware, worker либо внешняя обёртка сценария. Промежуточные
@@ -2398,7 +2324,7 @@ from exc`. Не вызывать `logger.exception()` в каждом слое �
 и не записывать как обычную ошибку обработки.
 
 Событие `*.committed` записывается только после успешного commit. В стандартном
-сценарии §25 это точка после выхода из внешнего `async with UnitOfWork(...)`.
+сценарии из раздела [Unit of Work](#unit-of-work) это точка после выхода из внешнего `async with UnitOfWork(...)`.
 Успех `repository.save()` или возврат handler не доказывают сохранение данных.
 Запись сообщения в Outbox также не означает его доставку: publisher фиксирует
 результат доставки отдельно, после подтверждения брокером. Повторные доставки
@@ -2416,10 +2342,10 @@ from exc`. Не вызывать `logger.exception()` в каждом слое �
 `logger.info("Order %s committed", order_id)`, а не f-строки. При структурированном
 выводе предпочитать постоянное сообщение с полями в `extra`.
 
-## 42.5. Пример: итог команды после завершения UoW
+#### Пример: итог команды после завершения UoW
 
 Псевдокод внешней сборки для CLI или worker. Он использует те же порты и handler,
-что и §13; здесь находится граница записи итогового события. В HTTP-сценарии
+что и в разделе [Command Handler](#command-handler); здесь находится граница записи итогового события. В HTTP-сценарии
 аналогичный лог должен учитывать завершение Depends/UoW, а не только возврат
 контроллера. Импорты проектных типов опущены. Предполагается настроенный formatter
 с очисткой чувствительных данных и отсутствие дублирующего логирования ошибки
@@ -2514,7 +2440,7 @@ async def run_confirm_order(
 
 JSON показан с отступами для чтения; в потоке логов это одна строка.
 
-## 42.6. Пример: повторная доставка Outbox
+#### Пример: повторная доставка Outbox
 
 Этот фрагмент выполняется в publisher после успешного планирования очередной
 попытки существующим механизмом retry. Сам лог не планирует повтор и не меняет
@@ -2541,9 +2467,7 @@ logger.warning(
 вместо `retry_scheduled`. После подтверждения доставки используется отдельное
 событие `outbox.publish.delivered`; его нельзя писать сразу после записи в Outbox.
 
----
-
-# Главное архитектурное правило
+### Главное архитектурное правило
 
 При написании любого кода агент должен исходить не из структуры таблиц, а из бизнес-модели.
 
@@ -2587,3 +2511,7 @@ API
 ```
 
 База данных является способом сохранения модели, а не источником архитектуры приложения.
+
+## Фронтенд
+
+Раздел будет дополнен.

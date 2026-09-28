@@ -24,12 +24,7 @@ from src.modules.contact_points.infrastructure.normalization.phone import (
 from src.modules.contact_points.infrastructure.normalization.email import (
     EmailNormalizer,
 )
-from src.modules.crm.presentation.http.contact.requests.schemas import (
-    UpdateContactRequest,
-)
-from src.modules.crm.presentation.http.contact_points import contact_point_inputs
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
-from src.modules.shared.infrastructure.uuid import UUID7Generator
 
 
 class ContactPointsDomainTests(unittest.TestCase):
@@ -93,18 +88,6 @@ class ContactPointsDomainTests(unittest.TestCase):
         )
         with self.assertRaises(FrozenInstanceError):
             point.canonical_value = "other@example.com"
-
-    def test_omitted_empty_and_null_request_lists(self):
-        generator = UUID7Generator()
-        omitted = contact_point_inputs(UpdateContactRequest(first_name="A"), generator)
-        empty = contact_point_inputs(
-            UpdateContactRequest(first_name="A", phones=[]), generator
-        )
-        self.assertIsNone(omitted["phones"])
-        self.assertEqual(empty["phones"], ())
-        self.assertIsNone(empty["emails"])
-        with self.assertRaises(ValueError):
-            UpdateContactRequest(first_name="A", phones=None)
 
     def test_binding_noop_rebind_and_position_invariants(self):
         from datetime import timedelta
@@ -189,9 +172,6 @@ class ContactPointsDomainTests(unittest.TestCase):
                         ),
                         (str(path), name),
                     )
-        for layer in ("domain", "application"):
-            for path in (root / "crm" / layer).rglob("*.py"):
-                self.assertNotIn("src.modules.contact_points", path.read_text())
         for path in (root / "shared").rglob("*.py"):
             self.assertNotIn("src.modules.contact_points", path.read_text())
 

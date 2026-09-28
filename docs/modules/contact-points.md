@@ -17,7 +17,7 @@ queries exported by `contact_points/application/api.py`, using the public `domai
 No ORM entity or session crosses this boundary. Specialized VO remain in their owning module; Shared provides
 existing neutral identifiers, clock and UoW primitives.
 
-The owner validates access and existence and locks the owner row before update/delete. CRM uses the stable keys
+The owner validates access and existence and locks the owner row before update/delete. Existing CRM bindings use the stable keys
 `crm.contact` and `crm.company`. There is no foreign key to a polymorphic target and no universal binding HTTP API.
 Future owners must follow the same locking and cleanup discipline, with their own adapter.
 
@@ -43,7 +43,8 @@ No outbox events are emitted because this version has no event consumer.
 
 ## Input and normalization
 
-A CRM create/update can include:
+The former CRM create/update contract used the following payload. Its backend adapter and HTTP endpoints
+have been removed for the [CRM rebuild](crm.md); this example documents the retained Console contract:
 
 ```json
 {
@@ -89,10 +90,10 @@ There is no backfill from identity emails and no restoration of the removed lega
 Focused tests:
 
 ```sh
-uv run python -m unittest test.test_contact_point_mappers test.test_contact_points test.test_crm test.test_crm_http test.test_removed_module_boundaries
+uv run python -m unittest test.test_contact_point_mappers test.test_contact_points test.test_removed_module_boundaries
 TEST_POSTGRES_URL=postgresql+asyncpg://... uv run python -m unittest test.test_contact_points_postgres test.test_tenant_migrations_postgres
 ```
 
-Use a disposable PostgreSQL database. Integration coverage includes shared session identity, atomic rollback,
-concurrent resolve/update/delete, identical UUIDs across tenant schemas on one session/repository instance, immutable shared values, archival permissions/CSRF, reverse
-lookup and transactional migrations. See [the implementation plan](../plan/contact_point_module.md) for scope.
+Use a disposable PostgreSQL database. Integration coverage includes shared session identity, identical UUIDs across tenant schemas on one
+session/repository instance, archival permissions/CSRF and transactional migrations. Tests of the removed
+CRM HTTP integration have been removed; independent contact point tests remain. See [the implementation plan](../plan/contact_point_module.md) for scope.

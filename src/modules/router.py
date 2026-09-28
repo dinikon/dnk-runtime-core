@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 
-from src.modules.crm.presentation.http.router import router as crm_router
 from src.modules.contact_points.presentation.http.router import (
     router as contact_points_router,
 )
@@ -18,7 +17,6 @@ router = APIRouter(prefix="/api/console")
 
 router.include_router(tenancy_router)
 router.include_router(identity_router)
-router.include_router(crm_router)
 router.include_router(contact_points_router)
 router.include_router(price_lists_router)
 router.include_router(price_list_offers_router)

@@ -1,5 +1,7 @@
 from contextlib import asynccontextmanager
-from modules.shared.infrastructure.persistence.unit_of_work.sqlalchemy import UnitOfWork
+from src.modules.shared.infrastructure.persistence.unit_of_work.sqlalchemy import (
+    UnitOfWork,
+)
 
 
 class SqlAlchemyImportTransactionFactory:

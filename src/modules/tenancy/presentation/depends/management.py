@@ -20,7 +20,9 @@ from src.modules.shared.infrastructure.persistence.tenant_migrations import (
     TenantMigrationError,
     TenantMigrator,
 )
-from modules.shared.infrastructure.persistence.unit_of_work.sqlalchemy import UnitOfWork
+from src.modules.shared.infrastructure.persistence.unit_of_work.sqlalchemy import (
+    UnitOfWork,
+)
 from src.modules.tenancy.domain.tenant.value_object import TenantIdVO
 from src.modules.tenancy.infrastructure.repository import SqlAlchemyTenantRepository
 

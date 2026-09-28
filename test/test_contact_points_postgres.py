@@ -1,6 +1,5 @@
 """Real HTTP/DI/PostgreSQL integration; requires an explicitly disposable database."""
 
-import asyncio
 from dataclasses import replace
 import os
 import unittest
@@ -16,7 +15,6 @@ from sqlalchemy.schema import CreateSchema, DropSchema
 
 from src.config import dnk_config
 from src.modules.contact_points.presentation.http.router import router as points_router
-from src.modules.crm.presentation.http.router import router as crm_router
 from src.modules.identity.presentation.http.csrf import issue_csrf
 from src.modules.shared.presentation.identity_context.depends import (
     require_authenticated_request_context,
@@ -34,28 +32,17 @@ from src.modules.shared.infrastructure.persistence.tenant_migrations import (
 )
 from src.modules.shared.infrastructure.persistence import UnitOfWork
 from src.modules.contact_points.infrastructure.persistence import (
-    ContactPointModel,
-    ContactPointBindingModel,
     ContactPointLabelModel,
 )
 from src.modules.contact_points.infrastructure.persistence.repository.binding_repository import (
     SqlAlchemyContactPointBindingRepository,
 )
-from src.modules.contact_points.presentation.depends.application import (
-    get_resolve_contact_point_targets_use_case,
-    get_contact_point_resolver,
-)
-from src.modules.contact_points.presentation.depends.infrastructure import (
-    get_normalizers,
-)
 from src.modules.contact_points.infrastructure.persistence import (
     SqlAlchemyContactPointRepository,
 )
-from src.modules.contact_points.application.api import ResolveContactPointTargetsQuery
 from src.modules.contact_points.domain.contact_point.value_object.value import (
     ContactPointType,
 )
-from src.modules.shared.infrastructure.time import UtcClock
 from src.modules.crm.infrastructure.persistence import ContactModel
 
 TEST_URL = os.environ.get("TEST_POSTGRES_URL")
@@ -93,7 +80,6 @@ class ContactPointsPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.app = FastAPI()
         self.app.state.db = self.sessions
         self.app.state.token_manager = TokenManager(InMemoryTokenBackend())
-        self.app.include_router(crm_router, prefix="/api/console")
         self.app.include_router(points_router, prefix="/api/console")
         self.app.dependency_overrides[require_authenticated_request_context] = (
             lambda: self.context
@@ -126,17 +112,6 @@ class ContactPointsPostgresTests(unittest.IsolatedAsyncioTestCase):
             method, "/api/console/" + path, headers=self.headers, **kwargs
         )
 
-    async def create(self, *, company=False, **changes):
-        path = "crm/companies" if company else "crm/contacts"
-        payload = {"name": "Acme"} if company else {"first_name": "Test"}
-        payload.update(changes)
-        response = await self.request("POST", path, json=payload)
-        self.assertEqual(response.status_code, 201, response.text)
-        return response.json()
-
-    def phone(self, value="0501234567", **changes):
-        return dict(value=value, country_code="UA", **changes)
-
     async def count(self, model, tenant=None):
         async with self.sessions() as session:
             return await session.scalar(
@@ -150,10 +125,6 @@ class ContactPointsPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
 
     async def test_request_dependency_graph_shares_session_and_commits_once(self):
-        from src.modules.crm.presentation.depends.infrastructure import (
-            ContactRepositoryDep,
-            CompanyRepositoryDep,
-        )
         from src.modules.contact_points.presentation.depends.infrastructure import (
             ContactPointRepositoryDep,
             ContactPointBindingRepositoryDep,
@@ -164,18 +135,12 @@ class ContactPointsPostgresTests(unittest.IsolatedAsyncioTestCase):
         @self.app.get("/di-probe")
         async def probe(
             uow: UoWDep,
-            contacts: ContactRepositoryDep,
-            companies: CompanyRepositoryDep,
             points: ContactPointRepositoryDep,
             bindings: ContactPointBindingRepositoryDep,
             labels: ContactPointLabelRepositoryDep,
         ):
             return {
                 "same_session": all(
-                    repository.session is uow.session
-                    for repository in (contacts, companies)
-                )
-                and all(
                     repository._session is uow.session
                     for repository in (points, bindings, labels)
                 )
@@ -192,63 +157,11 @@ class ContactPointsPostgresTests(unittest.IsolatedAsyncioTestCase):
             await original(uow)
 
         with patch.object(UnitOfWork, "commit", track_commit):
-            await self.create(
-                phones=[self.phone()], emails=[{"value": "test@example.com"}]
+            response = await self.request(
+                "POST", "contact-points/labels", json={"type": "phone", "name": "New"}
             )
+            self.assertEqual(response.status_code, 201, response.text)
         self.assertEqual(len(commits), 1)
-
-    async def test_page_batches_bindings_and_noop_preserves_audit(self):
-        contact = await self.create(phones=[self.phone()])
-        await self.create(phones=[self.phone("0672222222")])
-        calls = []
-        original = SqlAlchemyContactPointBindingRepository.list_for_targets
-
-        async def read(repository, tenant_id, targets):
-            calls.append(targets)
-            return await original(repository, tenant_id, targets)
-
-        with patch.object(
-            SqlAlchemyContactPointBindingRepository, "list_for_targets", read
-        ):
-            response = await self.request("GET", "crm/contacts")
-        self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(len(calls), 1)
-        self.assertEqual(len(calls[0]), 2)
-        async with self.sessions() as session:
-            before = (
-                (
-                    await session.execute(
-                        select(ContactPointBindingModel.__table__).execution_options(
-                            schema_translate_map={"tenant": self.schemas[0]}
-                        )
-                    )
-                )
-                .mappings()
-                .all()
-            )
-        row = contact["phones"][0]
-        response = await self.request(
-            "PUT",
-            f"crm/contacts/{contact['id']}",
-            json={
-                "first_name": "Test",
-                "phones": [self.phone(binding_id=row["binding_id"])],
-            },
-        )
-        self.assertEqual(response.status_code, 200, response.text)
-        async with self.sessions() as session:
-            after = (
-                (
-                    await session.execute(
-                        select(ContactPointBindingModel.__table__).execution_options(
-                            schema_translate_map={"tenant": self.schemas[0]}
-                        )
-                    )
-                )
-                .mappings()
-                .all()
-            )
-        self.assertEqual(before, after)
 
     async def test_same_ids_in_two_tenants_through_one_session_and_repositories(self):
         from datetime import UTC, datetime, timedelta
@@ -382,183 +295,10 @@ class ContactPointsPostgresTests(unittest.IsolatedAsyncioTestCase):
                 len(await bindings.list_for_targets(self.other, (target,))), 1
             )
 
-    async def test_shared_phone_rebind_and_delete_preserve_other_owner_and_orphans(
-        self,
-    ):
-        contact = await self.create(phones=[self.phone()])
-        company = await self.create(company=True, phones=[self.phone("+380501234567")])
-        self.assertEqual(
-            contact["phones"][0]["contact_point_id"],
-            company["phones"][0]["contact_point_id"],
-        )
-        self.assertEqual(await self.count(ContactPointModel), 1)
-        old_binding = contact["phones"][0]["binding_id"]
-        response = await self.request(
-            "PUT",
-            f"crm/contacts/{contact['id']}",
-            json={
-                "first_name": "Changed",
-                "phones": [self.phone("0672222222", binding_id=old_binding)],
-            },
-        )
-        self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(response.json()["phones"][0]["binding_id"], old_binding)
-        self.assertNotEqual(
-            response.json()["phones"][0]["contact_point_id"],
-            company["phones"][0]["contact_point_id"],
-        )
-        current_company = await self.request("GET", f"crm/companies/{company['id']}")
-        self.assertEqual(current_company.json()["phones"], company["phones"])
-        self.assertEqual(
-            (await self.request("DELETE", f"crm/contacts/{contact['id']}")).status_code,
-            204,
-        )
-        self.assertEqual(await self.count(ContactPointModel), 2)
-        self.assertEqual(await self.count(ContactPointBindingModel), 1)
-        self.assertEqual(
-            (
-                await self.request("DELETE", f"crm/companies/{company['id']}")
-            ).status_code,
-            204,
-        )
-        self.assertEqual(await self.count(ContactPointBindingModel), 0)
-        self.assertEqual(await self.count(ContactPointModel), 2)
-
-    async def test_omitted_empty_noop_and_swap(self):
-        contact = await self.create(
-            phones=[self.phone(), self.phone("0672222222")],
-            emails=[{"value": "Denis@Example.COM"}],
-        )
-        self.assertEqual(contact["emails"][0]["value"], "Denis@example.com")
-        response = await self.request(
-            "PUT", f"crm/contacts/{contact['id']}", json={"first_name": "Renamed"}
-        )
-        self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(response.json()["phones"], contact["phones"])
-        rows = contact["phones"]
-        response = await self.request(
-            "PUT",
-            f"crm/contacts/{contact['id']}",
-            json={
-                "first_name": "Renamed",
-                "phones": [
-                    self.phone(rows[1]["value"], binding_id=rows[0]["binding_id"]),
-                    self.phone(rows[0]["value"], binding_id=rows[1]["binding_id"]),
-                ],
-                "emails": [],
-            },
-        )
-        self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(response.json()["emails"], [])
-        self.assertEqual(
-            response.json()["phones"][0]["binding_id"], rows[0]["binding_id"]
-        )
-        self.assertEqual(response.json()["phones"][0]["value"], rows[1]["value"])
-
-    async def test_invalid_row_duplicate_and_foreign_binding_roll_back_crm(self):
-        response = await self.request(
-            "POST",
-            "crm/contacts",
-            json={
-                "first_name": "Never saved",
-                "phones": [self.phone()],
-                "emails": [{"value": "not-an-email"}],
-            },
-        )
-        self.assertEqual(response.status_code, 422, response.text)
-        self.assertEqual(
-            response.json()["detail"][0]["loc"], ["body", "emails", 0, "value"]
-        )
-        self.assertEqual(await self.count(ContactModel), 0)
-        self.assertEqual(await self.count(ContactPointModel), 0)
-        contact = await self.create(phones=[self.phone()])
-        response = await self.request(
-            "PUT",
-            f"crm/contacts/{contact['id']}",
-            json={
-                "first_name": "Must rollback",
-                "phones": [self.phone(), self.phone("+380501234567")],
-            },
-        )
-        self.assertEqual(response.status_code, 422, response.text)
-        self.assertEqual(
-            (await self.request("GET", f"crm/contacts/{contact['id']}")).json()[
-                "first_name"
-            ],
-            "Test",
-        )
-        response = await self.request(
-            "POST",
-            "crm/companies",
-            json={
-                "name": "Never saved",
-                "phones": [self.phone(binding_id=contact["phones"][0]["binding_id"])],
-            },
-        )
-        self.assertEqual(response.status_code, 422, response.text)
-
-    async def test_failure_after_binding_write_rolls_back_all_tables(self):
-        original = SqlAlchemyContactPointBindingRepository.replace_for_target
-
-        async def fail_after_write(repository, *args):
-            await original(repository, *args)
-            raise RuntimeError("injected persistence failure")
-
-        with patch.object(
-            SqlAlchemyContactPointBindingRepository,
-            "replace_for_target",
-            fail_after_write,
-        ):
-            with self.assertRaisesRegex(RuntimeError, "injected"):
-                await self.request(
-                    "POST",
-                    "crm/contacts",
-                    json={"first_name": "Never saved", "phones": [self.phone()]},
-                )
-        self.assertEqual(await self.count(ContactModel), 0)
-        self.assertEqual(await self.count(ContactPointModel), 0)
-        self.assertEqual(await self.count(ContactPointBindingModel), 0)
-
-    async def test_tenant_isolation_even_with_identical_record_ids(self):
-        contact = await self.create(phones=[self.phone()])
-        self.context = replace(
-            self.context,
-            principal=replace(self.context.principal, tenant_id=str(self.other)),
-        )
-        self.assertEqual(
-            (await self.request("GET", f"crm/contacts/{contact['id']}")).status_code,
-            404,
-        )
-        other_contact = await self.create(phones=[self.phone()])
-        self.assertNotEqual(
-            contact["phones"][0]["contact_point_id"],
-            other_contact["phones"][0]["contact_point_id"],
-        )
-        # Same owner UUID in a different schema must still address only that schema.
-        async with self.engine.begin() as connection:
-            from uuid import UUID
-
-            await connection.execute(
-                ContactModel.__table__.insert()
-                .values(
-                    id=UUID(contact["id"]),
-                    first_name="Other tenant",
-                    created_by=self.actor,
-                    updated_by=self.actor,
-                )
-                .execution_options(schema_translate_map={"tenant": self.schemas[1]})
-            )
-        response = await self.request("GET", f"crm/contacts/{contact['id']}")
-        self.assertEqual(response.json()["first_name"], "Other tenant")
-        self.assertEqual(response.json()["phones"], [])
-        self.assertEqual(await self.count(ContactPointModel, self.tenant), 1)
-        self.assertEqual(await self.count(ContactPointModel, self.other), 1)
-
     async def test_label_admin_archive_type_and_csrf(self):
         labels = (await self.request("GET", "contact-points/labels")).json()
         self.assertEqual(len(labels), 6)
         label = next(row for row in labels if row["type"] == "phone")
-        email_label = next(row for row in labels if row["type"] == "email")
         self.context = replace(
             self.context, principal=replace(self.context.principal, roles=("member",))
         )
@@ -574,35 +314,13 @@ class ContactPointsPostgresTests(unittest.IsolatedAsyncioTestCase):
             json={"type": "phone", "name": "No CSRF"},
         )
         self.assertEqual(response.status_code, 403)
-        contact = await self.create(phones=[self.phone(label_id=label["id"])])
         response = await self.request(
             "PATCH",
             f"contact-points/labels/{label['id']}",
             json={"name": "Archived", "is_active": False},
         )
         self.assertEqual(response.status_code, 200, response.text)
-        row = contact["phones"][0]
-        response = await self.request(
-            "PUT",
-            f"crm/contacts/{contact['id']}",
-            json={
-                "first_name": "Test",
-                "phones": [
-                    self.phone(binding_id=row["binding_id"], label_id=label["id"])
-                ],
-            },
-        )
-        self.assertEqual(response.status_code, 200, response.text)
-        for label_id in (label["id"], email_label["id"]):
-            response = await self.request(
-                "POST",
-                "crm/contacts",
-                json={
-                    "first_name": "Never saved",
-                    "phones": [self.phone(label_id=label_id)],
-                },
-            )
-            self.assertEqual(response.status_code, 422, response.text)
+        self.assertFalse(response.json()["is_active"])
         response = await self.request(
             "POST",
             "contact-points/labels",
@@ -611,77 +329,35 @@ class ContactPointsPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 201, response.text)
         self.assertEqual(response.json()["name"], "Support")
 
-    async def test_concurrent_resolve_and_owner_updates(self):
-        contacts = await asyncio.gather(
-            *(self.create(phones=[self.phone()]) for _ in range(4))
-        )
-        self.assertEqual(await self.count(ContactPointModel), 1)
-        self.assertEqual(await self.count(ContactPointBindingModel), 4)
-        contact = contacts[0]
-        updates = await asyncio.gather(
-            *(
-                self.request(
-                    "PUT",
-                    f"crm/contacts/{contact['id']}",
-                    json={"first_name": "Test", "phones": [self.phone(value)]},
-                )
-                for value in ("0672222222", "0501234567")
-            )
-        )
-        self.assertTrue(
-            all(response.status_code == 200 for response in updates),
-            [r.text for r in updates],
-        )
-        self.assertEqual(await self.count(ContactPointBindingModel), 4)
-        # Race a replacement against delete; replacement either wins first or sees a missing owner.
-        update, deleted = await asyncio.gather(
-            self.request(
-                "PUT",
-                f"crm/contacts/{contact['id']}",
-                json={"first_name": "Test", "phones": [self.phone()]},
-            ),
-            self.request("DELETE", f"crm/contacts/{contact['id']}"),
-        )
-        self.assertIn(update.status_code, (200, 404))
-        self.assertEqual(deleted.status_code, 204, deleted.text)
-        self.assertEqual(await self.count(ContactPointBindingModel), 3)
-
-    async def test_reverse_lookup_is_read_only(self):
-        contact = await self.create(phones=[self.phone()])
-        async with UnitOfWork(self.sessions) as uow:
-            points = SqlAlchemyContactPointRepository(uow.session, self.naming)
-            bindings = SqlAlchemyContactPointBindingRepository(uow.session, self.naming)
-            resolver = get_contact_point_resolver(points, get_normalizers(), UtcClock())
-            use_case = get_resolve_contact_point_targets_use_case(
-                resolver, points, bindings
-            )
-            result = await use_case(
-                ResolveContactPointTargetsQuery(
-                    self.tenant, ContactPointType.PHONE, "0501234567", "UA"
-                )
-            )
-            self.assertEqual(str(result[0].record_id), contact["id"])
-            self.assertEqual(result[0].model_key, "crm.contact")
-            self.assertEqual(
-                await use_case(
-                    ResolveContactPointTargetsQuery(
-                        self.tenant, ContactPointType.EMAIL, "missing@example.com"
-                    )
-                ),
-                (),
-            )
-        self.assertEqual(await self.count(ContactPointModel), 1)
-
     async def test_upgrade_existing_crm_and_migration_rollback(self):
-        contact = await self.create()
+        from datetime import UTC, datetime
+
+        contact_id = uuid4()
+        async with self.engine.begin() as connection:
+            await connection.execute(
+                ContactModel.__table__.insert()
+                .values(
+                    id=contact_id,
+                    first_name="Preserved",
+                    created_by=self.actor,
+                    updated_by=self.actor,
+                    created_at=datetime.now(UTC),
+                    updated_at=datetime.now(UTC),
+                )
+                .execution_options(schema_translate_map={"tenant": self.schemas[0]})
+            )
         async with self.engine.begin() as connection:
             await TenantMigrator().downgrade(
                 connection, self.schemas[0], "0007_crm_contacts_companies"
             )
             await TenantMigrator().upgrade(connection, self.schemas[0])
-        response = await self.request("GET", f"crm/contacts/{contact['id']}")
-        self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(response.json()["phones"], [])
+        async with self.sessions() as session:
+            first_name = await session.scalar(
+                select(ContactModel.first_name)
+                .where(ContactModel.id == contact_id)
+                .execution_options(schema_translate_map={"tenant": self.schemas[0]})
+            )
+        self.assertEqual(first_name, "Preserved")
         self.assertEqual(await self.count(ContactPointLabelModel), 6)
         schema = self.naming.schema_name(EntityIdVO.from_value(uuid4()))
         with self.assertRaisesRegex(RuntimeError, "rollback bootstrap"):

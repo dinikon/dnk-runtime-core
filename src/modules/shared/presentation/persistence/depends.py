@@ -6,12 +6,11 @@ from typing import Annotated
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.modules.shared.application.persistence import UnitOfWorkProtocol
 from src.modules.shared.infrastructure.persistence import UnitOfWork, db_helper
 
 
-async def get_uow(request: Request) -> AsyncGenerator[UnitOfWorkProtocol, None]:
-    """FastAPI dependency, открывающая UnitOfWork на время request."""
+async def get_uow(request: Request) -> AsyncGenerator[UnitOfWork, None]:
+    """Открывает общий UoW и завершает транзакцию до отправки HTTP-ответа."""
 
     session_factory = getattr(request.app.state, "db", db_helper.session_factory)
     connection = getattr(request.state, "tenant_connection", None)
@@ -22,6 +21,6 @@ async def get_uow(request: Request) -> AsyncGenerator[UnitOfWorkProtocol, None]:
         yield uow
 
 
-UoWDep = Annotated[UnitOfWorkProtocol, Depends(get_uow)]
+UoWDep = Annotated[UnitOfWork, Depends(get_uow, scope="function")]
 
 __all__ = ["get_uow", "UoWDep"]

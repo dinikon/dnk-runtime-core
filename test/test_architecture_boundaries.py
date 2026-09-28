@@ -38,9 +38,9 @@ class ArchitectureBoundariesTests(unittest.TestCase):
 
     def test_crm_entry_modules_import_without_order_dependencies(self):
         for name in (
-            "src.modules.crm.application.links.company_contacts",
-            "src.modules.crm.domain.links",
-            "src.modules.crm.infrastructure.persistence.contact_query_repository",
+            "src.modules.crm.infrastructure.persistence.models",
+            "src.modules.crm.links.infrastructure.persistence.models",
+            "src.modules.tenant_persistence",
         ):
             with self.subTest(module=name):
                 result = subprocess.run(
@@ -55,40 +55,6 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                     text=True,
                 )
                 self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_crm_dependencies_point_inward(self):
-        for layer in ("domain", "application"):
-            forbidden = (
-                "sqlalchemy",
-                "fastapi",
-                "pydantic",
-                "src.modules.crm.infrastructure",
-                "src.modules.crm.presentation",
-                "src.modules.shared.infrastructure",
-                "src.modules.shared.presentation",
-            )
-            if layer == "domain":
-                forbidden += (
-                    "src.modules.crm.application",
-                    "src.modules.shared.application",
-                )
-            for path in iter_python_files("src/modules/crm/" + layer):
-                for name in iter_imports(path):
-                    self.assertFalse(
-                        name.startswith(forbidden), f"{path} imports {name}"
-                    )
-                tree = ast.parse(path.read_text())
-                for node in ast.walk(tree):
-                    if isinstance(node, ast.Call) and isinstance(
-                        node.func, ast.Attribute
-                    ):
-                        self.assertNotIn(
-                            node.func.attr, ("commit", "rollback"), str(path)
-                        )
-        for path in iter_python_files("src/modules/crm/infrastructure/persistence"):
-            for node in ast.walk(ast.parse(path.read_text())):
-                if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-                    self.assertNotIn(node.func.attr, ("commit", "rollback"), str(path))
 
     def test_price_lists_dependencies_point_inward(self):
         forbidden = {

@@ -1,5 +1,3 @@
-from modules.shared.infrastructure.persistence.unit_of_work.protocol import (
-    UnitOfWorkProtocol,
-)
+from src.modules.shared.application.persistence.unit_of_work import UnitOfWorkProtocol
 
 __all__ = ["UnitOfWorkProtocol"]

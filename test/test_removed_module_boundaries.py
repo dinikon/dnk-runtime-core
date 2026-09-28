@@ -132,29 +132,49 @@ class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(object_feature_response.status_code, 404)
         self.assertNotIn("object_feature_config", Base.metadata.tables)
 
-    def test_crm_is_static_and_exposes_only_current_crud_surface(self) -> None:
-        self.assertTrue((PROJECT_ROOT / "src/modules/crm").is_dir())
-        self.assertFalse(
-            (
-                PROJECT_ROOT / "src/modules/crm/application/contact/integration_events"
-            ).exists()
+    async def test_crm_api_is_absent_but_sql_models_remain(self) -> None:
+        from src.modules.crm.infrastructure.persistence import (
+            CompanyModel,
+            ContactModel,
         )
-        app = create_app()
-        openapi_paths = set(app.openapi()["paths"])
-        self.assertTrue(
-            {
-                "/api/console/crm/contacts",
-                "/api/console/crm/contacts/{contact_id}",
-                "/api/console/crm/companies",
-                "/api/console/crm/companies/{company_id}",
-            }.issubset(openapi_paths)
+        from src.modules.crm.links.infrastructure.persistence.models import (
+            ContactCompanyModel,
         )
-        self.assertFalse(
-            any(
-                path.startswith("/api/console/crm/contact-points")
-                for path in openapi_paths
+        from src.modules.shared.infrastructure.persistence.tenant_migration_metadata import (
+            migration_metadata,
+        )
+
+        for relative_path in (
+            "application",
+            "domain",
+            "presentation",
+            "links/application",
+            "links/domain",
+            "links/presentation",
+        ):
+            self.assertFalse(
+                (PROJECT_ROOT / "src/modules/crm" / relative_path).exists()
             )
+
+        metadata = migration_metadata()
+        for model in (ContactModel, CompanyModel, ContactCompanyModel):
+            self.assertIn(model.__tablename__, metadata.tables)
+        links = metadata.tables["contact_companies"]
+        self.assertEqual(
+            {fk.column.table.name for fk in links.foreign_keys},
+            {"contacts", "companies"},
         )
+
+        app = create_app()
+        self.assertFalse(
+            any(path.startswith("/api/console/crm") for path in app.openapi()["paths"])
+        )
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+        ) as client:
+            for path in ("contacts", "companies"):
+                response = await client.get(f"/api/console/crm/{path}")
+                self.assertEqual(response.status_code, 404)
 
 
 if __name__ == "__main__":
