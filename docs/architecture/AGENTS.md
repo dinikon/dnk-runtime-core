@@ -4,6 +4,11 @@
 
 Основная единица организации кода — **бизнес-модуль / bounded context**.
 
+Примеры ниже — сокращённый псевдокод: импорты и вспомогательные реализации могут
+быть опущены. Docstring внутри классов и методов объясняют их назначение и
+поведение на русском языке; комментарии поясняют короткие вызовы и антипримеры.
+`...` обозначает пропущенную реализацию, а не готовый production-код.
+
 Например:
 
 ```text
@@ -219,6 +224,7 @@ Domain должен быть максимально обычным Python.
 ```python
 @dataclass(slots=True)
 class Order:
+    """Корень агрегата заказа: управляет позициями, статусом и доменными событиями."""
     id: OrderIdVO
     customer_id: EntityIdVO
     status: OrderStatus
@@ -240,6 +246,7 @@ class Order:
         customer_id: EntityIdVO,
         created_at: datetime,
     ) -> "Order":
+        """Создаёт пустой черновик заказа и накапливает событие его создания."""
         order = cls(
             id=order_id,
             customer_id=customer_id,
@@ -265,6 +272,7 @@ class Order:
         quantity: QuantityVO,
         price: MoneyVO,
     ) -> None:
+        """Добавляет позицию в черновик или увеличивает количество уже выбранного товара."""
         self._ensure_editable()
 
         existing = self._find_item(product_id)
@@ -285,11 +293,13 @@ class Order:
         self,
         product_id: EntityIdVO,
     ) -> None:
+        """Проверяет возможность редактирования; удаление позиции в примере опущено."""
         self._ensure_editable()
 
         ...
 
     def confirm(self) -> None:
+        """Подтверждает непустой черновик и накапливает событие подтверждения."""
         if self.status is not OrderStatus.DRAFT:
             raise OrderAlreadyConfirmedError()
 
@@ -305,6 +315,7 @@ class Order:
         )
 
     def calculate_total(self) -> MoneyVO:
+        """Вычисляет сумму стоимостей всех позиций заказа."""
         return sum(
             item.total
             for item in self.items
@@ -313,11 +324,13 @@ class Order:
     def pull_events(
         self,
     ) -> tuple[DomainEvent, ...]:
+        """Возвращает накопленные события и очищает внутреннюю очередь агрегата."""
         events = tuple(self._events)
         self._events.clear()
         return events
 
     def _ensure_editable(self) -> None:
+        """Запрещает изменение заказа, если он уже вышел из состояния черновика."""
         if self.status is not OrderStatus.DRAFT:
             raise OrderCannotBeModifiedError()
 ```
@@ -332,6 +345,7 @@ class Order:
 Не писать:
 
 ```python
+# Антипример: прямое присваивание обходит проверки и события агрегата.
 order.status = OrderStatus.CONFIRMED
 ```
 
@@ -340,6 +354,7 @@ order.status = OrderStatus.CONFIRMED
 Правильно:
 
 ```python
+# Публичный метод агрегата проверяет инварианты и фиксирует доменное событие.
 order.confirm()
 ```
 
@@ -352,6 +367,7 @@ order.confirm()
 ```python
 @dataclass(slots=True)
 class OrderItem:
+    """Позиция заказа, жизненным циклом которой управляет агрегат Order."""
     id: OrderItemIdVO
     product_id: EntityIdVO
 
@@ -366,6 +382,7 @@ class OrderItem:
         quantity: QuantityVO,
         price: MoneyVO,
     ) -> "OrderItem":
+        """Создаёт позицию с новым идентификатором, количеством и ценой за единицу."""
         return cls(
             id=OrderItemIdVO.generate(),
             product_id=product_id,
@@ -375,12 +392,14 @@ class OrderItem:
 
     @property
     def total(self) -> MoneyVO:
+        """Возвращает стоимость позиции: цену за единицу, умноженную на количество."""
         return self.unit_price * self.quantity.value
 
     def increase(
         self,
         quantity: QuantityVO,
     ) -> None:
+        """Увеличивает количество товара, создавая новое значение QuantityVO."""
         self.quantity = self.quantity + quantity
 ```
 
@@ -389,6 +408,7 @@ class OrderItem:
 Нельзя загружать:
 
 ```python
+# Антипример: внутреннюю позицию нельзя загружать отдельно от её агрегата.
 OrderItemRepository.get(item_id)
 ```
 
@@ -397,6 +417,7 @@ OrderItemRepository.get(item_id)
 Он загружается через:
 
 ```python
+# Заказ загружается вместе с принадлежащими ему позициями.
 OrderRepository.get(order_id)
 ```
 
@@ -414,9 +435,11 @@ Value Object должен описывать значение, а не стро�
     slots=True,
 )
 class QuantityVO:
+    """Неизменяемое положительное количество товара с проверкой при создании."""
     value: int
 
     def __post_init__(self) -> None:
+        """Отклоняет нулевое и отрицательное количество как нарушение бизнес-правила."""
         if self.value <= 0:
             raise InvalidQuantityError()
 
@@ -424,6 +447,7 @@ class QuantityVO:
         self,
         other: "QuantityVO",
     ) -> "QuantityVO":
+        """Возвращает сумму двух количеств, не изменяя исходные объекты."""
         return QuantityVO(
             self.value + other.value
         )
@@ -433,6 +457,7 @@ class QuantityVO:
 
 ```python
 class OrderStatus(StrEnum):
+    """Перечисляет допустимые состояния заказа; переходами управляет агрегат."""
     DRAFT = "draft"
     CONFIRMED = "confirmed"
     CANCELLED = "cancelled"
@@ -449,24 +474,29 @@ Value Objects желательно делать immutable.
 
 ```python
 class OrderError(DomainError):
+    """Базовая ошибка бизнес-операций с заказом."""
     pass
 
 
 class OrderNotFoundError(OrderError):
+    """Сообщает, что запрошенный заказ не найден."""
     pass
 
 
 class EmptyOrderCannotBeConfirmedError(OrderError):
+    """Сообщает о запрете подтверждать заказ без позиций."""
     pass
 
 
 class OrderCannotBeModifiedError(OrderError):
+    """Сообщает о запрете редактировать заказ в текущем состоянии."""
     pass
 ```
 
 Не использовать:
 
 ```python
+# Антипример: эти типы не выражают предметные ошибки публичного Domain API.
 HTTPException
 IntegrityError
 ValueError
@@ -486,6 +516,7 @@ Domain Event описывает факт, который уже произошё
     slots=True,
 )
 class OrderConfirmed(DomainEvent):
+    """Неизменяемый факт подтверждения заказа, ещё не означающий commit в БД."""
     order_id: OrderIdVO
 ```
 
@@ -493,6 +524,7 @@ Aggregate создаёт событие:
 
 ```python
 def confirm(self) -> None:
+    """Меняет статус и накапливает событие; проверки инвариантов здесь опущены."""
     ...
 
     self.status = OrderStatus.CONFIRMED
@@ -524,11 +556,13 @@ Domain Repository работает с Aggregate Root.
 ```python
 class OrderRepositoryProtocol(Protocol):
 
+    """Определяет операции хранения и загрузки агрегата в контексте tenant."""
     async def get(
         self,
         tenant_id: EntityIdVO,
         order_id: OrderIdVO,
     ) -> Order:
+        """Загружает заказ с его позициями или выбрасывает OrderNotFoundError."""
         ...
 
     async def add(
@@ -536,6 +570,7 @@ class OrderRepositoryProtocol(Protocol):
         tenant_id: EntityIdVO,
         order: Order,
     ) -> None:
+        """Добавляет новый агрегат в текущую транзакцию без самостоятельного commit."""
         ...
 
     async def save(
@@ -543,18 +578,21 @@ class OrderRepositoryProtocol(Protocol):
         tenant_id: EntityIdVO,
         order: Order,
     ) -> None:
+        """Сохраняет состояние существующего агрегата в текущей транзакции без commit."""
         ...
 ```
 
 Repository возвращает:
 
 ```python
+# Контракт записи возвращает полноценный доменный агрегат.
 Order
 ```
 
 а не:
 
 ```python
+# Антипример: представления хранения и DTO не заменяют агрегат в Domain Repository.
 OrderModel
 Row
 dict
@@ -581,12 +619,14 @@ Domain Service нужен, если бизнес-операция:
 ```python
 class OrderPricingService:
 
+    """Содержит чистое бизнес-правило расчёта стоимости с учётом скидки."""
     def calculate(
         self,
         *,
         items: tuple[OrderItem, ...],
         discount: DiscountVO | None,
     ) -> MoneyVO:
+        """Суммирует стоимость позиций и применяет скидку, если она задана."""
         subtotal = sum(
             item.total
             for item in items
@@ -615,11 +655,13 @@ Domain Service:
 ```python
 class OrderConfirmationPolicy:
 
+    """Проверяет условия подтверждения по заказу и снимку данных клиента."""
     def ensure_can_confirm(
         self,
         order: Order,
         customer: CustomerSnapshot,
     ) -> None:
+        """Запрещает заказ заблокированному клиенту и подтверждение нулевой суммы."""
         if customer.is_blocked:
             raise CustomerCannotPlaceOrderError()
 
@@ -655,6 +697,7 @@ Application не должен содержать бизнес-инвариант
 Плохо:
 
 ```python
+# Антипример: Application дублирует бизнес-правило и меняет состояние напрямую.
 if order.status == "draft" and len(order.items) > 0:
     order.status = "confirmed"
 ```
@@ -662,6 +705,7 @@ if order.status == "draft" and len(order.items) > 0:
 Правильно:
 
 ```python
+# Application делегирует проверку и переход состояния самому агрегату.
 order.confirm()
 ```
 
@@ -677,6 +721,7 @@ Command описывает намерение изменить систему.
     slots=True,
 )
 class ConfirmOrderCommand:
+    """Передаёт намерение подтвердить заказ с контекстом tenant и инициатора."""
     tenant_id: EntityIdVO
     order_id: OrderIdVO
     actor_id: EntityIdVO
@@ -693,12 +738,14 @@ Command не содержит SQLAlchemy model или HTTP Request.
 ```python
 class ConfirmOrderHandler:
 
+    """Координирует подтверждение и запись Outbox в уже открытой транзакции."""
     def __init__(
         self,
         *,
         repository: OrderRepositoryProtocol,
         outbox: OutboxRepositoryProtocol,
     ) -> None:
+        """Принимает порты заказа и Outbox, собранные на одной сессии внешнего UoW."""
         self._repository = repository
         self._outbox = outbox
 
@@ -707,6 +754,7 @@ class ConfirmOrderHandler:
         command: ConfirmOrderCommand,
     ) -> None:
 
+        """Подтверждает заказ, сохраняет его и сообщения Outbox; commit выполняется снаружи."""
         order = await self._repository.get(
             tenant_id=command.tenant_id,
             order_id=command.order_id,
@@ -759,6 +807,7 @@ Application Service используется, когда use case сложнее
 ```python
 class OrderApplicationService:
 
+    """Координирует порты и агрегат, оставляя бизнес-решения в Domain."""
     def __init__(
         self,
         *,
@@ -766,6 +815,7 @@ class OrderApplicationService:
         inventory: InventoryGatewayProtocol,
         payment: PaymentGatewayProtocol,
     ) -> None:
+        """Принимает порты хранения, склада и оплаты; порт оплаты в этом сценарии не вызван."""
         self._orders = order_repository
         self._inventory = inventory
         self._payment = payment
@@ -777,6 +827,7 @@ class OrderApplicationService:
         order_id: OrderIdVO,
     ) -> Order:
 
+        """Проверяет наличие товаров через порт, вызывает Domain и сохраняет заказ без commit."""
         order = await self._orders.get(
             tenant_id,
             order_id,
@@ -847,6 +898,7 @@ Read-side может напрямую читать projection.
     slots=True,
 )
 class OrderListItemDTO:
+    """Передаёт готовые данные строки списка заказов без поведения Domain."""
     id: UUID
     number: str
     customer_name: str
@@ -883,12 +935,14 @@ class OrderQueryRepositoryProtocol(
     Protocol
 ):
 
+    """Определяет чтение проекций для Application без восстановления агрегата."""
     async def get_details(
         self,
         *,
         tenant_id: EntityIdVO,
         order_id: OrderIdVO,
     ) -> OrderDetailsDTO | None:
+        """Возвращает детали заказа в контексте tenant или None, если заказа нет."""
         ...
 
     async def list(
@@ -898,6 +952,7 @@ class OrderQueryRepositoryProtocol(
         filters: OrderListFilters,
         pagination: Pagination,
     ) -> Page[OrderListItemDTO]:
+        """Возвращает страницу проекций с учётом tenant, фильтров и параметров пагинации."""
         ...
 ```
 
@@ -925,11 +980,13 @@ Infrastructure может выполнять оптимизированный SQ
 ```python
 class SqlAlchemyOrderQueryRepository:
 
+    """Читает SQL-проекции заказов и преобразует результат в DTO."""
     def __init__(
         self,
         session: AsyncSession,
         naming: TenantSchemaNaming,
     ) -> None:
+        """Принимает внешнюю сессию и правила выбора схемы tenant."""
         self._session = session
         self._naming = naming
 
@@ -940,6 +997,7 @@ class SqlAlchemyOrderQueryRepository:
         order_id: OrderIdVO,
     ) -> OrderDetailsDTO | None:
 
+        """Соединяет таблицы, агрегирует позиции и возвращает DTO либо None."""
         orders = OrderModel.__table__
         customers = CustomerModel.__table__
         items = OrderItemModel.__table__
@@ -1031,12 +1089,14 @@ read replicas
 
 ```python
 class OrderQueryMapper:
+    """Преобразует строки SQL-проекции в DTO без запросов к базе данных."""
 
     @staticmethod
     def to_details(
         row: Mapping[str, Any],
     ) -> OrderDetailsDTO:
 
+        """Собирает детали заказа из именованных полей результата SQL."""
         return OrderDetailsDTO(
             id=row["id"],
             number=row["number"],
@@ -1058,6 +1118,7 @@ class OrderQueryMapper:
 Называть:
 
 ```python
+# Имена отражают создание проекции для чтения, а не доменного объекта.
 to_projection()
 to_details()
 to_list_item()
@@ -1066,6 +1127,7 @@ to_list_item()
 Не называть:
 
 ```python
+# Антипример: это имя вводит в заблуждение, если метод возвращает DTO.
 to_domain()
 ```
 
@@ -1081,6 +1143,7 @@ to_domain()
     slots=True,
 )
 class GetOrderQuery:
+    """Передаёт параметры чтения деталей конкретного заказа в контексте tenant."""
     tenant_id: EntityIdVO
     order_id: OrderIdVO
 ```
@@ -1090,10 +1153,12 @@ Handler:
 ```python
 class GetOrderHandler:
 
+    """Выполняет сценарий чтения через порт проекций Application."""
     def __init__(
         self,
         repository: OrderQueryRepositoryProtocol,
     ) -> None:
+        """Принимает порт чтения готовых DTO заказов."""
         self._repository = repository
 
     async def execute(
@@ -1101,6 +1166,7 @@ class GetOrderHandler:
         query: GetOrderQuery,
     ) -> OrderDetailsDTO:
 
+        """Возвращает детали заказа или преобразует отсутствие результата в ошибку."""
         result = (
             await self._repository.get_details(
                 tenant_id=query.tenant_id,
@@ -1127,6 +1193,7 @@ class OrderModel(
     AudienceMixin,
     TenantBase,
 ):
+    """Описывает хранение полей заказа в SQLAlchemy, не реализуя бизнес-поведение."""
     __tablename__ = "orders"
 
     id: Mapped[UUID] = mapped_column(
@@ -1158,6 +1225,7 @@ class OrderModel(
 Нельзя передавать:
 
 ```python
+# Антипример: ORM-модель не должна выходить за пределы Infrastructure.
 OrderModel
 ```
 
@@ -1171,6 +1239,7 @@ Mapper является единственной точкой преобразо
 
 ```python
 class OrderMapper:
+    """Преобразует представление хранения в Domain и обратно без выполнения I/O."""
 
     @staticmethod
     def to_domain(
@@ -1180,6 +1249,7 @@ class OrderMapper:
         ],
     ) -> Order:
 
+        """Восстанавливает сохранённый агрегат с позициями, не создавая событие OrderCreated."""
         return Order(
             id=OrderIdVO.from_value(
                 order_row["id"]
@@ -1207,6 +1277,7 @@ class OrderMapper:
         order: Order,
     ) -> dict[str, Any]:
 
+        """Извлекает поля заказа в словарь для вставки; сам INSERT не выполняет."""
         return {
             "id": order.id.uuid,
             "customer_id":
@@ -1237,11 +1308,13 @@ Mapper:
 ```python
 class SqlAlchemyOrderRepository:
 
+    """Загружает агрегат из таблиц, скрывая SQL и ORM от внутренних слоёв."""
     def __init__(
         self,
         session: AsyncSession,
         naming: TenantSchemaNaming,
     ) -> None:
+        """Принимает сессию внешнего UoW и правила выбора схемы tenant."""
         self._session = session
         self._naming = naming
 
@@ -1251,6 +1324,7 @@ class SqlAlchemyOrderRepository:
         order_id: OrderIdVO,
     ) -> Order:
 
+        """Читает заказ и его позиции в контексте tenant, затем восстанавливает агрегат."""
         orders = OrderModel.__table__
         items = OrderItemModel.__table__
 
@@ -1323,6 +1397,7 @@ async def save(
     order: Order,
 ) -> None:
 
+    """Обновляет заказ и заменяет его позиции в общей транзакции, не выполняя commit."""
     orders = OrderModel.__table__
     items = OrderItemModel.__table__
 
@@ -1377,6 +1452,7 @@ Domain не знает, каким способом Aggregate сохраняет
 Repository не делает:
 
 ```python
+# Управление транзакцией принадлежит UoW; Repository эти операции не вызывает.
 commit()
 rollback()
 ```
@@ -1402,10 +1478,13 @@ from typing import Protocol
 
 
 class UnitOfWorkProtocol(Protocol):
+    """Даёт Application управление уже открытой транзакцией без доступа к сессии."""
     async def commit(self) -> None:
+        """Фиксирует текущие изменения; при сбое передаёт исключение вызывающему коду."""
         ...
 
     async def rollback(self) -> None:
+        """Отменяет незавершённые изменения, не затрагивая ранее выполненные commit."""
         ...
 ```
 
@@ -1420,6 +1499,7 @@ class UnitOfWorkProtocol(Protocol):
 
 ```python
 async def get_uow(request: Request) -> AsyncGenerator[UnitOfWork, None]:
+    """Открывает UoW на время процесса и завершает транзакцию при выходе из контекста."""
     async with UnitOfWork(request.app.state.db) as uow:
         yield uow
 
@@ -1431,11 +1511,13 @@ def get_order_repository(
     uow: UoWDep,
     naming: TenantNamingDep,
 ) -> OrderRepositoryProtocol:
+    """Создаёт репозиторий заказов на сессии общего UoW."""
     assert uow.session is not None
     return SqlAlchemyOrderRepository(uow.session, naming)
 
 
 def get_outbox_repository(uow: UoWDep) -> OutboxRepositoryProtocol:
+    """Подключает Outbox к той же сессии для атомарной записи с заказом."""
     assert uow.session is not None
     return SqlAlchemyOutboxRepository(uow.session)
 
@@ -1452,6 +1534,7 @@ def get_confirm_order_handler(
     repository: OrderRepositoryDep,
     outbox: OutboxRepositoryDep,
 ) -> ConfirmOrderHandler:
+    """Собирает обработчик из портов, не передавая ему инфраструктурную сессию."""
     return ConfirmOrderHandler(repository=repository, outbox=outbox)
 ```
 
@@ -1510,10 +1593,12 @@ class PaymentGatewayProtocol(
     Protocol
 ):
 
+    """Определяет независимый от платёжного провайдера контракт авторизации."""
     async def authorize(
         self,
         payment: PaymentRequest,
     ) -> PaymentAuthorization:
+        """Запрашивает авторизацию платежа и возвращает результат в терминах Application."""
         ...
 ```
 
@@ -1523,11 +1608,13 @@ Infrastructure:
 class StripePaymentGateway(
     PaymentGatewayProtocol
 ):
+    """Адаптирует платёжный API Stripe к контракту Application."""
 
     async def authorize(
         self,
         payment: PaymentRequest,
     ) -> PaymentAuthorization:
+        """Вызывает API провайдера; вызов и преобразование ответа в примере опущены."""
 
         response = await self._client...
         ...
@@ -1536,12 +1623,14 @@ class StripePaymentGateway(
 Application зависит от:
 
 ```python
+# Application обращается к абстрактному порту платёжного провайдера.
 PaymentGatewayProtocol
 ```
 
 а не от:
 
 ```python
+# Антипример: конкретный адаптер не должен становиться зависимостью Application.
 StripePaymentGateway
 ```
 
@@ -1561,6 +1650,7 @@ async def confirm_order(
     handler: ConfirmOrderHandler,
 ) -> OrderResponse:
 
+    """Преобразует HTTP-контекст в команду, вызывает обработчик и формирует ответ."""
     command = ConfirmOrderCommand(
         tenant_id=request.tenant_id,
         order_id=OrderIdVO(
@@ -1685,24 +1775,28 @@ Order Aggregate
 Write Repository:
 
 ```python
+# Контракт записи отвечает за загрузку и сохранение агрегатов.
 OrderRepositoryProtocol
 ```
 
 работает с:
 
 ```python
+# Агрегат хранит состояние и защищает бизнес-инварианты при изменениях.
 Order
 ```
 
 Query Repository:
 
 ```python
+# Контракт чтения возвращает проекции под задачи потребителя.
 OrderQueryRepositoryProtocol
 ```
 
 работает с:
 
 ```python
+# Детали, строки списка и страницы представляют разные результаты чтения.
 OrderDetailsDTO
 OrderListItemDTO
 Page[OrderListItemDTO]
@@ -1713,6 +1807,7 @@ Page[OrderListItemDTO]
 Не делать универсальный repository вида:
 
 ```python
+# Антипример: один универсальный репозиторий смешивает запись, чтение и аналитику.
 OrderRepository:
     get()
     save()
@@ -1745,6 +1840,7 @@ OrderStatisticsQueryRepository
 Если правило относится к состоянию одного Aggregate:
 
 ```python
+# Поведение, изменяющее один агрегат, размещается в его доменных методах.
 order.confirm()
 order.cancel()
 order.add_item()
@@ -1755,6 +1851,7 @@ order.add_item()
 Если правило относится к нескольким Domain Objects и является чистым бизнес-правилом:
 
 ```python
+# Чистые правила для нескольких доменных объектов размещаются в сервисе или политике.
 OrderPricingService
 OrderEligibilityPolicy
 ```
@@ -1894,6 +1991,7 @@ orders_router
 Не использовать один универсальный:
 
 ```python
+# Антипример: универсальный DTO скрывает назначение данных и потребителя.
 OrderDTO
 ```
 
@@ -1902,6 +2000,7 @@ OrderDTO
 Предпочитать use-case-specific DTO:
 
 ```python
+# Каждый DTO именуется по конкретному сценарию или форме чтения.
 OrderDetailsDTO
 OrderListItemDTO
 CreateOrderResultDTO
@@ -1918,12 +2017,14 @@ Read model создаётся под потребность consumer.
 Для восстановления Domain:
 
 ```python
+# Восстановление доменного агрегата обозначается явно.
 OrderMapper.to_domain()
 ```
 
 Для записи:
 
 ```python
+# Для записи mapper подготавливает значения, но сам не выполняет SQL.
 OrderMapper.to_insert_values()
 OrderMapper.to_update_values()
 ```
@@ -1931,6 +2032,7 @@ OrderMapper.to_update_values()
 Для Query projections:
 
 ```python
+# Mapper чтения создаёт детали, строку списка или другую проекцию.
 OrderQueryMapper.to_details()
 OrderQueryMapper.to_list_item()
 OrderQueryMapper.to_projection()
@@ -1939,6 +2041,7 @@ OrderQueryMapper.to_projection()
 Не называть Query projection:
 
 ```python
+# Антипример: имя восстановления Domain не подходит для создания Query DTO.
 to_domain()
 ```
 
@@ -1974,12 +2077,14 @@ Payment
 может ссылаться:
 
 ```python
+# Другой агрегат хранит идентификатор заказа как ссылку на его границу.
 order_id: OrderIdVO
 ```
 
 но не должен содержать прямой Python reference:
 
 ```python
+# Антипример: прямая ссылка на объект связывает жизненные циклы разных агрегатов.
 payment.order: Order
 ```
 
@@ -2003,18 +2108,21 @@ Orders не должен импортировать internal Entity другог
 Плохо:
 
 ```python
+# Антипример: импорт внутреннего агрегата склада нарушает границу бизнес-модулей.
 from modules.inventory.domain.stock.aggregate import Stock
 ```
 
 Предпочтительно:
 
 ```python
+# Порт изолирует Orders от внутренней реализации складского модуля.
 InventoryGatewayProtocol
 ```
 
 или application contract:
 
 ```python
+# Контракт передаёт только согласованные данные о доступности товаров.
 InventoryAvailability
 ```
 
@@ -2042,6 +2150,7 @@ Bounded Context должен сохранять автономность.
     slots=True,
 )
 class CustomerOrderSnapshot:
+    """Хранит неизменяемый снимок данных клиента, нужных для бизнес-решения Order."""
     customer_id: EntityIdVO
     is_blocked: bool
     customer_type: CustomerType
@@ -2050,6 +2159,7 @@ class CustomerOrderSnapshot:
 А не передавать:
 
 ```python
+# Антипример: чужой агрегат не передаётся в Domain вместо специализированного снимка.
 CustomerAggregate
 ```
 
@@ -2076,6 +2186,7 @@ domain behavior > anemic entities
 Плохо:
 
 ```python
+# Антипример: техническое обновление поля скрывает бизнес-намерение подтверждения.
 order.update(
     status="confirmed"
 )
@@ -2084,12 +2195,14 @@ order.update(
 Хорошо:
 
 ```python
+# Название доменного метода явно выражает бизнес-намерение.
 order.confirm()
 ```
 
 Плохо:
 
 ```python
+# Антипример: обновление отдельного поля в Repository обходит поведение агрегата.
 repository.update_field(
     "status",
     "confirmed",
@@ -2099,6 +2212,7 @@ repository.update_field(
 Хорошо:
 
 ```python
+# Сначала агрегат проверяет правила, затем Repository сохраняет его состояние без commit.
 order.confirm()
 
 await repository.save(
@@ -2198,6 +2312,234 @@ Write path защищает бизнес-инварианты.
 Read path оптимизирован под получение данных.
 
 Их не нужно искусственно заставлять использовать одинаковую модель.
+
+---
+
+# 42. Стандарты и примеры логирования
+
+Логи описывают выполнение сценариев и технические сбои. Они не заменяют Domain
+Events, Outbox, метрики или отдельный аудит бизнес-действий.
+
+## 42.1. Ответственность слоёв
+
+| Слой | Что логировать |
+| --- | --- |
+| Domain | Ничего: Aggregate, Entity, Value Object, Domain Service и Policy не используют logger. Они возвращают результат, создают события или выбрасывают доменные ошибки. |
+| Application | Значимые этапы сценария без SQL, HTTP payload и деталей конкретного провайдера. Завершение handler ещё не означает commit внешнего UoW. |
+| Infrastructure | Диагностику адаптеров, длительность внешних операций и технические события хранения и доставки. |
+| Presentation | Итог запроса, безопасный контекст корреляции и преобразование ошибки в транспортный ответ. |
+| Bootstrap / Worker | Запуск, остановку, итог обработки задания, повторные попытки и окончательные сбои. |
+
+Логирование не меняет направление зависимостей. Для новых примеров используется
+стандартный `logging`: `logging.getLogger(__name__)` создаётся на уровне модуля.
+Application не импортирует инфраструктурный адаптер логирования. Настройка
+уровней, handlers, formatter и фильтров выполняется один раз в bootstrap.
+Не вызывать `basicConfig()` внутри handler, repository или при импорте модуля.
+
+## 42.2. Уровни и события
+
+| Уровень | Назначение | Пример события |
+| --- | --- | --- |
+| `DEBUG` | Подробности диагностики, отключённые в обычном production-режиме. | `orders.confirm.started` |
+| `INFO` | Значимый успешный результат или ожидаемый бизнес-отказ. | `orders.confirm.committed`, `orders.confirm.rejected` |
+| `WARNING` | Временный сбой, деградация или запланированная повторная попытка. | `outbox.publish.retry_scheduled` |
+| `ERROR` | Операция завершилась технической ошибкой или исчерпала попытки. | `orders.confirm.failed`, `outbox.publish.exhausted` |
+| `CRITICAL` | Процесс не может продолжать работу, например из-за сбоя обязательной инициализации. | `worker.startup.failed` |
+
+Ожидаемая ошибка валидации или бизнес-правила не является `ERROR` автоматически.
+Не логировать каждый пустой poll worker на `INFO`: использовать `DEBUG`,
+периодический агрегированный итог или метрику. Успешные массовые операции также
+агрегировать, если запись на каждый элемент создаёт лишний шум.
+
+Имя `event` стабильно и имеет вид `<module>.<operation>.<outcome>`.
+Динамические значения передаются отдельными полями, а не включаются в имя события.
+Сообщение коротко описывает факт; docstring и пояснения в примерах пишутся по-русски.
+
+## 42.3. Формат и контекст
+
+В production использовать структурированный JSON, одна запись на строку.
+Для локальной разработки допустим читаемый текст с теми же полями контекста.
+Formatter добавляет `timestamp` в UTC, `level`, `logger`, `message`, имя сервиса
+и окружение. Вызов logger передаёт `event` и только относящиеся к операции поля:
+
+| Поле | Смысл |
+| --- | --- |
+| `request_id` | Идентификатор запроса, проверенный или сгенерированный на входе. |
+| `trace_id`, `correlation_id` | Связь операций и сообщений, если поддерживается tracing или корреляция. |
+| `tenant_id`, `order_id` | Внутренние идентификаторы контекста и объекта операции. |
+| `message_id`, `job_id` | Идентификатор сообщения или фонового задания. |
+| `duration_ms` | Длительность этапа, измеренная монотонными часами. |
+| `attempt`, `max_attempts`, `retry_in_seconds` | Номер попытки, лимит и задержка повторения. |
+| `error_type`, `reason_code` | Тип исключения и стабильный безопасный код причины. |
+
+UUID и Value Objects явно преобразуются в примитивные значения. Отсутствующие
+поля опускаются. Произвольные DTO, ORM models, Command и Request целиком в лог
+не передаются. Не использовать ключи `message`, `name`, `levelname` и другие
+зарезервированные атрибуты `LogRecord` внутри `extra`.
+
+`extra` добавляет поля в `LogRecord`, но само по себе не включает JSON-вывод:
+bootstrap должен подключить formatter, который сериализует разрешённые поля.
+Request/trace context передаётся явно или через `contextvars` с обязательным
+сбросом в `finally`; mutable global context недопустим из-за смешивания запросов.
+Корреляция фонового сообщения переносится через его envelope, а не через живой
+объект HTTP Request или request-scoped session.
+
+## 42.4. Ошибки, транзакции и безопасные данные
+
+Одно исключение со stack trace записывается один раз на выбранной границе
+обработки: HTTP middleware, worker либо внешняя обёртка сценария. Промежуточные
+слои передают его выше или преобразуют с сохранением причины через `raise ...
+from exc`. Не вызывать `logger.exception()` в каждом слое для одной ошибки.
+Если граница уже записала сбой и пробросила исключение дальше, внешний обработчик
+только преобразует его в ответ или результат задания, без повторного stack trace.
+
+`logger.exception()` использовать внутри `except` для неожиданного сбоя.
+Ожидаемый отказ логировать без stack trace. Отмену async-задачи не подавлять
+и не записывать как обычную ошибку обработки.
+
+Событие `*.committed` записывается только после успешного commit. В стандартном
+сценарии §25 это точка после выхода из внешнего `async with UnitOfWork(...)`.
+Успех `repository.save()` или возврат handler не доказывают сохранение данных.
+Запись сообщения в Outbox также не означает его доставку: publisher фиксирует
+результат доставки отдельно, после подтверждения брокером. Повторные доставки
+сохраняют исходный `message_id`, а номер попытки меняется.
+
+Не писать пароли, токены, cookies, заголовки авторизации, OTP, платёжные реквизиты,
+персональные данные и полные тела запросов, ответов или сообщений. Использовать
+разрешённые внутренние ID и коды причин; внешние строки ограничивать по длине
+и очищать от управляющих символов. Текст исключения и stack trace также могут
+содержать секреты: перед выводом применять централизованную очистку, не включать
+дампы локальных переменных и SQL-параметров. Доступ и срок хранения логов
+настраиваются централизованно.
+
+Для подстановки значений в текст использовать ленивое форматирование
+`logger.info("Order %s committed", order_id)`, а не f-строки. При структурированном
+выводе предпочитать постоянное сообщение с полями в `extra`.
+
+## 42.5. Пример: итог команды после завершения UoW
+
+Псевдокод внешней сборки для CLI или worker. Он использует те же порты и handler,
+что и §13; здесь находится граница записи итогового события. В HTTP-сценарии
+аналогичный лог должен учитывать завершение Depends/UoW, а не только возврат
+контроллера. Импорты проектных типов опущены. Предполагается настроенный formatter
+с очисткой чувствительных данных и отсутствие дублирующего логирования ошибки
+в UoW, репозиториях и вызывающем коде.
+
+```python
+import logging
+from time import perf_counter
+
+
+logger = logging.getLogger(__name__)
+
+
+async def run_confirm_order(
+    command: ConfirmOrderCommand,
+    *,
+    session_factory: async_sessionmaker[AsyncSession],
+    naming: TenantSchemaNaming,
+    request_id: str,
+) -> None:
+    """Собирает сценарий и логирует его итог с учётом результата commit.
+
+    Заказ и Outbox используют общую транзакцию. Бизнес-отказ отличается
+    от технического сбоя; исключения передаются вызывающему коду.
+    """
+    started_at = perf_counter()
+    context = {
+        "request_id": request_id,
+        "tenant_id": str(command.tenant_id.uuid),
+        "order_id": str(command.order_id.uuid),
+    }
+
+    try:
+        async with UnitOfWork(session_factory) as uow:
+            handler = ConfirmOrderHandler(
+                repository=SqlAlchemyOrderRepository(uow.session, naming),
+                outbox=SqlAlchemyOutboxRepository(uow.session),
+            )
+            await handler.execute(command)
+            # Выход из контекста выполняет commit; до него успех не логируется.
+    except OrderError as exc:
+        logger.info(
+            "Order confirmation rejected",
+            extra={
+                **context,
+                "event": "orders.confirm.rejected",
+                "error_type": type(exc).__name__,
+                "duration_ms": round((perf_counter() - started_at) * 1000, 2),
+            },
+        )
+        raise
+    except Exception as exc:
+        # Эта граница единственная записывает stack trace данного сбоя.
+        logger.exception(
+            "Order confirmation failed",
+            extra={
+                **context,
+                "event": "orders.confirm.failed",
+                "error_type": type(exc).__name__,
+                "duration_ms": round((perf_counter() - started_at) * 1000, 2),
+            },
+        )
+        raise
+
+    logger.info(
+        "Order confirmation committed",
+        extra={
+            **context,
+            "event": "orders.confirm.committed",
+            "duration_ms": round((perf_counter() - started_at) * 1000, 2),
+        },
+    )
+```
+
+Пример записи, сформированной production formatter:
+
+```json
+{
+  "timestamp": "2026-09-28T10:15:30.125Z",
+  "level": "INFO",
+  "logger": "orders.bootstrap",
+  "service": "orders-worker",
+  "environment": "production",
+  "message": "Order confirmation committed",
+  "event": "orders.confirm.committed",
+  "request_id": "req-example-01",
+  "tenant_id": "ea57f057-75b2-458e-808f-1b15cfdc915d",
+  "order_id": "5d223a55-ffae-4c0b-b7c9-fb378ab856b3",
+  "duration_ms": 18.42
+}
+```
+
+JSON показан с отступами для чтения; в потоке логов это одна строка.
+
+## 42.6. Пример: повторная доставка Outbox
+
+Этот фрагмент выполняется в publisher после успешного планирования очередной
+попытки существующим механизмом retry. Сам лог не планирует повтор и не меняет
+состояние Outbox. В примере текущая попытка завершилась временным сбоем,
+а её номер ещё меньше `max_attempts`.
+
+```python
+# Пишем безопасные метаданные повторения без payload и текста ответа брокера.
+logger.warning(
+    "Outbox publication retry scheduled",
+    extra={
+        "event": "outbox.publish.retry_scheduled",
+        "message_id": str(message_id),
+        "correlation_id": correlation_id,
+        "attempt": attempt,
+        "max_attempts": max_attempts,
+        "retry_in_seconds": retry_in_seconds,
+        "reason_code": "broker_unavailable",
+    },
+)
+```
+
+При исчерпании попыток worker записывает `outbox.publish.exhausted` на `ERROR`
+вместо `retry_scheduled`. После подтверждения доставки используется отдельное
+событие `outbox.publish.delivered`; его нельзя писать сразу после записи в Outbox.
 
 ---
 
