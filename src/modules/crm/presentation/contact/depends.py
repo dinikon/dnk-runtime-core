@@ -7,6 +7,15 @@ from src.modules.crm.application.contact.command.create_contact.handler import (
     CreateContactHandler,
 )
 from src.modules.crm.domain.contact.repository import ContactRepositoryProtocol
+from src.modules.crm.application.contact.port.query_repository import (
+    ContactQueryRepositoryProtocol,
+)
+from src.modules.crm.application.contact.query.get_contact.handler import (
+    GetContactHandler,
+)
+from src.modules.crm.infrastructure.contact.persistence.query_repository import (
+    SqlAlchemyContactQueryRepository,
+)
 from src.modules.crm.infrastructure.contact.persistence.repository import (
     SqlAlchemyContactRepository,
 )
@@ -39,3 +48,23 @@ def get_create_contact_handler(
 CreateContactHandlerDep = Annotated[
     CreateContactHandler, Depends(get_create_contact_handler)
 ]
+
+
+def get_contact_query_repository(uow: UoWDep) -> ContactQueryRepositoryProtocol:
+    """Подключает чтение контактов к общей сессии HTTP-запроса."""
+    return SqlAlchemyContactQueryRepository(
+        uow.session, TenantSchemaNaming(dnk_config.SCHEMA_PREFIX)
+    )
+
+
+ContactQueryRepositoryDep = Annotated[
+    ContactQueryRepositoryProtocol, Depends(get_contact_query_repository)
+]
+
+
+def get_get_contact_handler(repository: ContactQueryRepositoryDep) -> GetContactHandler:
+    """Собирает обработчик чтения без clock и генератора идентификаторов."""
+    return GetContactHandler(repository)
+
+
+GetContactHandlerDep = Annotated[GetContactHandler, Depends(get_get_contact_handler)]

@@ -1,4 +1,4 @@
-"""Создание Contact на реальных tenant-схемах; только одноразовая тестовая БД."""
+"""Создание и чтение Contact в tenant-схемах одноразовой тестовой БД."""
 
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -18,6 +18,9 @@ from src.modules.crm.domain.contact.aggregate import Contact
 from src.modules.crm.domain.contact.value_object.identifier import ContactIdVO
 from src.modules.crm.infrastructure.contact.persistence.repository import (
     SqlAlchemyContactRepository,
+)
+from src.modules.crm.infrastructure.contact.persistence.query_repository import (
+    SqlAlchemyContactQueryRepository,
 )
 from src.modules.crm.infrastructure.persistence.models.contact import ContactModel
 from src.modules.shared.application.persistence.tenant_schema_naming import (
@@ -213,3 +216,97 @@ class CreateContactPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             {row["first_name"] for row in await self.rows(self.other)}, {"Other"}
         )
+
+    async def test_get_round_trip_preserves_data_and_never_builds_aggregate(self):
+        created = await self.create()
+        self.assertEqual(created.status_code, 201, created.text)
+        before = [dict(row) for row in await self.rows()]
+        with (
+            patch.object(
+                Contact,
+                "create",
+                side_effect=AssertionError("Read must not build aggregate"),
+            ),
+            patch(
+                "src.modules.crm.domain.contact.value_object.name.ContactNameVO.__post_init__",
+                side_effect=AssertionError("Read must not normalize name"),
+            ),
+        ):
+            response = await self.client.get(
+                f"/api/console/crm/contacts/{self.identifier}"
+            )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json(), created.json())
+        self.assertEqual([dict(row) for row in await self.rows()], before)
+
+    async def test_get_legacy_null_surname_preserves_original_name_and_audit(self):
+        async with self.engine.begin() as connection:
+            await connection.execute(
+                ContactModel.__table__.insert()
+                .values(
+                    id=self.identifier,
+                    first_name=" Legacy  Name ",
+                    last_name=None,
+                    middle_name=None,
+                    created_at=self.now,
+                    updated_at=self.now,
+                    created_by=self.actor.uuid,
+                    updated_by=self.actor.uuid,
+                )
+                .execution_options(schema_translate_map={"tenant": self.schemas[0]})
+            )
+        before = [dict(row) for row in await self.rows()]
+        response = await self.client.get(f"/api/console/crm/contacts/{self.identifier}")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["first_name"], " Legacy  Name ")
+        self.assertIsNone(response.json()["last_name"])
+        self.assertIsNone(response.json()["middle_name"])
+        self.assertEqual(
+            response.json()["updated_at"], self.now.isoformat().replace("+00:00", "Z")
+        )
+        self.assertEqual([dict(row) for row in await self.rows()], before)
+
+    async def test_get_does_not_disclose_other_tenant_and_same_ids_are_isolated(self):
+        self.assertEqual((await self.create()).status_code, 201)
+        self.app.state.test_context = replace(
+            self.context,
+            principal=replace(self.context.principal, tenant_id=str(self.other)),
+        )
+        url = f"/api/console/crm/contacts/{self.identifier}"
+        hidden = await self.client.get(url, params={"tenant_id": str(self.tenant)})
+        missing = await self.client.get(f"/api/console/crm/contacts/{uuid4()}")
+        self.assertEqual((hidden.status_code, missing.status_code), (404, 404))
+        self.assertEqual(hidden.json(), missing.json())
+        self.assertEqual((await self.create(first_name="Other")).status_code, 201)
+        self.assertEqual((await self.client.get(url)).json()["first_name"], "Other")
+        self.app.state.test_context = self.context
+        self.assertEqual(
+            (await self.client.get(url)).json()["first_name"], "Анна-Марія"
+        )
+
+    async def test_query_repository_alternates_tenants_on_one_session(self):
+        self.assertEqual((await self.create()).status_code, 201)
+        self.app.state.test_context = replace(
+            self.context,
+            principal=replace(self.context.principal, tenant_id=str(self.other)),
+        )
+        self.assertEqual((await self.create(first_name="Other")).status_code, 201)
+        before = [dict(row) for row in await self.rows()]
+        async with UnitOfWork(self.sessions) as uow:
+            repository = SqlAlchemyContactQueryRepository(uow.session, self.naming)
+            for tenant, name in (
+                (self.tenant, "Анна-Марія"),
+                (self.other, "Other"),
+                (self.tenant, "Анна-Марія"),
+            ):
+                dto = await repository.get_details(
+                    tenant_id=tenant, contact_id=ContactIdVO(self.identifier)
+                )
+                self.assertIsNotNone(dto)
+                self.assertEqual(dto.first_name, name)
+            self.assertIsNone(
+                await repository.get_details(
+                    tenant_id=self.tenant, contact_id=ContactIdVO(uuid4())
+                )
+            )
+        self.assertEqual([dict(row) for row in await self.rows()], before)

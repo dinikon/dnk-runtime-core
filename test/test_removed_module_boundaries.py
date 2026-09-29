@@ -132,7 +132,7 @@ class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(object_feature_response.status_code, 404)
         self.assertNotIn("object_feature_config", Base.metadata.tables)
 
-    async def test_crm_only_exposes_contact_creation_and_retains_sql_models(
+    async def test_crm_exposes_contact_creation_and_details_and_retains_sql_models(
         self,
     ) -> None:
         from src.modules.crm.infrastructure.persistence.models.company import (
@@ -173,16 +173,17 @@ class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
         paths = app.openapi()["paths"]
         self.assertEqual(
             {path for path in paths if path.startswith("/api/console/crm")},
-            {"/api/console/crm/contacts"},
+            {"/api/console/crm/contacts", "/api/console/crm/contacts/{contact_id}"},
         )
         self.assertEqual(set(paths["/api/console/crm/contacts"]), {"post"})
+        self.assertEqual(set(paths["/api/console/crm/contacts/{contact_id}"]), {"get"})
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://testserver"
         ) as client:
             for path, expected in (
                 ("contacts", 405),
                 ("companies", 404),
-                ("contacts/missing", 404),
+                ("contacts/missing/links", 404),
             ):
                 response = await client.get(f"/api/console/crm/{path}")
                 self.assertEqual(response.status_code, expected)

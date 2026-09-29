@@ -43,6 +43,8 @@ class ArchitectureBoundariesTests(unittest.TestCase):
             "src.modules.crm.infrastructure.persistence.models.contact_company",
             "src.modules.crm.domain.contact.aggregate",
             "src.modules.crm.application.contact.command.create_contact.handler",
+            "src.modules.crm.application.contact.query.get_contact.handler",
+            "src.modules.crm.infrastructure.contact.persistence.query_repository",
             "src.modules.crm.presentation.contact.http.router",
             "src.modules.tenant_persistence",
         ):
