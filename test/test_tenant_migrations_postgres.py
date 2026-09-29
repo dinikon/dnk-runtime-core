@@ -263,7 +263,7 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 "ix_contacts_name", {item["name"] for item in contact_indexes}
             )
             self.assertIn(
-                "ix_companies_name", {item["name"] for item in company_indexes}
+                "ix_companies_legal_name", {item["name"] for item in company_indexes}
             )
             await connection.execute(
                 ContactModel.__table__.insert()
@@ -309,7 +309,7 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 CompanyModel.__table__.insert()
                 .values(
                     id=uuid4(),
-                    name="Acme",
+                    legal_name="Acme",
                     created_by=actor_id,
                     updated_by=actor_id,
                 )
@@ -326,6 +326,26 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                             updated_by=actor_id,
                         )
                         .execution_options(schema_translate_map={"tenant": schema})
+                    )
+            await self.migrator.downgrade(
+                connection, schema, "0009_crm_contact_companies"
+            )
+            self.assertEqual(
+                await connection.scalar(text(f'SELECT name FROM "{schema}".companies')),
+                "Acme",
+            )
+            await self.migrator.upgrade(connection, schema)
+            self.assertEqual(
+                await connection.scalar(
+                    text(f'SELECT legal_name FROM "{schema}".companies')
+                ),
+                "Acme",
+            )
+            with self.assertRaises(IntegrityError):
+                async with connection.begin_nested():
+                    await connection.execute(
+                        text(f'UPDATE "{schema}".companies SET legal_name = :name'),
+                        {"name": "   "},
                     )
             await self.migrator.downgrade(
                 connection, schema, "0006_price_list_streaming"

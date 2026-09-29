@@ -14,10 +14,10 @@ class CompanyModel(EntityAuditMixin, AudienceMixin, TenantBase):
     __tablename__ = "companies"
     __table_args__ = (
         sa.CheckConstraint(
-            "char_length(btrim(name)) BETWEEN 1 AND 255",
-            name="ck_companies_name",
+            "char_length(btrim(legal_name)) BETWEEN 1 AND 255",
+            name="ck_companies_legal_name",
         ),
-        sa.Index("ix_companies_name", "name", "id"),
+        sa.Index("ix_companies_legal_name", "legal_name", "id"),
     )
 
-    name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    legal_name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
