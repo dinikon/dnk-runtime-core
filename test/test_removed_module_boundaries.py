@@ -132,7 +132,9 @@ class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(object_feature_response.status_code, 404)
         self.assertNotIn("object_feature_config", Base.metadata.tables)
 
-    async def test_crm_api_is_absent_but_sql_models_remain(self) -> None:
+    async def test_crm_only_exposes_contact_creation_and_retains_sql_models(
+        self,
+    ) -> None:
         from src.modules.crm.infrastructure.persistence.models.company import (
             CompanyModel,
         )
@@ -147,9 +149,9 @@ class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
         )
 
         for relative_path in (
-            "application",
-            "domain",
-            "presentation",
+            "application/company",
+            "domain/company",
+            "presentation/company",
             "links/application",
             "links/domain",
             "links/presentation",
@@ -168,15 +170,22 @@ class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
         )
 
         app = create_app()
-        self.assertFalse(
-            any(path.startswith("/api/console/crm") for path in app.openapi()["paths"])
+        paths = app.openapi()["paths"]
+        self.assertEqual(
+            {path for path in paths if path.startswith("/api/console/crm")},
+            {"/api/console/crm/contacts"},
         )
+        self.assertEqual(set(paths["/api/console/crm/contacts"]), {"post"})
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://testserver"
         ) as client:
-            for path in ("contacts", "companies"):
+            for path, expected in (
+                ("contacts", 405),
+                ("companies", 404),
+                ("contacts/missing", 404),
+            ):
                 response = await client.get(f"/api/console/crm/{path}")
-                self.assertEqual(response.status_code, 404)
+                self.assertEqual(response.status_code, expected)
 
 
 if __name__ == "__main__":

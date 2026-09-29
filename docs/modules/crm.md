@@ -1,24 +1,109 @@
 # CRM
 
-CRM backend is being rebuilt. Only SQLAlchemy models remain:
+CRM — контекст с самостоятельными агрегатами контактов и компаний. На текущем
+этапе реализован агрегат `Contact` и один сценарий создания по ФИО. SQL-модели
+компаний и связей сохранены для дальнейшей реализации.
 
-- `ContactModel` in `src/modules/crm/infrastructure/persistence/models/contact.py`.
-- `CompanyModel` in `src/modules/crm/infrastructure/persistence/models/company.py`.
-- `ContactCompanyModel` in `src/modules/crm/infrastructure/persistence/models/contact_company.py`.
+## Создание контакта
 
-Models are imported directly from their individual files; package initializers do not re-export them.
+Аутентифицированный участник tenant может выполнить `POST /api/console/crm/contacts`.
+Запрос требует обычной session authentication и CSRF-защиты Console: корректных
+`Origin`, `X-CSRF-Token` и привязанных к токену cookies. Роль администратора не требуется.
 
-The `contacts`, `companies` and `contact_companies` tables retain their columns, constraints,
-indexes and foreign keys. All three models remain registered through `src/modules/tenant_persistence.py`
-so Alembic continues to include them in tenant metadata. Existing migrations remain unchanged;
-this backend cleanup requires no new migration and does not modify stored data.
+```json
+{
+  "first_name": "  Анна-Марія ",
+  "last_name": " O'Neill ",
+  "middle_name": null
+}
+```
 
-The domain, application, repositories, adapters and HTTP/DI layers have been removed, including
-those in `crm/links`. `/api/console/crm/*` endpoints are absent from OpenAPI and return `404`.
-The independent `contact_points` module remains available, including its label API and storage.
+Имя и фамилия обязательны. После удаления пробелов по краям каждая часть должна
+содержать 1–255 символов. Отчество необязательно: отсутствие, `null`, пустая строка
+и строка из пробелов означают `null`. Непустое отчество также ограничено 255 символами.
+Внутренние пробелы, регистр, дефисы и апострофы сохраняются. Одинаковые ФИО разрешены.
 
-Console CRM screens remain in place for the rebuild. Their CRM requests will return `404` until
-the backend API is implemented again.
+Неизвестные поля запрещены. Клиент не передаёт ID, tenant, actor, аудит, телефоны,
+email или связи с компаниями. UUIDv7 генерируется сервером; tenant и автор берутся
+из доверенного `RequestContext`.
 
-Do not use the historical [CRM removal runbook](../operations/remove-crm.md) for this cleanup:
-it describes destructive database removal, whereas the current change preserves the SQL schema.
+### Ответ
+
+После успешного commit возвращается `201 Created`:
+
+```json
+{
+  "id": "019f0db0-0000-7000-8000-000000000001",
+  "first_name": "Анна-Марія",
+  "last_name": "O'Neill",
+  "middle_name": null,
+  "created_at": "2026-09-28T12:00:00Z",
+  "updated_at": "2026-09-28T12:00:00Z",
+  "created_by": "11111111-1111-4111-8111-111111111111",
+  "updated_by": "11111111-1111-4111-8111-111111111111"
+}
+```
+
+При создании обе даты равны одному показанию UTC clock, оба автора — текущему
+пользователю. Ответ не содержит заглушек для связанных сущностей.
+
+### Ошибки
+
+- `401`: отсутствует аутентификация.
+- `403`: отсутствует tenant или нарушена CSRF-защита.
+- `422`: неверный тип, неполное/слишком длинное имя или лишние поля.
+- `409`: конфликт первичного ключа контакта.
+- `500`: неожиданный сбой хранения или commit; успешный ответ не отправляется.
+
+## Слои и транзакция
+
+- `domain/contact/`: агрегат `Contact`, `ContactIdVO`, неизменяемый `ContactNameVO`,
+  доменная ошибка имени и контракт репозитория с единственным методом `add`.
+- `application/contact/command/create_contact/`: команда, handler и DTO результата.
+  Handler создаёт агрегат, сохраняет его через порт и возвращает ФИО с аудитом.
+- `infrastructure/contact/persistence/`: явный mapper в INSERT values и SQLAlchemy
+  Core repository. Tenant-схема выбирается отдельно для каждого вызова.
+- `presentation/contact/`: HTTP-контракт и сборка зависимостей. Общий `UoWDep`
+  передаёт сессию репозиторию и завершает транзакцию до отправки ответа.
+
+Domain и Application не зависят от SQLAlchemy/FastAPI. Handler и repository не
+выполняют commit/rollback. Domain events и Outbox в этом сценарии не используются.
+Импорты прямые, из файлов определений, без реэкспортов через `__init__.py`.
+
+## Хранение и совместимость
+
+Существующие модели остаются в `infrastructure/persistence/models/`, каждая в своём файле:
+
+- `contact.py`: `ContactModel`, таблица `contacts`.
+- `company.py`: `CompanyModel`, таблица `companies`.
+- `contact_company.py`: `ContactCompanyModel`, таблица `contact_companies`.
+
+Все три зарегистрированы в tenant metadata. SQL-модели, ограничения, индексы,
+внешние ключи и миграции не изменены. Новая миграция не требуется.
+
+Обязательная фамилия — правило создания новых контактов. Существующий столбец
+`last_name` остаётся nullable; исторические записи с `NULL` не изменяются.
+Чтение таких записей пока не реализовано.
+
+GET списка, GET карточки, обновление, удаление, операции компаний и связей отсутствуют.
+Неподдерживаемый метод на `/api/console/crm/contacts` возвращает `405`, отсутствующий
+маршрут — `404`. Самостоятельный модуль `contact_points` продолжает работать,
+но создание Contact пока с ним не интегрируется.
+
+Существующие экраны Console не изменены. Их старый контракт содержит телефоны,
+email и компании, поэтому форма пока несовместима с новым минимальным POST API.
+Адаптация интерфейса будет отдельной задачей.
+
+Исторический [runbook удаления CRM](../operations/remove-crm.md) к этой реализации
+не применяется: он описывает удаление данных, а текущая схема сохраняется.
+
+## Проверки
+
+```sh
+uv run python -m unittest test.test_crm_contact test.test_crm_contact_http test.test_architecture_boundaries test.test_removed_module_boundaries
+TEST_POSTGRES_URL=postgresql+asyncpg://... uv run python -m unittest test.test_crm_contact_postgres test.test_tenant_migrations_postgres
+```
+
+PostgreSQL-проверки запускаются только на одноразовой тестовой базе. Они проверяют
+аудит, нормализацию, изоляцию tenant, конфликты ID, rollback и отсутствие изменений
+схемы при Alembic autogenerate.

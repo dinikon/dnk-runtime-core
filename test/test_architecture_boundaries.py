@@ -41,6 +41,9 @@ class ArchitectureBoundariesTests(unittest.TestCase):
             "src.modules.crm.infrastructure.persistence.models.company",
             "src.modules.crm.infrastructure.persistence.models.contact",
             "src.modules.crm.infrastructure.persistence.models.contact_company",
+            "src.modules.crm.domain.contact.aggregate",
+            "src.modules.crm.application.contact.command.create_contact.handler",
+            "src.modules.crm.presentation.contact.http.router",
             "src.modules.tenant_persistence",
         ):
             with self.subTest(module=name):
@@ -56,6 +59,44 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                     text=True,
                 )
                 self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_crm_dependencies_point_inward_and_transactions_stay_external(self):
+        forbidden = (
+            "sqlalchemy",
+            "fastapi",
+            "pydantic",
+            "src.config",
+            "src.modules.crm.infrastructure",
+            "src.modules.crm.presentation",
+            "src.modules.shared.infrastructure",
+            "src.modules.shared.presentation",
+        )
+        for layer in ("domain", "application"):
+            prefixes = forbidden
+            if layer == "domain":
+                prefixes += (
+                    "src.modules.crm.application",
+                    "src.modules.shared.application",
+                )
+            for path in iter_python_files("src/modules/crm/" + layer):
+                for name in iter_imports(path):
+                    self.assertFalse(name.startswith(prefixes), f"{path}: {name}")
+        for root in ("application", "infrastructure/contact/persistence"):
+            for path in iter_python_files("src/modules/crm/" + root):
+                for node in ast.walk(ast.parse(path.read_text())):
+                    if isinstance(node, ast.Call) and isinstance(
+                        node.func, ast.Attribute
+                    ):
+                        self.assertNotIn(
+                            node.func.attr, ("commit", "rollback"), str(path)
+                        )
+        for path in iter_python_files("src/modules/crm"):
+            for name in iter_imports(path):
+                if name.startswith("src.modules"):
+                    self.assertTrue(
+                        (PROJECT_ROOT / (name.replace(".", "/") + ".py")).is_file(),
+                        f"{path}: indirect import {name}",
+                    )
 
     def test_price_lists_dependencies_point_inward(self):
         forbidden = {

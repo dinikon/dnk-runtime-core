@@ -21,7 +21,7 @@ existing local stack.
 - `identity`: email OTP, sessions, and tenant administrator provisioning.
 - `control_plane`: Runtime v1 provisioning, mTLS integration, readiness and access projection delivery.
 - `inventory`: Warehouse domain model and tenant-scoped persistence model; no HTTP API yet.
-- `crm`: retained tenant SQL models for contacts, companies and their links; backend API removed pending rebuild. Console screens remain.
+- `crm`: Contact aggregate and tenant-scoped creation API with name normalization and audit; company/link SQL models retained. Console adaptation is pending.
 - `shared`: database/UoW, tenant migrations, identifiers, audit fields, messaging, and jobs.
 
 Dynamic object modules are removed. Their earlier documentation is in [history](docs/history/index.md).
