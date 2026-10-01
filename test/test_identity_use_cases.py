@@ -4,31 +4,54 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from src.modules.identity.application import SessionRecord, TenantRequestContext
-from src.modules.identity.application.auth import (
+from src.modules.identity.application.ports.token_store import SessionRecord
+from src.modules.identity.application.ports.tenant_context_reader import (
+    TenantRequestContext,
+)
+from src.modules.identity.application.auth.command.authenticate_by_session_command import (
     AuthenticateBySessionCommand,
+)
+from src.modules.identity.application.auth.use_case.authenticate_by_session import (
     AuthenticateBySessionUseCase,
+)
+from src.modules.identity.application.auth.command.confirm_email_otp_command_dto import (
     ConfirmEmailOtpCommandDTO,
+)
+from src.modules.identity.application.auth.use_case.confirm_email_otp import (
     ConfirmEmailOtpUseCase,
+)
+from src.modules.identity.application.auth.command.get_current_user_command_dto import (
     GetCurrentUserCommandDTO,
+)
+from src.modules.identity.application.auth.use_case.get_current_user import (
     GetCurrentUserUseCase,
+)
+from src.modules.identity.application.auth.command.logout_current_session_command_dto import (
     LogoutCurrentSessionCommandDTO,
+)
+from src.modules.identity.application.auth.use_case.logout_current_session import (
     LogoutCurrentSessionUseCase,
-    OtpService,
+)
+from src.modules.identity.application.auth.service.otp_service import OtpService
+from src.modules.identity.application.auth.command.request_email_otp_command_dto import (
     RequestEmailOtpCommandDTO,
+)
+from src.modules.identity.application.auth.use_case.request_email_otp import (
     RequestEmailOtpUseCase,
-    SessionService,
+)
+from src.modules.identity.application.auth.service.session_service import SessionService
+from src.modules.identity.application.auth.command.update_current_user_profile_command_dto import (
     UpdateCurrentUserProfileCommandDTO,
+)
+from src.modules.identity.application.auth.use_case.update_current_user_profile import (
     UpdateCurrentUserProfileUseCase,
 )
-from src.modules.identity.application.user import UserService
-from src.modules.identity.domain import (
-    InvalidOtpChallengeError,
-    InvalidOtpCodeError,
-    InvalidSessionError,
-    UserEmailAlreadyExistsError,
-    User,
-)
+from src.modules.identity.application.user.service.user_service import UserService
+from src.modules.identity.domain.auth.error import InvalidOtpChallengeError
+from src.modules.identity.domain.auth.error import InvalidOtpCodeError
+from src.modules.identity.domain.auth.error import InvalidSessionError
+from src.modules.identity.domain.user.error import UserEmailAlreadyExistsError
+from src.modules.identity.domain.user.entity import User
 from src.modules.shared import EntityIdVO
 from src.modules.shared import DomainError
 from src.modules.shared.domain.email import (

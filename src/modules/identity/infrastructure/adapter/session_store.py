@@ -3,7 +3,8 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from src.modules.identity.application.ports import SessionRecord, SessionStorePort
+from src.modules.identity.application.ports.token_store import SessionRecord
+from src.modules.identity.application.ports.token_store import SessionStorePort
 from src.modules.shared.application.tokens import TokenManager
 
 

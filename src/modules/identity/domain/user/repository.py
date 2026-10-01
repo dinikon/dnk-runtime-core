@@ -3,7 +3,8 @@ from __future__ import annotations
 from typing import Protocol
 
 from src.modules.identity.domain.user.entity import User
-from src.modules.identity.domain.user.value_object import UserEmailIdVO, UserIdVO
+from src.modules.identity.domain.user.value_object.user_email_id import UserEmailIdVO
+from src.modules.identity.domain.user.value_object.user_id import UserIdVO
 from src.modules.shared import EntityIdVO
 
 

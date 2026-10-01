@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from src.modules.shared.application.access import AuthorizationServiceProtocol
+from src.modules.identity.application.access.authorization_service_protocol import (
+    AuthorizationServiceProtocol,
+)
 
 
 class AllowAllAuthorizationService(AuthorizationServiceProtocol):

@@ -3,13 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from src.modules.identity.application.auth.command import AuthenticateBySessionCommand
-from src.modules.identity.application.ports import (
-    SessionStorePort,
+from src.modules.identity.application.auth.command.authenticate_by_session_command import (
+    AuthenticateBySessionCommand,
+)
+from src.modules.identity.application.ports.token_store import SessionStorePort
+from src.modules.identity.application.ports.tenant_context_reader import (
     TenantContextReaderPort,
 )
-from src.modules.identity.domain.user import UserRepositoryProtocol
-from src.modules.identity.domain.user.value_object import UserIdVO
+from src.modules.identity.domain.user.repository import UserRepositoryProtocol
+from src.modules.identity.domain.user.value_object.user_id import UserIdVO
 from src.modules.shared import EntityIdVO
 from src.modules.shared.presentation.http.host import normalize_host
 from src.modules.tenancy.domain.tenant_domain import (

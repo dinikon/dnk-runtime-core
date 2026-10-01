@@ -4,8 +4,12 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
-from src.modules.shared.application.access import AuthorizationServiceProtocol
-from src.modules.shared.infrastructure.access import AllowAllAuthorizationService
+from src.modules.identity.application.access.authorization_service_protocol import (
+    AuthorizationServiceProtocol,
+)
+from src.modules.identity.infrastructure.access.allow_all_authorization_service import (
+    AllowAllAuthorizationService,
+)
 
 default_authorization_service: AuthorizationServiceProtocol = (
     AllowAllAuthorizationService()

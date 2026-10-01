@@ -3,7 +3,8 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from src.modules.identity.application.ports import OtpChallenge, OtpChallengeStorePort
+from src.modules.identity.application.ports.token_store import OtpChallenge
+from src.modules.identity.application.ports.token_store import OtpChallengeStorePort
 from src.modules.shared.application.tokens import TokenManager
 
 

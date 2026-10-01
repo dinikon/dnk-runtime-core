@@ -16,10 +16,11 @@ from sqlalchemy.schema import CreateSchema, DropSchema
 from src.config import dnk_config
 from src.modules.contact_points.presentation.http.router import router as points_router
 from src.modules.identity.presentation.http.csrf import issue_csrf
-from src.modules.shared.presentation.identity_context.depends import (
+from src.modules.identity.presentation.auth.depends import (
     require_authenticated_request_context,
 )
-from src.modules.shared.domain.identity_context import Principal, RequestContext
+from src.modules.identity.domain.auth.principal import Principal
+from src.modules.identity.domain.auth.request_context import RequestContext
 from src.modules.shared.application.tokens import TokenManager
 from src.modules.shared.infrastructure.tokens import InMemoryTokenBackend
 from src.modules.shared.presentation.tokens.depends import TokenManagerDep

@@ -15,14 +15,14 @@ hosts shared contracts, small domain primitives, infrastructure adapters and pre
 - `presentation/<feature_aggregate>/`
 
 Layer roots contain only `__init__.py`. Every class, protocol, dataclass or enum lives inside a feature aggregate such
-as `events`, `jobs`, `persistence`, `identity_context`, `email`, `tokens`, `time`, `uuid`, `access`, `errors`,
+as `events`, `jobs`, `persistence`, `email`, `tokens`, `time`, `uuid`, `errors`,
 `value_object` or `http`. Old internal paths such as `shared/kernel`, `shared/db`, `shared/depends` and
 `shared/http` are removed.
 
 ## What Is Inside
 
 - `domain`
-    - shared value objects, request identity context, event/job records and statuses, email/tokens primitives and base
+    - shared value objects, event/job records and statuses, email/tokens primitives and base
       errors
 - `application`
     - ports, protocols, token manager, event use cases and scheduled job use cases
@@ -32,21 +32,16 @@ as `events`, `jobs`, `persistence`, `identity_context`, `email`, `tokens`, `time
 - `presentation`
     - FastAPI dependency wiring, HTTP host helpers and management wiring builders
 
+User context and authentication/authorization dependencies belong to [Identity](identity.md).
+Generic tokens, Redis backends, email, UoW, jobs/events and tenant infrastructure remain here.
+
 ## Most Used Shared Primitives
 
 - `EntityIdVO`
     - UUID value object used directly for tenant scope and as the base class for concrete identifiers such as
       `UserIdVO`, `ContactIdVO`, `CompanyIdVO`, `RuntimeObjectIdVO` and `RuntimeFieldIdVO`
-- `RequestContext`
-    - current request principal + request metadata
-- `Principal`
-    - authenticated session identity used by request context
 - `UnitOfWork`
     - request/command transaction boundary
-- `AuthenticatedRequestContextDep`
-    - authentication guard for HTTP routes
-- `AuthorizationServiceDep`
-    - authorization boundary, currently backed by allow-all implementation
 - `ClockPort` / `UtcClock`
     - time abstraction used by domain/application services
 - `EmailServicePort` / `SystemEmailKind`
@@ -105,7 +100,7 @@ depend on the application ports and presentation wiring, not on `shared.infrastr
 ## Why It Matters
 
 - keeps module code small and focused on business logic
-- standardizes transaction, auth and request lifecycle behavior
+- standardizes transaction and request lifecycle behavior
 - centralizes email provider selection and SMTP transport wiring
 - provides common contracts for domain/application code
 - keeps id handling consistent: public APIs and persistence can expose UUIDs, while domain/application code uses
@@ -113,7 +108,6 @@ depend on the application ports and presentation wiring, not on `shared.infrastr
 
 ## Tests Covering This Area
 
-- shared authentication dependency tests
 - shared email service tests
 - DB and type tests
 - architecture boundary tests that protect module layering

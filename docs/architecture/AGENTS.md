@@ -104,6 +104,20 @@ ORM models или session factory. Контракт UoW предоставляе
 дополнительные зависимости в нём допустимы только как абстрактные порты без
 инфраструктурных типов. Создание сессии и подключение репозиториев остаются снаружи.
 
+#### Владение контекстом пользователя
+
+Модуль `identity` владеет `Principal`, `RequestContext`, HTTP-аутентификацией и
+зависимостями авторизации. HTTP-контроллеры других модулей импортируют
+`AuthenticatedRequestContextDep` и `OptionalRequestContextDep` напрямую из
+`src.modules.identity.presentation.auth.depends`, а `AuthorizationServiceDep` —
+из `src.modules.identity.presentation.access.depends`. Domain-типы импортируются
+из отдельных файлов `identity/domain/auth/`. Пакеты Identity не реэкспортируют
+определения через `__init__.py`.
+
+Универсальные TokenManager, Redis-backend, email, UoW, jobs/events и существующая
+tenant-инфраструктура остаются в `shared`. Сборка Identity использует эти механизмы;
+перенос контекста пользователя не меняет границы транзакций или правила доступа.
+
 #### Структура модуля
 
 Целевая структура модуля CRM с самостоятельными агрегатами `Contact` и `Company`:

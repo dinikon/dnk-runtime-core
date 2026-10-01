@@ -73,8 +73,10 @@ class TenancyAdapter:
         )
 
     async def install(self, installation, command: dict):
-        from src.modules.identity.application.user import UserService
-        from src.modules.identity.infrastructure.repository import (
+        from src.modules.identity.application.user.service.user_service import (
+            UserService,
+        )
+        from src.modules.identity.infrastructure.repository.user_repository import (
             SqlAlchemyUserRepository,
         )
         from src.modules.identity.infrastructure.cloud_owner import bind_cloud_owner

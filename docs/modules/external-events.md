@@ -72,7 +72,8 @@ external payload + source config -> normalized tenant event
 
 | Зависимость       | Для чего используется                                                                       |
 |-------------------|---------------------------------------------------------------------------------------------|
-| `shared`          | IDs, domain errors, clock/UUID ports, UoW, request context и shared event/outbox ports.     |
+| `shared`          | IDs, domain errors, clock/UUID ports, UoW и shared event/outbox ports.     |
+| `identity` | Контекст пользователя и зависимости аутентификации/авторизации; прямые импорты из файлов определений. |
 | `schema_registry` | Опциональные event object descriptors, source metadata descriptors и event schema metadata. |
 | `runtime_data`    | Опциональное descriptor-backed event/source storage и audit search.                         |
 

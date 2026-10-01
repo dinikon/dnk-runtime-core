@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from src.modules.identity.application.auth.command import (
+from src.modules.identity.application.auth.command.logout_current_session_command_dto import (
     LogoutCurrentSessionCommandDTO,
 )
 from src.modules.identity.application.auth.dto.logout_current_session_result_dto import (
     LogoutCurrentSessionResultDTO,
 )
-from src.modules.identity.application.ports import (
-    SessionStorePort,
+from src.modules.identity.application.ports.token_store import SessionStorePort
+from src.modules.identity.application.ports.tenant_context_reader import (
     TenantContextReaderPort,
 )
 from src.modules.shared.presentation.http.host import normalize_host

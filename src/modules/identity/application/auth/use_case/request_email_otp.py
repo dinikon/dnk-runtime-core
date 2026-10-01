@@ -2,21 +2,21 @@ from __future__ import annotations
 
 import logging
 
-from src.modules.identity.application.auth.command import RequestEmailOtpCommandDTO
+from src.modules.identity.application.auth.command.request_email_otp_command_dto import (
+    RequestEmailOtpCommandDTO,
+)
 from src.modules.identity.application.auth.dto.request_email_otp_result_dto import (
     RequestEmailOtpResultDTO,
 )
-from src.modules.identity.application.auth.service import OtpServiceProtocol
-from src.modules.identity.application.ports import (
-    OtpChallenge,
-    OtpChallengeStorePort,
+from src.modules.identity.application.auth.service.otp_service import OtpServiceProtocol
+from src.modules.identity.application.ports.token_store import OtpChallenge
+from src.modules.identity.application.ports.token_store import OtpChallengeStorePort
+from src.modules.identity.application.ports.tenant_context_reader import (
     TenantContextReaderPort,
 )
-from src.modules.identity.domain.user import (
-    PrimaryUserEmailNotFoundError,
-    UserLoginUnavailableError,
-    UserRepositoryProtocol,
-)
+from src.modules.identity.domain.user.error import PrimaryUserEmailNotFoundError
+from src.modules.identity.domain.user.error import UserLoginUnavailableError
+from src.modules.identity.domain.user.repository import UserRepositoryProtocol
 from src.modules.shared import EntityIdVO
 from src.modules.shared.application.email import EmailServicePort
 from src.modules.shared.domain.email import (

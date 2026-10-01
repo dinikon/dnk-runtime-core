@@ -3,16 +3,18 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, status
 
 from src.config import dnk_config
-from src.modules.identity.application.auth import RequestEmailOtpCommandDTO
-from src.modules.identity.domain import (
-    PrimaryUserEmailNotFoundError,
-    UserLoginUnavailableError,
+from src.modules.identity.application.auth.command.request_email_otp_command_dto import (
+    RequestEmailOtpCommandDTO,
 )
-from src.modules.identity.presentation.depends import RequestEmailOtpUseCaseDep
-from src.modules.identity.presentation.http.console_auth.requests import (
+from src.modules.identity.domain.user.error import PrimaryUserEmailNotFoundError
+from src.modules.identity.domain.user.error import UserLoginUnavailableError
+from src.modules.identity.presentation.depends.application import (
+    RequestEmailOtpUseCaseDep,
+)
+from src.modules.identity.presentation.http.console_auth.requests.request_email_otp_request import (
     RequestEmailOtpRequestSchema,
 )
-from src.modules.identity.presentation.http.console_auth.responses import (
+from src.modules.identity.presentation.http.console_auth.responses.request_email_otp_response import (
     RequestEmailOtpResponseSchema,
 )
 from src.modules.shared.presentation.http.depends import RequestHostDep

@@ -5,7 +5,9 @@ import src.modules.crm.infrastructure.persistence.models.contact  # noqa: F401
 import src.modules.crm.infrastructure.persistence.models.contact_company  # noqa: F401
 import src.modules.contact_points.infrastructure.persistence  # noqa: F401
 import src.modules.inventory.infrastructure.persistence  # noqa: F401
-import src.modules.identity.infrastructure.persistence  # noqa: F401
+import src.modules.identity.infrastructure.persistence.user  # noqa: F401
+import src.modules.identity.infrastructure.persistence.user_email  # noqa: F401
+import src.modules.identity.infrastructure.persistence.access  # noqa: F401
 import src.modules.price_lists.infrastructure.persistence  # noqa: F401
 
 # Не удалять имена при удалении модели: autogenerate должен видеть DROP TABLE.

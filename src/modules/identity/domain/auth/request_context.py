@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.modules.shared.domain.identity_context.principal import Principal
+from src.modules.identity.domain.auth.principal import Principal
 
 
 @dataclass(frozen=True, slots=True)

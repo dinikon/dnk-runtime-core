@@ -5,7 +5,8 @@ from datetime import UTC, datetime
 
 import uuid6
 
-from src.modules.identity.domain.user.value_object import UserEmailIdVO, UserIdVO
+from src.modules.identity.domain.user.value_object.user_email_id import UserEmailIdVO
+from src.modules.identity.domain.user.value_object.user_id import UserIdVO
 from src.modules.shared import EntityIdVO
 from src.modules.shared import DomainError
 

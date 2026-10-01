@@ -5,7 +5,7 @@ import hashlib
 from uuid import UUID
 
 from src.modules.identity.domain.access import IdentityAccessError
-from src.modules.identity.domain.user import UserIdVO
+from src.modules.identity.domain.user.value_object.user_id import UserIdVO
 from src.modules.shared import EntityIdVO
 
 

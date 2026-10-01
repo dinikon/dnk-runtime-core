@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
-from src.modules.identity.application.auth import LogoutCurrentSessionCommandDTO
-from src.modules.identity.presentation.depends import (
-    AuthSettingsDep,
+from src.modules.identity.application.auth.command.logout_current_session_command_dto import (
+    LogoutCurrentSessionCommandDTO,
+)
+from src.modules.identity.presentation.depends.infrastructure import AuthSettingsDep
+from src.modules.identity.presentation.depends.application import (
     LogoutCurrentSessionUseCaseDep,
 )
-from src.modules.identity.presentation.http.console_auth.responses import (
+from src.modules.identity.presentation.http.console_auth.responses.logout_current_session_response import (
     LogoutCurrentSessionResponseSchema,
 )
 from src.modules.shared.presentation.http.depends import RequestHostDep

@@ -26,8 +26,8 @@ from src.modules.crm.infrastructure.persistence.models.contact import ContactMod
 from src.modules.shared.application.persistence.tenant_schema_naming import (
     TenantSchemaNaming,
 )
-from src.modules.shared.domain.identity_context.principal import Principal
-from src.modules.shared.domain.identity_context.request_context import RequestContext
+from src.modules.identity.domain.auth.principal import Principal
+from src.modules.identity.domain.auth.request_context import RequestContext
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.shared.infrastructure.persistence.tenant_migrations import (
     TenantMigrator,

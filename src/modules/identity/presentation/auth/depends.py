@@ -5,16 +5,18 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request, status
 
 from src.config import dnk_config
-from src.modules.identity.presentation.depends import AuthenticateBySessionUseCaseDep
-from src.modules.shared.domain.identity_context import RequestContext
+from src.modules.identity.presentation.depends.application import (
+    AuthenticateBySessionUseCaseDep,
+)
+from src.modules.identity.domain.auth.request_context import RequestContext
 from src.modules.shared.presentation.http.host import extract_request_host
-from src.modules.shared.presentation.identity_context.authenticate_by_session_command import (
+from src.modules.identity.presentation.auth.authenticate_by_session_command import (
     AuthenticateBySessionCommand,
 )
-from src.modules.shared.presentation.identity_context.authenticate_by_session_use_case_adapter import (
+from src.modules.identity.presentation.auth.authenticate_by_session_use_case_adapter import (
     AuthenticateBySessionUseCaseAdapter,
 )
-from src.modules.shared.presentation.identity_context.authentication_process_protocol import (
+from src.modules.identity.presentation.auth.authentication_process_protocol import (
     AuthenticationProcessProtocol,
 )
 
@@ -97,12 +99,8 @@ def _extract_request_ip(request: Request) -> str | None:
 
 __all__ = [
     "AuthenticatedRequestContextDep",
-    "AuthenticateBySessionCommand",
     "AuthenticationProcessDep",
-    "AuthenticationProcessProtocol",
-    "AuthenticateBySessionUseCaseAdapter",
     "OptionalRequestContextDep",
-    "RequestContext",
     "get_authentication_process",
     "get_optional_request_context",
     "require_authenticated_request_context",

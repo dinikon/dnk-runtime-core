@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from src.modules.shared.domain.identity_context import Principal
-from src.modules.shared.presentation.identity_context.authenticate_by_session_command import (
+from src.modules.identity.domain.auth.principal import Principal
+from src.modules.identity.presentation.auth.authenticate_by_session_command import (
     AuthenticateBySessionCommand,
 )
 

@@ -25,7 +25,7 @@
 
 ## Request/Auth Rules
 
-- HTTP business routes use request context from shared authentication dependency.
+- HTTP business routes use request context from the Identity authentication dependency.
 - Console auth is host-aware and session-cookie based.
 - Control-plane routes require the separate management Host, a trusted ingress socket peer, verified mTLS and an allowed Core certificate fingerprint.
 - Client data routes must not accept `tenant_id` from public payloads,

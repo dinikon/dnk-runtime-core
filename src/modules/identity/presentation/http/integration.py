@@ -9,17 +9,13 @@ from pydantic import BaseModel, EmailStr, Field
 
 from src.config import dnk_config
 from src.modules.identity.domain.access import IdentityAccessError
-from src.modules.identity.presentation.depends.integration import (
-    AccessServiceDep,
-    CloudServiceDep,
-)
-from src.modules.identity.presentation.http.csrf import (
-    issue_csrf,
-    require_csrf,
-    browser_session,
-    flow_cookie,
-    set_session_cookie,
-)
+from src.modules.identity.presentation.depends.integration import AccessServiceDep
+from src.modules.identity.presentation.depends.integration import CloudServiceDep
+from src.modules.identity.presentation.http.csrf import issue_csrf
+from src.modules.identity.presentation.http.csrf import require_csrf
+from src.modules.identity.presentation.http.csrf import browser_session
+from src.modules.identity.presentation.http.csrf import flow_cookie
+from src.modules.identity.presentation.http.csrf import set_session_cookie
 from src.modules.shared.presentation.http.depends import RequestHostDep
 from src.modules.shared.infrastructure.observability.metrics import oidc_errors
 from src.modules.shared.presentation.tokens.depends import TokenManagerDep

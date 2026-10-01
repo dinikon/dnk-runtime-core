@@ -11,8 +11,8 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.exc import IntegrityError
 
 from src.config import dnk_config
-from src.modules.shared.domain.identity_context.principal import Principal
-from src.modules.shared.domain.identity_context.request_context import RequestContext
+from src.modules.identity.domain.auth.principal import Principal
+from src.modules.identity.domain.auth.request_context import RequestContext
 from test.crm_contact_support import contact_app
 
 

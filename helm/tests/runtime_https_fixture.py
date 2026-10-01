@@ -22,9 +22,9 @@ from src.modules.shared.infrastructure.persistence.database_helper import db_hel
 from src.modules.shared.infrastructure.persistence.tenant_migrations import TenantMigrator
 from src.modules.shared.application.persistence.tenant_schema_naming import TenantSchemaNaming
 from src.modules.tenancy.domain.tenant.value_object import TenantIdVO
-from src.modules.identity.application.auth.service import OtpService
-from src.modules.identity.application.ports import OtpChallenge
-from src.modules.identity.infrastructure.adapter import TokenManagerBackedOtpChallengeStore
+from src.modules.identity.application.auth.service.otp_service import OtpService
+from src.modules.identity.application.ports.token_store import OtpChallenge
+from src.modules.identity.infrastructure.adapter.otp_challenge_store import TokenManagerBackedOtpChallengeStore
 from src.modules.shared.application.tokens import TokenManager
 from src.modules.shared.infrastructure.tokens import RedisTokenBackend
 

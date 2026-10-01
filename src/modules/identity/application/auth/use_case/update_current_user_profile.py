@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.modules.identity.application.auth.command import (
+from src.modules.identity.application.auth.command.update_current_user_profile_command_dto import (
     UpdateCurrentUserProfileCommandDTO,
 )
 from src.modules.identity.application.auth.dto.get_current_user_email_dto import (
@@ -9,16 +9,14 @@ from src.modules.identity.application.auth.dto.get_current_user_email_dto import
 from src.modules.identity.application.auth.dto.update_current_user_profile_result_dto import (
     UpdateCurrentUserProfileResultDTO,
 )
-from src.modules.identity.application.ports import (
-    SessionStorePort,
+from src.modules.identity.application.ports.token_store import SessionStorePort
+from src.modules.identity.application.ports.tenant_context_reader import (
     TenantContextReaderPort,
 )
-from src.modules.identity.domain.auth import InvalidSessionError
-from src.modules.identity.domain.user import (
-    UserLoginUnavailableError,
-    UserRepositoryProtocol,
-)
-from src.modules.identity.domain.user.value_object import UserIdVO
+from src.modules.identity.domain.auth.error import InvalidSessionError
+from src.modules.identity.domain.user.error import UserLoginUnavailableError
+from src.modules.identity.domain.user.repository import UserRepositoryProtocol
+from src.modules.identity.domain.user.value_object.user_id import UserIdVO
 from src.modules.shared import EntityIdVO
 from src.modules.shared.application.persistence import UnitOfWorkProtocol
 from src.modules.shared.presentation.http.host import normalize_host

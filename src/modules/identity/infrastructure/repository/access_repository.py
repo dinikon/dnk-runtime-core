@@ -7,11 +7,10 @@ from sqlalchemy import select, insert, update, delete, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.identity.domain.access import IdentityAccessError
-from src.modules.identity.application.ports.access import CloudIdentity, Invitation
-from src.modules.identity.infrastructure.persistence.access import (
-    CloudIdentityModel,
-    InvitationModel,
-)
+from src.modules.identity.application.ports.access import CloudIdentity
+from src.modules.identity.application.ports.access import Invitation
+from src.modules.identity.infrastructure.persistence.access import CloudIdentityModel
+from src.modules.identity.infrastructure.persistence.access import InvitationModel
 from src.modules.identity.infrastructure.persistence.user import UserModel
 from src.modules.identity.infrastructure.persistence.user_email import UserEmailModel
 from src.modules.shared import EntityIdVO

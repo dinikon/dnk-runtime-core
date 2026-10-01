@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class AuthenticateBySessionCommand:
-    """Команда shared authentication process по session cookie."""
+    """Команда HTTP-аутентификации по session cookie."""
 
     host: str | None
     session_token: str | None

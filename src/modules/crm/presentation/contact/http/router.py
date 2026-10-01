@@ -9,7 +9,7 @@ from src.modules.crm.presentation.contact.http.response import (
     GetContactResponse,
 )
 from src.modules.identity.presentation.http.csrf import require_csrf
-from src.modules.shared.presentation.identity_context.depends import (
+from src.modules.identity.presentation.auth.depends import (
     require_authenticated_request_context,
 )
 

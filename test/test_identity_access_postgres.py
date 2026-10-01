@@ -16,9 +16,10 @@ from src.config.feature.identity.auth_config import IdentityAuthSettings
 from src.modules.identity.application.access_service import IdentityAccessService
 from src.modules.identity.application.cloud_auth_service import CloudAuthService
 from src.modules.identity.application.ports.cloud import CloudConnection
-from src.modules.identity.application.auth.service import OtpService, SessionService
+from src.modules.identity.application.auth.service.otp_service import OtpService
+from src.modules.identity.application.auth.service.session_service import SessionService
 from src.modules.identity.domain.access import IdentityAccessError
-from src.modules.identity.domain.user import User
+from src.modules.identity.domain.user.entity import User
 from src.modules.identity.infrastructure.repository.access_repository import (
     AccessRepository,
 )

@@ -538,14 +538,12 @@ class PriceListBulkPostgresTests(unittest.IsolatedAsyncioTestCase):
             router,
             offers_router,
         )
-        from src.modules.shared.presentation.identity_context.depends import (
+        from src.modules.identity.presentation.auth.depends import (
             require_authenticated_request_context,
         )
         from src.modules.identity.presentation.http.csrf import require_csrf
-        from src.modules.shared.domain.identity_context.request_context import (
-            RequestContext,
-        )
-        from src.modules.shared.domain.identity_context.principal import Principal
+        from src.modules.identity.domain.auth.request_context import RequestContext
+        from src.modules.identity.domain.auth.principal import Principal
         from src.modules.price_lists.presentation.depends.infrastructure import (
             get_source_cipher,
         )

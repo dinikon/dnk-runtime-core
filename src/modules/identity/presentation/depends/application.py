@@ -4,26 +4,43 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from src.modules.identity.application.auth import (
+from src.modules.identity.application.auth.use_case.authenticate_by_session import (
     AuthenticateBySessionUseCase,
+)
+from src.modules.identity.application.auth.use_case.authenticate_by_session import (
     AuthenticateBySessionUseCaseProtocol,
+)
+from src.modules.identity.application.auth.use_case.confirm_email_otp import (
     ConfirmEmailOtpUseCase,
+)
+from src.modules.identity.application.auth.use_case.get_current_user import (
     GetCurrentUserUseCase,
+)
+from src.modules.identity.application.auth.use_case.logout_current_session import (
     LogoutCurrentSessionUseCase,
+)
+from src.modules.identity.application.auth.use_case.request_email_otp import (
     RequestEmailOtpUseCase,
+)
+from src.modules.identity.application.auth.use_case.update_current_user_profile import (
     UpdateCurrentUserProfileUseCase,
 )
-from src.modules.identity.application.user import UserService, UserServiceProtocol
-from src.modules.identity.presentation.depends.infrastructure import (
-    AuthSettingsDep,
-    EmailServiceDep,
-    OtpChallengeStoreDep,
-    OtpServiceDep,
-    SessionServiceDep,
-    SessionStoreDep,
-    TenantContextReaderDep,
-    UsersRepositoryDep,
+from src.modules.identity.application.user.service.user_service import UserService
+from src.modules.identity.application.user.service.user_service import (
+    UserServiceProtocol,
 )
+from src.modules.identity.presentation.depends.infrastructure import AuthSettingsDep
+from src.modules.shared.presentation.email.depends import EmailServiceDep
+from src.modules.identity.presentation.depends.infrastructure import (
+    OtpChallengeStoreDep,
+)
+from src.modules.identity.presentation.depends.infrastructure import OtpServiceDep
+from src.modules.identity.presentation.depends.infrastructure import SessionServiceDep
+from src.modules.identity.presentation.depends.infrastructure import SessionStoreDep
+from src.modules.identity.presentation.depends.infrastructure import (
+    TenantContextReaderDep,
+)
+from src.modules.identity.presentation.depends.infrastructure import UsersRepositoryDep
 from src.modules.shared.presentation.persistence.depends import UoWDep
 
 

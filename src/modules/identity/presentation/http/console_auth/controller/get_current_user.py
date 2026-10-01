@@ -2,17 +2,22 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request, status
 
-from src.modules.identity.application.auth import (
+from src.modules.identity.application.auth.command.get_current_user_command_dto import (
     GetCurrentUserCommandDTO,
+)
+from src.modules.identity.application.auth.dto.get_current_user_result_dto import (
     GetCurrentUserResultDTO,
 )
-from src.modules.identity.domain import InvalidSessionError, UserLoginUnavailableError
-from src.modules.identity.presentation.depends import (
-    AuthSettingsDep,
+from src.modules.identity.domain.auth.error import InvalidSessionError
+from src.modules.identity.domain.user.error import UserLoginUnavailableError
+from src.modules.identity.presentation.depends.infrastructure import AuthSettingsDep
+from src.modules.identity.presentation.depends.application import (
     GetCurrentUserUseCaseDep,
 )
-from src.modules.identity.presentation.http.console_auth.responses import (
+from src.modules.identity.presentation.http.console_auth.responses.current_user_email_response import (
     CurrentUserEmailResponseSchema,
+)
+from src.modules.identity.presentation.http.console_auth.responses.current_user_response import (
     CurrentUserResponseSchema,
 )
 from src.modules.shared.presentation.http.depends import RequestHostDep

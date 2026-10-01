@@ -10,16 +10,16 @@ from src.modules.identity.infrastructure.adapter.oidc_client import OidcClient
 from src.modules.identity.infrastructure.repository.access_repository import (
     AccessRepository,
 )
+from src.modules.identity.presentation.depends.infrastructure import UsersRepositoryDep
+from src.modules.identity.presentation.depends.infrastructure import SessionStoreDep
 from src.modules.identity.presentation.depends.infrastructure import (
-    UsersRepositoryDep,
-    SessionStoreDep,
     TenantContextReaderDep,
-    TokenManagerDep,
-    OtpServiceDep,
-    SessionServiceDep,
-    EmailServiceDep,
-    AuthSettingsDep,
 )
+from src.modules.shared.presentation.tokens.depends import TokenManagerDep
+from src.modules.identity.presentation.depends.infrastructure import OtpServiceDep
+from src.modules.identity.presentation.depends.infrastructure import SessionServiceDep
+from src.modules.shared.presentation.email.depends import EmailServiceDep
+from src.modules.identity.presentation.depends.infrastructure import AuthSettingsDep
 from src.modules.shared.application.persistence.tenant_schema_naming import (
     TenantSchemaNaming,
 )

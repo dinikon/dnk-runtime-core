@@ -35,6 +35,7 @@ read/update flows, and tenant admin provisioning during onboarding.
     - `repository.py` with `UserRepositoryProtocol`
 - `domain/auth/`
     - `error.py` with OTP/session errors
+    - `principal.py` and `request_context.py` with immutable user/request context
 - `application/auth/`
     - `command/`, `dto/`, `service/`, `use_case/`
 - `application/user/`
@@ -46,6 +47,31 @@ read/update flows, and tenant admin provisioning during onboarding.
 - `presentation/depends/`
     - `application.py` for use case wiring
     - `infrastructure.py` for repository/adapters/settings wiring
+
+## Request Context And Authorization
+
+Identity owns `Principal`, `RequestContext`, the HTTP authentication process and
+authorization service contract, default implementation and dependency wiring.
+Consumers import definitions directly; Identity package `__init__.py` files are empty.
+
+```python
+from src.modules.identity.domain.auth.principal import Principal
+from src.modules.identity.domain.auth.request_context import RequestContext
+from src.modules.identity.presentation.auth.depends import AuthenticatedRequestContextDep
+from src.modules.identity.presentation.auth.depends import OptionalRequestContextDep
+from src.modules.identity.presentation.access.depends import AuthorizationServiceDep
+```
+
+`presentation/auth/` contains the HTTP command, authentication protocol, use case
+adapter and context dependencies. `application/access/` defines the authorization
+protocol; `infrastructure/access/` contains the existing allow-all implementation.
+`presentation/access/depends.py` assembles the authorization dependency.
+
+`app.state.authentication_process`, `app.state.authorization_service` and FastAPI
+`dependency_overrides` remain supported. FastAPI resolves the standard session use
+case dependency before selecting an authentication process from `app.state`.
+Authentication, session checks, roles, OTP, CSRF and transaction timing are unchanged.
+Tenant infrastructure, token mechanisms and UoW remain in `shared`.
 
 ## Infrastructure / Persistence
 
@@ -89,7 +115,7 @@ The default theme is `system`, and `PATCH /me` requires an explicit non-null the
 ## Dependencies On Other Modules
 
 - uses `tenancy` host resolution rules and tenant availability checks
-- uses `shared` request context, UoW and token abstractions
+- owns request context and authentication/authorization dependencies; uses `shared` UoW and token abstractions
 - is consumed by `tenancy` through `UserService` provisioning adapter
 
 ## Cloud access and invitations
@@ -106,6 +132,7 @@ Every session consumer checks current user status and epoch. Revocation or unlin
     - identical IDs/emails in separate tenant schemas and isolated profile/email writes
     - local foreign keys, migration transitions and onboarding rollback after administrator insertion
     - HTTP login, profile updates, cross-tenant session rejection and logout with real repository/DI
+- `test/test_identity_context_relocation.py`: direct imports, isolated entrypoints and request/authorization dependency overrides
 - `test/test_identity_use_cases.py`
     - auth use cases and tenant admin provisioning service
 - `test/test_identity_access_postgres.py`: invitations, roles, revocation, linking and rollback

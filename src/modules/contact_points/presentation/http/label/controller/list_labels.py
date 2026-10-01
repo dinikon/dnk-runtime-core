@@ -1,6 +1,6 @@
 from typing import Literal
 from fastapi import APIRouter
-from src.modules.shared.presentation.identity_context.depends import (
+from src.modules.identity.presentation.auth.depends import (
     AuthenticatedRequestContextDep,
 )
 from src.modules.contact_points.presentation.depends.application import (

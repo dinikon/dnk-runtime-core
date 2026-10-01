@@ -9,8 +9,8 @@ from src.modules.router import router as api_router
 from src.modules.control_plane.presentation.router import router as control_plane_router
 from src.modules.identity.presentation.http.integration import (
     router as identity_integration_router,
-    cloud_router,
 )
+from src.modules.identity.presentation.http.integration import cloud_router
 from src.modules.shared.infrastructure.events import ensure_event_bus_topology
 from src.modules.shared.infrastructure.messaging import (
     RabbitMQBrokerProvider,

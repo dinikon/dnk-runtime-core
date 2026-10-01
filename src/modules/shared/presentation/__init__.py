@@ -4,11 +4,8 @@ from importlib import import_module
 from typing import Any
 
 _LAZY_EXPORTS: dict[str, str] = {
-    "AuthenticatedRequestContextDep": "src.modules.shared.presentation.identity_context",
-    "AuthorizationServiceDep": "src.modules.shared.presentation.access",
     "ClockDep": "src.modules.shared.presentation.time",
     "EmailServiceDep": "src.modules.shared.presentation.email",
-    "OptionalRequestContextDep": "src.modules.shared.presentation.identity_context",
     "RequestHostDep": "src.modules.shared.presentation.http",
     "TokenManagerDep": "src.modules.shared.presentation.tokens",
     "UoWDep": "src.modules.shared.presentation.persistence",
@@ -16,7 +13,6 @@ _LAZY_EXPORTS: dict[str, str] = {
     "build_email_service": "src.modules.shared.presentation.email",
     "default_email_service": "src.modules.shared.presentation.email",
     "default_uuid_generator": "src.modules.shared.presentation.uuid",
-    "get_authorization_service": "src.modules.shared.presentation.access",
     "get_clock": "src.modules.shared.presentation.time",
     "get_email_service": "src.modules.shared.presentation.email",
     "get_request_host": "src.modules.shared.presentation.http",

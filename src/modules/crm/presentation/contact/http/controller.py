@@ -22,7 +22,7 @@ from src.modules.crm.presentation.contact.http.response import (
     GetContactResponse,
 )
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
-from src.modules.shared.presentation.identity_context.depends import (
+from src.modules.identity.presentation.auth.depends import (
     AuthenticatedRequestContextDep,
 )
 from src.modules.shared.presentation.uuid.depends import UuidDep

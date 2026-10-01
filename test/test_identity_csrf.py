@@ -1,7 +1,8 @@
 import unittest
 from fastapi import FastAPI, Depends, Request, Response
 from httpx import AsyncClient, ASGITransport
-from src.modules.identity.presentation.http.csrf import issue_csrf, require_csrf
+from src.modules.identity.presentation.http.csrf import issue_csrf
+from src.modules.identity.presentation.http.csrf import require_csrf
 from src.modules.shared.presentation.tokens.depends import TokenManagerDep
 from src.modules.shared.application.tokens import TokenManager
 from src.modules.shared.infrastructure.tokens import InMemoryTokenBackend
@@ -62,12 +63,12 @@ class BrowserCsrfTests(unittest.IsolatedAsyncioTestCase):
     async def test_new_read_endpoints_return_404_for_unknown_host(self):
         from types import SimpleNamespace
         from unittest.mock import AsyncMock
-        from src.modules.identity.presentation.http.integration import (
-            router,
-            cloud_router,
-        )
+        from src.modules.identity.presentation.http.integration import router
+        from src.modules.identity.presentation.http.integration import cloud_router
         from src.modules.identity.presentation.depends.integration import (
             get_access_service,
+        )
+        from src.modules.identity.presentation.depends.integration import (
             get_cloud_service,
         )
         from src.modules.tenancy.domain.tenant_domain import TenantHostNotFoundError

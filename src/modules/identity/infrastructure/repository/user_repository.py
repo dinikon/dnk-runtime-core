@@ -3,13 +3,11 @@ from __future__ import annotations
 from sqlalchemy import Select, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.identity.domain.user import (
-    User,
-    UserEmail,
-    UserEmailIdVO,
-    UserIdVO,
-    UserRepositoryProtocol,
-)
+from src.modules.identity.domain.user.entity import User
+from src.modules.identity.domain.user.entity import UserEmail
+from src.modules.identity.domain.user.value_object.user_email_id import UserEmailIdVO
+from src.modules.identity.domain.user.value_object.user_id import UserIdVO
+from src.modules.identity.domain.user.repository import UserRepositoryProtocol
 from src.modules.identity.infrastructure.persistence.user import UserModel
 from src.modules.identity.infrastructure.persistence.user_email import UserEmailModel
 from src.modules.shared import DomainError, EntityIdVO

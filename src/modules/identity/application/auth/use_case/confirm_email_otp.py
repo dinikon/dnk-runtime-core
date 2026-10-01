@@ -1,28 +1,26 @@
 from __future__ import annotations
 
-from src.modules.identity.application.auth.command import ConfirmEmailOtpCommandDTO
+from src.modules.identity.application.auth.command.confirm_email_otp_command_dto import (
+    ConfirmEmailOtpCommandDTO,
+)
 from src.modules.identity.application.auth.dto.confirm_email_otp_result_dto import (
     ConfirmEmailOtpResultDTO,
 )
-from src.modules.identity.application.auth.service import (
-    OtpServiceProtocol,
+from src.modules.identity.application.auth.service.otp_service import OtpServiceProtocol
+from src.modules.identity.application.auth.service.session_service import (
     SessionServiceProtocol,
 )
-from src.modules.identity.application.ports import (
-    OtpChallengeStorePort,
-    SessionRecord,
-    SessionStorePort,
+from src.modules.identity.application.ports.token_store import OtpChallengeStorePort
+from src.modules.identity.application.ports.token_store import SessionRecord
+from src.modules.identity.application.ports.token_store import SessionStorePort
+from src.modules.identity.application.ports.tenant_context_reader import (
     TenantContextReaderPort,
 )
-from src.modules.identity.domain.auth import (
-    InvalidOtpChallengeError,
-    InvalidOtpCodeError,
-)
-from src.modules.identity.domain.user import (
-    PrimaryUserEmailNotFoundError,
-    UserLoginUnavailableError,
-    UserRepositoryProtocol,
-)
+from src.modules.identity.domain.auth.error import InvalidOtpChallengeError
+from src.modules.identity.domain.auth.error import InvalidOtpCodeError
+from src.modules.identity.domain.user.error import PrimaryUserEmailNotFoundError
+from src.modules.identity.domain.user.error import UserLoginUnavailableError
+from src.modules.identity.domain.user.repository import UserRepositoryProtocol
 from src.modules.shared import EntityIdVO
 from src.modules.shared.application.persistence import UnitOfWorkProtocol
 from src.modules.shared.presentation.http.host import normalize_host

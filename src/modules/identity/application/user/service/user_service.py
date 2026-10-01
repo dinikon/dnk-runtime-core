@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from src.modules.identity.application.user.dto import CreatedTenantAdmin
-from src.modules.identity.domain.user import (
-    User,
-    UserEmailAlreadyExistsError,
-    UserRepositoryProtocol,
+from src.modules.identity.application.user.dto.created_tenant_admin import (
+    CreatedTenantAdmin,
 )
+from src.modules.identity.domain.user.entity import User
+from src.modules.identity.domain.user.error import UserEmailAlreadyExistsError
+from src.modules.identity.domain.user.repository import UserRepositoryProtocol
 from src.modules.shared import EntityIdVO
 
 

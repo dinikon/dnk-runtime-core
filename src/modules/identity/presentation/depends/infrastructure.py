@@ -6,28 +6,34 @@ from fastapi import Depends
 
 from src.config import dnk_config
 from src.config.feature.identity.auth_config import IdentityAuthSettings
-from src.modules.identity.application.auth.service import (
-    OtpService,
-    OtpServiceProtocol,
-    SessionService,
+from src.modules.identity.application.auth.service.otp_service import OtpService
+from src.modules.identity.application.auth.service.otp_service import OtpServiceProtocol
+from src.modules.identity.application.auth.service.session_service import SessionService
+from src.modules.identity.application.auth.service.session_service import (
     SessionServiceProtocol,
 )
-from src.modules.identity.application.ports import (
-    OtpChallengeStorePort,
-    SessionStorePort,
+from src.modules.identity.application.ports.token_store import OtpChallengeStorePort
+from src.modules.identity.application.ports.token_store import SessionStorePort
+from src.modules.identity.application.ports.tenant_context_reader import (
     TenantContextReaderPort,
 )
-from src.modules.identity.domain.user import UserRepositoryProtocol
-from src.modules.identity.infrastructure.adapter import (
+from src.modules.identity.domain.user.repository import UserRepositoryProtocol
+from src.modules.identity.infrastructure.adapter.tenant_context import (
     TenancyTenantContextReaderAdapter,
+)
+from src.modules.identity.infrastructure.adapter.otp_challenge_store import (
     TokenManagerBackedOtpChallengeStore,
+)
+from src.modules.identity.infrastructure.adapter.session_store import (
     TokenManagerBackedSessionStore,
 )
 from src.modules.shared.presentation.email.depends import (
     EmailServiceDep,
     get_email_service,
 )
-from src.modules.identity.infrastructure.repository import SqlAlchemyUserRepository
+from src.modules.identity.infrastructure.repository.user_repository import (
+    SqlAlchemyUserRepository,
+)
 from src.modules.shared.presentation.tokens.depends import (
     TokenManagerDep,
     default_token_manager,

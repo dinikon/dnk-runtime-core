@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from src.modules.identity.application.user import UserServiceProtocol
+from src.modules.identity.application.user.service.user_service import (
+    UserServiceProtocol,
+)
 from src.modules.shared import EntityIdVO
 from src.modules.tenancy.application.ports.identity import (
     IdentityProvisioningServiceProtocol,

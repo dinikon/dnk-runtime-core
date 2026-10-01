@@ -334,7 +334,8 @@ HTTP error mapping:
 
 | Module          | Layer                                                    | Used For                                                                                                       |
 |-----------------|----------------------------------------------------------|----------------------------------------------------------------------------------------------------------------|
-| `shared`        | all layers                                               | `EntityIdVO`, `DomainError`, clock ports, UoW/session, DB base/types, authentication dependency.               |
+| `shared`        | all layers                                               | `EntityIdVO`, `DomainError`, clock ports, UoW/session, DB base/types.               |
+| `identity` | presentation | Request context and authentication/authorization dependencies, imported directly from definition files. |
 | `tenancy`       | infrastructure/presentation DI                           | `TenantSchemaBootstrapPort` and `TenantSchemaBootstrapContext` adapter for tenant onboarding.                  |
 | `runtime_data`  | consumer dependency, not imported by module code for DDL | Consumers use `RuntimeObjectDescriptor`; schema_registry itself does not do runtime row CRUD.                  |
 | `config`        | management/bootstrap                                     | `dnk_config.DEFAULT_SEED_MODULE` and `SCHEMA_PREFIX`.                                                          |

@@ -6,8 +6,10 @@ from fastapi import Depends
 
 from src.config import dnk_config
 
-from src.modules.identity.application.user import UserService
-from src.modules.identity.infrastructure.repository import SqlAlchemyUserRepository
+from src.modules.identity.application.user.service.user_service import UserService
+from src.modules.identity.infrastructure.repository.user_repository import (
+    SqlAlchemyUserRepository,
+)
 
 from src.modules.shared.presentation.persistence.depends import UoWDep
 from src.modules.shared.application.persistence.tenant_schema_naming import (

@@ -3,7 +3,7 @@
 from uuid import UUID
 
 from src.config import dnk_config
-from src.modules.identity.domain.user import UserIdVO
+from src.modules.identity.domain.user.value_object.user_id import UserIdVO
 from src.modules.identity.infrastructure.repository.access_repository import (
     AccessRepository,
 )

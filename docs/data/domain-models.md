@@ -68,16 +68,16 @@ scope uses `EntityIdVO` directly; concrete entities expose concrete subclasses s
 
 `Warehouse` represents a physical warehouse with `WarehouseIdVO`, title, nullable parent id and audit fields. Storage uses a self-FK within each tenant schema. Multiple roots are allowed, self-parent is rejected, and deletion of a parent with children is restricted. Longer cycles are deferred to future hierarchy use cases.
 
-## Shared Kernel Concepts
+## Identity Request Context
 
 ### `Principal`
 
-- Module owner: `shared`
+- Module owner: `identity`
 - Business meaning: authenticated session identity bound to request context
 
 ### `RequestContext`
 
-- Module owner: `shared`
+- Module owner: `identity`
 - Business meaning: request-scoped envelope with principal, request id, IP and user agent
 
 ## Related

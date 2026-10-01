@@ -2,7 +2,7 @@ from decimal import Decimal
 from uuid import UUID
 from typing import Literal
 from fastapi import APIRouter, Query
-from src.modules.shared.presentation.identity_context.depends import (
+from src.modules.identity.presentation.auth.depends import (
     AuthenticatedRequestContextDep,
 )
 from src.modules.price_lists.presentation.depends.application import (

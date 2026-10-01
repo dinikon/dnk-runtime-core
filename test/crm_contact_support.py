@@ -8,9 +8,7 @@ from src.modules.shared.application.tokens.token_manager import TokenManager
 from src.modules.shared.infrastructure.tokens.in_memory_token_backend import (
     InMemoryTokenBackend,
 )
-from src.modules.shared.presentation.identity_context.depends import (
-    get_optional_request_context,
-)
+from src.modules.identity.presentation.auth.depends import get_optional_request_context
 from src.modules.shared.presentation.tokens.depends import TokenManagerDep
 
 

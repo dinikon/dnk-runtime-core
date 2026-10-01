@@ -23,9 +23,11 @@ from src.modules.crm.infrastructure.persistence.models.company import CompanyMod
 from src.modules.crm.infrastructure.persistence.models.contact import ContactModel
 from src.management.cli import build_parser
 from src.management.commands.tenant_migrations import handle
-from src.modules.identity.application.user import UserService
+from src.modules.identity.application.user.service.user_service import UserService
 from src.modules.identity.infrastructure.persistence.user import UserModel
-from src.modules.identity.infrastructure.repository import SqlAlchemyUserRepository
+from src.modules.identity.infrastructure.repository.user_repository import (
+    SqlAlchemyUserRepository,
+)
 from src.modules.inventory.infrastructure.persistence import WarehouseModel
 from src.modules.shared.application.persistence.tenant_schema_naming import (
     TenantSchemaNaming,

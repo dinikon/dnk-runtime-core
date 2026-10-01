@@ -2,21 +2,21 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Response, status
 
-from src.modules.identity.application.auth import ConfirmEmailOtpCommandDTO
-from src.modules.identity.domain import (
-    InvalidOtpChallengeError,
-    InvalidOtpCodeError,
-    PrimaryUserEmailNotFoundError,
-    UserLoginUnavailableError,
+from src.modules.identity.application.auth.command.confirm_email_otp_command_dto import (
+    ConfirmEmailOtpCommandDTO,
 )
-from src.modules.identity.presentation.depends import (
-    AuthSettingsDep,
+from src.modules.identity.domain.auth.error import InvalidOtpChallengeError
+from src.modules.identity.domain.auth.error import InvalidOtpCodeError
+from src.modules.identity.domain.user.error import PrimaryUserEmailNotFoundError
+from src.modules.identity.domain.user.error import UserLoginUnavailableError
+from src.modules.identity.presentation.depends.infrastructure import AuthSettingsDep
+from src.modules.identity.presentation.depends.application import (
     ConfirmEmailOtpUseCaseDep,
 )
-from src.modules.identity.presentation.http.console_auth.requests import (
+from src.modules.identity.presentation.http.console_auth.requests.confirm_email_otp_request import (
     ConfirmEmailOtpRequestSchema,
 )
-from src.modules.identity.presentation.http.console_auth.responses import (
+from src.modules.identity.presentation.http.console_auth.responses.confirm_email_otp_response import (
     ConfirmEmailOtpResponseSchema,
 )
 from src.modules.shared.presentation.http.depends import RequestHostDep

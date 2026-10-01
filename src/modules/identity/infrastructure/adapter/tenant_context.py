@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from src.modules.identity.application.ports import (
+from src.modules.identity.application.ports.tenant_context_reader import (
     TenantContextReaderPort,
+)
+from src.modules.identity.application.ports.tenant_context_reader import (
     TenantRequestContext,
 )
 from src.modules.tenancy.application.tenant_domain.query import (

@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 from unittest.mock import AsyncMock
 
-from src.modules.identity.domain.user import User
+from src.modules.identity.domain.user.entity import User
 from src.modules.shared import DomainError
 from src.modules.shared.application.persistence.tenant_schema_naming import (
     TenantSchemaNaming,
@@ -21,7 +21,8 @@ from src.modules.identity.infrastructure.persistence.user_email import UserEmail
 from src.modules.identity.infrastructure.repository.user_repository import (
     SqlAlchemyUserRepository,
 )
-from src.modules.identity.domain.user import UserEmailIdVO, UserIdVO
+from src.modules.identity.domain.user.value_object.user_email_id import UserEmailIdVO
+from src.modules.identity.domain.user.value_object.user_id import UserIdVO
 from src.modules.shared import EntityIdVO
 
 

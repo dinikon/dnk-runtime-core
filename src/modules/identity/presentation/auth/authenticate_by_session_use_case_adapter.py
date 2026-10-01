@@ -1,21 +1,25 @@
 from __future__ import annotations
 
-from src.modules.identity.application.auth import (
+from src.modules.identity.application.auth.command.authenticate_by_session_command import (
     AuthenticateBySessionCommand as AuthenticateBySessionUseCaseCommand,
+)
+from src.modules.identity.application.auth.use_case.authenticate_by_session import (
     SessionPrincipal,
 )
-from src.modules.identity.presentation.depends import AuthenticateBySessionUseCaseDep
-from src.modules.shared.domain.identity_context import Principal
-from src.modules.shared.presentation.identity_context.authenticate_by_session_command import (
+from src.modules.identity.presentation.depends.application import (
+    AuthenticateBySessionUseCaseDep,
+)
+from src.modules.identity.domain.auth.principal import Principal
+from src.modules.identity.presentation.auth.authenticate_by_session_command import (
     AuthenticateBySessionCommand,
 )
-from src.modules.shared.presentation.identity_context.authentication_process_protocol import (
+from src.modules.identity.presentation.auth.authentication_process_protocol import (
     AuthenticationProcessProtocol,
 )
 
 
 class AuthenticateBySessionUseCaseAdapter(AuthenticationProcessProtocol):
-    """Адаптер shared auth-порта к identity AuthenticateBySessionUseCase."""
+    """Адаптер HTTP-аутентификации к AuthenticateBySessionUseCase."""
 
     def __init__(self, use_case: AuthenticateBySessionUseCaseDep) -> None:
         """Сохраняет identity use case для последующей аутентификации."""
@@ -25,7 +29,7 @@ class AuthenticateBySessionUseCaseAdapter(AuthenticationProcessProtocol):
         self,
         command: AuthenticateBySessionCommand,
     ) -> Principal | None:
-        """Аутентифицирует session и мапит identity principal в shared Principal."""
+        """Аутентифицирует session и мапит identity principal в Principal."""
         principal = await self._use_case(
             AuthenticateBySessionUseCaseCommand(
                 host=command.host,
@@ -40,7 +44,7 @@ class AuthenticateBySessionUseCaseAdapter(AuthenticationProcessProtocol):
 
 
 def _map_principal(principal: SessionPrincipal) -> Principal:
-    """Мапит identity SessionPrincipal в shared Principal."""
+    """Мапит identity SessionPrincipal в Principal."""
     return Principal(
         user_id=principal.user_id,
         tenant_id=principal.tenant_id,

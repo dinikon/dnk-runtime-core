@@ -6,10 +6,11 @@ import logging
 import secrets
 from uuid import UUID, uuid4
 
-from src.modules.identity.application.ports import SessionRecord
+from src.modules.identity.application.ports.token_store import SessionRecord
 from src.modules.identity.domain.access import IdentityAccessError
 from src.modules.identity.application.ports.access import Invitation
-from src.modules.identity.domain.user import User, UserIdVO
+from src.modules.identity.domain.user.entity import User
+from src.modules.identity.domain.user.value_object.user_id import UserIdVO
 from src.modules.shared import EntityIdVO
 from src.modules.shared.domain.email import (
     EmailDeliveryError,

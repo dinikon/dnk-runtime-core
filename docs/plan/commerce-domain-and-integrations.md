@@ -34,7 +34,8 @@
 | `orders` | заказом, строками-снимками, воронками, стадиями, правилами переходов и ссылками на резерв/отгрузку | бухгалтерскими или складскими проводками, содержимым карточки товара, HTTP-клиентами платформ |
 | `integrations` | подключениями, профилями синхронизации, external bindings, sync runs, конфликтами и доставкой интеграционных задач | инвариантами товара, склада и заказа; платформенным SDK/API |
 | `plugins` | протоколом конкретной внешней платформы: OAuth/API key, webhook signature, pagination, rate limits, payload mapping | внутренними бизнес-правилами и прямыми SQL-запросами к `catalog`, `inventory`, `orders` |
-| `shared` | UoW, outbox/inbox, clock, UUID, request context, jobs, технические ошибки и observability | commerce workflows и provider-specific логику |
+| `shared` | UoW, outbox/inbox, clock, UUID, jobs, технические ошибки и observability | commerce workflows и provider-specific логику |
+| `identity` | контекстом пользователя, аутентификацией и авторизацией | commerce workflows и жизненным циклом заказа |
 
 ```mermaid
 flowchart LR

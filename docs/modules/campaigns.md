@@ -68,7 +68,8 @@ business campaign goal + audience + schedule + orchestration template -> measura
 
 | Зависимость       | Для чего используется                                                                    |
 |-------------------|------------------------------------------------------------------------------------------|
-| `shared`          | IDs, domain errors, clock/UUID ports, UoW и request context dependencies.                |
+| `shared`          | IDs, domain errors, clock/UUID ports, UoW.                |
+| `identity` | Контекст пользователя и зависимости аутентификации/авторизации; прямые импорты из файлов определений. |
 | `schema_registry` | Runtime object descriptors для campaign-owned runtime objects.                             |
 | `runtime_data`    | Хранение/поиск campaign runtime rows, если campaign objects descriptor-backed.           |
 
