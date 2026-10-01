@@ -6,10 +6,8 @@ from starlette.routing import Match
 from sqlalchemy import select
 
 from src.modules.shared.infrastructure.persistence.database_helper import db_helper
-from src.modules.shared.infrastructure.persistence.tenant_gate import (
-    TenantGate,
-    TenantUnavailable,
-)
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_gate import TenantGate
+from src.modules.tenancy.application.tenant.tenant_admission import TenantUnavailable
 from src.modules.shared.presentation.http.host import extract_request_host
 from src.modules.tenancy.infrastructure.persistence.tenant_domain import (
     TenantDomainModel,

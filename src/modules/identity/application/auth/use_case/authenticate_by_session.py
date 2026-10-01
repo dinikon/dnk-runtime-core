@@ -14,10 +14,8 @@ from src.modules.identity.domain.user.repository import UserRepositoryProtocol
 from src.modules.identity.domain.user.value_object.user_id import UserIdVO
 from src.modules.shared import EntityIdVO
 from src.modules.shared.presentation.http.host import normalize_host
-from src.modules.tenancy.domain.tenant_domain import (
-    TenantHostNotFoundError,
-    TenantLoginUnavailableError,
-)
+from src.modules.tenancy.domain.tenant_domain.error import TenantHostNotFoundError
+from src.modules.tenancy.domain.tenant_domain.error import TenantLoginUnavailableError
 
 
 @dataclass(frozen=True, slots=True)

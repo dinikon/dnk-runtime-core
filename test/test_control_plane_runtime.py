@@ -52,7 +52,7 @@ from src.modules.control_plane.infrastructure.worker_engine import (
 from src.modules.shared.infrastructure.persistence.global_migrations import (
     GlobalMigrator,
 )
-from src.modules.shared.infrastructure.persistence.tenant_migrations import (
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
     schema_exists,
 )
 from src.modules.tenancy.infrastructure.persistence.tenant import TenantModel

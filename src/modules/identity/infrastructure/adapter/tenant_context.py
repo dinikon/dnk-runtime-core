@@ -6,7 +6,7 @@ from src.modules.identity.application.ports.tenant_context_reader import (
 from src.modules.identity.application.ports.tenant_context_reader import (
     TenantRequestContext,
 )
-from src.modules.tenancy.application.tenant_domain.query import (
+from src.modules.tenancy.application.tenant_domain.query.resolve_tenant_request_context_by_host_query import (
     ResolveTenantRequestContextByHostQuery,
 )
 from src.modules.tenancy.presentation.depends.application import (

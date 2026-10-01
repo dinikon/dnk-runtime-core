@@ -1,30 +1,32 @@
 from dataclasses import dataclass
 
-from src.modules.shared.infrastructure.persistence.tenant_gate import (
-    TenantGate,
-    TenantUnavailable,
-)
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_gate import TenantGate
+from src.modules.tenancy.application.tenant.tenant_admission import TenantUnavailable
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.engine import URL
 from sqlalchemy.pool import NullPool
 from sqlalchemy import select
-from src.modules.shared.infrastructure.persistence.tenant_gate import DELETING
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_gate import DELETING
 from src.modules.tenancy.infrastructure.persistence.tenant import TenantModel
 
-from src.modules.shared.application.persistence.tenant_schema_naming import (
+from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
-from src.modules.shared.infrastructure.persistence.tenant_migrations import (
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
     TenantMigrationError,
+)
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
     TenantMigrator,
 )
 from src.modules.shared.infrastructure.persistence.unit_of_work.sqlalchemy import (
     UnitOfWork,
 )
-from src.modules.tenancy.domain.tenant.value_object import TenantIdVO
-from src.modules.tenancy.infrastructure.repository import SqlAlchemyTenantRepository
+from src.modules.tenancy.domain.tenant.value_object.tenant_id import TenantIdVO
+from src.modules.tenancy.infrastructure.repository.tenant_repository import (
+    SqlAlchemyTenantRepository,
+)
 
 
 @dataclass(frozen=True, slots=True)

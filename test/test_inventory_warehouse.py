@@ -13,9 +13,12 @@ from src.modules.inventory.domain.warehouse import (
 from src.modules.inventory.infrastructure.persistence import WarehouseModel
 from src.modules.shared.domain.domain_error import EntityIdTypeError
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
-from src.modules.shared.infrastructure.persistence import Base, TenantBase
-from src.modules.shared.infrastructure.persistence.tenant_migration_metadata import (
+from src.modules.shared.infrastructure.persistence import Base
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_base import TenantBase
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migration_metadata import (
     migration_metadata,
+)
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migration_metadata import (
     managed_table_names,
 )
 

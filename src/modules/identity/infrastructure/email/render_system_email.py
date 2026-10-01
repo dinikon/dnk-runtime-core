@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from typing import Callable, cast
 
-from src.modules.shared.domain.email import (
+from src.modules.identity.application.email.send_invitation_variables import (
     SendInvitationVariables,
-    SendOtpCodeVariables,
-    SystemEmailKind,
 )
-from src.modules.shared.infrastructure.email.rendered_email_message import (
+from src.modules.identity.application.email.send_otp_code_variables import (
+    SendOtpCodeVariables,
+)
+from src.modules.identity.application.email.system_email_kind import SystemEmailKind
+from src.modules.shared.application.email.rendered_email_message import (
     RenderedEmailMessage,
 )
 

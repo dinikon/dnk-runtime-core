@@ -21,10 +21,10 @@ from src.modules.shared.infrastructure.persistence.database_helper import db_hel
 from src.modules.shared.infrastructure.persistence.global_migrations import (
     GlobalMigrator,
 )
-from src.modules.shared.presentation.http.trust_boundary import (
+from src.modules.control_plane.presentation.http.trust_boundary import (
     ManagementTrustBoundary,
-    install_access_log_redaction,
 )
+from src.modules.shared.presentation.http.access_log import install_access_log_redaction
 
 
 @asynccontextmanager
@@ -82,7 +82,7 @@ def create_app() -> DnkApp:
     app.include_router(identity_integration_router)
     app.include_router(cloud_router)
     integration = dnk_config.CONTROL_PLANE
-    from src.modules.shared.presentation.http.tenant_gate import (
+    from src.modules.tenancy.presentation.tenant.http.tenant_gate import (
         TenantAdmissionMiddleware,
     )
 

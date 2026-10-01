@@ -5,12 +5,11 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.tenancy.domain.tenant import Tenant, TenantRepositoryProtocol
-from src.modules.tenancy.domain.tenant.value_object import TenantIdVO
-from src.modules.tenancy.infrastructure.mapper import (
-    tenant_model_to_entity,
-    tenant_to_model,
-)
+from src.modules.tenancy.domain.tenant.entity import Tenant
+from src.modules.tenancy.domain.tenant.repository import TenantRepositoryProtocol
+from src.modules.tenancy.domain.tenant.value_object.tenant_id import TenantIdVO
+from src.modules.tenancy.infrastructure.mapper.tenant import tenant_model_to_entity
+from src.modules.tenancy.infrastructure.mapper.tenant import tenant_to_model
 from src.modules.tenancy.infrastructure.persistence.tenant import TenantModel
 
 

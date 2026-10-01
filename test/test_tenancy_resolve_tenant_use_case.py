@@ -2,15 +2,18 @@ from __future__ import annotations
 
 import unittest
 
-from src.modules.tenancy.application.tenant_domain.query import (
+from src.modules.tenancy.application.tenant_domain.query.resolve_tenant_by_host_query import (
     ResolveTenantByHostQuery,
 )
-from src.modules.tenancy.application.tenant_domain.use_case import (
+from src.modules.tenancy.application.tenant_domain.use_case.resolve_tenant_by_host import (
     ResolveTenantByHostUseCase,
 )
-from src.modules.tenancy.domain.tenant import Tenant
-from src.modules.tenancy.domain.tenant.value_object import TenantStatus
-from src.modules.tenancy.domain.tenant_domain import TenantDomain, TenantDomainStatus
+from src.modules.tenancy.domain.tenant.entity import Tenant
+from src.modules.tenancy.domain.tenant.value_object.tenant_status import TenantStatus
+from src.modules.tenancy.domain.tenant_domain.entity import TenantDomain
+from src.modules.tenancy.domain.tenant_domain.value_object.tenant_domain_status import (
+    TenantDomainStatus,
+)
 
 
 class _TenantRepositoryStub:

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import ipaddress
-import logging
 from datetime import UTC, datetime
 from urllib.parse import unquote
 
@@ -11,7 +9,10 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
-from src.modules.shared.infrastructure.observability.metrics import mtls_rejections
+from src.modules.control_plane.infrastructure.observability.metrics import (
+    mtls_rejections,
+)
+from src.modules.shared.presentation.http.trusted_proxy import TrustedProxyHeaders
 
 
 class ManagementTrustBoundary:
@@ -27,18 +28,8 @@ class ManagementTrustBoundary:
         self.app = app
         self.enabled = enabled
         self.management_host = management_host
-        self.networks = tuple(
-            ipaddress.ip_network(value, strict=False)
-            for value in trusted_proxy_networks
-        )
+        self.proxy_headers = TrustedProxyHeaders(trusted_proxy_networks)
         self.fingerprints = frozenset(allowed_core_fingerprints)
-
-    def _trusted(self, address: str) -> bool:
-        try:
-            parsed = ipaddress.ip_address(address)
-            return any(parsed in network for network in self.networks)
-        except ValueError:
-            return False
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] not in {"http", "websocket"}:
@@ -57,7 +48,7 @@ class ManagementTrustBoundary:
         raw_peer = scope.get("client")
         scope["state"]["socket_peer"] = raw_peer
         scope["state"]["control_plane_trusted"] = False
-        trusted_peer = bool(raw_peer and self._trusted(raw_peer[0]))
+        trusted_peer = bool(raw_peer and self.proxy_headers.is_trusted(raw_peer[0]))
         internal = scope.get("path", "").split("/", 2)[1:2] == ["internal"]
         management = bool(self.management_host and raw_host == self.management_host)
         if internal:
@@ -73,30 +64,8 @@ class ManagementTrustBoundary:
             await self._reject(scope, receive, send, 404)
             return
 
-        # Read only a trusted ingress's values, after authenticating its raw peer.
-        if trusted_peer:
-            proto = headers.get(b"x-forwarded-proto", [])
-            if len(proto) == 1 and proto[0] in {b"http", b"https"}:
-                scope["scheme"] = proto[0].decode("ascii")
-            forwarded = headers.get(b"x-forwarded-for", [])
-            if len(forwarded) == 1:
-                chain = forwarded[0].decode("latin-1").split(",")
-                for item in reversed(chain):
-                    address = item.strip()
-                    try:
-                        ipaddress.ip_address(address)
-                    except ValueError:
-                        break
-                    scope["client"] = (address, 0)
-                    if not self._trusted(address):
-                        break
-        # No downstream helper can accidentally trust client-supplied headers.
-        scope["headers"] = [
-            (key, value)
-            for key, value in scope.get("headers", [])
-            if not key.lower().startswith((b"x-forwarded-", b"ssl-client-"))
-            and key.lower() != b"forwarded"
-        ]
+        # Management policy checks the raw peer/certificate before normalization.
+        self.proxy_headers.normalize(scope, headers, trusted_peer=trusted_peer)
         await self.app(scope, receive, send)
 
     def _certificate_allowed(self, headers: dict[bytes, list[bytes]]) -> bool:
@@ -127,21 +96,3 @@ class ManagementTrustBoundary:
                 {"detail": "Not found" if code == 404 else "Invalid connection"},
                 status_code=code,
             )(scope, receive, send)
-
-
-class RedactAccessQuery(logging.Filter):
-    """Do not retain authorization codes or invitation tokens in access logs."""
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        if isinstance(record.args, tuple) and len(record.args) == 5:
-            args = list(record.args)
-            if isinstance(args[2], str):
-                args[2] = args[2].split("?", 1)[0]
-                record.args = tuple(args)
-        return True
-
-
-def install_access_log_redaction() -> None:
-    logger = logging.getLogger("uvicorn.access")
-    if not any(isinstance(item, RedactAccessQuery) for item in logger.filters):
-        logger.addFilter(RedactAccessQuery())

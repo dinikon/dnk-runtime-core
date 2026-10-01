@@ -7,8 +7,10 @@ import sqlalchemy as sa
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.modules.shared.infrastructure.persistence import StringUUID
-from src.modules.shared.infrastructure.persistence.base import TENANT_SCHEMA_ALIAS
-from src.modules.shared.infrastructure.persistence.tenant_base import TenantBase
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_base import (
+    TENANT_SCHEMA_ALIAS,
+)
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_base import TenantBase
 
 
 class CloudIdentityModel(TenantBase):

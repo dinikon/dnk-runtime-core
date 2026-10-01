@@ -6,15 +6,23 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.shared import EntityIdVO
-from src.modules.tenancy.domain.tenant_domain import (
-    TenantDomain,
+from src.modules.tenancy.domain.tenant_domain.entity import TenantDomain
+from src.modules.tenancy.domain.tenant_domain.value_object.tenant_domain_id import (
     TenantDomainIdVO,
+)
+from src.modules.tenancy.domain.tenant_domain.repository import (
     TenantDomainRepositoryProtocol,
+)
+from src.modules.tenancy.domain.tenant_domain.value_object.tenant_domain_status import (
     TenantDomainStatus,
+)
+from src.modules.tenancy.domain.tenant_domain.value_object.tenant_service_type import (
     TenantServiceType,
 )
-from src.modules.tenancy.infrastructure.mapper import (
+from src.modules.tenancy.infrastructure.mapper.tenant_domain import (
     tenant_domain_model_to_entity,
+)
+from src.modules.tenancy.infrastructure.mapper.tenant_domain import (
     tenant_domain_to_model,
 )
 from src.modules.tenancy.infrastructure.persistence.tenant_domain import (

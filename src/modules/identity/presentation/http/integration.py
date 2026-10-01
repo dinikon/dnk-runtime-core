@@ -17,12 +17,10 @@ from src.modules.identity.presentation.http.csrf import browser_session
 from src.modules.identity.presentation.http.csrf import flow_cookie
 from src.modules.identity.presentation.http.csrf import set_session_cookie
 from src.modules.shared.presentation.http.depends import RequestHostDep
-from src.modules.shared.infrastructure.observability.metrics import oidc_errors
+from src.modules.identity.infrastructure.observability.metrics import oidc_errors
 from src.modules.shared.presentation.tokens.depends import TokenManagerDep
-from src.modules.tenancy.domain.tenant_domain import (
-    TenantHostNotFoundError,
-    TenantLoginUnavailableError,
-)
+from src.modules.tenancy.domain.tenant_domain.error import TenantHostNotFoundError
+from src.modules.tenancy.domain.tenant_domain.error import TenantLoginUnavailableError
 
 router = APIRouter(
     prefix="/api/console",

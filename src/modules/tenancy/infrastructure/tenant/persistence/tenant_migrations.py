@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import re
-from contextlib import asynccontextmanager
-from collections.abc import AsyncIterator, Callable
+from collections.abc import Callable
 from pathlib import Path
-from threading import Lock
+
+from src.modules.shared.infrastructure.persistence.alembic_lock import (
+    serialized_alembic,
+)
 
 from alembic import command
 from alembic.config import Config
@@ -16,8 +17,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-MIGRATIONS_PATH = Path(__file__).resolve().parents[5] / "migrations" / "tenant"
-_ALEMBIC_LOCK = Lock()
+MIGRATIONS_PATH = Path(__file__).resolve().parents[6] / "migrations" / "tenant"
 
 
 class TenantMigrationError(Exception):
@@ -58,17 +58,6 @@ async def schema_exists(connection: AsyncConnection, schema_name: str) -> bool:
             {"name": schema_name},
         )
     )
-
-
-@asynccontextmanager
-async def serialized_alembic() -> AsyncIterator[None]:
-    """Защищает глобальные proxy Alembic, включая разные event loops."""
-    while not _ALEMBIC_LOCK.acquire(blocking=False):
-        await asyncio.sleep(0.01)
-    try:
-        yield
-    finally:
-        _ALEMBIC_LOCK.release()
 
 
 class TenantMigrator:

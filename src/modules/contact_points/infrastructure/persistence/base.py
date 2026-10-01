@@ -1,8 +1,10 @@
-from src.modules.shared.application.persistence.tenant_schema_naming import (
+from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
-from src.modules.shared.infrastructure.persistence.base import TENANT_SCHEMA_ALIAS
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_base import (
+    TENANT_SCHEMA_ALIAS,
+)
 
 
 class ContactPointPersistenceMappingError(RuntimeError):

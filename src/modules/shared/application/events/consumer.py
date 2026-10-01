@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from src.modules.shared.application.persistence.tenant_admission import (
-    TenantUnavailable,
+from src.modules.tenancy.application.tenant.tenant_admission import TenantUnavailable
+from src.modules.tenancy.application.tenant.tenant_admission import (
     unrestricted_admission,
 )
 

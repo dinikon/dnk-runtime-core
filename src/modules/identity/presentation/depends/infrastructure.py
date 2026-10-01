@@ -27,10 +27,8 @@ from src.modules.identity.infrastructure.adapter.otp_challenge_store import (
 from src.modules.identity.infrastructure.adapter.session_store import (
     TokenManagerBackedSessionStore,
 )
-from src.modules.shared.presentation.email.depends import (
-    EmailServiceDep,
-    get_email_service,
-)
+from src.modules.identity.presentation.email.depends import EmailServiceDep
+from src.modules.identity.presentation.email.depends import get_email_service
 from src.modules.identity.infrastructure.repository.user_repository import (
     SqlAlchemyUserRepository,
 )
@@ -40,7 +38,7 @@ from src.modules.shared.presentation.tokens.depends import (
     get_token_manager,
 )
 from src.modules.shared.presentation.persistence.depends import UoWDep
-from src.modules.shared.application.persistence.tenant_schema_naming import (
+from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
 from src.modules.tenancy.presentation.depends.application import (

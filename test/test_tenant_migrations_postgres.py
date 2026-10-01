@@ -29,29 +29,39 @@ from src.modules.identity.infrastructure.repository.user_repository import (
     SqlAlchemyUserRepository,
 )
 from src.modules.inventory.infrastructure.persistence import WarehouseModel
-from src.modules.shared.application.persistence.tenant_schema_naming import (
+from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
 from src.modules.shared.infrastructure.persistence import Base, UnitOfWork
-from src.modules.shared.infrastructure.persistence.tenant_migration_metadata import (
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migration_metadata import (
     migration_metadata,
 )
-from src.modules.shared.infrastructure.persistence.tenant_migrations import (
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
     MIGRATIONS_PATH,
+)
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
     TenantMigrator,
+)
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
     TenantMigrationError,
+)
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
     TenantSchemaMissingError,
+)
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
     schema_exists,
 )
 from src.modules.tenancy.application.ports.schema_bootstrap import (
     TenantSchemaBootstrapContextFactory,
 )
-from src.modules.tenancy.application.tenant import (
+from src.modules.tenancy.application.tenant.command.create_tenant_command import (
     CreateTenantCommand,
+)
+from src.modules.tenancy.application.tenant.use_case.create_tenant import (
     CreateTenantUseCase,
 )
-from src.modules.tenancy.domain.service import TenantOnboardingService
-from src.modules.tenancy.domain.tenant import Tenant
+from src.modules.tenancy.domain.service.tenant_onboarding import TenantOnboardingService
+from src.modules.tenancy.domain.tenant.entity import Tenant
 from src.modules.tenancy.domain.tenant.schema_error import (
     TenantSchemaAlreadyExistsError,
 )
@@ -65,8 +75,10 @@ from src.modules.tenancy.infrastructure.persistence.tenant import TenantModel
 from src.modules.tenancy.infrastructure.persistence.tenant_domain import (
     TenantDomainModel,
 )
-from src.modules.tenancy.infrastructure.repository import (
+from src.modules.tenancy.infrastructure.repository.tenant_repository import (
     SqlAlchemyTenantRepository,
+)
+from src.modules.tenancy.infrastructure.repository.tenant_domain_repository import (
     SqlAlchemyTenantDomainRepository,
 )
 from src.modules.tenancy.presentation.depends.management import (
@@ -622,7 +634,7 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                     script = await migrator.revision(connection, schema, "test draft")
                 else:
                     with patch(
-                        "src.modules.shared.infrastructure.persistence.tenant_migration_metadata.migration_metadata",
+                        "src.modules.tenancy.infrastructure.tenant.persistence.tenant_migration_metadata.migration_metadata",
                         return_value=metadata,
                     ):
                         script = await migrator.revision(
@@ -713,7 +725,7 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
         code = """
 import asyncio, os, sys
 from sqlalchemy.ext.asyncio import create_async_engine
-from src.modules.shared.infrastructure.persistence.tenant_migrations import TenantMigrator
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import TenantMigrator
 async def main():
     engine = create_async_engine(os.environ['TEST_POSTGRES_URL'])
     try:

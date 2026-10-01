@@ -236,7 +236,7 @@ from typing import Annotated
 from fastapi import Depends
 
 from src.config import dnk_config
-from src.modules.shared.application.persistence.tenant_schema_naming import TenantSchemaNaming
+from src.modules.tenancy.application.tenant.tenant_schema_naming import TenantSchemaNaming
 from src.modules.shared.presentation.persistence.depends import UoWDep
 
 

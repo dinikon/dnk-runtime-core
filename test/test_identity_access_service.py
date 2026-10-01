@@ -6,7 +6,8 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 from src.modules.identity.application.access_service import IdentityAccessService
-from src.modules.shared.domain.email import EmailDeliveryError, SystemEmailKind
+from src.modules.shared.domain.email import EmailDeliveryError
+from src.modules.identity.application.email.system_email_kind import SystemEmailKind
 
 
 class IdentityAccessServiceTests(unittest.IsolatedAsyncioTestCase):

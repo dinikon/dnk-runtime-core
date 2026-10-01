@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from src.modules.tenancy.domain.tenant import Tenant, TenantStatus
-from src.modules.tenancy.domain.tenant.value_object import TenantIdVO
+from src.modules.tenancy.domain.tenant.entity import Tenant
+from src.modules.tenancy.domain.tenant.value_object.tenant_status import TenantStatus
+from src.modules.tenancy.domain.tenant.value_object.tenant_id import TenantIdVO
 from src.modules.tenancy.infrastructure.persistence.tenant import TenantModel
 
 

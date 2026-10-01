@@ -15,13 +15,11 @@ from src.modules.control_plane.infrastructure.services import (
 from src.modules.identity.infrastructure.repository.access_repository import (
     AccessRepository,
 )
-from src.modules.shared.application.persistence.tenant_schema_naming import (
+from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
-from src.modules.shared.infrastructure.persistence.tenant_gate import (
-    TenantGate,
-    TenantUnavailable,
-)
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_gate import TenantGate
+from src.modules.tenancy.application.tenant.tenant_admission import TenantUnavailable
 from src.modules.tenancy.infrastructure.persistence.tenant import TenantModel
 
 log = logging.getLogger(__name__)

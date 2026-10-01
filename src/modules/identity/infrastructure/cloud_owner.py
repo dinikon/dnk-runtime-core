@@ -11,7 +11,7 @@ from src.modules.identity.infrastructure.repository.user_repository import (
     SqlAlchemyUserRepository,
 )
 from src.modules.shared import EntityIdVO
-from src.modules.shared.application.persistence.tenant_schema_naming import (
+from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
 

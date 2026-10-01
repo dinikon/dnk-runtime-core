@@ -4,7 +4,9 @@ from typing import Protocol
 
 from src.modules.shared import EntityIdVO
 from src.modules.tenancy.domain.tenant_domain.entity import TenantDomain
-from src.modules.tenancy.domain.tenant_domain.value_object import TenantDomainIdVO
+from src.modules.tenancy.domain.tenant_domain.value_object.tenant_domain_id import (
+    TenantDomainIdVO,
+)
 
 
 class TenantDomainRepositoryProtocol(Protocol):

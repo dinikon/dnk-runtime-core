@@ -3,15 +3,17 @@ from uuid import UUID
 from sqlalchemy import CheckConstraint, ForeignKey, Index, PrimaryKeyConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.modules.shared.infrastructure.persistence.tenant_base import TenantBase
-from src.modules.shared.infrastructure.persistence.tenant_system_mixin import (
-    TenantSystemMixin,
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_base import TenantBase
+from src.modules.shared.infrastructure.persistence.titled_entity_audit_mixin import (
+    TitledEntityAuditMixin,
 )
 from src.modules.shared.infrastructure.persistence.string_uuid import StringUUID
-from src.modules.shared.infrastructure.persistence.base import TENANT_SCHEMA_ALIAS
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_base import (
+    TENANT_SCHEMA_ALIAS,
+)
 
 
-class WarehouseModel(TenantSystemMixin, TenantBase):
+class WarehouseModel(TitledEntityAuditMixin, TenantBase):
     """Статическая tenant-модель склада; структура управляется Alembic."""
 
     __tablename__ = "warehouses"

@@ -30,7 +30,7 @@ from src.modules.identity.application.user.service.user_service import (
     UserServiceProtocol,
 )
 from src.modules.identity.presentation.depends.infrastructure import AuthSettingsDep
-from src.modules.shared.presentation.email.depends import EmailServiceDep
+from src.modules.identity.presentation.email.depends import EmailServiceDep
 from src.modules.identity.presentation.depends.infrastructure import (
     OtpChallengeStoreDep,
 )

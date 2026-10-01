@@ -3,10 +3,8 @@ from __future__ import annotations
 from src.modules.shared.domain.email.email_provider_not_implemented_error import (
     EmailProviderNotImplementedError,
 )
-from src.modules.shared.infrastructure.email.email_transport_port import (
-    EmailTransportPort,
-)
-from src.modules.shared.infrastructure.email.rendered_email_message import (
+from src.modules.shared.application.email.email_transport_port import EmailTransportPort
+from src.modules.shared.application.email.rendered_email_message import (
     RenderedEmailMessage,
 )
 

@@ -3,13 +3,13 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from src.modules.shared.presentation.http.depends import RequestHostDep
-from src.modules.tenancy.application.tenant_domain.query import (
+from src.modules.tenancy.application.tenant_domain.query.resolve_tenant_by_host_query import (
     ResolveTenantByHostQuery,
 )
 from src.modules.tenancy.presentation.depends.application import (
     ResolveTenantByHostUseCaseDep,
 )
-from src.modules.tenancy.presentation.http.console_tenant.responses import (
+from src.modules.tenancy.presentation.http.console_tenant.responses.resolve_tenant_response import (
     ResolveTenantResponseSchema,
 )
 

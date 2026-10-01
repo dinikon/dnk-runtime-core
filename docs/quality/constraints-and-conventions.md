@@ -46,7 +46,7 @@
 
 ## Tenant Migration Rules
 
-- Static tenant models inherit shared TenantBase and use Alembic revisions.
+- Static tenant models inherit Tenancy-owned TenantBase and use Alembic revisions.
 - Global Base models use global Alembic revisions; startup checks the revision without changing the schema.
 - Bootstrap DDL shares the onboarding transaction and never commits internally.
 - Schema names use the shared naming strategy and a stable SCHEMA_PREFIX.

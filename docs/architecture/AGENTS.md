@@ -114,9 +114,19 @@ ORM models или session factory. Контракт UoW предоставляе
 из отдельных файлов `identity/domain/auth/`. Пакеты Identity не реэкспортируют
 определения через `__init__.py`.
 
-Универсальные TokenManager, Redis-backend, email, UoW, jobs/events и существующая
-tenant-инфраструктура остаются в `shared`. Сборка Identity использует эти механизмы;
-перенос контекста пользователя не меняет границы транзакций или правила доступа.
+Универсальные TokenManager, Redis-backend, доставка готовых email, UoW и jobs/events
+остаются в `shared`. Виды писем OTP/приглашений, их переменные, шаблоны и сборка
+сервиса принадлежат Identity; общий транспорт не импортирует их.
+
+Tenancy владеет именованием tenant-схем, `TenantBase`, tenant-миграциями и admission.
+Пакеты Tenancy также имеют пустые `__init__.py`. Общая блокировка Alembic остаётся
+в shared и используется обоими миграторами. Общие mixins не содержат правил
+жизненного цикла tenant; `TitledEntityAuditMixin` остаётся в shared.
+
+Control Plane владеет management trust policy и mTLS-метрикой. Общая обработка
+proxy-заголовков вызывается после проверки исходного peer и сертификата;
+затем выполняются tenant admission и HTTP dependencies. UoW переиспользует
+соединение admission и завершает транзакцию до отправки ответа.
 
 #### Структура модуля
 

@@ -4,11 +4,15 @@ import unittest
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from src.modules.tenancy.domain.tenant import TenantStatus
-from src.modules.tenancy.domain.tenant.value_object import TenantIdVO
-from src.modules.tenancy.domain.tenant_domain import (
+from src.modules.tenancy.domain.tenant.value_object.tenant_status import TenantStatus
+from src.modules.tenancy.domain.tenant.value_object.tenant_id import TenantIdVO
+from src.modules.tenancy.domain.tenant_domain.value_object.tenant_domain_id import (
     TenantDomainIdVO,
+)
+from src.modules.tenancy.domain.tenant_domain.value_object.tenant_domain_status import (
     TenantDomainStatus,
+)
+from src.modules.tenancy.domain.tenant_domain.value_object.tenant_service_type import (
     TenantServiceType,
 )
 from src.modules.shared import EntityIdVO

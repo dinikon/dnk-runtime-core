@@ -6,7 +6,7 @@ from fastapi import Depends
 
 from src.config import dnk_config
 from src.modules.shared.presentation.persistence.depends import UoWDep
-from src.modules.shared.infrastructure.persistence.tenant_migrations import (
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
     TenantMigrator,
 )
 from src.modules.tenancy.infrastructure.adapter.schema_bootstrap import (
@@ -14,19 +14,29 @@ from src.modules.tenancy.infrastructure.adapter.schema_bootstrap import (
 )
 from src.modules.tenancy.application.ports.schema_bootstrap import (
     TenantSchemaBootstrapContextFactory,
+)
+from src.modules.tenancy.application.ports.schema_bootstrap import (
     TenantSchemaBootstrapPort,
 )
-from src.modules.tenancy.application.tenant import CreateTenantUseCase
-from src.modules.tenancy.application.tenant_domain.use_case import (
+from src.modules.tenancy.application.tenant.use_case.create_tenant import (
+    CreateTenantUseCase,
+)
+from src.modules.tenancy.application.tenant_domain.use_case.resolve_tenant_by_host import (
     ResolveTenantByHostUseCase,
+)
+from src.modules.tenancy.application.tenant_domain.use_case.resolve_tenant_request_context_by_host import (
     ResolveTenantRequestContextByHostUseCase,
 )
 from src.modules.tenancy.presentation.depends.infrastructure import (
     IdentityProvisioningServiceDep,
-    TenantDomainsRepositoryDep,
-    TenantOnboardingServiceDep,
-    TenantsRepositoryDep,
 )
+from src.modules.tenancy.presentation.depends.infrastructure import (
+    TenantDomainsRepositoryDep,
+)
+from src.modules.tenancy.presentation.depends.infrastructure import (
+    TenantOnboardingServiceDep,
+)
+from src.modules.tenancy.presentation.depends.infrastructure import TenantsRepositoryDep
 
 
 def get_create_tenant_use_case(

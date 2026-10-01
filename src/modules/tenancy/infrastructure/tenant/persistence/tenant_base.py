@@ -1,7 +1,7 @@
 from sqlalchemy import MetaData
 from sqlalchemy.orm import DeclarativeBase
 
-from src.modules.shared.infrastructure.persistence.base import TENANT_SCHEMA_ALIAS
+TENANT_SCHEMA_ALIAS = "tenant"
 
 
 class TenantBase(DeclarativeBase):

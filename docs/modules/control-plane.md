@@ -26,7 +26,20 @@ Public Tenant readiness checks successful installation, local schema, decryptabl
 
 ## Structure
 
-Application ports and use cases define protocol/orchestration; infrastructure supplies SQLAlchemy persistence, encryption, tenancy/identity adapters, delivery and observations; presentation composes the current UoW and exposes HTTP. Shared infrastructure supplies generic RabbitMQ transport, migrations and process metrics.
+Application ports and use cases define protocol/orchestration; infrastructure supplies SQLAlchemy persistence, encryption, tenancy/identity adapters, delivery and observations; presentation composes the current UoW and exposes HTTP. Shared infrastructure supplies generic RabbitMQ transport, global migration support and worker metrics; tenant migrations belong to Tenancy.
+
+## HTTP Trust Boundary
+
+`presentation/http/trust_boundary.py` owns `ManagementTrustBoundary`: management host,
+internal paths, raw ingress peer checks, Core certificate validation and `control_plane_trusted`.
+The `mtls_rejections` counter is owned by `infrastructure/observability/metrics.py`;
+its name and labels are unchanged.
+
+After successful policy checks, the boundary calls shared `TrustedProxyHeaders` to
+normalize trusted proxy data and remove forwarding/certificate headers. Shared
+`access_log.py` removes query strings from access logs. The application still registers
+management trust outside tenant admission: policy checks precede normalization,
+which precedes tenant resolution and endpoint dependency execution.
 
 ## Tests
 

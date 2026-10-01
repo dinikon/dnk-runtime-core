@@ -1,6 +1,6 @@
 # Tenancy
 
-Tenancy owns tenant accounts, domain bindings, host resolution and onboarding.
+Tenancy owns tenant accounts, domain bindings, host resolution, onboarding, tenant-schema infrastructure and admission.
 
 ## Public flows
 
@@ -15,11 +15,27 @@ Runtime UUIDs are reserved before installation. New installations remain `provis
 
 ## Schema bootstrap
 
-`TenantSchemaBootstrapContext` contains `tenant_id` and `schema_name`. Its factory delegates to the shared `TenantSchemaNaming`: configured prefix plus UUID hex.
+`TenantSchemaBootstrapContext` contains `tenant_id` and `schema_name`. Its factory delegates to the Tenancy-owned `TenantSchemaNaming`: configured prefix plus UUID hex.
 
 `TenantSchemaBootstrapPort` is implemented by `AlembicTenantSchemaBootstrapAdapter`. It uses the current UoW session, locks the target schema, rejects an existing schema, creates it and runs tenant migrations. There is no seed, datasource metadata or dynamic schema dependency.
 
 Administrator provisioning runs only after schema bootstrap succeeds. The whole onboarding operation commits together or rolls back together, including failures after administrator insertion. A schema-name conflict is a tenancy error mapped to HTTP 409. Technical migration errors remain server errors.
+
+## Tenant Infrastructure
+
+`application/tenant/tenant_schema_naming.py` defines deterministic schema naming;
+`tenant_admission.py` defines `TenantUnavailable` and the optional admission context.
+`infrastructure/tenant/persistence/` owns `TenantBase`, `TENANT_SCHEMA_ALIAS`,
+`TenantGate`, tenant migrations and migration metadata helpers.
+`presentation/tenant/http/tenant_gate.py` owns `TenantAdmissionMiddleware`.
+
+Admission checks tenant state and holds a PostgreSQL advisory lock through the request.
+The middleware exposes `request.state.tenant_connection`; shared UoW reuses that connection
+and finishes its transaction before sending the response. Jobs and Events remain in shared
+and use these Tenancy admission components through direct imports.
+
+All Tenancy `__init__.py` files are empty. Consumers and model registrars import definition files.
+The physical migrations directory, revision history, schema alias and SQL metadata are unchanged.
 
 ## Presentation and management
 

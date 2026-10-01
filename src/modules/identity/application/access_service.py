@@ -12,11 +12,11 @@ from src.modules.identity.application.ports.access import Invitation
 from src.modules.identity.domain.user.entity import User
 from src.modules.identity.domain.user.value_object.user_id import UserIdVO
 from src.modules.shared import EntityIdVO
-from src.modules.shared.domain.email import (
-    EmailDeliveryError,
+from src.modules.shared.domain.email import EmailDeliveryError
+from src.modules.identity.application.email.send_invitation_variables import (
     SendInvitationVariables,
-    SystemEmailKind,
 )
+from src.modules.identity.application.email.system_email_kind import SystemEmailKind
 
 log = logging.getLogger(__name__)
 

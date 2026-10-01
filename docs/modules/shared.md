@@ -33,7 +33,10 @@ as `events`, `jobs`, `persistence`, `email`, `tokens`, `time`, `uuid`, `errors`,
     - FastAPI dependency wiring, HTTP host helpers and management wiring builders
 
 User context and authentication/authorization dependencies belong to [Identity](identity.md).
-Generic tokens, Redis backends, email, UoW, jobs/events and tenant infrastructure remain here.
+Generic tokens, Redis backends, email delivery, UoW and jobs/events remain here.
+Tenant schema naming, metadata, migrations and admission belong to [Tenancy](tenancy.md).
+Management trust policy belongs to [Control Plane](control-plane.md).
+Shared HTTP code supplies proxy normalization and access-log redaction.
 
 ## Most Used Shared Primitives
 
@@ -44,8 +47,8 @@ Generic tokens, Redis backends, email, UoW, jobs/events and tenant infrastructur
     - request/command transaction boundary
 - `ClockPort` / `UtcClock`
     - time abstraction used by domain/application services
-- `EmailServicePort` / `SystemEmailKind`
-  - typed shared contract for system email delivery used by business modules
+- `EmailTransportPort` / `RenderedEmailMessage`
+  - generic application contracts for delivering a ready message; OTP/invitation kinds and templates belong to Identity
 - `IntegrationEvent`
     - shared integration event contract persisted through PostgreSQL outbox and published asynchronously to RabbitMQ
 - `EventPublisherPort` / `EventConsumerPort`
@@ -56,6 +59,18 @@ Generic tokens, Redis backends, email, UoW, jobs/events and tenant infrastructur
     - shared scheduled work contract persisted through PostgreSQL and processed by at-least-once workers
 - `ScheduledJobHandlerPort`
     - handler contract implemented by future orchestration, bulk-send or polling modules
+
+## Persistence Ownership
+
+`Base`, `DatabaseHelper`, UoW, SQL types and audit mixins remain shared.
+`TitledEntityAuditMixin` supplies UUID, title and actor audit fields without tenant lifecycle rules.
+`TenantBase` and `TENANT_SCHEMA_ALIAS` live in Tenancy and are imported directly by tenant SQL models.
+`serialized_alembic` and its sole process-wide lock remain in `infrastructure/persistence/alembic_lock.py`;
+both global and tenant migrators use them.
+
+Jobs and Events stay in shared. Their tenant admission integration imports Tenancy directly.
+`delete_shared_tenant_records` remains with the shared jobs/inbox/outbox records it deletes;
+the existing Control Plane deletion workflow still calls it in the same transaction.
 
 ## Event Bus, Outbox And Inbox
 
@@ -108,7 +123,7 @@ depend on the application ports and presentation wiring, not on `shared.infrastr
 
 ## Tests Covering This Area
 
-- shared email service tests
+- generic email transport tests and Identity email rendering/wiring tests
 - DB and type tests
 - architecture boundary tests that protect module layering
 - shared event tests for serialization, publish retry, RabbitMQ publication and inbox idempotency

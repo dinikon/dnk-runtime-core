@@ -10,8 +10,8 @@ from src.modules.shared.infrastructure.persistence.audience_mixin import Audienc
 from src.modules.shared.infrastructure.persistence.string_uuid import StringUUID
 
 
-class TenantSystemMixin(AudienceMixin):
-    """SQLAlchemy mixin для tenant-scoped системных сущностей."""
+class TitledEntityAuditMixin(AudienceMixin):
+    """SQLAlchemy mixin для сущностей с названием и аудитом."""
 
     id: Mapped[UUID] = mapped_column(
         StringUUID,

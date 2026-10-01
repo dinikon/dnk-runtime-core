@@ -18,9 +18,9 @@ from src.modules.identity.presentation.depends.infrastructure import (
 from src.modules.shared.presentation.tokens.depends import TokenManagerDep
 from src.modules.identity.presentation.depends.infrastructure import OtpServiceDep
 from src.modules.identity.presentation.depends.infrastructure import SessionServiceDep
-from src.modules.shared.presentation.email.depends import EmailServiceDep
+from src.modules.identity.presentation.email.depends import EmailServiceDep
 from src.modules.identity.presentation.depends.infrastructure import AuthSettingsDep
-from src.modules.shared.application.persistence.tenant_schema_naming import (
+from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
 from src.modules.shared.presentation.persistence.depends import UoWDep

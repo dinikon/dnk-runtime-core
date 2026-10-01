@@ -54,10 +54,8 @@ from src.modules.identity.domain.user.error import UserEmailAlreadyExistsError
 from src.modules.identity.domain.user.entity import User
 from src.modules.shared import EntityIdVO
 from src.modules.shared import DomainError
-from src.modules.shared.domain.email import (
-    EmailDeliveryError,
-    SystemEmailKind,
-)
+from src.modules.shared.domain.email import EmailDeliveryError
+from src.modules.identity.application.email.system_email_kind import SystemEmailKind
 
 
 class _TenantContextReaderStub:

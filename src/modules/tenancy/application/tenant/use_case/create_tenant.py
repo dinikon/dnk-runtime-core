@@ -5,12 +5,18 @@ from src.modules.tenancy.application.ports.identity import (
 )
 from src.modules.tenancy.application.ports.schema_bootstrap import (
     TenantSchemaBootstrapContextFactory,
+)
+from src.modules.tenancy.application.ports.schema_bootstrap import (
     TenantSchemaBootstrapPort,
 )
-from src.modules.tenancy.application.tenant.command import CreateTenantCommand
-from src.modules.tenancy.application.tenant.dto import CreateTenantResultDTO
-from src.modules.tenancy.domain.service import TenantOnboardingService
-from src.modules.tenancy.domain.tenant.value_object import TenantIdVO
+from src.modules.tenancy.application.tenant.command.create_tenant_command import (
+    CreateTenantCommand,
+)
+from src.modules.tenancy.application.tenant.dto.create_tenant_result_dto import (
+    CreateTenantResultDTO,
+)
+from src.modules.tenancy.domain.service.tenant_onboarding import TenantOnboardingService
+from src.modules.tenancy.domain.tenant.value_object.tenant_id import TenantIdVO
 
 
 class CreateTenantUseCase:

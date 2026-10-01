@@ -5,21 +5,25 @@ from uuid import UUID
 from sqlalchemy import or_, select, update
 
 from src.modules.shared import EntityIdVO
-from src.modules.shared.application.persistence.tenant_schema_naming import (
+from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
-from src.modules.shared.infrastructure.persistence.tenant_migrations import (
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
     TenantMigrator,
+)
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
     schema_exists,
 )
 from src.modules.tenancy.application.ports.schema_bootstrap import (
     TenantSchemaBootstrapContextFactory,
 )
-from src.modules.tenancy.application.tenant.command import CreateTenantCommand
+from src.modules.tenancy.application.tenant.command.create_tenant_command import (
+    CreateTenantCommand,
+)
 from src.modules.tenancy.application.tenant.use_case.create_tenant import (
     CreateTenantUseCase,
 )
-from src.modules.tenancy.domain.service import TenantOnboardingService
+from src.modules.tenancy.domain.service.tenant_onboarding import TenantOnboardingService
 from src.modules.tenancy.infrastructure.adapter.identity_provisioning import (
     IdentityProvisioningServiceAdapter,
 )
@@ -30,8 +34,10 @@ from src.modules.tenancy.infrastructure.persistence.tenant import TenantModel
 from src.modules.tenancy.infrastructure.persistence.tenant_domain import (
     TenantDomainModel,
 )
-from src.modules.tenancy.infrastructure.repository import (
+from src.modules.tenancy.infrastructure.repository.tenant_domain_repository import (
     SqlAlchemyTenantDomainRepository,
+)
+from src.modules.tenancy.infrastructure.repository.tenant_repository import (
     SqlAlchemyTenantRepository,
 )
 

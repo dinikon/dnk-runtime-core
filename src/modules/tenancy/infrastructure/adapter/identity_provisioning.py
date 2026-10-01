@@ -6,8 +6,8 @@ from src.modules.identity.application.user.service.user_service import (
 from src.modules.shared import EntityIdVO
 from src.modules.tenancy.application.ports.identity import (
     IdentityProvisioningServiceProtocol,
-    ProvisionedTenantAdmin,
 )
+from src.modules.tenancy.application.ports.identity import ProvisionedTenantAdmin
 
 
 class IdentityProvisioningServiceAdapter(IdentityProvisioningServiceProtocol):

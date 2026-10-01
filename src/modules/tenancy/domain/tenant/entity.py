@@ -5,11 +5,10 @@ from datetime import UTC, datetime
 
 import uuid6
 
-from src.modules.tenancy.domain.tenant.error import (
-    InvalidTenantExternalIdError,
-    InvalidTenantNameError,
-)
-from src.modules.tenancy.domain.tenant.value_object import TenantIdVO, TenantStatus
+from src.modules.tenancy.domain.tenant.error import InvalidTenantExternalIdError
+from src.modules.tenancy.domain.tenant.error import InvalidTenantNameError
+from src.modules.tenancy.domain.tenant.value_object.tenant_id import TenantIdVO
+from src.modules.tenancy.domain.tenant.value_object.tenant_status import TenantStatus
 
 
 @dataclass(slots=True)

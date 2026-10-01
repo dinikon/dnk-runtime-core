@@ -3,9 +3,13 @@
 from alembic import context
 from sqlalchemy import text
 
-from src.modules.shared.infrastructure.persistence.tenant_migration_metadata import (
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migration_metadata import (
     managed_table_names,
+)
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migration_metadata import (
     migration_metadata,
+)
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migration_metadata import (
     render_migration_item,
 )
 

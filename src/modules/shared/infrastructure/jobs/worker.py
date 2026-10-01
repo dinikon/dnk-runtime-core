@@ -20,9 +20,7 @@ from src.modules.shared.application.jobs.scheduled_job_deferred import (
 from src.modules.shared.infrastructure.jobs.sqlalchemy_scheduled_job_repository import (
     SqlAlchemyScheduledJobRepository,
 )
-from src.modules.shared.infrastructure.persistence.tenant_gate import (
-    TenantGate,
-)
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_gate import TenantGate
 from src.modules.shared.infrastructure.observability.metrics import (
     scheduled_job_worker_cycles,
     scheduled_job_worker_heartbeat,

@@ -13,10 +13,8 @@ from src.modules.identity.presentation.http.console_auth.responses.logout_curren
     LogoutCurrentSessionResponseSchema,
 )
 from src.modules.shared.presentation.http.depends import RequestHostDep
-from src.modules.tenancy.domain.tenant_domain import (
-    TenantHostNotFoundError,
-    TenantLoginUnavailableError,
-)
+from src.modules.tenancy.domain.tenant_domain.error import TenantHostNotFoundError
+from src.modules.tenancy.domain.tenant_domain.error import TenantLoginUnavailableError
 
 router = APIRouter(tags=["console-auth"])
 

@@ -1,9 +1,11 @@
 from sqlalchemy import MetaData
 from sqlalchemy.schema import BLANK_SCHEMA
 
-from src.modules.shared.infrastructure.persistence.base import TENANT_SCHEMA_ALIAS
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_base import (
+    TENANT_SCHEMA_ALIAS,
+)
 from src.modules.shared.infrastructure.persistence.string_uuid import StringUUID
-from src.modules.shared.infrastructure.persistence.tenant_base import TenantBase
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_base import TenantBase
 
 
 def migration_metadata(source: MetaData | None = None) -> MetaData:

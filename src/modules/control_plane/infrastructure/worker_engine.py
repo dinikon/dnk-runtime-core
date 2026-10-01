@@ -242,8 +242,10 @@ class AccessDelivery:
         return context
 
     async def run(self, event_id: UUID) -> None:
-        from src.modules.shared.infrastructure.persistence.tenant_gate import (
+        from src.modules.tenancy.infrastructure.tenant.persistence.tenant_gate import (
             TenantGate,
+        )
+        from src.modules.tenancy.application.tenant.tenant_admission import (
             TenantUnavailable,
         )
 

@@ -11,10 +11,12 @@ from src.modules.identity.domain.user.repository import UserRepositoryProtocol
 from src.modules.identity.infrastructure.persistence.user import UserModel
 from src.modules.identity.infrastructure.persistence.user_email import UserEmailModel
 from src.modules.shared import DomainError, EntityIdVO
-from src.modules.shared.application.persistence.tenant_schema_naming import (
+from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
-from src.modules.shared.infrastructure.persistence.base import TENANT_SCHEMA_ALIAS
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_base import (
+    TENANT_SCHEMA_ALIAS,
+)
 
 
 class SqlAlchemyUserRepository(UserRepositoryProtocol):

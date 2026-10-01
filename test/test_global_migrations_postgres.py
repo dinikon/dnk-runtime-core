@@ -15,7 +15,7 @@ from src.modules.shared.infrastructure.persistence.global_migrations import (
     GlobalMigrator,
     GlobalSchemaNotReadyError,
 )
-from src.modules.shared.infrastructure.persistence.tenant_migrations import (
+from src.modules.shared.infrastructure.persistence.alembic_lock import (
     serialized_alembic,
 )
 

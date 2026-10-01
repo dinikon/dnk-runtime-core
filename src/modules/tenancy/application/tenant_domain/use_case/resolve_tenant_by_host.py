@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 from src.modules.shared.presentation.http.host import normalize_host
-from src.modules.tenancy.application.tenant_domain.dto import (
+from src.modules.tenancy.application.tenant_domain.dto.resolve_tenant_by_host_result_dto import (
     ResolveTenantByHostResultDTO,
 )
-from src.modules.tenancy.application.tenant_domain.query import (
+from src.modules.tenancy.application.tenant_domain.query.resolve_tenant_by_host_query import (
     ResolveTenantByHostQuery,
 )
-from src.modules.tenancy.domain.tenant import TenantRepositoryProtocol
-from src.modules.tenancy.domain.tenant_domain import (
+from src.modules.tenancy.domain.tenant.repository import TenantRepositoryProtocol
+from src.modules.tenancy.domain.tenant_domain.repository import (
     TenantDomainRepositoryProtocol,
+)
+from src.modules.tenancy.domain.tenant_domain.value_object.tenant_domain_status import (
     TenantDomainStatus,
 )
 

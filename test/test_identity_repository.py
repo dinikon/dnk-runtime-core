@@ -7,12 +7,12 @@ from unittest.mock import AsyncMock
 
 from src.modules.identity.domain.user.entity import User
 from src.modules.shared import DomainError
-from src.modules.shared.application.persistence.tenant_schema_naming import (
+from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
 from src.modules.shared.infrastructure.persistence import Base
-from src.modules.shared.infrastructure.persistence.tenant_base import TenantBase
-from src.modules.shared.infrastructure.persistence.tenant_migration_metadata import (
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_base import TenantBase
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migration_metadata import (
     migration_metadata,
 )
 

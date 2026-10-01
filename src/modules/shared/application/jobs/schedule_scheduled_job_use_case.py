@@ -12,7 +12,7 @@ from src.modules.shared.application.jobs.scheduled_job_repository_protocol impor
 from src.modules.shared.application.uuid import UUIdGeneratorProtocol
 from src.modules.shared.domain.jobs import ScheduledJob, ScheduledJobStatus
 from src.modules.shared.domain.time import ClockPort
-from src.modules.shared.application.persistence.tenant_admission import (
+from src.modules.tenancy.application.tenant.tenant_admission import (
     unrestricted_admission,
 )
 

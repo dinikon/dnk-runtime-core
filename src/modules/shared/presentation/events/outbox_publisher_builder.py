@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from src.modules.shared.infrastructure.persistence.tenant_gate import session_guard
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_gate import (
+    session_guard,
+)
 
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager

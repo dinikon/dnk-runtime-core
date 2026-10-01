@@ -71,7 +71,9 @@ class BrowserCsrfTests(unittest.IsolatedAsyncioTestCase):
         from src.modules.identity.presentation.depends.integration import (
             get_cloud_service,
         )
-        from src.modules.tenancy.domain.tenant_domain import TenantHostNotFoundError
+        from src.modules.tenancy.domain.tenant_domain.error import (
+            TenantHostNotFoundError,
+        )
 
         local = SimpleNamespace(
             context=AsyncMock(side_effect=TenantHostNotFoundError("missing.example"))

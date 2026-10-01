@@ -1,17 +1,15 @@
 from __future__ import annotations
 
-from src.modules.shared.application.email import EmailServicePort
-from src.modules.shared.domain.email import SystemEmailKind
-from src.modules.shared.infrastructure.email.email_transport_port import (
-    EmailTransportPort,
-)
-from src.modules.shared.infrastructure.email.render_system_email import (
+from src.modules.identity.application.email.email_service_port import EmailServicePort
+from src.modules.identity.application.email.system_email_kind import SystemEmailKind
+from src.modules.shared.application.email.email_transport_port import EmailTransportPort
+from src.modules.identity.infrastructure.email.render_system_email import (
     render_system_email,
 )
 
 
 class SystemEmailService(EmailServicePort):
-    """Shared email service, принимающий typed system email kinds."""
+    """Сервис писем Identity, принимающий типизированные виды системных писем."""
 
     def __init__(self, transport: EmailTransportPort) -> None:
         self._transport = transport

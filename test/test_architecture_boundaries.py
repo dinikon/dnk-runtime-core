@@ -234,7 +234,7 @@ class ArchitectureBoundariesTests(unittest.TestCase):
         self,
     ) -> None:
         paths = [
-            PROJECT_ROOT / "src/modules/shared/presentation/email/depends.py",
+            PROJECT_ROOT / "src/modules/identity/presentation/email/depends.py",
             PROJECT_ROOT
             / "src/modules/identity/presentation/depends/infrastructure.py",
             PROJECT_ROOT

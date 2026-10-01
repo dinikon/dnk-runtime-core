@@ -17,12 +17,12 @@ existing local stack.
 
 ## Modules
 
-- `tenancy`: tenant lifecycle, domains, and transactional schema bootstrap.
+- `tenancy`: tenant schemas, migrations and admission; tenant lifecycle, domains, and transactional schema bootstrap.
 - `identity`: request context, authentication/authorization dependencies, email OTP, sessions, and tenant administrator provisioning.
 - `control_plane`: Runtime v1 provisioning, mTLS integration, readiness and access projection delivery.
 - `inventory`: Warehouse domain model and tenant-scoped persistence model; no HTTP API yet.
 - `crm`: Contact aggregate with tenant-scoped creation and get-by-ID APIs, name normalization and audit; company/link SQL models retained. Console adaptation is pending.
-- `shared`: database/UoW, tenant migrations, identifiers, audit fields, messaging, and jobs.
+- `shared`: database/UoW, identifiers, audit fields, generic email transport, messaging, and jobs.
 
 Dynamic object modules are removed. Their earlier documentation is in [history](docs/history/index.md).
 

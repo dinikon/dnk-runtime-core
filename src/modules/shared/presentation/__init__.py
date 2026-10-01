@@ -5,16 +5,12 @@ from typing import Any
 
 _LAZY_EXPORTS: dict[str, str] = {
     "ClockDep": "src.modules.shared.presentation.time",
-    "EmailServiceDep": "src.modules.shared.presentation.email",
     "RequestHostDep": "src.modules.shared.presentation.http",
     "TokenManagerDep": "src.modules.shared.presentation.tokens",
     "UoWDep": "src.modules.shared.presentation.persistence",
     "UuidDep": "src.modules.shared.presentation.uuid",
-    "build_email_service": "src.modules.shared.presentation.email",
-    "default_email_service": "src.modules.shared.presentation.email",
     "default_uuid_generator": "src.modules.shared.presentation.uuid",
     "get_clock": "src.modules.shared.presentation.time",
-    "get_email_service": "src.modules.shared.presentation.email",
     "get_request_host": "src.modules.shared.presentation.http",
     "get_token_manager": "src.modules.shared.presentation.tokens",
     "get_uow": "src.modules.shared.presentation.persistence",

@@ -144,7 +144,7 @@ class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
         from src.modules.crm.infrastructure.persistence.models.contact_company import (
             ContactCompanyModel,
         )
-        from src.modules.shared.infrastructure.persistence.tenant_migration_metadata import (
+        from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migration_metadata import (
             migration_metadata,
         )
 

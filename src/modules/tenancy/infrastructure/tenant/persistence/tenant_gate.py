@@ -8,9 +8,7 @@ from uuid import UUID
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncConnection, async_sessionmaker
 
-from src.modules.shared.application.persistence.tenant_admission import (
-    TenantUnavailable,
-)
+from src.modules.tenancy.application.tenant.tenant_admission import TenantUnavailable
 from src.modules.tenancy.infrastructure.persistence.tenant import TenantModel
 
 DELETING = frozenset({"deletion_pending", "blocked", "purging", "deleted"})

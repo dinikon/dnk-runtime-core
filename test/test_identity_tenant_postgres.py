@@ -30,23 +30,27 @@ from src.modules.identity.presentation.depends.infrastructure import get_session
 from src.modules.identity.presentation.http.router import router as auth_router
 from src.modules.identity.presentation.http.csrf import require_csrf
 from src.modules.shared import EntityIdVO
-from src.modules.shared.application.persistence.tenant_schema_naming import (
+from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
 from src.modules.shared.infrastructure.persistence import Base, UnitOfWork
-from src.modules.shared.infrastructure.persistence.tenant_migrations import (
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
     TenantMigrator,
+)
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
     schema_exists,
 )
-from src.modules.shared.presentation.email.depends import get_email_service
+from src.modules.identity.presentation.email.depends import get_email_service
 from src.modules.tenancy.application.ports.schema_bootstrap import (
     TenantSchemaBootstrapContextFactory,
 )
-from src.modules.tenancy.application.tenant import (
+from src.modules.tenancy.application.tenant.command.create_tenant_command import (
     CreateTenantCommand,
+)
+from src.modules.tenancy.application.tenant.use_case.create_tenant import (
     CreateTenantUseCase,
 )
-from src.modules.tenancy.domain.service import TenantOnboardingService
+from src.modules.tenancy.domain.service.tenant_onboarding import TenantOnboardingService
 from src.modules.tenancy.infrastructure.adapter.schema_bootstrap import (
     AlembicTenantSchemaBootstrapAdapter,
 )
@@ -54,8 +58,10 @@ from src.modules.tenancy.infrastructure.persistence.tenant import TenantModel
 from src.modules.tenancy.infrastructure.persistence.tenant_domain import (
     TenantDomainModel,
 )
-from src.modules.tenancy.infrastructure.repository import (
+from src.modules.tenancy.infrastructure.repository.tenant_repository import (
     SqlAlchemyTenantRepository,
+)
+from src.modules.tenancy.infrastructure.repository.tenant_domain_repository import (
     SqlAlchemyTenantDomainRepository,
 )
 from src.modules.tenancy.presentation.depends.infrastructure import (

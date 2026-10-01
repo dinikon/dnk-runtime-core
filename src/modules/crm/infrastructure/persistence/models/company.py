@@ -5,7 +5,7 @@ from src.modules.shared.infrastructure.persistence.audience_mixin import Audienc
 from src.modules.shared.infrastructure.persistence.entity_audit_mixin import (
     EntityAuditMixin,
 )
-from src.modules.shared.infrastructure.persistence.tenant_base import TenantBase
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_base import TenantBase
 
 
 class CompanyModel(EntityAuditMixin, AudienceMixin, TenantBase):

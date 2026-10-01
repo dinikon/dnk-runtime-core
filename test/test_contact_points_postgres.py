@@ -24,11 +24,11 @@ from src.modules.identity.domain.auth.request_context import RequestContext
 from src.modules.shared.application.tokens import TokenManager
 from src.modules.shared.infrastructure.tokens import InMemoryTokenBackend
 from src.modules.shared.presentation.tokens.depends import TokenManagerDep
-from src.modules.shared.application.persistence.tenant_schema_naming import (
+from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
-from src.modules.shared.infrastructure.persistence.tenant_migrations import (
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
     TenantMigrator,
 )
 from src.modules.shared.infrastructure.persistence import UnitOfWork

@@ -18,12 +18,12 @@ from src.modules.identity.domain.user.error import PrimaryUserEmailNotFoundError
 from src.modules.identity.domain.user.error import UserLoginUnavailableError
 from src.modules.identity.domain.user.repository import UserRepositoryProtocol
 from src.modules.shared import EntityIdVO
-from src.modules.shared.application.email import EmailServicePort
-from src.modules.shared.domain.email import (
-    EmailDeliveryError,
+from src.modules.identity.application.email.email_service_port import EmailServicePort
+from src.modules.shared.domain.email import EmailDeliveryError
+from src.modules.identity.application.email.send_otp_code_variables import (
     SendOtpCodeVariables,
-    SystemEmailKind,
 )
+from src.modules.identity.application.email.system_email_kind import SystemEmailKind
 from src.modules.shared.presentation.http.host import normalize_host
 
 log = logging.getLogger(__name__)

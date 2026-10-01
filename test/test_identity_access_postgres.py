@@ -30,8 +30,8 @@ from src.modules.identity.infrastructure.adapter.session_store import (
     TokenManagerBackedSessionStore,
 )
 from src.modules.shared import EntityIdVO
-from src.modules.shared.domain.email import SystemEmailKind
-from src.modules.shared.application.persistence.tenant_schema_naming import (
+from src.modules.identity.application.email.system_email_kind import SystemEmailKind
+from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
 from src.modules.shared.application.tokens import TokenManager
@@ -39,7 +39,7 @@ from src.modules.shared.infrastructure.tokens import InMemoryTokenBackend
 from src.modules.shared.infrastructure.persistence.unit_of_work.sqlalchemy import (
     UnitOfWork,
 )
-from src.modules.shared.infrastructure.persistence.tenant_migrations import (
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
     TenantMigrator,
 )
 

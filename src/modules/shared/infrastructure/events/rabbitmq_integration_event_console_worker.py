@@ -16,8 +16,8 @@ from src.modules.shared.application.messaging import (
     BrokerTopologyPort,
 )
 from src.modules.shared.domain.events import IntegrationEvent
-from src.modules.shared.application.persistence.tenant_admission import (
-    TenantUnavailable,
+from src.modules.tenancy.application.tenant.tenant_admission import TenantUnavailable
+from src.modules.tenancy.application.tenant.tenant_admission import (
     unrestricted_admission,
 )
 from src.modules.shared.infrastructure.events.rabbitmq_integration_event_publisher import (
@@ -150,7 +150,9 @@ def build_integration_event_console_worker_app(
         from src.modules.shared.infrastructure.persistence.database_helper import (
             db_helper,
         )
-        from src.modules.shared.infrastructure.persistence.tenant_gate import TenantGate
+        from src.modules.tenancy.infrastructure.tenant.persistence.tenant_gate import (
+            TenantGate,
+        )
 
         await handle_integration_event_console_message(
             payload=payload,

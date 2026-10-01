@@ -44,15 +44,15 @@ from src.modules.control_plane.infrastructure.worker_engine import Installer
 from src.modules.shared.infrastructure.persistence.global_migrations import (
     GlobalMigrator,
 )
-from src.modules.shared.infrastructure.persistence.tenant_gate import (
-    TenantGate,
-    TenantUnavailable,
-    gate_key,
-)
-from src.modules.shared.infrastructure.persistence.tenant_migrations import (
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_gate import TenantGate
+from src.modules.tenancy.application.tenant.tenant_admission import TenantUnavailable
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_gate import gate_key
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
     schema_exists,
 )
-from src.modules.shared.presentation.http.tenant_gate import TenantAdmissionMiddleware
+from src.modules.tenancy.presentation.tenant.http.tenant_gate import (
+    TenantAdmissionMiddleware,
+)
 from src.modules.tenancy.infrastructure.persistence.tenant import TenantModel
 from src.modules.tenancy.infrastructure.persistence.tenant_domain import (
     TenantDomainModel,
@@ -61,7 +61,7 @@ from src.modules.identity.infrastructure.repository.access_repository import (
     AccessRepository,
 )
 from src.modules.identity.infrastructure.persistence.user import UserModel
-from src.modules.shared.application.persistence.tenant_schema_naming import (
+from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
 from src.modules.shared.infrastructure.jobs.scheduled_job_model import ScheduledJobModel

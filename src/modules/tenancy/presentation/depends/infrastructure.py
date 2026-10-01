@@ -12,22 +12,24 @@ from src.modules.identity.infrastructure.repository.user_repository import (
 )
 
 from src.modules.shared.presentation.persistence.depends import UoWDep
-from src.modules.shared.application.persistence.tenant_schema_naming import (
+from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
 from src.modules.tenancy.application.ports.identity import (
     IdentityProvisioningServiceProtocol,
 )
-from src.modules.tenancy.domain.service import TenantOnboardingService
-from src.modules.tenancy.domain.tenant import TenantRepositoryProtocol
-from src.modules.tenancy.domain.tenant_domain import (
+from src.modules.tenancy.domain.service.tenant_onboarding import TenantOnboardingService
+from src.modules.tenancy.domain.tenant.repository import TenantRepositoryProtocol
+from src.modules.tenancy.domain.tenant_domain.repository import (
     TenantDomainRepositoryProtocol,
 )
 from src.modules.tenancy.infrastructure.adapter.identity_provisioning import (
     IdentityProvisioningServiceAdapter,
 )
-from src.modules.tenancy.infrastructure.repository import (
+from src.modules.tenancy.infrastructure.repository.tenant_domain_repository import (
     SqlAlchemyTenantDomainRepository,
+)
+from src.modules.tenancy.infrastructure.repository.tenant_repository import (
     SqlAlchemyTenantRepository,
 )
 

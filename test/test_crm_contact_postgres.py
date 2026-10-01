@@ -23,13 +23,13 @@ from src.modules.crm.infrastructure.contact.persistence.query_repository import 
     SqlAlchemyContactQueryRepository,
 )
 from src.modules.crm.infrastructure.persistence.models.contact import ContactModel
-from src.modules.shared.application.persistence.tenant_schema_naming import (
+from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
 from src.modules.identity.domain.auth.principal import Principal
 from src.modules.identity.domain.auth.request_context import RequestContext
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
-from src.modules.shared.infrastructure.persistence.tenant_migrations import (
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
     TenantMigrator,
 )
 from src.modules.shared.infrastructure.persistence.unit_of_work.sqlalchemy import (

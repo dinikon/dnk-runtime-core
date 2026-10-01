@@ -7,8 +7,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 from src.modules.shared.infrastructure.persistence.audience_mixin import AudienceMixin
 from src.modules.shared.infrastructure.persistence.string_uuid import StringUUID
 
-class TenantSystemMixin(AudienceMixin):
-    """Type stub для tenant-scoped системного SQLAlchemy mixin."""
+class TitledEntityAuditMixin(AudienceMixin):
+    """Type stub для SQLAlchemy mixin сущностей с названием и аудитом."""
 
     id: Mapped[UUID] = mapped_column(
         StringUUID,

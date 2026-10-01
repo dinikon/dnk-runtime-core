@@ -6,7 +6,9 @@ sys.path.insert(0, "src")
 
 from src.modules.shared.infrastructure.persistence.database_helper import db_helper
 from modules.shared.infrastructure.persistence.unit_of_work.sqlalchemy import UnitOfWork
-from src.modules.tenancy.application.tenant.command import CreateTenantCommand
+from src.modules.tenancy.application.tenant.command.create_tenant_command import (
+    CreateTenantCommand,
+)
 from src.modules.tenancy.presentation.depends import application as app
 from src.modules.tenancy.presentation.depends import infrastructure as infra
 

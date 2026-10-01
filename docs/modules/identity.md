@@ -71,7 +71,7 @@ protocol; `infrastructure/access/` contains the existing allow-all implementatio
 `dependency_overrides` remain supported. FastAPI resolves the standard session use
 case dependency before selecting an authentication process from `app.state`.
 Authentication, session checks, roles, OTP, CSRF and transaction timing are unchanged.
-Tenant infrastructure, token mechanisms and UoW remain in `shared`.
+Tenant infrastructure belongs to Tenancy; token mechanisms and UoW remain in `shared`.
 
 ## Infrastructure / Persistence
 
@@ -85,8 +85,21 @@ Tenant infrastructure, token mechanisms and UoW remain in `shared`.
 - global migrations do not create identity tables; onboarding migrates each tenant schema before creating its administrator
 - token/session implementations use shared `TokenManager`
 - tenant context is resolved through a tenancy-owned use case adapter
-- request OTP delegates typed email sending to shared `EmailService`
+- OTP and invitations use the Identity-owned `EmailServicePort` and `SystemEmailService`
 - email delivery uses shared provider wiring with SMTP MVP transport and a placeholder `resend` provider
+
+## Email And Observability
+
+`application/email/` owns the typed email service contract, `SystemEmailKind`,
+`SendOtpCodeVariables` and `SendInvitationVariables`.
+`infrastructure/email/` owns `SystemEmailService` and the OTP/invitation renderer.
+`presentation/email/depends.py` builds the service and exposes `EmailServiceDep` and
+`get_email_service`; FastAPI dependency overrides target this definition directly.
+
+Delivery uses shared `application/email/EmailTransportPort` and `RenderedEmailMessage`
+contracts with shared SMTP/Resend adapters. Message content, settings and error behavior
+are unchanged. The OIDC counter lives in `infrastructure/observability/metrics.py` and
+retains the published `dnk_runtime_oidc_errors_total` name and labels.
 
 ## Presentation / Entry Points
 

@@ -3,18 +3,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from src.modules.shared.presentation.http.host import normalize_host
-from src.modules.tenancy.domain.tenant import (
-    Tenant,
-    TenantExternalIdAlreadyExistsError,
-    TenantNameAlreadyExistsError,
-    TenantRepositoryProtocol,
-    TenantStatus,
-)
-from src.modules.tenancy.domain.tenant.value_object import TenantIdVO
-from src.modules.tenancy.domain.tenant_domain import (
-    InvalidTenantDomainHostError,
-    TenantDomain,
+from src.modules.tenancy.domain.tenant.entity import Tenant
+from src.modules.tenancy.domain.tenant.error import TenantExternalIdAlreadyExistsError
+from src.modules.tenancy.domain.tenant.error import TenantNameAlreadyExistsError
+from src.modules.tenancy.domain.tenant.repository import TenantRepositoryProtocol
+from src.modules.tenancy.domain.tenant.value_object.tenant_status import TenantStatus
+from src.modules.tenancy.domain.tenant.value_object.tenant_id import TenantIdVO
+from src.modules.tenancy.domain.tenant_domain.error import InvalidTenantDomainHostError
+from src.modules.tenancy.domain.tenant_domain.entity import TenantDomain
+from src.modules.tenancy.domain.tenant_domain.error import (
     TenantDomainHostAlreadyExistsError,
+)
+from src.modules.tenancy.domain.tenant_domain.repository import (
     TenantDomainRepositoryProtocol,
 )
 

@@ -4,11 +4,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.crm.domain.contact.aggregate import Contact
 from src.modules.crm.infrastructure.contact.persistence.mapper import ContactMapper
 from src.modules.crm.infrastructure.persistence.models.contact import ContactModel
-from src.modules.shared.application.persistence.tenant_schema_naming import (
+from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
-from src.modules.shared.infrastructure.persistence.base import TENANT_SCHEMA_ALIAS
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_base import (
+    TENANT_SCHEMA_ALIAS,
+)
 
 
 class SqlAlchemyContactRepository:

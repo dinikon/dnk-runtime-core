@@ -10,10 +10,12 @@ from uuid import UUID
 from sqlalchemy import insert, update, column, cast, values as sql_values
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
-from src.modules.shared.application.persistence.tenant_schema_naming import (
+from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
-from src.modules.shared.infrastructure.persistence.base import TENANT_SCHEMA_ALIAS
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_base import (
+    TENANT_SCHEMA_ALIAS,
+)
 from src.modules.price_lists.application.sync_run.options import ImportOptions
 
 

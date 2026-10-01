@@ -6,13 +6,15 @@ from uuid import uuid4
 from src.modules.tenancy.application.ports.schema_bootstrap import (
     TenantSchemaBootstrapContextFactory,
 )
-from src.modules.tenancy.application.tenant import (
+from src.modules.tenancy.application.tenant.command.create_tenant_command import (
     CreateTenantCommand,
+)
+from src.modules.tenancy.application.tenant.use_case.create_tenant import (
     CreateTenantUseCase,
 )
-from src.modules.tenancy.domain.service import TenantOnboardingDraft
-from src.modules.tenancy.domain.tenant import Tenant
-from src.modules.tenancy.domain.tenant_domain import TenantDomain
+from src.modules.tenancy.domain.service.tenant_onboarding import TenantOnboardingDraft
+from src.modules.tenancy.domain.tenant.entity import Tenant
+from src.modules.tenancy.domain.tenant_domain.entity import TenantDomain
 
 
 class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):

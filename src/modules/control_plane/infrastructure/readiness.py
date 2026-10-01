@@ -28,7 +28,7 @@ def probe_hostname(settings, zone: str) -> str:
 
 def heartbeat_key(settings) -> str:
     from src.config import dnk_config
-    from src.modules.shared.infrastructure.persistence.tenant_migrations import (
+    from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
         TenantMigrator,
     )
     from src.modules.shared.infrastructure.persistence.global_migrations import (

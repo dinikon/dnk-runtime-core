@@ -19,7 +19,7 @@ from src.modules.crm.infrastructure.contact.persistence.query_mapper import (
 from src.modules.crm.infrastructure.contact.persistence.query_repository import (
     SqlAlchemyContactQueryRepository,
 )
-from src.modules.shared.application.persistence.tenant_schema_naming import (
+from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
