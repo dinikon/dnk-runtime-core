@@ -23,9 +23,9 @@ from src.modules.crm.infrastructure.persistence.models.company import CompanyMod
 from src.modules.crm.infrastructure.persistence.models.contact import ContactModel
 from src.management.cli import build_parser
 from src.management.commands.tenant_migrations import handle
-from src.modules.identity.application.user.service.user_service import UserService
-from src.modules.identity.infrastructure.persistence.user import UserModel
-from src.modules.identity.infrastructure.repository.user_repository import (
+from src.modules.identity.application.user.command.create_tenant_admin.handler import CreateTenantAdminHandler
+from src.modules.identity.infrastructure.persistence.models.user import UserModel
+from src.modules.identity.infrastructure.user.persistence.repository import (
     SqlAlchemyUserRepository,
 )
 from src.modules.inventory.infrastructure.persistence import WarehouseModel
@@ -476,7 +476,7 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                     SqlAlchemyTenantDomainRepository(uow.session),
                 ),
                 identity_provisioning_service=IdentityProvisioningServiceAdapter(
-                    UserService(
+                    CreateTenantAdminHandler(
                         SqlAlchemyUserRepository(
                             uow.session, TenantSchemaNaming("dnk_")
                         )

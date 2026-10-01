@@ -23,8 +23,8 @@ from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations imp
 from src.modules.tenancy.application.tenant.tenant_schema_naming import TenantSchemaNaming
 from src.modules.tenancy.domain.tenant.value_object.tenant_id import TenantIdVO
 from src.modules.identity.application.auth.service.otp_service import OtpService
-from src.modules.identity.application.ports.token_store import OtpChallenge
-from src.modules.identity.infrastructure.adapter.otp_challenge_store import TokenManagerBackedOtpChallengeStore
+from src.modules.identity.application.auth.port.otp_challenge_store import OtpChallenge
+from src.modules.identity.infrastructure.auth.otp_challenge_store import TokenManagerBackedOtpChallengeStore
 from src.modules.shared.application.tokens import TokenManager
 from src.modules.shared.infrastructure.tokens import RedisTokenBackend
 

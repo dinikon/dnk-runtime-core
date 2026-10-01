@@ -6,8 +6,8 @@ from fastapi import Depends
 
 from src.config import dnk_config
 
-from src.modules.identity.application.user.service.user_service import UserService
-from src.modules.identity.infrastructure.repository.user_repository import (
+from src.modules.identity.application.user.command.create_tenant_admin.handler import CreateTenantAdminHandler
+from src.modules.identity.infrastructure.user.persistence.repository import (
     SqlAlchemyUserRepository,
 )
 
@@ -61,7 +61,7 @@ def get_identity_provisioning_service(
     uow: UoWDep,
 ) -> IdentityProvisioningServiceProtocol:
     """Создает tenancy adapter к identity provisioning сервису."""
-    user_service = UserService(
+    user_service = CreateTenantAdminHandler(
         SqlAlchemyUserRepository(
             uow.session, TenantSchemaNaming(dnk_config.SCHEMA_PREFIX)
         )

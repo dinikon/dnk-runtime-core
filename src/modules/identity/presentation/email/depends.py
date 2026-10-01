@@ -1,9 +1,5 @@
 from __future__ import annotations
-
-from typing import Annotated
-
 from fastapi import Depends
-
 from src.config import dnk_config
 from src.config.infrastructure.email_config import EmailSettings
 from src.modules.identity.application.email.email_service_port import EmailServicePort
@@ -11,6 +7,7 @@ from src.modules.identity.infrastructure.email.system_email_service import (
     SystemEmailService,
 )
 from src.modules.shared.presentation.email.depends import build_email_transport
+from typing import Annotated
 
 
 def build_email_service(settings: EmailSettings) -> EmailServicePort:
@@ -27,10 +24,3 @@ def get_email_service() -> EmailServicePort:
 
 
 EmailServiceDep = Annotated[EmailServicePort, Depends(get_email_service)]
-
-__all__ = [
-    "EmailServiceDep",
-    "build_email_service",
-    "default_email_service",
-    "get_email_service",
-]

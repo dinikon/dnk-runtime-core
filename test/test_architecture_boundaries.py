@@ -236,9 +236,9 @@ class ArchitectureBoundariesTests(unittest.TestCase):
         paths = [
             PROJECT_ROOT / "src/modules/identity/presentation/email/depends.py",
             PROJECT_ROOT
-            / "src/modules/identity/presentation/depends/infrastructure.py",
+            / "src/modules/identity/presentation/auth/providers.py",
             PROJECT_ROOT
-            / "src/modules/identity/application/auth/use_case/request_email_otp.py",
+            / "src/modules/identity/application/auth/command/request_email_otp/handler.py",
         ]
         forbidden_patterns = (
             "request.app.state",

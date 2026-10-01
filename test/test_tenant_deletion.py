@@ -57,10 +57,10 @@ from src.modules.tenancy.infrastructure.persistence.tenant import TenantModel
 from src.modules.tenancy.infrastructure.persistence.tenant_domain import (
     TenantDomainModel,
 )
-from src.modules.identity.infrastructure.repository.access_repository import (
+from src.modules.identity.infrastructure.access.persistence.repository import (
     AccessRepository,
 )
-from src.modules.identity.infrastructure.persistence.user import UserModel
+from src.modules.identity.infrastructure.persistence.models.user import UserModel
 from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )

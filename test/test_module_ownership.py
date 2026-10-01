@@ -1,3 +1,8 @@
+from src.modules.identity.presentation.access.providers import (
+    AccessRepositoryDep,
+    AccessProjectionsDep,
+)
+
 """Границы Tenancy, Identity email и Control Plane после разделения shared."""
 
 import ast
@@ -24,7 +29,7 @@ from src.modules.tenancy.presentation.depends.infrastructure import (
     TenantsRepositoryDep,
     TenantDomainsRepositoryDep,
 )
-from src.modules.identity.presentation.depends.infrastructure import UsersRepositoryDep
+from src.modules.identity.presentation.user.providers import UsersRepositoryDep
 
 ROOT = Path(__file__).resolve().parents[1]
 OLD_MODULES = (
@@ -278,11 +283,15 @@ class WiringRegressionTests(unittest.IsolatedAsyncioTestCase):
             tenants: TenantsRepositoryDep,
             domains: TenantDomainsRepositoryDep,
             users: UsersRepositoryDep,
+            access: AccessRepositoryDep,
+            projections: AccessProjectionsDep,
             uow: UoWDep,
         ):
             self.assertIs(tenants._session, session)
             self.assertIs(domains._session, session)
             self.assertIs(users._session, session)
+            self.assertIs(access.session, session)
+            self.assertIs(projections.session, session)
             self.assertIs(uow.session, session)
             return {"ok": True}
 

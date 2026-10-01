@@ -13,20 +13,20 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.schema import CreateSchema, DropSchema
 
 from src.config.feature.identity.auth_config import IdentityAuthSettings
-from src.modules.identity.application.access_service import IdentityAccessService
-from src.modules.identity.application.cloud_auth_service import CloudAuthService
-from src.modules.identity.application.ports.cloud import CloudConnection
+from test.identity_scenarios import AccessScenarios
+from test.identity_scenarios import CloudScenarios
+from src.modules.identity.application.cloud.port.cloud import CloudConnection
 from src.modules.identity.application.auth.service.otp_service import OtpService
 from src.modules.identity.application.auth.service.session_service import SessionService
-from src.modules.identity.domain.access import IdentityAccessError
+from src.modules.identity.domain.access.error import IdentityAccessError
 from src.modules.identity.domain.user.entity import User
-from src.modules.identity.infrastructure.repository.access_repository import (
+from src.modules.identity.infrastructure.access.persistence.repository import (
     AccessRepository,
 )
-from src.modules.identity.infrastructure.repository.user_repository import (
+from src.modules.identity.infrastructure.user.persistence.repository import (
     SqlAlchemyUserRepository,
 )
-from src.modules.identity.infrastructure.adapter.session_store import (
+from src.modules.identity.infrastructure.auth.session_store import (
     TokenManagerBackedSessionStore,
 )
 from src.modules.shared import EntityIdVO
@@ -86,7 +86,7 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
         await self.engine.dispose()
 
     def service(self, uow):
-        return IdentityAccessService(
+        return AccessScenarios(
             uow=uow,
             users=SqlAlchemyUserRepository(uow.session, self.naming),
             access=AccessRepository(uow.session, self.naming),
@@ -218,7 +218,7 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
         oidc.exchange.return_value = str(uuid4())
         async with UnitOfWork(self.sessions) as uow:
             service = self.service(uow)
-            cloud = CloudAuthService(service, reader, oidc)
+            cloud = CloudScenarios(service, reader, oidc)
             await cloud.start(
                 "tenant.example", self.member_session.token, "browser", "link"
             )
@@ -311,9 +311,11 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
     async def test_http_callback_failure_rolls_back_binding_before_safe_redirect(self):
         from fastapi import FastAPI
         from httpx import AsyncClient, ASGITransport
-        from src.modules.identity.presentation.http.integration import cloud_router
-        from src.modules.identity.presentation.depends.integration import (
-            get_cloud_service,
+        from src.modules.identity.presentation.cloud.http.router import (
+            router as cloud_router,
+        )
+        from src.modules.identity.presentation.cloud.depends import (
+            get_complete_cloud_auth_handler,
         )
 
         core_tenant = uuid4()
@@ -334,7 +336,7 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
         )
         async with UnitOfWork(self.sessions) as uow:
             local = self.service(uow)
-            cloud = CloudAuthService(local, reader, oidc)
+            cloud = CloudScenarios(local, reader, oidc)
             await cloud.start(
                 "tenant.example", self.member_session.token, "browser", "link"
             )
@@ -345,7 +347,12 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
             app = FastAPI()
             app.include_router(cloud_router)
-            app.dependency_overrides[get_cloud_service] = lambda: cloud
+            app.dependency_overrides[get_complete_cloud_auth_handler] = (
+                lambda: cloud.handler("complete_cloud_auth")
+            )
+            from src.modules.shared.presentation.persistence.depends import get_uow
+
+            app.dependency_overrides[get_uow] = lambda: uow
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="https://tenant.example"
             ) as client:

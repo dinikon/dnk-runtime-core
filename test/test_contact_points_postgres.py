@@ -15,7 +15,7 @@ from sqlalchemy.schema import CreateSchema, DropSchema
 
 from src.config import dnk_config
 from src.modules.contact_points.presentation.http.router import router as points_router
-from src.modules.identity.presentation.http.csrf import issue_csrf
+from src.modules.identity.presentation.auth.http.csrf import issue_csrf
 from src.modules.identity.presentation.auth.depends import (
     require_authenticated_request_context,
 )

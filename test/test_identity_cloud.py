@@ -14,9 +14,9 @@ import httpx
 from authlib.jose import JsonWebKey, JsonWebToken
 from authlib.jose.errors import JoseError
 
-from src.modules.identity.application.ports.cloud import CloudConnection
-from src.modules.identity.domain.access import IdentityAccessError
-from src.modules.identity.infrastructure.adapter.oidc_client import OidcClient
+from src.modules.identity.application.cloud.port.cloud import CloudConnection
+from src.modules.identity.domain.access.error import IdentityAccessError
+from src.modules.identity.infrastructure.cloud.oidc_client import OidcClient
 from src.modules.shared.application.tokens import TokenManager
 from src.modules.shared.infrastructure.tokens import InMemoryTokenBackend
 

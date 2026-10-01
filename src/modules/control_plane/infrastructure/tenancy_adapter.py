@@ -79,13 +79,13 @@ class TenancyAdapter:
         )
 
     async def install(self, installation, command: dict):
-        from src.modules.identity.application.user.service.user_service import (
-            UserService,
+        from src.modules.identity.application.user.command.create_tenant_admin.handler import (
+            CreateTenantAdminHandler,
         )
-        from src.modules.identity.infrastructure.repository.user_repository import (
+        from src.modules.identity.infrastructure.user.persistence.repository import (
             SqlAlchemyUserRepository,
         )
-        from src.modules.identity.infrastructure.cloud_owner import bind_cloud_owner
+        from src.modules.identity.infrastructure.cloud.bootstrap import bind_cloud_owner
 
         use_case = CreateTenantUseCase(
             TenantOnboardingService(
@@ -93,7 +93,7 @@ class TenancyAdapter:
                 SqlAlchemyTenantDomainRepository(self.session),
             ),
             IdentityProvisioningServiceAdapter(
-                UserService(SqlAlchemyUserRepository(self.session, self.naming))
+                CreateTenantAdminHandler(SqlAlchemyUserRepository(self.session, self.naming))
             ),
             TenantSchemaBootstrapContextFactory(schema_prefix=self.schema_prefix),
             AlembicTenantSchemaBootstrapAdapter(self.session, self.migrator),
@@ -123,7 +123,7 @@ class TenancyAdapter:
     async def ready(
         self, installation, command: dict, *, require_active: bool = False
     ) -> bool:
-        from src.modules.identity.infrastructure.cloud_owner import cloud_owner_ready
+        from src.modules.identity.infrastructure.cloud.bootstrap import cloud_owner_ready
 
         tenant = await self.session.get(TenantModel, installation.runtime_tenant_id)
         if tenant is None or (require_active and tenant.status != "active"):

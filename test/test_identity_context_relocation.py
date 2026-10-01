@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from src.config import dnk_config
-from src.modules.identity.application.auth.use_case.authenticate_by_session import (
+from src.modules.identity.application.auth.query.authenticate_by_session.dto import (
     SessionPrincipal,
 )
 from src.modules.identity.domain.auth.principal import Principal
@@ -26,12 +26,11 @@ from src.modules.identity.presentation.auth.depends import (
     AuthenticatedRequestContextDep,
 )
 from src.modules.identity.presentation.auth.depends import OptionalRequestContextDep
-from src.modules.identity.presentation.auth.depends import get_authentication_process
 from src.modules.identity.presentation.auth.depends import (
     require_authenticated_request_context,
 )
-from src.modules.identity.presentation.depends.application import (
-    get_authenticate_by_session_use_case,
+from src.modules.identity.presentation.auth.depends import (
+    get_authenticate_by_session_handler,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -124,10 +123,14 @@ assert not any(name.startswith(('src.modules.identity.application', 'src.modules
 
     def test_entrypoints_import_in_independent_processes(self):
         for module in (
-            "src.modules.identity.infrastructure.persistence.user",
+            "src.modules.identity.infrastructure.persistence.models.user",
             "src.modules.identity.presentation.auth.depends",
             "src.modules.identity.presentation.access.depends",
-            "src.modules.identity.presentation.http.router",
+            "src.modules.identity.presentation.auth.http.router",
+            "src.modules.identity.presentation.access.http.router",
+            "src.modules.identity.presentation.invitation.http.router",
+            "src.modules.identity.presentation.cloud.http.router",
+            "src.modules.identity.infrastructure.cloud.bootstrap",
             "src.modules.persistence",
             "src.modules.tenant_persistence",
         ):
@@ -145,9 +148,11 @@ class IdentityContextWiringTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.principal = Principal("user", "tenant", "session", ("member",), ("read",))
         self.app = FastAPI()
-        self.use_case = AsyncMock(
-            return_value=SessionPrincipal(
-                "user", "tenant", "session", ("member",), ("read",)
+        self.use_case = SimpleNamespace(
+            execute=AsyncMock(
+                return_value=SessionPrincipal(
+                    "user", "tenant", "session", ("member",), ("read",)
+                )
             )
         )
         self.provider = Mock(return_value=self.use_case)
@@ -156,7 +161,7 @@ class IdentityContextWiringTests(unittest.IsolatedAsyncioTestCase):
         def provide():
             return self.provider()
 
-        self.app.dependency_overrides[get_authenticate_by_session_use_case] = provide
+        self.app.dependency_overrides[get_authenticate_by_session_handler] = provide
 
         @self.app.get("/required")
         async def required(
@@ -192,7 +197,7 @@ class IdentityContextWiringTests(unittest.IsolatedAsyncioTestCase):
             base_url="https://tenant.example",
         )
 
-    async def test_default_adapter_preserves_fields_and_dependency_cache(self):
+    async def test_handler_preserves_fields_and_dependency_cache(self):
         async with self.client() as client:
             client.cookies.set(dnk_config.AUTH.session_cookie_name, "token")
             response = await client.get(
@@ -214,15 +219,15 @@ class IdentityContextWiringTests(unittest.IsolatedAsyncioTestCase):
             },
         )
         self.provider.assert_called_once_with()
-        self.use_case.assert_awaited_once()
-        command = self.use_case.await_args.args[0]
+        self.use_case.execute.assert_awaited_once()
+        command = self.use_case.execute.await_args.args[0]
         self.assertEqual(
-            (command.host, command.session_token, command.ip, command.user_agent),
-            ("tenant.example", "token", "192.0.2.1", "test"),
+            (command.host, command.session_token),
+            ("tenant.example", "token"),
         )
 
     async def test_anonymous_context_and_unauthorized_response(self):
-        self.use_case.return_value = None
+        self.use_case.execute.return_value = None
         async with self.client() as client:
             self.assertEqual(
                 (await client.get("/optional")).json(), {"anonymous": True}
@@ -230,24 +235,6 @@ class IdentityContextWiringTests(unittest.IsolatedAsyncioTestCase):
             response = await client.get("/required")
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.json(), {"detail": "Unauthorized."})
-
-    async def test_app_state_override_still_resolves_standard_provider(self):
-        process = SimpleNamespace(authenticate=AsyncMock(return_value=self.principal))
-        self.app.state.authentication_process = process
-        async with self.client() as client:
-            response = await client.get("/required")
-        self.assertEqual(response.status_code, 200)
-        self.provider.assert_called_once_with()
-        self.use_case.assert_not_awaited()
-        process.authenticate.assert_awaited_once()
-
-    async def test_process_dependency_override_bypasses_standard_provider(self):
-        process = SimpleNamespace(authenticate=AsyncMock(return_value=self.principal))
-        self.app.dependency_overrides[get_authentication_process] = lambda: process
-        async with self.client() as client:
-            self.assertEqual((await client.get("/required")).status_code, 200)
-        self.provider.assert_not_called()
-        process.authenticate.assert_awaited_once()
 
     async def test_authenticated_context_dependency_can_be_overridden(self):
         context = RequestContext(

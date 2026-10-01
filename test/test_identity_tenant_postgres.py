@@ -18,17 +18,17 @@ from src.config import dnk_config
 from src.modules.identity.domain.user.entity import User
 from src.modules.identity.domain.user.value_object.user_email_id import UserEmailIdVO
 from src.modules.identity.domain.user.value_object.user_id import UserIdVO
-from src.modules.identity.infrastructure.persistence.user import UserModel
-from src.modules.identity.infrastructure.persistence.user_email import UserEmailModel
-from src.modules.identity.infrastructure.repository.user_repository import (
+from src.modules.identity.infrastructure.persistence.models.user import UserModel
+from src.modules.identity.infrastructure.persistence.models.user_email import (
+    UserEmailModel,
+)
+from src.modules.identity.infrastructure.user.persistence.repository import (
     SqlAlchemyUserRepository,
 )
-from src.modules.identity.presentation.depends.infrastructure import (
-    get_otp_challenge_store,
-)
-from src.modules.identity.presentation.depends.infrastructure import get_session_store
-from src.modules.identity.presentation.http.router import router as auth_router
-from src.modules.identity.presentation.http.csrf import require_csrf
+from src.modules.identity.presentation.auth.providers import get_otp_challenge_store
+from src.modules.identity.presentation.auth.providers import get_session_store
+from src.modules.identity.presentation.auth.http.router import router as auth_router
+from src.modules.identity.presentation.auth.http.csrf import require_csrf
 from src.modules.shared import EntityIdVO
 from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,

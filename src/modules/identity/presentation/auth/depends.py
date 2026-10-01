@@ -1,61 +1,148 @@
 from __future__ import annotations
-
+from fastapi import Depends
+from fastapi import Depends, HTTPException, Request, status
+from src.config import dnk_config
+from src.modules.identity.application.auth.command.confirm_email_otp.handler import (
+    ConfirmEmailOtpHandler,
+)
+from src.modules.identity.application.auth.command.logout_current_session.handler import (
+    LogoutCurrentSessionHandler,
+)
+from src.modules.identity.application.auth.command.request_email_otp.handler import (
+    RequestEmailOtpHandler,
+)
+from src.modules.identity.application.auth.query.authenticate_by_session.handler import (
+    AuthenticateBySessionHandler,
+)
+from src.modules.identity.application.auth.query.authenticate_by_session.query import (
+    AuthenticateBySessionQuery,
+)
+from src.modules.identity.domain.auth.principal import Principal
+from src.modules.identity.domain.auth.request_context import RequestContext
+from src.modules.identity.presentation.auth.providers import AuthSettingsDep
+from src.modules.identity.presentation.auth.providers import OtpChallengeStoreDep
+from src.modules.identity.presentation.auth.providers import OtpServiceDep
+from src.modules.identity.presentation.auth.providers import SessionServiceDep
+from src.modules.identity.presentation.auth.providers import SessionStoreDep
+from src.modules.identity.presentation.auth.providers import TenantContextReaderDep
+from src.modules.identity.presentation.email.depends import EmailServiceDep
+from src.modules.identity.presentation.user.providers import UsersRepositoryDep
+from src.modules.shared.presentation.http.host import extract_request_host
+from src.modules.shared.presentation.persistence.depends import UoWDep
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Request, status
 
-from src.config import dnk_config
-from src.modules.identity.presentation.depends.application import (
-    AuthenticateBySessionUseCaseDep,
-)
-from src.modules.identity.domain.auth.request_context import RequestContext
-from src.modules.shared.presentation.http.host import extract_request_host
-from src.modules.identity.presentation.auth.authenticate_by_session_command import (
-    AuthenticateBySessionCommand,
-)
-from src.modules.identity.presentation.auth.authenticate_by_session_use_case_adapter import (
-    AuthenticateBySessionUseCaseAdapter,
-)
-from src.modules.identity.presentation.auth.authentication_process_protocol import (
-    AuthenticationProcessProtocol,
-)
-
-
-def get_authentication_process(
-    request: Request,
-    use_case: AuthenticateBySessionUseCaseDep,
-) -> AuthenticationProcessProtocol:
-    """Возвращает authentication process из app.state или default adapter."""
-    from_state = getattr(request.app.state, "authentication_process", None)
-    if from_state is not None:
-        return from_state
-    return AuthenticateBySessionUseCaseAdapter(use_case)
+def get_request_email_otp_handler(
+    tenant_context_reader: TenantContextReaderDep,
+    users_repository: UsersRepositoryDep,
+    otp_challenge_store: OtpChallengeStoreDep,
+    otp_service: OtpServiceDep,
+    email_service: EmailServiceDep,
+    settings: AuthSettingsDep,
+) -> RequestEmailOtpHandler:
+    """Создает use case запроса email OTP."""
+    return RequestEmailOtpHandler(
+        tenant_context_reader=tenant_context_reader,
+        users_repository=users_repository,
+        otp_challenge_store=otp_challenge_store,
+        otp_service=otp_service,
+        email_service=email_service,
+        otp_ttl_seconds=settings.otp_token_ttl_seconds,
+    )
 
 
-AuthenticationProcessDep = Annotated[
-    AuthenticationProcessProtocol,
-    Depends(get_authentication_process),
+RequestEmailOtpHandlerDep = Annotated[
+    RequestEmailOtpHandler, Depends(get_request_email_otp_handler)
+]
+
+
+def get_authenticate_by_session_handler(
+    tenant_context_reader: TenantContextReaderDep,
+    users_repository: UsersRepositoryDep,
+    session_store: SessionStoreDep,
+) -> AuthenticateBySessionHandler:
+    """Создает use case аутентификации по session."""
+    return AuthenticateBySessionHandler(
+        tenant_context_reader=tenant_context_reader,
+        users_repository=users_repository,
+        session_store=session_store,
+    )
+
+
+AuthenticateBySessionHandlerDep = Annotated[
+    AuthenticateBySessionHandler, Depends(get_authenticate_by_session_handler)
+]
+
+
+def get_confirm_email_otp_handler(
+    uow: UoWDep,
+    tenant_context_reader: TenantContextReaderDep,
+    users_repository: UsersRepositoryDep,
+    otp_challenge_store: OtpChallengeStoreDep,
+    session_store: SessionStoreDep,
+    otp_service: OtpServiceDep,
+    session_service: SessionServiceDep,
+    settings: AuthSettingsDep,
+) -> ConfirmEmailOtpHandler:
+    """Создает use case подтверждения email OTP."""
+    return ConfirmEmailOtpHandler(
+        uow=uow,
+        tenant_context_reader=tenant_context_reader,
+        users_repository=users_repository,
+        otp_challenge_store=otp_challenge_store,
+        session_store=session_store,
+        otp_service=otp_service,
+        session_service=session_service,
+        session_ttl_seconds=settings.session_ttl_seconds,
+    )
+
+
+ConfirmEmailOtpHandlerDep = Annotated[
+    ConfirmEmailOtpHandler, Depends(get_confirm_email_otp_handler)
+]
+
+
+def get_logout_current_session_handler(
+    tenant_context_reader: TenantContextReaderDep, session_store: SessionStoreDep
+) -> LogoutCurrentSessionHandler:
+    """Создает use case logout текущей session."""
+    return LogoutCurrentSessionHandler(
+        tenant_context_reader=tenant_context_reader, session_store=session_store
+    )
+
+
+LogoutCurrentSessionHandlerDep = Annotated[
+    LogoutCurrentSessionHandler, Depends(get_logout_current_session_handler)
 ]
 
 
 async def get_optional_request_context(
-    request: Request,
-    authentication_process: AuthenticationProcessDep,
+    request: Request, handler: AuthenticateBySessionHandlerDep
 ) -> RequestContext:
     """Строит RequestContext с optional principal из session cookie."""
     auth_settings = dnk_config.AUTH
-    command = AuthenticateBySessionCommand(
+    query = AuthenticateBySessionQuery(
         host=extract_request_host(request),
         session_token=request.cookies.get(auth_settings.session_cookie_name),
-        ip=_extract_request_ip(request),
-        user_agent=request.headers.get("user-agent"),
     )
-    principal = await authentication_process.authenticate(command)
+    result = await handler.execute(query)
+    principal = (
+        None
+        if result is None
+        else Principal(
+            user_id=result.user_id,
+            tenant_id=result.tenant_id,
+            session_id=result.session_id,
+            roles=result.roles,
+            permissions=result.permissions,
+            is_authenticated=result.is_authenticated,
+        )
+    )
     return RequestContext(
         principal=principal,
         request_id=_extract_request_id(request),
-        ip=command.ip,
-        user_agent=command.user_agent,
+        ip=_extract_request_ip(request),
+        user_agent=request.headers.get("user-agent"),
     )
 
 
@@ -65,19 +152,16 @@ async def require_authenticated_request_context(
     """Возвращает context только для аутентифицированного principal."""
     if context.principal is None or not context.principal.is_authenticated:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Unauthorized.",
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized."
         )
     return context
 
 
 OptionalRequestContextDep = Annotated[
-    RequestContext,
-    Depends(get_optional_request_context),
+    RequestContext, Depends(get_optional_request_context)
 ]
 AuthenticatedRequestContextDep = Annotated[
-    RequestContext,
-    Depends(require_authenticated_request_context),
+    RequestContext, Depends(require_authenticated_request_context)
 ]
 
 
@@ -95,13 +179,3 @@ def _extract_request_ip(request: Request) -> str | None:
     if client is None:
         return None
     return client.host
-
-
-__all__ = [
-    "AuthenticatedRequestContextDep",
-    "AuthenticationProcessDep",
-    "OptionalRequestContextDep",
-    "get_authentication_process",
-    "get_optional_request_context",
-    "require_authenticated_request_context",
-]

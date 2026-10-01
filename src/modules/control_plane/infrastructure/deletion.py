@@ -26,8 +26,8 @@ from src.modules.control_plane.infrastructure.services import (
     serialize,
     AccessProjectionWriter,
 )
-from src.modules.identity.infrastructure.persistence.user import UserModel
-from src.modules.identity.infrastructure.repository.access_repository import (
+from src.modules.identity.infrastructure.persistence.models.user import UserModel
+from src.modules.identity.infrastructure.access.persistence.repository import (
     AccessRepository,
 )
 from src.modules.shared import EntityIdVO

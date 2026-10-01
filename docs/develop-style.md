@@ -162,7 +162,8 @@ Presentation layer отвечает только за протокол вход�
 
 ## Dependency Injection
 
-DI собирается только в `presentation/depends`.
+DI собирается в `presentation/<responsibility>/depends.py` и связанных
+`providers.py`; общая сборка нескольких агрегатов может находиться в `presentation/depends/`.
 
 Правила:
 
@@ -279,8 +280,8 @@ DI собирается только в `presentation/depends`.
 ## Source Of Truth
 
 - `src/modules/identity/domain/user/entity.py`
-- `src/modules/identity/application/auth/use_case/get_current_user.py`
-- `src/modules/identity/infrastructure/repository/user_repository.py`
-- `src/modules/identity/presentation/depends/application.py`
-- `src/modules/identity/presentation/depends/infrastructure.py`
-- `src/modules/identity/presentation/http/router.py`
+- `src/modules/identity/application/user/query/get_current_user/handler.py`
+- `src/modules/identity/infrastructure/user/persistence/repository.py`
+- `src/modules/identity/presentation/auth/depends.py`
+- `src/modules/identity/presentation/auth/providers.py`
+- `src/modules/identity/presentation/auth/http/router.py`

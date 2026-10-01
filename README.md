@@ -18,7 +18,7 @@ existing local stack.
 ## Modules
 
 - `tenancy`: tenant schemas, migrations and admission; tenant lifecycle, domains, and transactional schema bootstrap.
-- `identity`: request context, authentication/authorization dependencies, email OTP, sessions, and tenant administrator provisioning.
+- `identity`: request context, authentication/authorization dependencies, email OTP, sessions, and tenant administrator provisioning. Scenarios use dedicated command/query handlers grouped by responsibility; see [Identity structure and dependency diagram](docs/modules/identity.md).
 - `control_plane`: Runtime v1 provisioning, mTLS integration, readiness and access projection delivery.
 - `inventory`: Warehouse domain model and tenant-scoped persistence model; no HTTP API yet.
 - `crm`: Contact aggregate with tenant-scoped creation and get-by-ID APIs, name normalization and audit; company/link SQL models retained. Console adaptation is pending.

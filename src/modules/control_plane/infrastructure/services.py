@@ -220,7 +220,7 @@ class CloudConnectionReader:
         self.session, self.cipher = session, cipher
 
     async def get(self, tenant_id: UUID):
-        from src.modules.identity.application.ports.cloud import CloudConnection
+        from src.modules.identity.application.cloud.port.cloud import CloudConnection
 
         connection = await self.session.get(CloudConnectionModel, tenant_id)
         if connection is None:
@@ -307,10 +307,10 @@ class AccessProjectionWriter:
 
     async def refresh(self, installation, global_user_id, issuer, naming):
         """Caller holds the tenant admission and identity locks through commit."""
-        from src.modules.identity.infrastructure.repository.access_repository import (
+        from src.modules.identity.infrastructure.access.persistence.repository import (
             AccessRepository,
         )
-        from src.modules.identity.infrastructure.persistence.user import UserModel
+        from src.modules.identity.infrastructure.persistence.models.user import UserModel
 
         access = AccessRepository(self.session, naming)
         runtime_id = installation.runtime_tenant_id

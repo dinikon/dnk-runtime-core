@@ -16,9 +16,11 @@ from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migration_meta
     migration_metadata,
 )
 
-from src.modules.identity.infrastructure.persistence.user import UserModel
-from src.modules.identity.infrastructure.persistence.user_email import UserEmailModel
-from src.modules.identity.infrastructure.repository.user_repository import (
+from src.modules.identity.infrastructure.persistence.models.user import UserModel
+from src.modules.identity.infrastructure.persistence.models.user_email import (
+    UserEmailModel,
+)
+from src.modules.identity.infrastructure.user.persistence.repository import (
     SqlAlchemyUserRepository,
 )
 from src.modules.identity.domain.user.value_object.user_email_id import UserEmailIdVO

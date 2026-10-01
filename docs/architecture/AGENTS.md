@@ -114,6 +114,22 @@ ORM models или session factory. Контракт UoW предоставляе
 из отдельных файлов `identity/domain/auth/`. Пакеты Identity не реэкспортируют
 определения через `__init__.py`.
 
+Сценарии Identity размещаются в `application/<responsibility>/command|query/<scenario>/`:
+входной объект, `handler.py` с `execute(...)`, `dto.py`. `auth`, `access`, `cloud`
+и `email` обозначают ответственность, а не новые Aggregate Roots. Общие операции
+находятся в небольших Application services; обработчики не вызывают друг друга.
+
+Зависимость контекста напрямую вызывает `AuthenticateBySessionHandler.execute` и
+преобразует результат в `Principal`. Подмена обработчика выполняется через FastAPI
+`dependency_overrides` для `get_authenticate_by_session_handler`; подмена готового
+контекста — через `require_authenticated_request_context`. Транспортные Request/Depends
+типы остаются в Presentation. Tenant context adapter принимает Application use case
+Tenancy и переводит его ошибки в собственные ошибки порта Identity.
+
+Чистая нормализация host находится в `shared/application/network/host.py` и доступна
+внутренним слоям без импорта HTTP Presentation. Извлечение host из Request остаётся
+HTTP-функцией. Подробная структура и диаграмма приведены в [Identity](../modules/identity.md).
+
 Универсальные TokenManager, Redis-backend, доставка готовых email, UoW и jobs/events
 остаются в `shared`. Виды писем OTP/приглашений, их переменные, шаблоны и сборка
 сервиса принадлежат Identity; общий транспорт не импортирует их.

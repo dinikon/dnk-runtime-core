@@ -4,7 +4,7 @@ from src.modules.crm.presentation.contact.http.router import router as contacts_
 from src.modules.contact_points.presentation.http.router import (
     router as contact_points_router,
 )
-from src.modules.identity.presentation.http.router import router as identity_router
+from src.modules.identity.presentation.auth.http.router import router as identity_router
 from src.modules.price_lists.presentation.http.router import (
     offers_router as price_list_offers_router,
 )

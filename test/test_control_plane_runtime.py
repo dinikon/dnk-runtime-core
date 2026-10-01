@@ -765,9 +765,7 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
         self,
     ):
         from src.modules.control_plane.presentation.router import router
-        from src.modules.identity.infrastructure.persistence.access import (
-            CloudIdentityModel,
-        )
+        from src.modules.identity.infrastructure.persistence.models.cloud_identity import CloudIdentityModel
 
         payload, _ = await self.accept()
         await Installer(self.sessions, self.config, "dnk_").run(

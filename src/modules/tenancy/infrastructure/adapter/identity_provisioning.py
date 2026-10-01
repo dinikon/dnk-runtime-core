@@ -1,7 +1,8 @@
 from __future__ import annotations
+from src.modules.identity.application.user.command.create_tenant_admin.command import CreateTenantAdminCommand
 
-from src.modules.identity.application.user.service.user_service import (
-    UserServiceProtocol,
+from src.modules.identity.application.user.command.create_tenant_admin.handler import (
+    CreateTenantAdminHandler,
 )
 from src.modules.shared import EntityIdVO
 from src.modules.tenancy.application.ports.identity import (
@@ -11,9 +12,9 @@ from src.modules.tenancy.application.ports.identity import ProvisionedTenantAdmi
 
 
 class IdentityProvisioningServiceAdapter(IdentityProvisioningServiceProtocol):
-    """Адаптер tenancy-порта provisioning к identity UserService."""
+    """Адаптер tenancy-порта provisioning к identity CreateTenantAdminHandler."""
 
-    def __init__(self, user_service: UserServiceProtocol) -> None:
+    def __init__(self, user_service: CreateTenantAdminHandler) -> None:
         """Инициализирует адаптер сервисом пользователей identity."""
         self._user_service = user_service
 
@@ -25,12 +26,12 @@ class IdentityProvisioningServiceAdapter(IdentityProvisioningServiceProtocol):
         email: str,
     ) -> ProvisionedTenantAdmin:
         """Создает tenant admin через identity и мапит результат в tenancy DTO."""
-        result = await self._user_service.create_tenant_admin(
+        result = await self._user_service.execute(CreateTenantAdminCommand(
             tenant_id=tenant_id,
             first_name=first_name,
             last_name=last_name,
             email=email,
-        )
+        ))
         return ProvisionedTenantAdmin(
             user_id=result.user_id,
             user_email_id=result.user_email_id,

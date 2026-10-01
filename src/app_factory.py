@@ -7,10 +7,10 @@ from src.config import dnk_config
 from src.dnk_app import DnkApp
 from src.modules.router import router as api_router
 from src.modules.control_plane.presentation.router import router as control_plane_router
-from src.modules.identity.presentation.http.integration import (
-    router as identity_integration_router,
-)
-from src.modules.identity.presentation.http.integration import cloud_router
+from src.modules.identity.presentation.auth.http.csrf_router import router as identity_csrf_router
+from src.modules.identity.presentation.access.http.router import router as identity_access_router
+from src.modules.identity.presentation.invitation.http.router import router as identity_invitation_router
+from src.modules.identity.presentation.cloud.http.router import router as cloud_router
 from src.modules.shared.infrastructure.events import ensure_event_bus_topology
 from src.modules.shared.infrastructure.messaging import (
     RabbitMQBrokerProvider,
@@ -79,7 +79,9 @@ def create_app() -> DnkApp:
     )
     app.include_router(api_router)
     app.include_router(control_plane_router)
-    app.include_router(identity_integration_router)
+    app.include_router(identity_csrf_router)
+    app.include_router(identity_access_router)
+    app.include_router(identity_invitation_router)
     app.include_router(cloud_router)
     integration = dnk_config.CONTROL_PLANE
     from src.modules.tenancy.presentation.tenant.http.tenant_gate import (

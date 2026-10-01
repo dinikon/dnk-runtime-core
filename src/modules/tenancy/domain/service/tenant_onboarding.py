@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.modules.shared.presentation.http.host import normalize_host
+from src.modules.shared.application.network.host import normalize_host
 from src.modules.tenancy.domain.tenant.entity import Tenant
 from src.modules.tenancy.domain.tenant.error import TenantExternalIdAlreadyExistsError
 from src.modules.tenancy.domain.tenant.error import TenantNameAlreadyExistsError

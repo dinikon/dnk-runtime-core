@@ -23,10 +23,10 @@ from uuid import UUID
 
 import httpx
 
-from src.modules.identity.application.cloud_auth_service import CloudAuthService
-from src.modules.identity.application.ports.cloud import CloudConnection
-from src.modules.identity.domain.access import IdentityAccessError
-from src.modules.identity.infrastructure.adapter.oidc_client import OidcClient
+from test.identity_scenarios import CloudScenarios
+from src.modules.identity.application.cloud.port.cloud import CloudConnection
+from src.modules.identity.domain.access.error import IdentityAccessError
+from src.modules.identity.infrastructure.cloud.oidc_client import OidcClient
 from src.modules.shared.infrastructure.persistence.unit_of_work.sqlalchemy import (
     UnitOfWork,
 )
@@ -164,7 +164,7 @@ class RealCoreIdentityInteroperabilityTests(unittest.IsolatedAsyncioTestCase):
                 initial["owner"],
             )
             await uow.commit()
-            cloud = CloudAuthService(local, reader, oidc)
+            cloud = CloudScenarios(local, reader, oidc)
 
             async def roundtrip(session, user, purpose):
                 request = await cloud.start(host, session, "browser", purpose)

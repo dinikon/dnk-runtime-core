@@ -17,42 +17,52 @@ read/update flows, and tenant admin provisioning during onboarding.
 - explicit cloud login/link/unlink using Authlib OIDC
 - CSRF browser binding and session epoch revocation
 
-## Main Flows / Use Cases
+## Scenarios And Structure
 
-- `RequestEmailOtpUseCase.__call__`
-- `ConfirmEmailOtpUseCase.__call__`
-- `AuthenticateBySessionUseCase.__call__`
-- `GetCurrentUserUseCase.__call__`
-- `UpdateCurrentUserProfileUseCase.__call__`
-- `LogoutCurrentSessionUseCase.__call__`
-- `UserService.create_tenant_admin`
+Every scenario has an immutable command/query, a handler with `execute(...)`, and
+its result DTO. Ports belong to the responsibility that consumes them.
 
-## Internal Structure
+| Responsibility | Queries | Commands |
+| --- | --- | --- |
+| Auth | authenticate_by_session | request_email_otp, confirm_email_otp, logout_current_session |
+| User | get_current_user | update_current_user_profile, create_tenant_admin |
+| Access | list_users | change_user_access |
+| Invitation | list_invitations | create_invitation, revoke_invitation, request_invitation_otp, accept_invitation |
+| Cloud | get_cloud_status | start_cloud_auth, complete_cloud_auth, unlink_cloud_identity |
 
-- `domain/user/`
-    - `entity.py` with `User` and `UserEmail`
-    - `error.py` with user/email login errors
-    - `repository.py` with `UserRepositoryProtocol`
-- `domain/auth/`
-    - `error.py` with OTP/session errors
-    - `principal.py` and `request_context.py` with immutable user/request context
-- `application/auth/`
-    - `command/`, `dto/`, `service/`, `use_case/`
-- `application/user/`
-    - `dto/`, `service/`
-- `application/ports/`
-  - tenant context and token store ports
-- `presentation/http/console_auth/`
-    - controller/request/response files per endpoint
-- `presentation/depends/`
-    - `application.py` for use case wiring
-    - `infrastructure.py` for repository/adapters/settings wiring
+```text
+identity/
+├── domain/{user,auth,access}/
+├── application/
+│   ├── auth/{command,query,port,service}/
+│   ├── user/{command,query}/
+│   ├── access/{command,query,port}/
+│   ├── invitation/{command,query,dto,service}/
+│   ├── cloud/{command,query,dto,port,service}/
+│   └── email/
+├── infrastructure/
+│   ├── user/persistence/
+│   ├── access/persistence/
+│   ├── persistence/models/  # one model per file
+│   └── {auth,cloud,email,observability}/
+└── presentation/
+    └── {auth,user,access,invitation,cloud,email}/
+```
+
+A scenario is located at `application/<responsibility>/<command|query>/<scenario>/`
+with `command.py` or `query.py`, `handler.py`, and `dto.py`. Auth, access, cloud and
+email are responsibilities, not additional aggregate roots. Domain entities and
+business rules retain their existing boundaries.
+
+Presentation owns `depends.py`, adapter `providers.py`, and HTTP controllers/schemas.
+Shared application services perform session validation/issuance, invitation validation
+and cloud connection checks. They do not dispatch other handlers. Bootstrap functions
+live in `infrastructure/cloud/bootstrap.py` and use the caller's UoW.
 
 ## Request Context And Authorization
 
-Identity owns `Principal`, `RequestContext`, the HTTP authentication process and
-authorization service contract, default implementation and dependency wiring.
-Consumers import definitions directly; Identity package `__init__.py` files are empty.
+Identity owns immutable `Principal` and `RequestContext` in `domain/auth/`.
+Consumers use direct file imports; package `__init__.py` files remain empty.
 
 ```python
 from src.modules.identity.domain.auth.principal import Principal
@@ -62,16 +72,40 @@ from src.modules.identity.presentation.auth.depends import OptionalRequestContex
 from src.modules.identity.presentation.access.depends import AuthorizationServiceDep
 ```
 
-`presentation/auth/` contains the HTTP command, authentication protocol, use case
-adapter and context dependencies. `application/access/` defines the authorization
-protocol; `infrastructure/access/` contains the existing allow-all implementation.
-`presentation/access/depends.py` assembles the authorization dependency.
+```mermaid
+flowchart TD
+    Endpoint[Protected endpoint] --> Required[AuthenticatedRequestContextDep]
+    Required --> Optional[get_optional_request_context]
+    Optional --> Handler[AuthenticateBySessionHandler.execute]
+    Handler --> TenantPort[Identity TenantContextReaderPort]
+    TenantPort --> Adapter[Identity TenancyTenantContextReaderAdapter]
+    Adapter --> Tenancy[Tenancy Application: resolve host]
+    Tenancy --> TenantSQL[Tenancy repositories: public tables]
+    Handler --> SessionPort[Identity SessionStorePort]
+    SessionPort --> Store[Identity session store]
+    Store --> Tokens[Shared TokenManager and Redis]
+    Handler --> UserPort[Identity UserRepositoryProtocol]
+    UserPort --> UserSQL[Identity SQLAlchemy repository: tenant schema]
+    TenantSQL --> UoW[Shared request UoW]
+    UserSQL --> UoW
+    UoW --> Connection[TenantGate connection]
+```
 
-`app.state.authentication_process`, `app.state.authorization_service` and FastAPI
-`dependency_overrides` remain supported. FastAPI resolves the standard session use
-case dependency before selecting an authentication process from `app.state`.
-Authentication, session checks, roles, OTP, CSRF and transaction timing are unchanged.
-Tenant infrastructure belongs to Tenancy; token mechanisms and UoW remain in `shared`.
+The handler receives only host and session token, and returns `SessionPrincipal | None`.
+Presentation explicitly maps it to `Principal` and adds request ID, IP and User-Agent.
+The required dependency returns `401` with `Unauthorized.` for an anonymous context.
+FastAPI caches the context and UoW for the request.
+
+Tests replace `get_authenticate_by_session_handler` through `app.dependency_overrides`,
+using an object with async `execute(query)`, or override
+`require_authenticated_request_context` directly. Authorization still supports
+`app.state.authorization_service` and dependency overrides.
+
+Host normalization is a pure function in `shared/application/network/host.py`.
+HTTP extraction stays in Presentation. The Tenancy adapter maps its known domain
+failures to `IdentityTenantNotFoundError` / `IdentityTenantUnavailableError`, retaining
+messages and exception causes. Unexpected storage failures propagate. Identity's
+Application and controllers do not depend on Tenancy domain exceptions.
 
 ## Infrastructure / Persistence
 
@@ -111,8 +145,8 @@ Console auth routes live under `/api/console/auth`:
 - `PATCH /me`
 - `POST /logout`
 
-Each controller keeps its own explicit `try/except -> HTTPException` mapping.
-`identity` does not use a shared `error_mapper.py`.
+Auth/profile controllers keep explicit HTTP exception mapping. Access, invitation and
+cloud controllers share Identity-owned HTTP error handling and explicitly serialize DTOs.
 Current-user profile stores `interface_theme` as a non-null string.
 The default theme is `system`, and `PATCH /me` requires an explicit non-null theme value.
 
@@ -129,7 +163,7 @@ The default theme is `system`, and `PATCH /me` requires an explicit non-null the
 
 - uses `tenancy` host resolution rules and tenant availability checks
 - owns request context and authentication/authorization dependencies; uses `shared` UoW and token abstractions
-- is consumed by `tenancy` through `UserService` provisioning adapter
+- is consumed by `tenancy` through `CreateTenantAdminHandler` provisioning adapter
 
 ## Cloud access and invitations
 
@@ -146,8 +180,9 @@ Every session consumer checks current user status and epoch. Revocation or unlin
     - local foreign keys, migration transitions and onboarding rollback after administrator insertion
     - HTTP login, profile updates, cross-tenant session rejection and logout with real repository/DI
 - `test/test_identity_context_relocation.py`: direct imports, isolated entrypoints and request/authorization dependency overrides
+- `test/test_identity_structure.py`: dependency direction, port error translation and authentication rejection paths
 - `test/test_identity_use_cases.py`
-    - auth use cases and tenant admin provisioning service
+    - auth handlers and tenant admin provisioning command
 - `test/test_identity_access_postgres.py`: invitations, roles, revocation, linking and rollback
 - `test/test_identity_cloud.py`: OIDC claims, issuer isolation and JWKS rotation
 - `test/test_identity_csrf.py` and `test/test_identity_redis.py`: browser binding and atomic state
@@ -164,9 +199,10 @@ Every session consumer checks current user status and epoch. Revocation or unlin
 
 ## Source Of Truth
 
-- `src/modules/identity/presentation/http/console_auth/controller/`
+- `src/modules/identity/presentation/auth/http/`
+- `src/modules/identity/presentation/user/http/`
 - `src/modules/identity/domain/user/entity.py`
 - `src/modules/identity/domain/auth/error.py`
-- `src/modules/identity/application/auth/use_case/`
-- `src/modules/identity/application/user/service/user_service.py`
+- `src/modules/identity/application/auth/`
+- `src/modules/identity/application/user/command/create_tenant_admin/handler.py`
 - `src/config/feature/identity/auth_config.py`

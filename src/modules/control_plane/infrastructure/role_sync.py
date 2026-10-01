@@ -12,7 +12,7 @@ from src.modules.control_plane.infrastructure.services import (
     AccessProjectionWriter,
     now,
 )
-from src.modules.identity.infrastructure.repository.access_repository import (
+from src.modules.identity.infrastructure.access.persistence.repository import (
     AccessRepository,
 )
 from src.modules.tenancy.application.tenant.tenant_schema_naming import (

@@ -1,8 +1,8 @@
 import unittest
 from fastapi import FastAPI, Depends, Request, Response
 from httpx import AsyncClient, ASGITransport
-from src.modules.identity.presentation.http.csrf import issue_csrf
-from src.modules.identity.presentation.http.csrf import require_csrf
+from src.modules.identity.presentation.auth.http.csrf import issue_csrf
+from src.modules.identity.presentation.auth.http.csrf import require_csrf
 from src.modules.shared.presentation.tokens.depends import TokenManagerDep
 from src.modules.shared.application.tokens import TokenManager
 from src.modules.shared.infrastructure.tokens import InMemoryTokenBackend
@@ -63,31 +63,40 @@ class BrowserCsrfTests(unittest.IsolatedAsyncioTestCase):
     async def test_new_read_endpoints_return_404_for_unknown_host(self):
         from types import SimpleNamespace
         from unittest.mock import AsyncMock
-        from src.modules.identity.presentation.http.integration import router
-        from src.modules.identity.presentation.http.integration import cloud_router
-        from src.modules.identity.presentation.depends.integration import (
-            get_access_service,
+        from src.modules.identity.presentation.auth.http.csrf_router import router
+        from src.modules.identity.presentation.cloud.http.router import (
+            router as cloud_router,
         )
-        from src.modules.identity.presentation.depends.integration import (
-            get_cloud_service,
+        from src.modules.identity.presentation.auth.providers import (
+            get_tenant_context_reader,
         )
-        from src.modules.tenancy.domain.tenant_domain.error import (
-            TenantHostNotFoundError,
+        from src.modules.identity.presentation.cloud.depends import (
+            get_complete_cloud_auth_handler,
+        )
+        from src.modules.identity.application.auth.port.tenant_context_reader import (
+            IdentityTenantNotFoundError,
         )
 
         local = SimpleNamespace(
-            context=AsyncMock(side_effect=TenantHostNotFoundError("missing.example"))
+            get_by_host=AsyncMock(
+                side_effect=IdentityTenantNotFoundError("missing.example")
+            )
         )
         cloud = SimpleNamespace(
-            callback=AsyncMock(side_effect=TenantHostNotFoundError("missing.example")),
+            execute=AsyncMock(
+                side_effect=IdentityTenantNotFoundError("missing.example")
+            ),
             local=SimpleNamespace(uow=AsyncMock()),
         )
         app = FastAPI()
         app.include_router(router)
         app.include_router(cloud_router)
         app.state.token_manager = TokenManager(InMemoryTokenBackend())
-        app.dependency_overrides[get_access_service] = lambda: local
-        app.dependency_overrides[get_cloud_service] = lambda: cloud
+        app.dependency_overrides[get_tenant_context_reader] = lambda: local
+        app.dependency_overrides[get_complete_cloud_auth_handler] = lambda: cloud
+        from src.modules.shared.presentation.persistence.depends import get_uow
+
+        app.dependency_overrides[get_uow] = lambda: cloud.local.uow
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="https://missing.example"
         ) as client:
