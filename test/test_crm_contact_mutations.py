@@ -45,8 +45,12 @@ class UpdateContactHandlerTests(unittest.IsolatedAsyncioTestCase):
         )
         contact = ContactMapper.to_entity(cast(RowMapping, row))
         self.assertIsInstance(contact.name, ContactNameVO)
+        without_surname = ContactMapper.to_entity(
+            cast(RowMapping, {**row, "last_name": None})
+        )
+        self.assertIsNone(without_surname.name.last_name)
         with self.assertRaises(InvalidContactNameError):
-            ContactMapper.to_entity(cast(RowMapping, {**row, "last_name": None}))
+            ContactMapper.to_entity(cast(RowMapping, {**row, "first_name": " "}))
 
     async def test_patch_updates_valid_name_and_audit_once(self):
         old, now = datetime(2026, 9, 1, tzinfo=UTC), datetime(2026, 10, 1, tzinfo=UTC)
@@ -95,12 +99,12 @@ class UpdateContactHandlerTests(unittest.IsolatedAsyncioTestCase):
                 UpdateContactCommand(
                     contact.id,
                     actor,
-                    frozenset({"last_name"}),
-                    last_name=None,
+                    frozenset({"first_name"}),
+                    first_name=None,
                 )
             )
         repository.save.assert_not_awaited()
-        self.assertEqual(contact.name.last_name, "Doe")
+        self.assertEqual(contact.name.first_name, "Jane")
 
 
 class ContactMethodsHttpTests(unittest.IsolatedAsyncioTestCase):
@@ -149,6 +153,11 @@ class ContactMethodsHttpTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         await self.client.aclose()
 
+    async def test_patch_schema_has_optional_nonnullable_first_name(self):
+        schema = self.app.openapi()["components"]["schemas"]["PatchContactRequest"]
+        self.assertNotIn("first_name", schema.get("required", []))
+        self.assertEqual(schema["properties"]["first_name"]["type"], "string")
+
     async def test_list_returns_all_without_clock_or_csrf(self):
         response = await self.client.get("/api/console/crm/contacts")
         self.assertEqual(response.status_code, 200, response.text)
@@ -192,12 +201,30 @@ class ContactMethodsHttpTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.json()["middle_name"], "Marie")
         self.assertEqual(self.session.execute.await_count, 2)
 
+    async def test_put_and_patch_can_clear_optional_surname(self):
+        put = await self.client.put(
+            self.url,
+            headers=self.headers,
+            json={"first_name": " Solo "},
+        )
+        self.assertEqual(put.status_code, 200, put.text)
+        self.assertEqual(put.json()["first_name"], "Solo")
+        self.assertIsNone(put.json()["last_name"])
+        patch = await self.client.patch(
+            self.url,
+            headers=self.headers,
+            json={"last_name": None},
+        )
+        self.assertEqual(patch.status_code, 200, patch.text)
+        self.assertEqual(patch.json()["first_name"], "Jane")
+        self.assertIsNone(patch.json()["last_name"])
+
     async def test_invalid_bodies_and_csrf_are_rejected(self):
         for method, payload in (
-            ("put", {"first_name": "Jane"}),
+            ("put", {}),
             ("put", {"first_name": "Jane", "last_name": "Doe", "id": str(uuid4())}),
             ("patch", {}),
-            ("patch", {"last_name": None}),
+            ("patch", {"first_name": None}),
             ("patch", {"first_name": " "}),
         ):
             with self.subTest(method=method, payload=payload):

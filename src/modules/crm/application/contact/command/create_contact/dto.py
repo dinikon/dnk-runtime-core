@@ -9,7 +9,7 @@ class CreateContactResultDTO:
 
     id: UUID
     first_name: str
-    last_name: str
+    last_name: str | None
     middle_name: str | None
     created_at: datetime
     updated_at: datetime

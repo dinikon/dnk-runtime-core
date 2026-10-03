@@ -211,17 +211,33 @@ src/modules/crm/
 │           └── contact_company.py
 └── presentation/
     ├── contact/
+    │   ├── router.py
     │   ├── depends.py
     │   └── http/
-    │       ├── router.py
-    │       ├── request.py
-    │       └── response.py
+    │       ├── controller/
+    │       │   ├── create_contact.py
+    │       │   ├── get_contact.py
+    │       │   ├── list_contacts.py
+    │       │   ├── put_contact.py
+    │       │   ├── patch_contact.py
+    │       │   └── delete_contact.py
+    │       ├── request/
+    │       │   ├── create_contact.py
+    │       │   ├── put_contact.py
+    │       │   └── patch_contact.py
+    │       └── response/
+    │           ├── create_contact.py
+    │           ├── get_contact.py
+    │           ├── list_contacts.py
+    │           ├── put_contact.py
+    │           └── patch_contact.py
     ├── company/
+    │   ├── router.py
     │   ├── depends.py
     │   └── http/
-    │       ├── router.py
-    │       ├── request.py
-    │       └── response.py
+    │       ├── controller/
+    │       ├── request/
+    │       └── response/
     └── depends/
 ```
 
@@ -242,9 +258,10 @@ Application через их контракты. Каждый агрегат из
 Чистые правила, относящиеся к нескольким агрегатам, могут находиться в Domain Service
 или Policy; принадлежность одному модулю не отменяет границы агрегатов.
 
-Дерево описывает целевую организацию кода. Сейчас CRM находится на этапе
-перестройки: реализованы создание и чтение Contact по ID, SQL-модели компаний и связей сохранены;
-актуальное состояние описано в
+Дерево показывает правило организации, а не перечень уже созданных файлов.
+В CRM реализованы создание, чтение списка и карточки, полное и частичное
+обновление, удаление Contact. SQL-модели компаний и связей сохранены, но
+Presentation для Company ещё не создаётся. Актуальное поведение описано в
 [документации CRM](../modules/crm.md). Не создавать пустые каталоги заранее —
 добавлять элементы по мере реализации соответствующего поведения.
 
@@ -1720,34 +1737,75 @@ commit
 
 #### Presentation layer
 
-HTTP слой должен быть максимально тонким.
+HTTP-слой должен быть тонким и явно разделённым по методам агрегата:
+
+```text
+presentation/<aggregate_root>/
+├── router.py
+├── depends.py
+└── http/
+    ├── controller/<scenario>.py
+    ├── request/<scenario>.py
+    └── response/<scenario>.py
+```
+
+`router.py` агрегата только регистрирует URL, HTTP-методы, статусы, response
+schema при наличии тела ответа и внешние зависимости (например, authentication
+и CSRF). Он напрямую
+импортирует каждый controller и каждую response schema из файла определения.
+`depends.py` собирает обработчики, порты и адаптеры, передавая репозиториям
+сессию общего UoW; это composition root, а не место для бизнес-правил.
+
+Каждый HTTP endpoint находится в отдельном файле
+`http/controller/<scenario>.py`, например `patch_contact.py`.
+Контроллер сам преобразует запрос и доверенный контекст в Command/Query, вызывает
+Application handler, переводит ожидаемые ошибки в HTTP-статусы и явно создаёт
+свою response schema из DTO. Даже если PUT и PATCH вызывают один Application
+handler, их контроллеры остаются самостоятельными: общий HTTP-helper не должен
+скрывать состав полей, семантику отсутствующего поля или обработку ошибок.
+Повторение небольшого транспортного кода допустимо ради явного контракта метода.
+Общие authentication, CSRF и UoW dependencies при этом остаются общими.
+
+Каждая request или response schema определяется в отдельном файле с именем
+сценария: `http/request/patch_contact.py`, `http/response/patch_contact.py`.
+Схемы разных методов не объединяются только потому, что сегодня имеют одинаковые
+поля. Для метода без тела запроса не создаётся фиктивная request schema; для
+`204 No Content` не создаётся response schema с пустым телом. Пакетные
+`__init__.py` остаются пустыми, импорты идут напрямую из файлов определений.
 
 ```python
-@router.post(
-    "/orders/{order_id}/confirm"
+# presentation/contact/router.py
+router.add_api_route(
+    "/{contact_id}",
+    patch_contact,
+    methods=["PATCH"],
+    response_model=PatchContactResponse,
+    dependencies=[Depends(require_authenticated_request_context), Depends(require_csrf)],
 )
-async def confirm_order(
-    order_id: UUID,
-    request: Request,
-    handler: ConfirmOrderHandler,
-) -> OrderResponse:
 
-    """Преобразует HTTP-контекст в команду, вызывает обработчик и формирует ответ."""
-    command = ConfirmOrderCommand(
-        tenant_id=request.tenant_id,
-        order_id=OrderIdVO(
-            order_id
-        ),
-        actor_id=request.actor_id,
+# presentation/contact/http/controller/patch_contact.py
+async def patch_contact(
+    contact_id: UUID,
+    payload: PatchContactRequest,
+    context: AuthenticatedRequestContextDep,
+    handler: UpdateContactHandlerDep,
+) -> PatchContactResponse:
+    """Преобразует PATCH в команду и возвращает результат через свою HTTP-схему."""
+    command = UpdateContactCommand(
+        contact_id=ContactIdVO.from_value(contact_id),
+        actor_id=EntityIdVO.from_value(context.principal.user_id),
+        fields=frozenset(payload.model_fields_set),
+        first_name=payload.first_name,
+        last_name=payload.last_name,
+        middle_name=payload.middle_name,
     )
-
-    await handler.execute(command)
-
-    return OrderResponse(
-        id=order_id,
-        status="confirmed",
-    )
+    result = await handler.execute(command)
+    return PatchContactResponse.from_dto(result)
 ```
+
+Здесь для краткости опущены импорты, проверка tenant-контекста и преобразование
+ошибок; рабочая реализация контроллера выполняет их до ответа. Имена файлов,
+схем и прямые импорты соответствуют модулю Contact.
 
 Presentation отвечает за:
 
@@ -2130,12 +2188,20 @@ StripePaymentGateway
 Presentation:
 
 ```text
-CreateOrderRequest
-OrderResponse
-orders_router
+CreateContactRequest
+CreateContactResponse
+GetContactResponse
+ListContactItemResponse
+PutContactRequest
+PutContactResponse
+PatchContactRequest
+PatchContactResponse
+router в presentation/contact/router.py
 ```
 
-Из названия класса должно быть понятно, какую архитектурную роль он выполняет.
+Из названия класса должно быть понятно, какую архитектурную роль и какой HTTP
+сценарий он обслуживает. Совпадающие поля не требуют общего response-класса
+для разных методов.
 
 ##### DTO naming
 

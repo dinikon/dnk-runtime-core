@@ -186,7 +186,7 @@ class CreateContactPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 500)
         self.assertEqual(await self.rows(), [])
 
-    async def test_invalid_name_does_not_write_and_legacy_null_surname_remains(self):
+    async def test_invalid_first_name_does_not_write_and_nullable_surname_remains(self):
         async with self.engine.begin() as connection:
             await connection.execute(
                 ContactModel.__table__.insert()
@@ -199,7 +199,7 @@ class CreateContactPostgresTests(unittest.IsolatedAsyncioTestCase):
                 )
                 .execution_options(schema_translate_map={"tenant": self.schemas[0]})
             )
-        response = await self.create(last_name=" ")
+        response = await self.create(first_name=" ")
         self.assertEqual(response.status_code, 422, response.text)
         rows = await self.rows()
         self.assertEqual(len(rows), 1)
@@ -368,7 +368,7 @@ class CreateContactPostgresTests(unittest.IsolatedAsyncioTestCase):
         invalid = await self.client.patch(
             url,
             headers=self.headers,
-            json={"last_name": None},
+            json={"first_name": None},
         )
         self.assertEqual(invalid.status_code, 422)
         self.assertEqual((await self.rows())[0]["last_name"], "O'Neill  Smith")
@@ -383,6 +383,31 @@ class CreateContactPostgresTests(unittest.IsolatedAsyncioTestCase):
             ("New", "Name"),
         )
         self.assertEqual((await self.rows())[0]["last_name"], "Name")
+
+    async def test_optional_last_name_round_trip(self):
+        created = await self.create(last_name=None)
+        self.assertEqual(created.status_code, 201, created.text)
+        self.assertIsNone(created.json()["last_name"])
+        self.assertIsNone((await self.rows())[0]["last_name"])
+        url = f"/api/console/crm/contacts/{self.identifier}"
+        self.assertIsNone((await self.client.get(url)).json()["last_name"])
+        self.assertIsNone(
+            (await self.client.get("/api/console/crm/contacts")).json()[0]["last_name"]
+        )
+        renamed = await self.client.patch(
+            url,
+            headers=self.headers,
+            json={"last_name": " Surname "},
+        )
+        self.assertEqual(renamed.status_code, 200, renamed.text)
+        self.assertEqual((await self.rows())[0]["last_name"], "Surname")
+        cleared = await self.client.patch(
+            url,
+            headers=self.headers,
+            json={"last_name": " "},
+        )
+        self.assertEqual(cleared.status_code, 200, cleared.text)
+        self.assertIsNone((await self.rows())[0]["last_name"])
 
     async def test_update_failure_after_write_rolls_back(self):
         self.assertEqual((await self.create()).status_code, 201)

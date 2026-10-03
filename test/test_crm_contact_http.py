@@ -84,8 +84,7 @@ class CreateContactHttpTests(unittest.IsolatedAsyncioTestCase):
     async def test_missing_and_invalid_names_are_rejected(self):
         for payload in (
             {},
-            {"first_name": "A"},
-            {"first_name": "A", "last_name": None},
+            {"first_name": None},
             {"first_name": " ", "last_name": "B"},
             {"first_name": "A", "last_name": 12},
             {"first_name": "A", "last_name": "b" * 256},
@@ -95,6 +94,19 @@ class CreateContactHttpTests(unittest.IsolatedAsyncioTestCase):
                 response = await self.create(payload)
                 self.assertEqual(response.status_code, 422, response.text)
         self.session.execute.assert_not_awaited()
+
+    async def test_only_first_name_is_required(self):
+        for payload in (
+            {"first_name": " Solo "},
+            {"first_name": " Solo ", "last_name": None},
+            {"first_name": " Solo ", "last_name": " "},
+        ):
+            with self.subTest(payload=payload):
+                response = await self.create(payload)
+                self.assertEqual(response.status_code, 201, response.text)
+                self.assertEqual(response.json()["first_name"], "Solo")
+                self.assertIsNone(response.json()["last_name"])
+                self.assertIsNone(response.json()["middle_name"])
 
     async def test_unknown_fields_cannot_override_context_or_add_relations(self):
         for field in (

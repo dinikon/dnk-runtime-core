@@ -25,9 +25,9 @@ class ContactEntity:
         *,
         contact_id: ContactIdVO,
         first_name: str,
-        last_name: str,
         actor_id: EntityIdVO,
         now: datetime,
+        last_name: str | None = None,
         middle_name: str | None = None,
     ) -> Self:
         """Создаёт контакт с проверенным именем и первоначальным аудитом."""
@@ -40,7 +40,7 @@ class ContactEntity:
             updated_by=actor_id,
         )
 
-    def replace_name(
+    def update(
         self,
         *,
         first_name: str | None,
@@ -50,10 +50,8 @@ class ContactEntity:
         now: datetime,
     ) -> bool:
         """Проверяет новое ФИО и обновляет аудит только при изменении."""
-        if not isinstance(first_name, str) or not isinstance(last_name, str):
-            raise InvalidContactNameError(
-                "first_name и last_name должны быть строками."
-            )
+        if not isinstance(first_name, str):
+            raise InvalidContactNameError("first_name: ожидается строка.")
         name = ContactNameVO(first_name, last_name, middle_name)
         if name == self.name:
             return False

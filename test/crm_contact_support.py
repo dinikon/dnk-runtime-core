@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import FastAPI, Request, Response
 
 from src.config import dnk_config
-from src.modules.crm.presentation.contact.http.router import router
+from src.modules.crm.presentation.contact.router import router
 from src.modules.identity.presentation.auth.http.csrf import issue_csrf
 from src.modules.shared.application.tokens.token_manager import TokenManager
 from src.modules.shared.infrastructure.tokens.in_memory_token_backend import (

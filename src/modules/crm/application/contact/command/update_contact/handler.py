@@ -21,7 +21,7 @@ class UpdateContactHandler:
         if contact is None:
             raise ContactNotFoundError("Contact not found.")
         current = contact.name
-        changed = contact.replace_name(
+        changed = contact.update(
             first_name=(
                 command.first_name
                 if "first_name" in command.fields

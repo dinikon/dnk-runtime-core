@@ -28,15 +28,17 @@ class ContactDomainTests(unittest.TestCase):
         with self.assertRaises(FrozenInstanceError):
             name.first_name = "Other"
 
-    def test_empty_middle_name_means_absence(self):
-        for middle in (None, "", " \t\n"):
-            with self.subTest(middle=middle):
-                self.assertIsNone(ContactNameVO("A", "B", middle).middle_name)
+    def test_empty_optional_parts_mean_absence(self):
+        for value in (None, "", " \t\n"):
+            with self.subTest(value=value):
+                self.assertIsNone(ContactNameVO("A", value, value).last_name)
+                self.assertIsNone(ContactNameVO("A", value, value).middle_name)
+        self.assertEqual(ContactNameVO("A"), ContactNameVO("A", None, None))
 
     def test_required_parts_and_types_are_checked_in_domain(self):
         for field in ("first_name", "last_name", "middle_name"):
             invalid = [0, False, [], {}, b"name", "a" * 256]
-            if field != "middle_name":
+            if field == "first_name":
                 invalid += [None, "", " \n\t"]
             for value in invalid:
                 with self.subTest(field=field, value=value):
@@ -65,14 +67,77 @@ class ContactDomainTests(unittest.TestCase):
         self.assertEqual(contact.name, ContactNameVO("A", "B"))
         self.assertEqual((contact.created_at, contact.updated_at), (now, now))
         self.assertEqual((contact.created_by, contact.updated_by), (actor, actor))
+        without_surname = ContactEntity.create(
+            contact_id=ContactIdVO(uuid4()),
+            actor_id=actor,
+            now=now,
+            first_name=" Solo ",
+        )
+        self.assertEqual(without_surname.name, ContactNameVO("Solo"))
         with self.assertRaises(InvalidContactNameError):
             ContactEntity.create(
                 contact_id=identifier,
                 actor_id=actor,
                 now=now,
-                first_name="A",
-                last_name=" ",
+                first_name=" ",
             )
+
+    def test_update_uses_name_vo_and_preserves_audit_for_unchanged_name(self):
+        created_at = datetime(2026, 9, 28, tzinfo=UTC)
+        updated_at = datetime(2026, 10, 3, tzinfo=UTC)
+        creator, editor = EntityIdVO(uuid4()), EntityIdVO(uuid4())
+        contact = ContactEntity.create(
+            contact_id=ContactIdVO(uuid4()),
+            first_name="A",
+            last_name="B",
+            actor_id=creator,
+            now=created_at,
+        )
+        self.assertFalse(
+            contact.update(
+                first_name=" A ",
+                last_name=" B ",
+                middle_name=None,
+                actor_id=editor,
+                now=updated_at,
+            )
+        )
+        self.assertEqual(
+            (contact.updated_at, contact.updated_by), (created_at, creator)
+        )
+        self.assertTrue(
+            contact.update(
+                first_name=" A ",
+                last_name=" C ",
+                middle_name=" M ",
+                actor_id=editor,
+                now=updated_at,
+            )
+        )
+        self.assertEqual(contact.name, ContactNameVO("A", "C", "M"))
+        self.assertTrue(
+            contact.update(
+                first_name="A",
+                last_name=None,
+                middle_name=None,
+                actor_id=editor,
+                now=updated_at,
+            )
+        )
+        self.assertEqual(contact.name, ContactNameVO("A"))
+        self.assertEqual(
+            (contact.created_at, contact.created_by), (created_at, creator)
+        )
+        self.assertEqual((contact.updated_at, contact.updated_by), (updated_at, editor))
+        with self.assertRaises(InvalidContactNameError):
+            contact.update(
+                first_name="",
+                last_name="C",
+                middle_name=None,
+                actor_id=creator,
+                now=updated_at,
+            )
+        self.assertEqual(contact.name, ContactNameVO("A"))
 
 
 class CreateContactHandlerTests(unittest.IsolatedAsyncioTestCase):
@@ -116,7 +181,7 @@ class CreateContactHandlerTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_invalid_name_never_reaches_repository(self):
         with self.assertRaises(InvalidContactNameError):
-            await self.handler.execute(replace(self.command, last_name=""))
+            await self.handler.execute(replace(self.command, first_name=""))
         self.repository.add.assert_not_awaited()
 
     async def test_storage_failure_propagates(self):

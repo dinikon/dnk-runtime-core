@@ -67,7 +67,8 @@ authenticated tenant user can read and mutate CRM data; browser mutations requir
 | PATCH | `/api/console/crm/contacts/{id}` | Update supplied name fields; `200` or `404` |
 | DELETE | `/api/console/crm/contacts/{id}` | Hard-delete the contact; `204` or `404` |
 
-Contact requests contain only `first_name`, `last_name`, and optional `middle_name`.
+Contact requests contain `first_name` and optional `last_name` and `middle_name`.
+POST and PUT require `first_name`; PATCH may omit it but cannot clear it.
 Read and mutation responses include the full name and audit fields. Unknown fields
 are rejected; validation is `422`. List results are ordered by `created_at`, then
 `id`. Company, relationship, phone, and email operations are not implemented in

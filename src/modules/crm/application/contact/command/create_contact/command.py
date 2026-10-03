@@ -9,5 +9,5 @@ class CreateContactCommand:
 
     actor_id: EntityIdVO
     first_name: str
-    last_name: str
+    last_name: str | None = None
     middle_name: str | None = None

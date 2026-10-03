@@ -1,17 +1,33 @@
 from fastapi import APIRouter, Depends
 
-from src.modules.crm.presentation.contact.http.controller import (
+from src.modules.crm.presentation.contact.http.controller.create_contact import (
     create_contact,
-    delete_contact,
-    get_contact,
-    list_contacts,
-    patch_contact,
-    put_contact,
 )
-from src.modules.crm.presentation.contact.http.response import (
+from src.modules.crm.presentation.contact.http.controller.delete_contact import (
+    delete_contact,
+)
+from src.modules.crm.presentation.contact.http.controller.get_contact import get_contact
+from src.modules.crm.presentation.contact.http.controller.list_contacts import (
+    list_contacts,
+)
+from src.modules.crm.presentation.contact.http.controller.patch_contact import (
+    patch_contact,
+)
+from src.modules.crm.presentation.contact.http.controller.put_contact import put_contact
+from src.modules.crm.presentation.contact.http.response.create_contact import (
     CreateContactResponse,
+)
+from src.modules.crm.presentation.contact.http.response.get_contact import (
     GetContactResponse,
-    UpdateContactResponse,
+)
+from src.modules.crm.presentation.contact.http.response.list_contacts import (
+    ListContactItemResponse,
+)
+from src.modules.crm.presentation.contact.http.response.patch_contact import (
+    PatchContactResponse,
+)
+from src.modules.crm.presentation.contact.http.response.put_contact import (
+    PutContactResponse,
 )
 from src.modules.identity.presentation.auth.http.csrf import require_csrf
 from src.modules.identity.presentation.auth.depends import (
@@ -23,7 +39,7 @@ router.add_api_route(
     "",
     list_contacts,
     methods=["GET"],
-    response_model=list[GetContactResponse],
+    response_model=list[ListContactItemResponse],
     dependencies=[Depends(require_authenticated_request_context)],
 )
 router.add_api_route(
@@ -48,7 +64,7 @@ router.add_api_route(
     "/{contact_id}",
     put_contact,
     methods=["PUT"],
-    response_model=UpdateContactResponse,
+    response_model=PutContactResponse,
     dependencies=[
         Depends(require_authenticated_request_context),
         Depends(require_csrf),
@@ -58,7 +74,7 @@ router.add_api_route(
     "/{contact_id}",
     patch_contact,
     methods=["PATCH"],
-    response_model=UpdateContactResponse,
+    response_model=PatchContactResponse,
     dependencies=[
         Depends(require_authenticated_request_context),
         Depends(require_csrf),

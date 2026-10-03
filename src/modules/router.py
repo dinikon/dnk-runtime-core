@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from src.modules.crm.presentation.contact.http.router import router as contacts_router
+from src.modules.crm.presentation.contact.router import router as contacts_router
 from src.modules.contact_points.presentation.http.router import (
     router as contact_points_router,
 )
