@@ -20,6 +20,7 @@ from src.modules.crm.infrastructure.contact.persistence.repository import (
 )
 from src.modules.shared.presentation.persistence.depends import UoWDep
 from src.modules.shared.presentation.time.depends import ClockDep
+from src.modules.shared.presentation.uuid.depends import UuidDep
 
 
 def get_contact_repository(uow: UoWDep) -> ContactRepositoryProtocol:
@@ -33,10 +34,10 @@ ContactRepositoryDep = Annotated[
 
 
 def get_create_contact_handler(
-    repository: ContactRepositoryDep, clock: ClockDep
+    repository: ContactRepositoryDep, clock: ClockDep, uuid_generator: UuidDep
 ) -> CreateContactHandler:
     """Подключает порты к обработчику создания контакта."""
-    return CreateContactHandler(repository, clock)
+    return CreateContactHandler(repository, clock, uuid_generator)
 
 
 CreateContactHandlerDep = Annotated[

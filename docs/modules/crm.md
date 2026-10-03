@@ -86,7 +86,8 @@ ISO 8601. Телефоны, email и компании в ответ не вхо�
 - `domain/contact/`: агрегат `ContactEntity`, `ContactIdVO`, неизменяемый `ContactNameVO`,
   доменная ошибка имени и контракт репозитория с единственным методом `add`.
 - `application/contact/command/create_contact/`: команда, handler и DTO результата.
-  Handler создаёт агрегат, сохраняет его через порт и возвращает ФИО с аудитом.
+  Handler получает генератор UUID через порт, создаёт агрегат, сохраняет его и
+  возвращает ФИО с аудитом. Контроллер не формирует ID контакта.
 - `application/contact/query/get_contact/`: `GetContactQuery`, `GetContactHandler`
   и `ContactDetailsDTO`. Порт `ContactQueryRepositoryProtocol` расположен в
   `application/contact/port/query_repository.py`.

@@ -79,26 +79,31 @@ class CreateContactHandlerTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.command = CreateContactCommand(
             actor_id=EntityIdVO(uuid4()),
-            contact_id=ContactIdVO(uuid4()),
             first_name=" A ",
             last_name=" B ",
             middle_name=" ",
         )
         self.now = datetime(2026, 9, 28, tzinfo=UTC)
         self.clock = Mock(now=Mock(return_value=self.now))
+        self.identifier = uuid4()
+        self.uuid_generator = Mock(new=Mock(return_value=self.identifier))
         self.repository = Mock(add=AsyncMock())
-        self.handler = CreateContactHandler(self.repository, self.clock)
+        self.handler = CreateContactHandler(
+            self.repository, self.clock, self.uuid_generator
+        )
 
     async def test_saves_once_and_returns_created_values(self):
         dto = await self.handler.execute(self.command)
         self.clock.now.assert_called_once_with()
+        self.uuid_generator.new.assert_called_once_with()
         self.repository.add.assert_awaited_once()
         (contact,) = self.repository.add.await_args.args
+        self.assertEqual(contact.id.uuid, self.identifier)
         self.assertEqual(contact.name, ContactNameVO("A", "B"))
         self.assertEqual(
             (dto.id, dto.created_by, dto.updated_by),
             (
-                self.command.contact_id.uuid,
+                self.identifier,
                 self.command.actor_id.uuid,
                 self.command.actor_id.uuid,
             ),

@@ -25,14 +25,12 @@ from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.identity.presentation.auth.depends import (
     AuthenticatedRequestContextDep,
 )
-from src.modules.shared.presentation.uuid.depends import UuidDep
 
 
 async def create_contact(
     payload: CreateContactRequest,
     context: AuthenticatedRequestContextDep,
     handler: CreateContactHandlerDep,
-    uuid_generator: UuidDep,
 ) -> CreateContactResponse:
     """Создаёт контакт в tenant аутентифицированного участника."""
     principal = context.principal
@@ -40,7 +38,6 @@ async def create_contact(
         raise HTTPException(403, "Tenant context is required.")
     command = CreateContactCommand(
         actor_id=EntityIdVO.from_value(principal.user_id),
-        contact_id=ContactIdVO.from_value(uuid_generator.new()),
         first_name=payload.first_name,
         last_name=payload.last_name,
         middle_name=payload.middle_name,
