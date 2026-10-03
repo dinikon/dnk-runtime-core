@@ -4,12 +4,12 @@ from uuid import UUID
 
 
 @dataclass(frozen=True, slots=True)
-class ContactDetailsDTO:
-    """Сохранённые данные контакта с учётом nullable SQL-столбца."""
+class UpdateContactResultDTO:
+    """Актуальное ФИО и аудит после изменения контакта."""
 
     id: UUID
     first_name: str
-    last_name: str | None
+    last_name: str
     middle_name: str | None
     created_at: datetime
     updated_at: datetime

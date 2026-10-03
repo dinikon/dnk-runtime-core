@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Self
 
+from src.modules.crm.domain.contact.error import InvalidContactNameError
 from src.modules.crm.domain.contact.value_object.identifier import ContactIdVO
 from src.modules.crm.domain.contact.value_object.name import ContactNameVO
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
@@ -38,3 +39,25 @@ class ContactEntity:
             created_by=actor_id,
             updated_by=actor_id,
         )
+
+    def replace_name(
+        self,
+        *,
+        first_name: str | None,
+        last_name: str | None,
+        middle_name: str | None,
+        actor_id: EntityIdVO,
+        now: datetime,
+    ) -> bool:
+        """Проверяет новое ФИО и обновляет аудит только при изменении."""
+        if not isinstance(first_name, str) or not isinstance(last_name, str):
+            raise InvalidContactNameError(
+                "first_name и last_name должны быть строками."
+            )
+        name = ContactNameVO(first_name, last_name, middle_name)
+        if name == self.name:
+            return False
+        self.name = name
+        self.updated_at = now
+        self.updated_by = actor_id
+        return True

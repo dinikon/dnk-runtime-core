@@ -5,6 +5,15 @@ from fastapi import Depends
 from src.modules.crm.application.contact.command.create_contact.handler import (
     CreateContactHandler,
 )
+from src.modules.crm.application.contact.command.delete_contact.handler import (
+    DeleteContactHandler,
+)
+from src.modules.crm.application.contact.command.update_contact.handler import (
+    UpdateContactHandler,
+)
+from src.modules.crm.application.contact.query.list_contacts.handler import (
+    ListContactsHandler,
+)
 from src.modules.crm.domain.contact.repository import ContactRepositoryProtocol
 from src.modules.crm.application.contact.port.query_repository import (
     ContactQueryRepositoryProtocol,
@@ -61,3 +70,36 @@ def get_get_contact_handler(repository: ContactQueryRepositoryDep) -> GetContact
 
 
 GetContactHandlerDep = Annotated[GetContactHandler, Depends(get_get_contact_handler)]
+
+
+def get_list_contacts_handler(
+    repository: ContactQueryRepositoryDep,
+) -> ListContactsHandler:
+    return ListContactsHandler(repository)
+
+
+ListContactsHandlerDep = Annotated[
+    ListContactsHandler, Depends(get_list_contacts_handler)
+]
+
+
+def get_update_contact_handler(
+    repository: ContactRepositoryDep, clock: ClockDep
+) -> UpdateContactHandler:
+    return UpdateContactHandler(repository, clock)
+
+
+UpdateContactHandlerDep = Annotated[
+    UpdateContactHandler, Depends(get_update_contact_handler)
+]
+
+
+def get_delete_contact_handler(
+    repository: ContactRepositoryDep,
+) -> DeleteContactHandler:
+    return DeleteContactHandler(repository)
+
+
+DeleteContactHandlerDep = Annotated[
+    DeleteContactHandler, Depends(get_delete_contact_handler)
+]

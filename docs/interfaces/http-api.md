@@ -58,27 +58,20 @@ Invitation links expire after seven days. Creating an invitation attempts email 
 CRM routes are tenant-scoped from the authenticated request context. Clients cannot choose a `tenant_id`. Every
 authenticated tenant user can read and mutate CRM data; browser mutations require the shared CSRF token.
 
-| Method | Path                                              | Behavior                                                   |
-|--------|---------------------------------------------------|------------------------------------------------------------|
-| GET    | `/api/console/crm/contacts?q=&limit=25&offset=0`  | Search and page contacts; `{items, total, limit, offset}`  |
-| GET    | `/api/console/crm/contacts/{id}`                  | Get a contact or `404`                                     |
-| POST   | `/api/console/crm/contacts`                       | Create a contact and return it with `201`                  |
-| PUT    | `/api/console/crm/contacts/{id}`                  | Update a contact                                           |
-| DELETE | `/api/console/crm/contacts/{id}`                  | Hard-delete a contact and return `204`                     |
-| GET    | `/api/console/crm/companies?q=&limit=25&offset=0` | Search and page companies; `{items, total, limit, offset}` |
-| GET    | `/api/console/crm/companies/{id}`                 | Get a company or `404`                                     |
-| POST   | `/api/console/crm/companies`                      | Create a company and return it with `201`                  |
-| PUT    | `/api/console/crm/companies/{id}`                 | Update a company                                           |
-| DELETE | `/api/console/crm/companies/{id}`                 | Hard-delete a company and return `204`                     |
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | `/api/console/crm/contacts` | All contacts in the current tenant, as an array without filtering or pagination |
+| GET | `/api/console/crm/contacts/{id}` | One contact or `404` |
+| POST | `/api/console/crm/contacts` | Create a contact from a full name; `201` |
+| PUT | `/api/console/crm/contacts/{id}` | Replace the full name; `200` or `404` |
+| PATCH | `/api/console/crm/contacts/{id}` | Update supplied name fields; `200` or `404` |
+| DELETE | `/api/console/crm/contacts/{id}` | Hard-delete the contact; `204` or `404` |
 
-`limit` must be between 1 and 100. Search is case-insensitive; results use fixed name-then-id ordering. Domain
-validation is `422`, missing records are `404`, and persistence conflicts are `409`. See [CRM](../modules/crm.md).
-
-CRM POST/PUT also accept `phones` and `emails`. Omitted arrays preserve existing bindings, empty arrays clear
-them, and `null` is rejected. Phone rows require `country_code`; both kinds accept `value`, optional `binding_id`
-and `label_id`. Responses include `contact_point_id` and normalized values. Changing a value rebinds the same
-binding without changing other owners. Any invalid row rolls back the whole CRM request. See the
-[contact-points contract](../modules/contact-points.md) for examples and normalization rules.
+Contact requests contain only `first_name`, `last_name`, and optional `middle_name`.
+Read and mutation responses include the full name and audit fields. Unknown fields
+are rejected; validation is `422`. List results are ordered by `created_at`, then
+`id`. Company, relationship, phone, and email operations are not implemented in
+CRM yet. See [CRM](../modules/crm.md).
 
 ## Console contact-point labels
 
@@ -97,10 +90,3 @@ There is no standalone attach/detach HTTP endpoint: bindings are synchronized at
 The outbox sends Instance-mTLS `PUT /internal/v1/tenants/{tenant_id}/access/{user_id}/` with `{event_id, version, available}`. Core replies `{status: 200, data: {applied, version?}}`; both applied and already-processed results acknowledge delivery. Roles stay local.
 
 See [Control Plane integration](../modules/control-plane.md), [Identity](../modules/identity.md) and [configuration](configuration.md).
-
-
-## CRM relationship editing
-
-Contact/company POST and PUT support `company_ids` / `contact_ids`. For PUT, include the corresponding `expected_company_ids` / `expected_contact_ids` from the original detail response whenever changing membership. Omission preserves links, an empty array clears them, and null/duplicate IDs are invalid. A stale original set returns 409 and rolls back all card changes.
-
-Detail and mutation responses expose `companies` / `contacts` as `{id, name}` summaries. Candidate queries are `GET /api/console/crm/contacts/{id}/available-companies` and `GET /api/console/crm/companies/{id}/available-contacts`, with `q`, `limit` (1–100), and `offset`; stored links are excluded before pagination. Authentication, CSRF on mutations, and tenant derivation follow the existing CRM contract. See [CRM](../modules/crm.md).

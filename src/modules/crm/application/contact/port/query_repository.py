@@ -10,3 +10,7 @@ class ContactQueryRepositoryProtocol(Protocol):
     async def get_details(self, *, contact_id: ContactIdVO) -> ContactDetailsDTO | None:
         """Возвращает запись текущего tenant либо None, если её нет."""
         ...
+
+    async def list_details(self) -> list[ContactDetailsDTO]:
+        """Возвращает все контакты текущего tenant в устойчивом порядке."""
+        ...

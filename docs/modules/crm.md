@@ -1,7 +1,7 @@
 # CRM
 
 CRM — контекст с самостоятельными агрегатами контактов и компаний. На текущем
-этапе реализован агрегат `ContactEntity`, создание по ФИО и чтение конкретной записи по ID. SQL-модели
+этапе реализован агрегат `ContactEntity`, создание, чтение, обновление и удаление контактов. SQL-модели
 компаний и связей сохранены для дальнейшей реализации.
 
 ## Создание контакта
@@ -68,9 +68,9 @@ Tenant определяется только доверенным `RequestContex
 `updated_at`, `created_by`, `updated_by`. UUID передаются строками, даты — в формате
 ISO 8601. Телефоны, email и компании в ответ не входят.
 
-Контракт чтения допускает `last_name: null` для исторических записей. Отчество
-также может быть `null`. Сохранённые имена не нормализуются повторно; GET не изменяет
-данные и аудит. Обязательность фамилии для POST остаётся прежней.
+Отчество может быть `null`. Сохранённые имена не нормализуются повторно;
+GET не изменяет данные и аудит. SQL-столбец `last_name` пока остаётся nullable,
+поэтому контракт чтения допускает `null`, хотя текущие записи содержат фамилию.
 
 ### Ошибки
 
@@ -81,19 +81,55 @@ ISO 8601. Телефоны, email и компании в ответ не вхо�
   ответ `{"detail": "Contact not found."}`, не раскрывая её существование.
 - `500`: неожиданный сбой чтения или завершения транзакции; успешный ответ не отправляется.
 
+## Список контактов
+
+`GET /api/console/crm/contacts` возвращает `200 OK` и массив всех контактов
+текущего tenant. Фильтрации, поиска и пагинации нет; порядок — `created_at`, затем
+`id`. Элементы имеют формат GET по ID.
+Пустой список — `[]`. Требуются аутентификация и tenant-контекст, CSRF не нужен.
+
+## Обновление контакта
+
+`PUT /api/console/crm/contacts/{contact_id}` полностью заменяет ФИО. В теле
+обязательны строковые `first_name` и `last_name`; пропущенный `middle_name`
+становится `null`.
+
+`PATCH` по тому же URL меняет только переданные части. Пустое тело `{}` запрещено;
+явный `middle_name: null` очищает отчество. Имя и фамилию нельзя сделать `null`
+или пустыми. Оба метода применяют правила нормализации POST и возвращают `200 OK`
+с полным ФИО и аудитом. При изменении обновляются `updated_at` и `updated_by`;
+повторная передача того же нормализованного ФИО сохраняет прежний аудит.
+При загрузке на изменение ФИО восстанавливается как `ContactNameVO` и
+проверяется по доменным правилам.
+
+Оба метода требуют аутентификации, tenant-контекста и CSRF. Неизвестные поля,
+включая ID и аудит, дают `422`. Отсутствующий контакт даёт `404` с
+`Contact not found.`; запись другого tenant также не раскрывается.
+
+## Удаление контакта
+
+`DELETE /api/console/crm/contacts/{contact_id}` физически удаляет запись.
+Успех — `204 No Content` без тела, отсутствие — `404`. Требования к
+аутентификации, tenant и CSRF те же, что у PUT/PATCH. Существующий внешний ключ
+`ON DELETE CASCADE` удаляет связи контакта с компаниями.
+
 ## Слои и транзакция
 
-- `domain/contact/`: агрегат `ContactEntity`, `ContactIdVO`, неизменяемый `ContactNameVO`,
-  доменная ошибка имени и контракт репозитория с единственным методом `add`.
+- `domain/contact/`: агрегат `ContactEntity`, `ContactIdVO`, неизменяемый
+  `ContactNameVO`, доменные ошибки и контракт репозитория записи.
 - `application/contact/command/create_contact/`: команда, handler и DTO результата.
   Handler получает генератор UUID через порт, создаёт агрегат, сохраняет его и
   возвращает ФИО с аудитом. Контроллер не формирует ID контакта.
 - `application/contact/query/get_contact/`: `GetContactQuery`, `GetContactHandler`
   и `ContactDetailsDTO`. Порт `ContactQueryRepositoryProtocol` расположен в
   `application/contact/port/query_repository.py`.
+- `application/contact/query/list_contacts/`: список через тот же порт проекций.
+- `application/contact/command/update_contact/` и `delete_contact/`: изменение
+  и удаление через заблокированный агрегат в общем UoW.
 - `infrastructure/contact/persistence/`: раздельные репозитории записи и чтения.
-  `ContactMapper` готовит INSERT values, `ContactQueryMapper.to_details()` переносит
-  SQL-проекцию в DTO без восстановления `ContactEntity` и `ContactNameVO`. Чтение выполняет
+  `ContactMapper` готовит INSERT/UPDATE values и восстанавливает агрегат для
+  изменения; `ContactQueryMapper.to_details()` переносит проекцию чтения в DTO.
+  Чтение по ID выполняет
   один SELECT явных колонок по ID, без блокировки и загрузки связей. Tenant admission
   один раз привязывает `schema_translate_map` к соединению запроса до создания UoW;
   оба репозитория используют общую сессию без выбора схемы в каждом SQL-выражении.
@@ -116,11 +152,12 @@ Domain и Application не зависят от SQLAlchemy/FastAPI. Handler и re
 Все три зарегистрированы в tenant metadata. SQL-модели, ограничения, индексы,
 внешние ключи и миграции не изменены. Новая миграция не требуется.
 
-Обязательная фамилия — правило создания новых контактов. Существующий столбец
-`last_name` остаётся nullable; исторические записи с `NULL` не изменяются.
-GET возвращает такие записи с `last_name: null`.
+Обязательная фамилия — инвариант агрегата при создании и изменении. Существующий
+столбец `last_name` остаётся nullable, чтобы не менять SQL-модель и миграции;
+в текущих данных записей с `NULL` нет. Query-проекция сохраняет совместимость
+с nullable-столбцом, но агрегат с таким именем для изменения не восстанавливается.
 
-GET списка, обновление, удаление, операции компаний и связей отсутствуют.
+Операции компаний и управления связями отсутствуют.
 Неподдерживаемый метод существующего маршрута возвращает `405`, отсутствующий
 маршрут — `404`. Самостоятельный модуль `contact_points` продолжает работать,
 но создание Contact пока с ним не интегрируется.
@@ -135,11 +172,11 @@ email и компании, поэтому форма пока несовмест
 ## Проверки
 
 ```sh
-uv run python -m unittest test.test_crm_contact test.test_crm_contact_http test.test_crm_contact_get test.test_crm_contact_get_http test.test_architecture_boundaries test.test_removed_module_boundaries
+uv run python -m unittest test.test_crm_contact test.test_crm_contact_http test.test_crm_contact_get test.test_crm_contact_get_http test.test_crm_contact_mutations test.test_architecture_boundaries test.test_removed_module_boundaries
 TEST_POSTGRES_URL=postgresql+asyncpg://... uv run python -m unittest test.test_crm_contact_postgres test.test_tenant_migrations_postgres
 ```
 
 PostgreSQL-проверки запускаются только на одноразовой тестовой базе. Они проверяют
-аудит, нормализацию, создание и последующее чтение, изоляцию tenant, конфликты ID,
-rollback, чтение исторических записей и неизменность данных после GET. Отдельно
+аудит, нормализацию, создание, чтение, изменение, удаление, изоляцию tenant,
+rollback и работу проекции чтения с nullable-столбцом. Отдельно
 проверяется отсутствие изменений схемы при Alembic autogenerate.

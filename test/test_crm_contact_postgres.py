@@ -320,3 +320,84 @@ class CreateContactPostgresTests(unittest.IsolatedAsyncioTestCase):
                     await repository.get_details(contact_id=ContactIdVO(uuid4()))
                 )
         self.assertEqual([dict(row) for row in await self.rows()], before)
+
+    async def test_list_update_and_delete_stay_in_current_tenant(self):
+        created = await self.create()
+        self.assertEqual(created.status_code, 201, created.text)
+        self.app.state.test_context = replace(
+            self.context,
+            principal=replace(self.context.principal, tenant_id=str(self.other)),
+        )
+        self.assertEqual((await self.create(first_name="Other")).status_code, 201)
+        url = f"/api/console/crm/contacts/{self.identifier}"
+        self.assertEqual(
+            (await self.client.get("/api/console/crm/contacts")).json()[0][
+                "first_name"
+            ],
+            "Other",
+        )
+        self.assertEqual(
+            (
+                await self.client.patch(
+                    url, headers=self.headers, json={"middle_name": " M "}
+                )
+            ).json()["middle_name"],
+            "M",
+        )
+        self.assertEqual((await self.rows())[0]["middle_name"], None)
+        self.assertEqual((await self.rows(self.other))[0]["middle_name"], "M")
+        self.assertEqual(
+            (await self.client.delete(url, headers=self.headers)).status_code, 204
+        )
+        self.assertEqual(await self.rows(self.other), [])
+        self.assertEqual(len(await self.rows()), 1)
+        self.app.state.test_context = self.context
+        response = await self.client.put(
+            url,
+            headers=self.headers,
+            json={"first_name": " New ", "last_name": " Surname "},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["first_name"], "New")
+        self.assertIsNone(response.json()["middle_name"])
+        self.assertEqual((await self.rows())[0]["last_name"], "Surname")
+
+    async def test_put_replaces_valid_contact_and_invalid_patch_rolls_back(self):
+        self.assertEqual((await self.create()).status_code, 201)
+        url = f"/api/console/crm/contacts/{self.identifier}"
+        invalid = await self.client.patch(
+            url,
+            headers=self.headers,
+            json={"last_name": None},
+        )
+        self.assertEqual(invalid.status_code, 422)
+        self.assertEqual((await self.rows())[0]["last_name"], "O'Neill  Smith")
+        replaced = await self.client.put(
+            url,
+            headers=self.headers,
+            json={"first_name": " New ", "last_name": " Name "},
+        )
+        self.assertEqual(replaced.status_code, 200, replaced.text)
+        self.assertEqual(
+            (replaced.json()["first_name"], replaced.json()["last_name"]),
+            ("New", "Name"),
+        )
+        self.assertEqual((await self.rows())[0]["last_name"], "Name")
+
+    async def test_update_failure_after_write_rolls_back(self):
+        self.assertEqual((await self.create()).status_code, 201)
+        before = [dict(row) for row in await self.rows()]
+        original = SqlAlchemyContactRepository.save
+
+        async def fail(repository, contact):
+            await original(repository, contact)
+            raise RuntimeError("failure after update")
+
+        with patch.object(SqlAlchemyContactRepository, "save", fail):
+            response = await self.client.patch(
+                f"/api/console/crm/contacts/{self.identifier}",
+                headers=self.headers,
+                json={"first_name": "Changed"},
+            )
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual([dict(row) for row in await self.rows()], before)
