@@ -295,7 +295,7 @@
 - **runtime_schema**: introduce module for tenant schema management
 - **tenancy**: implement tenant schema provisioning and data source management
 - **universal_access**: initialize module structure with domain layers
-- **crm**: add persistence models for `Company`, `Contact`, `Deal`, and `Lead`
+- **crm**: add persistence models for `Company`, `ContactEntity`, `Deal`, and `Lead`
 - **shared**: add `AudienceMixin` and `TitledEntityAuditMixin` for shared database models
 - **shared**: add `TenantBase` with tenant schema support
 - **mock**: introduce mock module with API endpoints and frontend contracts

@@ -8,7 +8,7 @@ from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 
 
 @dataclass(slots=True)
-class Contact:
+class ContactEntity:
     """Самостоятельный контакт с полным именем и аудитом изменений."""
 
     id: ContactIdVO

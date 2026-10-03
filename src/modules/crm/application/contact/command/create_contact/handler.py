@@ -4,7 +4,7 @@ from src.modules.crm.application.contact.command.create_contact.command import (
 from src.modules.crm.application.contact.command.create_contact.dto import (
     CreateContactResultDTO,
 )
-from src.modules.crm.domain.contact.aggregate import Contact
+from src.modules.crm.domain.contact.aggregate import ContactEntity
 from src.modules.crm.domain.contact.repository import ContactRepositoryProtocol
 from src.modules.shared.domain.time.clock_port import ClockPort
 
@@ -19,7 +19,7 @@ class CreateContactHandler:
 
     async def execute(self, command: CreateContactCommand) -> CreateContactResultDTO:
         """Делегирует проверку имени домену и возвращает данные нового контакта."""
-        contact = Contact.create(
+        contact = ContactEntity.create(
             contact_id=command.contact_id,
             first_name=command.first_name,
             last_name=command.last_name,

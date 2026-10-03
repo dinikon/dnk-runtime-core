@@ -12,7 +12,7 @@ from src.modules.crm.application.contact.command.create_contact.command import (
 from src.modules.crm.application.contact.command.create_contact.handler import (
     CreateContactHandler,
 )
-from src.modules.crm.domain.contact.aggregate import Contact
+from src.modules.crm.domain.contact.aggregate import ContactEntity
 from src.modules.crm.domain.contact.error import InvalidContactNameError
 from src.modules.crm.domain.contact.value_object.identifier import ContactIdVO
 from src.modules.crm.domain.contact.value_object.name import ContactNameVO
@@ -54,7 +54,7 @@ class ContactDomainTests(unittest.TestCase):
         identifier = ContactIdVO(uuid4())
         actor = EntityIdVO(uuid4())
         now = datetime(2026, 9, 28, tzinfo=UTC)
-        contact = Contact.create(
+        contact = ContactEntity.create(
             contact_id=identifier,
             actor_id=actor,
             now=now,
@@ -66,7 +66,7 @@ class ContactDomainTests(unittest.TestCase):
         self.assertEqual((contact.created_at, contact.updated_at), (now, now))
         self.assertEqual((contact.created_by, contact.updated_by), (actor, actor))
         with self.assertRaises(InvalidContactNameError):
-            Contact.create(
+            ContactEntity.create(
                 contact_id=identifier,
                 actor_id=actor,
                 now=now,

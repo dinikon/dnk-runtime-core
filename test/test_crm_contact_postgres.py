@@ -14,7 +14,7 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.schema import CreateSchema, DropSchema
 
 from src.config import dnk_config
-from src.modules.crm.domain.contact.aggregate import Contact
+from src.modules.crm.domain.contact.aggregate import ContactEntity
 from src.modules.crm.domain.contact.value_object.identifier import ContactIdVO
 from src.modules.crm.infrastructure.contact.persistence.repository import (
     SqlAlchemyContactRepository,
@@ -202,7 +202,7 @@ class CreateContactPostgresTests(unittest.IsolatedAsyncioTestCase):
                 (self.other, self.identifier, "Other"),
                 (self.tenant, uuid4(), "Last"),
             ):
-                contact = Contact.create(
+                contact = ContactEntity.create(
                     contact_id=ContactIdVO(identifier),
                     first_name=name,
                     last_name="Name",
@@ -223,7 +223,7 @@ class CreateContactPostgresTests(unittest.IsolatedAsyncioTestCase):
         before = [dict(row) for row in await self.rows()]
         with (
             patch.object(
-                Contact,
+                ContactEntity,
                 "create",
                 side_effect=AssertionError("Read must not build aggregate"),
             ),

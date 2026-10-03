@@ -1,7 +1,7 @@
 from sqlalchemy import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.crm.domain.contact.aggregate import Contact
+from src.modules.crm.domain.contact.aggregate import ContactEntity
 from src.modules.crm.infrastructure.contact.persistence.mapper import ContactMapper
 from src.modules.crm.infrastructure.persistence.models.contact import ContactModel
 from src.modules.tenancy.application.tenant.tenant_schema_naming import (
@@ -21,7 +21,7 @@ class SqlAlchemyContactRepository:
         self._session = session
         self._naming = naming
 
-    async def add(self, tenant_id: EntityIdVO, contact: Contact) -> None:
+    async def add(self, tenant_id: EntityIdVO, contact: ContactEntity) -> None:
         """Добавляет агрегат в схему текущего вызова без commit/rollback."""
         await self._session.execute(
             insert(ContactModel)

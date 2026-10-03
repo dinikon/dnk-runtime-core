@@ -1,11 +1,11 @@
-from src.modules.crm.domain.contact.aggregate import Contact
+from src.modules.crm.domain.contact.aggregate import ContactEntity
 
 
 class ContactMapper:
     """Явно преобразует агрегат контакта в представление хранения."""
 
     @staticmethod
-    def to_insert_values(contact: Contact) -> dict[str, object]:
+    def to_insert_values(contact: ContactEntity) -> dict[str, object]:
         """Возвращает поля INSERT без SQL-запросов и создания ORM-объекта."""
         return {
             "id": contact.id.uuid,

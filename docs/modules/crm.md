@@ -1,7 +1,7 @@
 # CRM
 
 CRM — контекст с самостоятельными агрегатами контактов и компаний. На текущем
-этапе реализован агрегат `Contact`, создание по ФИО и чтение конкретной записи по ID. SQL-модели
+этапе реализован агрегат `ContactEntity`, создание по ФИО и чтение конкретной записи по ID. SQL-модели
 компаний и связей сохранены для дальнейшей реализации.
 
 ## Создание контакта
@@ -83,7 +83,7 @@ ISO 8601. Телефоны, email и компании в ответ не вхо�
 
 ## Слои и транзакция
 
-- `domain/contact/`: агрегат `Contact`, `ContactIdVO`, неизменяемый `ContactNameVO`,
+- `domain/contact/`: агрегат `ContactEntity`, `ContactIdVO`, неизменяемый `ContactNameVO`,
   доменная ошибка имени и контракт репозитория с единственным методом `add`.
 - `application/contact/command/create_contact/`: команда, handler и DTO результата.
   Handler создаёт агрегат, сохраняет его через порт и возвращает ФИО с аудитом.
@@ -92,7 +92,7 @@ ISO 8601. Телефоны, email и компании в ответ не вхо�
   `application/contact/port/query_repository.py`.
 - `infrastructure/contact/persistence/`: раздельные репозитории записи и чтения.
   `ContactMapper` готовит INSERT values, `ContactQueryMapper.to_details()` переносит
-  SQL-проекцию в DTO без восстановления `Contact` и `ContactNameVO`. Чтение выполняет
+  SQL-проекцию в DTO без восстановления `ContactEntity` и `ContactNameVO`. Чтение выполняет
   один SELECT явных колонок по ID, без блокировки и загрузки связей. Tenant-схема
   выбирается отдельно для каждого вызова.
 - `presentation/contact/`: HTTP-контракт и сборка зависимостей. Общий `UoWDep`

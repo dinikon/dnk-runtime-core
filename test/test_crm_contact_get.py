@@ -46,7 +46,7 @@ class ContactQueryMapperTests(unittest.TestCase):
             with (
                 self.subTest(last_name=last_name),
                 patch(
-                    "src.modules.crm.domain.contact.aggregate.Contact.create",
+                    "src.modules.crm.domain.contact.aggregate.ContactEntity.create",
                     side_effect=AssertionError("No aggregate on read"),
                 ),
                 patch(
