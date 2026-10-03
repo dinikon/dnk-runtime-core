@@ -5,7 +5,14 @@ from starlette.responses import JSONResponse
 from starlette.routing import Match
 from sqlalchemy import select
 
+from src.config import dnk_config
 from src.modules.shared.infrastructure.persistence.database_helper import db_helper
+from src.modules.tenancy.application.tenant.tenant_schema_naming import (
+    TenantSchemaNaming,
+)
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_connection import (
+    bind_tenant_schema,
+)
 from src.modules.tenancy.infrastructure.tenant.persistence.tenant_gate import TenantGate
 from src.modules.tenancy.application.tenant.tenant_admission import TenantUnavailable
 from src.modules.shared.presentation.http.host import extract_request_host
@@ -41,6 +48,11 @@ class TenantAdmissionMiddleware:
             return await self.app(scope, receive, send)
         try:
             async with TenantGate(sessions).hold(tenant_id) as connection:
+                await bind_tenant_schema(
+                    connection,
+                    tenant_id,
+                    TenantSchemaNaming(dnk_config.SCHEMA_PREFIX),
+                )
                 request.state.tenant_connection = connection
                 await self.app(scope, receive, send)
         except TenantUnavailable:

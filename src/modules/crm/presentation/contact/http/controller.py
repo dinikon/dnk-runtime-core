@@ -39,7 +39,6 @@ async def create_contact(
     if principal is None or not principal.tenant_id:
         raise HTTPException(403, "Tenant context is required.")
     command = CreateContactCommand(
-        tenant_id=EntityIdVO.from_value(principal.tenant_id),
         actor_id=EntityIdVO.from_value(principal.user_id),
         contact_id=ContactIdVO.from_value(uuid_generator.new()),
         first_name=payload.first_name,
@@ -71,7 +70,6 @@ async def get_contact(
     if principal is None or not principal.tenant_id:
         raise HTTPException(403, "Tenant context is required.")
     query = GetContactQuery(
-        tenant_id=EntityIdVO.from_value(principal.tenant_id),
         contact_id=ContactIdVO.from_value(contact_id),
     )
     try:

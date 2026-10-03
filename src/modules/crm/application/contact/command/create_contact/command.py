@@ -8,7 +8,6 @@ from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 class CreateContactCommand:
     """Намерение создать контакт от имени участника tenant."""
 
-    tenant_id: EntityIdVO
     actor_id: EntityIdVO
     contact_id: ContactIdVO
     first_name: str

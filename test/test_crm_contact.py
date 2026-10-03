@@ -78,7 +78,6 @@ class ContactDomainTests(unittest.TestCase):
 class CreateContactHandlerTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.command = CreateContactCommand(
-            tenant_id=EntityIdVO(uuid4()),
             actor_id=EntityIdVO(uuid4()),
             contact_id=ContactIdVO(uuid4()),
             first_name=" A ",
@@ -94,8 +93,7 @@ class CreateContactHandlerTests(unittest.IsolatedAsyncioTestCase):
         dto = await self.handler.execute(self.command)
         self.clock.now.assert_called_once_with()
         self.repository.add.assert_awaited_once()
-        tenant, contact = self.repository.add.await_args.args
-        self.assertEqual(tenant, self.command.tenant_id)
+        (contact,) = self.repository.add.await_args.args
         self.assertEqual(contact.name, ContactNameVO("A", "B"))
         self.assertEqual(
             (dto.id, dto.created_by, dto.updated_by),

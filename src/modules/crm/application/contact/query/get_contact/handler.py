@@ -15,9 +15,7 @@ class GetContactHandler:
 
     async def execute(self, query: GetContactQuery) -> ContactDetailsDTO:
         """Читает сохранённые данные либо сообщает об отсутствии контакта."""
-        result = await self._repository.get_details(
-            tenant_id=query.tenant_id, contact_id=query.contact_id
-        )
+        result = await self._repository.get_details(contact_id=query.contact_id)
         if result is None:
             raise ContactNotFoundError("Contact not found.")
         return result

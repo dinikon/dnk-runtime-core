@@ -1,5 +1,6 @@
 """Создание и чтение Contact в tenant-схемах одноразовой тестовой БД."""
 
+from contextlib import asynccontextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
 import os
@@ -25,6 +26,9 @@ from src.modules.crm.infrastructure.contact.persistence.query_repository import 
 from src.modules.crm.infrastructure.persistence.models.contact import ContactModel
 from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
+)
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_connection import (
+    bind_tenant_schema,
 )
 from src.modules.identity.domain.auth.principal import Principal
 from src.modules.identity.domain.auth.request_context import RequestContext
@@ -63,7 +67,7 @@ class CreateContactPostgresTests(unittest.IsolatedAsyncioTestCase):
             None,
             None,
         )
-        self.app = contact_app(self.sessions, self.context)
+        self.app = contact_app(self.sessions, self.context, scoped_connection=True)
         self.app.state.clock = Mock(now=Mock(return_value=self.now))
         self.app.state.uuid_generator = Mock(new=Mock(return_value=self.identifier))
         scheme = "http" if dnk_config.AUTH.allow_insecure_http else "https"
@@ -111,6 +115,14 @@ class CreateContactPostgresTests(unittest.IsolatedAsyncioTestCase):
                 .mappings()
                 .all()
             )
+
+    @asynccontextmanager
+    async def scoped_uow(self, tenant):
+        async with self.engine.connect() as connection:
+            await bind_tenant_schema(connection, tenant.uuid, self.naming)
+            sessions = async_sessionmaker(connection, expire_on_commit=False)
+            async with UnitOfWork(sessions) as uow:
+                yield uow
 
     async def test_persists_normalized_name_and_audit_before_success_response(self):
         commits = []
@@ -165,8 +177,8 @@ class CreateContactPostgresTests(unittest.IsolatedAsyncioTestCase):
     async def test_failure_after_insert_rolls_back(self):
         original = SqlAlchemyContactRepository.add
 
-        async def fail(repository, tenant_id, contact):
-            await original(repository, tenant_id, contact)
+        async def fail(repository, contact):
+            await original(repository, contact)
             raise RuntimeError("failure after insert")
 
         with patch.object(SqlAlchemyContactRepository, "add", fail):
@@ -194,14 +206,14 @@ class CreateContactPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(rows[0]["first_name"], "Legacy")
         self.assertIsNone(rows[0]["last_name"])
 
-    async def test_one_repository_and_session_can_alternate_tenants(self):
-        async with UnitOfWork(self.sessions) as uow:
-            repository = SqlAlchemyContactRepository(uow.session, self.naming)
-            for tenant, identifier, name in (
-                (self.tenant, self.identifier, "First"),
-                (self.other, self.identifier, "Other"),
-                (self.tenant, uuid4(), "Last"),
-            ):
+    async def test_each_uow_uses_its_bound_tenant_schema(self):
+        for tenant, identifier, name in (
+            (self.tenant, self.identifier, "First"),
+            (self.other, self.identifier, "Other"),
+            (self.tenant, uuid4(), "Last"),
+        ):
+            async with self.scoped_uow(tenant) as uow:
+                repository = SqlAlchemyContactRepository(uow.session)
                 contact = ContactEntity.create(
                     contact_id=ContactIdVO(identifier),
                     first_name=name,
@@ -209,7 +221,7 @@ class CreateContactPostgresTests(unittest.IsolatedAsyncioTestCase):
                     actor_id=self.actor,
                     now=self.now,
                 )
-                await repository.add(tenant, contact)
+                await repository.add(contact)
         self.assertEqual(
             {row["first_name"] for row in await self.rows()}, {"First", "Last"}
         )
@@ -284,7 +296,7 @@ class CreateContactPostgresTests(unittest.IsolatedAsyncioTestCase):
             (await self.client.get(url)).json()["first_name"], "Анна-Марія"
         )
 
-    async def test_query_repository_alternates_tenants_on_one_session(self):
+    async def test_query_repository_uses_connection_bound_tenant(self):
         self.assertEqual((await self.create()).status_code, 201)
         self.app.state.test_context = replace(
             self.context,
@@ -292,21 +304,19 @@ class CreateContactPostgresTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual((await self.create(first_name="Other")).status_code, 201)
         before = [dict(row) for row in await self.rows()]
-        async with UnitOfWork(self.sessions) as uow:
-            repository = SqlAlchemyContactQueryRepository(uow.session, self.naming)
-            for tenant, name in (
-                (self.tenant, "Анна-Марія"),
-                (self.other, "Other"),
-                (self.tenant, "Анна-Марія"),
-            ):
+        for tenant, name in (
+            (self.tenant, "Анна-Марія"),
+            (self.other, "Other"),
+            (self.tenant, "Анна-Марія"),
+        ):
+            async with self.scoped_uow(tenant) as uow:
+                repository = SqlAlchemyContactQueryRepository(uow.session)
                 dto = await repository.get_details(
-                    tenant_id=tenant, contact_id=ContactIdVO(self.identifier)
+                    contact_id=ContactIdVO(self.identifier)
                 )
                 self.assertIsNotNone(dto)
                 self.assertEqual(dto.first_name, name)
-            self.assertIsNone(
-                await repository.get_details(
-                    tenant_id=self.tenant, contact_id=ContactIdVO(uuid4())
+                self.assertIsNone(
+                    await repository.get_details(contact_id=ContactIdVO(uuid4()))
                 )
-            )
         self.assertEqual([dict(row) for row in await self.rows()], before)

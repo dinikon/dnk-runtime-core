@@ -19,10 +19,6 @@ from src.modules.crm.infrastructure.contact.persistence.query_mapper import (
 from src.modules.crm.infrastructure.contact.persistence.query_repository import (
     SqlAlchemyContactQueryRepository,
 )
-from src.modules.tenancy.application.tenant.tenant_schema_naming import (
-    TenantSchemaNaming,
-)
-from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 
 
 def contact_row():
@@ -59,16 +55,16 @@ class ContactQueryMapperTests(unittest.TestCase):
 
 class GetContactHandlerTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        self.query = GetContactQuery(EntityIdVO(uuid4()), ContactIdVO(uuid4()))
+        self.query = GetContactQuery(ContactIdVO(uuid4()))
         self.repository = Mock(get_details=AsyncMock())
         self.handler = GetContactHandler(self.repository)
 
-    async def test_returns_same_projection_and_passes_typed_scope(self):
+    async def test_returns_same_projection_and_passes_identifier(self):
         dto = ContactDetailsDTO(**contact_row())
         self.repository.get_details.return_value = dto
         self.assertIs(await self.handler.execute(self.query), dto)
         self.repository.get_details.assert_awaited_once_with(
-            tenant_id=self.query.tenant_id, contact_id=self.query.contact_id
+            contact_id=self.query.contact_id
         )
 
     async def test_absence_is_contact_not_found(self):
@@ -85,18 +81,15 @@ class GetContactHandlerTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ContactQueryRepositoryTests(unittest.IsolatedAsyncioTestCase):
-    async def test_reads_only_requested_columns_and_scope_without_lock(self):
+    async def test_reads_only_requested_columns_without_lock(self):
         row = contact_row()
         result = Mock()
         result.mappings.return_value.one_or_none.return_value = row
         session = Mock(execute=AsyncMock(return_value=result))
-        naming = TenantSchemaNaming("tenant_")
-        repository = SqlAlchemyContactQueryRepository(session, naming)
-        tenant, identifier = EntityIdVO(uuid4()), ContactIdVO(row["id"])
+        repository = SqlAlchemyContactQueryRepository(session)
+        identifier = ContactIdVO(row["id"])
         self.assertEqual(
-            asdict(
-                await repository.get_details(tenant_id=tenant, contact_id=identifier)
-            ),
+            asdict(await repository.get_details(contact_id=identifier)),
             row,
         )
         session.execute.assert_awaited_once()
@@ -107,22 +100,17 @@ class ContactQueryRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("JOIN", sql)
         self.assertEqual(set(statement.selected_columns.keys()), set(row))
         self.assertEqual(statement.compile().params, {"id_1": row["id"]})
-        self.assertEqual(
-            statement.get_execution_options()["schema_translate_map"],
-            {"tenant": naming.schema_name(tenant)},
-        )
+        self.assertNotIn("schema_translate_map", statement.get_execution_options())
 
     async def test_missing_row_is_none_without_mapping(self):
         result = Mock()
         result.mappings.return_value.one_or_none.return_value = None
         repository = SqlAlchemyContactQueryRepository(
-            Mock(execute=AsyncMock(return_value=result)), TenantSchemaNaming("tenant_")
+            Mock(execute=AsyncMock(return_value=result))
         )
         with patch.object(
             ContactQueryMapper, "to_details", side_effect=AssertionError("Missing row")
         ):
             self.assertIsNone(
-                await repository.get_details(
-                    tenant_id=EntityIdVO(uuid4()), contact_id=ContactIdVO(uuid4())
-                )
+                await repository.get_details(contact_id=ContactIdVO(uuid4()))
             )

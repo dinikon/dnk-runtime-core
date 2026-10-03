@@ -2,7 +2,6 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from src.config import dnk_config
 from src.modules.crm.application.contact.command.create_contact.handler import (
     CreateContactHandler,
 )
@@ -19,18 +18,13 @@ from src.modules.crm.infrastructure.contact.persistence.query_repository import 
 from src.modules.crm.infrastructure.contact.persistence.repository import (
     SqlAlchemyContactRepository,
 )
-from src.modules.tenancy.application.tenant.tenant_schema_naming import (
-    TenantSchemaNaming,
-)
 from src.modules.shared.presentation.persistence.depends import UoWDep
 from src.modules.shared.presentation.time.depends import ClockDep
 
 
 def get_contact_repository(uow: UoWDep) -> ContactRepositoryProtocol:
     """Собирает репозиторий на общей сессии текущего HTTP-запроса."""
-    return SqlAlchemyContactRepository(
-        uow.session, TenantSchemaNaming(dnk_config.SCHEMA_PREFIX)
-    )
+    return SqlAlchemyContactRepository(uow.session)
 
 
 ContactRepositoryDep = Annotated[
@@ -52,9 +46,7 @@ CreateContactHandlerDep = Annotated[
 
 def get_contact_query_repository(uow: UoWDep) -> ContactQueryRepositoryProtocol:
     """Подключает чтение контактов к общей сессии HTTP-запроса."""
-    return SqlAlchemyContactQueryRepository(
-        uow.session, TenantSchemaNaming(dnk_config.SCHEMA_PREFIX)
-    )
+    return SqlAlchemyContactQueryRepository(uow.session)
 
 
 ContactQueryRepositoryDep = Annotated[

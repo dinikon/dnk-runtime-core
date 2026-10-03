@@ -27,7 +27,7 @@ class CreateContactHandler:
             actor_id=command.actor_id,
             now=self._clock.now(),
         )
-        await self._repository.add(command.tenant_id, contact)
+        await self._repository.add(contact)
         return CreateContactResultDTO(
             id=contact.id.uuid,
             first_name=contact.name.first_name,
