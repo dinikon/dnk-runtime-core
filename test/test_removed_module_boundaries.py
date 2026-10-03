@@ -132,7 +132,7 @@ class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(object_feature_response.status_code, 404)
         self.assertNotIn("object_feature_config", Base.metadata.tables)
 
-    async def test_crm_exposes_contact_operations_and_retains_sql_models(
+    async def test_crm_exposes_aggregate_operations_and_retains_sql_models(
         self,
     ) -> None:
         from src.modules.crm.infrastructure.persistence.models.company import (
@@ -149,9 +149,6 @@ class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
         )
 
         for relative_path in (
-            "application/company",
-            "domain/company",
-            "presentation/company",
             "links/application",
             "links/domain",
             "links/presentation",
@@ -173,11 +170,21 @@ class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
         paths = app.openapi()["paths"]
         self.assertEqual(
             {path for path in paths if path.startswith("/api/console/crm")},
-            {"/api/console/crm/contacts", "/api/console/crm/contacts/{contact_id}"},
+            {
+                "/api/console/crm/contacts",
+                "/api/console/crm/contacts/{contact_id}",
+                "/api/console/crm/companies",
+                "/api/console/crm/companies/{company_id}",
+            },
         )
         self.assertEqual(set(paths["/api/console/crm/contacts"]), {"get", "post"})
         self.assertEqual(
             set(paths["/api/console/crm/contacts/{contact_id}"]),
+            {"get", "put", "patch", "delete"},
+        )
+        self.assertEqual(set(paths["/api/console/crm/companies"]), {"get", "post"})
+        self.assertEqual(
+            set(paths["/api/console/crm/companies/{company_id}"]),
             {"get", "put", "patch", "delete"},
         )
         async with httpx.AsyncClient(
@@ -185,7 +192,8 @@ class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
         ) as client:
             for method, path, expected in (
                 ("TRACE", "contacts", 405),
-                ("GET", "companies", 404),
+                ("TRACE", "companies", 405),
+                ("GET", "companies/missing/links", 404),
                 ("GET", "contacts/missing/links", 404),
             ):
                 response = await client.request(method, f"/api/console/crm/{path}")

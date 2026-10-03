@@ -1,8 +1,9 @@
 # CRM
 
 CRM — контекст с самостоятельными агрегатами контактов и компаний. На текущем
-этапе реализован агрегат `ContactEntity`, создание, чтение, обновление и удаление контактов. SQL-модели
-компаний и связей сохранены для дальнейшей реализации.
+этапе реализованы самостоятельные агрегаты `ContactEntity` и `CompanyEntity` с
+созданием, чтением, обновлением и удалением. SQL-модель связей сохранена для
+дальнейшей реализации операций между агрегатами.
 
 ## Создание контакта
 
@@ -114,6 +115,41 @@ ISO 8601. Телефоны, email и компании в ответ не вхо�
 аутентификации, tenant и CSRF те же, что у PUT/PATCH. Существующий внешний ключ
 `ON DELETE CASCADE` удаляет связи контакта с компаниями.
 
+## Компания
+
+Аутентифицированный участник tenant может читать и изменять компании без роли
+администратора. Запись требует CSRF; tenant и actor берутся из доверенного
+`RequestContext`. ID генерируется сервером через общий UUID-порт.
+
+| Метод | URL | Результат |
+| --- | --- | --- |
+| `POST` | `/api/console/crm/companies` | `201 Created`, полная запись |
+| `GET` | `/api/console/crm/companies/{company_id}` | `200 OK`, одна запись |
+| `GET` | `/api/console/crm/companies` | `200 OK`, массив всех компаний tenant |
+| `PUT` | `/api/console/crm/companies/{company_id}` | `200 OK`, полная замена бизнес-полей |
+| `PATCH` | `/api/console/crm/companies/{company_id}` | `200 OK`, изменение переданных полей |
+| `DELETE` | `/api/console/crm/companies/{company_id}` | `204 No Content` без тела |
+
+Единственное бизнес-поле текущей SQL-модели — `legal_name`. POST и PUT требуют
+строку `legal_name`; PATCH допускает её отсутствие в схеме запроса, но пустой
+объект `{}` и явный `null` отклоняются, поскольку других изменяемых полей пока
+нет. Пробелы по краям удаляются; результат должен содержать 1–255 символов.
+Внутренние пробелы, регистр и знаки сохраняются. Одинаковые названия разрешены.
+Неизвестные поля, включая ID, аудит и связи с контактами, дают `422`.
+
+POST, GET, LIST, PUT и PATCH возвращают `id`, `legal_name`, `created_at`,
+`updated_at`, `created_by`, `updated_by` (список — массив таких объектов).
+Список не поддерживает фильтрацию, поиск и пагинацию и отсортирован по
+`created_at`, затем `id`. Повторное PUT/PATCH с тем же нормализованным названием
+сохраняет прежний аудит. GET и LIST не изменяют сохранённое название.
+
+Без аутентификации ответ `401`; без tenant либо при нарушении CSRF — `403`.
+Некорректный UUID, тело или название дают `422`; отсутствующая в текущем tenant
+компания — `404` с `Company not found.`. Конфликт первичного ключа при создании
+даёт `409`; неожиданный сбой хранения или commit — `500`, без успешного ответа.
+DELETE физически удаляет компанию; существующий FK с `ON DELETE CASCADE`
+удаляет строки `contact_companies`. Работа со связями не входит в Company API.
+
 ## Слои и транзакция
 
 - `domain/contact/`: агрегат `ContactEntity`, `ContactIdVO`, неизменяемый
@@ -141,6 +177,15 @@ ISO 8601. Телефоны, email и компании в ответ не вхо�
   `http/controller/` — отдельный файл для каждого контроллера. PUT и PATCH
   явно собирают свои команды и ответы. `depends.py` собирает зависимости. Общий `UoWDep`
   передаёт сессию репозиторию и завершает транзакцию до отправки ответа.
+- `domain/company/`: `CompanyEntity`, `CompanyIdVO`, неизменяемый
+  `CompanyLegalNameVO`, ошибки и контракт репозитория записи.
+- `application/company/`: отдельные сценарии Create, Get, List, Update, Delete.
+  PUT и PATCH вызывают один `UpdateCompanyHandler`, но имеют явные контроллеры и
+  собственные HTTP-схемы.
+- `infrastructure/company/persistence/`: репозитории чтения и записи, mapper
+  агрегата и mapper проекции. Используют ту же сессию UoW с выбранной tenant-схемой.
+- `presentation/company/`: router и depends агрегата, отдельные контроллеры
+  шести HTTP-методов и отдельные файлы схем для каждого применимого метода.
 
 Domain и Application не зависят от SQLAlchemy/FastAPI. Handler и repository не
 выполняют commit/rollback. Domain events и Outbox в этом сценарии не используются.
@@ -161,7 +206,7 @@ Domain и Application не зависят от SQLAlchemy/FastAPI. Handler и re
 Столбцы `last_name` и `middle_name` остаются nullable; SQL-модель и миграции
 не требуют изменений.
 
-Операции компаний и управления связями отсутствуют.
+Операции управления связями отсутствуют.
 Неподдерживаемый метод существующего маршрута возвращает `405`, отсутствующий
 маршрут — `404`. Самостоятельный модуль `contact_points` продолжает работать,
 но создание Contact пока с ним не интегрируется.
@@ -177,10 +222,12 @@ email и компании, поэтому форма пока несовмест
 
 ```sh
 uv run python -m unittest test.test_crm_contact test.test_crm_contact_http test.test_crm_contact_get test.test_crm_contact_get_http test.test_crm_contact_mutations test.test_architecture_boundaries test.test_removed_module_boundaries
-TEST_POSTGRES_URL=postgresql+asyncpg://... uv run python -m unittest test.test_crm_contact_postgres test.test_tenant_migrations_postgres
+uv run python -m unittest test.test_crm_company test.test_crm_company_http
+TEST_POSTGRES_URL=postgresql+asyncpg://... uv run python -m unittest test.test_crm_contact_postgres test.test_crm_company_postgres test.test_tenant_migrations_postgres
 ```
 
 PostgreSQL-проверки запускаются только на одноразовой тестовой базе. Они проверяют
 аудит, нормализацию, создание, чтение, изменение, удаление, изоляцию tenant,
-rollback и работу проекции чтения с nullable-столбцом. Отдельно
+rollback и каскадное удаление связей Company; для Contact также проверяется
+проекция чтения с nullable-столбцом. Отдельно
 проверяется отсутствие изменений схемы при Alembic autogenerate.

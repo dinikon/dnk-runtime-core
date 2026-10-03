@@ -164,8 +164,8 @@ src/modules/crm/
 │   └── company/
 │       ├── aggregate.py
 │       ├── value_object/
-│       │   └── identifier.py
-│       ├── event/
+│       │   ├── identifier.py
+│       │   └── legal_name.py
 │       ├── error.py
 │       └── repository.py
 ├── application/
@@ -183,11 +183,23 @@ src/modules/crm/
 │   │       └── query_repository.py
 │   └── company/
 │       ├── command/
-│       │   └── create_company/
+│       │   ├── create_company/
+│       │   │   ├── command.py
+│       │   │   ├── handler.py
+│       │   │   └── dto.py
+│       │   ├── update_company/
+│       │   │   ├── command.py
+│       │   │   ├── handler.py
+│       │   │   └── dto.py
+│       │   └── delete_company/
 │       │       ├── command.py
 │       │       └── handler.py
 │       ├── query/
-│       │   └── get_company/
+│       │   ├── get_company/
+│       │   │   ├── query.py
+│       │   │   ├── handler.py
+│       │   │   └── dto.py
+│       │   └── list_companies/
 │       │       ├── query.py
 │       │       ├── handler.py
 │       │       └── dto.py
@@ -203,6 +215,7 @@ src/modules/crm/
 │   │   └── persistence/
 │   │       ├── mapper.py
 │   │       ├── repository.py
+│   │       ├── query_mapper.py
 │   │       └── query_repository.py
 │   └── persistence/
 │       └── models/
@@ -236,8 +249,22 @@ src/modules/crm/
     │   ├── depends.py
     │   └── http/
     │       ├── controller/
+    │       │   ├── create_company.py
+    │       │   ├── get_company.py
+    │       │   ├── list_companies.py
+    │       │   ├── put_company.py
+    │       │   ├── patch_company.py
+    │       │   └── delete_company.py
     │       ├── request/
+    │       │   ├── create_company.py
+    │       │   ├── put_company.py
+    │       │   └── patch_company.py
     │       └── response/
+    │           ├── create_company.py
+    │           ├── get_company.py
+    │           ├── list_companies.py
+    │           ├── put_company.py
+    │           └── patch_company.py
     └── depends/
 ```
 
@@ -258,12 +285,12 @@ Application через их контракты. Каждый агрегат из
 Чистые правила, относящиеся к нескольким агрегатам, могут находиться в Domain Service
 или Policy; принадлежность одному модулю не отменяет границы агрегатов.
 
-Дерево показывает правило организации, а не перечень уже созданных файлов.
-В CRM реализованы создание, чтение списка и карточки, полное и частичное
-обновление, удаление Contact. SQL-модели компаний и связей сохранены, но
-Presentation для Company ещё не создаётся. Актуальное поведение описано в
-[документации CRM](../modules/crm.md). Не создавать пустые каталоги заранее —
-добавлять элементы по мере реализации соответствующего поведения.
+Дерево показывает правило организации слоёв CRM. Для Contact и Company
+реализованы создание, чтение списка и карточки, полное и частичное обновление,
+удаление. SQL-модель связей между ними сохранена; сценарии управления связями
+пока не реализованы. Актуальное поведение описано в
+[документации CRM](../modules/crm.md). Пустые каталоги заранее не создаются —
+элементы добавляются по мере реализации соответствующего поведения.
 
 ### Слои модуля
 

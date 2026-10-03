@@ -46,6 +46,11 @@ class ArchitectureBoundariesTests(unittest.TestCase):
             "src.modules.crm.application.contact.query.get_contact.handler",
             "src.modules.crm.infrastructure.contact.persistence.query_repository",
             "src.modules.crm.presentation.contact.router",
+            "src.modules.crm.domain.company.aggregate",
+            "src.modules.crm.application.company.command.create_company.handler",
+            "src.modules.crm.application.company.query.get_company.handler",
+            "src.modules.crm.infrastructure.company.persistence.query_repository",
+            "src.modules.crm.presentation.company.router",
             "src.modules.tenant_persistence",
         ):
             with self.subTest(module=name):
@@ -83,7 +88,11 @@ class ArchitectureBoundariesTests(unittest.TestCase):
             for path in iter_python_files("src/modules/crm/" + layer):
                 for name in iter_imports(path):
                     self.assertFalse(name.startswith(prefixes), f"{path}: {name}")
-        for root in ("application", "infrastructure/contact/persistence"):
+        for root in (
+            "application",
+            "infrastructure/contact/persistence",
+            "infrastructure/company/persistence",
+        ):
             for path in iter_python_files("src/modules/crm/" + root):
                 for node in ast.walk(ast.parse(path.read_text())):
                     if isinstance(node, ast.Call) and isinstance(
@@ -235,8 +244,7 @@ class ArchitectureBoundariesTests(unittest.TestCase):
     ) -> None:
         paths = [
             PROJECT_ROOT / "src/modules/identity/presentation/email/depends.py",
-            PROJECT_ROOT
-            / "src/modules/identity/presentation/auth/providers.py",
+            PROJECT_ROOT / "src/modules/identity/presentation/auth/providers.py",
             PROJECT_ROOT
             / "src/modules/identity/application/auth/command/request_email_otp/handler.py",
         ]

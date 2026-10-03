@@ -66,13 +66,22 @@ authenticated tenant user can read and mutate CRM data; browser mutations requir
 | PUT | `/api/console/crm/contacts/{id}` | Replace the full name; `200` or `404` |
 | PATCH | `/api/console/crm/contacts/{id}` | Update supplied name fields; `200` or `404` |
 | DELETE | `/api/console/crm/contacts/{id}` | Hard-delete the contact; `204` or `404` |
+| GET | `/api/console/crm/companies` | All companies in the current tenant, as an array without filtering or pagination |
+| GET | `/api/console/crm/companies/{id}` | One company or `404` |
+| POST | `/api/console/crm/companies` | Create a company from `legal_name`; `201` |
+| PUT | `/api/console/crm/companies/{id}` | Replace `legal_name`; `200` or `404` |
+| PATCH | `/api/console/crm/companies/{id}` | Update `legal_name`; `200` or `404` |
+| DELETE | `/api/console/crm/companies/{id}` | Hard-delete the company; `204` or `404` |
 
 Contact requests contain `first_name` and optional `last_name` and `middle_name`.
 POST and PUT require `first_name`; PATCH may omit it but cannot clear it.
 Read and mutation responses include the full name and audit fields. Unknown fields
 are rejected; validation is `422`. List results are ordered by `created_at`, then
-`id`. Company, relationship, phone, and email operations are not implemented in
-CRM yet. See [CRM](../modules/crm.md).
+`id`. Company requests accept only `legal_name`: POST and PUT require it; PATCH
+rejects an empty body and `null`. It is trimmed and must contain 1–255 characters.
+Company responses contain the name and audit fields. Duplicate names are allowed.
+Relationship, phone, and email operations are not implemented in CRM yet. See
+[CRM](../modules/crm.md).
 
 ## Console contact-point labels
 
