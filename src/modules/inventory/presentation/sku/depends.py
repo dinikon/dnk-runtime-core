@@ -8,12 +8,10 @@ from src.modules.inventory.application.sku.command.create_sku.handler import (
 from src.modules.inventory.application.sku.port.query_repository import (
     SkuQueryRepositoryProtocol,
 )
-from src.modules.inventory.application.sku.port.sku_lookup import SkuLookupProtocol
 from src.modules.inventory.application.sku.query.get_sku.handler import GetSkuHandler
 from src.modules.inventory.application.sku.query.list_skus.handler import (
     ListSkusHandler,
 )
-from src.modules.inventory.application.sku.service.sku_lookup import SkuLookupService
 from src.modules.inventory.domain.sku.repository import SkuRepositoryProtocol
 from src.modules.inventory.infrastructure.sku.persistence.repository import (
     SqlAlchemySkuRepository,
@@ -68,11 +66,3 @@ def get_list_skus_handler(repository: SkuQueryRepositoryDep) -> ListSkusHandler:
 
 
 ListSkusHandlerDep = Annotated[ListSkusHandler, Depends(get_list_skus_handler)]
-
-
-def get_sku_lookup(repository: SkuQueryRepositoryDep) -> SkuLookupProtocol:
-    """Предоставляет будущему Catalog публичный порт текущего tenant."""
-    return SkuLookupService(repository)
-
-
-SkuLookupDep = Annotated[SkuLookupProtocol, Depends(get_sku_lookup)]

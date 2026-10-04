@@ -23,7 +23,7 @@ from src.modules.inventory.infrastructure.sku.persistence.repository import (
 from src.modules.inventory.infrastructure.sku.persistence.query_repository import (
     SqlAlchemySkuQueryRepository,
 )
-from src.modules.inventory.application.sku.service.sku_lookup import SkuLookupService
+from src.modules.inventory.domain.sku.value_object.identifier import SkuIdVO
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.shared.infrastructure.persistence.unit_of_work.sqlalchemy import (
     UnitOfWork,
@@ -124,9 +124,9 @@ class SkuPostgresTests(unittest.IsolatedAsyncioTestCase):
                 async_sessionmaker(connection, expire_on_commit=False)
             ) as uow:
                 self.assertIsNone(
-                    await SkuLookupService(
-                        SqlAlchemySkuQueryRepository(uow.session)
-                    ).get_sku(sku_id=UUID(identifier))
+                    await SqlAlchemySkuQueryRepository(uow.session).get_details(
+                        sku_id=SkuIdVO(UUID(identifier))
+                    )
                 )
         self.assertEqual(len(await self.rows()), 2)
 
@@ -164,7 +164,7 @@ class SkuPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.rows(), [])
         self.assertEqual((await self.create()).status_code, 201)
 
-    async def test_public_lookup_returns_sku_reference_in_bound_tenant(self):
+    async def test_query_repository_reads_only_bound_tenant(self):
         response = await self.create()
 
         async with self.engine.connect() as connection:
@@ -172,10 +172,13 @@ class SkuPostgresTests(unittest.IsolatedAsyncioTestCase):
             async with UnitOfWork(
                 async_sessionmaker(connection, expire_on_commit=False)
             ) as uow:
-                lookup = SkuLookupService(SqlAlchemySkuQueryRepository(uow.session))
-                reference = await lookup.get_sku(sku_id=UUID(response.json()["id"]))
-                self.assertEqual(reference.code, "OMEGA-100")
-                self.assertIsNone(await lookup.get_sku(sku_id=uuid4()))
+                repository = SqlAlchemySkuQueryRepository(uow.session)
+                details = await repository.get_details(
+                    sku_id=SkuIdVO(UUID(response.json()["id"]))
+                )
+                self.assertIsNotNone(details)
+                self.assertEqual(details.code, "OMEGA-100")
+                self.assertIsNone(await repository.get_details(sku_id=SkuIdVO(uuid4())))
 
     async def test_migration_downgrade_upgrade_is_scoped_and_preserves_warehouse(self):
         migrator = TenantMigrator()

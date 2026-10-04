@@ -6,7 +6,7 @@ import src.modules.crm.infrastructure.persistence.models.contact_company  # noqa
 import src.modules.contact_points.infrastructure.persistence.models.contact_point  # noqa: F401
 import src.modules.contact_points.infrastructure.persistence.models.contact_point_binding  # noqa: F401
 import src.modules.contact_points.infrastructure.persistence.models.contact_point_label  # noqa: F401
-import src.modules.inventory.infrastructure.persistence  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.warehouse  # noqa: F401
 import src.modules.inventory.infrastructure.persistence.models.sku  # noqa: F401
 import src.modules.identity.infrastructure.persistence.models.user  # noqa: F401
 import src.modules.identity.infrastructure.persistence.models.user_email  # noqa: F401

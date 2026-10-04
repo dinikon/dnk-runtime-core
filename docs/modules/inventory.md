@@ -55,28 +55,25 @@ AllowAll требует замены или настройки для проду
 ## Архитектура и публичный контракт
 
 - domain/sku: агрегат, ID/code/title value objects, ошибки, write repository port.
-- application/sku: CreateSku, GetSku, ListSkus, read repository port и публичный lookup.
+- domain/warehouse: самостоятельный неизменяемый агрегат с `WarehouseTitleVO`,
+  фабрикой создания и методами `rename`/`change_parent`; сценарии склада пока не реализованы.
+- application/sku: CreateSku, GetSku, ListSkus и read repository port.
 - infrastructure/sku/persistence: mapper записи, repository и отдельные query repository/mapper.
-- infrastructure/persistence/models/sku.py: статическая tenant SQL-модель.
+- infrastructure/persistence/models/: отдельные статические tenant SQL-модели SKU и Warehouse.
 - presentation/sku: composition root, router, отдельные HTTP controller/request/response.
 
 Репозитории используют сессию общего внешнего UoW и не выполняют commit/rollback.
-Проверки создания SKU и Warehouse выполняются в явных фабриках create.
-Метод __post_init__ используется только в VO. Query хранит параметры страницы;
+Проверки создания SKU и Warehouse выполняются в явных фабриках create, а изменения
+склада — через доменные методы с сохранением первоначального аудита.
+Метод `__post_init__` используется только в VO. Query хранит параметры страницы;
 ListSkusHandler проверяет их до обращения к read repository, в том числе вне HTTP.
 Queries читают проекции без восстановления агрегата. Именованные unique constraints
 переводятся в доменные ошибки адаптером хранения и затем в HTTP 409.
 
-```text
-SkuLookupProtocol.get_sku(sku_id: UUID) → SkuReferenceDTO | None
-SkuReferenceDTO: id, code, title
-```
-
-SkuLookupService использует query repository текущего tenant.
-В composition root get_sku_lookup / SkuLookupDep связывают его с тем же UoW.
-Другие модули используют application contract и DTO без импорта domain entity
-или ORM-модели Inventory. Чужой/отсутствующий ID возвращает None.
-Количество по SKU этим портом не предоставляется.
+Контракт для будущего Catalog появится вместе с реальным потребителем: Catalog
+определит нужный ему порт, а внешняя сборка свяжет его с данными Inventory.
+Текущие read-side запросы не восстанавливают агрегат и не выдают количество по SKU.
+Пакетные `__init__.py` не реэкспортируют типы; модели регистрируются прямыми импортами.
 
 ## Миграция и проверки
 
@@ -94,5 +91,5 @@ dnk-manage tenant-migrations upgrade --all
 Проверки: test/test_inventory_sku.py, test/test_inventory_sku_http.py,
 test/test_inventory_sku_postgres.py и архитектурные тесты. PostgreSQL-набор использует
 только явно заданный TEST_POSTGRES_URL одноразовой базы. Проверены конкурентные
-дубли, изоляция двух tenant, пагинация, публичный lookup, rollback после вставки,
+дубли, изоляция двух tenant, пагинация, read-side запросы, rollback после вставки,
 downgrade/upgrade с сохранением Warehouse и отсутствие drift Alembic metadata.

@@ -32,8 +32,6 @@ from src.modules.inventory.application.sku.query.list_skus.query import ListSkus
 from src.modules.inventory.application.sku.query.list_skus.handler import (
     ListSkusHandler,
 )
-from src.modules.inventory.application.sku.service.sku_lookup import SkuLookupService
-from src.modules.inventory.application.sku.port.sku_lookup import SkuReferenceDTO
 
 
 class SkuDomainTests(unittest.TestCase):
@@ -107,30 +105,26 @@ class SkuApplicationTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(RuntimeError):
             await handler.execute(replace(command, code="A"))
 
-    async def test_lookup_exposes_immutable_reference_without_aggregate_or_stock(self):
+    async def test_read_scenarios_use_projection_without_aggregate(self):
         identifier, actor, now = uuid4(), uuid4(), datetime.now(UTC)
         details = SkuDetailsDTO(identifier, "A", "Title", now, now, actor, actor)
         repository = Mock(
             get_details=AsyncMock(return_value=details),
             list_details=AsyncMock(return_value=[details]),
         )
-        reference = await SkuLookupService(repository).get_sku(sku_id=identifier)
-        self.assertEqual(reference, SkuReferenceDTO(identifier, "A", "Title"))
-        self.assertFalse(hasattr(reference, "stock"))
-        repository.get_details.assert_awaited_once_with(sku_id=SkuIdVO(identifier))
-        with self.assertRaises(FrozenInstanceError):
-            reference.code = "Other"
         result = await ListSkusHandler(repository).execute(
             ListSkusQuery(limit=5, offset=10)
         )
         repository.list_details.assert_awaited_once_with(limit=5, offset=10)
         self.assertEqual(result.skus, (details,))
         repository.get_details.return_value = None
-        self.assertIsNone(await SkuLookupService(repository).get_sku(sku_id=identifier))
         with self.assertRaises(SkuNotFoundError):
             await GetSkuHandler(repository).execute(GetSkuQuery(SkuIdVO(identifier)))
+        repository.get_details.assert_awaited_once_with(sku_id=SkuIdVO(identifier))
 
-    def test_query_limits_are_validated_for_non_http_consumers(self):
+    async def test_query_limits_are_validated_for_non_http_consumers(self):
+        repository = Mock(list_details=AsyncMock())
+        handler = ListSkusHandler(repository)
         for args in (
             dict(limit=0),
             dict(limit=201),
@@ -140,4 +134,5 @@ class SkuApplicationTests(unittest.IsolatedAsyncioTestCase):
             dict(offset=True),
         ):
             with self.subTest(args=args), self.assertRaises(ValueError):
-                ListSkusQuery(**args)
+                await handler.execute(ListSkusQuery(**args))
+        repository.list_details.assert_not_awaited()

@@ -1,16 +1,22 @@
 import unittest
-from datetime import UTC, datetime
+from dataclasses import FrozenInstanceError
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from sqlalchemy import ForeignKeyConstraint
 
-from src.modules.inventory.domain.warehouse import (
+from src.modules.inventory.domain.warehouse.aggregate import Warehouse
+from src.modules.inventory.domain.warehouse.error import (
     InvalidWarehouseTitleError,
-    Warehouse,
-    WarehouseIdVO,
     WarehouseSelfParentError,
 )
-from src.modules.inventory.infrastructure.persistence import WarehouseModel
+from src.modules.inventory.domain.warehouse.value_object.title import WarehouseTitleVO
+from src.modules.inventory.domain.warehouse.value_object.warehouse_id import (
+    WarehouseIdVO,
+)
+from src.modules.inventory.infrastructure.persistence.models.warehouse import (
+    WarehouseModel,
+)
 from src.modules.shared.domain.domain_error import EntityIdTypeError
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.shared.infrastructure.persistence import Base
@@ -63,6 +69,38 @@ class WarehouseTests(unittest.TestCase):
         ):
             with self.subTest(changes=changes), self.assertRaises(EntityIdTypeError):
                 self.make(**changes)
+
+    def test_rename_and_parent_change_preserve_invariants_and_audit(self):
+        warehouse = self.make()
+        actor = EntityIdVO.from_value(uuid4())
+        later = warehouse.created_at + timedelta(seconds=1)
+        renamed = warehouse.rename(title=" Secondary ", actor_id=actor, now=later)
+        self.assertEqual(renamed.title, WarehouseTitleVO("Secondary"))
+        self.assertEqual(renamed.updated_at, later)
+        self.assertEqual(renamed.updated_by, actor)
+        self.assertEqual(renamed.created_at, warehouse.created_at)
+        self.assertEqual(renamed.created_by, warehouse.created_by)
+        self.assertIs(
+            renamed.rename(title=" Secondary ", actor_id=actor, now=later), renamed
+        )
+
+        parent_id = WarehouseIdVO.from_value(uuid4())
+        moved = renamed.change_parent(parent_id=parent_id, actor_id=actor, now=later)
+        self.assertEqual(moved.parent_id, parent_id)
+        self.assertIs(
+            moved.change_parent(parent_id=parent_id, actor_id=actor, now=later), moved
+        )
+        self.assertIsNone(warehouse.parent_id)
+        with self.assertRaises(FrozenInstanceError):
+            warehouse.parent_id = warehouse.id
+        with self.assertRaises(WarehouseSelfParentError):
+            warehouse.change_parent(parent_id=warehouse.id, actor_id=actor, now=later)
+        with self.assertRaises(InvalidWarehouseTitleError):
+            warehouse.rename(title="   ", actor_id=actor, now=later)
+        with self.assertRaises(EntityIdTypeError):
+            warehouse.change_parent(
+                parent_id=EntityIdVO(uuid4()), actor_id=actor, now=later
+            )
 
     def test_model_is_tenant_only_and_copy_rewrites_self_fk(self):
         self.assertNotIn("warehouses", Base.metadata.tables)
