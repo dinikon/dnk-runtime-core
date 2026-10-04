@@ -1,37 +1,37 @@
-from src.modules.contact_points.application.binding.command.remove_target_contact_points.command import (
+from src.modules.contact_points.application.command.remove_target_contact_points.command import (
     RemoveTargetContactPointsCommand,
 )
-from src.modules.contact_points.application.binding.command.sync_target_contact_points.command import (
+from src.modules.contact_points.application.command.sync_target_contact_points.command import (
     SyncTargetContactPointsCommand,
 )
-from src.modules.contact_points.application.binding.query.get_targets_contact_points.query import (
+from src.modules.contact_points.application.query.get_targets_contact_points.query import (
     GetTargetsContactPointsQuery,
 )
-from src.modules.contact_points.application.binding.query.get_targets_contact_points.handler import (
+from src.modules.contact_points.application.query.get_targets_contact_points.handler import (
     GetTargetsContactPointsHandler,
 )
-from src.modules.contact_points.application.binding.command.remove_target_contact_points.handler import (
+from src.modules.contact_points.application.command.remove_target_contact_points.handler import (
     RemoveTargetContactPointsHandler,
 )
-from src.modules.contact_points.application.binding.command.sync_target_contact_points.handler import (
+from src.modules.contact_points.application.command.sync_target_contact_points.handler import (
     SyncTargetContactPointsHandler,
 )
-from src.modules.contact_points.domain.binding.value_object.draft import (
+from src.modules.contact_points.domain.value_object.draft import (
     ContactPointDraftVO,
 )
-from src.modules.contact_points.domain.binding.value_object.identifier import (
+from src.modules.contact_points.domain.value_object.binding_identifier import (
     ContactPointBindingIdVO,
 )
-from src.modules.contact_points.domain.binding.value_object.target import (
+from src.modules.contact_points.domain.value_object.target import (
     ContactPointTargetVO,
 )
-from src.modules.contact_points.domain.contact_point.value_object.identifier import (
+from src.modules.contact_points.domain.value_object.contact_point_identifier import (
     ContactPointIdVO,
 )
-from src.modules.contact_points.domain.contact_point.value_object.value import (
+from src.modules.contact_points.domain.value_object.value import (
     ContactPointType,
 )
-from src.modules.contact_points.domain.label.value_object.identifier import (
+from src.modules.contact_points.domain.value_object.label_identifier import (
     ContactPointLabelIdVO,
 )
 from src.modules.crm.application.contact_point.dto import (

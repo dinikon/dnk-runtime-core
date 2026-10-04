@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from src.modules.contact_points.presentation.binding.depends import (
+from src.modules.contact_points.presentation.depends.binding import (
     GetTargetsContactPointsHandlerDep,
     RemoveTargetContactPointsHandlerDep,
     SyncTargetContactPointsHandlerDep,

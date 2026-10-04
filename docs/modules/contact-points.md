@@ -13,7 +13,7 @@ new/existing point and preserves the binding identifier; it never edits the valu
 Deleting the final binding does not delete the directory entry.
 
 A consumer defines its own application port and DTOs. Its infrastructure adapter maps those into commands and
-queries imported directly from their scenario files under `application/binding/`; value objects are imported
+queries imported directly from their scenario files under `application/`; value objects are imported
 directly from their defining files under `domain/`.
 No ORM entity or session crosses this boundary. Specialized VO remain in their owning module; Shared provides
 existing neutral identifiers, clock and UoW primitives.
@@ -23,11 +23,10 @@ The owner validates access and existence and locks the owner row before update/d
 Future owners must follow the same locking and cleanup discipline, with their own adapter.
 
 All repositories are constructed by presentation dependencies on the same cached shared `UoWDep.session`.
-Tenant is explicit on every repository operation and translated to a schema by `TenantSchemaNaming`.
-The three repositories live under `infrastructure/<responsibility>/persistence/`, have plain `(session, naming)`
-constructors and use SQLAlchemy Core. The SQL models remain together under `infrastructure/persistence/models/`
-and are registered by explicit model-file imports. A stateless
-`tenant_execution_options` function scopes every statement; no repository base class or tenant state is needed.
+TenantGate binds the tenant schema to the connection before UoW creates its session. The three persistence
+adapters live together under `infrastructure/persistence/`, accept only that session and use SQLAlchemy Core;
+they do not select a schema per statement. The SQL models remain together under
+`infrastructure/persistence/models/` and are registered by explicit model-file imports.
 `ContactPointMapper`, `ContactPointBindingMapper` and `ContactPointLabelMapper` explicitly map persisted fields
 (including audit) into domain objects and produce insert/update values. Binding JOIN queries use fixed aliases;
 the binding mapper assembles the domain projection through the point mapper. Invalid persisted types, identifiers
@@ -46,12 +45,13 @@ No outbox events are emitted because this version has no event consumer.
 
 ## Module structure
 
-The module follows `layer → responsibility → scenario`. `contact_point`, `binding` and `label` own their domain
-types and infrastructure; Application commands and queries each have their own `command.py` or `query.py`,
-`handler.py` with `execute(...)`, and `dto.py` when they return data. Integration dependencies are assembled in
-`presentation/binding/depends.py` and `presentation/contact_point/depends.py`. Label HTTP routes are registered in
-`presentation/label/router.py`; each endpoint has its own controller and request/response schema files under
-`presentation/label/http/`. Package `__init__.py` files are empty and consumers use direct imports.
+The module has one `ContactPoint` aggregate root. Bindings and labels are its related domain entities and
+settings, not three parallel aggregate directories in every layer. Files are grouped directly under `domain/`,
+`infrastructure/persistence/` and `presentation/`; Application scenarios live under `application/command/` or
+`application/query/`, each with its own input, `handler.py` and result DTO when needed. Dependencies are assembled
+under `presentation/depends/`. Label HTTP routes are registered in `presentation/router.py`; each endpoint has its
+own controller and request/response schema files under `presentation/http/`. Package `__init__.py` files are empty
+and consumers use direct imports.
 
 ## Input and normalization
 
@@ -108,6 +108,5 @@ uv run python -m unittest test.test_contact_point_mappers test.test_contact_poin
 TEST_POSTGRES_URL=postgresql+asyncpg://... uv run python -m unittest test.test_contact_points_postgres test.test_tenant_migrations_postgres
 ```
 
-Use a disposable PostgreSQL database. Integration coverage includes shared session identity, identical UUIDs across tenant schemas on one
-session/repository instance, archival permissions/CSRF and transactional migrations. Tests of the removed
-CRM extension tests cover its owner-specific HTTP integration; independent contact point tests remain. See [the implementation plan](../plan/contact_point_module.md) for scope.
+Use a disposable PostgreSQL database. Integration coverage includes shared session identity, identical UUIDs across tenant schemas with separate tenant-bound sessions, archival permissions/CSRF and transactional migrations. Tests of the removed
+CRM extension tests cover its owner-specific HTTP integration; independent contact point tests remain. See [the historical implementation plan](../plan/contact_point_module.md) for the original scope.

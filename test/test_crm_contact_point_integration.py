@@ -28,19 +28,19 @@ from src.modules.crm.presentation.depends.contact_points import (
     get_contact_contact_points,
 )
 from src.modules.crm.infrastructure.contact_point.adapter import ContactPointsAdapter
-from src.modules.contact_points.application.binding.query.get_targets_contact_points.dto import (
+from src.modules.contact_points.application.query.get_targets_contact_points.dto import (
     ContactPointBindingDTO,
 )
-from src.modules.contact_points.domain.binding.value_object.identifier import (
+from src.modules.contact_points.domain.value_object.binding_identifier import (
     ContactPointBindingIdVO,
 )
-from src.modules.contact_points.domain.binding.error import (
+from src.modules.contact_points.domain.binding_error import (
     InvalidContactPointBindingError,
 )
-from src.modules.contact_points.domain.contact_point.value_object.identifier import (
+from src.modules.contact_points.domain.value_object.contact_point_identifier import (
     ContactPointIdVO,
 )
-from src.modules.contact_points.domain.contact_point.value_object.value import (
+from src.modules.contact_points.domain.value_object.value import (
     ContactPointType,
 )
 from src.modules.identity.domain.auth.principal import Principal

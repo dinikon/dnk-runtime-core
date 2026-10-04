@@ -2,13 +2,13 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from src.modules.contact_points.application.contact_point.query.resolve_contact_point_targets.handler import (
+from src.modules.contact_points.application.query.resolve_contact_point_targets.handler import (
     ResolveContactPointTargetsHandler,
 )
-from src.modules.contact_points.presentation.binding.depends import (
+from src.modules.contact_points.presentation.depends.binding import (
     ContactPointBindingRepositoryDep,
 )
-from src.modules.contact_points.presentation.contact_point.depends import (
+from src.modules.contact_points.presentation.depends.contact_point import (
     ContactPointRepositoryDep,
     ContactPointResolverDep,
 )

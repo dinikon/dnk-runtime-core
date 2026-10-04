@@ -7,27 +7,27 @@ from uuid import uuid4
 from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
 
-from src.modules.contact_points.application.label.command.create_label.dto import (
+from src.modules.contact_points.application.command.create_label.dto import (
     CreateContactPointLabelDTO,
 )
-from src.modules.contact_points.application.label.command.update_label.dto import (
+from src.modules.contact_points.application.command.update_label.dto import (
     UpdateContactPointLabelDTO,
 )
-from src.modules.contact_points.application.label.query.list_labels.dto import (
+from src.modules.contact_points.application.query.list_labels.dto import (
     ListContactPointLabelDTO,
 )
-from src.modules.contact_points.domain.contact_point.value_object.value import (
+from src.modules.contact_points.domain.value_object.value import (
     ContactPointType,
 )
-from src.modules.contact_points.domain.label.value_object.identifier import (
+from src.modules.contact_points.domain.value_object.label_identifier import (
     ContactPointLabelIdVO,
 )
-from src.modules.contact_points.presentation.label.depends import (
+from src.modules.contact_points.presentation.depends.label import (
     get_create_label_handler,
     get_list_labels_handler,
     get_update_label_handler,
 )
-from src.modules.contact_points.presentation.label.router import router
+from src.modules.contact_points.presentation.router import router
 from src.modules.identity.domain.auth.principal import Principal
 from src.modules.identity.domain.auth.request_context import RequestContext
 from src.modules.identity.presentation.auth.depends import (

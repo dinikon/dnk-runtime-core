@@ -7,21 +7,21 @@ from pathlib import Path
 import unittest
 from uuid import uuid4
 
-from src.modules.contact_points.domain.contact_point.aggregate import ContactPoint
-from src.modules.contact_points.domain.contact_point.error import (
+from src.modules.contact_points.domain.aggregate import ContactPoint
+from src.modules.contact_points.domain.contact_point_error import (
     InvalidContactPointError,
 )
-from src.modules.contact_points.domain.contact_point.value_object.identifier import (
+from src.modules.contact_points.domain.value_object.contact_point_identifier import (
     ContactPointIdVO,
 )
-from src.modules.contact_points.domain.contact_point.value_object.value import (
+from src.modules.contact_points.domain.value_object.value import (
     ContactPointType,
     NormalizationContext,
 )
-from src.modules.contact_points.infrastructure.contact_point.normalization.phone import (
+from src.modules.contact_points.infrastructure.normalization.phone import (
     PhoneNormalizer,
 )
-from src.modules.contact_points.infrastructure.contact_point.normalization.email import (
+from src.modules.contact_points.infrastructure.normalization.email import (
     EmailNormalizer,
 )
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
@@ -91,11 +91,11 @@ class ContactPointsDomainTests(unittest.TestCase):
 
     def test_binding_noop_rebind_and_position_invariants(self):
         from datetime import timedelta
-        from src.modules.contact_points.domain.binding.entity import ContactPointBinding
-        from src.modules.contact_points.domain.binding.value_object.identifier import (
+        from src.modules.contact_points.domain.binding import ContactPointBinding
+        from src.modules.contact_points.domain.value_object.binding_identifier import (
             ContactPointBindingIdVO,
         )
-        from src.modules.contact_points.domain.binding.value_object.target import (
+        from src.modules.contact_points.domain.value_object.target import (
             ContactPointTargetVO,
         )
         from src.modules.shared.domain.domain_error import DomainError

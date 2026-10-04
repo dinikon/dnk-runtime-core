@@ -45,6 +45,14 @@ src/modules/<module>/<layer>/<aggregate_root>/<responsibility>/
 Infrastructure и интерфейсы Presentation этого агрегата. Это организация кода
 вокруг одного Aggregate Root, а не четыре независимые реализации бизнес-модели.
 
+Если модуль содержит ровно один корень агрегата, дополнительный одноимённый каталог
+в каждом слое не нужен: код располагается прямо в `domain/`, `application/`,
+`infrastructure/` и `presentation/`. Так устроен `contact_points`: `ContactPoint` —
+корень, а binding и label находятся рядом как связанные сущности и настройки.
+Сценарии по-прежнему разделяются в `application/command/<scenario>/` и
+`application/query/<scenario>/`; SQL-адаптеры лежат в `infrastructure/persistence/`,
+HTTP-контроллеры — в `presentation/http/controller/`.
+
 #### Направление зависимостей
 
 Допустимое направление:
@@ -1384,11 +1392,9 @@ class SqlAlchemyOrderRepository:
     def __init__(
         self,
         session: AsyncSession,
-        naming: TenantSchemaNaming,
     ) -> None:
-        """Принимает сессию внешнего UoW и правила выбора схемы tenant."""
+        """Принимает сессию внешнего UoW с привязанной tenant-схемой."""
         self._session = session
-        self._naming = naming
 
     async def get(
         self,
@@ -1406,12 +1412,6 @@ class SqlAlchemyOrderRepository:
                 .where(
                     orders.c.id
                     == order_id.uuid
-                )
-                .execution_options(
-                    **tenant_execution_options(
-                        self._naming,
-                        tenant_id,
-                    )
                 )
             )
         )
@@ -1434,12 +1434,6 @@ class SqlAlchemyOrderRepository:
                 )
                 .order_by(
                     items.c.position
-                )
-                .execution_options(
-                    **tenant_execution_options(
-                        self._naming,
-                        tenant_id,
-                    )
                 )
             )
         )
@@ -1482,12 +1476,6 @@ async def save(
                 order
             )
         )
-        .execution_options(
-            **tenant_execution_options(
-                self._naming,
-                tenant_id,
-            )
-        )
     )
 
     await self._session.execute(
@@ -1496,12 +1484,10 @@ async def save(
             items.c.order_id
             == order.id.uuid
         )
-        .execution_options(...)
     )
 
     await self._session.execute(
-        insert(items)
-        .execution_options(...),
+        insert(items),
         [
             OrderItemMapper
             .to_insert_values(
@@ -1526,11 +1512,9 @@ class SqlAlchemyOrderQueryRepository:
     def __init__(
         self,
         session: AsyncSession,
-        naming: TenantSchemaNaming,
     ) -> None:
-        """Принимает внешнюю сессию и правила выбора схемы tenant."""
+        """Принимает внешнюю сессию с привязанной tenant-схемой."""
         self._session = session
-        self._naming = naming
 
     async def get_details(
         self,
@@ -1585,12 +1569,6 @@ class SqlAlchemyOrderQueryRepository:
             .group_by(
                 orders.c.id,
                 customers.c.name,
-            )
-            .execution_options(
-                **tenant_execution_options(
-                    self._naming,
-                    tenant_id,
-                )
             )
         )
 
@@ -1725,21 +1703,21 @@ class UnitOfWorkProtocol(Protocol):
 
 ```python
 async def get_uow(request: Request) -> AsyncGenerator[UnitOfWork, None]:
-    """Открывает UoW на время процесса и завершает транзакцию при выходе из контекста."""
-    async with UnitOfWork(request.app.state.db) as uow:
+    """Открывает UoW на tenant-соединении и завершает транзакцию до ответа."""
+    connection = request.state.tenant_connection
+    sessions = async_sessionmaker(connection, expire_on_commit=False)
+    async with UnitOfWork(sessions) as uow:
         yield uow
 
 
-UoWDep = Annotated[UnitOfWork, Depends(get_uow)]
+UoWDep = Annotated[UnitOfWork, Depends(get_uow, scope="function")]
 
 
 def get_order_repository(
     uow: UoWDep,
-    naming: TenantNamingDep,
 ) -> OrderRepositoryProtocol:
     """Создаёт репозиторий заказов на сессии общего UoW."""
-    assert uow.session is not None
-    return SqlAlchemyOrderRepository(uow.session, naming)
+    return SqlAlchemyOrderRepository(uow.session)
 
 
 def get_outbox_repository(uow: UoWDep) -> OutboxRepositoryProtocol:
@@ -2560,7 +2538,6 @@ async def run_confirm_order(
     command: ConfirmOrderCommand,
     *,
     session_factory: async_sessionmaker[AsyncSession],
-    naming: TenantSchemaNaming,
     request_id: str,
 ) -> None:
     """Собирает сценарий и логирует его итог с учётом результата commit.
@@ -2568,6 +2545,7 @@ async def run_confirm_order(
     Заказ и Outbox используют общую транзакцию. Бизнес-отказ отличается
     от технического сбоя; исключения передаются вызывающему коду.
     """
+    # session_factory заранее привязана к соединению нужного tenant.
     started_at = perf_counter()
     context = {
         "request_id": request_id,
@@ -2578,7 +2556,7 @@ async def run_confirm_order(
     try:
         async with UnitOfWork(session_factory) as uow:
             handler = ConfirmOrderHandler(
-                repository=SqlAlchemyOrderRepository(uow.session, naming),
+                repository=SqlAlchemyOrderRepository(uow.session),
                 outbox=SqlAlchemyOutboxRepository(uow.session),
             )
             await handler.execute(command)

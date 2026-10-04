@@ -3,10 +3,10 @@ from contextlib import contextmanager
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 
-from src.modules.contact_points.domain.binding.error import (
+from src.modules.contact_points.domain.binding_error import (
     InvalidContactPointBindingError,
 )
-from src.modules.contact_points.infrastructure.persistence.base import (
+from src.modules.contact_points.application.error import (
     ContactPointPersistenceMappingError,
 )
 from src.modules.crm.domain.company.error import CompanyNotFoundError
