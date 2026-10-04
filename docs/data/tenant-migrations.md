@@ -26,6 +26,9 @@ uniqueness. Revisions `0004` through `0006` add partner price-list ingestion and
 indexes. Revision `0008_contact_points` creates the tenant-local directory, bindings and labels with same-schema
 foreign keys. It seeds six labels with fixed identifiers and timestamps; seed actors are null. Upgrade existing
 tenants before running code that reads the new CRM arrays. Existing CRM rows are preserved with empty arrays.
+Revision `0011_inventory_skus`, after `0010_crm_company_legal_name`, adds the tenant-local
+Inventory `skus` directory with unique codes and audit fields. Upgrade existing tenant
+schemas before using the SKU API; fresh tenants receive it through the same bootstrap.
 Revisions contain no fixed tenant names and do not import current ORM models.
 
 The migration environment uses transaction-local `search_path` (through PostgreSQL `set_config(..., true)`) and explicitly sets `version_table_schema`. Successful execution restores the previous path. Failed transactions are rolled back by the owner. Migration files must preserve transactional execution: no internal commit, autocommit block or nontransactional DDL in onboarding revisions.
