@@ -28,7 +28,7 @@ Format/compile checks: `uv run black --check src test migrations` and `uv run py
 
 ## CRM contact–company membership
 
-- `test/test_crm_relations.py`: immutable membership, typed IDs, duplicates, no-op audit, optimistic membership checks, reverse-side application orchestration.
-- `test/test_crm_relations_postgres.py`: real HTTP/UoW, tenant isolation including identical UUIDs, candidate filtering/counting, incremental persistence, failures after partial writes and at commit, opposite-side concurrency, overlapping batches, deletion races and migration round trips. Requires disposable `TEST_POSTGRES_URL`.
+- `test/test_crm_relations.py`: typed immutable link, ordered existence locks, idempotent SQL insert, one-query projections and absent-owner handling.
+- `test/test_crm_relations_http.py`: both route directions, authentication, CSRF, validation, missing parents and UoW failures.
+- `test/test_crm_relations_postgres.py`: real HTTP/UoW, duplicate concurrent PUTs, tenant isolation with identical UUIDs, rollback and FK cascade. Requires disposable `TEST_POSTGRES_URL`.
 - `test/test_architecture_boundaries.py`: inward CRM dependencies and absence of CRM repository/use-case commits.
-- Console browser checks: draft selection/save/discard, unlink/reselect, navigation/Back, conflict recovery and desktop/mobile layout.

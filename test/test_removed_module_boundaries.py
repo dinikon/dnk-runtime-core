@@ -173,8 +173,12 @@ class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
             {
                 "/api/console/crm/contacts",
                 "/api/console/crm/contacts/{contact_id}",
+                "/api/console/crm/contacts/{contact_id}/companies",
+                "/api/console/crm/contacts/{contact_id}/companies/{company_id}",
                 "/api/console/crm/companies",
                 "/api/console/crm/companies/{company_id}",
+                "/api/console/crm/companies/{company_id}/contacts",
+                "/api/console/crm/companies/{company_id}/contacts/{contact_id}",
             },
         )
         self.assertEqual(set(paths["/api/console/crm/contacts"]), {"get", "post"})
@@ -187,6 +191,19 @@ class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
             set(paths["/api/console/crm/companies/{company_id}"]),
             {"get", "put", "patch", "delete"},
         )
+        self.assertEqual(
+            set(paths["/api/console/crm/contacts/{contact_id}/companies"]),
+            {"get"},
+        )
+        self.assertEqual(
+            set(paths["/api/console/crm/companies/{company_id}/contacts"]),
+            {"get"},
+        )
+        for path in (
+            "/api/console/crm/contacts/{contact_id}/companies/{company_id}",
+            "/api/console/crm/companies/{company_id}/contacts/{contact_id}",
+        ):
+            self.assertEqual(set(paths[path]), {"put", "delete"})
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://testserver"
         ) as client:

@@ -157,8 +157,9 @@ src/modules/crm/
 │   ├── contact/
 │   │   ├── aggregate.py
 │   │   ├── value_object/
-│   │   │   └── identifier.py
-│   │   ├── event/
+│   │   │   ├── identifier.py
+│   │   │   ├── name.py
+│   │   │   └── company_link.py
 │   │   ├── error.py
 │   │   └── repository.py
 │   └── company/
@@ -171,16 +172,40 @@ src/modules/crm/
 ├── application/
 │   ├── contact/
 │   │   ├── command/
-│   │   │   └── create_contact/
+│   │   │   ├── create_contact/
+│   │   │   │   ├── command.py
+│   │   │   │   ├── handler.py
+│   │   │   │   └── dto.py
+│   │   │   ├── update_contact/
+│   │   │   │   ├── command.py
+│   │   │   │   ├── handler.py
+│   │   │   │   └── dto.py
+│   │   │   ├── delete_contact/
+│   │   │   │   ├── command.py
+│   │   │   │   └── handler.py
+│   │   │   ├── link_company/
+│   │   │   │   ├── command.py
+│   │   │   │   └── handler.py
+│   │   │   └── unlink_company/
 │   │   │       ├── command.py
 │   │   │       └── handler.py
 │   │   ├── query/
-│   │   │   └── get_contact/
+│   │   │   ├── get_contact/
+│   │   │   │   ├── query.py
+│   │   │   │   ├── handler.py
+│   │   │   │   └── dto.py
+│   │   │   ├── list_contacts/
+│   │   │   │   ├── query.py
+│   │   │   │   ├── handler.py
+│   │   │   │   └── dto.py
+│   │   │   └── list_companies/
 │   │   │       ├── query.py
 │   │   │       ├── handler.py
 │   │   │       └── dto.py
 │   │   └── port/
-│   │       └── query_repository.py
+│   │       ├── query_repository.py
+│   │       ├── company_link_repository.py
+│   │       └── company_link_query_repository.py
 │   └── company/
 │       ├── command/
 │       │   ├── create_company/
@@ -199,24 +224,33 @@ src/modules/crm/
 │       │   │   ├── query.py
 │       │   │   ├── handler.py
 │       │   │   └── dto.py
-│       │   └── list_companies/
+│       │   ├── list_companies/
+│       │   │   ├── query.py
+│       │   │   ├── handler.py
+│       │   │   └── dto.py
+│       │   └── list_contacts/
 │       │       ├── query.py
 │       │       ├── handler.py
 │       │       └── dto.py
 │       └── port/
-│           └── query_repository.py
+│           ├── query_repository.py
+│           └── contact_link_query_repository.py
 ├── infrastructure/
 │   ├── contact/
 │   │   └── persistence/
 │   │       ├── mapper.py
 │   │       ├── repository.py
-│   │       └── query_repository.py
+│   │       ├── query_repository.py
+│   │       ├── query_mapper.py
+│   │       ├── company_link_repository.py
+│   │       └── company_link_query_repository.py
 │   ├── company/
 │   │   └── persistence/
 │   │       ├── mapper.py
 │   │       ├── repository.py
 │   │       ├── query_mapper.py
-│   │       └── query_repository.py
+│   │       ├── query_repository.py
+│   │       └── contact_link_query_repository.py
 │   └── persistence/
 │       └── models/
 │           ├── contact.py
@@ -233,7 +267,10 @@ src/modules/crm/
     │       │   ├── list_contacts.py
     │       │   ├── put_contact.py
     │       │   ├── patch_contact.py
-    │       │   └── delete_contact.py
+    │       │   ├── delete_contact.py
+    │       │   ├── link_company.py
+    │       │   ├── unlink_company.py
+    │       │   └── list_companies.py
     │       ├── request/
     │       │   ├── create_contact.py
     │       │   ├── put_contact.py
@@ -243,7 +280,8 @@ src/modules/crm/
     │           ├── get_contact.py
     │           ├── list_contacts.py
     │           ├── put_contact.py
-    │           └── patch_contact.py
+    │           ├── patch_contact.py
+    │           └── list_companies.py
     ├── company/
     │   ├── router.py
     │   ├── depends.py
@@ -254,7 +292,10 @@ src/modules/crm/
     │       │   ├── list_companies.py
     │       │   ├── put_company.py
     │       │   ├── patch_company.py
-    │       │   └── delete_company.py
+    │       │   ├── delete_company.py
+    │       │   ├── link_contact.py
+    │       │   ├── unlink_contact.py
+    │       │   └── list_contacts.py
     │       ├── request/
     │       │   ├── create_company.py
     │       │   ├── put_company.py
@@ -264,8 +305,10 @@ src/modules/crm/
     │           ├── get_company.py
     │           ├── list_companies.py
     │           ├── put_company.py
-    │           └── patch_company.py
+    │           ├── patch_company.py
+    │           └── list_contacts.py
     └── depends/
+        └── company_link.py
 ```
 
 Основной порядок каталогов: **модуль → слой → Aggregate Root → назначение**.
@@ -287,8 +330,9 @@ Application через их контракты. Каждый агрегат из
 
 Дерево показывает правило организации слоёв CRM. Для Contact и Company
 реализованы создание, чтение списка и карточки, полное и частичное обновление,
-удаление. SQL-модель связей между ними сохранена; сценарии управления связями
-пока не реализованы. Актуальное поведение описано в
+удаление. Связь между ними реализована без третьего Aggregate Root: одна пара
+ID хранится в `contact_companies`, запись принадлежит сценарию Contact, а
+обратное чтение — проекции Company. Актуальное поведение описано в
 [документации CRM](../modules/crm.md). Пустые каталоги заранее не создаются —
 элементы добавляются по мере реализации соответствующего поведения.
 

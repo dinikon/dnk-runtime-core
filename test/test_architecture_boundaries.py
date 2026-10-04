@@ -51,6 +51,11 @@ class ArchitectureBoundariesTests(unittest.TestCase):
             "src.modules.crm.application.company.query.get_company.handler",
             "src.modules.crm.infrastructure.company.persistence.query_repository",
             "src.modules.crm.presentation.company.router",
+            "src.modules.crm.domain.contact.value_object.company_link",
+            "src.modules.crm.application.contact.command.link_company.handler",
+            "src.modules.crm.application.company.query.list_contacts.handler",
+            "src.modules.crm.infrastructure.contact.persistence.company_link_repository",
+            "src.modules.crm.infrastructure.company.persistence.contact_link_query_repository",
             "src.modules.tenant_persistence",
         ):
             with self.subTest(module=name):

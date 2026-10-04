@@ -10,6 +10,15 @@ from src.modules.crm.presentation.contact.http.controller.get_contact import get
 from src.modules.crm.presentation.contact.http.controller.list_contacts import (
     list_contacts,
 )
+from src.modules.crm.presentation.contact.http.controller.link_company import (
+    link_company,
+)
+from src.modules.crm.presentation.contact.http.controller.unlink_company import (
+    unlink_company,
+)
+from src.modules.crm.presentation.contact.http.controller.list_companies import (
+    list_contact_companies,
+)
 from src.modules.crm.presentation.contact.http.controller.patch_contact import (
     patch_contact,
 )
@@ -22,6 +31,9 @@ from src.modules.crm.presentation.contact.http.response.get_contact import (
 )
 from src.modules.crm.presentation.contact.http.response.list_contacts import (
     ListContactItemResponse,
+)
+from src.modules.crm.presentation.contact.http.response.list_companies import (
+    ListContactCompanyItemResponse,
 )
 from src.modules.crm.presentation.contact.http.response.patch_contact import (
     PatchContactResponse,
@@ -83,6 +95,33 @@ router.add_api_route(
 router.add_api_route(
     "/{contact_id}",
     delete_contact,
+    methods=["DELETE"],
+    status_code=204,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
+router.add_api_route(
+    "/{contact_id}/companies",
+    list_contact_companies,
+    methods=["GET"],
+    response_model=list[ListContactCompanyItemResponse],
+    dependencies=[Depends(require_authenticated_request_context)],
+)
+router.add_api_route(
+    "/{contact_id}/companies/{company_id}",
+    link_company,
+    methods=["PUT"],
+    status_code=204,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
+router.add_api_route(
+    "/{contact_id}/companies/{company_id}",
+    unlink_company,
     methods=["DELETE"],
     status_code=204,
     dependencies=[

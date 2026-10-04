@@ -14,6 +14,12 @@ from src.modules.crm.application.contact.command.update_contact.handler import (
 from src.modules.crm.application.contact.query.list_contacts.handler import (
     ListContactsHandler,
 )
+from src.modules.crm.application.contact.query.list_companies.handler import (
+    ListContactCompaniesHandler,
+)
+from src.modules.crm.application.contact.port.company_link_query_repository import (
+    ContactCompanyQueryRepositoryProtocol,
+)
 from src.modules.crm.domain.contact.repository import ContactRepositoryProtocol
 from src.modules.crm.application.contact.port.query_repository import (
     ContactQueryRepositoryProtocol,
@@ -23,6 +29,9 @@ from src.modules.crm.application.contact.query.get_contact.handler import (
 )
 from src.modules.crm.infrastructure.contact.persistence.query_repository import (
     SqlAlchemyContactQueryRepository,
+)
+from src.modules.crm.infrastructure.contact.persistence.company_link_query_repository import (
+    SqlAlchemyContactCompanyQueryRepository,
 )
 from src.modules.crm.infrastructure.contact.persistence.repository import (
     SqlAlchemyContactRepository,
@@ -102,4 +111,28 @@ def get_delete_contact_handler(
 
 DeleteContactHandlerDep = Annotated[
     DeleteContactHandler, Depends(get_delete_contact_handler)
+]
+
+
+def get_contact_company_query_repository(
+    uow: UoWDep,
+) -> ContactCompanyQueryRepositoryProtocol:
+    return SqlAlchemyContactCompanyQueryRepository(uow.session)
+
+
+ContactCompanyQueryRepositoryDep = Annotated[
+    ContactCompanyQueryRepositoryProtocol,
+    Depends(get_contact_company_query_repository),
+]
+
+
+def get_list_contact_companies_handler(
+    repository: ContactCompanyQueryRepositoryDep,
+) -> ListContactCompaniesHandler:
+    return ListContactCompaniesHandler(repository)
+
+
+ListContactCompaniesHandlerDep = Annotated[
+    ListContactCompaniesHandler,
+    Depends(get_list_contact_companies_handler),
 ]

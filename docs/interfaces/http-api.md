@@ -72,6 +72,12 @@ authenticated tenant user can read and mutate CRM data; browser mutations requir
 | PUT | `/api/console/crm/companies/{id}` | Replace `legal_name`; `200` or `404` |
 | PATCH | `/api/console/crm/companies/{id}` | Update `legal_name`; `200` or `404` |
 | DELETE | `/api/console/crm/companies/{id}` | Hard-delete the company; `204` or `404` |
+| GET | `/api/console/crm/contacts/{contact_id}/companies` | Linked companies; `200` array or `404` if contact is absent |
+| PUT | `/api/console/crm/contacts/{contact_id}/companies/{company_id}` | Link idempotently; `204` or `404` |
+| DELETE | `/api/console/crm/contacts/{contact_id}/companies/{company_id}` | Unlink idempotently; `204` or `404` |
+| GET | `/api/console/crm/companies/{company_id}/contacts` | Linked contacts; `200` array or `404` if company is absent |
+| PUT | `/api/console/crm/companies/{company_id}/contacts/{contact_id}` | Same link from the company side; `204` or `404` |
+| DELETE | `/api/console/crm/companies/{company_id}/contacts/{contact_id}` | Same unlink from the company side; `204` or `404` |
 
 Contact requests contain `first_name` and optional `last_name` and `middle_name`.
 POST and PUT require `first_name`; PATCH may omit it but cannot clear it.
@@ -80,7 +86,9 @@ are rejected; validation is `422`. List results are ordered by `created_at`, the
 `id`. Company requests accept only `legal_name`: POST and PUT require it; PATCH
 rejects an empty body and `null`. It is trimmed and must contain 1–255 characters.
 Company responses contain the name and audit fields. Duplicate names are allowed.
-Relationship, phone, and email operations are not implemented in CRM yet. See
+Both relation directions address the same row. Lists include the linked entity's
+fields and audit; an existing owner with no links returns `[]`. Link changes do
+not change Contact or Company audit. Phone and email operations are not implemented in CRM yet. See
 [CRM](../modules/crm.md).
 
 ## Console contact-point labels

@@ -7,3 +7,7 @@ class InvalidContactNameError(DomainError):
 
 class ContactNotFoundError(DomainError):
     """Контакт отсутствует в текущем tenant."""
+
+
+class InvalidContactCompanyLinkError(DomainError):
+    """Пара идентификаторов связи Contact–Company имеет неверные типы."""

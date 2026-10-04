@@ -2,8 +2,8 @@
 
 CRM — контекст с самостоятельными агрегатами контактов и компаний. На текущем
 этапе реализованы самостоятельные агрегаты `ContactEntity` и `CompanyEntity` с
-созданием, чтением, обновлением и удалением. SQL-модель связей сохранена для
-дальнейшей реализации операций между агрегатами.
+созданием, чтением, обновлением и удалением. Связь между ними управляется через
+существующую SQL-модель `contact_companies` без отдельного Aggregate Root.
 
 ## Создание контакта
 
@@ -148,7 +148,35 @@ POST, GET, LIST, PUT и PATCH возвращают `id`, `legal_name`, `created_
 компания — `404` с `Company not found.`. Конфликт первичного ключа при создании
 даёт `409`; неожиданный сбой хранения или commit — `500`, без успешного ответа.
 DELETE физически удаляет компанию; существующий FK с `ON DELETE CASCADE`
-удаляет строки `contact_companies`. Работа со связями не входит в Company API.
+удаляет строки `contact_companies`.
+
+## Связь контакта и компании
+
+Одна строка `contact_companies(contact_id, company_id)` представляет связь в обоих
+направлениях. Для существующей пары Contact и Company PUT создаёт связь, а
+повторный PUT оставляет её без изменений. DELETE удаляет связь; повторный DELETE
+также успешен. Оба метода возвращают `204 No Content` без тела.
+
+| Действие | От контакта | От компании |
+| --- | --- | --- |
+| Связать | `PUT /api/console/crm/contacts/{contact_id}/companies/{company_id}` | `PUT /api/console/crm/companies/{company_id}/contacts/{contact_id}` |
+| Отвязать | `DELETE` по тому же URL | `DELETE` по тому же URL |
+| Список | `GET /api/console/crm/contacts/{contact_id}/companies` | `GET /api/console/crm/companies/{company_id}/contacts` |
+
+Список от контакта возвращает полные проекции связанных компаний (`id`,
+`legal_name`, аудит); список от компании — полные проекции контактов (`id`, ФИО,
+аудит). Оба отсортированы по `created_at`, затем `id` связанной записи.
+Существующий объект без связей возвращает `[]`, отсутствующий — `404`. Оба PUT и
+DELETE возвращают `404`, если отсутствует хотя бы один из двух объектов в текущем
+tenant; отсутствие самой строки связи при DELETE не считается ошибкой.
+
+Чтение требует аутентификацию и tenant-контекст, запись дополнительно требует
+CSRF. Неверный UUID даёт `422`, отсутствие аутентификации — `401`, отсутствие
+tenant или нарушение CSRF — `403`. Обе стороны URL используют один сценарий записи
+и одну tenant-сессию UoW. Список формируется одним LEFT JOIN без загрузки
+агрегатов по одному. Связь не имеет колонок аудита, поэтому изменение связи не
+меняет аудит Contact или Company. При удалении любого из них существующий FK
+каскадно удаляет строку связи.
 
 ## Слои и транзакция
 
@@ -186,6 +214,16 @@ DELETE физически удаляет компанию; существующ�
   агрегата и mapper проекции. Используют ту же сессию UoW с выбранной tenant-схемой.
 - `presentation/company/`: router и depends агрегата, отдельные контроллеры
   шести HTTP-методов и отдельные файлы схем для каждого применимого метода.
+- `domain/contact/value_object/company_link.py`: неизменяемая типизированная
+  пара ID без отдельного Aggregate Root.
+- `application/contact/command/link_company/` и `unlink_company/`: единые
+  обработчики записи для обоих направлений URL. Порт связи находится в
+  `application/contact/port/`.
+- `application/contact/query/list_companies/` и
+  `application/company/query/list_contacts/`: независимые проекции чтения.
+- Репозиторий записи связи находится в `infrastructure/contact/persistence/`,
+  проекции чтения — в инфраструктуре соответствующего агрегата. Общая сборка
+  обработчиков записи находится в `presentation/depends/company_link.py`.
 
 Domain и Application не зависят от SQLAlchemy/FastAPI. Handler и repository не
 выполняют commit/rollback. Domain events и Outbox в этом сценарии не используются.
@@ -206,7 +244,6 @@ Domain и Application не зависят от SQLAlchemy/FastAPI. Handler и re
 Столбцы `last_name` и `middle_name` остаются nullable; SQL-модель и миграции
 не требуют изменений.
 
-Операции управления связями отсутствуют.
 Неподдерживаемый метод существующего маршрута возвращает `405`, отсутствующий
 маршрут — `404`. Самостоятельный модуль `contact_points` продолжает работать,
 но создание Contact пока с ним не интегрируется.
@@ -223,7 +260,8 @@ email и компании, поэтому форма пока несовмест
 ```sh
 uv run python -m unittest test.test_crm_contact test.test_crm_contact_http test.test_crm_contact_get test.test_crm_contact_get_http test.test_crm_contact_mutations test.test_architecture_boundaries test.test_removed_module_boundaries
 uv run python -m unittest test.test_crm_company test.test_crm_company_http
-TEST_POSTGRES_URL=postgresql+asyncpg://... uv run python -m unittest test.test_crm_contact_postgres test.test_crm_company_postgres test.test_tenant_migrations_postgres
+uv run python -m unittest test.test_crm_relations test.test_crm_relations_http
+TEST_POSTGRES_URL=postgresql+asyncpg://... uv run python -m unittest test.test_crm_contact_postgres test.test_crm_company_postgres test.test_crm_relations_postgres test.test_tenant_migrations_postgres
 ```
 
 PostgreSQL-проверки запускаются только на одноразовой тестовой базе. Они проверяют
