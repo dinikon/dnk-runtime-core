@@ -28,7 +28,7 @@ from src.modules.crm.presentation.depends.contact_points import (
     get_contact_contact_points,
 )
 from src.modules.crm.infrastructure.contact_point.adapter import ContactPointsAdapter
-from src.modules.contact_points.application.binding.dto.binding_dto import (
+from src.modules.contact_points.application.binding.query.get_targets_contact_points.dto import (
     ContactPointBindingDTO,
 )
 from src.modules.contact_points.domain.binding.value_object.identifier import (
@@ -64,8 +64,9 @@ class ContactPointsAdapterTests(unittest.IsolatedAsyncioTestCase):
             label_id=None,
             position=0,
         )
-        reader = AsyncMock(return_value=(row,))
-        writer, remover = AsyncMock(), AsyncMock()
+        reader = Mock(execute=AsyncMock(return_value=(row,)))
+        writer = Mock(execute=AsyncMock())
+        remover = Mock(execute=AsyncMock())
         adapter = ContactPointsAdapter(
             "crm.company",
             reader,
@@ -80,7 +81,7 @@ class ContactPointsAdapterTests(unittest.IsolatedAsyncioTestCase):
             None,
             (ContactPointDraftDTO("Name@Example.COM", existing_binding, label),),
         )
-        command = writer.await_args.args[0]
+        command = writer.execute.await_args.args[0]
         self.assertEqual(command.target.model_key, "crm.company")
         self.assertEqual(command.target.record_id, owner)
         self.assertEqual(command.tenant_id, tenant)
@@ -91,9 +92,15 @@ class ContactPointsAdapterTests(unittest.IsolatedAsyncioTestCase):
         listed = await adapter.list(tenant, owner)
         self.assertEqual(listed.phones, ())
         self.assertEqual(listed.emails[0].value, "Name@example.com")
-        self.assertEqual(reader.await_args.args[0].targets[0].model_key, "crm.company")
+        self.assertEqual(
+            reader.execute.await_args.args[0].targets[0].model_key,
+            "crm.company",
+        )
         await adapter.remove(tenant, owner)
-        self.assertEqual(remover.await_args.args[0].target.model_key, "crm.company")
+        self.assertEqual(
+            remover.execute.await_args.args[0].target.model_key,
+            "crm.company",
+        )
 
 
 class CrmContactPointsHttpTests(unittest.IsolatedAsyncioTestCase):

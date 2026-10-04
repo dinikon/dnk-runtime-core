@@ -4,7 +4,7 @@ from src.modules.contact_points.domain.binding.entity import ContactPointBinding
 from src.modules.contact_points.domain.binding.value_object.target import (
     ContactPointTargetVO,
 )
-from src.modules.contact_points.domain.contact_point.entity import ContactPoint
+from src.modules.contact_points.domain.contact_point.aggregate import ContactPoint
 from src.modules.contact_points.domain.contact_point.value_object.identifier import (
     ContactPointIdVO,
 )

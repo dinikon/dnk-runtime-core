@@ -13,7 +13,8 @@ new/existing point and preserves the binding identifier; it never edits the valu
 Deleting the final binding does not delete the directory entry.
 
 A consumer defines its own application port and DTOs. Its infrastructure adapter maps those into commands and
-queries exported by `contact_points/application/api.py`, using the public `domain/api.py` VO exports as needed.
+queries imported directly from their scenario files under `application/binding/`; value objects are imported
+directly from their defining files under `domain/`.
 No ORM entity or session crosses this boundary. Specialized VO remain in their owning module; Shared provides
 existing neutral identifiers, clock and UoW primitives.
 
@@ -23,13 +24,15 @@ Future owners must follow the same locking and cleanup discipline, with their ow
 
 All repositories are constructed by presentation dependencies on the same cached shared `UoWDep.session`.
 Tenant is explicit on every repository operation and translated to a schema by `TenantSchemaNaming`.
-The three repositories have plain `(session, naming)` constructors and use SQLAlchemy Core. A stateless
+The three repositories live under `infrastructure/<responsibility>/persistence/`, have plain `(session, naming)`
+constructors and use SQLAlchemy Core. The SQL models remain together under `infrastructure/persistence/models/`
+and are registered by explicit model-file imports. A stateless
 `tenant_execution_options` function scopes every statement; no repository base class or tenant state is needed.
 `ContactPointMapper`, `ContactPointBindingMapper` and `ContactPointLabelMapper` explicitly map persisted fields
 (including audit) into domain objects and produce insert/update values. Binding JOIN queries use fixed aliases;
 the binding mapper assembles the domain projection through the point mapper. Invalid persisted types, identifiers
 or timezone-less timestamps raise `ContactPointPersistenceMappingError` with the original cause. No ORM instances
-or reflection-based field mapping are used. Display sorting belongs to `ListContactPointLabelsUseCase`; repository
+or reflection-based field mapping are used. Display sorting belongs to `ListContactPointLabelsHandler`; repository
 reads keep the stable id order required for label locks.
 
 Only the outer shared UoW commits/rolls back. Sync validates the supplied arrays, normalizes values, resolves points
@@ -41,11 +44,20 @@ Public operations are sync, batch read (also used for a single target), target c
 and list/create/update labels. Reverse lookup returns target references; its consumer decides how to display them.
 No outbox events are emitted because this version has no event consumer.
 
+## Module structure
+
+The module follows `layer → responsibility → scenario`. `contact_point`, `binding` and `label` own their domain
+types and infrastructure; Application commands and queries each have their own `command.py` or `query.py`,
+`handler.py` with `execute(...)`, and `dto.py` when they return data. Integration dependencies are assembled in
+`presentation/binding/depends.py` and `presentation/contact_point/depends.py`. Label HTTP routes are registered in
+`presentation/label/router.py`; each endpoint has its own controller and request/response schema files under
+`presentation/label/http/`. Package `__init__.py` files are empty and consumers use direct imports.
+
 ## Input and normalization
 
 The former CRM create/update contract used the following payload. CRM now exposes
 separate Contact and Company contact-point routes described in [CRM](crm.md).
-The old embedded create/update payload remains a Console migration reference:
+The old embedded create/update payload is shown below for historical context:
 
 ```json
 {
@@ -78,8 +90,9 @@ CSRF; null patch values are rejected. Labels are managed at `/admin/contact-poin
 The public Console module exports `ContactPointsWidget`, `PhoneContactPointsField`, `EmailContactPointsField` and
 their draft/label/error types. The fields compose existing shadcn-vue components. They are controlled by arrays,
 keep stable `clientKey` values and emit changes/validation without fetching or saving. Phone drafts default to UA.
-The parent supplies labels, loading/error state and `pending`, and maps indexed server errors against the sent
-snapshot. Empty rows must be filled or explicitly removed. A save failure retains the draft; cancel discards it.
+The CRM record page supplies labels, loading/error state and `pending`, and maps indexed server errors against the
+sent snapshot. It saves phone and email arrays through the owner's separate contact-point endpoint. Empty rows must
+be filled or explicitly removed. A save failure retains the draft; cancel discards it.
 
 ## Deployment and verification
 

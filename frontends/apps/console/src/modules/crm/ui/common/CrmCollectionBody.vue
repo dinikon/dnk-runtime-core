@@ -16,7 +16,6 @@ defineProps<{
   pending: boolean;
   error: boolean;
   empty: boolean;
-  searchActive: boolean;
   emptyTitle: string;
   emptyDescription: string;
 }>();
@@ -40,20 +39,10 @@ defineEmits<{ retry: [] }>();
   <Empty v-else-if="empty" class="min-h-72 border">
     <EmptyHeader>
       <EmptyMedia variant="icon"><SearchX /></EmptyMedia>
-      <EmptyTitle>{{
-        searchActive ? "Ничего не найдено" : emptyTitle
-      }}</EmptyTitle>
-      <EmptyDescription>
-        {{
-          searchActive
-            ? "Попробуйте изменить поисковый запрос."
-            : emptyDescription
-        }}
-      </EmptyDescription>
+      <EmptyTitle>{{ emptyTitle }}</EmptyTitle>
+      <EmptyDescription>{{ emptyDescription }}</EmptyDescription>
     </EmptyHeader>
-    <EmptyContent v-if="!searchActive"
-      ><slot name="empty-action"
-    /></EmptyContent>
+    <EmptyContent><slot name="empty-action" /></EmptyContent>
   </Empty>
   <slot v-else />
 </template>

@@ -7,7 +7,7 @@ from pathlib import Path
 import unittest
 from uuid import uuid4
 
-from src.modules.contact_points.domain.contact_point.entity import ContactPoint
+from src.modules.contact_points.domain.contact_point.aggregate import ContactPoint
 from src.modules.contact_points.domain.contact_point.error import (
     InvalidContactPointError,
 )
@@ -18,10 +18,10 @@ from src.modules.contact_points.domain.contact_point.value_object.value import (
     ContactPointType,
     NormalizationContext,
 )
-from src.modules.contact_points.infrastructure.normalization.phone import (
+from src.modules.contact_points.infrastructure.contact_point.normalization.phone import (
     PhoneNormalizer,
 )
-from src.modules.contact_points.infrastructure.normalization.email import (
+from src.modules.contact_points.infrastructure.contact_point.normalization.email import (
     EmailNormalizer,
 )
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
@@ -174,6 +174,46 @@ class ContactPointsDomainTests(unittest.TestCase):
                     )
         for path in (root / "shared").rglob("*.py"):
             self.assertNotIn("src.modules.contact_points", path.read_text())
+
+    def test_scenarios_and_imports_use_definition_files(self):
+        project = Path(__file__).resolve().parents[1]
+        module = project / "src/modules/contact_points"
+        for handler in (module / "application").rglob("handler.py"):
+            tree = ast.parse(handler.read_text())
+            self.assertTrue(
+                (handler.parent / "command.py").is_file()
+                or (handler.parent / "query.py").is_file(),
+                str(handler),
+            )
+            self.assertTrue(
+                any(
+                    isinstance(node, ast.AsyncFunctionDef) and node.name == "execute"
+                    for node in ast.walk(tree)
+                ),
+                str(handler),
+            )
+        for init in module.rglob("__init__.py"):
+            self.assertFalse(init.read_text().strip(), str(init))
+        for root in (project / "src", project / "test"):
+            for path in root.rglob("*.py"):
+                tree = ast.parse(path.read_text())
+                imports = [
+                    node.module
+                    for node in ast.walk(tree)
+                    if isinstance(node, ast.ImportFrom) and node.module
+                ]
+                imports.extend(
+                    alias.name
+                    for node in ast.walk(tree)
+                    if isinstance(node, ast.Import)
+                    for alias in node.names
+                )
+                for name in imports:
+                    if name.startswith("src.modules.contact_points."):
+                        self.assertTrue(
+                            (project / (name.replace(".", "/") + ".py")).is_file(),
+                            f"{path}: indirect or removed import {name}",
+                        )
 
 
 if __name__ == "__main__":

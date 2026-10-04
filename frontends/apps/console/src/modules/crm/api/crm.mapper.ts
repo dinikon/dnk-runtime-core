@@ -1,6 +1,6 @@
 import { mapContactPoint } from "@/modules/contact-points";
-import type { CompanyDto, ContactDto, PageDto } from "./crm.dto";
-import type { Company, Contact, Page } from "../model/crm.types";
+import type { ContactDto, CompanyDto, ContactPointsDto } from "./crm.dto";
+import type { Contact, Company, CrmContactPoints } from "../model/crm.types";
 
 export function mapContact(dto: ContactDto): Contact {
   return {
@@ -15,44 +15,23 @@ export function mapContact(dto: ContactDto): Contact {
     updatedAt: dto.updated_at,
     createdBy: dto.created_by,
     updatedBy: dto.updated_by,
-    phones: dto.phones.map(mapContactPoint),
-    emails: dto.emails.map(mapContactPoint),
   };
 }
 
 export function mapCompany(dto: CompanyDto): Company {
   return {
     id: dto.id,
-    name: dto.name,
+    legalName: dto.legal_name,
     createdAt: dto.created_at,
     updatedAt: dto.updated_at,
     createdBy: dto.created_by,
     updatedBy: dto.updated_by,
+  };
+}
+
+export function mapContactPoints(dto: ContactPointsDto): CrmContactPoints {
+  return {
     phones: dto.phones.map(mapContactPoint),
     emails: dto.emails.map(mapContactPoint),
   };
-}
-
-export function mapPage<TDto, TModel>(
-  dto: PageDto<TDto>,
-  mapper: (item: TDto) => TModel,
-): Page<TModel> {
-  return {
-    items: dto.items.map(mapper),
-    total: dto.total,
-    limit: dto.limit,
-    offset: dto.offset,
-  };
-}
-
-export function mapContactDetails(
-  dto: import("./crm.dto").ContactDetailsDto,
-): import("../model/crm.types").ContactDetails {
-  return { ...mapContact(dto), companies: dto.companies };
-}
-
-export function mapCompanyDetails(
-  dto: import("./crm.dto").CompanyDetailsDto,
-): import("../model/crm.types").CompanyDetails {
-  return { ...mapCompany(dto), contacts: dto.contacts };
 }

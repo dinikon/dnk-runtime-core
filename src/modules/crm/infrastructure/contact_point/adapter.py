@@ -1,20 +1,20 @@
-from src.modules.contact_points.application.binding.command.remove_target_contact_points_command import (
+from src.modules.contact_points.application.binding.command.remove_target_contact_points.command import (
     RemoveTargetContactPointsCommand,
 )
-from src.modules.contact_points.application.binding.command.sync_target_contact_points_command import (
+from src.modules.contact_points.application.binding.command.sync_target_contact_points.command import (
     SyncTargetContactPointsCommand,
 )
-from src.modules.contact_points.application.binding.query.get_targets_contact_points_query import (
+from src.modules.contact_points.application.binding.query.get_targets_contact_points.query import (
     GetTargetsContactPointsQuery,
 )
-from src.modules.contact_points.application.binding.use_case.get_targets_contact_points import (
-    GetTargetsContactPointsUseCase,
+from src.modules.contact_points.application.binding.query.get_targets_contact_points.handler import (
+    GetTargetsContactPointsHandler,
 )
-from src.modules.contact_points.application.binding.use_case.remove_target_contact_points import (
-    RemoveTargetContactPointsUseCase,
+from src.modules.contact_points.application.binding.command.remove_target_contact_points.handler import (
+    RemoveTargetContactPointsHandler,
 )
-from src.modules.contact_points.application.binding.use_case.sync_target_contact_points import (
-    SyncTargetContactPointsUseCase,
+from src.modules.contact_points.application.binding.command.sync_target_contact_points.handler import (
+    SyncTargetContactPointsHandler,
 )
 from src.modules.contact_points.domain.binding.value_object.draft import (
     ContactPointDraftVO,
@@ -49,9 +49,9 @@ class ContactPointsAdapter:
     def __init__(
         self,
         model_key: str,
-        reader: GetTargetsContactPointsUseCase,
-        writer: SyncTargetContactPointsUseCase,
-        remover: RemoveTargetContactPointsUseCase,
+        reader: GetTargetsContactPointsHandler,
+        writer: SyncTargetContactPointsHandler,
+        remover: RemoveTargetContactPointsHandler,
         uuid_generator: UUIdGeneratorProtocol,
     ) -> None:
         self._model_key = model_key
@@ -68,7 +68,7 @@ class ContactPointsAdapter:
     async def list(
         self, tenant_id: EntityIdVO, owner_id: EntityIdVO
     ) -> ContactPointsDTO:
-        rows = await self._reader(
+        rows = await self._reader.execute(
             GetTargetsContactPointsQuery(tenant_id, (self._target(owner_id),))
         )
         points = tuple(
@@ -123,7 +123,7 @@ class ContactPointsAdapter:
         phones: tuple[ContactPointDraftDTO, ...] | None,
         emails: tuple[ContactPointDraftDTO, ...] | None,
     ) -> None:
-        await self._writer(
+        await self._writer.execute(
             SyncTargetContactPointsCommand(
                 tenant_id=tenant_id,
                 actor_id=actor_id,
@@ -134,6 +134,6 @@ class ContactPointsAdapter:
         )
 
     async def remove(self, tenant_id: EntityIdVO, owner_id: EntityIdVO) -> None:
-        await self._remover(
+        await self._remover.execute(
             RemoveTargetContactPointsCommand(tenant_id, self._target(owner_id))
         )

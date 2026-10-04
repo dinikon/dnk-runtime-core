@@ -1,5 +1,5 @@
 from typing import Protocol
-from src.modules.contact_points.domain.label.entity import ContactPointLabel
+from src.modules.contact_points.domain.label.aggregate import ContactPointLabel
 from src.modules.contact_points.domain.label.value_object.identifier import (
     ContactPointLabelIdVO,
 )

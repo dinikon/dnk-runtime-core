@@ -1,12 +1,11 @@
-import { computed, type Ref } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { crmContactsApi } from "../api/crm.api";
-import { contactKeys } from "./crm.query-keys";
-import type { ListParams } from "./crm.types";
+import { CRM_QUERY_STALE_TIME, crmKeys } from "./crm.query-keys";
 
-export function useContactsQuery(params: Ref<ListParams>) {
+export function useContactsQuery() {
   return useQuery({
-    queryKey: computed(() => contactKeys.list(params.value)),
-    queryFn: ({ signal }) => crmContactsApi.list(params.value, signal),
+    queryKey: crmKeys.list("contacts"),
+    queryFn: ({ signal }) => crmContactsApi.list(signal),
+    staleTime: CRM_QUERY_STALE_TIME,
   });
 }

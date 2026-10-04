@@ -14,7 +14,7 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.schema import CreateSchema, DropSchema
 
 from src.config import dnk_config
-from src.modules.contact_points.presentation.http.router import router as points_router
+from src.modules.contact_points.presentation.label.router import router as points_router
 from src.modules.identity.presentation.auth.http.csrf import issue_csrf
 from src.modules.identity.presentation.auth.depends import (
     require_authenticated_request_context,
@@ -32,13 +32,13 @@ from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations imp
     TenantMigrator,
 )
 from src.modules.shared.infrastructure.persistence import UnitOfWork
-from src.modules.contact_points.infrastructure.persistence import (
+from src.modules.contact_points.infrastructure.persistence.models.contact_point_label import (
     ContactPointLabelModel,
 )
-from src.modules.contact_points.infrastructure.persistence.repository.binding_repository import (
+from src.modules.contact_points.infrastructure.binding.persistence.repository import (
     SqlAlchemyContactPointBindingRepository,
 )
-from src.modules.contact_points.infrastructure.persistence import (
+from src.modules.contact_points.infrastructure.contact_point.persistence.repository import (
     SqlAlchemyContactPointRepository,
 )
 from src.modules.contact_points.domain.contact_point.value_object.value import (
@@ -126,9 +126,13 @@ class ContactPointsPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
 
     async def test_request_dependency_graph_shares_session_and_commits_once(self):
-        from src.modules.contact_points.presentation.depends.infrastructure import (
+        from src.modules.contact_points.presentation.contact_point.depends import (
             ContactPointRepositoryDep,
+        )
+        from src.modules.contact_points.presentation.binding.depends import (
             ContactPointBindingRepositoryDep,
+        )
+        from src.modules.contact_points.presentation.label.depends import (
             ContactPointLabelRepositoryDep,
         )
         from src.modules.shared.presentation.persistence.depends import UoWDep
@@ -166,7 +170,9 @@ class ContactPointsPostgresTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_same_ids_in_two_tenants_through_one_session_and_repositories(self):
         from datetime import UTC, datetime, timedelta
-        from src.modules.contact_points.domain.contact_point.entity import ContactPoint
+        from src.modules.contact_points.domain.contact_point.aggregate import (
+            ContactPoint,
+        )
         from src.modules.contact_points.domain.contact_point.value_object.identifier import (
             ContactPointIdVO,
         )
@@ -180,14 +186,14 @@ class ContactPointsPostgresTests(unittest.IsolatedAsyncioTestCase):
         from src.modules.contact_points.domain.binding.value_object.target import (
             ContactPointTargetVO,
         )
-        from src.modules.contact_points.domain.label.entity import ContactPointLabel
+        from src.modules.contact_points.domain.label.aggregate import ContactPointLabel
         from src.modules.contact_points.domain.label.value_object.identifier import (
             ContactPointLabelIdVO,
         )
-        from src.modules.contact_points.infrastructure.normalization.phone import (
+        from src.modules.contact_points.infrastructure.contact_point.normalization.phone import (
             PhoneNormalizer,
         )
-        from src.modules.contact_points.infrastructure.persistence import (
+        from src.modules.contact_points.infrastructure.label.persistence.repository import (
             SqlAlchemyContactPointLabelRepository,
         )
 

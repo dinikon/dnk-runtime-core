@@ -1,5 +1,5 @@
 from collections.abc import Mapping
-from src.modules.contact_points.domain.contact_point.entity import ContactPoint
+from src.modules.contact_points.domain.contact_point.aggregate import ContactPoint
 from src.modules.contact_points.domain.contact_point.repository import (
     ContactPointRepositoryProtocol,
 )
