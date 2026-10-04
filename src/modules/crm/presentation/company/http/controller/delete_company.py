@@ -11,6 +11,7 @@ from src.modules.crm.presentation.company.depends import DeleteCompanyHandlerDep
 from src.modules.identity.presentation.auth.depends import (
     AuthenticatedRequestContextDep,
 )
+from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 
 
 async def delete_company(
@@ -22,7 +23,12 @@ async def delete_company(
     if principal is None or not principal.tenant_id:
         raise HTTPException(403, "Tenant context is required.")
     try:
-        await handler.execute(DeleteCompanyCommand(CompanyIdVO.from_value(company_id)))
+        await handler.execute(
+            DeleteCompanyCommand(
+                CompanyIdVO.from_value(company_id),
+                EntityIdVO.from_value(principal.tenant_id),
+            )
+        )
     except CompanyNotFoundError as exc:
         raise HTTPException(404, str(exc)) from exc
     return Response(status_code=204)

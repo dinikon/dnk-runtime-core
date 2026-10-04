@@ -241,7 +241,7 @@ class ContactMethodsHttpTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.delete(self.url, headers=self.headers)
         self.assertEqual(response.status_code, 204, response.text)
         self.assertEqual(response.content, b"")
-        self.assertEqual(self.session.execute.await_count, 2)
+        self.assertEqual(self.session.execute.await_count, 3)
         self.result.mappings.return_value.one_or_none.return_value = None
         response = await self.client.delete(self.url, headers=self.headers)
         self.assertEqual(response.status_code, 404)

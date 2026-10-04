@@ -7,6 +7,15 @@ from src.modules.crm.presentation.contact.http.controller.delete_contact import 
     delete_contact,
 )
 from src.modules.crm.presentation.contact.http.controller.get_contact import get_contact
+from src.modules.crm.presentation.contact.http.controller.get_contact_points import (
+    get_contact_contact_points,
+)
+from src.modules.crm.presentation.contact.http.controller.put_contact_points import (
+    put_contact_contact_points,
+)
+from src.modules.crm.presentation.contact.http.controller.patch_contact_points import (
+    patch_contact_contact_points,
+)
 from src.modules.crm.presentation.contact.http.controller.list_contacts import (
     list_contacts,
 )
@@ -28,6 +37,15 @@ from src.modules.crm.presentation.contact.http.response.create_contact import (
 )
 from src.modules.crm.presentation.contact.http.response.get_contact import (
     GetContactResponse,
+)
+from src.modules.crm.presentation.contact.http.response.get_contact_points import (
+    GetContactContactPointsResponse,
+)
+from src.modules.crm.presentation.contact.http.response.put_contact_points import (
+    PutContactContactPointsResponse,
+)
+from src.modules.crm.presentation.contact.http.response.patch_contact_points import (
+    PatchContactContactPointsResponse,
 )
 from src.modules.crm.presentation.contact.http.response.list_contacts import (
     ListContactItemResponse,
@@ -114,6 +132,33 @@ router.add_api_route(
     link_company,
     methods=["PUT"],
     status_code=204,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
+router.add_api_route(
+    "/{contact_id}/contact-points",
+    get_contact_contact_points,
+    methods=["GET"],
+    response_model=GetContactContactPointsResponse,
+    dependencies=[Depends(require_authenticated_request_context)],
+)
+router.add_api_route(
+    "/{contact_id}/contact-points",
+    put_contact_contact_points,
+    methods=["PUT"],
+    response_model=PutContactContactPointsResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
+router.add_api_route(
+    "/{contact_id}/contact-points",
+    patch_contact_contact_points,
+    methods=["PATCH"],
+    response_model=PatchContactContactPointsResponse,
     dependencies=[
         Depends(require_authenticated_request_context),
         Depends(require_csrf),

@@ -137,9 +137,12 @@ class CompanyHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.repository.get_for_update.await_count, 2)
 
     async def test_delete_uses_locked_aggregate(self):
-        await DeleteCompanyHandler(self.repository).execute(
-            DeleteCompanyCommand(self.company.id)
+        points = Mock(remove=AsyncMock())
+        tenant = EntityIdVO(uuid4())
+        await DeleteCompanyHandler(self.repository, points).execute(
+            DeleteCompanyCommand(self.company.id, tenant)
         )
+        points.remove.assert_awaited_once_with(tenant, self.company.id)
         self.repository.delete.assert_awaited_once_with(self.company)
 
     async def test_absence_and_storage_errors_propagate(self):
@@ -149,9 +152,11 @@ class CompanyHandlerTests(unittest.IsolatedAsyncioTestCase):
                 UpdateCompanyCommand(self.company.id, self.actor, "New")
             )
         with self.assertRaises(CompanyNotFoundError):
-            await DeleteCompanyHandler(self.repository).execute(
-                DeleteCompanyCommand(self.company.id)
+            points = Mock(remove=AsyncMock())
+            await DeleteCompanyHandler(self.repository, points).execute(
+                DeleteCompanyCommand(self.company.id, EntityIdVO(uuid4()))
             )
+        points.remove.assert_not_awaited()
         self.repository.add.side_effect = RuntimeError("storage")
         with self.assertRaises(RuntimeError):
             await CreateCompanyHandler(self.repository, self.clock, self.uuid).execute(

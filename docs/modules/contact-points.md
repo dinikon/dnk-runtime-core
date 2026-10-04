@@ -43,8 +43,9 @@ No outbox events are emitted because this version has no event consumer.
 
 ## Input and normalization
 
-The former CRM create/update contract used the following payload. Its backend adapter and HTTP endpoints
-have been removed for the [CRM rebuild](crm.md); this example documents the retained Console contract:
+The former CRM create/update contract used the following payload. CRM now exposes
+separate Contact and Company contact-point routes described in [CRM](crm.md).
+The old embedded create/update payload remains a Console migration reference:
 
 ```json
 {
@@ -96,4 +97,4 @@ TEST_POSTGRES_URL=postgresql+asyncpg://... uv run python -m unittest test.test_c
 
 Use a disposable PostgreSQL database. Integration coverage includes shared session identity, identical UUIDs across tenant schemas on one
 session/repository instance, archival permissions/CSRF and transactional migrations. Tests of the removed
-CRM HTTP integration have been removed; independent contact point tests remain. See [the implementation plan](../plan/contact_point_module.md) for scope.
+CRM extension tests cover its owner-specific HTTP integration; independent contact point tests remain. See [the implementation plan](../plan/contact_point_module.md) for scope.

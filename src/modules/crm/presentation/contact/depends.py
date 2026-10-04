@@ -17,6 +17,12 @@ from src.modules.crm.application.contact.query.list_contacts.handler import (
 from src.modules.crm.application.contact.query.list_companies.handler import (
     ListContactCompaniesHandler,
 )
+from src.modules.crm.application.contact.query.list_contact_points.handler import (
+    ListContactContactPointsHandler,
+)
+from src.modules.crm.application.contact.command.sync_contact_points.handler import (
+    SyncContactContactPointsHandler,
+)
 from src.modules.crm.application.contact.port.company_link_query_repository import (
     ContactCompanyQueryRepositoryProtocol,
 )
@@ -39,6 +45,7 @@ from src.modules.crm.infrastructure.contact.persistence.repository import (
 from src.modules.shared.presentation.persistence.depends import UoWDep
 from src.modules.shared.presentation.time.depends import ClockDep
 from src.modules.shared.presentation.uuid.depends import UuidDep
+from src.modules.crm.presentation.depends.contact_points import ContactContactPointsDep
 
 
 def get_contact_repository(uow: UoWDep) -> ContactRepositoryProtocol:
@@ -105,8 +112,9 @@ UpdateContactHandlerDep = Annotated[
 
 def get_delete_contact_handler(
     repository: ContactRepositoryDep,
+    points: ContactContactPointsDep,
 ) -> DeleteContactHandler:
-    return DeleteContactHandler(repository)
+    return DeleteContactHandler(repository, points)
 
 
 DeleteContactHandlerDep = Annotated[
@@ -135,4 +143,28 @@ def get_list_contact_companies_handler(
 ListContactCompaniesHandlerDep = Annotated[
     ListContactCompaniesHandler,
     Depends(get_list_contact_companies_handler),
+]
+
+
+def get_list_contact_contact_points_handler(
+    repository: ContactQueryRepositoryDep, points: ContactContactPointsDep
+) -> ListContactContactPointsHandler:
+    return ListContactContactPointsHandler(repository, points)
+
+
+ListContactContactPointsHandlerDep = Annotated[
+    ListContactContactPointsHandler,
+    Depends(get_list_contact_contact_points_handler),
+]
+
+
+def get_sync_contact_contact_points_handler(
+    repository: ContactRepositoryDep, points: ContactContactPointsDep
+) -> SyncContactContactPointsHandler:
+    return SyncContactContactPointsHandler(repository, points)
+
+
+SyncContactContactPointsHandlerDep = Annotated[
+    SyncContactContactPointsHandler,
+    Depends(get_sync_contact_contact_points_handler),
 ]

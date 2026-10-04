@@ -11,6 +11,7 @@ from src.modules.crm.presentation.contact.depends import DeleteContactHandlerDep
 from src.modules.identity.presentation.auth.depends import (
     AuthenticatedRequestContextDep,
 )
+from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 
 
 async def delete_contact(
@@ -23,7 +24,12 @@ async def delete_contact(
     if principal is None or not principal.tenant_id:
         raise HTTPException(403, "Tenant context is required.")
     try:
-        await handler.execute(DeleteContactCommand(ContactIdVO.from_value(contact_id)))
+        await handler.execute(
+            DeleteContactCommand(
+                ContactIdVO.from_value(contact_id),
+                EntityIdVO.from_value(principal.tenant_id),
+            )
+        )
     except ContactNotFoundError as exc:
         raise HTTPException(404, str(exc)) from exc
     return Response(status_code=204)

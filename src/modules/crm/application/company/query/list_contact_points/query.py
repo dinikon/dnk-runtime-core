@@ -5,6 +5,6 @@ from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 
 
 @dataclass(frozen=True, slots=True)
-class DeleteCompanyCommand:
-    company_id: CompanyIdVO
+class ListCompanyContactPointsQuery:
     tenant_id: EntityIdVO
+    company_id: CompanyIdVO
