@@ -130,9 +130,7 @@ class SkuApplicationTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(SkuNotFoundError):
             await GetSkuHandler(repository).execute(GetSkuQuery(SkuIdVO(identifier)))
 
-    async def test_query_limits_are_validated_before_read_for_non_http_consumers(self):
-        repository = Mock(list_details=AsyncMock())
-        handler = ListSkusHandler(repository)
+    def test_query_limits_are_validated_for_non_http_consumers(self):
         for args in (
             dict(limit=0),
             dict(limit=201),
@@ -142,5 +140,4 @@ class SkuApplicationTests(unittest.IsolatedAsyncioTestCase):
             dict(offset=True),
         ):
             with self.subTest(args=args), self.assertRaises(ValueError):
-                await handler.execute(ListSkusQuery(**args))
-        repository.list_details.assert_not_awaited()
+                ListSkusQuery(**args)

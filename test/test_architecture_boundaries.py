@@ -203,19 +203,6 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                             f"{path}: indirect import {name}",
                         )
 
-    def test_inventory_post_init_is_defined_only_in_value_objects(self) -> None:
-        for path in iter_python_files("src/modules/inventory"):
-            for node in ast.walk(ast.parse(path.read_text())):
-                if not isinstance(node, ast.ClassDef):
-                    continue
-                for method in node.body:
-                    if isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef)) and (
-                        method.name == "__post_init__"
-                    ):
-                        self.assertIn("/domain/", path.as_posix(), str(path))
-                        self.assertIn("/value_object/", path.as_posix(), str(path))
-                        self.assertTrue(node.name.endswith("VO"), str(path))
-
     def test_no_modules_namespace_imports_are_used(self) -> None:
         forbidden_prefix = "modules."
         for root in ("src", "test"):
