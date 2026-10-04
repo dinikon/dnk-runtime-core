@@ -23,21 +23,6 @@ class Warehouse:
     created_by: EntityIdVO
     updated_by: EntityIdVO
 
-    def __post_init__(self) -> None:
-        if type(self.id) is not WarehouseIdVO or (
-            self.parent_id is not None and type(self.parent_id) is not WarehouseIdVO
-        ):
-            raise EntityIdTypeError("Warehouse identifiers must use WarehouseIdVO.")
-        if not isinstance(self.created_by, EntityIdVO) or not isinstance(
-            self.updated_by, EntityIdVO
-        ):
-            raise EntityIdTypeError("Warehouse audit identifiers must use EntityIdVO.")
-        if not isinstance(self.title, EntityTitleVO) or not self.title.value.strip():
-            raise InvalidWarehouseTitleError("Warehouse title must not be empty.")
-        self.title = EntityTitleVO(self.title.value.strip())
-        if self.parent_id == self.id:
-            raise WarehouseSelfParentError("Warehouse cannot be its own parent.")
-
     @classmethod
     def create(
         cls,
@@ -49,8 +34,18 @@ class Warehouse:
         parent_id: WarehouseIdVO | None = None,
     ) -> "Warehouse":
         """Создаёт склад с едиными значениями времени и авторства."""
+        if type(warehouse_id) is not WarehouseIdVO or (
+            parent_id is not None and type(parent_id) is not WarehouseIdVO
+        ):
+            raise EntityIdTypeError("Warehouse identifiers must use WarehouseIdVO.")
+        if not isinstance(actor_id, EntityIdVO):
+            raise EntityIdTypeError("Warehouse audit identifiers must use EntityIdVO.")
+        if parent_id == warehouse_id:
+            raise WarehouseSelfParentError("Warehouse cannot be its own parent.")
         if not isinstance(title, str):
             raise InvalidWarehouseTitleError("Warehouse title must be a string.")
+        if not title.strip():
+            raise InvalidWarehouseTitleError("Warehouse title must not be empty.")
         try:
             title_vo = EntityTitleVO(title.strip())
         except ValueError as exc:

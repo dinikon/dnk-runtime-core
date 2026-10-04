@@ -163,6 +163,59 @@ class ArchitectureBoundariesTests(unittest.TestCase):
             for name in iter_imports(path):
                 self.assertFalse(name.startswith(forbidden), f"{path} imports {name}")
 
+    def test_inventory_sku_application_and_persistence_keep_boundaries(self) -> None:
+        forbidden = (
+            "sqlalchemy",
+            "alembic",
+            "fastapi",
+            "pydantic",
+            "src.config",
+            "src.modules.inventory.infrastructure",
+            "src.modules.inventory.presentation",
+            "src.modules.shared.infrastructure",
+            "src.modules.shared.presentation",
+        )
+        for path in iter_python_files("src/modules/inventory/application/sku"):
+            for name in iter_imports(path):
+                self.assertFalse(name.startswith(forbidden), f"{path}: {name}")
+        for root in ("application/sku", "infrastructure/sku/persistence"):
+            for path in iter_python_files("src/modules/inventory/" + root):
+                for node in ast.walk(ast.parse(path.read_text())):
+                    if isinstance(node, ast.Call) and isinstance(
+                        node.func, ast.Attribute
+                    ):
+                        self.assertNotIn(
+                            node.func.attr, ("commit", "rollback"), str(path)
+                        )
+        for root in (
+            "domain/sku",
+            "application/sku",
+            "infrastructure/sku",
+            "presentation/sku",
+        ):
+            for path in iter_python_files("src/modules/inventory/" + root):
+                if path.name == "__init__.py":
+                    self.assertEqual(path.read_text().strip(), "", str(path))
+                for name in iter_imports(path):
+                    if name.startswith("src.modules"):
+                        self.assertTrue(
+                            (PROJECT_ROOT / (name.replace(".", "/") + ".py")).is_file(),
+                            f"{path}: indirect import {name}",
+                        )
+
+    def test_inventory_post_init_is_defined_only_in_value_objects(self) -> None:
+        for path in iter_python_files("src/modules/inventory"):
+            for node in ast.walk(ast.parse(path.read_text())):
+                if not isinstance(node, ast.ClassDef):
+                    continue
+                for method in node.body:
+                    if isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef)) and (
+                        method.name == "__post_init__"
+                    ):
+                        self.assertIn("/domain/", path.as_posix(), str(path))
+                        self.assertIn("/value_object/", path.as_posix(), str(path))
+                        self.assertTrue(node.name.endswith("VO"), str(path))
+
     def test_no_modules_namespace_imports_are_used(self) -> None:
         forbidden_prefix = "modules."
         for root in ("src", "test"):
