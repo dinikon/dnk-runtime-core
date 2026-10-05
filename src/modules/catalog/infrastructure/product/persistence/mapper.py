@@ -21,9 +21,7 @@ class ProductMapper:
         return dict(
             id=variant.id.uuid,
             product_id=product.id.uuid,
-            product_type=product.type,
             sku_id=variant.sku_id.uuid,
-            combination_key=variant.combination_key,
         )
 
     @staticmethod

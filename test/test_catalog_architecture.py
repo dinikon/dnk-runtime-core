@@ -46,7 +46,6 @@ class CatalogArchitectureTests(unittest.TestCase):
         for layer in (
             "application",
             "infrastructure/product/persistence",
-            "infrastructure/attribute/persistence",
         ):
             for path in (CATALOG / layer).rglob("*.py"):
                 tree = ast.parse(path.read_text())
@@ -60,31 +59,14 @@ class CatalogArchitectureTests(unittest.TestCase):
                 if "repository.py" in path.name:
                     self.assertNotIn("schema_translate_map", path.read_text())
 
-    def test_attribute_core_does_not_depend_on_product_core(self) -> None:
-        for layer in ("domain", "application"):
-            for path in (CATALOG / layer / "attribute").rglob("*.py"):
-                self.assertFalse(
-                    any(
-                        name.startswith(f"src.modules.catalog.{layer}.product")
-                        for name in imported_modules(path)
-                    ),
-                    str(path),
-                )
-
     def test_entrypoints_import_independently(self) -> None:
         for module in (
             "src.modules.catalog.domain.product.aggregate",
-            "src.modules.catalog.domain.attribute.aggregate",
             "src.modules.catalog.application.product.command.create_product.handler",
-            "src.modules.catalog.application.product.command.create_variable_product.handler",
-            "src.modules.catalog.application.attribute.command.create_attribute.handler",
             "src.modules.catalog.application.product.query.get_product.handler",
             "src.modules.catalog.infrastructure.persistence.models.product",
-            "src.modules.catalog.infrastructure.persistence.models.attribute",
             "src.modules.catalog.infrastructure.product.persistence.repository",
-            "src.modules.catalog.infrastructure.attribute.persistence.repository",
             "src.modules.catalog.presentation.product.router",
-            "src.modules.catalog.presentation.attribute.router",
             "src.modules.tenant_persistence",
         ):
             result = subprocess.run(

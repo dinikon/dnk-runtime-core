@@ -34,9 +34,9 @@ schemas before using the SKU API; fresh tenants receive it through the same boot
 Revision `0012_catalog_simple` adds tenant-local Product, Variant and translation
 tables. It does not create locale settings or a default language; translation codes
 are validated against active public reference data at write time.
-Revision `0013_catalog_variable` permits multiple Variants on VARIABLE products,
-adds tenant-local SELECT attributes, options, their translations and variant
-selections. The SIMPLE invariant remains protected by a partial unique index.
+Catalog migrations currently end at `0012_catalog_simple`. Disposable development
+schemas that previously reached the removed `0013_catalog_variable` revision must
+be recreated before running tenant migrations again.
 Revisions contain no fixed tenant names and do not import current ORM models.
 
 The migration environment uses transaction-local `search_path` (through PostgreSQL `set_config(..., true)`) and explicitly sets `version_table_schema`. Successful execution restores the previous path. Failed transactions are rolled back by the owner. Migration files must preserve transactional execution: no internal commit, autocommit block or nontransactional DDL in onboarding revisions.

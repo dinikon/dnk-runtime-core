@@ -5,16 +5,10 @@ from fastapi import Depends
 from src.modules.catalog.application.product.command.create_product.handler import (
     CreateProductHandler,
 )
-from src.modules.catalog.application.product.command.create_variable_product.handler import (
-    CreateVariableProductHandler,
-)
 from src.modules.catalog.application.product.command.put_product_content.handler import (
     PutProductContentHandler,
 )
 from src.modules.catalog.application.product.port.locale_reader import LocaleReaderPort
-from src.modules.catalog.application.product.port.attribute_reader import (
-    AttributeReaderPort,
-)
 from src.modules.catalog.application.product.port.query_repository import (
     ProductQueryRepositoryProtocol,
 )
@@ -25,9 +19,6 @@ from src.modules.catalog.application.product.query.get_product.handler import (
 from src.modules.catalog.domain.product.repository import ProductRepositoryProtocol
 from src.modules.catalog.infrastructure.product.inventory_sku_reader import (
     InventorySkuReaderAdapter,
-)
-from src.modules.catalog.infrastructure.attribute.persistence.query_repository import (
-    SqlAlchemyAttributeQueryRepository,
 )
 from src.modules.catalog.infrastructure.product.persistence.query_repository import (
     SqlAlchemyProductQueryRepository,
@@ -81,13 +72,6 @@ def get_locale_reader(uow: UoWDep) -> LocaleReaderPort:
 LocaleReaderDep = Annotated[LocaleReaderPort, Depends(get_locale_reader)]
 
 
-def get_attribute_reader(uow: UoWDep) -> AttributeReaderPort:
-    return SqlAlchemyAttributeQueryRepository(uow.session)
-
-
-AttributeReaderDep = Annotated[AttributeReaderPort, Depends(get_attribute_reader)]
-
-
 def get_create_product_handler(
     repository: ProductRepositoryDep,
     skus: SkuReaderDep,
@@ -100,24 +84,6 @@ def get_create_product_handler(
 
 CreateProductHandlerDep = Annotated[
     CreateProductHandler, Depends(get_create_product_handler)
-]
-
-
-def get_create_variable_product_handler(
-    repository: ProductRepositoryDep,
-    skus: SkuReaderDep,
-    attributes: AttributeReaderDep,
-    locales: LocaleReaderDep,
-    clock: ClockDep,
-    uuids: UuidDep,
-) -> CreateVariableProductHandler:
-    return CreateVariableProductHandler(
-        repository, skus, attributes, locales, clock, uuids
-    )
-
-
-CreateVariableProductHandlerDep = Annotated[
-    CreateVariableProductHandler, Depends(get_create_variable_product_handler)
 ]
 
 

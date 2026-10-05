@@ -24,23 +24,6 @@ from src.modules.catalog.application.product.command.create_product.command impo
 from src.modules.catalog.application.product.command.create_product.handler import (
     CreateProductHandler,
 )
-from src.modules.catalog.application.attribute.command.create_attribute.command import (
-    CreateAttributeCommand,
-    CreateAttributeContent,
-    CreateAttributeOption,
-)
-from src.modules.catalog.application.attribute.command.create_attribute.handler import (
-    CreateAttributeHandler,
-)
-from src.modules.catalog.application.product.command.create_variable_product.command import (
-    CreateVariableProductCommand,
-    CreateVariableProductContent,
-    CreateVariableVariant,
-    CreateVariantSelection,
-)
-from src.modules.catalog.application.product.command.create_variable_product.handler import (
-    CreateVariableProductHandler,
-)
 from src.modules.catalog.application.product.command.put_product_content.command import (
     PutProductContentCommand,
 )
@@ -56,20 +39,12 @@ from src.modules.catalog.application.product.query.get_product.query import (
 from src.modules.catalog.domain.product.error import (
     ProductLocaleUnavailableError,
     ProductNotFoundError,
-    ProductOptionUnavailableError,
     ProductSkuNotFoundError,
 )
 from src.modules.catalog.domain.product.value_object.identifier import ProductIdVO
-from src.modules.catalog.domain.attribute.locale import AttributeLocaleVO
 from src.modules.catalog.domain.product.value_object.locale import ProductLocaleVO
 from src.modules.catalog.infrastructure.persistence.models.product import ProductModel
 from src.modules.catalog.infrastructure.persistence.models.variant import VariantModel
-from src.modules.catalog.infrastructure.attribute.persistence.query_repository import (
-    SqlAlchemyAttributeQueryRepository,
-)
-from src.modules.catalog.infrastructure.attribute.persistence.repository import (
-    SqlAlchemyAttributeRepository,
-)
 from src.modules.catalog.infrastructure.product.inventory_sku_reader import (
     InventorySkuReaderAdapter,
 )
@@ -83,7 +58,6 @@ from src.modules.catalog.infrastructure.reference_locale_reader import (
     ReferenceLocaleReaderAdapter,
 )
 from src.modules.catalog.presentation.product.router import router as product_router
-from src.modules.catalog.presentation.attribute.router import router as attribute_router
 from src.modules.identity.domain.auth.principal import Principal
 from src.modules.identity.domain.auth.request_context import RequestContext
 from src.modules.identity.presentation.auth.depends import get_optional_request_context
@@ -262,201 +236,6 @@ class CatalogProductPostgresTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
 
-    async def test_attribute_and_variable_product_persist_in_tenant(self) -> None:
-        second_sku = uuid4()
-        third_sku = uuid4()
-        async with self.tenant_uow(0) as uow:
-            await uow.session.execute(
-                insert(SkuModel),
-                [
-                    dict(
-                        id=identifier,
-                        code=f"SKU-{index}",
-                        title=f"SKU {index}",
-                        created_by=self.actor.uuid,
-                        updated_by=self.actor.uuid,
-                    )
-                    for index, identifier in enumerate((second_sku, third_sku), start=2)
-                ],
-            )
-            locales = ReferenceLocaleReaderAdapter(
-                SqlAlchemyCatalogRepository(uow.session)
-            )
-            attribute_handler = CreateAttributeHandler(
-                SqlAlchemyAttributeRepository(uow.session),
-                locales,
-                Mock(now=Mock(return_value=self.now)),
-                Mock(new=Mock(side_effect=uuid4)),
-            )
-            attribute = await attribute_handler.execute(
-                CreateAttributeCommand(
-                    actor_id=self.actor,
-                    code="capsules",
-                    options=tuple(
-                        CreateAttributeOption(
-                            code,
-                            (CreateAttributeContent("uk", f"{code} капсул"),),
-                        )
-                        for code in ("100", "200", "500")
-                    ),
-                    contents=(CreateAttributeContent("uk", "Капсули"),),
-                )
-            )
-            self.assertEqual(attribute.code, "capsules")
-            reader = SqlAlchemyAttributeQueryRepository(uow.session)
-            details = await reader.get_details(
-                EntityIdVO(attribute.id), AttributeLocaleVO("uk")
-            )
-            self.assertEqual(details.name, "Капсули")
-            self.assertEqual(len(details.options), 3)
-            self.assertEqual(len(await reader.list_details(AttributeLocaleVO("uk"))), 1)
-            sku_reader = InventorySkuReaderAdapter(
-                SqlAlchemySkuQueryRepository(uow.session)
-            )
-            product_handler = CreateVariableProductHandler(
-                SqlAlchemyProductRepository(uow.session),
-                sku_reader,
-                reader,
-                locales,
-                Mock(now=Mock(return_value=self.now)),
-                Mock(new=Mock(side_effect=uuid4)),
-            )
-            created = await product_handler.execute(
-                CreateVariableProductCommand(
-                    actor_id=self.actor,
-                    variants=tuple(
-                        CreateVariableVariant(
-                            sku_id=sku_id,
-                            selections=(
-                                CreateVariantSelection(attribute.id, option.id),
-                            ),
-                        )
-                        for sku_id, option in zip(
-                            (self.sku_id, second_sku, third_sku), attribute.options
-                        )
-                    ),
-                    contents=(CreateVariableProductContent("uk", "Omega 3"),),
-                )
-            )
-            self.assertEqual(len(created.variants), 3)
-        async with self.tenant_uow(0) as uow:
-            _, get, put = self.handlers(uow.session)
-            details = await get.execute(
-                GetProductQuery(ProductIdVO(created.id), ProductLocaleVO("uk"))
-            )
-            self.assertEqual(details.type, "VARIABLE")
-            self.assertEqual(len(details.variants), 3)
-            self.assertEqual(details.content.name, "Omega 3")
-            self.assertEqual(
-                details.variants[0].selections[0].attribute_name, "Капсули"
-            )
-            await put.execute(
-                PutProductContentCommand(
-                    ProductIdVO(created.id), self.actor, "ru", "Омега 3"
-                )
-            )
-        rolled_back_id = None
-        with self.assertRaises(RuntimeError):
-            async with self.tenant_uow(0) as uow:
-                reader = SqlAlchemyAttributeQueryRepository(uow.session)
-                sku_reader = InventorySkuReaderAdapter(
-                    SqlAlchemySkuQueryRepository(uow.session)
-                )
-                handler = CreateVariableProductHandler(
-                    SqlAlchemyProductRepository(uow.session),
-                    sku_reader,
-                    reader,
-                    ReferenceLocaleReaderAdapter(
-                        SqlAlchemyCatalogRepository(uow.session)
-                    ),
-                    Mock(now=Mock(return_value=self.now)),
-                    Mock(new=Mock(side_effect=uuid4)),
-                )
-                rolled_back_id = (
-                    await handler.execute(
-                        CreateVariableProductCommand(
-                            actor_id=self.actor,
-                            variants=(
-                                CreateVariableVariant(
-                                    self.sku_id,
-                                    (
-                                        CreateVariantSelection(
-                                            attribute.id, attribute.options[0].id
-                                        ),
-                                    ),
-                                ),
-                                CreateVariableVariant(
-                                    second_sku,
-                                    (
-                                        CreateVariantSelection(
-                                            attribute.id, attribute.options[1].id
-                                        ),
-                                    ),
-                                ),
-                            ),
-                        )
-                    )
-                ).id
-                raise RuntimeError("rollback variable")
-        async with self.tenant_uow(0) as uow:
-            self.assertIsNone(await uow.session.get(ProductModel, rolled_back_id))
-        async with self.tenant_uow(1) as uow:
-            _, get, _ = self.handlers(uow.session)
-            with self.assertRaises(ProductNotFoundError):
-                await get.execute(
-                    GetProductQuery(ProductIdVO(created.id), ProductLocaleVO("uk"))
-                )
-            reader = SqlAlchemyAttributeQueryRepository(uow.session)
-            self.assertEqual(await reader.list_details(AttributeLocaleVO("uk")), ())
-            isolated = CreateVariableProductHandler(
-                SqlAlchemyProductRepository(uow.session),
-                InventorySkuReaderAdapter(SqlAlchemySkuQueryRepository(uow.session)),
-                reader,
-                ReferenceLocaleReaderAdapter(SqlAlchemyCatalogRepository(uow.session)),
-                Mock(now=Mock(return_value=self.now)),
-                Mock(new=Mock(side_effect=uuid4)),
-            )
-            with self.assertRaises(ProductOptionUnavailableError):
-                await isolated.execute(
-                    CreateVariableProductCommand(
-                        actor_id=self.actor,
-                        variants=(
-                            CreateVariableVariant(
-                                self.sku_id,
-                                (
-                                    CreateVariantSelection(
-                                        attribute.id, attribute.options[0].id
-                                    ),
-                                ),
-                            ),
-                            CreateVariableVariant(
-                                self.sku_id,
-                                (
-                                    CreateVariantSelection(
-                                        attribute.id, attribute.options[1].id
-                                    ),
-                                ),
-                            ),
-                        ),
-                    )
-                )
-        async with self.tenant_uow(0) as uow:
-            create, _, _ = self.handlers(uow.session)
-            simple = (
-                await create.execute(CreateProductCommand(self.actor, self.sku_id))
-            ).id
-        with self.assertRaises(IntegrityError):
-            async with self.tenant_uow(0) as uow:
-                await uow.session.execute(
-                    insert(VariantModel).values(
-                        id=uuid4(),
-                        product_id=simple,
-                        product_type="SIMPLE",
-                        sku_id=self.sku_id,
-                        combination_key="ANOTHER",
-                    )
-                )
-
     async def test_http_uses_bound_tenant_connection_and_commits_before_201(
         self,
     ) -> None:
@@ -476,7 +255,6 @@ class CatalogProductPostgresTests(unittest.IsolatedAsyncioTestCase):
             lambda: app.state.test_context
         )
         app.include_router(product_router, prefix="/api/console")
-        app.include_router(attribute_router, prefix="/api/console")
 
         engine = self.engine
         tenant_id = self.tenant_ids[0]
@@ -529,54 +307,9 @@ class CatalogProductPostgresTests(unittest.IsolatedAsyncioTestCase):
                 ]["name"],
                 "Назва",
             )
-            created_attribute = await client.post(
-                "/api/console/catalog/attributes",
-                json={
-                    "code": "capsules",
-                    "options": [{"code": code} for code in ("100", "200", "500")],
-                },
-                headers=headers,
-            )
-            self.assertEqual(created_attribute.status_code, 201, created_attribute.text)
-            attribute = created_attribute.json()
-            duplicate_attribute = await client.post(
-                "/api/console/catalog/attributes",
-                json={"code": "capsules", "options": [{"code": "10"}]},
-                headers=headers,
-            )
-            self.assertEqual(duplicate_attribute.status_code, 409, duplicate_attribute.text)
-            created_variable = await client.post(
-                f"{collection}/variable",
-                json={
-                    "variants": [
-                        {
-                            "sku_id": str(self.sku_id),
-                            "selections": [
-                                {
-                                    "attribute_id": attribute["id"],
-                                    "option_id": option["id"],
-                                }
-                            ],
-                        }
-                        for option in attribute["options"]
-                    ]
-                },
-                headers=headers,
-            )
-            self.assertEqual(created_variable.status_code, 201, created_variable.text)
-            variable_id = created_variable.json()["id"]
-            variable_read = await client.get(f"{collection}/{variable_id}?locale=uk")
-            self.assertEqual(variable_read.status_code, 200, variable_read.text)
-            self.assertEqual(variable_read.json()["type"], "VARIABLE")
-            self.assertEqual(len(variable_read.json()["variants"]), 3)
         async with self.tenant_uow(0) as uow:
             self.assertIsNotNone(
                 await uow.session.scalar(
                     select(ProductModel.id).where(ProductModel.id == product_id)
-                )
-            )
-            self.assertIsNotNone(
-                await uow.session.scalar(
-                    select(ProductModel.id).where(ProductModel.id == variable_id)
                 )
             )

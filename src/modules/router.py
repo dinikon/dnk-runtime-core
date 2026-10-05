@@ -2,9 +2,6 @@ from fastapi import APIRouter
 
 from src.modules.inventory.presentation.sku.router import router as skus_router
 from src.modules.catalog.presentation.product.router import router as products_router
-from src.modules.catalog.presentation.attribute.router import (
-    router as attributes_router,
-)
 from src.modules.crm.presentation.contact.router import router as contacts_router
 from src.modules.crm.presentation.company.router import router as companies_router
 from src.modules.contact_points.presentation.router import (
@@ -29,7 +26,6 @@ router.include_router(tenancy_router)
 router.include_router(reference_data_router)
 router.include_router(skus_router)
 router.include_router(products_router)
-router.include_router(attributes_router)
 router.include_router(identity_router)
 router.include_router(contact_points_router)
 router.include_router(contacts_router)

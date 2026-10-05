@@ -11,11 +11,6 @@ import src.modules.inventory.infrastructure.persistence.models.sku  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.product  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.variant  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.content  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.attribute  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.attribute_option  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.attribute_content  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.option_content  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.variant_selection  # noqa: F401
 import src.modules.identity.infrastructure.persistence.models.user  # noqa: F401
 import src.modules.identity.infrastructure.persistence.models.user_email  # noqa: F401
 import src.modules.identity.infrastructure.persistence.models.cloud_identity
@@ -30,11 +25,6 @@ HISTORICAL_TENANT_TABLE_NAMES = frozenset(
         "catalog_products",
         "catalog_variants",
         "catalog_product_contents",
-        "catalog_attributes",
-        "catalog_attribute_options",
-        "catalog_attribute_contents",
-        "catalog_option_contents",
-        "catalog_variant_selections",
         "contacts",
         "contact_companies",
         "companies",

@@ -9,15 +9,12 @@ from src.modules.tenancy.infrastructure.tenant.persistence.tenant_base import Te
 
 
 class ProductModel(EntityAuditMixin, AudienceMixin, TenantBase):
-    """Карточка SIMPLE или VARIABLE в схеме текущего tenant."""
+    """Карточка SIMPLE в схеме текущего tenant."""
 
     __tablename__ = "catalog_products"
     __table_args__ = (
         sa.PrimaryKeyConstraint("id", name="pk_catalog_products"),
-        sa.CheckConstraint(
-            "type IN ('SIMPLE', 'VARIABLE')", name="ck_catalog_products_type"
-        ),
-        sa.UniqueConstraint("id", "type", name="uq_catalog_products_id_type"),
+        sa.CheckConstraint("type = 'SIMPLE'", name="ck_catalog_products_type"),
     )
 
     type: Mapped[str] = mapped_column(sa.String(16), nullable=False)

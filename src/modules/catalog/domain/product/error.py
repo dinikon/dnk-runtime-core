@@ -27,7 +27,3 @@ class ProductIdentifierAlreadyExistsError(DomainError):
 
 class InvalidProductVariantError(DomainError):
     """Нарушено правило вариантов и их комбинаций."""
-
-
-class ProductOptionUnavailableError(DomainError):
-    """Выбранный option не принадлежит активному атрибуту Catalog."""

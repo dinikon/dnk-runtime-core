@@ -6,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.catalog.domain.product.aggregate import (
     Product,
     ProductVariant,
-    VariantSelection,
 )
 from src.modules.catalog.domain.product.error import ProductIdentifierAlreadyExistsError
 from src.modules.catalog.domain.product.value_object.content import ProductContentVO
@@ -20,9 +19,6 @@ from src.modules.catalog.infrastructure.persistence.models.content import (
 )
 from src.modules.catalog.infrastructure.persistence.models.product import ProductModel
 from src.modules.catalog.infrastructure.persistence.models.variant import VariantModel
-from src.modules.catalog.infrastructure.persistence.models.variant_selection import (
-    VariantSelectionModel,
-)
 from src.modules.catalog.infrastructure.product.persistence.mapper import ProductMapper
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 
@@ -45,17 +41,6 @@ class SqlAlchemyProductRepository:
                     for variant in product.variants
                 ],
             )
-            selections = [
-                dict(
-                    variant_id=variant.id.uuid,
-                    attribute_id=item.attribute_id.uuid,
-                    option_id=item.option_id.uuid,
-                )
-                for variant in product.variants
-                for item in variant.selections
-            ]
-            if selections:
-                await self._session.execute(insert(VariantSelectionModel), selections)
             if product.contents:
                 await self._session.execute(
                     insert(ProductContentModel),
@@ -67,7 +52,7 @@ class SqlAlchemyProductRepository:
         except IntegrityError as exc:
             original = exc.orig
             constraint = getattr(original, "constraint_name", None) or getattr(
-                original.__cause__, "constraint_name", None
+                getattr(original, "__cause__", None), "constraint_name", None
             )
             if getattr(original, "sqlstate", None) == "23505" and constraint in {
                 "pk_catalog_products",
@@ -99,28 +84,6 @@ class SqlAlchemyProductRepository:
             .scalars()
             .all()
         )
-        selections = (
-            (
-                await self._session.execute(
-                    select(VariantSelectionModel)
-                    .join(
-                        VariantModel,
-                        VariantModel.id == VariantSelectionModel.variant_id,
-                    )
-                    .where(VariantModel.product_id == product_id.uuid)
-                )
-            )
-            .scalars()
-            .all()
-        )
-        by_variant = {}
-        for item in selections:
-            by_variant.setdefault(item.variant_id, []).append(
-                VariantSelection(
-                    EntityIdVO.from_value(item.attribute_id),
-                    EntityIdVO.from_value(item.option_id),
-                )
-            )
         content_rows = (
             (
                 await self._session.execute(
@@ -132,14 +95,13 @@ class SqlAlchemyProductRepository:
             .scalars()
             .all()
         )
-        return Product(
-            id=ProductIdVO.from_value(row.id),
+        return Product.restore(
+            product_id=ProductIdVO.from_value(row.id),
             product_type=row.type,
             variants=tuple(
                 ProductVariant(
                     VariantIdVO.from_value(variant.id),
                     EntityIdVO.from_value(variant.sku_id),
-                    tuple(by_variant.get(variant.id, ())),
                 )
                 for variant in variants
             ),

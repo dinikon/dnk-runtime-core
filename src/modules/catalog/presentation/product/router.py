@@ -3,9 +3,6 @@ from fastapi import APIRouter, Depends
 from src.modules.catalog.presentation.product.http.controller.create_product import (
     create_product,
 )
-from src.modules.catalog.presentation.product.http.controller.create_variable_product import (
-    create_variable_product,
-)
 from src.modules.catalog.presentation.product.http.controller.get_product import (
     get_product,
 )
@@ -15,14 +12,8 @@ from src.modules.catalog.presentation.product.http.controller.put_product_conten
 from src.modules.catalog.presentation.product.http.response.create_product import (
     CreateProductResponse,
 )
-from src.modules.catalog.presentation.product.http.response.create_variable_product import (
-    CreateVariableProductResponse,
-)
 from src.modules.catalog.presentation.product.http.response.get_product import (
     GetProductResponse,
-)
-from src.modules.catalog.presentation.product.http.response.get_variable_product import (
-    GetVariableProductResponse,
 )
 from src.modules.catalog.presentation.product.http.response.put_product_content import (
     PutProductContentResponse,
@@ -45,21 +36,10 @@ router.add_api_route(
     ],
 )
 router.add_api_route(
-    "/variable",
-    create_variable_product,
-    methods=["POST"],
-    status_code=201,
-    response_model=CreateVariableProductResponse,
-    dependencies=[
-        Depends(require_authenticated_request_context),
-        Depends(require_csrf),
-    ],
-)
-router.add_api_route(
     "/{product_id}",
     get_product,
     methods=["GET"],
-    response_model=GetProductResponse | GetVariableProductResponse,
+    response_model=GetProductResponse,
     dependencies=[Depends(require_authenticated_request_context)],
 )
 router.add_api_route(

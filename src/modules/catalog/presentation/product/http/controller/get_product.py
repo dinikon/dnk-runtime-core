@@ -5,9 +5,6 @@ from fastapi import HTTPException
 from src.modules.catalog.application.product.query.get_product.query import (
     GetProductQuery,
 )
-from src.modules.catalog.application.product.query.get_product.dto import (
-    VariableProductDetailsDTO,
-)
 from src.modules.catalog.domain.product.error import (
     InvalidProductLocaleError,
     ProductNotFoundError,
@@ -18,9 +15,6 @@ from src.modules.catalog.domain.product.value_object.locale import ProductLocale
 from src.modules.catalog.presentation.product.depends import GetProductHandlerDep
 from src.modules.catalog.presentation.product.http.response.get_product import (
     GetProductResponse,
-)
-from src.modules.catalog.presentation.product.http.response.get_variable_product import (
-    GetVariableProductResponse,
 )
 from src.modules.identity.presentation.access.depends import AuthorizationServiceDep
 from src.modules.identity.presentation.auth.depends import (
@@ -34,7 +28,7 @@ async def get_product(
     context: AuthenticatedRequestContextDep,
     handler: GetProductHandlerDep,
     authorization: AuthorizationServiceDep,
-) -> GetProductResponse | GetVariableProductResponse:
+) -> GetProductResponse:
     """Читает только явно запрошенный язык без fallback."""
     principal = context.principal
     if principal is None or not principal.tenant_id:
@@ -58,6 +52,4 @@ async def get_product(
         raise HTTPException(422, str(exc)) from exc
     except (ProductNotFoundError, ProductSkuNotFoundError) as exc:
         raise HTTPException(404, str(exc)) from exc
-    if isinstance(result, VariableProductDetailsDTO):
-        return GetVariableProductResponse.from_dto(result)
     return GetProductResponse.from_dto(result)

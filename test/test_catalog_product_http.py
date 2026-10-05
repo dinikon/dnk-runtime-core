@@ -4,7 +4,7 @@ import unittest
 from dataclasses import replace
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from fastapi import FastAPI, Request, Response
 from httpx import ASGITransport, AsyncClient
@@ -13,23 +13,8 @@ from src.config import dnk_config
 from src.modules.catalog.application.product.query.get_product.dto import (
     ProductContentDTO,
     ProductDetailsDTO,
-    ProductSelectionDTO,
-    ProductVariantDTO,
-    VariableProductDetailsDTO,
 )
-from src.modules.catalog.application.attribute.query.list_attributes.dto import (
-    AttributeDetailsDTO,
-    AttributeOptionDTO,
-)
-from src.modules.catalog.domain.attribute.error import AttributeAlreadyExistsError
-from src.modules.catalog.presentation.attribute.depends import (
-    get_attribute_locale_reader,
-    get_attribute_query_repository,
-    get_attribute_repository,
-)
-from src.modules.catalog.presentation.attribute.router import router as attribute_router
 from src.modules.catalog.presentation.product.depends import (
-    get_attribute_reader,
     get_locale_reader,
     get_product_query_repository,
     get_product_repository,
@@ -65,47 +50,6 @@ class InMemoryProducts:
         if product is None:
             return None
         content = product.contents.get(locale.value)
-        if product.type == "VARIABLE":
-            return VariableProductDetailsDTO(
-                id=product.id.uuid,
-                type=product.type,
-                variants=tuple(
-                    ProductVariantDTO(
-                        id=variant.id.uuid,
-                        sku_id=variant.sku_id.uuid,
-                        sku_code=None,
-                        selections=tuple(
-                            ProductSelectionDTO(
-                                attribute_id=item.attribute_id.uuid,
-                                attribute_code="capsules",
-                                attribute_name=(
-                                    "Капсули" if locale.value == "uk" else None
-                                ),
-                                option_id=item.option_id.uuid,
-                                option_code=self.option_codes[item.option_id.uuid],
-                                option_name=None,
-                            )
-                            for item in variant.selections
-                        ),
-                    )
-                    for variant in product.variants
-                ),
-                requested_locale=locale.value,
-                content_locales=tuple(sorted(product.contents)),
-                content=(
-                    ProductContentDTO(
-                        locale=content.locale.value,
-                        name=content.name,
-                        description=content.description,
-                    )
-                    if content
-                    else None
-                ),
-                created_at=product.created_at,
-                updated_at=product.updated_at,
-                created_by=product.created_by.uuid,
-                updated_by=product.updated_by.uuid,
-            )
         return ProductDetailsDTO(
             id=product.id.uuid,
             type=product.type,
@@ -130,64 +74,6 @@ class InMemoryProducts:
         )
 
 
-class InMemoryAttributes:
-    def __init__(self) -> None:
-        self.rows = {}
-
-    async def add(self, attribute) -> None:
-        if any(item.code == attribute.code for item in self.rows.values()):
-            raise AttributeAlreadyExistsError("Attribute code already exists.")
-        self.rows[attribute.id.uuid] = attribute
-
-    async def option_ids(self, attribute_ids):
-        return {
-            identifier: frozenset(
-                option.id.uuid for option in self.rows[identifier].options
-            )
-            for identifier in attribute_ids
-            if identifier in self.rows
-        }
-
-    async def get_details(self, attribute_id, locale):
-        attribute = self.rows.get(attribute_id.uuid)
-        if attribute is None:
-            return None
-        return AttributeDetailsDTO(
-            id=attribute.id.uuid,
-            code=attribute.code,
-            type="SELECT",
-            name=next(
-                (item.name for item in attribute.contents if item.locale == locale),
-                None,
-            ),
-            options=tuple(
-                AttributeOptionDTO(
-                    option.id.uuid,
-                    option.code,
-                    next(
-                        (
-                            item.name
-                            for item in option.contents
-                            if item.locale == locale
-                        ),
-                        None,
-                    ),
-                )
-                for option in attribute.options
-            ),
-        )
-
-    async def list_details(self, locale):
-        return tuple(
-            [
-                await self.get_details(type(attribute.id)(identifier), locale)
-                for identifier, attribute in sorted(
-                    self.rows.items(), key=lambda item: item[1].code
-                )
-            ]
-        )
-
-
 class ProductHttpTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self.tenant, self.actor, self.sku = uuid4(), uuid4(), uuid4()
@@ -209,8 +95,6 @@ class ProductHttpTests(unittest.IsolatedAsyncioTestCase):
         )
         self.app.state.authorization_service = Mock(can=AsyncMock(return_value=True))
         self.products = InMemoryProducts()
-        self.attributes = InMemoryAttributes()
-        self.products.option_codes = {}
         self.skus = Mock(get_code=AsyncMock(return_value="SKU-1"))
         self.locales = Mock(is_active=AsyncMock(return_value=True))
         self.app.dependency_overrides[get_optional_request_context] = (
@@ -222,16 +106,7 @@ class ProductHttpTests(unittest.IsolatedAsyncioTestCase):
         )
         self.app.dependency_overrides[get_sku_reader] = lambda: self.skus
         self.app.dependency_overrides[get_locale_reader] = lambda: self.locales
-        self.app.dependency_overrides[get_attribute_reader] = lambda: self.attributes
-        self.app.dependency_overrides[get_attribute_locale_reader] = lambda: self.locales
-        self.app.dependency_overrides[get_attribute_repository] = (
-            lambda: self.attributes
-        )
-        self.app.dependency_overrides[get_attribute_query_repository] = (
-            lambda: self.attributes
-        )
         self.app.include_router(router, prefix="/api/console")
-        self.app.include_router(attribute_router, prefix="/api/console")
 
         @self.app.get("/csrf")
         async def csrf(request: Request, response: Response, tokens: TokenManagerDep):
@@ -385,166 +260,12 @@ class ProductHttpTests(unittest.IsolatedAsyncioTestCase):
             422,
         )
 
-    async def test_attribute_and_variable_product_contract(self) -> None:
-        self.app.state.uuid_generator = Mock(new=Mock(side_effect=uuid4))
-        attributes_url = "/api/console/catalog/attributes"
-        created_attribute = await self.client.post(
-            attributes_url,
-            json={
-                "code": " CAPSULES ",
-                "contents": [{"locale": "uk", "name": " Капсули "}],
-                "options": [
-                    {
-                        "code": code,
-                        "contents": [{"locale": "uk", "name": f"{code} капсул"}],
-                    }
-                    for code in ("100", "200", "500")
-                ],
-            },
-            headers=self.headers,
-        )
-        self.assertEqual(created_attribute.status_code, 201, created_attribute.text)
-        attribute = created_attribute.json()
-        self.assertEqual(attribute["code"], "capsules")
+    async def test_attribute_and_variable_routes_are_absent(self) -> None:
         self.assertEqual(
-            (
-                await self.client.post(
-                    attributes_url,
-                    json={"code": "capsules", "options": [{"code": "1"}]},
-                    headers=self.headers,
-                )
-            ).status_code,
-            409,
-        )
-        attribute_id = attribute["id"]
-        options = attribute["options"]
-        self.products.option_codes = {
-            UUID(item["id"]): item["code"] for item in options
-        }
-        listed = await self.client.get(attributes_url, params={"locale": "uk"})
-        self.assertEqual(listed.status_code, 200, listed.text)
-        self.assertEqual(listed.json()["items"][0]["name"], "Капсули")
-        detail = await self.client.get(
-            f"{attributes_url}/{attribute_id}", params={"locale": "uk"}
-        )
-        self.assertEqual(detail.status_code, 200, detail.text)
-        self.assertEqual(detail.json()["options"][0]["name"], "100 капсул")
-        self.assertEqual(
-            (
-                await self.client.get(
-                    f"{attributes_url}/{uuid4()}", params={"locale": "uk"}
-                )
-            ).status_code,
+            (await self.client.get("/api/console/catalog/attributes")).status_code,
             404,
         )
-        self.assertEqual((await self.client.get(attributes_url)).status_code, 422)
-        variable_url = f"{self.collection}/variable"
-        sku_ids = [uuid4(), uuid4(), uuid4()]
-        sku_codes = {
-            identifier: f"SKU-{index}" for index, identifier in enumerate(sku_ids)
-        }
-
-        async def get_code(identifier):
-            return sku_codes.get(identifier)
-
-        self.skus.get_code.side_effect = get_code
-        payload = {
-            "variants": [
-                {
-                    "sku_id": str(sku_id),
-                    "selections": [
-                        {
-                            "attribute_id": attribute_id,
-                            "option_id": options[index]["id"],
-                        }
-                    ],
-                }
-                for index, sku_id in enumerate(sku_ids)
-            ],
-            "contents": [{"locale": "uk", "name": "Omega 3"}],
-        }
-        created = await self.client.post(
-            variable_url, json=payload, headers=self.headers
+        response = await self.client.post(
+            f"{self.collection}/variable", json={}, headers=self.headers
         )
-        self.assertEqual(created.status_code, 201, created.text)
-        self.assertEqual(created.json()["type"], "VARIABLE")
-        self.assertEqual(len(created.json()["variants"]), 3)
-        read = await self.client.get(
-            f"{self.collection}/{created.json()['id']}", params={"locale": "uk"}
-        )
-        self.assertEqual(read.status_code, 200, read.text)
-        self.assertEqual(read.json()["type"], "VARIABLE")
-        self.assertEqual(len(read.json()["variants"]), 3)
-        self.assertEqual(read.json()["content"]["name"], "Omega 3")
-        self.assertEqual(
-            read.json()["variants"][0]["selections"][0]["attribute_code"], "capsules"
-        )
-        self.assertEqual(
-            (
-                await self.client.get(
-                    f"{self.collection}/{created.json()['id']}", params={"locale": "ru"}
-                )
-            ).json()["content"],
-            None,
-        )
-        changed = await self.client.put(
-            f"{self.collection}/{created.json()['id']}/contents/ru",
-            json={"name": "Омега 3"},
-            headers=self.headers,
-        )
-        self.assertEqual(changed.status_code, 200, changed.text)
-        duplicate = {**payload, "variants": [payload["variants"][0]] * 2}
-        self.assertEqual(
-            (
-                await self.client.post(
-                    variable_url, json=duplicate, headers=self.headers
-                )
-            ).status_code,
-            422,
-        )
-        invalid_option = {
-            **payload,
-            "variants": [
-                {
-                    **payload["variants"][0],
-                    "selections": [
-                        {"attribute_id": attribute_id, "option_id": str(uuid4())}
-                    ],
-                },
-                *payload["variants"][1:],
-            ],
-        }
-        self.assertEqual(
-            (
-                await self.client.post(
-                    variable_url, json=invalid_option, headers=self.headers
-                )
-            ).status_code,
-            422,
-        )
-        self.assertEqual(
-            (await self.client.post(variable_url, json=payload)).status_code, 403
-        )
-        self.assertEqual(
-            (
-                await self.client.post(
-                    variable_url,
-                    json={**payload, "tenant_id": str(self.tenant)},
-                    headers=self.headers,
-                )
-            ).status_code,
-            422,
-        )
-        self.app.state.test_context = replace(self.context, principal=None)
-        self.assertEqual(
-            (
-                await self.client.get(attributes_url, params={"locale": "uk"})
-            ).status_code,
-            401,
-        )
-        self.assertEqual(
-            (
-                await self.client.post(variable_url, json=payload, headers=self.headers)
-            ).status_code,
-            401,
-        )
+        self.assertIn(response.status_code, (404, 405))
