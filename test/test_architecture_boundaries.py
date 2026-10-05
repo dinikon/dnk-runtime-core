@@ -203,59 +203,6 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                             f"{path}: indirect import {name}",
                         )
 
-    def test_tenant_locale_layers_and_direct_imports(self) -> None:
-        roots = (
-            "domain/tenant_locale",
-            "application/tenant_locale",
-            "infrastructure/tenant_locale",
-            "presentation/tenant_locale",
-        )
-        for root in roots:
-            for path in iter_python_files("src/modules/tenancy/" + root):
-                if path.name == "__init__.py":
-                    self.assertEqual(path.read_text().strip(), "", str(path))
-                for name in iter_imports(path):
-                    if name.startswith("src.modules"):
-                        self.assertTrue(
-                            (PROJECT_ROOT / (name.replace(".", "/") + ".py")).is_file(),
-                            f"{path}: indirect import {name}",
-                        )
-                    if root.startswith("domain/"):
-                        self.assertFalse(
-                            name.startswith(
-                                (
-                                    "sqlalchemy",
-                                    "fastapi",
-                                    "pydantic",
-                                    "src.modules.tenancy.application",
-                                    "src.modules.tenancy.infrastructure",
-                                    "src.modules.tenancy.presentation",
-                                )
-                            ),
-                            f"{path}: {name}",
-                        )
-                    if root.startswith("application/"):
-                        self.assertFalse(
-                            name.startswith(
-                                (
-                                    "sqlalchemy",
-                                    "fastapi",
-                                    "pydantic",
-                                    "src.modules.tenancy.infrastructure",
-                                    "src.modules.tenancy.presentation",
-                                )
-                            ),
-                            f"{path}: {name}",
-                        )
-                if root.startswith(("application/", "infrastructure/")):
-                    for node in ast.walk(ast.parse(path.read_text())):
-                        if isinstance(node, ast.Call) and isinstance(
-                            node.func, ast.Attribute
-                        ):
-                            self.assertNotIn(
-                                node.func.attr, ("commit", "rollback"), str(path)
-                            )
-
     def test_no_modules_namespace_imports_are_used(self) -> None:
         forbidden_prefix = "modules."
         for root in ("src", "test"):

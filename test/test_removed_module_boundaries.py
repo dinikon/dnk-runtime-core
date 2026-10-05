@@ -14,6 +14,19 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
+    def test_tenancy_has_no_locale_selection_surface(self) -> None:
+        from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migration_metadata import (
+            migration_metadata,
+        )
+        self.assertNotIn("tenant_locales", migration_metadata().tables)
+        self.assertFalse(
+            (PROJECT_ROOT / "migrations/tenant/versions/0012_tenant_locales.py").exists()
+        )
+        paths = create_app().openapi()["paths"]
+        self.assertFalse(
+            any(path.startswith("/api/console/tenants/locales") for path in paths)
+        )
+
     def test_dynamic_modules_and_surfaces_are_absent(self) -> None:
         self.assertFalse((PROJECT_ROOT / "src/modules/schema_registry").exists())
         self.assertFalse((PROJECT_ROOT / "src/modules/runtime_data").exists())
