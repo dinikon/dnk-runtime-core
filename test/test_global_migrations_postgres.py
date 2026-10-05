@@ -58,7 +58,9 @@ class GlobalMigrationsPostgresTests(unittest.IsolatedAsyncioTestCase):
                 lambda conn: inspect(conn).get_table_names(schema="public")
             )
             self.assertEqual(
-                set(tables), set(Base.metadata.tables) | {"alembic_version_global"}
+                set(tables),
+                {table.name for table in Base.metadata.tables.values()}
+                | {"alembic_version_global"},
             )
             for table in Base.metadata.sorted_tables:
                 columns = await connection.run_sync(

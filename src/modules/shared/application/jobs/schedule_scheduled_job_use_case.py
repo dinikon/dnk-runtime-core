@@ -37,6 +37,8 @@ class ScheduleScheduledJobUseCase:
         self,
         command: ScheduleScheduledJobCommand,
     ) -> ScheduleScheduledJobResultDTO:
+        if command.tenant_id is None:
+            return await self._schedule(command)
         async with self._admission(command.tenant_id):
             return await self._schedule(command)
 

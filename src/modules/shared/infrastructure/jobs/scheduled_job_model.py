@@ -29,7 +29,9 @@ class ScheduledJobModel(Base):
     )
 
     id: Mapped[UUID] = mapped_column(StringUUID, primary_key=True, nullable=False)
-    tenant_id: Mapped[UUID] = mapped_column(StringUUID, nullable=False, index=True)
+    tenant_id: Mapped[UUID | None] = mapped_column(
+        StringUUID, nullable=True, index=True
+    )
     job_type: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     payload: Mapped[dict[str, Any]] = mapped_column(PortableJSON, nullable=False)
     run_at: Mapped[datetime] = mapped_column(

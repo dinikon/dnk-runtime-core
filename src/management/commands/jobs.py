@@ -11,6 +11,12 @@ from pathlib import Path
 import signal
 
 from src.config import dnk_config
+from src.modules.reference_data.presentation.jobs.refresh import (
+    JOB_TYPE,
+    ReferenceDataRefreshJobHandler,
+    ensure_weekly_jobs,
+)
+from datetime import UTC, datetime
 from src.management.job_healthcheck import main as probe_main
 from src.modules.shared.application.jobs import (
     ProcessDueScheduledJobsCommand,
@@ -110,6 +116,7 @@ async def handle_worker(_args: argparse.Namespace) -> int:
             "price_list.cleanup": PriceListCleanupJobHandler(
                 get_cleanup_price_list_use_case(db_helper.session_factory)
             ),
+            JOB_TYPE: ReferenceDataRefreshJobHandler(db_helper.session_factory),
         }
     )
     worker = build_scheduled_job_worker(
@@ -128,10 +135,26 @@ async def handle_worker(_args: argparse.Namespace) -> int:
         job_timeout_seconds=settings.job_timeout_seconds,
         shutdown_grace_seconds=settings.shutdown_grace_seconds,
     )
+
+    async def register_reference_jobs() -> None:
+        logger = logging.getLogger(__name__)
+        while not stop.is_set():
+            try:
+                await ensure_weekly_jobs(db_helper.session_factory, datetime.now(UTC))
+            except Exception:
+                logger.exception("Could not register weekly reference data jobs")
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=3600)
+            except TimeoutError:
+                pass
+
+    registrar = asyncio.create_task(register_reference_jobs())
     try:
         await worker.run(stop)
         return 0
     finally:
+        registrar.cancel()
+        await asyncio.gather(registrar, return_exceptions=True)
         await db_helper.dispose()
 
 

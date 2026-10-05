@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
+from src.modules.shared.domain.jobs.scheduled_job import ScheduledJob
 from src.modules.tenancy.application.tenant.tenant_admission import TenantUnavailable
 from src.modules.tenancy.application.tenant.tenant_admission import (
     unrestricted_admission,
@@ -63,31 +64,14 @@ class ProcessDueScheduledJobsUseCase:
         retried = 0
         for job in jobs:
             try:
-                async with self._admission(job.tenant_id):
-                    try:
-                        await self._dispatcher.dispatch(job)
-                        if await self._repository.mark_done(
-                            job_id=job.id,
-                            lock_token=lock_token,
-                            completed_at=now,
-                        ):
-                            done += 1
-                    except Exception as exc:
-                        retry_at = None
-                        if job.attempts < command.max_attempts:
-                            retry_at = self._retry_policy.next_retry_at(
-                                now=now,
-                                attempts=job.attempts,
-                            )
-                            retried += 1
-                        await self._repository.mark_failed(
-                            job_id=job.id,
-                            lock_token=lock_token,
-                            error=str(exc),
-                            retry_at=retry_at,
-                            failed_at=now,
-                        )
-                        failed += 1
+                if job.tenant_id is None:
+                    outcome = await self._process_one(job, lock_token, now, command)
+                else:
+                    async with self._admission(job.tenant_id):
+                        outcome = await self._process_one(job, lock_token, now, command)
+                done += outcome[0]
+                failed += outcome[1]
+                retried += outcome[2]
             except TenantUnavailable:
                 continue
 
@@ -98,6 +82,39 @@ class ProcessDueScheduledJobsUseCase:
             failed=failed,
             retried=retried,
         )
+
+    async def _process_one(
+        self,
+        job: ScheduledJob,
+        lock_token: str,
+        now: datetime,
+        command: ProcessDueScheduledJobsCommand,
+    ) -> tuple[int, int, int]:
+        try:
+            await self._dispatcher.dispatch(job)
+            marked = await self._repository.mark_done(
+                job_id=job.id,
+                lock_token=lock_token,
+                completed_at=now,
+            )
+            return (int(marked), 0, 0)
+        except Exception as exc:
+            retry_at = None
+            retried = 0
+            if job.attempts < command.max_attempts:
+                retry_at = self._retry_policy.next_retry_at(
+                    now=now,
+                    attempts=job.attempts,
+                )
+                retried = 1
+            await self._repository.mark_failed(
+                job_id=job.id,
+                lock_token=lock_token,
+                error=str(exc),
+                retry_at=retry_at,
+                failed_at=now,
+            )
+            return (0, 1, retried)
 
 
 __all__ = ["ProcessDueScheduledJobsUseCase"]

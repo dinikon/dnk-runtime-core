@@ -4,6 +4,8 @@
 
 Alembic owns both global and static tenant tables. Global revisions live in `migrations/global/`; run `dnk-manage database upgrade` before starting API and workers. Startup only checks their version. The fresh global baseline refuses an existing unversioned database rather than adopting or deleting its tables. No dynamic object subsystem is active.
 
+Global revision `0006_reference_data` adds the four public reference catalogs, country/time-zone links and synchronization state. It also permits `scheduled_jobs.tenant_id=NULL` for global jobs. After upgrading and before exposing the reference-data GET routes, run `dnk-manage reference-data sync --dataset all`; subsequent refreshes are registered by the shared jobs worker every seven days. The catalogs do not require tenant migrations.
+
 Tenant models use `TenantBase` with logical schema `tenant`. `src/modules/tenant_persistence.py` registers model imports and historical table names. Retain historical names after removing a model so autogenerate can detect its removal. Unregistered legacy tables are excluded from reflection candidates; they are never adopted or deleted automatically.
 
 ## Schema identity
@@ -29,6 +31,9 @@ tenants before running code that reads the new CRM arrays. Existing CRM rows are
 Revision `0011_inventory_skus`, after `0010_crm_company_legal_name`, adds the tenant-local
 Inventory `skus` directory with unique codes and audit fields. Upgrade existing tenant
 schemas before using the SKU API; fresh tenants receive it through the same bootstrap.
+Revision `0012_tenant_locales` adds the selected-locale directory inside each tenant
+schema with a code primary key and creation audit. The runtime system list initially
+contains `uk` and `en`; selection data is isolated by schema.
 Revisions contain no fixed tenant names and do not import current ORM models.
 
 The migration environment uses transaction-local `search_path` (through PostgreSQL `set_config(..., true)`) and explicitly sets `version_table_schema`. Successful execution restores the previous path. Failed transactions are rolled back by the owner. Migration files must preserve transactional execution: no internal commit, autocommit block or nontransactional DDL in onboarding revisions.

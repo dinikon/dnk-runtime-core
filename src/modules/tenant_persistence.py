@@ -8,6 +8,7 @@ import src.modules.contact_points.infrastructure.persistence.models.contact_poin
 import src.modules.contact_points.infrastructure.persistence.models.contact_point_label  # noqa: F401
 import src.modules.inventory.infrastructure.persistence.models.warehouse  # noqa: F401
 import src.modules.inventory.infrastructure.persistence.models.sku  # noqa: F401
+import src.modules.tenancy.infrastructure.tenant_locale.persistence.model  # noqa: F401
 import src.modules.identity.infrastructure.persistence.models.user  # noqa: F401
 import src.modules.identity.infrastructure.persistence.models.user_email  # noqa: F401
 import src.modules.identity.infrastructure.persistence.models.cloud_identity
@@ -19,6 +20,7 @@ HISTORICAL_TENANT_TABLE_NAMES = frozenset(
     {
         "warehouses",
         "skus",
+        "tenant_locales",
         "contacts",
         "contact_companies",
         "companies",

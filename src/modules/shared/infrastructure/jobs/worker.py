@@ -164,6 +164,9 @@ class ScheduledJobWorker:
         return len(jobs)
 
     async def _dispatch(self, job) -> None:
+        if job.tenant_id is None:
+            await self.dispatcher.dispatch(job)
+            return
         async with self.tenant_gate.hold(job.tenant_id):
             await self.dispatcher.dispatch(job)
 
