@@ -97,6 +97,16 @@ class SqlAlchemyCatalogRepository:
             for m in models
         ]
 
+    async def has_active_locale(self, code: str) -> bool:
+        """Проверяет один код без загрузки всего справочника."""
+        return bool(
+            await self._session.scalar(
+                select(LocaleModel.code).where(
+                    LocaleModel.code == code, LocaleModel.active.is_(True)
+                )
+            )
+        )
+
     async def list_time_zones(self) -> list[TimeZone]:
         zones = (
             await self._session.scalars(

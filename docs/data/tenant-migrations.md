@@ -31,6 +31,12 @@ tenants before running code that reads the new CRM arrays. Existing CRM rows are
 Revision `0011_inventory_skus`, after `0010_crm_company_legal_name`, adds the tenant-local
 Inventory `skus` directory with unique codes and audit fields. Upgrade existing tenant
 schemas before using the SKU API; fresh tenants receive it through the same bootstrap.
+Revision `0012_catalog_simple` adds tenant-local Product, Variant and translation
+tables. It does not create locale settings or a default language; translation codes
+are validated against active public reference data at write time.
+Revision `0013_catalog_variable` permits multiple Variants on VARIABLE products,
+adds tenant-local SELECT attributes, options, their translations and variant
+selections. The SIMPLE invariant remains protected by a partial unique index.
 Revisions contain no fixed tenant names and do not import current ORM models.
 
 The migration environment uses transaction-local `search_path` (through PostgreSQL `set_config(..., true)`) and explicitly sets `version_table_schema`. Successful execution restores the previous path. Failed transactions are rolled back by the owner. Migration files must preserve transactional execution: no internal commit, autocommit block or nontransactional DDL in onboarding revisions.

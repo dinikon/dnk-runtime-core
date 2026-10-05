@@ -210,5 +210,5 @@ class SkuPostgresTests(unittest.IsolatedAsyncioTestCase):
                 warehouse,
             )
             self.assertEqual(
-                await migrator.current(connection, schema), ("0011_inventory_skus",)
+                await migrator.current(connection, schema), ("0012_catalog_simple",)
             )
