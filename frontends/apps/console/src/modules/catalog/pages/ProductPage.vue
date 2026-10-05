@@ -14,6 +14,9 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import ProductCategoriesForm from "../ui/ProductCategoriesForm.vue";
+import { categoriesApi } from "../api/categories.api";
+import { useCategories, categoryError } from "../model/categories";
 import { catalogApi } from "../api/catalog.api";
 import {
   catalogError,
@@ -27,7 +30,7 @@ import {
   useLocales,
   useProduct,
 } from "../model/queries";
-import { useUnsavedChanges } from "../model/use-unsaved-changes";
+import { useUnsavedChanges } from "@/shared/model/use-unsaved-changes";
 import ContentFields from "../ui/ContentFields.vue";
 import LocaleSelect from "../ui/LocaleSelect.vue";
 import RequestError from "../ui/RequestError.vue";
@@ -41,6 +44,7 @@ const locale = computed(() =>
 );
 const locales = useLocales();
 const product = useProduct(id, locale);
+const categories = useCategories(locale);
 const languages = computed(() =>
   [...(locales.data.value ?? [])].sort((a, b) => a.code.localeCompare(b.code)),
 );
@@ -85,8 +89,8 @@ const dirty = computed(
   () => loadedKey.value === identity.value && draft.value !== baseline.value,
 );
 watch(
-  () => product.data.value,
-  (value) => {
+  [() => product.data.value, identity],
+  ([value]) => {
     if (
       !value ||
       dirty.value ||
@@ -115,8 +119,75 @@ const mutation = useMutation({
   retry: false,
 });
 const saving = ref(false);
-useUnsavedChanges(dirty, saving);
+const selectedCategories = ref<string[]>([]);
+const primaryCategory = ref<string | null>(null);
+const categoriesBaseline = ref("");
+const categoriesLoaded = ref("");
+const categoriesSaving = ref(false);
+const categoriesError = ref("");
+const categoriesDraft = computed(() =>
+  JSON.stringify([[...selectedCategories.value].sort(), primaryCategory.value]),
+);
+const categoriesDirty = computed(
+  () =>
+    categoriesLoaded.value === identity.value &&
+    categoriesDraft.value !== categoriesBaseline.value,
+);
+watch(
+  [() => product.data.value, identity],
+  ([value]) => {
+    if (
+      !value ||
+      value.id !== id.value ||
+      value.requested_locale !== locale.value ||
+      categoriesDirty.value
+    )
+      return;
+    selectedCategories.value = (value.categories ?? []).map((item) => item.id);
+    primaryCategory.value = value.primary_category_id ?? null;
+    categoriesBaseline.value = categoriesDraft.value;
+    categoriesLoaded.value = identity.value;
+  },
+  { immediate: true },
+);
+const anyDirty = computed(() => dirty.value || categoriesDirty.value);
+const anySaving = computed(() => saving.value || categoriesSaving.value);
+useUnsavedChanges(anyDirty, anySaving);
+async function saveCategories() {
+  if (anySaving.value || categoriesLoaded.value !== identity.value) return;
+  categoriesError.value = "";
+  if (
+    selectedCategories.value.length &&
+    (!primaryCategory.value ||
+      !selectedCategories.value.includes(primaryCategory.value))
+  ) {
+    categoriesError.value =
+      "Выберите основную категорию из назначенных товару.";
+    return;
+  }
+  categoriesSaving.value = true;
+  try {
+    const saved = await categoriesApi.putProductCategories(id.value, {
+      category_ids: [...new Set(selectedCategories.value)],
+      primary_category_id: selectedCategories.value.length
+        ? primaryCategory.value
+        : null,
+    });
+    selectedCategories.value = saved.category_ids;
+    primaryCategory.value = saved.primary_category_id;
+    categoriesBaseline.value = categoriesDraft.value;
+    await client.invalidateQueries({
+      queryKey: productKey(tenant.value, id.value),
+    });
+    toast.success("Категории сохранены");
+  } catch (error) {
+    categoriesError.value = categoryError(error, "assign");
+  } finally {
+    categoriesSaving.value = false;
+  }
+}
 watch(identity, () => {
+  categoriesError.value = "";
   validation.value = "";
   mutation.reset();
 });
@@ -124,7 +195,7 @@ const canEdit = computed(() =>
   languages.value.some((item) => item.code === locale.value),
 );
 async function save() {
-  if (saving.value) return;
+  if (anySaving.value) return;
   validation.value = "";
   if (!validName(name.value)) {
     validation.value = "Название должно содержать 1–255 символов.";
@@ -207,7 +278,7 @@ const formatDate = (value: string) => new Date(value).toLocaleString("ru-RU");
               ><LocaleSelect
                 :options="options"
                 :value="locale"
-                :disabled="saving"
+                :disabled="anySaving"
                 @change="changeLocale" /></Field></FieldGroup></CardContent
       ></Card>
       <template
@@ -281,7 +352,7 @@ const formatDate = (value: string) => new Date(value).toLocaleString("ru-RU");
                 ><ContentFields
                   v-model:name="name"
                   v-model:description="description"
-                  :disabled="saving || !canEdit"
+                  :disabled="anySaving || !canEdit"
                   :invalid="!!validation" /></FieldGroup
               ><RequestError
                 v-if="validation"
@@ -293,13 +364,33 @@ const formatDate = (value: string) => new Date(value).toLocaleString("ru-RU");
                 type="submit"
                 class="self-start"
                 :disabled="
-                  saving || !canEdit || (!dirty && !!product.data.value.content)
+                  anySaving ||
+                  !canEdit ||
+                  (!dirty && !!product.data.value.content)
                 "
                 >{{ saving ? "Сохранение…" : "Сохранить перевод" }}</Button
               >
             </form></CardContent
           ></Card
         >
+        <ProductCategoriesForm
+          v-model:selected="selectedCategories"
+          v-model:primary="primaryCategory"
+          :items="categories.data.value ?? []"
+          :locale="locale"
+          :pending="anySaving"
+          :loading="categories.isPending.value"
+          :available="categories.isSuccess.value"
+          :load-error="
+            categories.isError.value
+              ? categoryError(categories.error.value)
+              : ''
+          "
+          :error="categoriesError"
+          :dirty="categoriesDirty"
+          @save="saveCategories"
+          @retry="categories.refetch()"
+        />
       </template>
     </template>
   </div>

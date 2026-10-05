@@ -11,6 +11,12 @@ class ProductContentDTO:
 
 
 @dataclass(frozen=True, slots=True)
+class ProductCategoryDTO:
+    id: UUID
+    name: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class ProductDetailsDTO:
     id: UUID
     type: str
@@ -20,6 +26,8 @@ class ProductDetailsDTO:
     requested_locale: str
     content_locales: tuple[str, ...]
     content: ProductContentDTO | None
+    categories: tuple[ProductCategoryDTO, ...]
+    primary_category_id: UUID | None
     created_at: datetime
     updated_at: datetime
     created_by: UUID

@@ -19,7 +19,6 @@ from src.modules.catalog.presentation.product.http.request.put_product_content i
 from src.modules.catalog.presentation.product.http.response.put_product_content import (
     PutProductContentResponse,
 )
-from src.modules.identity.presentation.access.depends import AuthorizationServiceDep
 from src.modules.identity.presentation.auth.depends import (
     AuthenticatedRequestContextDep,
 )
@@ -32,20 +31,11 @@ async def put_product_content(
     payload: PutProductContentRequest,
     context: AuthenticatedRequestContextDep,
     handler: PutProductContentHandlerDep,
-    authorization: AuthorizationServiceDep,
 ) -> PutProductContentResponse:
     """Добавляет либо полностью заменяет один перевод карточки."""
     principal = context.principal
     if principal is None or not principal.tenant_id:
         raise HTTPException(403, "Tenant context is required.")
-    if not await authorization.can(
-        user_id=UUID(principal.user_id),
-        tenant_id=UUID(principal.tenant_id),
-        action="update",
-        resource_type="catalog.product",
-        resource_id=product_id,
-    ):
-        raise HTTPException(403, "Product updating is not allowed.")
     try:
         result = await handler.execute(
             PutProductContentCommand(

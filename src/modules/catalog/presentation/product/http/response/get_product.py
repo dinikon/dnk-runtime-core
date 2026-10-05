@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from src.modules.catalog.application.product.query.get_product.dto import (
     ProductContentDTO,
     ProductDetailsDTO,
+    ProductCategoryDTO,
 )
 
 
@@ -23,6 +24,15 @@ class GetProductContentResponse(BaseModel):
         )
 
 
+class GetProductCategoryResponse(BaseModel):
+    id: UUID
+    name: str | None
+
+    @classmethod
+    def from_dto(cls, dto: ProductCategoryDTO) -> "GetProductCategoryResponse":
+        return cls(id=dto.id, name=dto.name)
+
+
 class GetProductResponse(BaseModel):
     id: UUID
     type: str
@@ -32,6 +42,8 @@ class GetProductResponse(BaseModel):
     requested_locale: str
     content_locales: list[str]
     content: GetProductContentResponse | None
+    categories: list[GetProductCategoryResponse]
+    primary_category_id: UUID | None
     created_at: datetime
     updated_at: datetime
     created_by: UUID
@@ -54,6 +66,10 @@ class GetProductResponse(BaseModel):
                 if dto.content is not None
                 else None
             ),
+            categories=[
+                GetProductCategoryResponse.from_dto(item) for item in dto.categories
+            ],
+            primary_category_id=dto.primary_category_id,
             created_at=dto.created_at,
             updated_at=dto.updated_at,
             created_by=dto.created_by,

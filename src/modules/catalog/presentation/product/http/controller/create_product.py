@@ -1,5 +1,3 @@
-from uuid import UUID
-
 from fastapi import HTTPException
 
 from src.modules.catalog.application.product.command.create_product.command import (
@@ -20,7 +18,6 @@ from src.modules.catalog.presentation.product.http.request.create_product import
 from src.modules.catalog.presentation.product.http.response.create_product import (
     CreateProductResponse,
 )
-from src.modules.identity.presentation.access.depends import AuthorizationServiceDep
 from src.modules.identity.presentation.auth.depends import (
     AuthenticatedRequestContextDep,
 )
@@ -31,19 +28,11 @@ async def create_product(
     payload: CreateProductRequest,
     context: AuthenticatedRequestContextDep,
     handler: CreateProductHandlerDep,
-    authorization: AuthorizationServiceDep,
 ) -> CreateProductResponse:
-    """Проверяет доступ и создаёт товар без подмены tenant и аудита."""
+    """Создаёт товар без подмены tenant и аудита."""
     principal = context.principal
     if principal is None or not principal.tenant_id:
         raise HTTPException(403, "Tenant context is required.")
-    if not await authorization.can(
-        user_id=UUID(principal.user_id),
-        tenant_id=UUID(principal.tenant_id),
-        action="create",
-        resource_type="catalog.product",
-    ):
-        raise HTTPException(403, "Product creation is not allowed.")
     try:
         result = await handler.execute(
             CreateProductCommand(

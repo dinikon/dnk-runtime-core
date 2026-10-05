@@ -24,6 +24,8 @@ export interface CreatedProductDto extends AuditDto {
 export interface ProductDto extends CreatedProductDto {
   requested_locale: string;
   content: ProductContentDto | null;
+  categories: { id: string; name: string | null }[];
+  primary_category_id: string | null;
 }
 export interface PutContentDto {
   name: string;
@@ -35,11 +37,6 @@ export interface SavedContentDto extends PutContentDto {
   updated_at: string;
   updated_by: string;
 }
-export interface SkuDto extends AuditDto {
-  id: string;
-  code: string;
-  title: string;
-}
 export interface LocaleDto {
   code: string;
   language_code: string;
@@ -47,4 +44,49 @@ export interface LocaleDto {
   region_code: string | null;
   country_code: string | null;
   name: string;
+}
+
+export interface CategoryListDto {
+  id: string;
+  parent_id: string | null;
+  name: string | null;
+}
+export interface CategoryTranslationDto {
+  locale: string;
+  name: string;
+}
+export interface CategoryDto extends CategoryListDto, AuditDto {
+  requested_locale: string;
+  translations: CategoryTranslationDto[];
+}
+export interface CreateCategoryDto {
+  parent_id: string | null;
+  translations: CategoryTranslationDto[];
+}
+export interface CreatedCategoryDto extends AuditDto {
+  id: string;
+  parent_id: string | null;
+  locales: string[];
+}
+export interface SavedCategoryContentDto {
+  category_id: string;
+  locale: string;
+  name: string;
+  updated_at: string;
+  updated_by: string;
+}
+export interface MovedCategoryDto {
+  id: string;
+  parent_id: string | null;
+  updated_at: string;
+  updated_by: string;
+}
+export interface ProductCategoriesPayload {
+  category_ids: string[];
+  primary_category_id: string | null;
+}
+export interface SavedProductCategoriesDto extends ProductCategoriesPayload {
+  product_id: string;
+  updated_at: string;
+  updated_by: string;
 }

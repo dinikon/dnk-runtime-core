@@ -27,3 +27,11 @@ class ProductIdentifierAlreadyExistsError(DomainError):
 
 class InvalidProductVariantError(DomainError):
     """Нарушено правило вариантов и их комбинаций."""
+
+
+class InvalidProductCategoriesError(DomainError):
+    """Неверный набор или основная категория товара."""
+
+
+class ProductCategoryNotFoundError(DomainError):
+    """Категория отсутствует в текущем tenant."""

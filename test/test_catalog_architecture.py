@@ -25,6 +25,12 @@ def imported_modules(path: Path) -> list[str]:
 
 
 class CatalogArchitectureTests(unittest.TestCase):
+    def test_catalog_http_does_not_depend_on_access_levels(self) -> None:
+        for path in (CATALOG / "presentation").rglob("*.py"):
+            source = path.read_text()
+            self.assertNotIn("identity.presentation.access", source, str(path))
+            self.assertNotIn("authorization.can", source, str(path))
+
     def test_domain_and_application_depend_only_inward(self) -> None:
         forbidden = (
             "sqlalchemy",
@@ -46,6 +52,7 @@ class CatalogArchitectureTests(unittest.TestCase):
         for layer in (
             "application",
             "infrastructure/product/persistence",
+            "infrastructure/category/persistence",
         ):
             for path in (CATALOG / layer).rglob("*.py"):
                 tree = ast.parse(path.read_text())
@@ -62,9 +69,14 @@ class CatalogArchitectureTests(unittest.TestCase):
     def test_entrypoints_import_independently(self) -> None:
         for module in (
             "src.modules.catalog.domain.product.aggregate",
+            "src.modules.catalog.domain.category.aggregate",
             "src.modules.catalog.application.product.command.create_product.handler",
             "src.modules.catalog.application.product.query.get_product.handler",
             "src.modules.catalog.infrastructure.persistence.models.product",
+            "src.modules.catalog.infrastructure.persistence.models.category",
+            "src.modules.catalog.application.category.command.move_category.handler",
+            "src.modules.catalog.infrastructure.category.persistence.repository",
+            "src.modules.catalog.presentation.category.router",
             "src.modules.catalog.infrastructure.product.persistence.repository",
             "src.modules.catalog.presentation.product.router",
             "src.modules.tenant_persistence",

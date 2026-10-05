@@ -8,6 +8,15 @@ from src.modules.catalog.application.product.command.create_product.handler impo
 from src.modules.catalog.application.product.command.put_product_content.handler import (
     PutProductContentHandler,
 )
+from src.modules.catalog.application.product.command.put_product_categories.handler import (
+    PutProductCategoriesHandler,
+)
+from src.modules.catalog.application.product.port.category_reader import (
+    CategoryReaderPort,
+)
+from src.modules.catalog.infrastructure.product.category_reader import (
+    SqlAlchemyCategoryReader,
+)
 from src.modules.catalog.application.product.port.locale_reader import LocaleReaderPort
 from src.modules.catalog.application.product.port.query_repository import (
     ProductQueryRepositoryProtocol,
@@ -104,4 +113,22 @@ def get_put_product_content_handler(
 
 PutProductContentHandlerDep = Annotated[
     PutProductContentHandler, Depends(get_put_product_content_handler)
+]
+
+
+def get_category_reader(uow: UoWDep) -> CategoryReaderPort:
+    return SqlAlchemyCategoryReader(uow.session)
+
+
+CategoryReaderDep = Annotated[CategoryReaderPort, Depends(get_category_reader)]
+
+
+def get_put_product_categories_handler(
+    repository: ProductRepositoryDep, categories: CategoryReaderDep, clock: ClockDep
+) -> PutProductCategoriesHandler:
+    return PutProductCategoriesHandler(repository, categories, clock)
+
+
+PutProductCategoriesHandlerDep = Annotated[
+    PutProductCategoriesHandler, Depends(get_put_product_categories_handler)
 ]

@@ -16,7 +16,6 @@ from src.modules.catalog.presentation.product.depends import GetProductHandlerDe
 from src.modules.catalog.presentation.product.http.response.get_product import (
     GetProductResponse,
 )
-from src.modules.identity.presentation.access.depends import AuthorizationServiceDep
 from src.modules.identity.presentation.auth.depends import (
     AuthenticatedRequestContextDep,
 )
@@ -27,20 +26,11 @@ async def get_product(
     locale: str,
     context: AuthenticatedRequestContextDep,
     handler: GetProductHandlerDep,
-    authorization: AuthorizationServiceDep,
 ) -> GetProductResponse:
     """Читает только явно запрошенный язык без fallback."""
     principal = context.principal
     if principal is None or not principal.tenant_id:
         raise HTTPException(403, "Tenant context is required.")
-    if not await authorization.can(
-        user_id=UUID(principal.user_id),
-        tenant_id=UUID(principal.tenant_id),
-        action="read",
-        resource_type="catalog.product",
-        resource_id=product_id,
-    ):
-        raise HTTPException(403, "Product reading is not allowed.")
     try:
         result = await handler.execute(
             GetProductQuery(

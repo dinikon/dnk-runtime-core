@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useMutation } from "@tanstack/vue-query";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -22,23 +22,55 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { catalogApi } from "../api/catalog.api";
 import { catalogError, contentPayload, validName } from "../model/forms";
-import { useLocales, useSkus } from "../model/queries";
-import { useUnsavedChanges } from "../model/use-unsaved-changes";
+import { useLocales } from "../model/queries";
+import { useSkus, useSku, inventoryError } from "@/modules/inventory";
+import { useUnsavedChanges } from "@/shared/model/use-unsaved-changes";
 import ContentFields from "../ui/ContentFields.vue";
 import LocaleSelect from "../ui/LocaleSelect.vue";
 import RequestError from "../ui/RequestError.vue";
 const router = useRouter();
+const route = useRoute();
+const requestedSkuId = computed(() =>
+  typeof route.query.skuId === "string" ? route.query.skuId : "",
+);
+const selectedSku = useSku(requestedSkuId);
+const ignoredPrefill = ref(false);
 const skus = useSkus();
 const locales = useLocales();
 const items = computed(() => [
   ...new Map(
-    (skus.data.value?.pages.flat() ?? []).map((item) => [item.id, item]),
+    [
+      ...(skus.data.value?.pages.flat() ?? []),
+      ...(selectedSku.data.value ? [selectedSku.data.value] : []),
+    ].map((item) => [item.id, item]),
   ).values(),
 ]);
 const languages = computed(() =>
   [...(locales.data.value ?? [])].sort((a, b) => a.code.localeCompare(b.code)),
 );
 const sku = ref("");
+watch(requestedSkuId, () => {
+  ignoredPrefill.value = false;
+  sku.value = "";
+});
+watch(
+  () => selectedSku.data.value,
+  (item) => {
+    if (
+      item &&
+      item.id === requestedSkuId.value &&
+      !ignoredPrefill.value &&
+      !sku.value
+    )
+      sku.value = item.id;
+  },
+  { immediate: true },
+);
+function chooseSku(value: unknown) {
+  if (!value) return;
+  ignoredPrefill.value = true;
+  sku.value = String(value);
+}
 const locale = ref("");
 const name = ref("");
 const description = ref("");
@@ -129,16 +161,33 @@ async function submit() {
           />
           <RequestError
             v-if="skus.isError.value"
-            :message="catalogError(skus.error.value)"
+            :message="inventoryError(skus.error.value)"
             retry
             :pending="skus.isFetching.value"
             @retry="skus.refetch()"
+          />
+          <Skeleton
+            v-if="
+              requestedSkuId && selectedSku.isPending.value && !ignoredPrefill
+            "
+            class="h-12"
+            aria-label="Загрузка выбранного SKU"
+          />
+          <RequestError
+            v-if="
+              requestedSkuId && selectedSku.isError.value && !ignoredPrefill
+            "
+            :message="inventoryError(selectedSku.error.value)"
+            retry
+            :pending="selectedSku.isFetching.value"
+            @retry="selectedSku.refetch()"
           />
           <FieldGroup>
             <Field
               ><FieldLabel for="product-sku">SKU</FieldLabel
               ><Select
-                v-model="sku"
+                :model-value="sku"
+                @update:model-value="chooseSku"
                 :disabled="mutation.isPending.value || !items.length"
                 ><SelectTrigger id="product-sku" class="w-full"
                   ><SelectValue placeholder="Выберите SKU" /></SelectTrigger

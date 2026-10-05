@@ -233,6 +233,42 @@ outside this module. Unsaved drafts are protected on route/language changes and
 browser exit. Product query keys include tenant, product ID and locale; saving
 invalidates all cached locales for that product.
 
+## SKU Workspace
+
+The `inventory` module adds the **Склад** navigation group. `/inventory/skus`
+loads SKU rows in pages of 50, `/inventory/skus/new` creates a SKU from `code`
+and `title`, and `/inventory/skus/:skuId` displays its details and audit fields.
+The module uses the existing session and CSRF client; editing and deletion are
+not supported by the current API.
+
+A SKU card links to `/catalog/products/new?skuId=...`. The product form fetches
+that SKU separately and preselects it even when it is outside the first list
+page. A failed lookup can be retried or replaced by a selection from the list.
+Both modules share inventory's tenant-scoped SKU queries; creating a SKU
+invalidates the list used by the product form.
+
+## Category Management
+
+The **Каталог** group includes **Категории**. `/catalog/categories?locale=uk`
+shows a collapsible hierarchy, `/catalog/categories/new` creates a category
+with a required initial name translation and optional `parentId`, and
+`/catalog/categories/:categoryId` manages translations, parent and deletion.
+The locale is explicit in the URL; missing translations show the category ID
+without falling back to another language. Parent selection excludes the current
+category and its descendants. Deletion requires confirmation and the backend
+rejects categories with children or linked products.
+
+Product cards have an independent category-assignment form. A nonempty selection
+requires a primary category from that selection; clearing all categories sends
+an empty list and a null primary category. Saving categories preserves an unsaved
+product translation, and saving the translation preserves the category draft.
+Both drafts participate in the shared navigation and browser-exit guard.
+
+Category queries are tenant- and locale-scoped. Changes invalidate category lists,
+details and product views containing category names. Category data is fetched as
+a full list; no server search, pagination, translation deletion or bulk actions
+are exposed.
+
 ## Quality And Verification
 
 The primary static verification command is:

@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.catalog.application.product.query.get_product.dto import (
     ProductContentDTO,
     ProductDetailsDTO,
+    ProductCategoryDTO,
 )
 from src.modules.catalog.domain.product.value_object.identifier import ProductIdVO
 from src.modules.catalog.domain.product.value_object.locale import ProductLocaleVO
@@ -12,6 +13,12 @@ from src.modules.catalog.infrastructure.persistence.models.content import (
 )
 from src.modules.catalog.infrastructure.persistence.models.product import ProductModel
 from src.modules.catalog.infrastructure.persistence.models.variant import VariantModel
+from src.modules.catalog.infrastructure.persistence.models.category_content import (
+    CategoryContentModel,
+)
+from src.modules.catalog.infrastructure.persistence.models.product_category import (
+    ProductCategoryModel,
+)
 
 
 class SqlAlchemyProductQueryRepository:
@@ -45,6 +52,25 @@ class SqlAlchemyProductQueryRepository:
         matching = next(
             (item for item in contents if item.locale_code == locale.value), None
         )
+        category_rows = (
+            await self._session.execute(
+                select(
+                    ProductCategoryModel.category_id,
+                    ProductCategoryModel.is_primary,
+                    CategoryContentModel.name,
+                )
+                .outerjoin(
+                    CategoryContentModel,
+                    (
+                        CategoryContentModel.category_id
+                        == ProductCategoryModel.category_id
+                    )
+                    & (CategoryContentModel.locale_code == locale.value),
+                )
+                .where(ProductCategoryModel.product_id == product_id.uuid)
+                .order_by(ProductCategoryModel.category_id)
+            )
+        ).all()
         return ProductDetailsDTO(
             id=row.id,
             type=row.type,
@@ -61,6 +87,13 @@ class SqlAlchemyProductQueryRepository:
                 )
                 if matching is not None
                 else None
+            ),
+            categories=tuple(
+                ProductCategoryDTO(item.category_id, item.name)
+                for item in category_rows
+            ),
+            primary_category_id=next(
+                (item.category_id for item in category_rows if item.is_primary), None
             ),
             created_at=row.created_at,
             updated_at=row.updated_at,

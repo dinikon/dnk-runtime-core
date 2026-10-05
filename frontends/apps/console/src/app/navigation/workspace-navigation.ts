@@ -1,6 +1,7 @@
 import {
   Building2,
   Package,
+  Warehouse,
   FileSpreadsheet,
   LifeBuoy,
   ShoppingBasket,
@@ -12,8 +13,15 @@ import type { WorkspaceNavigation } from "./workspace-navigation.types";
 export const workspaceNavigation: WorkspaceNavigation = {
   navGroups: [
     {
+      title: "Склад",
+      items: [{ title: "SKU", url: "/inventory/skus", icon: Warehouse }],
+    },
+    {
       title: "Каталог",
-      items: [{ title: "Товары", url: "/catalog/products", icon: Package }],
+      items: [
+        { title: "Товары", url: "/catalog/products", icon: Package },
+        { title: "Категории", url: "/catalog/categories", icon: Package },
+      ],
     },
     {
       title: "CRM",

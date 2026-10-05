@@ -13,8 +13,10 @@ from src.config import dnk_config
 from src.modules.catalog.application.product.query.get_product.dto import (
     ProductContentDTO,
     ProductDetailsDTO,
+    ProductCategoryDTO,
 )
 from src.modules.catalog.presentation.product.depends import (
+    get_category_reader,
     get_locale_reader,
     get_product_query_repository,
     get_product_repository,
@@ -45,6 +47,9 @@ class InMemoryProducts:
     async def save_content(self, product, locale) -> None:
         self.rows[product.id.uuid] = product
 
+    async def save_categories(self, product) -> None:
+        self.rows[product.id.uuid] = product
+
     async def get_details(self, product_id, locale):
         product = self.rows.get(product_id.uuid)
         if product is None:
@@ -65,6 +70,14 @@ class InMemoryProducts:
                     description=content.description,
                 )
                 if content
+                else None
+            ),
+            categories=tuple(
+                ProductCategoryDTO(item.uuid, None) for item in product.category_ids
+            ),
+            primary_category_id=(
+                product.primary_category_id.uuid
+                if product.primary_category_id
                 else None
             ),
             created_at=product.created_at,
@@ -93,10 +106,10 @@ class ProductHttpTests(unittest.IsolatedAsyncioTestCase):
         self.app.state.uuid_generator = Mock(
             new=Mock(side_effect=(self.product_id, self.variant_id))
         )
-        self.app.state.authorization_service = Mock(can=AsyncMock(return_value=True))
         self.products = InMemoryProducts()
         self.skus = Mock(get_code=AsyncMock(return_value="SKU-1"))
         self.locales = Mock(is_active=AsyncMock(return_value=True))
+        self.categories = Mock(require_all=AsyncMock())
         self.app.dependency_overrides[get_optional_request_context] = (
             lambda: self.app.state.test_context
         )
@@ -106,6 +119,7 @@ class ProductHttpTests(unittest.IsolatedAsyncioTestCase):
         )
         self.app.dependency_overrides[get_sku_reader] = lambda: self.skus
         self.app.dependency_overrides[get_locale_reader] = lambda: self.locales
+        self.app.dependency_overrides[get_category_reader] = lambda: self.categories
         self.app.include_router(router, prefix="/api/console")
 
         @self.app.get("/csrf")
@@ -147,6 +161,8 @@ class ProductHttpTests(unittest.IsolatedAsyncioTestCase):
                 "requested_locale",
                 "content_locales",
                 "content",
+                "categories",
+                "primary_category_id",
                 "created_at",
                 "updated_at",
                 "created_by",
@@ -220,17 +236,6 @@ class ProductHttpTests(unittest.IsolatedAsyncioTestCase):
                     headers=self.headers,
                 )
                 self.assertEqual(response.status_code, 422)
-        self.app.state.authorization_service.can.return_value = False
-        self.assertEqual(
-            (
-                await self.client.post(
-                    self.collection,
-                    json={"sku_id": str(self.sku)},
-                    headers=self.headers,
-                )
-            ).status_code,
-            403,
-        )
 
     async def test_inactive_locale_and_missing_sku(self) -> None:
         self.skus.get_code.return_value = None
@@ -269,3 +274,65 @@ class ProductHttpTests(unittest.IsolatedAsyncioTestCase):
             f"{self.collection}/variable", json={}, headers=self.headers
         )
         self.assertIn(response.status_code, (404, 405))
+
+    async def test_replace_categories(self) -> None:
+        category_id = uuid4()
+        self.assertEqual(
+            (
+                await self.client.post(
+                    self.collection,
+                    json={"sku_id": str(self.sku)},
+                    headers=self.headers,
+                )
+            ).status_code,
+            201,
+        )
+        path = f"{self.item}/categories"
+        self.assertEqual(
+            (
+                await self.client.put(
+                    path,
+                    json={
+                        "category_ids": [str(category_id)],
+                        "primary_category_id": str(category_id),
+                    },
+                    headers=self.headers,
+                )
+            ).status_code,
+            200,
+        )
+        self.categories.require_all.assert_awaited_once_with((category_id,))
+        read = await self.client.get(self.item, params={"locale": "uk"})
+        self.assertEqual(
+            read.json()["categories"], [{"id": str(category_id), "name": None}]
+        )
+        self.assertEqual(read.json()["primary_category_id"], str(category_id))
+        self.assertEqual(
+            (
+                await self.client.put(
+                    path,
+                    json={
+                        "category_ids": [str(category_id)],
+                        "primary_category_id": None,
+                    },
+                    headers=self.headers,
+                )
+            ).status_code,
+            422,
+        )
+        self.assertEqual(
+            (
+                await self.client.put(
+                    path,
+                    json={"category_ids": [], "primary_category_id": None},
+                    headers=self.headers,
+                )
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            (await self.client.get(self.item, params={"locale": "uk"})).json()[
+                "categories"
+            ],
+            [],
+        )

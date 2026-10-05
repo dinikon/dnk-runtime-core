@@ -27,7 +27,11 @@ defineEmits<{ change: [value: string] }>();
       id="product-locale"
       class="w-full"
       aria-label="Язык перевода"
-      ><SelectValue placeholder="Выберите язык" /></SelectTrigger
+      ><SelectValue v-if="value"
+        >{{ options.find((item) => item.code === value)?.name ?? value }} ({{
+          value
+        }})</SelectValue
+      ><SelectValue v-else placeholder="Выберите язык" /></SelectTrigger
     ><SelectContent
       ><SelectGroup
         ><SelectItem v-for="item in options" :key="item.code" :value="item.code"

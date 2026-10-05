@@ -5,7 +5,6 @@ import type {
   ProductDto,
   PutContentDto,
   SavedContentDto,
-  SkuDto,
   LocaleDto,
 } from "./contracts";
 export const catalogApi = {
@@ -31,14 +30,6 @@ export const catalogApi = {
         `/console/catalog/products/${encodeURIComponent(id)}/contents/${encodeURIComponent(locale)}`,
         payload,
       )
-    ).data;
-  },
-  async listSkus(offset: number, signal?: AbortSignal) {
-    return (
-      await httpClient.get<SkuDto[]>("/console/inventory/skus", {
-        params: { limit: 50, offset },
-        signal,
-      })
     ).data;
   },
   async listLocales(signal?: AbortSignal) {

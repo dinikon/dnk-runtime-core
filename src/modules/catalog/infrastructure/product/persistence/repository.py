@@ -1,4 +1,4 @@
-from sqlalchemy import insert, select, update
+from sqlalchemy import delete, insert, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +19,10 @@ from src.modules.catalog.infrastructure.persistence.models.content import (
 )
 from src.modules.catalog.infrastructure.persistence.models.product import ProductModel
 from src.modules.catalog.infrastructure.persistence.models.variant import VariantModel
+from src.modules.catalog.infrastructure.persistence.models.product_category import (
+    ProductCategoryModel,
+)
+from src.modules.catalog.domain.category.value_object.identifier import CategoryIdVO
 from src.modules.catalog.infrastructure.product.persistence.mapper import ProductMapper
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 
@@ -95,6 +99,17 @@ class SqlAlchemyProductRepository:
             .scalars()
             .all()
         )
+        category_rows = (
+            (
+                await self._session.execute(
+                    select(ProductCategoryModel)
+                    .where(ProductCategoryModel.product_id == product_id.uuid)
+                    .order_by(ProductCategoryModel.category_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
         return Product.restore(
             product_id=ProductIdVO.from_value(row.id),
             product_type=row.type,
@@ -117,6 +132,17 @@ class SqlAlchemyProductRepository:
                 )
                 for item in content_rows
             },
+            category_ids=tuple(
+                CategoryIdVO.from_value(item.category_id) for item in category_rows
+            ),
+            primary_category_id=next(
+                (
+                    CategoryIdVO.from_value(item.category_id)
+                    for item in category_rows
+                    if item.is_primary
+                ),
+                None,
+            ),
         )
 
     async def save_content(self, product: Product, locale: ProductLocaleVO) -> None:
@@ -129,6 +155,30 @@ class SqlAlchemyProductRepository:
                 set_={field: values[field] for field in ("name", "description")},
             )
         )
+        await self._session.execute(
+            update(ProductModel)
+            .where(ProductModel.id == product.id.uuid)
+            .values(updated_at=product.updated_at, updated_by=product.updated_by.uuid)
+        )
+
+    async def save_categories(self, product: Product) -> None:
+        await self._session.execute(
+            delete(ProductCategoryModel).where(
+                ProductCategoryModel.product_id == product.id.uuid
+            )
+        )
+        if product.category_ids:
+            await self._session.execute(
+                insert(ProductCategoryModel),
+                [
+                    {
+                        "product_id": product.id.uuid,
+                        "category_id": category_id.uuid,
+                        "is_primary": category_id == product.primary_category_id,
+                    }
+                    for category_id in product.category_ids
+                ],
+            )
         await self._session.execute(
             update(ProductModel)
             .where(ProductModel.id == product.id.uuid)
