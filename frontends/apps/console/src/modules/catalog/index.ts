@@ -1,0 +1,1 @@
+export { catalogRoutes } from "./routes";

@@ -214,6 +214,25 @@ Optional environment:
 
 - `VITE_API_BASE_URL`: backend API base URL. Defaults to `/api`.
 
+## Product Cards
+
+The `catalog` module uses the existing console session and CSRF-protected HTTP
+client. Its entry route `/catalog/products` opens cards by UUID; it does not
+show a product list because the backend currently has no product-list endpoint.
+
+`/catalog/products/new` creates a SIMPLE product linked to an existing SKU, with
+an optional first translation. SKU options are fetched in pages of 50.
+`/catalog/products/:productId?locale=uk` displays a card and edits one translation
+at a time. The locale is explicit in the URL; missing translations have an empty
+form without fallback to another language. The default locale is `uk` when
+available, otherwise the first sorted reference-data locale.
+
+The product API supports creation, reading and replacing a translation only.
+SKU/type are read-only, and images, prices, deletion and variant management are
+outside this module. Unsaved drafts are protected on route/language changes and
+browser exit. Product query keys include tenant, product ID and locale; saving
+invalidates all cached locales for that product.
+
 ## Quality And Verification
 
 The primary static verification command is:
