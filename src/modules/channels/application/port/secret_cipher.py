@@ -1,0 +1,6 @@
+from typing import Protocol
+
+
+class SecretCipherPort(Protocol):
+    def encrypt(self, secrets: dict[str, str]) -> str: ...
+    def decrypt(self, encrypted: str) -> dict[str, str]: ...

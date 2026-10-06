@@ -7,9 +7,15 @@ from src.config import dnk_config
 from src.dnk_app import DnkApp
 from src.modules.router import router as api_router
 from src.modules.control_plane.presentation.router import router as control_plane_router
-from src.modules.identity.presentation.auth.http.csrf_router import router as identity_csrf_router
-from src.modules.identity.presentation.access.http.router import router as identity_access_router
-from src.modules.identity.presentation.invitation.http.router import router as identity_invitation_router
+from src.modules.identity.presentation.auth.http.csrf_router import (
+    router as identity_csrf_router,
+)
+from src.modules.identity.presentation.access.http.router import (
+    router as identity_access_router,
+)
+from src.modules.identity.presentation.invitation.http.router import (
+    router as identity_invitation_router,
+)
 from src.modules.identity.presentation.cloud.http.router import router as cloud_router
 from src.modules.shared.infrastructure.events import ensure_event_bus_topology
 from src.modules.shared.infrastructure.messaging import (

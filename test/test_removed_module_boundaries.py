@@ -18,9 +18,12 @@ class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
         from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migration_metadata import (
             migration_metadata,
         )
+
         self.assertNotIn("tenant_locales", migration_metadata().tables)
         self.assertFalse(
-            (PROJECT_ROOT / "migrations/tenant/versions/0012_tenant_locales.py").exists()
+            (
+                PROJECT_ROOT / "migrations/tenant/versions/0012_tenant_locales.py"
+            ).exists()
         )
         paths = create_app().openapi()["paths"]
         self.assertFalse(

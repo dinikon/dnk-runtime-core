@@ -1,5 +1,7 @@
 from __future__ import annotations
-from src.modules.identity.application.user.command.create_tenant_admin.command import CreateTenantAdminCommand
+from src.modules.identity.application.user.command.create_tenant_admin.command import (
+    CreateTenantAdminCommand,
+)
 
 from src.modules.identity.application.user.command.create_tenant_admin.handler import (
     CreateTenantAdminHandler,
@@ -26,12 +28,14 @@ class IdentityProvisioningServiceAdapter(IdentityProvisioningServiceProtocol):
         email: str,
     ) -> ProvisionedTenantAdmin:
         """Создает tenant admin через identity и мапит результат в tenancy DTO."""
-        result = await self._user_service.execute(CreateTenantAdminCommand(
-            tenant_id=tenant_id,
-            first_name=first_name,
-            last_name=last_name,
-            email=email,
-        ))
+        result = await self._user_service.execute(
+            CreateTenantAdminCommand(
+                tenant_id=tenant_id,
+                first_name=first_name,
+                last_name=last_name,
+                email=email,
+            )
+        )
         return ProvisionedTenantAdmin(
             user_id=result.user_id,
             user_email_id=result.user_email_id,

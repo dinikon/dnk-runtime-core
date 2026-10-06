@@ -1,5 +1,6 @@
 """Регистрация статических tenant-моделей и их исторических имён."""
 
+import src.modules.channels.infrastructure.persistence.models.channel  # noqa: F401
 import src.modules.crm.infrastructure.persistence.models.company  # noqa: F401
 import src.modules.crm.infrastructure.persistence.models.contact  # noqa: F401
 import src.modules.crm.infrastructure.persistence.models.contact_company  # noqa: F401
@@ -31,6 +32,7 @@ import src.modules.price_lists.infrastructure.persistence  # noqa: F401
 # Не удалять имена при удалении модели: autogenerate должен видеть DROP TABLE.
 HISTORICAL_TENANT_TABLE_NAMES = frozenset(
     {
+        "channels",
         "warehouses",
         "skus",
         "catalog_products",

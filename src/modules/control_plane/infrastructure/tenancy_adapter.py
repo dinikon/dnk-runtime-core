@@ -93,7 +93,9 @@ class TenancyAdapter:
                 SqlAlchemyTenantDomainRepository(self.session),
             ),
             IdentityProvisioningServiceAdapter(
-                CreateTenantAdminHandler(SqlAlchemyUserRepository(self.session, self.naming))
+                CreateTenantAdminHandler(
+                    SqlAlchemyUserRepository(self.session, self.naming)
+                )
             ),
             TenantSchemaBootstrapContextFactory(schema_prefix=self.schema_prefix),
             AlembicTenantSchemaBootstrapAdapter(self.session, self.migrator),
@@ -123,7 +125,9 @@ class TenancyAdapter:
     async def ready(
         self, installation, command: dict, *, require_active: bool = False
     ) -> bool:
-        from src.modules.identity.infrastructure.cloud.bootstrap import cloud_owner_ready
+        from src.modules.identity.infrastructure.cloud.bootstrap import (
+            cloud_owner_ready,
+        )
 
         tenant = await self.session.get(TenantModel, installation.runtime_tenant_id)
         if tenant is None or (require_active and tenant.status != "active"):

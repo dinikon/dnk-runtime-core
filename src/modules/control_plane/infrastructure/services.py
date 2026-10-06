@@ -310,7 +310,9 @@ class AccessProjectionWriter:
         from src.modules.identity.infrastructure.access.persistence.repository import (
             AccessRepository,
         )
-        from src.modules.identity.infrastructure.persistence.models.user import UserModel
+        from src.modules.identity.infrastructure.persistence.models.user import (
+            UserModel,
+        )
 
         access = AccessRepository(self.session, naming)
         runtime_id = installation.runtime_tenant_id

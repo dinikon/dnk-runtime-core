@@ -6,7 +6,9 @@ from fastapi import Depends
 
 from src.config import dnk_config
 
-from src.modules.identity.application.user.command.create_tenant_admin.handler import CreateTenantAdminHandler
+from src.modules.identity.application.user.command.create_tenant_admin.handler import (
+    CreateTenantAdminHandler,
+)
 from src.modules.identity.infrastructure.user.persistence.repository import (
     SqlAlchemyUserRepository,
 )
