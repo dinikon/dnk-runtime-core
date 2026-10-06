@@ -7,14 +7,16 @@ from dataclasses import replace
 from uuid import UUID, uuid4
 from cryptography.fernet import Fernet
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select, inspect
+from sqlalchemy import select, inspect, delete
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 from sqlalchemy.schema import CreateSchema, DropSchema
 from src.config import dnk_config
-from src.modules.channels.infrastructure.crypto.cipher import ChannelSecretCipher
+from src.modules.channels.infrastructure.channel.crypto.cipher import (
+    ChannelSecretCipher,
+)
 from src.modules.channels.infrastructure.persistence.models.channel import ChannelModel
-from src.modules.channels.presentation.depends import get_cipher
+from src.modules.channels.presentation.channel.depends import get_cipher
 from src.modules.identity.domain.auth.principal import Principal
 from src.modules.identity.domain.auth.request_context import RequestContext
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
@@ -25,6 +27,7 @@ from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations imp
     TenantMigrator,
 )
 from test.channels_support import channel_app
+from src.modules.shared.infrastructure.jobs.scheduled_job_model import ScheduledJobModel
 
 TEST_URL = os.environ.get("TEST_POSTGRES_URL")
 
@@ -36,6 +39,10 @@ class ChannelsPostgresTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.engine = create_async_engine(TEST_URL, poolclass=NullPool)
         self.sessions = async_sessionmaker(self.engine, expire_on_commit=False)
+        async with self.engine.begin() as connection:
+            await connection.run_sync(
+                lambda c: ScheduledJobModel.__table__.create(c, checkfirst=True)
+            )
         self.tenant, self.other, self.actor = uuid4(), uuid4(), uuid4()
         naming = TenantSchemaNaming(dnk_config.SCHEMA_PREFIX)
         self.schemas = [
@@ -66,6 +73,12 @@ class ChannelsPostgresTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.client.aclose()
+        async with self.engine.begin() as connection:
+            await connection.execute(
+                delete(ScheduledJobModel).where(
+                    ScheduledJobModel.tenant_id.in_((self.tenant, self.other))
+                )
+            )
         async with self.engine.begin() as connection:
             for schema in self.schemas:
                 await connection.execute(

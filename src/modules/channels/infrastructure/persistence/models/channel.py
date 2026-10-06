@@ -22,6 +22,9 @@ class ChannelModel(EntityAuditMixin, AudienceMixin, TenantBase):
             "status IN ('unverified', 'connected', 'error')", name="ck_channel_status"
         ),
     )
+    connection_revision: Mapped[int] = mapped_column(
+        sa.Integer, nullable=False, server_default="1"
+    )
     name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
     kind: Mapped[str] = mapped_column(sa.String(64), nullable=False)
     config_version: Mapped[int] = mapped_column(sa.Integer, nullable=False)

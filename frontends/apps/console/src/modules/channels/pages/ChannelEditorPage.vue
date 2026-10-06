@@ -51,6 +51,9 @@ import {
 } from "../model/types";
 import ConnectionForm from "../ui/ConnectionForm.vue";
 
+const props = withDefaults(defineProps<{ embedded?: boolean }>(), {
+  embedded: false,
+});
 const route = useRoute(),
   router = useRouter(),
   client = useQueryClient();
@@ -233,6 +236,12 @@ async function save() {
     });
     if (requestGeneration !== generation) return;
     pending.value = false;
+    await client.invalidateQueries({
+      queryKey: ["channels", requestTenant, "publications", result.id],
+    });
+    await client.invalidateQueries({
+      queryKey: ["channels", requestTenant, "imports", result.id],
+    });
     toast.success("Канал сохранён");
     if (!editing.value) await router.push(`/channels/${result.id}`);
   } catch (reason) {
@@ -277,6 +286,12 @@ async function remove() {
     });
     if (requestGeneration !== generation) return;
     pending.value = false;
+    client.removeQueries({
+      queryKey: ["channels", requestTenant, "publications", requestId],
+    });
+    client.removeQueries({
+      queryKey: ["channels", requestTenant, "imports", requestId],
+    });
     toast.success("Канал удалён");
     await router.push("/channels");
   } catch (reason) {
@@ -293,7 +308,10 @@ async function remove() {
 </script>
 <template>
   <div class="flex min-h-0 flex-col gap-5 overflow-y-auto pb-6">
-    <header class="flex flex-wrap items-center justify-between gap-3">
+    <header
+      v-if="!props.embedded"
+      class="flex flex-wrap items-center justify-between gap-3"
+    >
       <h1 class="text-2xl font-semibold">
         {{ editing ? "Настройки канала" : "Добавить канал" }}
       </h1>
@@ -460,13 +478,18 @@ async function remove() {
               @replace="replaceSecret"
               @cancel-replace="cancelReplace"
             />
-            <Alert
-              ><AlertTitle>Проверка подключения пока недоступна</AlertTitle
-              ><AlertDescription
-                >Сейчас сохраняются только настройки. Загрузка товаров ещё не
-                запускается.</AlertDescription
-              ></Alert
-            >
+            <Alert v-if="['prom', 'woocommerce'].includes(kind)">
+              <AlertTitle>Публикации из магазина</AlertTitle>
+              <AlertDescription v-if="editing">
+                Загрузите или обновите карточки на вкладке «Публикации».
+              </AlertDescription>
+              <AlertDescription v-else-if="active">
+                После сохранения канала начнётся загрузка публикаций.
+              </AlertDescription>
+              <AlertDescription v-else>
+                Включите канал, чтобы загрузить публикации.
+              </AlertDescription>
+            </Alert>
             <Alert v-if="error" variant="destructive"
               ><AlertTitle>Не удалось выполнить действие</AlertTitle
               ><AlertDescription
@@ -522,8 +545,9 @@ async function remove() {
           ><AlertDialogTitle
             >Удалить канал «{{ original?.name }}»?</AlertDialogTitle
           ><AlertDialogDescription
-            >Настройки и сохранённые ключи этого канала будут удалены. Данные
-            внешнего магазина не изменятся.</AlertDialogDescription
+            >Настройки, ключи подключения и локальные публикации этого канала
+            будут удалены. Данные внешнего магазина не
+            изменятся.</AlertDialogDescription
           ></AlertDialogHeader
         >
         <p v-if="error" role="alert" class="text-sm text-destructive">

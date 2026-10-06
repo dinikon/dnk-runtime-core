@@ -1,4 +1,10 @@
 from __future__ import annotations
+from src.modules.channels.application.publication_import_run.service import (
+    JOB_TYPE as CHANNEL_IMPORT_JOB_TYPE,
+)
+from src.modules.channels.presentation.publication_import_run.depends import (
+    PublicationImportJobRuntime,
+)
 from src.modules.price_lists.presentation.depends.application import (
     get_synchronize_price_list_use_case,
     get_cleanup_price_list_use_case,
@@ -117,6 +123,9 @@ async def handle_worker(_args: argparse.Namespace) -> int:
                 get_cleanup_price_list_use_case(db_helper.session_factory)
             ),
             JOB_TYPE: ReferenceDataRefreshJobHandler(db_helper.session_factory),
+            CHANNEL_IMPORT_JOB_TYPE: PublicationImportJobRuntime(
+                db_helper.session_factory
+            ),
         }
     )
     worker = build_scheduled_job_worker(

@@ -11,9 +11,14 @@ from src.config import dnk_config
 from src.modules.identity.domain.auth.principal import Principal
 from src.modules.identity.domain.auth.request_context import RequestContext
 from src.modules.channels.infrastructure.persistence.models.channel import ChannelModel
-from src.modules.channels.presentation.depends import get_cipher
-from src.modules.channels.infrastructure.crypto.cipher import ChannelSecretCipher
+from src.modules.channels.presentation.channel.depends import get_cipher
+from src.modules.channels.infrastructure.channel.crypto.cipher import (
+    ChannelSecretCipher,
+)
 from test.channels_support import channel_app
+from src.modules.channels.presentation.publication_import_run.depends import (
+    get_import_starter,
+)
 
 
 class ChannelsHttpTests(unittest.IsolatedAsyncioTestCase):
@@ -33,6 +38,8 @@ class ChannelsHttpTests(unittest.IsolatedAsyncioTestCase):
             close=AsyncMock(),
         )
         self.app = channel_app(lambda: self.session, self.context)
+        self.imports = Mock(start=AsyncMock())
+        self.app.dependency_overrides[get_import_starter] = lambda: self.imports
         self.app.state.clock = Mock(now=Mock(return_value=self.now))
         self.app.state.uuid_generator = Mock(new=Mock(return_value=self.identifier))
         self.cipher = ChannelSecretCipher(Fernet.generate_key().decode())

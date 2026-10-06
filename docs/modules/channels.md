@@ -1,7 +1,9 @@
 # Channels
 
-Первый срез управляет настройками подключений через Console и HTTP API.
-Проверка доступа, синхронизация и связь с Catalog пока не выполняются.
+Реализованы настройки подключений и чтение публикаций Prom/WooCommerce через
+Console и HTTP API. Карточки сохраняются локально; импорт выполняет shared jobs
+worker. Проверка подключения как отдельный сценарий, запись на платформы и связь
+с Catalog остаются следующими этапами.
 
 ## Модель
 
@@ -9,12 +11,15 @@
 `ChannelType` — категория платформы: `marketplace`, `cms`, `shop`; она выводится
 из реестра по kind и не дублируется в tenant-таблице. Отдельного ConnectionType нет.
 
-Channel — единственный Aggregate Root модуля. Слои размещены непосредственно
-в `channels/domain`, `application`, `infrastructure`, `presentation`.
+Корни модуля: `Channel`, `ExternalPublication`, `PublicationImportRun`. В каждом
+слое они размещены в `channel/`, `external_publication/`,
+`publication_import_run/`; SQL-модели находятся в общей
+`infrastructure/persistence/models/`.
 Агрегат неизменяем: его методы возвращают новое проверенное состояние.
 Он хранит название, kind, версию конфигурации, настройки, активность, статус и audit.
-Domain получает только запечатанные credentials; открытые ключи существуют
-в Application при проверке и объединении настроек. Секреты не входят в repr.
+Domain получает только запечатанные credentials; открытые ключи используются
+в Application при объединении настроек и в HTTP-адаптерах при чтении источника.
+Секреты не входят в repr.
 
 - `is_active` управляется пользователем, по умолчанию `true`.
 - `status`: `unverified`, `connected`, `error`; новый канал — `unverified`.
@@ -26,7 +31,7 @@ Domain получает только запечатанные credentials; от�
 ## Архитектура и контракты сценариев
 
 Правила: [архитектура проекта](../architecture/AGENTS.md) и корневой `AGENTS.md`.
-Для единственного Aggregate Root нет дополнительного каталога `channel/` в слоях.
+Сценарии разделены по Aggregate Root внутри соответствующего слоя.
 
 | Сценарий Application | Вход | Результат | HTTP response |
 | --- | --- | --- | --- |
@@ -38,7 +43,7 @@ Domain получает только запечатанные credentials; от�
 | `list_kinds` | `ListKindsQuery` | `tuple[ChannelKindListItemDTO, ...]` | список `ListChannelKindItemResponse` |
 | `get_kind_config` | `GetKindConfigQuery` | `ChannelKindConfigDTO` | `GetKindConfigResponse` |
 
-Каждый сценарий находится в `application/command|query/<scenario>/` с отдельными
+Каждый сценарий находится в `application/<aggregate_root>/command|query/<scenario>/` с отдельными
 `command.py` или `query.py`, `handler.py` и `dto.py` при наличии результата.
 Удалению пустой DTO не нужен. Все методы имеют явные аннотации и docstrings.
 Каждый HTTP-метод имеет собственные controller/response файлы; request нужен
@@ -68,15 +73,15 @@ Application. Ошибки полей имеют независимые от тр
 
 ## Реестр и форма
 
-Реестр находится в `infrastructure/definitions/registry.py`, выдаёт копии определений
+Реестр находится в `infrastructure/channel/definitions/registry.py`, выдаёт копии определений
 и включает 21 платформу из плана, кроме Facebook Leads и TikTok Leads.
 Сохранение доступно для Prom и WooCommerce. Остальные записи имеют причину
 недоступности и `config.connection: null`.
 
 Определение содержит kind, type, label, can_configure, unavailable_reason,
 config_version и config. В `config.connection` находятся JSON Schema Draft 2020-12
-и ui_schema (упорядоченные property/widget/help_text). `config.capabilities` пока
-пустой; отсутствующая возможность недоступна. Схемы не редактируются через API.
+и ui_schema (упорядоченные property/widget/help_text).
+`config.capabilities.read_publications` доступна для Prom и WooCommerce. Схемы не редактируются через API.
 
 Prom требует секретный `api_key`. WooCommerce требует `url` и секретные
 `consumer_key`, `consumer_secret`. URL — HTTPS без userinfo, query и fragment,
@@ -120,7 +125,8 @@ loc/msg/type без input. Ошибка проходит через исключ
 
 ## Хранение и запуск
 
-Tenant-миграция `0013_channels` следует за `0012_catalog`. Таблица channels
+Tenant-миграция `0013_channels` следует за `0012_catalog`;
+`0014_channel_publications` добавляет локальные карточки, запуски и ревизию подключения. Таблица channels
 хранит публичные параметры в JSONB, секретные — одним Fernet ciphertext.
 Query-проекции не выбирают ciphertext. PATCH блокирует строку на время UoW;
 HTTP-вызовов внешних платформ внутри транзакции нет.
@@ -147,7 +153,14 @@ python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 
 - `/channels` — список, активность и технический статус отдельно.
 - `/channels/new` — выбор платформы и динамическая форма из API.
-- `/channels/:channelId` — настройки, замена ключей, активность и удаление.
+- `/channels/:channelId` — переход к вкладке «Публикации».
+- `/channels/:channelId/publications` — список локальных карточек и обновление.
+- `/channels/:channelId/publications/:publicationId` — поля карточки и вариации.
+- `/channels/:channelId/settings` — существующая форма подключения.
+
+На странице канала общие вкладки «Публикации» и «Настройки подключения».
+Карточка сохраняет активность вкладки публикаций. Переход из изменённой формы
+защищён существующим подтверждением несохранённых изменений.
 
 Сохранённые секреты представлены текстом «Ключ задан». Действие «Заменить»
 включает ввод нового значения; без этого секрет не отправляется. Изменение платформы
@@ -157,13 +170,14 @@ Credentials не сохраняются в web storage или query/mutation cac
 не используют mutation cache, ошибки Axios очищаются от тела запроса. Query keys
 изолированы по tenant, смена tenant очищает форму и отменяет текущий запрос.
 При 409 пользователь явно обновляет схему; автоматической повторной отправки нет.
-Проверка доступа и запуск синхронизации пока не отображаются как действия.
+В публикациях доступна кнопка загрузки/обновления и прогресс активного импорта.
+Страницы читают локальное хранилище; GET страницы Console не вызывает платформу.
 
 ## Проверки
 
 ```sh
-.venv/bin/python -m unittest test.test_channels test.test_channels_http test.test_channels_architecture -q
-TEST_POSTGRES_URL='<disposable PostgreSQL URL>' .venv/bin/python -m unittest test.test_channels_postgres -q
+.venv/bin/python -m unittest test.test_channels test.test_channels_http test.test_channel_publications test.test_channels_architecture -q
+TEST_POSTGRES_URL='<disposable PostgreSQL URL>' .venv/bin/python -m unittest test.test_channels_postgres test.test_channel_publications_postgres.ChannelPublicationsPostgresTests -q
 npm --prefix frontends run typecheck:console
 npm --prefix frontends run lint:console
 npm --prefix frontends run build:console
@@ -172,9 +186,90 @@ npm --prefix frontends run build:console
 PostgreSQL-тесты создают отдельные временные tenant-схемы, проверяют миграцию,
 шифрование, изоляцию, rollback, конкурентное объединение PATCH и удаление.
 
-`test_channels_architecture.py` проверяет структуру семи сценариев, отдельные DTO
+`test_channels_architecture.py` проверяет структуру сценариев всех трёх корней, отдельные DTO
 и HTTP-схемы, аннотации, русские docstrings, запрет `__post_init__` вне VO,
 направление импортов, границы транзакций, mapper-ы и пустые `__init__.py`.
 Он включается стандартным `unittest discover`, используемым `scripts.cicd.checks`,
 и также запускается отдельно без PostgreSQL. Семантику фабрик, audit, безопасных
 результатов команд, ошибок полей и сбоя commit проверяют регрессионные тесты.
+
+## Read публикации и импорт
+
+`ExternalPublication` сохраняет идентичность `(channel_id, connection_revision,
+resource_type, external_id)`, внешний ID родителя, native `raw_payload` в JSONB,
+типизированный `document` с `schema_version=1`, ревизию снимка и время наблюдения.
+Native данные сохраняют неизвестные поля, но не выдаются Read API. Документ
+содержит название, SKU, ссылки, очищенные описания, изображения, категории,
+характеристики, цены, валюту, остаток, наличие, внешний статус и тип товара.
+`None` означает отсутствие данных; нулевые цена/остаток остаются нулём.
+Изменение снимка увеличивает ревизию; повторный одинаковый импорт сохраняет ID
+и ревизию. Этот документ описывает наблюдаемое состояние и не является payload
+будущего создания/обновления на платформе.
+
+`PublicationImportRun` хранит queued/running/succeeded/partial/failed, число
+сохранённых страниц и ресурсов, курсор, текущий job_id и безопасный код ошибки.
+Создание активного канала автоматически ставит первоначальный импорт в очередь.
+Существующие каналы загружаются кнопкой. Повторный запуск возвращает активный run.
+Пустой успешный источник завершается succeeded с нулём ресурсов.
+
+| Сценарий | Вход | Результат |
+| --- | --- | --- |
+| start_publication_import | StartPublicationImportCommand | StartPublicationImportResultDTO |
+| prepare_publication_import | PreparePublicationImportCommand | PreparePublicationImportResultDTO или None для устаревшего job |
+| import_publication_page | ImportPublicationPageCommand | ImportPublicationPageResultDTO |
+| complete_publication_import | CompletePublicationImportCommand | None |
+| list_publications | ListPublicationsQuery | PublicationPageDTO |
+| get_publication | GetPublicationQuery | PublicationDetailsDTO |
+| get_publication_import_run | GetPublicationImportRunQuery | PublicationImportRunDetailsDTO или None |
+
+HTTP относительно `/api/console/channels/{channel_id}`:
+
+- POST `/publication-imports` — 202 и run_id, обязательный CSRF, без фиктивного body.
+- GET `/publication-imports/latest` — последний run текущего подключения или null.
+- GET `/publication-imports/{run_id}` — прогресс конкретного run или 404.
+- GET `/publications?offset=0&limit=25` — пагинированные локальные публикации.
+- GET `/publications/{publication_id}` — поля карточки и связанные позиции.
+
+Prom использует GET `/products/list` без фильтра группы/статуса. Курсор `last_id`
+уменьшается согласно верхней границе ID. Ответ списка уже содержит поля модели
+Product; отдельное чтение карточки пока не требуется. Вариации Prom остаются
+отдельными публикациями; связи строятся только по явному `variation_base_id`.
+Совпадение названий и SKU ничего не группирует. Локализованные native поля
+сохраняются; этот срез отображает основной контент ответа без выбора fallback.
+
+Woo использует REST v3 GET products со status=any и страницы GET
+products/{id}/variations. В списке находятся верхние ресурсы, в деталях —
+дочерние позиции текущего run. Если получение вариаций не завершено, карточка
+показывает неполноту. Валюта читается через general/woocommerce_currency;
+если права магазина не позволяют прочитать настройку, значение остаётся пустым
+с предупреждением. Доступные статусы определяет API и права ключа: данные вне
+его области видимости не считаются загруженными.
+
+Worker зарегистрирован как `channels.publication_import` в `jobs worker`.
+Каждое задание обрабатывает ограниченную страницу. Подготовка коммитится до GET;
+после GET открывается новый короткий UoW. Запись карточек, прогресса и задания
+продолжения атомарна. Lease проверяется с блокировкой перед записью; повтор старой
+страницы не продвигает прогресс. Shared jobs повторяют временные ошибки.
+Окончательная ошибка сохраняет уже полученные карточки и статус partial/failed;
+исчерпанное или потерянное job видно в проекции и допускает новый ручной запуск.
+
+`connection_revision` увеличивается только при действительном изменении настроек.
+Старый worker не сохраняет данные после смены подключения или выключения канала.
+Чтение выбирает только текущую ревизию; старые снимки остаются в БД до удаления
+канала. Ротация ключей также создаёт новую область снимков и требует загрузки.
+Отсутствие карточки в следующем обходе пока не удаляет ранее полученный снимок:
+автоматическая сверка удалений и периодический импорт отложены. Исчезнувшие
+вариации не смешиваются с текущим набором родителя.
+
+HTTP адаптеры разрешают HTTPS с публичным IP, закрепляют DNS адрес и TLS host,
+отключают proxy/redirect, ограничивают распакованный JSON до 16 MiB на запрос.
+Внешние ошибки не содержат URL, credentials и тела ответа. Описания очищает nh3
+за Application-портом; ссылки изображений и карточек ограничены HTTP(S) без
+userinfo. Запись на Prom/Woo, YML, локальные правки и привязка Catalog не входят
+в текущий срез.
+
+Проверки импорта покрывают страницы Prom, более 100 вариаций Woo, отсутствие
+валюты, нулевые значения, очистку HTML, сохранение native полей, повторные запуски,
+lease/ревизию подключения, частичный сбой, пустой источник и HTTP tenant isolation.
+Проверяются остановка при повторяющейся странице источника и полный rollback
+карточек, курсора и задания продолжения с успешным повтором после сбоя.

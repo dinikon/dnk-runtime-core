@@ -44,3 +44,53 @@ export function useChannelConfig(kind: Ref<string>) {
     refetchOnWindowFocus: false,
   });
 }
+
+export function usePublicationImport(id: Ref<string>) {
+  const tenant = useChannelTenant();
+  return useQuery({
+    queryKey: computed(() => ["channels", tenant.value, "imports", id.value]),
+    queryFn: ({ signal }) => channelsApi.latestImport(id.value, signal),
+    enabled: computed(() => !!tenant.value && !!id.value),
+    refetchInterval: (query) =>
+      ["queued", "running"].includes(query.state.data?.status ?? "")
+        ? 2000
+        : false,
+    retry: false,
+  });
+}
+export function usePublications(id: Ref<string>, offset: Ref<number>) {
+  const tenant = useChannelTenant();
+  return useQuery({
+    queryKey: computed(() => [
+      "channels",
+      tenant.value,
+      "publications",
+      id.value,
+      "list",
+      offset.value,
+    ]),
+    queryFn: ({ signal }) =>
+      channelsApi.publications(id.value, offset.value, 25, signal),
+    enabled: computed(() => !!tenant.value && !!id.value),
+    retry: false,
+  });
+}
+export function usePublication(id: Ref<string>, publicationId: Ref<string>) {
+  const tenant = useChannelTenant();
+  return useQuery({
+    queryKey: computed(() => [
+      "channels",
+      tenant.value,
+      "publications",
+      id.value,
+      "detail",
+      publicationId.value,
+    ]),
+    queryFn: ({ signal }) =>
+      channelsApi.publication(id.value, publicationId.value, signal),
+    enabled: computed(
+      () => !!tenant.value && !!id.value && !!publicationId.value,
+    ),
+    retry: false,
+  });
+}

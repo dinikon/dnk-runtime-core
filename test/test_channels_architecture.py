@@ -33,7 +33,7 @@ class ChannelsArchitectureTests(unittest.TestCase):
     def test_use_cases_have_explicit_inputs_handlers_and_own_result_contracts(self):
         for scenario, (category, result, response) in SCENARIOS.items():
             with self.subTest(scenario=scenario):
-                folder = ROOT / "application" / category / scenario
+                folder = ROOT / "application/channel" / category / scenario
                 self.assertTrue((folder / f"{category}.py").is_file())
                 handler = ast.parse((folder / "handler.py").read_text())
                 execute = next(
@@ -58,18 +58,24 @@ class ChannelsArchitectureTests(unittest.TestCase):
                         any(
                             isinstance(n, ast.ImportFrom)
                             and n.module
-                            == f"src.modules.channels.application.{category}.{scenario}.dto"
+                            == f"src.modules.channels.application.channel.{category}.{scenario}.dto"
                             for n in handler.body
                         )
                     )
                 self.assertTrue(
-                    (ROOT / "presentation/http/controller" / f"{scenario}.py").is_file()
+                    (
+                        ROOT / "presentation/channel/http/controller" / f"{scenario}.py"
+                    ).is_file()
                 )
                 self.assertEqual(
-                    (ROOT / "presentation/http/request" / f"{scenario}.py").is_file(),
+                    (
+                        ROOT / "presentation/channel/http/request" / f"{scenario}.py"
+                    ).is_file(),
                     scenario in {"create_channel", "update_channel"},
                 )
-                response_path = ROOT / "presentation/http/response" / f"{scenario}.py"
+                response_path = (
+                    ROOT / "presentation/channel/http/response" / f"{scenario}.py"
+                )
                 self.assertEqual(response_path.is_file(), response is not None)
                 if response:
                     definitions = [
@@ -78,7 +84,82 @@ class ChannelsArchitectureTests(unittest.TestCase):
                         if isinstance(n, ast.ClassDef)
                     ]
                     self.assertEqual(definitions, [response])
-        self.assertFalse((ROOT / "presentation/http/response/channel.py").exists())
+        self.assertFalse(
+            (ROOT / "presentation/channel/http/response/channel.py").exists()
+        )
+
+    def test_publication_use_cases_have_separate_inputs_and_concrete_results(self):
+        scenarios = {
+            "start_publication_import": (
+                "publication_import_run",
+                "command",
+                "StartPublicationImportResultDTO",
+            ),
+            "prepare_publication_import": (
+                "publication_import_run",
+                "command",
+                "PreparePublicationImportResultDTO | None",
+            ),
+            "import_publication_page": (
+                "publication_import_run",
+                "command",
+                "ImportPublicationPageResultDTO",
+            ),
+            "complete_publication_import": (
+                "publication_import_run",
+                "command",
+                "None",
+            ),
+            "get_publication_import_run": (
+                "publication_import_run",
+                "query",
+                "PublicationImportRunDetailsDTO | None",
+            ),
+            "list_publications": (
+                "external_publication",
+                "query",
+                "PublicationPageDTO",
+            ),
+            "get_publication": (
+                "external_publication",
+                "query",
+                "PublicationDetailsDTO",
+            ),
+        }
+        for scenario, (aggregate, category, result) in scenarios.items():
+            folder = ROOT / "application" / aggregate / category / scenario
+            with self.subTest(scenario=scenario):
+                self.assertTrue((folder / f"{category}.py").is_file())
+                tree = ast.parse((folder / "handler.py").read_text())
+                execute = next(
+                    n
+                    for n in ast.walk(tree)
+                    if isinstance(n, ast.AsyncFunctionDef) and n.name == "execute"
+                )
+                self.assertEqual(ast.unparse(execute.returns), result)
+                self.assertEqual((folder / "dto.py").is_file(), result != "None")
+        for aggregate in ("external_publication", "publication_import_run"):
+            tree = ast.parse((ROOT / "domain" / aggregate / "aggregate.py").read_text())
+            methods = {
+                node.name
+                for node in ast.walk(tree)
+                if isinstance(node, ast.FunctionDef)
+            }
+            self.assertTrue({"create", "restore"} <= methods)
+            for mapper in (ROOT / "infrastructure" / aggregate / "persistence").glob(
+                "*mapper.py"
+            ):
+                self.assertFalse(
+                    any(
+                        isinstance(node, ast.Await)
+                        for node in ast.walk(ast.parse(mapper.read_text()))
+                    )
+                )
+        read_repo = (
+            ROOT / "infrastructure/external_publication/persistence/query_repository.py"
+        ).read_text()
+        self.assertNotIn("raw_payload", read_repo)
+        self.assertNotIn("PublicationMapper", read_repo)
 
     def test_all_functions_have_complete_annotations_and_russian_documentation(self):
         for path, tree in parsed_files():
@@ -108,10 +189,9 @@ class ChannelsArchitectureTests(unittest.TestCase):
                     isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
                     and node.name == "__post_init__"
                 ):
-                    self.assertEqual(
-                        path.parts[:2], ("domain", "value_object"), str(path)
-                    )
-        tree = ast.parse((ROOT / "domain/aggregate.py").read_text())
+                    self.assertEqual(path.parts[0], "domain", str(path))
+                    self.assertEqual(path.parts[2], "value_object", str(path))
+        tree = ast.parse((ROOT / "domain/channel/aggregate.py").read_text())
         aggregate = next(n for n in tree.body if isinstance(n, ast.ClassDef))
         methods = {n.name: n for n in aggregate.body if isinstance(n, ast.FunctionDef)}
         for name in ("create", "restore"):
@@ -176,13 +256,12 @@ class ChannelsArchitectureTests(unittest.TestCase):
                         self.fail(f"Application scenario calls another handler: {path}")
 
     def test_read_mapping_and_write_mapping_have_distinct_responsibilities(self):
-        persistence = ROOT / "infrastructure/persistence"
+        persistence = ROOT / "infrastructure/channel/persistence"
         for name in (
             "mapper.py",
             "query_mapper.py",
             "repository.py",
             "query_repository.py",
-            "models/channel.py",
         ):
             self.assertTrue((persistence / name).is_file())
         query = (persistence / "query_repository.py").read_text()
@@ -195,21 +274,26 @@ class ChannelsArchitectureTests(unittest.TestCase):
             for node in ast.walk(tree):
                 self.assertNotIsInstance(node, ast.Await)
         query_mapper = (persistence / "query_mapper.py").read_text()
-        self.assertNotIn(".domain.aggregate", query_mapper)
+        self.assertNotIn(".domain.channel.aggregate", query_mapper)
         self.assertNotIn("decrypt", query_mapper)
         self.assertIn("Channel.restore(", (persistence / "mapper.py").read_text())
         self.assertIn(".with_for_update()", (persistence / "repository.py").read_text())
 
-    def test_package_initializers_are_empty_and_single_root_is_not_nested(self):
+    def test_package_initializers_are_empty_and_roots_are_grouped_in_each_layer(self):
         for path in ROOT.rglob("__init__.py"):
             self.assertEqual(ast.parse(path.read_text()).body, [], str(path))
         for layer in ("domain", "application", "infrastructure", "presentation"):
-            self.assertFalse((ROOT / layer / "channel").exists())
+            for aggregate in (
+                "channel",
+                "external_publication",
+                "publication_import_run",
+            ):
+                self.assertTrue((ROOT / layer / aggregate).is_dir())
 
     def test_controllers_map_their_own_dto_and_expected_errors(self):
         for scenario, (_, _, response) in SCENARIOS.items():
             source = (
-                ROOT / "presentation/http/controller" / f"{scenario}.py"
+                ROOT / "presentation/channel/http/controller" / f"{scenario}.py"
             ).read_text()
             with self.subTest(scenario=scenario):
                 self.assertIn("AuthenticatedRequestContextDep", source)
@@ -226,7 +310,7 @@ class ChannelsArchitectureTests(unittest.TestCase):
                     ):
                         self.assertIn(f"except {error}", source)
                     self.assertNotIn("GetChannelHandler", source)
-        router = (ROOT / "presentation/router.py").read_text()
+        router = (ROOT / "presentation/channel/router.py").read_text()
         for scenario, (_, _, response) in SCENARIOS.items():
             if response:
                 self.assertIn(f"http.response.{scenario} import", router)

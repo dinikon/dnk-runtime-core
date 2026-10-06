@@ -6,6 +6,9 @@ import type {
   PlatformConfig,
   CreateChannel,
   UpdateChannel,
+  PublicationPage,
+  PublicationDetails,
+  PublicationImportRun,
 } from "../model/types";
 const base = "/console/channels";
 export class ChannelRequestError extends Error {
@@ -63,6 +66,50 @@ async function write<T>(
   }
 }
 export const channelsApi = {
+  async publications(
+    id: string,
+    offset: number,
+    limit: number,
+    signal?: AbortSignal,
+  ) {
+    return (
+      await httpClient.get<PublicationPage>(
+        `${base}/${encodeURIComponent(id)}/publications`,
+        { params: { offset, limit }, signal },
+      )
+    ).data;
+  },
+  async publication(id: string, publicationId: string, signal?: AbortSignal) {
+    return (
+      await httpClient.get<PublicationDetails>(
+        `${base}/${encodeURIComponent(id)}/publications/${encodeURIComponent(publicationId)}`,
+        { signal },
+      )
+    ).data;
+  },
+  async latestImport(id: string, signal?: AbortSignal) {
+    return (
+      await httpClient.get<PublicationImportRun | null>(
+        `${base}/${encodeURIComponent(id)}/publication-imports/latest`,
+        { signal },
+      )
+    ).data;
+  },
+  async startImport(id: string, signal?: AbortSignal) {
+    try {
+      return (
+        await httpClient.post<{ run_id: string }>(
+          `${base}/${encodeURIComponent(id)}/publication-imports`,
+          undefined,
+          { signal },
+        )
+      ).data;
+    } catch {
+      throw new Error(
+        "Не удалось запустить загрузку публикаций. Проверьте активность и подключение канала.",
+      );
+    }
+  },
   async kinds(signal?: AbortSignal) {
     return (await httpClient.get<Platform[]>(`${base}/kinds`, { signal })).data;
   },

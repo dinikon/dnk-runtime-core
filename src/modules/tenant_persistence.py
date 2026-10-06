@@ -1,5 +1,7 @@
 """Регистрация статических tenant-моделей и их исторических имён."""
 
+import src.modules.channels.infrastructure.persistence.models.external_publication  # noqa: F401
+import src.modules.channels.infrastructure.persistence.models.publication_import_run  # noqa: F401
 import src.modules.channels.infrastructure.persistence.models.channel  # noqa: F401
 import src.modules.crm.infrastructure.persistence.models.company  # noqa: F401
 import src.modules.crm.infrastructure.persistence.models.contact  # noqa: F401
@@ -33,6 +35,8 @@ import src.modules.price_lists.infrastructure.persistence  # noqa: F401
 HISTORICAL_TENANT_TABLE_NAMES = frozenset(
     {
         "channels",
+        "channel_publications",
+        "channel_publication_import_runs",
         "warehouses",
         "skus",
         "catalog_products",

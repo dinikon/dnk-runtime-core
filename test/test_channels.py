@@ -10,37 +10,41 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 from cryptography.fernet import Fernet
 from jsonschema import Draft202012Validator
-from src.modules.channels.domain.aggregate import Channel
-from src.modules.channels.domain.error import InvalidChannelError
-from src.modules.channels.application.error import (
+from src.modules.channels.domain.channel.aggregate import Channel
+from src.modules.channels.domain.channel.error import InvalidChannelError
+from src.modules.channels.application.channel.error import (
     ChannelValidationError,
     ChannelConfigConflictError,
     ChannelSecretsUnavailableError,
 )
-from src.modules.channels.domain.value_object.identifier import ChannelIdVO
-from src.modules.channels.domain.value_object.kind import ChannelKind
-from src.modules.channels.domain.value_object.status import ChannelStatus
-from src.modules.channels.domain.value_object.settings import ConnectionSettings
-from src.modules.channels.infrastructure.crypto.cipher import ChannelSecretCipher
-from src.modules.channels.infrastructure.definitions.registry import CodeChannelRegistry
-from src.modules.channels.infrastructure.validation.connection import (
+from src.modules.channels.domain.channel.value_object.identifier import ChannelIdVO
+from src.modules.channels.domain.channel.value_object.kind import ChannelKind
+from src.modules.channels.domain.channel.value_object.status import ChannelStatus
+from src.modules.channels.domain.channel.value_object.settings import ConnectionSettings
+from src.modules.channels.infrastructure.channel.crypto.cipher import (
+    ChannelSecretCipher,
+)
+from src.modules.channels.infrastructure.channel.definitions.registry import (
+    CodeChannelRegistry,
+)
+from src.modules.channels.infrastructure.channel.validation.connection import (
     JsonSchemaConnectionValidator,
 )
-from src.modules.channels.application.settings import seal_settings
-from src.modules.channels.application.command.create_channel.command import (
+from src.modules.channels.application.channel.settings import seal_settings
+from src.modules.channels.application.channel.command.create_channel.command import (
     CreateChannelCommand,
 )
-from src.modules.channels.application.command.create_channel.handler import (
+from src.modules.channels.application.channel.command.create_channel.handler import (
     CreateChannelHandler,
 )
-from src.modules.channels.application.command.update_channel.command import (
+from src.modules.channels.application.channel.command.update_channel.command import (
     UpdateChannelCommand,
 )
-from src.modules.channels.application.command.update_channel.handler import (
+from src.modules.channels.application.channel.command.update_channel.handler import (
     UpdateChannelHandler,
 )
 from src.modules.channels.infrastructure.persistence.models.channel import ChannelModel
-from src.modules.channels.infrastructure.persistence.mapper import (
+from src.modules.channels.infrastructure.channel.persistence.mapper import (
     ChannelMapper,
 )
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
@@ -86,7 +90,9 @@ class ChannelsTests(unittest.IsolatedAsyncioTestCase):
             {ChannelKind.PROM, ChannelKind.WOOCOMMERCE},
         )
         for d in definitions:
-            self.assertEqual(d.config["capabilities"], {})
+            self.assertEqual(
+                d.config["capabilities"], {"read_publications": d.can_configure}
+            )
             if d.can_configure:
                 connection = d.config["connection"]
                 Draft202012Validator.check_schema(connection["json_schema"])
@@ -407,10 +413,10 @@ class ChannelsTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(all(issue.code == "required" for issue in issues))
 
     async def test_command_results_are_specific_dtos_without_ciphertext(self):
-        from src.modules.channels.application.command.create_channel.dto import (
+        from src.modules.channels.application.channel.command.create_channel.dto import (
             CreateChannelResultDTO,
         )
-        from src.modules.channels.application.command.update_channel.dto import (
+        from src.modules.channels.application.channel.command.update_channel.dto import (
             UpdateChannelResultDTO,
         )
 
