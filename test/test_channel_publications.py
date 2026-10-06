@@ -48,6 +48,15 @@ from src.modules.channels.infrastructure.external_publication.content.html_sanit
 from src.modules.channels.infrastructure.external_publication.persistence.mapper import (
     PublicationMapper,
 )
+from src.modules.channels.infrastructure.external_publication.persistence.document_mapper import (
+    PublicationDocumentMapper,
+)
+from src.modules.channels.infrastructure.external_publication.persistence.query_mapper import (
+    PublicationQueryMapper,
+)
+from src.modules.channels.presentation.external_publication.http.response.get_publication import (
+    GetPublicationResponse,
+)
 from src.modules.channels.infrastructure.publication_import_run.source.normalizer import (
     PublicationNormalizer,
 )
@@ -105,6 +114,109 @@ class MemoryPublications:
 class PublicationSourceTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.normalizer = PublicationNormalizer(PublicationHtmlSanitizer())
+
+    def test_prom_discount_from_native_payload_reaches_read_card_response(self):
+        discount = {
+            "type": "percent",
+            "value": 20,
+            "date_start": "07.10.2026",
+            "date_end": "07.10.2026",
+        }
+        raw = {
+            "id": 3222858785,
+            "name": "Товар со скидкой",
+            "price": 480.0,
+            "currency": "UAH",
+            "discount": discount,
+        }
+        resource = self.normalizer.normalize("prom", raw)
+        stored = PublicationDocumentMapper.to_values(resource.document)
+        self.assertEqual(
+            PublicationDocumentMapper.to_document(stored), resource.document
+        )
+        dto = PublicationQueryMapper.to_details(
+            {
+                "id": uuid4(),
+                "channel_id": uuid4(),
+                "external_id": resource.external_id,
+                "resource_type": "product",
+                "revision": 1,
+                "observed_at": datetime.now(UTC),
+                "document": stored,
+            },
+            (),
+        )
+        response = GetPublicationResponse.from_dto(dto).model_dump(mode="json")
+        self.assertEqual(Decimal(response["regular_price"]), Decimal("480"))
+        self.assertEqual(Decimal(response["sale_price"]), Decimal("384"))
+        self.assertEqual(Decimal(response["price"]), Decimal("480"))
+        self.assertEqual(json.loads(resource.raw_payload)["discount"], discount)
+        self.assertNotIn("raw_payload", response)
+        self.assertEqual(resource.document.warnings, ())
+
+    def test_prom_discount_amount_zero_and_invalid_values(self):
+        for discount, price, expected in (
+            ({"type": "amount", "value": "95.50"}, "480", "384.50"),
+            ({"type": "percent", "value": 100}, "480", "0"),
+            ({"type": "percent", "value": 0}, 0, "0"),
+            ({"type": "percent", "value": -1}, "480", None),
+            ({"type": "percent", "value": 101}, "480", None),
+            ({"type": "amount", "value": 481}, "480", None),
+            ({"type": "percent", "value": True}, "480", None),
+            ({"type": "percent", "value": "NaN"}, "480", None),
+            ({"type": "other", "value": 20}, "480", None),
+            ({"type": "percent", "value": 20}, None, None),
+            ("invalid", "480", None),
+        ):
+            with self.subTest(discount=discount, price=price):
+                document = self.normalizer.normalize(
+                    "prom",
+                    {
+                        "id": 1,
+                        "name": "Товар",
+                        "currency": "UAH",
+                        "price": price,
+                        "discount": discount,
+                    },
+                ).document
+                self.assertEqual(
+                    document.sale_price, None if expected is None else Decimal(expected)
+                )
+                self.assertEqual(
+                    "invalid_discount" in document.warnings, expected is None
+                )
+        for discount in (None, {}):
+            document = self.normalizer.normalize(
+                "prom",
+                {
+                    "id": 1,
+                    "name": "Товар",
+                    "currency": "UAH",
+                    "price": "480",
+                    "discount": discount,
+                },
+            ).document
+            self.assertEqual(document.regular_price, Decimal("480"))
+            self.assertIsNone(document.sale_price)
+            self.assertEqual(document.warnings, ())
+
+    def test_woo_native_sale_prices_remain_independent_of_prom_discount(self):
+        document = self.normalizer.normalize(
+            "woocommerce",
+            {
+                "id": 1,
+                "name": "Товар",
+                "price": "384",
+                "regular_price": "480",
+                "sale_price": "384",
+                "discount": {"type": "percent", "value": 50},
+            },
+            currency="UAH",
+        ).document
+        self.assertEqual(
+            (document.price, document.regular_price, document.sale_price),
+            (Decimal("384"), Decimal("480"), Decimal("384")),
+        )
 
     async def test_prom_cursor_keeps_native_fields_zero_and_sanitized_description(self):
         requests = []

@@ -62,6 +62,20 @@ def objects(value: Any) -> list[dict[str, Any]]:
     )
 
 
+def prom_sale_price(price: Decimal | None, discount: Any) -> Decimal | None:
+    """Преобразует заданную скидку Prom в цену без оценки периода её активности."""
+    if price is None or price < 0 or not isinstance(discount, dict):
+        return None
+    value = number(discount.get("value"))
+    if value is None or value < 0:
+        return None
+    if discount.get("type") == "percent" and value <= 100:
+        return price * (Decimal(100) - value) / Decimal(100)
+    if discount.get("type") == "amount" and value <= price:
+        return price - value
+    return None
+
+
 class PublicationNormalizer:
     """Переводит native JSON платформы в типизированные поля Read документа."""
 
@@ -159,6 +173,14 @@ class PublicationNormalizer:
         price = number(raw.get("price"))
         if raw.get("price") not in (None, "") and price is None:
             warnings.append("invalid_price")
+        regular_price = number(raw.get("regular_price")) if woo else price
+        sale_price = (
+            number(raw.get("sale_price"))
+            if woo
+            else prom_sale_price(price, raw.get("discount"))
+        )
+        if not woo and raw.get("discount") not in (None, {}) and sale_price is None:
+            warnings.append("invalid_discount")
         description, short = text(raw.get("description")), text(
             raw.get("short_description")
         )
@@ -171,8 +193,8 @@ class PublicationNormalizer:
             ),
             short_description_html=self._sanitizer.clean(short) if short else None,
             price=price,
-            regular_price=number(raw.get("regular_price")),
-            sale_price=number(raw.get("sale_price")),
+            regular_price=regular_price,
+            sale_price=sale_price,
             currency=source_currency,
             quantity=number(
                 raw.get("stock_quantity") if woo else raw.get("quantity_in_stock")
