@@ -4,6 +4,11 @@ from src.modules.catalog.application.product.command.create_product.command impo
     CreateProductCommand,
     CreateProductContent,
 )
+from src.modules.catalog.application.content_schema.service import (
+    SchemaNotFoundError,
+    SchemaConflictError,
+    SchemaValidationError,
+)
 from src.modules.catalog.domain.product.error import (
     InvalidProductContentError,
     InvalidProductLocaleError,
@@ -41,21 +46,23 @@ async def create_product(
                 contents=tuple(
                     CreateProductContent(
                         locale=item.locale,
-                        name=item.name,
-                        description=item.description,
+                        blocks=item.blocks,
                     )
                     for item in payload.contents
                 ),
+                product_type_id=payload.product_type_id,
+                schema_version=payload.schema_version,
             )
         )
     except (
         InvalidProductContentError,
         InvalidProductLocaleError,
         ProductLocaleUnavailableError,
+        SchemaValidationError,
     ) as exc:
         raise HTTPException(422, str(exc)) from exc
-    except ProductSkuNotFoundError as exc:
+    except (ProductSkuNotFoundError, SchemaNotFoundError) as exc:
         raise HTTPException(404, str(exc)) from exc
-    except ProductIdentifierAlreadyExistsError as exc:
+    except (ProductIdentifierAlreadyExistsError, SchemaConflictError) as exc:
         raise HTTPException(409, str(exc)) from exc
     return CreateProductResponse.from_dto(result)

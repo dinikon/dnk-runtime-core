@@ -13,4 +13,5 @@ class PutVariantContentCommand:
     variant_id: VariantIdVO
     actor_id: EntityIdVO
     locale: str
-    short_description: str
+    schema_version: int
+    blocks: dict[str, str]

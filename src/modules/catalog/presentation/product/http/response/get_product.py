@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime
 from uuid import UUID
 
@@ -17,7 +19,7 @@ class GetProductVariantResponse(BaseModel):
     sku_id: UUID
     sku_code: str
     content_locales: list[str]
-    short_description: str | None
+    content: "GetProductContentResponse | None"
 
     @classmethod
     def from_dto(cls, dto: ProductVariantDTO) -> "GetProductVariantResponse":
@@ -28,21 +30,21 @@ class GetProductVariantResponse(BaseModel):
             sku_id=dto.sku_id,
             sku_code=dto.sku_code,
             content_locales=list(dto.content_locales),
-            short_description=dto.short_description,
+            content=(
+                GetProductContentResponse.from_dto(dto.content) if dto.content else None
+            ),
         )
 
 
 class GetProductContentResponse(BaseModel):
     locale: str
-    name: str
-    description: str | None
+    blocks: dict[str, str]
 
     @classmethod
     def from_dto(cls, dto: ProductContentDTO) -> "GetProductContentResponse":
         return cls(
             locale=dto.locale,
-            name=dto.name,
-            description=dto.description,
+            blocks=dto.blocks,
         )
 
 
@@ -58,6 +60,8 @@ class GetProductCategoryResponse(BaseModel):
 class GetProductResponse(BaseModel):
     id: UUID
     kind: ProductKind
+    product_type_id: UUID
+    schema_version: int
     variant_id: UUID | None
     sku_id: UUID | None
     sku_code: str | None
@@ -79,6 +83,8 @@ class GetProductResponse(BaseModel):
         return cls(
             id=dto.id,
             kind=dto.kind,
+            product_type_id=dto.product_type_id,
+            schema_version=dto.schema_version,
             variant_id=dto.variant_id if dto.kind is ProductKind.SIMPLE else None,
             sku_id=dto.sku_id if dto.kind is ProductKind.SIMPLE else None,
             sku_code=dto.sku_code if dto.kind is ProductKind.SIMPLE else None,

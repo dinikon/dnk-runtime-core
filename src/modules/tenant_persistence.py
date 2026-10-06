@@ -9,9 +9,12 @@ import src.modules.contact_points.infrastructure.persistence.models.contact_poin
 import src.modules.inventory.infrastructure.persistence.models.warehouse  # noqa: F401
 import src.modules.inventory.infrastructure.persistence.models.sku  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.product  # noqa: F401
+import src.modules.catalog.infrastructure.persistence.models.content_block  # noqa: F401
+import src.modules.catalog.infrastructure.persistence.models.product_type  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.variant  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.variant_content  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.content  # noqa: F401
+import src.modules.catalog.infrastructure.persistence.models.content_value  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.category  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.category_content  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.product_category  # noqa: F401
@@ -29,6 +32,14 @@ HISTORICAL_TENANT_TABLE_NAMES = frozenset(
         "catalog_products",
         "catalog_variants",
         "catalog_product_contents",
+        "catalog_product_content_values",
+        "catalog_variant_contents",
+        "catalog_variant_content_values",
+        "catalog_content_block_definitions",
+        "catalog_content_block_translations",
+        "catalog_product_types",
+        "catalog_product_type_translations",
+        "catalog_product_type_content_blocks",
         "catalog_categories",
         "catalog_category_contents",
         "catalog_product_categories",

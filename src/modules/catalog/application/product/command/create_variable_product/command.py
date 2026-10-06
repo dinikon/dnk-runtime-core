@@ -12,3 +12,5 @@ class CreateVariableProductCommand:
     actor_id: EntityIdVO
     sku_ids: tuple[UUID, ...]
     contents: tuple[CreateProductContent, ...] = ()
+    product_type_id: UUID | None = None
+    schema_version: int | None = None

@@ -7,7 +7,7 @@ from uuid import UUID
 class PutProductContentResultDTO:
     product_id: UUID
     locale: str
-    name: str
-    description: str | None
+    schema_version: int
+    blocks: dict[str, str]
     updated_at: datetime
     updated_by: UUID

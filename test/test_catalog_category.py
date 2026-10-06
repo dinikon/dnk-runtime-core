@@ -41,6 +41,9 @@ from src.modules.catalog.domain.product.value_object.identifier import (
     ProductIdVO,
     VariantIdVO,
 )
+from src.modules.catalog.domain.product_type.value_object.product_type_id import (
+    ProductTypeIdVO,
+)
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 
 
@@ -95,6 +98,7 @@ class CategoryDomainTests(unittest.TestCase):
     def test_product_category_invariants(self) -> None:
         product = Product.create(
             product_id=ProductIdVO(uuid4()),
+            product_type_id=ProductTypeIdVO(uuid4()),
             variant_id=VariantIdVO(uuid4()),
             sku_id=EntityIdVO(uuid4()),
             contents=(),
@@ -199,6 +203,7 @@ class CategoryApplicationTests(unittest.IsolatedAsyncioTestCase):
         actor, category_id = EntityIdVO(uuid4()), uuid4()
         product = Product.create(
             product_id=ProductIdVO(uuid4()),
+            product_type_id=ProductTypeIdVO(uuid4()),
             variant_id=VariantIdVO(uuid4()),
             sku_id=EntityIdVO(uuid4()),
             contents=(),

@@ -16,6 +16,9 @@ from src.modules.catalog.domain.product.value_object.identifier import (
     ProductIdVO,
     VariantIdVO,
 )
+from src.modules.catalog.domain.product_type.value_object.product_type_id import (
+    ProductTypeIdVO,
+)
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.catalog.domain.category.value_object.identifier import CategoryIdVO
 
@@ -26,10 +29,10 @@ class ProductVariant:
 
     id: VariantIdVO
     sku_id: EntityIdVO
-    _contents: dict[str, str] = field(default_factory=dict, repr=False)
+    _contents: dict[str, ProductContentVO] = field(default_factory=dict, repr=False)
 
     @property
-    def contents(self) -> Mapping[str, str]:
+    def contents(self) -> Mapping[str, ProductContentVO]:
         return MappingProxyType(self._contents)
 
 
@@ -39,6 +42,7 @@ class Product:
 
     id: ProductIdVO
     kind: ProductKind
+    product_type_id: ProductTypeIdVO
     variants: tuple[ProductVariant, ...]
     created_at: datetime
     updated_at: datetime
@@ -76,6 +80,7 @@ class Product:
         cls,
         *,
         product_id: ProductIdVO,
+        product_type_id: ProductTypeIdVO,
         variants: tuple[ProductVariant, ...],
         contents: tuple[ProductContentVO, ...],
         actor_id: EntityIdVO,
@@ -95,6 +100,7 @@ class Product:
         return cls(
             id=product_id,
             kind=ProductKind.VARIABLE,
+            product_type_id=product_type_id,
             variants=variants,
             created_at=now,
             updated_at=now,
@@ -108,6 +114,7 @@ class Product:
         cls,
         *,
         product_id: ProductIdVO,
+        product_type_id: ProductTypeIdVO,
         variant_id: VariantIdVO,
         sku_id: EntityIdVO,
         contents: tuple[ProductContentVO, ...],
@@ -127,6 +134,7 @@ class Product:
         return cls(
             id=product_id,
             kind=ProductKind.SIMPLE,
+            product_type_id=product_type_id,
             variants=variants,
             created_at=now,
             updated_at=now,
@@ -140,6 +148,7 @@ class Product:
         cls,
         *,
         product_id: ProductIdVO,
+        product_type_id: ProductTypeIdVO,
         kind: ProductKind,
         variants: tuple[ProductVariant, ...],
         created_at: datetime,
@@ -154,6 +163,7 @@ class Product:
         return cls(
             id=product_id,
             kind=kind,
+            product_type_id=product_type_id,
             variants=variants,
             created_at=created_at,
             updated_at=updated_at,
@@ -261,15 +271,38 @@ class Product:
     def replace_variant_content(
         self,
         variant_id: VariantIdVO,
-        locale: ProductLocaleVO,
-        short_description: str,
+        content: ProductContentVO,
         *,
         actor_id: EntityIdVO,
         now: datetime,
     ) -> None:
-        if not isinstance(short_description, str) or not short_description.strip():
-            raise InvalidProductContentError("Variant short description is required.")
         variant = self.get_variant(variant_id)
-        variant._contents[locale.value] = short_description.strip()
+        variant._contents[content.locale.value] = content
+        self.updated_at = now
+        self.updated_by = actor_id
+
+    def remove_content(
+        self, locale: ProductLocaleVO, *, actor_id: EntityIdVO, now: datetime
+    ) -> None:
+        self.contents.pop(locale.value, None)
+        self.updated_at = now
+        self.updated_by = actor_id
+
+    def remove_variant_content(
+        self,
+        variant_id: VariantIdVO,
+        locale: ProductLocaleVO,
+        *,
+        actor_id: EntityIdVO,
+        now: datetime,
+    ) -> None:
+        self.get_variant(variant_id)._contents.pop(locale.value, None)
+        self.updated_at = now
+        self.updated_by = actor_id
+
+    def change_product_type(
+        self, type_id: ProductTypeIdVO, *, actor_id: EntityIdVO, now: datetime
+    ) -> None:
+        self.product_type_id = type_id
         self.updated_at = now
         self.updated_by = actor_id

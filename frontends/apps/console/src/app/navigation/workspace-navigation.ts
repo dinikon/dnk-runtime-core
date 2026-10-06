@@ -21,6 +21,8 @@ export const workspaceNavigation: WorkspaceNavigation = {
       items: [
         { title: "Товары", url: "/catalog/products", icon: Package },
         { title: "Категории", url: "/catalog/categories", icon: Package },
+        { title: "Типы товаров", url: "/catalog/product-types", icon: Package },
+        { title: "Контент-блоки", url: "/catalog/content-blocks", icon: Package },
       ],
     },
     {

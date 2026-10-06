@@ -6,3 +6,5 @@ from uuid import UUID
 class CreateVariableProductResultDTO:
     id: UUID
     variant_ids: tuple[UUID, ...]
+    product_type_id: UUID
+    schema_version: int

@@ -18,12 +18,7 @@ class VariantContentModel(TenantBase):
             name="fk_catalog_variant_contents_variant",
             ondelete="CASCADE",
         ),
-        sa.CheckConstraint(
-            "char_length(btrim(short_description)) > 0",
-            name="ck_catalog_variant_contents_description",
-        ),
     )
 
     variant_id: Mapped[UUID] = mapped_column(StringUUID, nullable=False)
     locale_code: Mapped[str] = mapped_column(sa.String(64), nullable=False)
-    short_description: Mapped[str] = mapped_column(sa.Text, nullable=False)

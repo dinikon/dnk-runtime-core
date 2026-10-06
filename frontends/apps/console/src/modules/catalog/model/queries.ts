@@ -45,3 +45,21 @@ export function useProducts(locale: Ref<string>) {
     retry: false,
   });
 }
+
+export function useProductTypes() {
+  const tenant = useCatalogTenant();
+  return useQuery({
+    queryKey: computed(() => ["catalog", tenant.value, "product-types"]),
+    queryFn: ({ signal }) => catalogApi.listProductTypes(signal),
+    retry: false,
+  });
+}
+
+export function useContentBlocks() {
+  const tenant = useCatalogTenant();
+  return useQuery({
+    queryKey: computed(() => ["catalog", tenant.value, "content-blocks"]),
+    queryFn: ({ signal }) => catalogApi.listBlocks(signal),
+    retry: false,
+  });
+}

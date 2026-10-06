@@ -16,6 +16,16 @@ from src.modules.catalog.domain.product.value_object.locale import ProductLocale
 from src.modules.catalog.infrastructure.persistence.models.content import (
     ProductContentModel,
 )
+from src.modules.catalog.infrastructure.persistence.models.content_value import (
+    ProductContentValueModel,
+    VariantContentValueModel,
+)
+from src.modules.catalog.infrastructure.persistence.models.content_block import (
+    ContentBlockDefinitionModel,
+)
+from src.modules.catalog.infrastructure.persistence.models.product_type import (
+    ProductTypeModel,
+)
 from src.modules.catalog.infrastructure.persistence.models.product import ProductModel
 from src.modules.catalog.infrastructure.persistence.models.variant import VariantModel
 from src.modules.catalog.infrastructure.persistence.models.variant_content import (
@@ -65,6 +75,24 @@ class SqlAlchemyProductQueryRepository:
             .scalars()
             .all()
         )
+        variant_values = (
+            await self._session.execute(
+                select(
+                    VariantContentValueModel.variant_id,
+                    VariantContentValueModel.locale_code,
+                    ContentBlockDefinitionModel.code,
+                    VariantContentValueModel.value,
+                )
+                .join(
+                    VariantModel, VariantContentValueModel.variant_id == VariantModel.id
+                )
+                .join(
+                    ContentBlockDefinitionModel,
+                    ContentBlockDefinitionModel.id == VariantContentValueModel.block_id,
+                )
+                .where(VariantModel.product_id == product_id.uuid)
+            )
+        ).all()
         contents = (
             (
                 await self._session.execute(
@@ -76,6 +104,20 @@ class SqlAlchemyProductQueryRepository:
             .scalars()
             .all()
         )
+        values = (
+            await self._session.execute(
+                select(
+                    ProductContentValueModel.locale_code,
+                    ContentBlockDefinitionModel.code,
+                    ProductContentValueModel.value,
+                )
+                .join(
+                    ContentBlockDefinitionModel,
+                    ContentBlockDefinitionModel.id == ProductContentValueModel.block_id,
+                )
+                .where(ProductContentValueModel.product_id == product_id.uuid)
+            )
+        ).all()
         matching = next(
             (item for item in contents if item.locale_code == locale.value), None
         )
@@ -101,6 +143,15 @@ class SqlAlchemyProductQueryRepository:
         return ProductDetailsDTO(
             id=row.id,
             kind=ProductKind(row.kind),
+            product_type_id=row.product_type_id,
+            schema_version=(
+                await self._session.scalar(
+                    select(ProductTypeModel.schema_version).where(
+                        ProductTypeModel.id == row.product_type_id
+                    )
+                )
+            )
+            or 1,
             variant_id=variant[0].id,
             sku_id=variant[0].sku_id,
             sku_code=None,
@@ -109,8 +160,11 @@ class SqlAlchemyProductQueryRepository:
             content=(
                 ProductContentDTO(
                     locale=matching.locale_code,
-                    name=matching.name,
-                    description=matching.description,
+                    blocks={
+                        value.code: value.value
+                        for value in values
+                        if value.locale_code == matching.locale_code
+                    },
                 )
                 if matching is not None
                 else None
@@ -138,14 +192,22 @@ class SqlAlchemyProductQueryRepository:
                             if content.variant_id == item.id
                         )
                     ),
-                    short_description=next(
-                        (
-                            content.short_description
-                            for content in variant_contents
-                            if content.variant_id == item.id
+                    content=(
+                        ProductContentDTO(
+                            locale.value,
+                            {
+                                value.code: value.value
+                                for value in variant_values
+                                if value.variant_id == item.id
+                                and value.locale_code == locale.value
+                            },
+                        )
+                        if any(
+                            content.variant_id == item.id
                             and content.locale_code == locale.value
-                        ),
-                        None,
+                            for content in variant_contents
+                        )
+                        else None
                     ),
                 )
                 for item in variant
@@ -163,21 +225,30 @@ class SqlAlchemyProductQueryRepository:
             .group_by(VariantModel.product_id)
             .subquery()
         )
+        title = (
+            select(ProductContentValueModel.value)
+            .join(
+                ContentBlockDefinitionModel,
+                ContentBlockDefinitionModel.id == ProductContentValueModel.block_id,
+            )
+            .where(
+                ProductContentValueModel.product_id == ProductModel.id,
+                ProductContentValueModel.locale_code == locale.value,
+                ContentBlockDefinitionModel.code == "title",
+            )
+            .correlate(ProductModel)
+            .scalar_subquery()
+        )
         rows = (
             await self._session.execute(
                 select(
                     ProductModel.id,
                     ProductModel.kind,
-                    ProductContentModel.name,
+                    title.label("name"),
                     counts.c.variant_count,
                     ProductCategoryModel.category_id,
                     CategoryContentModel.name.label("category_name"),
                     ProductModel.updated_at,
-                )
-                .outerjoin(
-                    ProductContentModel,
-                    (ProductContentModel.product_id == ProductModel.id)
-                    & (ProductContentModel.locale_code == locale.value),
                 )
                 .outerjoin(counts, counts.c.product_id == ProductModel.id)
                 .outerjoin(

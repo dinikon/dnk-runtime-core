@@ -4,6 +4,9 @@ from pydantic import BaseModel
 from src.modules.catalog.application.product.query.get_variant.dto import (
     GetVariantResultDTO,
 )
+from src.modules.catalog.presentation.product.http.response.get_product import (
+    GetProductContentResponse,
+)
 
 
 class GetVariantResponse(BaseModel):
@@ -13,7 +16,7 @@ class GetVariantResponse(BaseModel):
     sku_code: str
     requested_locale: str
     content_locales: list[str]
-    short_description: str | None
+    content: GetProductContentResponse | None
 
     @classmethod
     def from_dto(cls, dto: GetVariantResultDTO) -> "GetVariantResponse":
@@ -24,5 +27,7 @@ class GetVariantResponse(BaseModel):
             sku_code=dto.sku_code,
             requested_locale=dto.requested_locale,
             content_locales=list(dto.content_locales),
-            short_description=dto.short_description,
+            content=(
+                GetProductContentResponse.from_dto(dto.content) if dto.content else None
+            ),
         )

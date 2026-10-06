@@ -4,10 +4,13 @@ from uuid import UUID
 
 from src.modules.catalog.domain.product.value_object.kind import ProductKind
 
+
 @dataclass(frozen=True, slots=True)
 class CreateProductResultDTO:
     id: UUID
     kind: ProductKind
+    product_type_id: UUID
+    schema_version: int
     variant_id: UUID
     sku_id: UUID
     sku_code: str

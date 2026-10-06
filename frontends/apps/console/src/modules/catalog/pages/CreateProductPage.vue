@@ -21,12 +21,12 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { catalogApi } from "../api/catalog.api";
-import { catalogError, contentPayload, validName } from "../model/forms";
-import { useLocales } from "../model/queries";
+import { catalogError } from "../model/forms";
+import { useLocales, useProductTypes } from "../model/queries";
 import { useSkus, useSku, inventoryError } from "@/modules/inventory";
 import { useUnsavedChanges } from "@/shared/model/use-unsaved-changes";
 import { useUserStore } from "@/app/stores/user";
-import ContentFields from "../ui/ContentFields.vue";
+import DynamicContentFields from "../ui/DynamicContentFields.vue";
 import LocaleSelect from "../ui/LocaleSelect.vue";
 import RequestError from "../ui/RequestError.vue";
 const router = useRouter();
@@ -39,6 +39,7 @@ const selectedSku = useSku(requestedSkuId);
 const ignoredPrefill = ref(false);
 const skus = useSkus();
 const locales = useLocales();
+const productTypes = useProductTypes();
 const items = computed(() => [
   ...new Map(
     [
@@ -76,8 +77,12 @@ function chooseSku(value: unknown) {
   sku.value = String(value);
 }
 const locale = ref("");
-const name = ref("");
-const description = ref("");
+const productTypeId = ref("");
+const blockValues = ref<Record<string, string>>({});
+const selectedType = computed(() => productTypes.data.value?.find((item) => item.id === productTypeId.value));
+watch(() => productTypes.data.value, (values) => {
+  if (!productTypeId.value && values?.length) productTypeId.value = values.find((item) => item.code === "clean")?.id ?? values[0]!.id;
+});
 const withContent = ref(false);
 const validation = ref("");
 const succeeded = ref(false);
@@ -96,13 +101,17 @@ watch(
 const mutation = useMutation({
   mutationFn: async (payload: {
     sku_id: string;
-    contents: { locale: string; name: string; description: string | null }[];
+    product_type_id: string;
+    schema_version: number;
+    contents: { locale: string; blocks: Record<string, string> }[];
   }) =>
     kind.value === "simple"
       ? catalogApi.createProduct(payload)
       : catalogApi.createVariableProduct({
           sku_ids: [payload.sku_id, ...extraSkuIds.value],
           contents: payload.contents,
+          product_type_id: payload.product_type_id,
+          schema_version: payload.schema_version,
         }),
   retry: false,
 });
@@ -114,8 +123,7 @@ const dirty = computed(
       kind.value === "variable" ||
       extraSkuIds.value.some(Boolean) ||
       withContent.value ||
-      name.value ||
-      description.value
+      Object.values(blockValues.value).some(Boolean)
     ),
 );
 useUnsavedChanges(dirty, mutation.isPending);
@@ -137,23 +145,24 @@ async function submit() {
       "Для вариативного товара выберите минимум два разных SKU.";
     return;
   }
-  if (
-    withContent.value &&
-    (!validName(name.value) ||
-      !languages.value.some((item) => item.code === locale.value))
-  ) {
-    validation.value =
-      "Выберите язык и укажите название длиной 1–255 символов.";
+  if (!selectedType.value) {
+    validation.value = "Выберите тип товара.";
+    return;
+  }
+  if (withContent.value && (!languages.value.some((item) => item.code === locale.value) || selectedType.value.blocks.some((item) => item.scope === "product" && item.required && !blockValues.value[item.code]?.trim()))) {
+    validation.value = "Выберите язык и заполните обязательные блоки.";
     return;
   }
   try {
     const product = await mutation.mutateAsync({
       sku_id: sku.value,
+      product_type_id: selectedType.value.id,
+      schema_version: selectedType.value.schema_version,
       contents: withContent.value
         ? [
             {
               locale: locale.value,
-              ...contentPayload(name.value, description.value),
+              blocks: Object.fromEntries(Object.entries(blockValues.value).filter(([, value]) => value.trim())),
             },
           ]
         : [],
@@ -228,6 +237,12 @@ async function submit() {
             @retry="selectedSku.refetch()"
           />
           <FieldGroup>
+            <Field><FieldLabel for="product-type">Тип товара</FieldLabel>
+              <Select :model-value="productTypeId" @update:model-value="productTypeId = String($event ?? '')">
+                <SelectTrigger id="product-type" class="w-full"><SelectValue placeholder="Выберите тип" /></SelectTrigger>
+                <SelectContent><SelectGroup><SelectItem v-for="item in productTypes.data.value ?? []" :key="item.id" :value="item.id">{{ item.translations[user.user?.interface_language ?? ''] ?? item.translations.ru ?? item.code }}</SelectItem></SelectGroup></SelectContent>
+              </Select>
+            </Field>
             <Field
               ><FieldLabel for="product-sku">SKU</FieldLabel
               ><Select
@@ -340,11 +355,13 @@ async function submit() {
                   :value="locale"
                   :disabled="mutation.isPending.value || !languages.length"
                   @change="locale = $event" /></Field
-              ><ContentFields
-                v-model:name="name"
-                v-model:description="description"
+              ><DynamicContentFields
+                v-if="selectedType"
+                v-model="blockValues"
+                :blocks="selectedType.blocks"
+                scope="product"
+                :label-locale="user.user?.interface_language"
                 :disabled="mutation.isPending.value"
-                :invalid="!!validation && !validName(name)"
             /></FieldGroup>
           </template>
           <RequestError v-if="validation" :message="validation" />

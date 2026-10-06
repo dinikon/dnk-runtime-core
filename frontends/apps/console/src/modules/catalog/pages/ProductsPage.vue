@@ -105,7 +105,7 @@ const options = computed(() =>
                       params: { productId: item.id },
                       query: { locale: language },
                     }"
-                    >{{ item.name ?? "Без перевода" }}</RouterLink
+                    >{{ item.name ?? item.id }}</RouterLink
                   >
                   <div class="text-xs text-muted-foreground">{{ item.id }}</div>
                 </td>

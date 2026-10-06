@@ -4,6 +4,16 @@ from src.modules.catalog.application.product.command.put_variant_content.command
 from src.modules.catalog.application.product.command.put_variant_content.dto import (
     PutVariantContentResultDTO,
 )
+from src.modules.catalog.application.content_schema.contracts import (
+    ContentSchemaRepositoryProtocol,
+)
+from src.modules.catalog.application.content_schema.normalize_content import (
+    RichTextSanitizerPort,
+    normalize_content,
+    content_by_code,
+)
+from src.modules.catalog.domain.product.value_object.content import ProductContentVO
+from src.modules.catalog.domain.product_type.aggregate import ContentScope
 from src.modules.catalog.application.product.port.locale_reader import LocaleReaderPort
 from src.modules.catalog.domain.product.error import (
     ProductLocaleUnavailableError,
@@ -20,8 +30,11 @@ class PutVariantContentHandler:
         repository: ProductRepositoryProtocol,
         locales: LocaleReaderPort,
         clock: ClockPort,
+        schemas: ContentSchemaRepositoryProtocol,
+        sanitizer: RichTextSanitizerPort,
     ) -> None:
         self._repository, self._locales, self._clock = repository, locales, clock
+        self._schemas, self._sanitizer = schemas, sanitizer
 
     async def execute(
         self, command: PutVariantContentCommand
@@ -32,10 +45,22 @@ class PutVariantContentHandler:
         product = await self._repository.get_for_update(command.product_id)
         if product is None:
             raise ProductNotFoundError("Product not found.")
+        schema = await self._schemas.get_type(product.product_type_id.uuid, lock=True)
+        if schema is None:
+            raise ProductNotFoundError("Product type not found.")
+        content = ProductContentVO(
+            locale,
+            normalize_content(
+                schema,
+                scope=ContentScope.VARIANT,
+                version=command.schema_version,
+                blocks=command.blocks,
+                sanitizer=self._sanitizer,
+            ),
+        )
         product.replace_variant_content(
             command.variant_id,
-            locale,
-            command.short_description,
+            content,
             actor_id=command.actor_id,
             now=self._clock.now(),
         )
@@ -43,5 +68,6 @@ class PutVariantContentHandler:
         return PutVariantContentResultDTO(
             command.variant_id.uuid,
             locale.value,
-            product.get_variant(command.variant_id).contents[locale.value],
+            schema.schema_version,
+            content_by_code(schema, ContentScope.VARIANT, dict(content.values)),
         )

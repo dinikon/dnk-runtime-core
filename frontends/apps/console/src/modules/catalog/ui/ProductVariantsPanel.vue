@@ -18,19 +18,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { useSkus } from "@/modules/inventory";
 import { catalogApi } from "../api/catalog.api";
-import type { ProductDto } from "../api/contracts";
+import type { ProductDto, ProductTypeBlockDto } from "../api/contracts";
 import { catalogError } from "../model/forms";
 import { useUnsavedChanges } from "@/shared/model/use-unsaved-changes";
 import { productKey, useCatalogTenant } from "../model/queries";
 import RequestError from "./RequestError.vue";
+import DynamicContentFields from "./DynamicContentFields.vue";
 
 const props = defineProps<{
   product: ProductDto;
   locale: string;
   editable: boolean;
+  schema: ProductTypeBlockDto[];
+  labelLocale?: string;
 }>();
 const client = useQueryClient();
 const tenant = useCatalogTenant();
@@ -55,14 +57,14 @@ const selected = computed(
 );
 const skuDraft = ref("");
 const newSku = ref("");
-const description = ref("");
+const blocks = ref<Record<string, string>>({});
 const busy = ref(false);
 const error = ref("");
 const dirty = computed(
   () =>
     !!selected.value &&
     (skuDraft.value !== selected.value.sku_id ||
-      description.value !== (selected.value.short_description ?? "")),
+      JSON.stringify(blocks.value) !== JSON.stringify(selected.value.content?.blocks ?? {})),
 );
 useUnsavedChanges(dirty, busy);
 function chooseVariant(id: string) {
@@ -79,7 +81,7 @@ watch(
     if (!item) return;
     selectedId.value = item.id;
     skuDraft.value = item.sku_id;
-    description.value = item.short_description ?? "";
+    blocks.value = { ...(item.content?.blocks ?? {}) };
   },
   { immediate: true },
 );
@@ -148,9 +150,8 @@ function changeSku() {
   );
 }
 function saveContent() {
-  if (!selected.value || !props.editable || !description.value.trim()) {
-    error.value =
-      "Для перевода варианта нужен непустой текст и активная локаль.";
+  if (!selected.value || !props.editable || props.schema.some((item) => item.scope === "variant" && item.required && !blocks.value[item.code]?.trim())) {
+    error.value = "Заполните обязательные блоки варианта и выберите активный язык.";
     return;
   }
   void run(
@@ -159,10 +160,14 @@ function saveContent() {
         props.product.id,
         selected.value!.id,
         props.locale,
-        description.value,
+        { schema_version: props.product.schema_version, blocks: Object.fromEntries(Object.entries(blocks.value).filter(([, value]) => value.trim())) },
       ),
     "Перевод варианта сохранён",
   );
+}
+function deleteContent() {
+  if (!selected.value || !selected.value.content || !window.confirm("Удалить перевод варианта?")) return;
+  void run(() => catalogApi.deleteVariantContent(props.product.id, selected.value!.id, props.locale), "Перевод варианта удалён");
 }
 function remove() {
   if (
@@ -218,7 +223,7 @@ function makeSimple() {
         >
           <span class="font-medium">{{ item.sku_code }}</span
           ><span class="block text-xs text-muted-foreground">{{
-            item.short_description ?? "Нет перевода для выбранного языка"
+            item.content?.blocks.title ?? "Нет названия для выбранного языка"
           }}</span>
         </button>
         <div class="flex gap-2">
@@ -279,19 +284,16 @@ function makeSimple() {
           >
         </div>
         <div>
-          <label class="mb-2 block text-sm font-medium"
-            >Описание варианта · {{ locale }}</label
-          ><Textarea
-            v-model="description"
-            :disabled="busy || !editable"
-            rows="4"
-          /><Button
+          <p class="mb-2 text-sm font-medium">Контент варианта · {{ locale }}</p>
+          <DynamicContentFields v-model="blocks" :blocks="schema" scope="variant" :label-locale="labelLocale" :disabled="busy || !editable" />
+          <Button
             class="mt-2"
             type="button"
-            :disabled="busy || !editable || !description.trim()"
+            :disabled="busy || !editable"
             @click="saveContent"
             >Сохранить перевод</Button
           >
+          <Button v-if="selected.content" class="ml-2 mt-2" type="button" variant="destructive" :disabled="busy" @click="deleteContent">Удалить перевод</Button>
         </div>
         <div class="flex flex-wrap gap-2">
           <Button

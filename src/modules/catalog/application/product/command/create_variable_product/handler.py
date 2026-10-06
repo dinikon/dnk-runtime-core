@@ -4,6 +4,18 @@ from src.modules.catalog.application.product.command.create_variable_product.com
 from src.modules.catalog.application.product.command.create_variable_product.dto import (
     CreateVariableProductResultDTO,
 )
+from src.modules.catalog.application.content_schema.contracts import (
+    ContentSchemaRepositoryProtocol,
+)
+from src.modules.catalog.application.content_schema.normalize_content import (
+    RichTextSanitizerPort,
+    normalize_content,
+)
+from src.modules.catalog.application.content_schema.service import SchemaNotFoundError
+from src.modules.catalog.domain.product_type.aggregate import ContentScope
+from src.modules.catalog.domain.product_type.value_object.product_type_id import (
+    ProductTypeIdVO,
+)
 from src.modules.catalog.application.product.port.locale_reader import LocaleReaderPort
 from src.modules.catalog.application.product.port.sku_reader import SkuReaderPort
 from src.modules.catalog.domain.product.aggregate import Product, ProductVariant
@@ -32,6 +44,8 @@ class CreateVariableProductHandler:
         locales: LocaleReaderPort,
         clock: ClockPort,
         uuids: UUIdGeneratorProtocol,
+        schemas: ContentSchemaRepositoryProtocol,
+        sanitizer: RichTextSanitizerPort,
     ) -> None:
         self._repository, self._skus, self._locales, self._clock, self._uuids = (
             repository,
@@ -40,6 +54,7 @@ class CreateVariableProductHandler:
             clock,
             uuids,
         )
+        self._schemas, self._sanitizer = schemas, sanitizer
 
     async def execute(
         self, command: CreateVariableProductCommand
@@ -53,8 +68,24 @@ class CreateVariableProductHandler:
         for sku_id in command.sku_ids:
             if await self._skus.get_code(sku_id) is None:
                 raise ProductSkuNotFoundError("SKU not found.")
+        schema = await (
+            self._schemas.get_type(command.product_type_id, lock=True)
+            if command.product_type_id
+            else self._schemas.get_clean_type()
+        )
+        if schema is None:
+            raise SchemaNotFoundError("Product type not found.")
         contents = tuple(
-            ProductContentVO(ProductLocaleVO(item.locale), item.name, item.description)
+            ProductContentVO(
+                ProductLocaleVO(item.locale),
+                normalize_content(
+                    schema,
+                    scope=ContentScope.PRODUCT,
+                    version=command.schema_version or schema.schema_version,
+                    blocks=item.blocks,
+                    sanitizer=self._sanitizer,
+                ),
+            )
             for item in command.contents
         )
         for code in {item.locale.value for item in contents}:
@@ -68,6 +99,7 @@ class CreateVariableProductHandler:
         )
         product = Product.create_variable(
             product_id=ProductIdVO.from_value(self._uuids.new()),
+            product_type_id=ProductTypeIdVO.from_value(schema.id),
             variants=variants,
             contents=contents,
             actor_id=command.actor_id,
@@ -75,5 +107,8 @@ class CreateVariableProductHandler:
         )
         await self._repository.add(product)
         return CreateVariableProductResultDTO(
-            product.id.uuid, tuple(item.id.uuid for item in variants)
+            product.id.uuid,
+            tuple(item.id.uuid for item in variants),
+            schema.id,
+            schema.schema_version,
         )

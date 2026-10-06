@@ -31,17 +31,14 @@ tenants before running code that reads the new CRM arrays. Existing CRM rows are
 Revision `0011_inventory_skus`, after `0010_crm_company_legal_name`, adds the tenant-local
 Inventory `skus` directory with unique codes and audit fields. Upgrade existing tenant
 schemas before using the SKU API; fresh tenants receive it through the same bootstrap.
-Revision `0012_catalog_simple` adds tenant-local Product, Variant and translation
-tables. It does not create locale settings or a default language; translation codes
-are validated against active public reference data at write time.
-Revision `0013_catalog_categories` adds the category tree, translations and explicit
-Product assignments. Revision `0014_catalog_product_kind` renames Product `type`
-to `kind` and converts `SIMPLE` to `simple`, preserving existing rows and relations.
-Its downgrade restores the previous column and value. Upgrade tenant schemas before
-starting the matching API; deploy Console with the new `kind` response contract.
-Catalog migrations currently end at `0014_catalog_product_kind`. Disposable development
-schemas that previously reached the removed `0013_catalog_variable` revision must
-be recreated before running tenant migrations again.
+Revision `0012_catalog` is the single initial Catalog schema after Inventory.SKU.
+It creates Product, Variant, categories, content-block definitions, ProductType
+assignments and locale-specific content values. Every tenant receives the `clean`
+ProductType and the system blocks `title`, `description`, `short_description`.
+It does not create tenant locale settings or a default language: locale codes are
+checked against active public reference data when content is written. This revision
+replaces disposable development Catalog revisions; development databases that reached
+an earlier Catalog head must be recreated before upgrading.
 Revisions contain no fixed tenant names and do not import current ORM models.
 
 The migration environment uses transaction-local `search_path` (through PostgreSQL `set_config(..., true)`) and explicitly sets `version_table_schema`. Successful execution restores the previous path. Failed transactions are rolled back by the owner. Migration files must preserve transactional execution: no internal commit, autocommit block or nontransactional DDL in onboarding revisions.

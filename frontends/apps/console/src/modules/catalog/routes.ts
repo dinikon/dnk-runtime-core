@@ -1,5 +1,7 @@
 import type { RouteRecordRaw } from "vue-router";
 export const catalogRoutes: RouteRecordRaw[] = [
+  { path: "catalog/content-blocks", name: "catalog-content-blocks", component: () => import("./pages/ContentBlocksPage.vue") },
+  { path: "catalog/product-types", name: "catalog-product-types", component: () => import("./pages/ProductTypesPage.vue") },
   {
     path: "catalog/categories",
     name: "catalog-categories",

@@ -21,13 +21,7 @@ class ProductContentModel(TenantBase):
             name="fk_catalog_product_contents_product",
             ondelete="CASCADE",
         ),
-        sa.CheckConstraint(
-            "char_length(btrim(name)) BETWEEN 1 AND 255",
-            name="ck_catalog_product_contents_name",
-        ),
     )
 
     product_id: Mapped[UUID] = mapped_column(StringUUID, nullable=False)
     locale_code: Mapped[str] = mapped_column(sa.String(64), nullable=False)
-    name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
-    description: Mapped[str | None] = mapped_column(sa.Text)

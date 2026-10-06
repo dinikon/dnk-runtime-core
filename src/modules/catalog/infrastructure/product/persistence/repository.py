@@ -1,5 +1,4 @@
 from sqlalchemy import delete, insert, select, update
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +17,10 @@ from src.modules.catalog.domain.product.value_object.locale import ProductLocale
 from src.modules.catalog.infrastructure.persistence.models.content import (
     ProductContentModel,
 )
+from src.modules.catalog.infrastructure.persistence.models.content_value import (
+    ProductContentValueModel,
+    VariantContentValueModel,
+)
 from src.modules.catalog.infrastructure.persistence.models.product import ProductModel
 from src.modules.catalog.infrastructure.persistence.models.variant import VariantModel
 from src.modules.catalog.infrastructure.persistence.models.variant_content import (
@@ -27,6 +30,9 @@ from src.modules.catalog.infrastructure.persistence.models.product_category impo
     ProductCategoryModel,
 )
 from src.modules.catalog.domain.category.value_object.identifier import CategoryIdVO
+from src.modules.catalog.domain.product_type.value_object.product_type_id import (
+    ProductTypeIdVO,
+)
 from src.modules.catalog.infrastructure.product.persistence.mapper import ProductMapper
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 
@@ -57,6 +63,20 @@ class SqlAlchemyProductRepository:
                         for content in product.contents.values()
                     ],
                 )
+                values = [
+                    {
+                        "product_id": product.id.uuid,
+                        "locale_code": content.locale.value,
+                        "block_id": block_id,
+                        "value": value,
+                    }
+                    for content in product.contents.values()
+                    for block_id, value in content.values.items()
+                ]
+                if values:
+                    await self._session.execute(
+                        insert(ProductContentValueModel), values
+                    )
         except IntegrityError as exc:
             original = exc.orig
             constraint = getattr(original, "constraint_name", None) or getattr(
@@ -105,11 +125,36 @@ class SqlAlchemyProductRepository:
             .scalars()
             .all()
         )
+        variant_value_rows = (
+            (
+                await self._session.execute(
+                    select(VariantContentValueModel)
+                    .join(
+                        VariantModel,
+                        VariantContentValueModel.variant_id == VariantModel.id,
+                    )
+                    .where(VariantModel.product_id == product_id.uuid)
+                )
+            )
+            .scalars()
+            .all()
+        )
         content_rows = (
             (
                 await self._session.execute(
                     select(ProductContentModel).where(
                         ProductContentModel.product_id == product_id.uuid
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        product_value_rows = (
+            (
+                await self._session.execute(
+                    select(ProductContentValueModel).where(
+                        ProductContentValueModel.product_id == product_id.uuid
                     )
                 )
             )
@@ -129,13 +174,22 @@ class SqlAlchemyProductRepository:
         )
         return Product.restore(
             product_id=ProductIdVO.from_value(row.id),
+            product_type_id=ProductTypeIdVO.from_value(row.product_type_id),
             kind=ProductKind(row.kind),
             variants=tuple(
                 ProductVariant(
                     VariantIdVO.from_value(variant.id),
                     EntityIdVO.from_value(variant.sku_id),
                     {
-                        item.locale_code: item.short_description
+                        item.locale_code: ProductContentVO(
+                            ProductLocaleVO(item.locale_code),
+                            {
+                                value.block_id: value.value
+                                for value in variant_value_rows
+                                if value.variant_id == variant.id
+                                and value.locale_code == item.locale_code
+                            },
+                        )
                         for item in variant_content_rows
                         if item.variant_id == variant.id
                     },
@@ -149,8 +203,11 @@ class SqlAlchemyProductRepository:
             contents={
                 item.locale_code: ProductContentVO(
                     locale=ProductLocaleVO(item.locale_code),
-                    name=item.name,
-                    description=item.description,
+                    values={
+                        value.block_id: value.value
+                        for value in product_value_rows
+                        if value.locale_code == item.locale_code
+                    },
                 )
                 for item in content_rows
             },
@@ -168,15 +225,32 @@ class SqlAlchemyProductRepository:
         )
 
     async def save_content(self, product: Product, locale: ProductLocaleVO) -> None:
-        content = product.contents[locale.value]
-        values = ProductMapper.content_values(product.id.uuid, content)
-        statement = pg_insert(ProductContentModel).values(values)
         await self._session.execute(
-            statement.on_conflict_do_update(
-                constraint="pk_catalog_product_contents",
-                set_={field: values[field] for field in ("name", "description")},
+            delete(ProductContentModel).where(
+                ProductContentModel.product_id == product.id.uuid,
+                ProductContentModel.locale_code == locale.value,
             )
         )
+        content = product.contents.get(locale.value)
+        if content is not None:
+            await self._session.execute(
+                insert(ProductContentModel).values(
+                    ProductMapper.content_values(product.id.uuid, content)
+                )
+            )
+            if content.values:
+                await self._session.execute(
+                    insert(ProductContentValueModel),
+                    [
+                        {
+                            "product_id": product.id.uuid,
+                            "locale_code": locale.value,
+                            "block_id": block_id,
+                            "value": value,
+                        }
+                        for block_id, value in content.values.items()
+                    ],
+                )
         await self._session.execute(
             update(ProductModel)
             .where(ProductModel.id == product.id.uuid)
@@ -242,17 +316,9 @@ class SqlAlchemyProductRepository:
                         ProductMapper.variant_values(product, variant)
                     )
                 )
-            for locale, description in variant.contents.items():
-                statement = pg_insert(VariantContentModel).values(
-                    variant_id=variant_id,
-                    locale_code=locale,
-                    short_description=description,
-                )
-                await self._session.execute(
-                    statement.on_conflict_do_update(
-                        constraint="pk_catalog_variant_contents",
-                        set_={"short_description": description},
-                    )
+            for locale in variant.contents:
+                await self.save_variant_content(
+                    product, variant.id, ProductLocaleVO(locale)
                 )
         await self._session.execute(
             update(ProductModel)
@@ -267,18 +333,32 @@ class SqlAlchemyProductRepository:
     async def save_variant_content(
         self, product: Product, variant_id: VariantIdVO, locale: ProductLocaleVO
     ) -> None:
-        description = product.get_variant(variant_id).contents[locale.value]
-        statement = pg_insert(VariantContentModel).values(
-            variant_id=variant_id.uuid,
-            locale_code=locale.value,
-            short_description=description,
-        )
         await self._session.execute(
-            statement.on_conflict_do_update(
-                constraint="pk_catalog_variant_contents",
-                set_={"short_description": description},
+            delete(VariantContentModel).where(
+                VariantContentModel.variant_id == variant_id.uuid,
+                VariantContentModel.locale_code == locale.value,
             )
         )
+        content = product.get_variant(variant_id).contents.get(locale.value)
+        if content is not None:
+            await self._session.execute(
+                insert(VariantContentModel).values(
+                    variant_id=variant_id.uuid, locale_code=locale.value
+                )
+            )
+            if content.values:
+                await self._session.execute(
+                    insert(VariantContentValueModel),
+                    [
+                        {
+                            "variant_id": variant_id.uuid,
+                            "locale_code": locale.value,
+                            "block_id": block_id,
+                            "value": value,
+                        }
+                        for block_id, value in content.values.items()
+                    ],
+                )
         await self._session.execute(
             update(ProductModel)
             .where(ProductModel.id == product.id.uuid)
@@ -288,4 +368,15 @@ class SqlAlchemyProductRepository:
     async def delete(self, product: Product) -> None:
         await self._session.execute(
             delete(ProductModel).where(ProductModel.id == product.id.uuid)
+        )
+
+    async def save_type(self, product: Product) -> None:
+        await self._session.execute(
+            update(ProductModel)
+            .where(ProductModel.id == product.id.uuid)
+            .values(
+                product_type_id=product.product_type_id.uuid,
+                updated_at=product.updated_at,
+                updated_by=product.updated_by.uuid,
+            )
         )

@@ -7,8 +7,7 @@ class CreateProductContentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     locale: str
-    name: str
-    description: str | None = None
+    blocks: dict[str, str]
 
 
 class CreateProductRequest(BaseModel):
@@ -18,3 +17,5 @@ class CreateProductRequest(BaseModel):
 
     sku_id: UUID = Field(strict=False)
     contents: list[CreateProductContentRequest] = Field(default_factory=list)
+    product_type_id: UUID | None = None
+    schema_version: int | None = None

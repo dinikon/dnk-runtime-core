@@ -18,21 +18,17 @@ import ProductCategoriesForm from "../ui/ProductCategoriesForm.vue";
 import { categoriesApi } from "../api/categories.api";
 import { useCategories, categoryError } from "../model/categories";
 import { catalogApi } from "../api/catalog.api";
-import {
-  catalogError,
-  contentPayload,
-  isUuid,
-  validName,
-} from "../model/forms";
+import { catalogError, isUuid } from "../model/forms";
 import {
   productKey,
   useCatalogTenant,
   useLocales,
   useProduct,
+  useProductTypes,
 } from "../model/queries";
 import { useUnsavedChanges } from "@/shared/model/use-unsaved-changes";
 import { useUserStore } from "@/app/stores/user";
-import ContentFields from "../ui/ContentFields.vue";
+import DynamicContentFields from "../ui/DynamicContentFields.vue";
 import ProductVariantsPanel from "../ui/ProductVariantsPanel.vue";
 import LocaleSelect from "../ui/LocaleSelect.vue";
 import RequestError from "../ui/RequestError.vue";
@@ -47,6 +43,8 @@ const locale = computed(() =>
 );
 const locales = useLocales();
 const product = useProduct(id, locale);
+const productTypes = useProductTypes();
+const currentType = computed(() => productTypes.data.value?.find((item) => item.id === product.data.value?.product_type_id));
 const categories = useCategories(locale);
 const languages = computed(() =>
   [...(locales.data.value ?? [])].sort((a, b) => a.code.localeCompare(b.code)),
@@ -80,12 +78,11 @@ const options = computed(() => {
     if (code && !all.has(code)) all.set(code, { code, name: code });
   return [...all.values()].sort((a, b) => a.code.localeCompare(b.code));
 });
-const name = ref("");
-const description = ref("");
+const blocks = ref<Record<string, string>>({});
 const baseline = ref("");
 const loadedKey = ref("");
 const validation = ref("");
-const draft = computed(() => JSON.stringify([name.value, description.value]));
+const draft = computed(() => JSON.stringify(blocks.value));
 const identity = computed(() =>
   JSON.stringify([tenant.value, id.value, locale.value]),
 );
@@ -102,8 +99,7 @@ watch(
       value.requested_locale !== locale.value
     )
       return;
-    name.value = value.content?.name ?? "";
-    description.value = value.content?.description ?? "";
+    blocks.value = { ...(value.content?.blocks ?? {}) };
     baseline.value = draft.value;
     loadedKey.value = identity.value;
     validation.value = "";
@@ -118,7 +114,7 @@ const mutation = useMutation({
   }: {
     productId: string;
     language: string;
-    payload: ReturnType<typeof contentPayload>;
+    payload: { schema_version: number; blocks: Record<string, string> };
   }) => catalogApi.putProductContent(productId, language, payload),
   retry: false,
 });
@@ -201,8 +197,8 @@ const canEdit = computed(() =>
 async function save() {
   if (anySaving.value) return;
   validation.value = "";
-  if (!validName(name.value)) {
-    validation.value = "Название должно содержать 1–255 символов.";
+  if (currentType.value?.blocks.some((item) => item.scope === "product" && item.required && !blocks.value[item.code]?.trim())) {
+    validation.value = "Заполните обязательные блоки.";
     return;
   }
   if (!canEdit.value || loadedKey.value !== identity.value) return;
@@ -214,10 +210,9 @@ async function save() {
     const saved = await mutation.mutateAsync({
       productId,
       language,
-      payload: contentPayload(name.value, description.value),
+      payload: { schema_version: product.data.value!.schema_version, blocks: Object.fromEntries(Object.entries(blocks.value).filter(([, value]) => value.trim())) },
     });
-    name.value = saved.name;
-    description.value = saved.description ?? "";
+    blocks.value = { ...saved.blocks };
     baseline.value = draft.value;
     await client.invalidateQueries({
       queryKey: productKey(tenantId, productId),
@@ -228,6 +223,29 @@ async function save() {
   } finally {
     saving.value = false;
   }
+}
+async function deleteTranslation() {
+  if (!product.data.value?.content || !window.confirm("Удалить перевод этого языка?")) return;
+  try {
+    await catalogApi.deleteProductContent(id.value, locale.value);
+    blocks.value = {};
+    baseline.value = draft.value;
+    await client.invalidateQueries({ queryKey: productKey(tenant.value, id.value) });
+    toast.success("Перевод удалён");
+  } catch (error) {
+    validation.value = catalogError(error);
+  }
+}
+const typeSelection = ref("");
+watch(currentType, (value) => { if (value) typeSelection.value = value.id; }, { immediate: true });
+async function changeType() {
+  const target = productTypes.data.value?.find((item) => item.id === typeSelection.value);
+  if (!target || !product.data.value || target.id === product.data.value.product_type_id) return;
+  try {
+    await catalogApi.putProductType(id.value, target.id, target.schema_version);
+    await client.invalidateQueries({ queryKey: productKey(tenant.value, id.value) });
+    toast.success("Тип товара изменён");
+  } catch (error) { validation.value = catalogError(error); }
 }
 function changeLocale(value: string) {
   if (value !== locale.value)
@@ -266,7 +284,7 @@ async function removeProduct() {
     <header class="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h1 class="text-2xl font-semibold">
-          {{ product.data.value?.content?.name ?? "Карточка товара" }}
+          {{ product.data.value?.content?.blocks.title ?? product.data.value?.sku_code ?? product.data.value?.id ?? "Карточка товара" }}
         </h1>
         <p v-if="product.data.value" class="text-sm text-muted-foreground">
           {{
@@ -355,7 +373,7 @@ async function removeProduct() {
         <Card v-if="activeTab === 'overview'" class="w-full"
           ><CardHeader
             ><CardTitle>{{
-              product.data.value.content?.name ?? "Товар без перевода"
+              product.data.value.content?.blocks.title ?? product.data.value.sku_code ?? product.data.value.id
             }}</CardTitle
             ><CardDescription>Данные товара</CardDescription></CardHeader
           ><CardContent
@@ -379,6 +397,10 @@ async function removeProduct() {
                 <dd>{{ product.data.value.variants.length }}</dd>
               </div>
               <div>
+                <dt class="text-muted-foreground">Тип товара</dt>
+                <dd>{{ currentType?.translations[user.user?.interface_language ?? ''] ?? currentType?.code ?? product.data.value.product_type_id }}</dd>
+              </div>
+              <div>
                 <dt class="text-muted-foreground">Переводы</dt>
                 <dd class="flex flex-wrap gap-2">
                   <Badge
@@ -399,7 +421,7 @@ async function removeProduct() {
                 <dt class="text-muted-foreground">Обновлён</dt>
                 <dd>{{ formatDate(product.data.value.updated_at) }}</dd>
               </div>
-            </dl></CardContent
+            </dl><div class="mt-5 flex max-w-md gap-2"><select v-model="typeSelection" class="h-9 flex-1 rounded-md border bg-background px-3 text-sm"><option v-for="item in productTypes.data.value ?? []" :key="item.id" :value="item.id">{{ item.translations[user.user?.interface_language ?? ''] ?? item.code }}</option></select><Button variant="outline" :disabled="typeSelection === product.data.value.product_type_id" @click="changeType">Изменить тип</Button></div></CardContent
           ></Card
         >
         <ProductVariantsPanel
@@ -407,14 +429,16 @@ async function removeProduct() {
           :product="product.data.value"
           :locale="locale"
           :editable="canEdit"
+          :schema="currentType?.blocks ?? []"
+          :label-locale="user.user?.interface_language"
         />
         <Card v-if="activeTab === 'translations'" class="w-full"
           ><CardHeader
             ><CardTitle>Перевод: {{ locale }}</CardTitle
             ><CardDescription>{{
               product.data.value.content
-                ? "Редактирование названия и описания."
-                : "Перевод отсутствует. Добавьте название и описание для этого языка."
+                ? "Редактирование блоков выбранного языка."
+                : "Перевод отсутствует. Заполните блоки для этого языка."
             }}</CardDescription></CardHeader
           ><CardContent
             ><form class="flex flex-col gap-5" @submit.prevent="save">
@@ -423,11 +447,13 @@ async function removeProduct() {
                 просмотреть.
               </p>
               <FieldGroup
-                ><ContentFields
-                  v-model:name="name"
-                  v-model:description="description"
-                  :disabled="anySaving || !canEdit"
-                  :invalid="!!validation" /></FieldGroup
+                ><DynamicContentFields
+                  v-if="currentType"
+                  v-model="blocks"
+                  :blocks="currentType.blocks"
+                  scope="product"
+                  :label-locale="user.user?.interface_language"
+                  :disabled="anySaving || !canEdit" /></FieldGroup
               ><RequestError
                 v-if="validation"
                 :message="validation"
@@ -444,6 +470,7 @@ async function removeProduct() {
                 "
                 >{{ saving ? "Сохранение…" : "Сохранить перевод" }}</Button
               >
+              <Button v-if="product.data.value.content" type="button" variant="destructive" class="self-start" :disabled="anySaving" @click="deleteTranslation">Удалить перевод</Button>
             </form></CardContent
           ></Card
         >

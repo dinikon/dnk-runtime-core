@@ -10,6 +10,7 @@ class ProductMapper:
         return dict(
             id=product.id.uuid,
             kind=product.kind.value,
+            product_type_id=product.product_type_id.uuid,
             created_at=product.created_at,
             updated_at=product.updated_at,
             created_by=product.created_by.uuid,
@@ -26,9 +27,4 @@ class ProductMapper:
 
     @staticmethod
     def content_values(product_id, content: ProductContentVO) -> dict[str, object]:
-        return dict(
-            product_id=product_id,
-            locale_code=content.locale.value,
-            name=content.name,
-            description=content.description,
-        )
+        return {"product_id": product_id, "locale_code": content.locale.value}

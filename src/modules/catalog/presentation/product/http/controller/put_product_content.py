@@ -5,6 +5,10 @@ from fastapi import HTTPException
 from src.modules.catalog.application.product.command.put_product_content.command import (
     PutProductContentCommand,
 )
+from src.modules.catalog.application.content_schema.service import (
+    SchemaConflictError,
+    SchemaValidationError,
+)
 from src.modules.catalog.domain.product.error import (
     InvalidProductContentError,
     InvalidProductLocaleError,
@@ -42,16 +46,19 @@ async def put_product_content(
                 product_id=ProductIdVO.from_value(product_id),
                 actor_id=EntityIdVO.from_value(principal.user_id),
                 locale=locale,
-                name=payload.name,
-                description=payload.description,
+                schema_version=payload.schema_version,
+                blocks=payload.blocks,
             )
         )
     except (
         InvalidProductContentError,
         InvalidProductLocaleError,
         ProductLocaleUnavailableError,
+        SchemaValidationError,
     ) as exc:
         raise HTTPException(422, str(exc)) from exc
     except ProductNotFoundError as exc:
         raise HTTPException(404, str(exc)) from exc
+    except SchemaConflictError as exc:
+        raise HTTPException(409, str(exc)) from exc
     return PutProductContentResponse.from_dto(result)

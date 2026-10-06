@@ -11,8 +11,8 @@ from src.modules.catalog.application.product.command.put_product_content.dto imp
 class PutProductContentResponse(BaseModel):
     product_id: UUID
     locale: str
-    name: str
-    description: str | None
+    schema_version: int
+    blocks: dict[str, str]
     updated_at: datetime
     updated_by: UUID
 
@@ -21,8 +21,8 @@ class PutProductContentResponse(BaseModel):
         return cls(
             product_id=dto.product_id,
             locale=dto.locale,
-            name=dto.name,
-            description=dto.description,
+            schema_version=dto.schema_version,
+            blocks=dto.blocks,
             updated_at=dto.updated_at,
             updated_by=dto.updated_by,
         )

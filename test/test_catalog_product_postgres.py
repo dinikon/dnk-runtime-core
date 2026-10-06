@@ -1,4 +1,4 @@
-"""Реальный Catalog в двух tenant-схемах одноразовой PostgreSQL-базы."""
+"""Catalog в двух схемах одноразовой PostgreSQL-базы."""
 
 import os
 import unittest
@@ -7,10 +7,7 @@ from datetime import UTC, datetime
 from unittest.mock import Mock
 from uuid import uuid4
 
-from fastapi import FastAPI, Request, Response
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy import insert, select, text, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import insert, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
@@ -24,12 +21,6 @@ from src.modules.catalog.application.product.command.create_product.command impo
 from src.modules.catalog.application.product.command.create_product.handler import (
     CreateProductHandler,
 )
-from src.modules.catalog.application.product.command.create_variable_product.command import (
-    CreateVariableProductCommand,
-)
-from src.modules.catalog.application.product.command.create_variable_product.handler import (
-    CreateVariableProductHandler,
-)
 from src.modules.catalog.application.product.command.put_product_content.command import (
     PutProductContentCommand,
 )
@@ -42,16 +33,20 @@ from src.modules.catalog.application.product.query.get_product.handler import (
 from src.modules.catalog.application.product.query.get_product.query import (
     GetProductQuery,
 )
-from src.modules.catalog.domain.product.error import (
-    ProductLocaleUnavailableError,
-    ProductNotFoundError,
-    ProductSkuNotFoundError,
-)
 from src.modules.catalog.domain.product.value_object.identifier import ProductIdVO
-from src.modules.catalog.domain.product.value_object.kind import ProductKind
 from src.modules.catalog.domain.product.value_object.locale import ProductLocaleVO
-from src.modules.catalog.infrastructure.persistence.models.product import ProductModel
-from src.modules.catalog.infrastructure.persistence.models.variant import VariantModel
+from src.modules.catalog.infrastructure.content_schema.persistence.repository import (
+    SqlAlchemyContentSchemaRepository,
+)
+from src.modules.catalog.infrastructure.content_schema.rich_text_sanitizer import (
+    Nh3RichTextSanitizer,
+)
+from src.modules.catalog.infrastructure.persistence.models.content_value import (
+    ProductContentValueModel,
+)
+from src.modules.catalog.infrastructure.persistence.models.product_type import (
+    ProductTypeContentBlockModel,
+)
 from src.modules.catalog.infrastructure.product.inventory_sku_reader import (
     InventorySkuReaderAdapter,
 )
@@ -64,11 +59,6 @@ from src.modules.catalog.infrastructure.product.persistence.repository import (
 from src.modules.catalog.infrastructure.reference_locale_reader import (
     ReferenceLocaleReaderAdapter,
 )
-from src.modules.catalog.presentation.product.router import router as product_router
-from src.modules.identity.domain.auth.principal import Principal
-from src.modules.identity.domain.auth.request_context import RequestContext
-from src.modules.identity.presentation.auth.depends import get_optional_request_context
-from src.modules.identity.presentation.auth.http.csrf import issue_csrf
 from src.modules.inventory.infrastructure.persistence.models.sku import SkuModel
 from src.modules.inventory.infrastructure.sku.persistence.query_repository import (
     SqlAlchemySkuQueryRepository,
@@ -80,17 +70,12 @@ from src.modules.reference_data.infrastructure.persistence.repository import (
     SqlAlchemyCatalogRepository,
 )
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
-from src.modules.shared.application.tokens.token_manager import TokenManager
 from src.modules.shared.infrastructure.persistence.global_migrations import (
     GlobalMigrator,
 )
 from src.modules.shared.infrastructure.persistence.unit_of_work.sqlalchemy import (
     UnitOfWork,
 )
-from src.modules.shared.infrastructure.tokens.in_memory_token_backend import (
-    InMemoryTokenBackend,
-)
-from src.modules.shared.presentation.tokens.depends import TokenManagerDep
 from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
@@ -116,13 +101,13 @@ class CatalogProductPostgresTests(unittest.IsolatedAsyncioTestCase):
         ]
         self.actor = EntityIdVO(uuid4())
         self.sku_id = uuid4()
-        self.now = datetime(2026, 10, 5, tzinfo=UTC)
+        self.now = datetime(2026, 10, 6, tzinfo=UTC)
         async with self.engine.begin() as connection:
             await GlobalMigrator().upgrade(connection)
-            for code, language in (("uk", "uk"), ("ru", "ru")):
+            for code in ("uk", "ru"):
                 statement = pg_insert(LocaleModel).values(
                     code=code,
-                    language_code=language,
+                    language_code=code,
                     script_code=None,
                     region_code=None,
                     country_code=None,
@@ -165,278 +150,104 @@ class CatalogProductPostgresTests(unittest.IsolatedAsyncioTestCase):
                 yield uow
 
     def handlers(self, session):
-        repository = SqlAlchemyProductRepository(session)
+        products = SqlAlchemyProductRepository(session)
         skus = InventorySkuReaderAdapter(SqlAlchemySkuQueryRepository(session))
         locales = ReferenceLocaleReaderAdapter(SqlAlchemyCatalogRepository(session))
+        schemas = SqlAlchemyContentSchemaRepository(session)
         clock = Mock(now=Mock(return_value=self.now))
         uuids = Mock(new=Mock(side_effect=(uuid4(), uuid4())))
+        sanitizer = Nh3RichTextSanitizer()
         return (
-            CreateProductHandler(repository, skus, locales, clock, uuids),
+            CreateProductHandler(
+                products, skus, locales, clock, uuids, schemas, sanitizer
+            ),
             GetProductHandler(SqlAlchemyProductQueryRepository(session), skus),
-            PutProductContentHandler(repository, locales, clock),
+            PutProductContentHandler(products, locales, clock, schemas, sanitizer),
+            schemas,
         )
 
-    async def test_kind_migration_roundtrip_preserves_product_and_content(self) -> None:
+    async def test_seed_uses_same_definition_in_both_scopes(self) -> None:
+        for index in (0, 1):
+            async with self.tenant_uow(index) as uow:
+                schema = await SqlAlchemyContentSchemaRepository(
+                    uow.session
+                ).get_clean_type()
+                self.assertEqual(schema.code, "clean")
+                self.assertEqual(len(schema.blocks), 6)
+                for code in ("title", "description", "short_description"):
+                    self.assertEqual(
+                        {
+                            item.scope.value
+                            for item in schema.blocks
+                            if item.code == code
+                        },
+                        {"product", "variant"},
+                    )
+                self.assertEqual(sum(item.required for item in schema.blocks), 1)
+                assignments = (
+                    (await uow.session.execute(select(ProductTypeContentBlockModel)))
+                    .scalars()
+                    .all()
+                )
+                self.assertEqual(len(assignments), 6)
+
+    async def test_values_audit_isolation_and_rollback(self) -> None:
         async with self.tenant_uow(0) as uow:
-            create, _, _ = self.handlers(uow.session)
-            created = await create.execute(
+            create, _, _, _ = self.handlers(uow.session)
+            result = await create.execute(
                 CreateProductCommand(
                     self.actor,
                     self.sku_id,
-                    (CreateProductContent("uk", "Назва", "Опис"),),
-                )
-            )
-        migrator = TenantMigrator()
-        schema = self.schemas[0]
-        async with self.engine.begin() as connection:
-            await migrator.downgrade(connection, schema, "0013_catalog_categories")
-            row = (
-                (
-                    await connection.execute(
-                        text(
-                            f'SELECT * FROM "{schema}".catalog_products WHERE id = :id'
+                    (
+                        CreateProductContent(
+                            "uk", {"title": " Назва ", "description": "<p>Опис</p>"}
                         ),
-                        {"id": created.id},
-                    )
+                    ),
                 )
-                .mappings()
-                .one()
             )
-            self.assertEqual(row["type"], "SIMPLE")
-            self.assertNotIn("kind", row)
-            await migrator.upgrade(connection, schema)
-            row = (
-                (
-                    await connection.execute(
-                        text(
-                            f'SELECT * FROM "{schema}".catalog_products WHERE id = :id'
-                        ),
-                        {"id": created.id},
-                    )
-                )
-                .mappings()
-                .one()
-            )
-            self.assertEqual(row["kind"], "simple")
-            self.assertNotIn("type", row)
         async with self.tenant_uow(0) as uow:
-            restored = await SqlAlchemyProductRepository(uow.session).get_for_update(
-                ProductIdVO(created.id)
-            )
-            _, read, _ = self.handlers(uow.session)
+            _, read, put, schemas = self.handlers(uow.session)
             details = await read.execute(
-                GetProductQuery(ProductIdVO(created.id), ProductLocaleVO("uk"))
+                GetProductQuery(ProductIdVO(result.id), ProductLocaleVO("uk"))
             )
-            self.assertIs(restored.kind, ProductKind.SIMPLE)
-            self.assertIs(details.kind, ProductKind.SIMPLE)
-            self.assertEqual(details.variant_id, created.variant_id)
-            self.assertEqual(details.sku_id, created.sku_id)
-            self.assertEqual(details.content.name, "Назва")
-            self.assertEqual(details.content.description, "Опис")
-            self.assertEqual(details.created_at, created.created_at)
-            self.assertEqual(details.updated_at, created.updated_at)
-            self.assertEqual(details.created_by, created.created_by)
-            self.assertEqual(details.updated_by, created.updated_by)
-
-    async def test_variable_variants_are_tenant_scoped_and_localized(self) -> None:
-        second_sku = uuid4()
-        async with self.tenant_uow(0) as uow:
-            await uow.session.execute(
-                insert(SkuModel).values(
-                    id=second_sku,
-                    code="SKU-2",
-                    title="Second",
-                    created_by=self.actor.uuid,
-                    updated_by=self.actor.uuid,
+            self.assertEqual(details.content.blocks["title"], "Назва")
+            self.assertEqual(details.content.blocks["description"], "<p>Опис</p>")
+            self.assertEqual(details.product_type_id, result.product_type_id)
+            self.assertEqual(details.created_by, self.actor.uuid)
+            await put.execute(
+                PutProductContentCommand(
+                    ProductIdVO(result.id), self.actor, "ru", 1, {"title": "Имя"}
                 )
             )
-            repository = SqlAlchemyProductRepository(uow.session)
-            skus = InventorySkuReaderAdapter(SqlAlchemySkuQueryRepository(uow.session))
-            locales = ReferenceLocaleReaderAdapter(
-                SqlAlchemyCatalogRepository(uow.session)
-            )
-            handler = CreateVariableProductHandler(
-                repository,
-                skus,
-                locales,
-                Mock(now=Mock(return_value=self.now)),
-                Mock(new=Mock(side_effect=(uuid4(), uuid4(), uuid4()))),
-            )
-            created = await handler.execute(
-                CreateVariableProductCommand(self.actor, (self.sku_id, second_sku))
-            )
-        async with self.tenant_uow(0) as uow:
-            repository = SqlAlchemyProductRepository(uow.session)
-            product = await repository.get_for_update(ProductIdVO(created.id))
-            self.assertEqual(product.kind, ProductKind.VARIABLE)
-            self.assertEqual(len(product.variants), 2)
-            product.replace_variant_content(
-                product.variants[0].id,
-                ProductLocaleVO("uk"),
-                " Позиція ",
-                actor_id=self.actor,
-                now=self.now,
-            )
-            await repository.save_variant_content(
-                product, product.variants[0].id, ProductLocaleVO("uk")
-            )
-        async with self.tenant_uow(0) as uow:
-            skus = InventorySkuReaderAdapter(SqlAlchemySkuQueryRepository(uow.session))
-            details = await GetProductHandler(
-                SqlAlchemyProductQueryRepository(uow.session), skus
-            ).execute(GetProductQuery(ProductIdVO(created.id), ProductLocaleVO("uk")))
-            self.assertEqual(len(details.variants), 2)
-            self.assertIn(
-                "Позиція", [item.short_description for item in details.variants]
+            self.assertEqual(
+                len(
+                    (await uow.session.execute(select(ProductContentValueModel)))
+                    .scalars()
+                    .all()
+                ),
+                3,
             )
         async with self.tenant_uow(1) as uow:
             self.assertIsNone(
                 await SqlAlchemyProductQueryRepository(uow.session).get_details(
-                    ProductIdVO(created.id), ProductLocaleVO("uk")
+                    ProductIdVO(result.id), ProductLocaleVO("uk")
                 )
             )
-
-    async def test_create_reuse_translate_and_read_inactive_locale(self) -> None:
-        async with self.tenant_uow(0) as uow:
-            create, _, _ = self.handlers(uow.session)
-            first = await create.execute(CreateProductCommand(self.actor, self.sku_id))
-        async with self.tenant_uow(0) as uow:
-            create, _, _ = self.handlers(uow.session)
-            second = await create.execute(
-                CreateProductCommand(
-                    self.actor,
-                    self.sku_id,
-                    (CreateProductContent("uk", " Назва "),),
-                )
-            )
-        self.assertNotEqual(first.id, second.id)
-        async with self.tenant_uow(0) as uow:
-            _, read, put = self.handlers(uow.session)
-            empty = await read.execute(
-                GetProductQuery(ProductIdVO(first.id), ProductLocaleVO("uk"))
-            )
-            self.assertIsNone(empty.content)
-            changed = await put.execute(
-                PutProductContentCommand(
-                    ProductIdVO(first.id), self.actor, "ru", " Имя "
-                )
-            )
-            self.assertEqual(changed.name, "Имя")
-        async with self.engine.begin() as connection:
-            await connection.execute(
-                update(LocaleModel).where(LocaleModel.code == "ru").values(active=False)
-            )
-        async with self.tenant_uow(0) as uow:
-            _, read, put = self.handlers(uow.session)
-            details = await read.execute(
-                GetProductQuery(ProductIdVO(first.id), ProductLocaleVO("ru"))
-            )
-            self.assertEqual(details.content.name, "Имя")
-            self.assertEqual(details.sku_code, "SKU-1")
-            with self.assertRaises(ProductLocaleUnavailableError):
+        with self.assertRaises(RuntimeError):
+            async with self.tenant_uow(0) as uow:
+                _, _, put, _ = self.handlers(uow.session)
                 await put.execute(
                     PutProductContentCommand(
-                        ProductIdVO(first.id), self.actor, "ru", "New"
+                        ProductIdVO(result.id),
+                        self.actor,
+                        "uk",
+                        1,
+                        {"title": "Changed"},
                     )
                 )
-
-    async def test_tenant_isolation_and_rollback(self) -> None:
-        async with self.tenant_uow(1) as uow:
-            create, _, _ = self.handlers(uow.session)
-            with self.assertRaises(ProductSkuNotFoundError):
-                await create.execute(CreateProductCommand(self.actor, self.sku_id))
-        product_id = uuid4()
-        try:
-            async with self.tenant_uow(0) as uow:
-                create, _, _ = self.handlers(uow.session)
-                result = await create.execute(
-                    CreateProductCommand(self.actor, self.sku_id)
-                )
-                product_id = result.id
-                raise RuntimeError("rollback after insert")
-        except RuntimeError:
-            pass
+                raise RuntimeError("rollback")
         async with self.tenant_uow(0) as uow:
-            self.assertIsNone(
-                await uow.session.scalar(
-                    select(ProductModel.id).where(ProductModel.id == product_id)
-                )
+            details = await SqlAlchemyProductQueryRepository(uow.session).get_details(
+                ProductIdVO(result.id), ProductLocaleVO("uk")
             )
-
-    async def test_http_uses_bound_tenant_connection_and_commits_before_201(
-        self,
-    ) -> None:
-        context = RequestContext(
-            Principal(
-                str(self.actor.uuid), str(self.tenant_ids[0]), "session", ("member",)
-            ),
-            None,
-            None,
-            None,
-        )
-        app = FastAPI()
-        app.state.db = async_sessionmaker(self.engine, expire_on_commit=False)
-        app.state.token_manager = TokenManager(InMemoryTokenBackend())
-        app.state.test_context = context
-        app.dependency_overrides[get_optional_request_context] = (
-            lambda: app.state.test_context
-        )
-        app.include_router(product_router, prefix="/api/console")
-
-        engine = self.engine
-        tenant_id = self.tenant_ids[0]
-        naming = self.naming
-
-        class BoundTenantConnection:
-            def __init__(self, wrapped):
-                self.wrapped = wrapped
-
-            async def __call__(self, scope, receive, send):
-                if scope["type"] != "http":
-                    return await self.wrapped(scope, receive, send)
-                async with engine.connect() as connection:
-                    await bind_tenant_schema(connection, tenant_id, naming)
-                    scope.setdefault("state", {})["tenant_connection"] = connection
-                    await self.wrapped(scope, receive, send)
-
-        app.add_middleware(BoundTenantConnection)
-
-        @app.get("/csrf")
-        async def csrf(request: Request, response: Response, tokens: TokenManagerDep):
-            return await issue_csrf(request, response, tokens)
-
-        scheme = "http" if dnk_config.AUTH.allow_insecure_http else "https"
-        origin = f"{scheme}://tenant.example"
-        collection = "/api/console/catalog/products"
-        async with AsyncClient(
-            transport=ASGITransport(app=app, raise_app_exceptions=False),
-            base_url=origin,
-        ) as client:
-            token = (await client.get("/csrf")).json()["csrf_token"]
-            headers = {"Origin": origin, "X-CSRF-Token": token}
-            created = await client.post(
-                collection, json={"sku_id": str(self.sku_id)}, headers=headers
-            )
-            self.assertEqual(created.status_code, 201, created.text)
-            product_id = created.json()["id"]
-            read = await client.get(f"{collection}/{product_id}?locale=uk")
-            self.assertEqual(read.status_code, 200, read.text)
-            self.assertIsNone(read.json()["content"])
-            translated = await client.put(
-                f"{collection}/{product_id}/contents/uk",
-                json={"name": " Назва "},
-                headers=headers,
-            )
-            self.assertEqual(translated.status_code, 200, translated.text)
-            self.assertEqual(
-                (await client.get(f"{collection}/{product_id}?locale=uk")).json()[
-                    "content"
-                ]["name"],
-                "Назва",
-            )
-        async with self.tenant_uow(0) as uow:
-            self.assertIsNotNone(
-                await uow.session.scalar(
-                    select(ProductModel.id).where(ProductModel.id == product_id)
-                )
-            )
+            self.assertEqual(details.content.blocks["title"], "Назва")

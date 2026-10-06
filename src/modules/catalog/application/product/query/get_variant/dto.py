@@ -1,5 +1,8 @@
 from dataclasses import dataclass
 from uuid import UUID
+from src.modules.catalog.application.product.query.get_product.dto import (
+    ProductContentDTO,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -10,4 +13,4 @@ class GetVariantResultDTO:
     sku_code: str
     requested_locale: str
     content_locales: tuple[str, ...]
-    short_description: str | None
+    content: ProductContentDTO | None

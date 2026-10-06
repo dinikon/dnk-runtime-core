@@ -6,18 +6,21 @@ export interface AuditDto {
 }
 export interface ProductContentDto {
   locale: string;
-  name: string;
-  description: string | null;
+  blocks: Record<string, string>;
 }
 export interface CreateProductDto {
   sku_id: string;
   contents: ProductContentDto[];
+  product_type_id?: string | null;
+  schema_version?: number | null;
 }
 export type ProductKind = "simple" | "variable";
 
 export interface CreatedProductDto extends AuditDto {
   id: string;
   kind: ProductKind;
+  product_type_id: string;
+  schema_version: number;
   variant_id: string;
   sku_id: string;
   sku_code: string;
@@ -38,7 +41,7 @@ export interface ProductVariantDto {
   sku_id: string;
   sku_code: string;
   content_locales: string[];
-  short_description: string | null;
+  content: ProductContentDto | null;
 }
 export interface ProductListItemDto {
   id: string;
@@ -54,14 +57,54 @@ export interface VariantStructureDto {
   variants: { id?: string; sku_id: string }[];
 }
 export interface PutContentDto {
-  name: string;
-  description: string | null;
+  schema_version: number;
+  blocks: Record<string, string>;
 }
 export interface SavedContentDto extends PutContentDto {
   product_id: string;
   locale: string;
   updated_at: string;
   updated_by: string;
+}
+export type ContentScope = "product" | "variant";
+export type ContentBlockType = "text" | "rich_text";
+export interface ContentBlockDto {
+  id: string;
+  code: string;
+  type: ContentBlockType;
+  is_system: boolean;
+  translations: Record<string, string>;
+}
+export interface ProductTypeBlockDto {
+  block_id: string;
+  code: string;
+  type: ContentBlockType;
+  scope: ContentScope;
+  required: boolean;
+  position: number;
+  translations: Record<string, string>;
+}
+export interface ProductTypeDto {
+  id: string;
+  code: string;
+  is_system: boolean;
+  schema_version: number;
+  translations: Record<string, string>;
+  blocks: ProductTypeBlockDto[];
+}
+export interface TypeBlockPayload {
+  block_id: string;
+  scope: ContentScope;
+  required: boolean;
+  position: number;
+}
+export interface CreateTypeDto {
+  code: string;
+  translations: Record<string, string>;
+  blocks: TypeBlockPayload[];
+}
+export interface PutTypeDto extends Omit<CreateTypeDto, "code"> {
+  expected_schema_version: number;
 }
 export interface LocaleDto {
   code: string;

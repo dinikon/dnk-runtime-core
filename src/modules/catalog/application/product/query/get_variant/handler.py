@@ -40,5 +40,5 @@ class GetVariantHandler:
             code,
             query.locale.value,
             variant.content_locales,
-            variant.short_description,
+            variant.content,
         )

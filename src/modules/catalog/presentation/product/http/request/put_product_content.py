@@ -6,5 +6,5 @@ class PutProductContentRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    name: str
-    description: str | None = None
+    schema_version: int
+    blocks: dict[str, str]

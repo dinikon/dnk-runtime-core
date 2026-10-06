@@ -6,4 +6,5 @@ from uuid import UUID
 class PutVariantContentResultDTO:
     variant_id: UUID
     locale: str
-    short_description: str
+    schema_version: int
+    blocks: dict[str, str]

@@ -3,4 +3,5 @@ from pydantic import BaseModel, ConfigDict
 
 class PutVariantContentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    short_description: str
+    schema_version: int
+    blocks: dict[str, str]

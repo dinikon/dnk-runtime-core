@@ -59,6 +59,9 @@ from src.modules.catalog.application.product.command.put_product_categories.comm
 from src.modules.catalog.application.product.command.put_product_categories.handler import (
     PutProductCategoriesHandler,
 )
+from src.modules.catalog.infrastructure.content_schema.persistence.repository import (
+    SqlAlchemyContentSchemaRepository,
+)
 from src.modules.catalog.domain.category.error import (
     CategoryCycleError,
     CategoryInUseError,
@@ -282,10 +285,14 @@ class CatalogCategoryPostgresTests(unittest.IsolatedAsyncioTestCase):
                 )
         product_id = uuid4()
         async with self.uow() as uow:
+            clean_type = await SqlAlchemyContentSchemaRepository(
+                uow.session
+            ).get_clean_type()
             await uow.session.execute(
                 insert(ProductModel).values(
                     id=product_id,
                     kind="simple",
+                    product_type_id=clean_type.id,
                     created_by=self.actor.uuid,
                     updated_by=self.actor.uuid,
                 )

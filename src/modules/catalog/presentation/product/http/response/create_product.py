@@ -12,6 +12,8 @@ from src.modules.catalog.application.product.command.create_product.dto import (
 class CreateProductResponse(BaseModel):
     id: UUID
     kind: ProductKind
+    product_type_id: UUID
+    schema_version: int
     variant_id: UUID
     sku_id: UUID
     sku_code: str
@@ -26,6 +28,8 @@ class CreateProductResponse(BaseModel):
         return cls(
             id=dto.id,
             kind=dto.kind,
+            product_type_id=dto.product_type_id,
+            schema_version=dto.schema_version,
             variant_id=dto.variant_id,
             sku_id=dto.sku_id,
             sku_code=dto.sku_code,

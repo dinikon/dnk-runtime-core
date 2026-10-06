@@ -8,6 +8,11 @@ import type {
   LocaleDto,
   ProductListItemDto,
   VariantStructureDto,
+  ContentBlockDto,
+  ProductTypeDto,
+  CreateTypeDto,
+  PutTypeDto,
+  ContentBlockType,
 } from "./contracts";
 export const catalogApi = {
   async listProducts(locale: string, signal?: AbortSignal) {
@@ -21,6 +26,8 @@ export const catalogApi = {
   async createVariableProduct(payload: {
     sku_ids: string[];
     contents: CreateProductDto["contents"];
+    product_type_id?: string | null;
+    schema_version?: number | null;
   }) {
     return (
       await httpClient.post<{ id: string; variant_ids: string[] }>(
@@ -67,12 +74,12 @@ export const catalogApi = {
     id: string,
     variantId: string,
     locale: string,
-    short_description: string,
+    payload: PutContentDto,
   ) {
     return (
       await httpClient.put(
         `/console/catalog/products/${encodeURIComponent(id)}/variants/${encodeURIComponent(variantId)}/contents/${encodeURIComponent(locale)}`,
-        { short_description },
+        payload,
       )
     ).data;
   },
@@ -99,6 +106,45 @@ export const catalogApi = {
         payload,
       )
     ).data;
+  },
+  async deleteProductContent(id: string, locale: string) {
+    await httpClient.delete(`/console/catalog/products/${encodeURIComponent(id)}/contents/${encodeURIComponent(locale)}`);
+  },
+  async deleteVariantContent(id: string, variantId: string, locale: string) {
+    await httpClient.delete(`/console/catalog/products/${encodeURIComponent(id)}/variants/${encodeURIComponent(variantId)}/contents/${encodeURIComponent(locale)}`);
+  },
+  async putProductType(id: string, product_type_id: string, expected_schema_version: number) {
+    return (await httpClient.put(`/console/catalog/products/${encodeURIComponent(id)}/product-type`, { product_type_id, expected_schema_version })).data;
+  },
+  async listBlocks(signal?: AbortSignal) {
+    return (await httpClient.get<ContentBlockDto[]>("/console/catalog/content-blocks", { signal })).data;
+  },
+  async getBlock(id: string, signal?: AbortSignal) {
+    return (await httpClient.get<ContentBlockDto>(`/console/catalog/content-blocks/${encodeURIComponent(id)}`, { signal })).data;
+  },
+  async createBlock(payload: { code: string; type: ContentBlockType; translations: Record<string, string> }) {
+    return (await httpClient.post<ContentBlockDto>("/console/catalog/content-blocks", payload)).data;
+  },
+  async putBlock(id: string, payload: { type: ContentBlockType; translations: Record<string, string> }) {
+    return (await httpClient.put<ContentBlockDto>(`/console/catalog/content-blocks/${encodeURIComponent(id)}`, payload)).data;
+  },
+  async deleteBlock(id: string) {
+    await httpClient.delete(`/console/catalog/content-blocks/${encodeURIComponent(id)}`);
+  },
+  async listProductTypes(signal?: AbortSignal) {
+    return (await httpClient.get<ProductTypeDto[]>("/console/catalog/product-types", { signal })).data;
+  },
+  async getProductType(id: string, signal?: AbortSignal) {
+    return (await httpClient.get<ProductTypeDto>(`/console/catalog/product-types/${encodeURIComponent(id)}`, { signal })).data;
+  },
+  async createProductType(payload: CreateTypeDto) {
+    return (await httpClient.post<ProductTypeDto>("/console/catalog/product-types", payload)).data;
+  },
+  async putProductTypeSchema(id: string, payload: PutTypeDto) {
+    return (await httpClient.put<ProductTypeDto>(`/console/catalog/product-types/${encodeURIComponent(id)}`, payload)).data;
+  },
+  async deleteProductType(id: string) {
+    await httpClient.delete(`/console/catalog/product-types/${encodeURIComponent(id)}`);
   },
   async listLocales(signal?: AbortSignal) {
     return (

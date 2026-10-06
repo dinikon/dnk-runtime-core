@@ -30,6 +30,18 @@ from src.modules.catalog.presentation.product.http.controller.delete_variant imp
 from src.modules.catalog.presentation.product.http.controller.put_variant_content import (
     put_variant_content,
 )
+from src.modules.catalog.presentation.product.http.controller.put_product_type import (
+    put_product_type,
+)
+from src.modules.catalog.presentation.product.http.controller.delete_product_content import (
+    delete_product_content,
+)
+from src.modules.catalog.presentation.product.http.controller.delete_variant_content import (
+    delete_variant_content,
+)
+from src.modules.catalog.presentation.product.http.response.put_product_type import (
+    PutProductTypeResponse,
+)
 from src.modules.catalog.presentation.product.http.response.create_variable_product import (
     CreateVariableProductResponse,
 )
@@ -193,10 +205,40 @@ router.add_api_route(
     ],
 )
 router.add_api_route(
+    "/{product_id}/variants/{variant_id}/contents/{locale}",
+    delete_variant_content,
+    methods=["DELETE"],
+    status_code=204,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
+router.add_api_route(
     "/{product_id}/contents/{locale}",
     put_product_content,
     methods=["PUT"],
     response_model=PutProductContentResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
+router.add_api_route(
+    "/{product_id}/contents/{locale}",
+    delete_product_content,
+    methods=["DELETE"],
+    status_code=204,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
+router.add_api_route(
+    "/{product_id}/product-type",
+    put_product_type,
+    methods=["PUT"],
+    response_model=PutProductTypeResponse,
     dependencies=[
         Depends(require_authenticated_request_context),
         Depends(require_csrf),

@@ -8,8 +8,7 @@ from src.modules.catalog.domain.product.value_object.kind import ProductKind
 @dataclass(frozen=True, slots=True)
 class ProductContentDTO:
     locale: str
-    name: str
-    description: str | None
+    blocks: dict[str, str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,13 +23,15 @@ class ProductVariantDTO:
     sku_id: UUID
     sku_code: str | None
     content_locales: tuple[str, ...]
-    short_description: str | None
+    content: ProductContentDTO | None
 
 
 @dataclass(frozen=True, slots=True)
 class ProductDetailsDTO:
     id: UUID
     kind: ProductKind
+    product_type_id: UUID
+    schema_version: int
     variant_id: UUID
     sku_id: UUID
     sku_code: str | None

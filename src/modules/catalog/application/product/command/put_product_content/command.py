@@ -9,5 +9,5 @@ class PutProductContentCommand:
     product_id: ProductIdVO
     actor_id: EntityIdVO
     locale: str
-    name: str
-    description: str | None = None
+    schema_version: int
+    blocks: dict[str, str]
