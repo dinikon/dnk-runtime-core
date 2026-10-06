@@ -32,8 +32,19 @@ class ContentBlockDefinition:
         translations: Mapping[str, ContentBlockTranslationVO],
         is_system: bool = False,
     ) -> "ContentBlockDefinition":
+        if not isinstance(id, ContentBlockIdVO) or not isinstance(
+            code, ContentBlockCodeVO
+        ):
+            raise InvalidContentBlockError("Invalid content block identity.")
+        if not isinstance(type, ContentBlockType) or not isinstance(is_system, bool):
+            raise InvalidContentBlockError("Invalid content block settings.")
         if not translations:
             raise InvalidContentBlockError("At least one translation is required.")
+        if any(
+            not isinstance(item, ContentBlockTranslationVO)
+            for item in translations.values()
+        ):
+            raise InvalidContentBlockError("Invalid content block translation.")
         return cls(id, code, type, is_system, dict(translations))
 
     @property
@@ -51,3 +62,24 @@ class ContentBlockDefinition:
         if len(self._translations) == 1:
             raise InvalidContentBlockError("At least one translation is required.")
         del self._translations[locale]
+
+    def replace_translations(
+        self, translations: Mapping[str, ContentBlockTranslationVO]
+    ) -> None:
+        if not translations or any(
+            not isinstance(item, ContentBlockTranslationVO)
+            for item in translations.values()
+        ):
+            raise InvalidContentBlockError(
+                "At least one valid translation is required."
+            )
+        self._translations = dict(translations)
+
+    def change_type(self, value_type: ContentBlockType) -> None:
+        if self.is_system:
+            raise InvalidContentBlockError(
+                "System content block type cannot be changed."
+            )
+        if not isinstance(value_type, ContentBlockType):
+            raise InvalidContentBlockError("Invalid content block type.")
+        self.type = value_type

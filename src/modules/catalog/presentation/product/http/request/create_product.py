@@ -17,5 +17,5 @@ class CreateProductRequest(BaseModel):
 
     sku_id: UUID = Field(strict=False)
     contents: list[CreateProductContentRequest] = Field(default_factory=list)
-    product_type_id: UUID | None = None
+    product_type_id: UUID | None = Field(default=None, strict=False)
     schema_version: int | None = None

@@ -1,4 +1,3 @@
-from dataclasses import replace
 from uuid import UUID
 
 from src.modules.catalog.application.content_schema.contracts import (
@@ -114,12 +113,33 @@ class ContentSchemaService:
         if type != block.type and await self._repository.block_in_use(block_id):
             raise SchemaConflictError("Used content block type cannot be changed.")
         try:
-            checked = {
-                k: ContentBlockTranslationVO(v).name for k, v in translations.items()
-            }
+            definition = ContentBlockDefinition.create(
+                id=ContentBlockIdVO.from_value(block.id),
+                code=ContentBlockCodeVO(block.code),
+                type=block.type,
+                is_system=block.is_system,
+                translations={
+                    locale: ContentBlockTranslationVO(name)
+                    for locale, name in block.translations.items()
+                },
+            )
+            if type != definition.type:
+                definition.change_type(type)
+            definition.replace_translations(
+                {
+                    locale: ContentBlockTranslationVO(name)
+                    for locale, name in translations.items()
+                }
+            )
         except ValueError as exc:
             raise SchemaValidationError(str(exc)) from exc
-        result = replace(block, type=type, translations=checked)
+        result = BlockDefinitionDTO(
+            definition.id.uuid,
+            definition.code.value,
+            definition.type,
+            definition.is_system,
+            {locale: item.name for locale, item in definition.translations.items()},
+        )
         await self._repository.update_block(result)
         return result
 
@@ -204,12 +224,35 @@ class ContentSchemaService:
                     raise SchemaConflictError(
                         "Existing content lacks the required block."
                     )
-        result = replace(
-            current,
-            translations=translations,
-            blocks=resolved,
-            schema_version=current.schema_version
-            + (old_assignments != new_assignments),
+        try:
+            product_type = ProductType.restore(
+                id=ProductTypeIdVO.from_value(current.id),
+                code=current.code,
+                is_system=current.is_system,
+                schema_version=current.schema_version,
+                translations=current.translations,
+                blocks=tuple(
+                    ProductTypeContentBlock(
+                        ContentBlockIdVO.from_value(item.block_id),
+                        item.scope,
+                        item.required,
+                        item.position,
+                    )
+                    for item in current.blocks
+                ),
+            )
+            product_type.replace_translations(translations)
+            if old_assignments != new_assignments:
+                product_type.replace_blocks(blocks)
+        except ValueError as exc:
+            raise SchemaValidationError(str(exc)) from exc
+        result = ProductTypeSchemaDTO(
+            current.id,
+            current.code,
+            current.is_system,
+            product_type.schema_version,
+            dict(product_type.translations),
+            resolved,
         )
         await self._repository.update_type(result)
         return result

@@ -27,13 +27,22 @@ from src.modules.catalog.application.product.command.put_product_content.command
 from src.modules.catalog.application.product.command.put_product_content.handler import (
     PutProductContentHandler,
 )
+from src.modules.catalog.application.product.command.put_variant_content.command import (
+    PutVariantContentCommand,
+)
+from src.modules.catalog.application.product.command.put_variant_content.handler import (
+    PutVariantContentHandler,
+)
 from src.modules.catalog.application.product.query.get_product.handler import (
     GetProductHandler,
 )
 from src.modules.catalog.application.product.query.get_product.query import (
     GetProductQuery,
 )
-from src.modules.catalog.domain.product.value_object.identifier import ProductIdVO
+from src.modules.catalog.domain.product.value_object.identifier import (
+    ProductIdVO,
+    VariantIdVO,
+)
 from src.modules.catalog.domain.product.value_object.locale import ProductLocaleVO
 from src.modules.catalog.infrastructure.content_schema.persistence.repository import (
     SqlAlchemyContentSchemaRepository,
@@ -211,6 +220,7 @@ class CatalogProductPostgresTests(unittest.IsolatedAsyncioTestCase):
                 GetProductQuery(ProductIdVO(result.id), ProductLocaleVO("uk"))
             )
             self.assertEqual(details.content.blocks["title"], "Назва")
+
             self.assertEqual(details.content.blocks["description"], "<p>Опис</p>")
             self.assertEqual(details.product_type_id, result.product_type_id)
             self.assertEqual(details.created_by, self.actor.uuid)
@@ -251,3 +261,40 @@ class CatalogProductPostgresTests(unittest.IsolatedAsyncioTestCase):
                 ProductIdVO(result.id), ProductLocaleVO("uk")
             )
             self.assertEqual(details.content.blocks["title"], "Назва")
+
+    async def test_variant_content_is_independent_from_product_content(self) -> None:
+        async with self.tenant_uow(0) as uow:
+            create, _, _, _ = self.handlers(uow.session)
+            created = await create.execute(
+                CreateProductCommand(self.actor, self.sku_id, ())
+            )
+        async with self.tenant_uow(0) as uow:
+            products = SqlAlchemyProductRepository(uow.session)
+            schemas = SqlAlchemyContentSchemaRepository(uow.session)
+            locales = ReferenceLocaleReaderAdapter(
+                SqlAlchemyCatalogRepository(uow.session)
+            )
+            handler = PutVariantContentHandler(
+                products,
+                locales,
+                Mock(now=Mock(return_value=self.now)),
+                schemas,
+                Nh3RichTextSanitizer(),
+            )
+            await handler.execute(
+                PutVariantContentCommand(
+                    ProductIdVO(created.id),
+                    VariantIdVO(created.variant_id),
+                    self.actor,
+                    "uk",
+                    1,
+                    {"title": "Варіант"},
+                )
+            )
+        async with self.tenant_uow(0) as uow:
+            _, read, _, _ = self.handlers(uow.session)
+            details = await read.execute(
+                GetProductQuery(ProductIdVO(created.id), ProductLocaleVO("uk"))
+            )
+            self.assertIsNone(details.content)
+            self.assertEqual(details.variants[0].content.blocks, {"title": "Варіант"})

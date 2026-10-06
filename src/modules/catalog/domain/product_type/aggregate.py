@@ -75,9 +75,32 @@ class ProductType:
             code.strip().lower(),
             is_system,
             1,
-            blocks,
+            tuple(sorted(blocks, key=lambda item: (item.scope.value, item.position))),
             {k: v.strip() for k, v in translations.items()},
         )
+
+    @classmethod
+    def restore(
+        cls,
+        *,
+        id: ProductTypeIdVO,
+        code: str,
+        is_system: bool,
+        schema_version: int,
+        translations: Mapping[str, str],
+        blocks: tuple[ProductTypeContentBlock, ...],
+    ) -> "ProductType":
+        if schema_version < 1:
+            raise InvalidProductTypeError("Invalid product type schema version.")
+        product_type = cls.create(
+            id=id,
+            code=code,
+            is_system=is_system,
+            translations=translations,
+            blocks=blocks,
+        )
+        product_type.schema_version = schema_version
+        return product_type
 
     @staticmethod
     def _check_blocks(blocks: tuple[ProductTypeContentBlock, ...]) -> None:
@@ -97,9 +120,24 @@ class ProductType:
             )
         self._translations[locale] = name.strip()
 
+    def replace_translations(self, translations: Mapping[str, str]) -> None:
+        if not translations or any(
+            not isinstance(name, str) or not 1 <= len(name.strip()) <= 255
+            for name in translations.values()
+        ):
+            raise InvalidProductTypeError("Product type needs valid translations.")
+        self._translations = {
+            locale: name.strip() for locale, name in translations.items()
+        }
+
     def replace_blocks(self, blocks: tuple[ProductTypeContentBlock, ...]) -> None:
+        self._check_blocks(blocks)
+        blocks = tuple(
+            sorted(blocks, key=lambda item: (item.scope.value, item.position))
+        )
+        if self.blocks == blocks:
+            return
         if self.is_system:
             raise InvalidProductTypeError("System product type cannot be changed.")
-        self._check_blocks(blocks)
         self.blocks = blocks
         self.schema_version += 1

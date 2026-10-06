@@ -292,6 +292,25 @@ class ProductHttpTests(unittest.IsolatedAsyncioTestCase):
             ]
         )
 
+    async def test_create_with_explicit_product_type_uuid_string(self) -> None:
+        invalid = await self.client.post(
+            self.collection,
+            json={"sku_id": str(self.sku), "product_type_id": "invalid-uuid"},
+            headers=self.headers,
+        )
+        self.assertEqual(invalid.status_code, 422, invalid.text)
+        self.assertEqual(invalid.json()["detail"][0]["loc"], ["body", "product_type_id"])
+        self.assertFalse(self.products.rows)
+
+        created = await self.client.post(
+            self.collection,
+            json={"sku_id": str(self.sku), "product_type_id": str(self.type_id)},
+            headers=self.headers,
+        )
+        self.assertEqual(created.status_code, 201, created.text)
+        self.assertEqual(created.json()["product_type_id"], str(self.type_id))
+        self.schemas.get_type.assert_awaited_once_with(self.type_id, lock=True)
+
     async def test_auth_csrf_and_schema_validation(self) -> None:
         self.app.state.test_context = replace(self.context, principal=None)
         self.assertEqual(
