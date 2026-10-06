@@ -4,9 +4,8 @@ from fastapi import HTTPException
 from src.modules.catalog.application.product.command.put_variant_content.command import (
     PutVariantContentCommand,
 )
-from src.modules.catalog.application.content_schema.service import (
-    SchemaConflictError,
-    SchemaValidationError,
+from src.modules.catalog.domain.product_type.error import (
+    ProductTypeConflictError,
 )
 from src.modules.catalog.domain.product.error import (
     InvalidProductContentError,
@@ -57,11 +56,10 @@ async def put_variant_content(
         InvalidProductContentError,
         InvalidProductLocaleError,
         ProductLocaleUnavailableError,
-        SchemaValidationError,
     ) as exc:
         raise HTTPException(422, str(exc)) from exc
     except (ProductNotFoundError, ProductVariantNotFoundError) as exc:
         raise HTTPException(404, str(exc)) from exc
-    except SchemaConflictError as exc:
+    except ProductTypeConflictError as exc:
         raise HTTPException(409, str(exc)) from exc
     return PutVariantContentResponse.from_dto(result)

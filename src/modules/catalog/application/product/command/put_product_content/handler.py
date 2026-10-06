@@ -1,14 +1,16 @@
+from src.modules.catalog.application.product.port.rich_text_sanitizer import (
+    RichTextSanitizerPort,
+)
 from src.modules.catalog.application.product.command.put_product_content.command import (
     PutProductContentCommand,
 )
 from src.modules.catalog.application.product.command.put_product_content.dto import (
     PutProductContentResultDTO,
 )
-from src.modules.catalog.application.content_schema.contracts import (
-    ContentSchemaRepositoryProtocol,
+from src.modules.catalog.application.product_type.port.schema_reader import (
+    ProductTypeSchemaReaderProtocol,
 )
-from src.modules.catalog.application.content_schema.normalize_content import (
-    RichTextSanitizerPort,
+from src.modules.catalog.application.product.content.normalize_content import (
     normalize_content,
     content_by_code,
 )
@@ -32,7 +34,7 @@ class PutProductContentHandler:
         repository: ProductRepositoryProtocol,
         locales: LocaleReaderPort,
         clock: ClockPort,
-        schemas: ContentSchemaRepositoryProtocol,
+        schemas: ProductTypeSchemaReaderProtocol,
         sanitizer: RichTextSanitizerPort,
     ) -> None:
         self._repository = repository

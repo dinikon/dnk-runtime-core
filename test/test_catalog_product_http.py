@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request, Response
 from httpx import ASGITransport, AsyncClient
 
 from src.config import dnk_config
-from src.modules.catalog.application.content_schema.contracts import (
+from src.modules.catalog.application.product_type.port.schema_reader import (
     ProductTypeSchemaDTO,
     SchemaBlockDTO,
 )
@@ -29,7 +29,7 @@ from src.modules.catalog.domain.content_block.value_object.content_block import 
 from src.modules.catalog.domain.product_type.aggregate import ContentScope
 from src.modules.catalog.presentation.product.depends import (
     get_category_reader,
-    get_content_schema_repository,
+    get_product_type_schema_reader,
     get_locale_reader,
     get_product_query_repository,
     get_product_repository,
@@ -231,7 +231,7 @@ class ProductHttpTests(unittest.IsolatedAsyncioTestCase):
         )
         self.app.dependency_overrides[get_sku_reader] = lambda: self.skus
         self.app.dependency_overrides[get_locale_reader] = lambda: self.locales
-        self.app.dependency_overrides[get_content_schema_repository] = (
+        self.app.dependency_overrides[get_product_type_schema_reader] = (
             lambda: self.schemas
         )
         self.app.dependency_overrides[get_category_reader] = lambda: Mock(
@@ -299,7 +299,9 @@ class ProductHttpTests(unittest.IsolatedAsyncioTestCase):
             headers=self.headers,
         )
         self.assertEqual(invalid.status_code, 422, invalid.text)
-        self.assertEqual(invalid.json()["detail"][0]["loc"], ["body", "product_type_id"])
+        self.assertEqual(
+            invalid.json()["detail"][0]["loc"], ["body", "product_type_id"]
+        )
         self.assertFalse(self.products.rows)
 
         created = await self.client.post(

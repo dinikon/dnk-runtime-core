@@ -53,6 +53,30 @@ class Category:
             raise InvalidCategoryError("Category cannot be its own parent.")
         return cls(category_id, parent_id, now, now, actor_id, actor_id, by_locale)
 
+    @classmethod
+    def restore(
+        cls,
+        *,
+        category_id: CategoryIdVO,
+        parent_id: CategoryIdVO | None,
+        translations: tuple[CategoryTranslationVO, ...],
+        created_at: datetime,
+        updated_at: datetime,
+        created_by: EntityIdVO,
+        updated_by: EntityIdVO,
+    ) -> Self:
+        """Восстанавливает сохранённое дерево с проверкой инвариантов корня."""
+        category = cls.create(
+            category_id=category_id,
+            parent_id=parent_id,
+            translations=translations,
+            actor_id=created_by,
+            now=created_at,
+        )
+        category.updated_at = updated_at
+        category.updated_by = updated_by
+        return category
+
     def set_translation(
         self, translation: CategoryTranslationVO, *, actor_id: EntityIdVO, now: datetime
     ) -> None:

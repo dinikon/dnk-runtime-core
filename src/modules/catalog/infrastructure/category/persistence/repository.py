@@ -100,19 +100,17 @@ class SqlAlchemyCategoryRepository:
             .scalars()
             .all()
         )
-        return Category(
-            id=CategoryIdVO.from_value(row.id),
+        return Category.restore(
+            category_id=CategoryIdVO.from_value(row.id),
             parent_id=CategoryIdVO.from_value(row.parent_id) if row.parent_id else None,
+            translations=tuple(
+                CategoryTranslationVO(CategoryLocaleVO(item.locale_code), item.name)
+                for item in translations
+            ),
             created_at=row.created_at,
             updated_at=row.updated_at,
             created_by=EntityIdVO.from_value(row.created_by),
             updated_by=EntityIdVO.from_value(row.updated_by),
-            _translations={
-                item.locale_code: CategoryTranslationVO(
-                    CategoryLocaleVO(item.locale_code), item.name
-                )
-                for item in translations
-            },
         )
 
     async def exists(self, category_id: CategoryIdVO) -> bool:

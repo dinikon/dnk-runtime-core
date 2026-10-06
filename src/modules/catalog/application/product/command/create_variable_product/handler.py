@@ -1,17 +1,19 @@
+from src.modules.catalog.application.product.port.rich_text_sanitizer import (
+    RichTextSanitizerPort,
+)
 from src.modules.catalog.application.product.command.create_variable_product.command import (
     CreateVariableProductCommand,
 )
 from src.modules.catalog.application.product.command.create_variable_product.dto import (
     CreateVariableProductResultDTO,
 )
-from src.modules.catalog.application.content_schema.contracts import (
-    ContentSchemaRepositoryProtocol,
+from src.modules.catalog.application.product_type.port.schema_reader import (
+    ProductTypeSchemaReaderProtocol,
 )
-from src.modules.catalog.application.content_schema.normalize_content import (
-    RichTextSanitizerPort,
+from src.modules.catalog.application.product.content.normalize_content import (
     normalize_content,
 )
-from src.modules.catalog.application.content_schema.service import SchemaNotFoundError
+from src.modules.catalog.domain.product_type.error import ProductTypeNotFoundError
 from src.modules.catalog.domain.product_type.aggregate import ContentScope
 from src.modules.catalog.domain.product_type.value_object.product_type_id import (
     ProductTypeIdVO,
@@ -44,7 +46,7 @@ class CreateVariableProductHandler:
         locales: LocaleReaderPort,
         clock: ClockPort,
         uuids: UUIdGeneratorProtocol,
-        schemas: ContentSchemaRepositoryProtocol,
+        schemas: ProductTypeSchemaReaderProtocol,
         sanitizer: RichTextSanitizerPort,
     ) -> None:
         self._repository, self._skus, self._locales, self._clock, self._uuids = (
@@ -74,7 +76,7 @@ class CreateVariableProductHandler:
             else self._schemas.get_clean_type()
         )
         if schema is None:
-            raise SchemaNotFoundError("Product type not found.")
+            raise ProductTypeNotFoundError("Product type not found.")
         contents = tuple(
             ProductContentVO(
                 ProductLocaleVO(item.locale),

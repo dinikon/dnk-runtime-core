@@ -2,14 +2,17 @@ from uuid import UUID
 
 from fastapi import HTTPException
 
-from src.modules.catalog.application.content_schema.service import (
-    SchemaConflictError,
-    SchemaNotFoundError,
+from src.modules.catalog.domain.product_type.error import (
+    ProductTypeNotFoundError,
+    ProductTypeConflictError,
 )
 from src.modules.catalog.application.product.command.put_product_type.command import (
     PutProductTypeCommand,
 )
-from src.modules.catalog.domain.product.error import ProductNotFoundError
+from src.modules.catalog.domain.product.error import (
+    ProductContentSchemaConflictError,
+    ProductNotFoundError,
+)
 from src.modules.catalog.domain.product.value_object.identifier import ProductIdVO
 from src.modules.catalog.domain.product_type.value_object.product_type_id import (
     ProductTypeIdVO,
@@ -44,8 +47,8 @@ async def put_product_type(
                 EntityIdVO.from_value(context.principal.user_id),
             )
         )
-    except (ProductNotFoundError, SchemaNotFoundError) as exc:
+    except (ProductNotFoundError, ProductTypeNotFoundError) as exc:
         raise HTTPException(404, str(exc)) from exc
-    except SchemaConflictError as exc:
+    except (ProductTypeConflictError, ProductContentSchemaConflictError) as exc:
         raise HTTPException(409, str(exc)) from exc
     return PutProductTypeResponse.from_dto(result)

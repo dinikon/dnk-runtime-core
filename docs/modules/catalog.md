@@ -7,6 +7,25 @@ Catalog хранит данные в tenant-схеме. `Product` — корен
 корень с деревом и переводами названий. Цена, остатки, медиа и атрибуты пока не
 имеют контрактов Catalog.
 
+## Границы и структура
+
+Четыре корня Catalog — `Product`, `Category`, `ProductType` и
+`ContentBlockDefinition`. `Variant` принадлежит Product и изменяется через его
+методы. Каждый корень расположен в собственном каталоге каждого слоя:
+`domain/<root>/`, `application/<root>/`, `infrastructure/<root>/` и
+`presentation/<root>/`. Сценарии Application находятся в
+`command|query/<scenario>/` и содержат входной объект, handler с `execute(...)`
+и DTO. HTTP-контроллер, request и response каждого метода лежат в отдельных
+файлах соответствующего `presentation/<root>/http/`.
+
+ContentBlockDefinition и ProductType сохраняются репозиториями агрегатов;
+списки и карточки читаются отдельными SQL-проекциями. Product получает снимок
+схемы через Application-контракт ProductType. Проверка допустимых и обязательных
+блоков — чистая доменная политика Product; очистка HTML вызывается через порт
+и реализована адаптером Infrastructure. Репозитории не выбирают tenant-схему и
+не завершают транзакцию: общая сессия UoW уже привязана к tenant. Импорты
+классов идут непосредственно из файлов определения, без реэкспортов пакетов.
+
 ## Схема контента
 
 `ContentBlockDefinition` задаёт устойчивые `id` и `code`, тип значения

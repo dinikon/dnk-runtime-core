@@ -18,6 +18,35 @@ from src.modules.catalog.application.product.command.create_product.command impo
     CreateProductCommand,
     CreateProductContent,
 )
+from src.modules.catalog.application.content_block.command.create_content_block.command import (
+    CreateContentBlockCommand,
+)
+from src.modules.catalog.application.content_block.command.create_content_block.handler import (
+    CreateContentBlockHandler,
+)
+from src.modules.catalog.application.product_type.command.create_product_type.command import (
+    CreateProductTypeCommand,
+)
+from src.modules.catalog.application.product_type.command.create_product_type.handler import (
+    CreateProductTypeHandler,
+)
+from src.modules.catalog.domain.content_block.value_object.content_block import (
+    ContentBlockIdVO,
+    ContentBlockType,
+)
+from src.modules.catalog.domain.product_type.aggregate import (
+    ContentScope,
+    ProductTypeContentBlock,
+)
+from src.modules.catalog.infrastructure.content_block.persistence.query_repository import (
+    SqlAlchemyContentBlockQueryRepository,
+)
+from src.modules.catalog.infrastructure.content_block.persistence.repository import (
+    SqlAlchemyContentBlockRepository,
+)
+from src.modules.catalog.infrastructure.product_type.persistence.repository import (
+    SqlAlchemyProductTypeRepository,
+)
 from src.modules.catalog.application.product.command.create_product.handler import (
     CreateProductHandler,
 )
@@ -44,16 +73,16 @@ from src.modules.catalog.domain.product.value_object.identifier import (
     VariantIdVO,
 )
 from src.modules.catalog.domain.product.value_object.locale import ProductLocaleVO
-from src.modules.catalog.infrastructure.content_schema.persistence.repository import (
-    SqlAlchemyContentSchemaRepository,
+from src.modules.catalog.infrastructure.product_type.persistence.schema_reader import (
+    SqlAlchemyProductTypeSchemaReader,
 )
-from src.modules.catalog.infrastructure.content_schema.rich_text_sanitizer import (
+from src.modules.catalog.infrastructure.product.rich_text_sanitizer import (
     Nh3RichTextSanitizer,
 )
-from src.modules.catalog.infrastructure.persistence.models.content_value import (
+from src.modules.catalog.infrastructure.persistence.models.product_content_value import (
     ProductContentValueModel,
 )
-from src.modules.catalog.infrastructure.persistence.models.product_type import (
+from src.modules.catalog.infrastructure.persistence.models.product_type_content_block import (
     ProductTypeContentBlockModel,
 )
 from src.modules.catalog.infrastructure.product.inventory_sku_reader import (
@@ -162,7 +191,7 @@ class CatalogProductPostgresTests(unittest.IsolatedAsyncioTestCase):
         products = SqlAlchemyProductRepository(session)
         skus = InventorySkuReaderAdapter(SqlAlchemySkuQueryRepository(session))
         locales = ReferenceLocaleReaderAdapter(SqlAlchemyCatalogRepository(session))
-        schemas = SqlAlchemyContentSchemaRepository(session)
+        schemas = SqlAlchemyProductTypeSchemaReader(session)
         clock = Mock(now=Mock(return_value=self.now))
         uuids = Mock(new=Mock(side_effect=(uuid4(), uuid4())))
         sanitizer = Nh3RichTextSanitizer()
@@ -178,7 +207,7 @@ class CatalogProductPostgresTests(unittest.IsolatedAsyncioTestCase):
     async def test_seed_uses_same_definition_in_both_scopes(self) -> None:
         for index in (0, 1):
             async with self.tenant_uow(index) as uow:
-                schema = await SqlAlchemyContentSchemaRepository(
+                schema = await SqlAlchemyProductTypeSchemaReader(
                     uow.session
                 ).get_clean_type()
                 self.assertEqual(schema.code, "clean")
@@ -199,6 +228,82 @@ class CatalogProductPostgresTests(unittest.IsolatedAsyncioTestCase):
                     .all()
                 )
                 self.assertEqual(len(assignments), 6)
+
+    async def test_definition_and_type_are_tenant_isolated_and_rollback(self) -> None:
+        block_id, type_id, rolled_back_id = uuid4(), uuid4(), uuid4()
+        async with self.tenant_uow(0) as uow:
+            definitions = SqlAlchemyContentBlockQueryRepository(uow.session)
+            locales = ReferenceLocaleReaderAdapter(
+                SqlAlchemyCatalogRepository(uow.session)
+            )
+            block = await CreateContentBlockHandler(
+                SqlAlchemyContentBlockRepository(uow.session),
+                locales,
+                Mock(new=Mock(return_value=block_id)),
+            ).execute(
+                CreateContentBlockCommand(
+                    "ingredients", ContentBlockType.RICH_TEXT, {"uk": "Склад"}
+                )
+            )
+            result = await CreateProductTypeHandler(
+                SqlAlchemyProductTypeRepository(uow.session),
+                definitions,
+                locales,
+                Mock(new=Mock(return_value=type_id)),
+            ).execute(
+                CreateProductTypeCommand(
+                    "vitamins",
+                    {"uk": "Вітаміни"},
+                    (
+                        ProductTypeContentBlock(
+                            ContentBlockIdVO(block.id), ContentScope.PRODUCT, True, 0
+                        ),
+                        ProductTypeContentBlock(
+                            ContentBlockIdVO(block.id), ContentScope.VARIANT, False, 0
+                        ),
+                    ),
+                )
+            )
+            self.assertEqual(result.schema_version, 1)
+            self.assertEqual(len(result.blocks), 2)
+        async with self.tenant_uow(0) as uow:
+            definition = await SqlAlchemyContentBlockQueryRepository(uow.session).get(
+                ContentBlockIdVO(block_id)
+            )
+            schema = await SqlAlchemyProductTypeSchemaReader(uow.session).get_type(
+                type_id
+            )
+            self.assertEqual(definition.translations, {"uk": "Склад"})
+            self.assertEqual(len(schema.blocks), 2)
+        async with self.tenant_uow(1) as uow:
+            self.assertIsNone(
+                await SqlAlchemyContentBlockQueryRepository(uow.session).get(
+                    ContentBlockIdVO(block_id)
+                )
+            )
+            self.assertIsNone(
+                await SqlAlchemyProductTypeSchemaReader(uow.session).get_type(type_id)
+            )
+        with self.assertRaises(RuntimeError):
+            async with self.tenant_uow(0) as uow:
+                await CreateContentBlockHandler(
+                    SqlAlchemyContentBlockRepository(uow.session),
+                    ReferenceLocaleReaderAdapter(
+                        SqlAlchemyCatalogRepository(uow.session)
+                    ),
+                    Mock(new=Mock(return_value=rolled_back_id)),
+                ).execute(
+                    CreateContentBlockCommand(
+                        "temporary", ContentBlockType.TEXT, {"uk": "Тимчасовий"}
+                    )
+                )
+                raise RuntimeError("rollback")
+        async with self.tenant_uow(0) as uow:
+            self.assertIsNone(
+                await SqlAlchemyContentBlockQueryRepository(uow.session).get(
+                    ContentBlockIdVO(rolled_back_id)
+                )
+            )
 
     async def test_values_audit_isolation_and_rollback(self) -> None:
         async with self.tenant_uow(0) as uow:
@@ -270,7 +375,7 @@ class CatalogProductPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
         async with self.tenant_uow(0) as uow:
             products = SqlAlchemyProductRepository(uow.session)
-            schemas = SqlAlchemyContentSchemaRepository(uow.session)
+            schemas = SqlAlchemyProductTypeSchemaReader(uow.session)
             locales = ReferenceLocaleReaderAdapter(
                 SqlAlchemyCatalogRepository(uow.session)
             )

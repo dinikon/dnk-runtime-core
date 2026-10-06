@@ -151,6 +151,15 @@ Product владеет вариантами: SIMPLE имеет ровно оди
 scope принадлежит связи с типом, поэтому одно определение применимо и к Product,
 и к Variant. Атрибуты пока остаются в целевом плане. Прямой импорт SQL-модели
 Inventory в Catalog запрещён.
+Четыре корня Catalog (`Product`, `Category`, `ProductType`,
+`ContentBlockDefinition`) разнесены по каждому слою. `Variant` — Entity внутри
+Product. Обработчики в `application/<root>/command|query/<scenario>/` изменяют
+агрегаты через методы, а для чтения используют проекции. Product получает снимок
+схемы ProductType через Application-контракт; общая служба двух корней не нужна.
+Проверка контента принадлежит доменной политике Product, а очистка HTML —
+Infrastructure-адаптеру за Application-портом. В `presentation/<root>/http/`
+каждый метод имеет собственные controller/request/response файлы. SQL-модели
+Catalog определены по одной в файле и регистрируются прямыми импортами.
 Category — отдельный корень Catalog. Product хранит только явно назначенные ID
 категорий и один основной ID при непустом наборе; дерево Category не вложено в
 Product. Запись перевода Category, как и Product, проверяет локаль через порт,

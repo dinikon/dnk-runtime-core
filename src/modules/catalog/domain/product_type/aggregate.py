@@ -4,16 +4,16 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import Mapping
 
+from src.modules.catalog.domain.product_type.error import (
+    InvalidProductTypeError,
+    ProductTypeConflictError,
+)
 from src.modules.catalog.domain.content_block.value_object.content_block import (
     ContentBlockIdVO,
 )
 from src.modules.catalog.domain.product_type.value_object.product_type_id import (
     ProductTypeIdVO,
 )
-
-
-class InvalidProductTypeError(ValueError):
-    """Нарушен инвариант шаблона товара."""
 
 
 class ContentScope(StrEnum):
@@ -69,7 +69,7 @@ class ProductType:
             for name in translations.values()
         ):
             raise InvalidProductTypeError("Product type needs valid translations.")
-        cls._check_blocks(blocks)
+        cls.validate_blocks(blocks)
         return cls(
             id,
             code.strip().lower(),
@@ -103,7 +103,7 @@ class ProductType:
         return product_type
 
     @staticmethod
-    def _check_blocks(blocks: tuple[ProductTypeContentBlock, ...]) -> None:
+    def validate_blocks(blocks: tuple[ProductTypeContentBlock, ...]) -> None:
         keys = [(item.scope, item.block_id) for item in blocks]
         positions = [(item.scope, item.position) for item in blocks]
         if len(set(keys)) != len(keys) or len(set(positions)) != len(positions):
@@ -131,13 +131,13 @@ class ProductType:
         }
 
     def replace_blocks(self, blocks: tuple[ProductTypeContentBlock, ...]) -> None:
-        self._check_blocks(blocks)
+        self.validate_blocks(blocks)
         blocks = tuple(
             sorted(blocks, key=lambda item: (item.scope.value, item.position))
         )
         if self.blocks == blocks:
             return
         if self.is_system:
-            raise InvalidProductTypeError("System product type cannot be changed.")
+            raise ProductTypeConflictError("System product type cannot be changed.")
         self.blocks = blocks
         self.schema_version += 1

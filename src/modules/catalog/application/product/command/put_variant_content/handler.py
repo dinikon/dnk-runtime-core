@@ -1,14 +1,16 @@
+from src.modules.catalog.application.product.port.rich_text_sanitizer import (
+    RichTextSanitizerPort,
+)
 from src.modules.catalog.application.product.command.put_variant_content.command import (
     PutVariantContentCommand,
 )
 from src.modules.catalog.application.product.command.put_variant_content.dto import (
     PutVariantContentResultDTO,
 )
-from src.modules.catalog.application.content_schema.contracts import (
-    ContentSchemaRepositoryProtocol,
+from src.modules.catalog.application.product_type.port.schema_reader import (
+    ProductTypeSchemaReaderProtocol,
 )
-from src.modules.catalog.application.content_schema.normalize_content import (
-    RichTextSanitizerPort,
+from src.modules.catalog.application.product.content.normalize_content import (
     normalize_content,
     content_by_code,
 )
@@ -30,7 +32,7 @@ class PutVariantContentHandler:
         repository: ProductRepositoryProtocol,
         locales: LocaleReaderPort,
         clock: ClockPort,
-        schemas: ContentSchemaRepositoryProtocol,
+        schemas: ProductTypeSchemaReaderProtocol,
         sanitizer: RichTextSanitizerPort,
     ) -> None:
         self._repository, self._locales, self._clock = repository, locales, clock

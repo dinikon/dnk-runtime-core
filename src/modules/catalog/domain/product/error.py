@@ -39,3 +39,7 @@ class InvalidProductCategoriesError(DomainError):
 
 class ProductCategoryNotFoundError(DomainError):
     """Категория отсутствует в текущем tenant."""
+
+
+class ProductContentSchemaConflictError(DomainError):
+    """Сохранённый контент несовместим с новой схемой товара."""

@@ -16,11 +16,13 @@ from src.modules.catalog.domain.product.value_object.locale import ProductLocale
 from src.modules.catalog.infrastructure.persistence.models.content import (
     ProductContentModel,
 )
-from src.modules.catalog.infrastructure.persistence.models.content_value import (
+from src.modules.catalog.infrastructure.persistence.models.product_content_value import (
     ProductContentValueModel,
+)
+from src.modules.catalog.infrastructure.persistence.models.variant_content_value import (
     VariantContentValueModel,
 )
-from src.modules.catalog.infrastructure.persistence.models.content_block import (
+from src.modules.catalog.infrastructure.persistence.models.content_block_definition import (
     ContentBlockDefinitionModel,
 )
 from src.modules.catalog.infrastructure.persistence.models.product_type import (

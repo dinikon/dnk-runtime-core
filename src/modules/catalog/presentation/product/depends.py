@@ -14,16 +14,16 @@ from src.modules.catalog.application.product.command.delete_variant_content.hand
 from src.modules.catalog.application.product.command.put_product_type.handler import (
     PutProductTypeHandler,
 )
-from src.modules.catalog.application.content_schema.contracts import (
-    ContentSchemaRepositoryProtocol,
+from src.modules.catalog.application.product_type.port.schema_reader import (
+    ProductTypeSchemaReaderProtocol,
 )
-from src.modules.catalog.application.content_schema.normalize_content import (
+from src.modules.catalog.application.product.port.rich_text_sanitizer import (
     RichTextSanitizerPort,
 )
-from src.modules.catalog.infrastructure.content_schema.persistence.repository import (
-    SqlAlchemyContentSchemaRepository,
+from src.modules.catalog.infrastructure.product_type.persistence.schema_reader import (
+    SqlAlchemyProductTypeSchemaReader,
 )
-from src.modules.catalog.infrastructure.content_schema.rich_text_sanitizer import (
+from src.modules.catalog.infrastructure.product.rich_text_sanitizer import (
     Nh3RichTextSanitizer,
 )
 from src.modules.catalog.application.product.command.create_variable_product.handler import (
@@ -129,12 +129,12 @@ def get_locale_reader(uow: UoWDep) -> LocaleReaderPort:
 LocaleReaderDep = Annotated[LocaleReaderPort, Depends(get_locale_reader)]
 
 
-def get_content_schema_repository(uow: UoWDep) -> ContentSchemaRepositoryProtocol:
-    return SqlAlchemyContentSchemaRepository(uow.session)
+def get_product_type_schema_reader(uow: UoWDep) -> ProductTypeSchemaReaderProtocol:
+    return SqlAlchemyProductTypeSchemaReader(uow.session)
 
 
-ContentSchemaRepositoryDep = Annotated[
-    ContentSchemaRepositoryProtocol, Depends(get_content_schema_repository)
+ProductTypeSchemaReaderDep = Annotated[
+    ProductTypeSchemaReaderProtocol, Depends(get_product_type_schema_reader)
 ]
 
 
@@ -153,7 +153,7 @@ def get_create_product_handler(
     locales: LocaleReaderDep,
     clock: ClockDep,
     uuids: UuidDep,
-    schemas: ContentSchemaRepositoryDep,
+    schemas: ProductTypeSchemaReaderDep,
     sanitizer: RichTextSanitizerDep,
 ) -> CreateProductHandler:
     return CreateProductHandler(
@@ -179,7 +179,7 @@ def get_put_product_content_handler(
     repository: ProductRepositoryDep,
     locales: LocaleReaderDep,
     clock: ClockDep,
-    schemas: ContentSchemaRepositoryDep,
+    schemas: ProductTypeSchemaReaderDep,
     sanitizer: RichTextSanitizerDep,
 ) -> PutProductContentHandler:
     return PutProductContentHandler(repository, locales, clock, schemas, sanitizer)
@@ -236,7 +236,7 @@ def get_create_variable_product_handler(
     locales: LocaleReaderDep,
     clock: ClockDep,
     uuids: UuidDep,
-    schemas: ContentSchemaRepositoryDep,
+    schemas: ProductTypeSchemaReaderDep,
     sanitizer: RichTextSanitizerDep,
 ) -> CreateVariableProductHandler:
     return CreateVariableProductHandler(
@@ -301,7 +301,7 @@ def get_put_variant_content_handler(
     repository: ProductRepositoryDep,
     locales: LocaleReaderDep,
     clock: ClockDep,
-    schemas: ContentSchemaRepositoryDep,
+    schemas: ProductTypeSchemaReaderDep,
     sanitizer: RichTextSanitizerDep,
 ) -> PutVariantContentHandler:
     return PutVariantContentHandler(repository, locales, clock, schemas, sanitizer)
@@ -322,7 +322,7 @@ GetVariantHandlerDep = Annotated[GetVariantHandler, Depends(get_get_variant_hand
 
 
 def get_put_product_type_handler(
-    products: ProductRepositoryDep, schemas: ContentSchemaRepositoryDep, clock: ClockDep
+    products: ProductRepositoryDep, schemas: ProductTypeSchemaReaderDep, clock: ClockDep
 ) -> PutProductTypeHandler:
     return PutProductTypeHandler(products, schemas, clock)
 

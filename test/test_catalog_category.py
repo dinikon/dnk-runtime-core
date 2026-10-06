@@ -82,6 +82,23 @@ class CategoryDomainTests(unittest.TestCase):
         )
         self.assertEqual(category.translations["ru"].name, "Имя")
 
+    def test_restore_preserves_persisted_audit(self) -> None:
+        created_at = datetime(2026, 10, 1, tzinfo=UTC)
+        original_actor = EntityIdVO(uuid4())
+        category = Category.restore(
+            category_id=self.category_id,
+            parent_id=None,
+            translations=(CategoryTranslationVO(CategoryLocaleVO("uk"), "Назва"),),
+            created_at=created_at,
+            updated_at=self.now,
+            created_by=original_actor,
+            updated_by=self.actor,
+        )
+        self.assertEqual(category.created_at, created_at)
+        self.assertEqual(category.updated_at, self.now)
+        self.assertEqual(category.created_by, original_actor)
+        self.assertEqual(category.updated_by, self.actor)
+
     def test_required_unique_and_bounded_translations(self) -> None:
         with self.assertRaises(InvalidCategoryError):
             self.create(())

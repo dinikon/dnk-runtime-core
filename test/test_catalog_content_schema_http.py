@@ -1,8 +1,7 @@
-"""HTTP-контракт редактора определений и типов Catalog."""
+"""HTTP-контракты самостоятельных ContentBlock и ProductType."""
 
 import unittest
 from dataclasses import replace
-from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
@@ -10,21 +9,29 @@ from fastapi import FastAPI, Request, Response
 from httpx import ASGITransport, AsyncClient
 
 from src.config import dnk_config
-from src.modules.catalog.application.content_schema.contracts import (
-    BlockDefinitionDTO,
+from src.modules.catalog.application.content_block.query.get_content_block.dto import (
+    ContentBlockDetailsDTO,
+)
+from src.modules.catalog.application.product_type.port.schema_reader import (
     ProductTypeSchemaDTO,
 )
-from src.modules.catalog.application.content_schema.service import SchemaConflictError
 from src.modules.catalog.domain.content_block.value_object.content_block import (
     ContentBlockType,
 )
-from src.modules.catalog.presentation.content_schema.depends import (
-    get_content_schema_service,
+from src.modules.catalog.domain.product_type.error import ProductTypeConflictError
+from src.modules.catalog.presentation.content_block.depends import (
+    get_create_content_block_handler,
+    get_get_content_block_handler,
+    get_list_content_blocks_handler,
 )
-from src.modules.catalog.presentation.content_schema.router import (
-    blocks_router,
-    types_router,
+from src.modules.catalog.presentation.product_type.depends import (
+    get_create_product_type_handler,
+    get_put_product_type_handler,
 )
+from src.modules.catalog.presentation.content_block.router import (
+    router as blocks_router,
+)
+from src.modules.catalog.presentation.product_type.router import router as types_router
 from src.modules.identity.domain.auth.principal import Principal
 from src.modules.identity.domain.auth.request_context import RequestContext
 from src.modules.identity.presentation.auth.depends import get_optional_request_context
@@ -39,28 +46,17 @@ from src.modules.shared.presentation.tokens.depends import TokenManagerDep
 class ContentSchemaHttpTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self.block_id, self.type_id = uuid4(), uuid4()
-        self.block = BlockDefinitionDTO(
+        block = ContentBlockDetailsDTO(
             self.block_id,
             "ingredients",
             ContentBlockType.RICH_TEXT,
             False,
             {"uk": "Склад"},
         )
-        self.product_type = ProductTypeSchemaDTO(
+        product_type = ProductTypeSchemaDTO(
             self.type_id, "vitamins", False, 1, {"uk": "Вітаміни"}, ()
         )
-        self.service = Mock(
-            create_block=AsyncMock(return_value=self.block),
-            list_blocks=AsyncMock(return_value=(self.block,)),
-            get_block=AsyncMock(return_value=self.block),
-            update_block=AsyncMock(return_value=self.block),
-            delete_block=AsyncMock(),
-            create_type=AsyncMock(return_value=self.product_type),
-            list_types=AsyncMock(return_value=(self.product_type,)),
-            get_type=AsyncMock(return_value=self.product_type),
-            update_type=AsyncMock(return_value=self.product_type),
-            delete_type=AsyncMock(),
-        )
+        self.put_handler = Mock(execute=AsyncMock(return_value=product_type))
         actor, tenant = uuid4(), uuid4()
         self.context = RequestContext(
             Principal(str(actor), str(tenant), "session", ("member",)), None, None, None
@@ -68,13 +64,24 @@ class ContentSchemaHttpTests(unittest.IsolatedAsyncioTestCase):
         self.app = FastAPI()
         self.app.state.context = self.context
         self.app.state.token_manager = TokenManager(InMemoryTokenBackend())
-        self.app.state.clock = Mock(
-            now=Mock(return_value=datetime(2026, 10, 6, tzinfo=UTC))
-        )
         self.app.dependency_overrides[get_optional_request_context] = (
             lambda: self.app.state.context
         )
-        self.app.dependency_overrides[get_content_schema_service] = lambda: self.service
+        self.app.dependency_overrides[get_create_content_block_handler] = lambda: Mock(
+            execute=AsyncMock(return_value=block)
+        )
+        self.app.dependency_overrides[get_get_content_block_handler] = lambda: Mock(
+            execute=AsyncMock(return_value=block)
+        )
+        self.app.dependency_overrides[get_list_content_blocks_handler] = lambda: Mock(
+            execute=AsyncMock(return_value=(block,))
+        )
+        self.app.dependency_overrides[get_create_product_type_handler] = lambda: Mock(
+            execute=AsyncMock(return_value=product_type)
+        )
+        self.app.dependency_overrides[get_put_product_type_handler] = (
+            lambda: self.put_handler
+        )
         self.app.include_router(blocks_router, prefix="/api/console")
         self.app.include_router(types_router, prefix="/api/console")
 
@@ -110,14 +117,36 @@ class ContentSchemaHttpTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             (await self.client.get(block_url)).json()[0]["id"], str(self.block_id)
         )
-        type_url = "/api/console/catalog/product-types"
+        self.assertEqual(
+            (await self.client.get(f"{block_url}/{self.block_id}")).status_code, 200
+        )
         created_type = await self.client.post(
-            type_url,
+            "/api/console/catalog/product-types",
             json={"code": "vitamins", "translations": {"uk": "Вітаміни"}, "blocks": []},
             headers=self.headers,
         )
         self.assertEqual(created_type.status_code, 201, created_type.text)
         self.assertEqual(created_type.json()["schema_version"], 1)
+
+    async def test_type_accepts_block_uuid_strings_in_two_scopes(self) -> None:
+        result = await self.client.post(
+            "/api/console/catalog/product-types",
+            json={
+                "code": "vitamins",
+                "translations": {"uk": "Вітаміни"},
+                "blocks": [
+                    {
+                        "block_id": str(self.block_id),
+                        "scope": scope,
+                        "required": scope == "product",
+                        "position": 0,
+                    }
+                    for scope in ("product", "variant")
+                ],
+            },
+            headers=self.headers,
+        )
+        self.assertEqual(result.status_code, 201, result.text)
 
     async def test_auth_csrf_validation_and_conflict(self) -> None:
         url = "/api/console/catalog/content-blocks"
@@ -138,7 +167,7 @@ class ContentSchemaHttpTests(unittest.IsolatedAsyncioTestCase):
             ).status_code,
             422,
         )
-        self.service.update_type.side_effect = SchemaConflictError(
+        self.put_handler.execute.side_effect = ProductTypeConflictError(
             "Product type schema version changed."
         )
         result = await self.client.put(

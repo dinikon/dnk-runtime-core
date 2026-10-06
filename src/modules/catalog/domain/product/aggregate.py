@@ -2,10 +2,12 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from types import MappingProxyType
 from typing import Mapping, Self
+from uuid import UUID
 
 from src.modules.catalog.domain.product.error import (
     InvalidProductCategoriesError,
     InvalidProductContentError,
+    ProductContentSchemaConflictError,
     InvalidProductVariantError,
     ProductVariantNotFoundError,
 )
@@ -43,12 +45,12 @@ class Product:
     id: ProductIdVO
     kind: ProductKind
     product_type_id: ProductTypeIdVO
-    variants: tuple[ProductVariant, ...]
+    _variants: tuple[ProductVariant, ...]
     created_at: datetime
     updated_at: datetime
     created_by: EntityIdVO
     updated_by: EntityIdVO
-    contents: dict[str, ProductContentVO] = field(default_factory=dict)
+    _contents: dict[str, ProductContentVO] = field(default_factory=dict)
     category_ids: tuple[CategoryIdVO, ...] = ()
     primary_category_id: CategoryIdVO | None = None
 
@@ -74,6 +76,17 @@ class Product:
         if self.kind is not ProductKind.SIMPLE:
             raise InvalidProductVariantError("VARIABLE has no single variant.")
         return self.variants[0]
+
+    @property
+    def variants(self) -> tuple[ProductVariant, ...]:
+        return tuple(
+            ProductVariant(item.id, item.sku_id, dict(item.contents))
+            for item in self._variants
+        )
+
+    @property
+    def contents(self) -> Mapping[str, ProductContentVO]:
+        return MappingProxyType(self._contents)
 
     @classmethod
     def create_variable(
@@ -101,12 +114,15 @@ class Product:
             id=product_id,
             kind=ProductKind.VARIABLE,
             product_type_id=product_type_id,
-            variants=variants,
+            _variants=tuple(
+                ProductVariant(item.id, item.sku_id, dict(item.contents))
+                for item in variants
+            ),
             created_at=now,
             updated_at=now,
             created_by=actor_id,
             updated_by=actor_id,
-            contents=by_locale,
+            _contents=by_locale,
         )
 
     @classmethod
@@ -135,12 +151,15 @@ class Product:
             id=product_id,
             kind=ProductKind.SIMPLE,
             product_type_id=product_type_id,
-            variants=variants,
+            _variants=tuple(
+                ProductVariant(item.id, item.sku_id, dict(item.contents))
+                for item in variants
+            ),
             created_at=now,
             updated_at=now,
             created_by=actor_id,
             updated_by=actor_id,
-            contents=by_locale,
+            _contents=by_locale,
         )
 
     @classmethod
@@ -160,16 +179,25 @@ class Product:
         primary_category_id: CategoryIdVO | None = None,
     ) -> Self:
         cls._validate_variants(kind, variants)
+        if any(
+            not isinstance(content, ProductContentVO) or locale != content.locale.value
+            for locale, content in contents.items()
+        ):
+            raise InvalidProductContentError("Product content is invalid.")
+        cls._validate_categories(category_ids, primary_category_id)
         return cls(
             id=product_id,
             kind=kind,
             product_type_id=product_type_id,
-            variants=variants,
+            _variants=tuple(
+                ProductVariant(item.id, item.sku_id, dict(item.contents))
+                for item in variants
+            ),
             created_at=created_at,
             updated_at=updated_at,
             created_by=created_by,
             updated_by=updated_by,
-            contents=dict(contents),
+            _contents=dict(contents),
             category_ids=category_ids,
             primary_category_id=primary_category_id,
         )
@@ -182,6 +210,17 @@ class Product:
         actor_id: EntityIdVO,
         now: datetime,
     ) -> None:
+        self._validate_categories(category_ids, primary_category_id)
+        self.category_ids = category_ids
+        self.primary_category_id = primary_category_id
+        self.updated_at = now
+        self.updated_by = actor_id
+
+    @staticmethod
+    def _validate_categories(
+        category_ids: tuple[CategoryIdVO, ...],
+        primary_category_id: CategoryIdVO | None,
+    ) -> None:
         if any(not isinstance(item, CategoryIdVO) for item in category_ids):
             raise InvalidProductCategoriesError("Invalid category identifier.")
         if len(set(category_ids)) != len(category_ids):
@@ -192,15 +231,11 @@ class Product:
             raise InvalidProductCategoriesError(
                 "Primary category must belong to the product."
             )
-        self.category_ids = category_ids
-        self.primary_category_id = primary_category_id
-        self.updated_at = now
-        self.updated_by = actor_id
 
     def replace_content(
         self, content: ProductContentVO, *, actor_id: EntityIdVO, now: datetime
     ) -> None:
-        self.contents[content.locale.value] = content
+        self._contents[content.locale.value] = content
         self.updated_at = now
         self.updated_by = actor_id
 
@@ -214,7 +249,10 @@ class Product:
     ) -> None:
         self._validate_variants(kind, variants)
         self.kind = kind
-        self.variants = variants
+        self._variants = tuple(
+            ProductVariant(item.id, item.sku_id, dict(item.contents))
+            for item in variants
+        )
         self.updated_at = now
         self.updated_by = actor_id
 
@@ -231,7 +269,11 @@ class Product:
         )
 
     def get_variant(self, variant_id: VariantIdVO) -> ProductVariant:
-        for variant in self.variants:
+        variant = self._find_variant(variant_id)
+        return ProductVariant(variant.id, variant.sku_id, dict(variant.contents))
+
+    def _find_variant(self, variant_id: VariantIdVO) -> ProductVariant:
+        for variant in self._variants:
             if variant.id == variant_id:
                 return variant
         raise ProductVariantNotFoundError("Variant not found in product.")
@@ -276,7 +318,7 @@ class Product:
         actor_id: EntityIdVO,
         now: datetime,
     ) -> None:
-        variant = self.get_variant(variant_id)
+        variant = self._find_variant(variant_id)
         variant._contents[content.locale.value] = content
         self.updated_at = now
         self.updated_by = actor_id
@@ -284,7 +326,7 @@ class Product:
     def remove_content(
         self, locale: ProductLocaleVO, *, actor_id: EntityIdVO, now: datetime
     ) -> None:
-        self.contents.pop(locale.value, None)
+        self._contents.pop(locale.value, None)
         self.updated_at = now
         self.updated_by = actor_id
 
@@ -296,7 +338,7 @@ class Product:
         actor_id: EntityIdVO,
         now: datetime,
     ) -> None:
-        self.get_variant(variant_id)._contents.pop(locale.value, None)
+        self._find_variant(variant_id)._contents.pop(locale.value, None)
         self.updated_at = now
         self.updated_by = actor_id
 
@@ -306,3 +348,26 @@ class Product:
         self.product_type_id = type_id
         self.updated_at = now
         self.updated_by = actor_id
+
+    def ensure_content_compatible(
+        self,
+        *,
+        product_allowed: frozenset[UUID],
+        product_required: frozenset[UUID],
+        variant_allowed: frozenset[UUID],
+        variant_required: frozenset[UUID],
+    ) -> None:
+        """Проверяет все сохранённые переводы перед сменой ProductType."""
+        for contents, allowed, required in (
+            (self.contents, product_allowed, product_required),
+            *(
+                (item.contents, variant_allowed, variant_required)
+                for item in self.variants
+            ),
+        ):
+            for content in contents.values():
+                saved = set(content.values)
+                if not saved <= allowed or not required <= saved:
+                    raise ProductContentSchemaConflictError(
+                        "Saved content is incompatible with product type."
+                    )

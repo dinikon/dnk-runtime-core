@@ -3,9 +3,11 @@ from fastapi import APIRouter
 from src.modules.inventory.presentation.sku.router import router as skus_router
 from src.modules.catalog.presentation.product.router import router as products_router
 from src.modules.catalog.presentation.category.router import router as categories_router
-from src.modules.catalog.presentation.content_schema.router import (
-    blocks_router as catalog_blocks_router,
-    types_router as catalog_types_router,
+from src.modules.catalog.presentation.content_block.router import (
+    router as catalog_blocks_router,
+)
+from src.modules.catalog.presentation.product_type.router import (
+    router as catalog_types_router,
 )
 from src.modules.crm.presentation.contact.router import router as contacts_router
 from src.modules.crm.presentation.company.router import router as companies_router

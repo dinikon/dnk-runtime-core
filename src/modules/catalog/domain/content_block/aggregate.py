@@ -2,16 +2,16 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Mapping
 
+from src.modules.catalog.domain.content_block.error import (
+    ContentBlockConflictError,
+    InvalidContentBlockError,
+)
 from src.modules.catalog.domain.content_block.value_object.content_block import (
     ContentBlockCodeVO,
     ContentBlockIdVO,
     ContentBlockType,
     ContentBlockTranslationVO,
 )
-
-
-class InvalidContentBlockError(ValueError):
-    """Нарушен инвариант определения контент-блока."""
 
 
 @dataclass(eq=False)
@@ -77,7 +77,7 @@ class ContentBlockDefinition:
 
     def change_type(self, value_type: ContentBlockType) -> None:
         if self.is_system:
-            raise InvalidContentBlockError(
+            raise ContentBlockConflictError(
                 "System content block type cannot be changed."
             )
         if not isinstance(value_type, ContentBlockType):

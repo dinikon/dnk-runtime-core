@@ -5,17 +5,15 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
-from src.modules.catalog.application.content_schema.contracts import (
+from src.modules.catalog.application.product_type.port.schema_reader import (
     ProductTypeSchemaDTO,
     SchemaBlockDTO,
 )
-from src.modules.catalog.application.content_schema.normalize_content import (
+from src.modules.catalog.application.product.content.normalize_content import (
     normalize_content,
 )
-from src.modules.catalog.application.content_schema.service import (
-    SchemaConflictError,
-    SchemaValidationError,
-)
+from src.modules.catalog.domain.product_type.error import ProductTypeConflictError
+from src.modules.catalog.domain.product.error import InvalidProductContentError
 from src.modules.catalog.application.product.command.create_product.command import (
     CreateProductCommand,
     CreateProductContent,
@@ -51,7 +49,7 @@ from src.modules.catalog.domain.product_type.aggregate import (
 from src.modules.catalog.domain.product_type.value_object.product_type_id import (
     ProductTypeIdVO,
 )
-from src.modules.catalog.infrastructure.content_schema.rich_text_sanitizer import (
+from src.modules.catalog.infrastructure.product.rich_text_sanitizer import (
     Nh3RichTextSanitizer,
 )
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
@@ -98,6 +96,11 @@ class ProductDomainTests(unittest.TestCase):
             content.values[block_id] = "Other"
         product = self.create((content,))
         self.assertEqual(product.contents["uk-UA"].values[block_id], "Name")
+        with self.assertRaises(TypeError):
+            product.contents["uk-UA"] = content
+        preview = product.variants[0]
+        preview.sku_id = EntityIdVO(uuid4())
+        self.assertEqual(product.variants[0].sku_id, self.sku)
 
     def test_same_block_allowed_in_both_scopes(self) -> None:
         block_id = ContentBlockIdVO(uuid4())
@@ -154,7 +157,7 @@ class ContentValidationTests(unittest.TestCase):
         self.sanitizer = Nh3RichTextSanitizer()
 
     def test_scope_and_required_are_independent(self) -> None:
-        with self.assertRaises(SchemaValidationError):
+        with self.assertRaises(InvalidProductContentError):
             normalize_content(
                 self.schema,
                 scope=ContentScope.PRODUCT,
@@ -182,7 +185,7 @@ class ContentValidationTests(unittest.TestCase):
             ),
             {self.block: "Name"},
         )
-        with self.assertRaises(SchemaConflictError):
+        with self.assertRaises(ProductTypeConflictError):
             normalize_content(
                 self.schema,
                 scope=ContentScope.PRODUCT,
