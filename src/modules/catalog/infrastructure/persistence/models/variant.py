@@ -8,7 +8,7 @@ from src.modules.tenancy.infrastructure.tenant.persistence.tenant_base import Te
 
 
 class VariantModel(TenantBase):
-    """Единственная продаваемая позиция SIMPLE-товара."""
+    """Продаваемая позиция товара."""
 
     __tablename__ = "catalog_variants"
     __table_args__ = (
@@ -19,7 +19,13 @@ class VariantModel(TenantBase):
             name="fk_catalog_variants_product",
             ondelete="CASCADE",
         ),
-        sa.UniqueConstraint("product_id", name="uq_catalog_variants_product"),
+        sa.UniqueConstraint(
+            "product_id",
+            "sku_id",
+            name="uq_catalog_variants_product_sku",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
         sa.Index("ix_catalog_variants_sku_id", "sku_id"),
     )
 

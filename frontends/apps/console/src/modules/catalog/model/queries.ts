@@ -30,3 +30,18 @@ export function useProduct(id: Ref<string>, locale: Ref<string>) {
     retry: false,
   });
 }
+
+export function useProducts(locale: Ref<string>) {
+  const tenant = useCatalogTenant();
+  return useQuery({
+    queryKey: computed(() => [
+      "catalog",
+      tenant.value,
+      "products",
+      locale.value,
+    ]),
+    queryFn: ({ signal }) => catalogApi.listProducts(locale.value, signal),
+    enabled: computed(() => !!locale.value),
+    retry: false,
+  });
+}

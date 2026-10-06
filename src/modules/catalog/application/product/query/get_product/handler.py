@@ -6,6 +6,7 @@ from src.modules.catalog.application.product.port.query_repository import (
 from src.modules.catalog.application.product.port.sku_reader import SkuReaderPort
 from src.modules.catalog.application.product.query.get_product.dto import (
     ProductDetailsDTO,
+    ProductVariantDTO,
 )
 from src.modules.catalog.application.product.query.get_product.query import (
     GetProductQuery,
@@ -27,7 +28,18 @@ class GetProductHandler:
         details = await self._repository.get_details(query.product_id, query.locale)
         if details is None:
             raise ProductNotFoundError("Product not found.")
-        sku_code = await self._skus.get_code(details.sku_id)
-        if sku_code is None:
-            raise ProductSkuNotFoundError("SKU not found.")
-        return replace(details, sku_code=sku_code)
+        variants = details.variants or (
+            ProductVariantDTO(details.variant_id, details.sku_id, None, (), None),
+        )
+        codes = (
+            await self._skus.get_codes(tuple(item.sku_id for item in variants))
+            if len(variants) > 1
+            else {variants[0].sku_id: await self._skus.get_code(variants[0].sku_id)}
+        )
+        resolved = []
+        for variant in variants:
+            code = codes.get(variant.sku_id)
+            if code is None:
+                raise ProductSkuNotFoundError("SKU not found.")
+            resolved.append(replace(variant, sku_code=code))
+        return replace(details, sku_code=resolved[0].sku_code, variants=tuple(resolved))

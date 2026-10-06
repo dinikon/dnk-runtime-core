@@ -24,6 +24,12 @@ from src.modules.catalog.application.product.command.create_product.command impo
 from src.modules.catalog.application.product.command.create_product.handler import (
     CreateProductHandler,
 )
+from src.modules.catalog.application.product.command.create_variable_product.command import (
+    CreateVariableProductCommand,
+)
+from src.modules.catalog.application.product.command.create_variable_product.handler import (
+    CreateVariableProductHandler,
+)
 from src.modules.catalog.application.product.command.put_product_content.command import (
     PutProductContentCommand,
 )
@@ -231,6 +237,64 @@ class CatalogProductPostgresTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(details.updated_at, created.updated_at)
             self.assertEqual(details.created_by, created.created_by)
             self.assertEqual(details.updated_by, created.updated_by)
+
+    async def test_variable_variants_are_tenant_scoped_and_localized(self) -> None:
+        second_sku = uuid4()
+        async with self.tenant_uow(0) as uow:
+            await uow.session.execute(
+                insert(SkuModel).values(
+                    id=second_sku,
+                    code="SKU-2",
+                    title="Second",
+                    created_by=self.actor.uuid,
+                    updated_by=self.actor.uuid,
+                )
+            )
+            repository = SqlAlchemyProductRepository(uow.session)
+            skus = InventorySkuReaderAdapter(SqlAlchemySkuQueryRepository(uow.session))
+            locales = ReferenceLocaleReaderAdapter(
+                SqlAlchemyCatalogRepository(uow.session)
+            )
+            handler = CreateVariableProductHandler(
+                repository,
+                skus,
+                locales,
+                Mock(now=Mock(return_value=self.now)),
+                Mock(new=Mock(side_effect=(uuid4(), uuid4(), uuid4()))),
+            )
+            created = await handler.execute(
+                CreateVariableProductCommand(self.actor, (self.sku_id, second_sku))
+            )
+        async with self.tenant_uow(0) as uow:
+            repository = SqlAlchemyProductRepository(uow.session)
+            product = await repository.get_for_update(ProductIdVO(created.id))
+            self.assertEqual(product.kind, ProductKind.VARIABLE)
+            self.assertEqual(len(product.variants), 2)
+            product.replace_variant_content(
+                product.variants[0].id,
+                ProductLocaleVO("uk"),
+                " Позиція ",
+                actor_id=self.actor,
+                now=self.now,
+            )
+            await repository.save_variant_content(
+                product, product.variants[0].id, ProductLocaleVO("uk")
+            )
+        async with self.tenant_uow(0) as uow:
+            skus = InventorySkuReaderAdapter(SqlAlchemySkuQueryRepository(uow.session))
+            details = await GetProductHandler(
+                SqlAlchemyProductQueryRepository(uow.session), skus
+            ).execute(GetProductQuery(ProductIdVO(created.id), ProductLocaleVO("uk")))
+            self.assertEqual(len(details.variants), 2)
+            self.assertIn(
+                "Позиція", [item.short_description for item in details.variants]
+            )
+        async with self.tenant_uow(1) as uow:
+            self.assertIsNone(
+                await SqlAlchemyProductQueryRepository(uow.session).get_details(
+                    ProductIdVO(created.id), ProductLocaleVO("uk")
+                )
+            )
 
     async def test_create_reuse_translate_and_read_inactive_locale(self) -> None:
         async with self.tenant_uow(0) as uow:

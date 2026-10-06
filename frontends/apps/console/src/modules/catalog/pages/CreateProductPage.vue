@@ -25,10 +25,12 @@ import { catalogError, contentPayload, validName } from "../model/forms";
 import { useLocales } from "../model/queries";
 import { useSkus, useSku, inventoryError } from "@/modules/inventory";
 import { useUnsavedChanges } from "@/shared/model/use-unsaved-changes";
+import { useUserStore } from "@/app/stores/user";
 import ContentFields from "../ui/ContentFields.vue";
 import LocaleSelect from "../ui/LocaleSelect.vue";
 import RequestError from "../ui/RequestError.vue";
 const router = useRouter();
+const user = useUserStore();
 const route = useRoute();
 const requestedSkuId = computed(() =>
   typeof route.query.skuId === "string" ? route.query.skuId : "",
@@ -49,6 +51,8 @@ const languages = computed(() =>
   [...(locales.data.value ?? [])].sort((a, b) => a.code.localeCompare(b.code)),
 );
 const sku = ref("");
+const kind = ref<"simple" | "variable">("simple");
+const extraSkuIds = ref<string[]>([""]);
 watch(requestedSkuId, () => {
   ignoredPrefill.value = false;
   sku.value = "";
@@ -82,20 +86,37 @@ watch(
   (values) => {
     if (!locale.value)
       locale.value =
-        values.find((item) => item.code === "uk")?.code ??
+        values.find((item) => item.code === user.user?.interface_language)
+          ?.code ??
         values[0]?.code ??
         "";
   },
   { immediate: true },
 );
 const mutation = useMutation({
-  mutationFn: catalogApi.createProduct,
+  mutationFn: async (payload: {
+    sku_id: string;
+    contents: { locale: string; name: string; description: string | null }[];
+  }) =>
+    kind.value === "simple"
+      ? catalogApi.createProduct(payload)
+      : catalogApi.createVariableProduct({
+          sku_ids: [payload.sku_id, ...extraSkuIds.value],
+          contents: payload.contents,
+        }),
   retry: false,
 });
 const dirty = computed(
   () =>
     !succeeded.value &&
-    !!(sku.value || withContent.value || name.value || description.value),
+    !!(
+      sku.value ||
+      kind.value === "variable" ||
+      extraSkuIds.value.some(Boolean) ||
+      withContent.value ||
+      name.value ||
+      description.value
+    ),
 );
 useUnsavedChanges(dirty, mutation.isPending);
 async function submit() {
@@ -103,6 +124,17 @@ async function submit() {
   validation.value = "";
   if (!sku.value) {
     validation.value = "Выберите SKU.";
+    return;
+  }
+  if (
+    kind.value === "variable" &&
+    (!extraSkuIds.value.length ||
+      extraSkuIds.value.some((value) => !value) ||
+      new Set([sku.value, ...extraSkuIds.value]).size !==
+        extraSkuIds.value.length + 1)
+  ) {
+    validation.value =
+      "Для вариативного товара выберите минимум два разных SKU.";
     return;
   }
   if (
@@ -154,6 +186,19 @@ async function submit() {
         ></CardHeader
       ><CardContent>
         <form class="flex flex-col gap-5" @submit.prevent="submit">
+          <div class="flex gap-2">
+            <Button
+              type="button"
+              :variant="kind === 'simple' ? 'default' : 'outline'"
+              @click="kind = 'simple'"
+              >Простой</Button
+            ><Button
+              type="button"
+              :variant="kind === 'variable' ? 'default' : 'outline'"
+              @click="kind = 'variable'"
+              >Вариативный</Button
+            >
+          </div>
           <Skeleton
             v-if="skus.isPending.value"
             class="h-12"
@@ -212,6 +257,44 @@ async function submit() {
               </p></Field
             >
           </FieldGroup>
+          <template v-if="kind === 'variable'">
+            <Field v-for="(value, index) in extraSkuIds" :key="index">
+              <FieldLabel>SKU варианта {{ index + 2 }}</FieldLabel>
+              <div class="flex gap-2">
+                <Select
+                  :model-value="value"
+                  @update:model-value="
+                    extraSkuIds[index] = String($event ?? '')
+                  "
+                  ><SelectTrigger class="w-full"
+                    ><SelectValue placeholder="Выберите SKU" /></SelectTrigger
+                  ><SelectContent
+                    ><SelectGroup
+                      ><SelectItem
+                        v-for="item in items"
+                        :key="item.id"
+                        :value="item.id"
+                        >{{ item.code }} — {{ item.title }}</SelectItem
+                      ></SelectGroup
+                    ></SelectContent
+                  ></Select
+                ><Button
+                  type="button"
+                  variant="outline"
+                  :disabled="extraSkuIds.length === 1"
+                  @click="extraSkuIds.splice(index, 1)"
+                  >Удалить</Button
+                >
+              </div>
+            </Field>
+            <Button
+              type="button"
+              variant="outline"
+              class="self-start"
+              @click="extraSkuIds.push('')"
+              >Добавить вариант</Button
+            >
+          </template>
           <Button
             v-if="skus.hasNextPage.value"
             type="button"

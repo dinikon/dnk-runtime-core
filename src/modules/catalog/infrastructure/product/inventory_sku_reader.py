@@ -15,3 +15,6 @@ class InventorySkuReaderAdapter:
     async def get_code(self, sku_id: UUID) -> str | None:
         details = await self._repository.get_details(sku_id=SkuIdVO.from_value(sku_id))
         return None if details is None else details.code
+
+    async def get_codes(self, sku_ids: tuple[UUID, ...]) -> dict[UUID, str]:
+        return await self._repository.get_codes(sku_ids=sku_ids)

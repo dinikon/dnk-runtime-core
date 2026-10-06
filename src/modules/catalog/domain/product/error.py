@@ -29,6 +29,10 @@ class InvalidProductVariantError(DomainError):
     """Нарушено правило вариантов и их комбинаций."""
 
 
+class ProductVariantNotFoundError(DomainError):
+    """Вариант не принадлежит товару."""
+
+
 class InvalidProductCategoriesError(DomainError):
     """Неверный набор или основная категория товара."""
 

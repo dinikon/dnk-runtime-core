@@ -18,7 +18,7 @@ from src.modules.catalog.application.product.command.put_product_content.command
 from src.modules.catalog.application.product.command.put_product_content.handler import (
     PutProductContentHandler,
 )
-from src.modules.catalog.domain.product.aggregate import Product
+from src.modules.catalog.domain.product.aggregate import Product, ProductVariant
 from src.modules.catalog.domain.product.error import (
     InvalidProductContentError,
     InvalidProductVariantError,
@@ -112,6 +112,40 @@ class ProductDomainTests(unittest.TestCase):
         self.assertEqual(product.created_at, self.now)
         self.assertEqual(product.updated_by, other)
         self.assertEqual(product.updated_at, later)
+
+    def test_variable_structure_and_variant_invariants(self) -> None:
+        product = self.create()
+        second = ProductVariant(VariantIdVO(uuid4()), EntityIdVO(uuid4()))
+        product.replace_variant_structure(
+            kind=ProductKind.VARIABLE,
+            variants=(*product.variants, second),
+            actor_id=self.actor,
+            now=self.now,
+        )
+        self.assertEqual(len(product.variants), 2)
+        with self.assertRaises(InvalidProductVariantError):
+            product.remove_variant(second.id, actor_id=self.actor, now=self.now)
+        with self.assertRaises(InvalidProductVariantError):
+            product.add_variant(
+                ProductVariant(VariantIdVO(uuid4()), self.sku),
+                actor_id=self.actor,
+                now=self.now,
+            )
+        product.replace_variant_content(
+            second.id,
+            ProductLocaleVO("uk"),
+            " Другий ",
+            actor_id=self.actor,
+            now=self.now,
+        )
+        self.assertEqual(product.get_variant(second.id).contents["uk"], "Другий")
+        product.replace_variant_structure(
+            kind=ProductKind.SIMPLE,
+            variants=(second,),
+            actor_id=self.actor,
+            now=self.now,
+        )
+        self.assertEqual(product.variant.id, second.id)
 
 
 class ProductApplicationTests(unittest.IsolatedAsyncioTestCase):

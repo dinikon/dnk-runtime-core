@@ -31,11 +31,14 @@ import {
   useProduct,
 } from "../model/queries";
 import { useUnsavedChanges } from "@/shared/model/use-unsaved-changes";
+import { useUserStore } from "@/app/stores/user";
 import ContentFields from "../ui/ContentFields.vue";
+import ProductVariantsPanel from "../ui/ProductVariantsPanel.vue";
 import LocaleSelect from "../ui/LocaleSelect.vue";
 import RequestError from "../ui/RequestError.vue";
 const route = useRoute();
 const router = useRouter();
+const user = useUserStore();
 const client = useQueryClient();
 const tenant = useCatalogTenant();
 const id = computed(() => String(route.params.productId ?? ""));
@@ -56,7 +59,8 @@ watch(
         query: {
           ...route.query,
           locale:
-            values.find((item) => item.code === "uk")?.code ?? values[0]!.code,
+            values.find((item) => item.code === user.user?.interface_language)
+              ?.code ?? values[0]!.code,
         },
       });
   },
@@ -230,13 +234,54 @@ function changeLocale(value: string) {
     void router.push({ query: { ...route.query, locale: value } });
 }
 const formatDate = (value: string) => new Date(value).toLocaleString("ru-RU");
+const deleting = ref(false);
+const deleteError = ref("");
+const activeTab = ref<"overview" | "variants" | "translations">("overview");
+async function removeProduct() {
+  if (
+    deleting.value ||
+    !window.confirm(
+      "Удалить товар, варианты и переводы? SKU в Inventory сохранятся.",
+    )
+  )
+    return;
+  deleting.value = true;
+  deleteError.value = "";
+  try {
+    await catalogApi.deleteProduct(id.value);
+    await client.invalidateQueries({
+      queryKey: ["catalog", tenant.value, "products"],
+    });
+    toast.success("Товар удалён");
+    await router.push({ name: "catalog-products" });
+  } catch (error) {
+    deleteError.value = catalogError(error);
+  } finally {
+    deleting.value = false;
+  }
+}
 </script>
 <template>
   <div class="flex min-h-0 flex-col gap-5 overflow-y-auto pb-6">
     <header class="flex flex-wrap items-center justify-between gap-3">
-      <h1 class="text-2xl font-semibold">Карточка товара</h1>
+      <div>
+        <h1 class="text-2xl font-semibold">
+          {{ product.data.value?.content?.name ?? "Карточка товара" }}
+        </h1>
+        <p v-if="product.data.value" class="text-sm text-muted-foreground">
+          {{
+            product.data.value.kind === "simple"
+              ? "Простой товар"
+              : "Вариативный товар"
+          }}
+          · {{ product.data.value.variants.length }} вариантов
+        </p>
+      </div>
       <Button variant="outline" as-child
         ><RouterLink to="/catalog/products">К товарам</RouterLink></Button
+      >
+      <Button variant="destructive" :disabled="deleting" @click="removeProduct"
+        >Удалить товар</Button
       >
     </header>
     <RequestError
@@ -244,6 +289,7 @@ const formatDate = (value: string) => new Date(value).toLocaleString("ru-RU");
       message="Некорректный ID товара. Введите UUID на странице товаров."
     />
     <template v-else>
+      <RequestError v-if="deleteError" :message="deleteError" />
       <Skeleton
         v-if="locales.isPending.value || (locale && product.isPending.value)"
         class="h-48"
@@ -286,7 +332,27 @@ const formatDate = (value: string) => new Date(value).toLocaleString("ru-RU");
           product.data.value && !product.isError.value && loadedKey === identity
         "
       >
-        <Card class="w-full max-w-3xl"
+        <nav class="flex gap-1 border-b" aria-label="Разделы товара">
+          <button
+            v-for="tab in [
+              ['overview', 'Обзор'],
+              ['variants', 'Варианты'],
+              ['translations', 'Переводы'],
+            ] as const"
+            :key="tab[0]"
+            type="button"
+            class="border-b-2 px-4 py-2 text-sm"
+            :class="
+              activeTab === tab[0]
+                ? 'border-primary font-medium'
+                : 'border-transparent text-muted-foreground'
+            "
+            @click="activeTab = tab[0]"
+          >
+            {{ tab[1] }}
+          </button>
+        </nav>
+        <Card v-if="activeTab === 'overview'" class="w-full"
           ><CardHeader
             ><CardTitle>{{
               product.data.value.content?.name ?? "Товар без перевода"
@@ -300,15 +366,17 @@ const formatDate = (value: string) => new Date(value).toLocaleString("ru-RU");
               </div>
               <div>
                 <dt class="text-muted-foreground">Вид</dt>
-                <dd>{{ product.data.value.kind }}</dd>
-              </div>
-              <div>
-                <dt class="text-muted-foreground">SKU</dt>
-                <dd class="break-all">
-                  {{ product.data.value.sku_code }}<br />{{
-                    product.data.value.sku_id
+                <dd>
+                  {{
+                    product.data.value.kind === "simple"
+                      ? "Простой"
+                      : "Вариативный"
                   }}
                 </dd>
+              </div>
+              <div>
+                <dt class="text-muted-foreground">Вариантов</dt>
+                <dd>{{ product.data.value.variants.length }}</dd>
               </div>
               <div>
                 <dt class="text-muted-foreground">Переводы</dt>
@@ -334,7 +402,13 @@ const formatDate = (value: string) => new Date(value).toLocaleString("ru-RU");
             </dl></CardContent
           ></Card
         >
-        <Card class="w-full max-w-3xl"
+        <ProductVariantsPanel
+          v-show="activeTab === 'variants'"
+          :product="product.data.value"
+          :locale="locale"
+          :editable="canEdit"
+        />
+        <Card v-if="activeTab === 'translations'" class="w-full"
           ><CardHeader
             ><CardTitle>Перевод: {{ locale }}</CardTitle
             ><CardDescription>{{
@@ -374,6 +448,7 @@ const formatDate = (value: string) => new Date(value).toLocaleString("ru-RU");
           ></Card
         >
         <ProductCategoriesForm
+          v-if="activeTab === 'overview'"
           v-model:selected="selectedCategories"
           v-model:primary="primaryCategory"
           :items="categories.data.value ?? []"

@@ -23,11 +23,35 @@ export interface CreatedProductDto extends AuditDto {
   sku_code: string;
   content_locales: string[];
 }
-export interface ProductDto extends CreatedProductDto {
+export interface ProductDto extends Omit<CreatedProductDto, "variant_id" | "sku_id" | "sku_code"> {
+  variant_id: string | null;
+  sku_id: string | null;
+  sku_code: string | null;
   requested_locale: string;
   content: ProductContentDto | null;
   categories: { id: string; name: string | null }[];
   primary_category_id: string | null;
+  variants: ProductVariantDto[];
+}
+export interface ProductVariantDto {
+  id: string;
+  sku_id: string;
+  sku_code: string;
+  content_locales: string[];
+  short_description: string | null;
+}
+export interface ProductListItemDto {
+  id: string;
+  kind: ProductKind;
+  name: string | null;
+  variant_count: number;
+  primary_category_id: string | null;
+  primary_category_name: string | null;
+  updated_at: string;
+}
+export interface VariantStructureDto {
+  kind: ProductKind;
+  variants: { id?: string; sku_id: string }[];
 }
 export interface PutContentDto {
   name: string;

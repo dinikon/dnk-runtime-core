@@ -10,6 +10,7 @@ import src.modules.inventory.infrastructure.persistence.models.warehouse  # noqa
 import src.modules.inventory.infrastructure.persistence.models.sku  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.product  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.variant  # noqa: F401
+import src.modules.catalog.infrastructure.persistence.models.variant_content  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.content  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.category  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.category_content  # noqa: F401

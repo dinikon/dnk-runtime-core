@@ -1,4 +1,5 @@
 from sqlalchemy import select
+from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.inventory.application.sku.query.get_sku.dto import SkuDetailsDTO
@@ -44,3 +45,13 @@ class SqlAlchemySkuQueryRepository:
             .offset(offset)
         )
         return [SkuQueryMapper.to_details(row) for row in result.mappings().all()]
+
+    async def get_codes(self, *, sku_ids: tuple[UUID, ...]) -> dict[UUID, str]:
+        if not sku_ids:
+            return {}
+        rows = (
+            await self._session.execute(
+                select(SkuModel.id, SkuModel.code).where(SkuModel.id.in_(sku_ids))
+            )
+        ).all()
+        return {row.id: row.code for row in rows}

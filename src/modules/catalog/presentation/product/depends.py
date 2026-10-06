@@ -5,6 +5,33 @@ from fastapi import Depends
 from src.modules.catalog.application.product.command.create_product.handler import (
     CreateProductHandler,
 )
+from src.modules.catalog.application.product.command.create_variable_product.handler import (
+    CreateVariableProductHandler,
+)
+from src.modules.catalog.application.product.command.create_variant.handler import (
+    CreateVariantHandler,
+)
+from src.modules.catalog.application.product.command.put_variant.handler import (
+    PutVariantHandler,
+)
+from src.modules.catalog.application.product.command.delete_variant.handler import (
+    DeleteVariantHandler,
+)
+from src.modules.catalog.application.product.command.put_variant_structure.handler import (
+    PutVariantStructureHandler,
+)
+from src.modules.catalog.application.product.command.put_variant_content.handler import (
+    PutVariantContentHandler,
+)
+from src.modules.catalog.application.product.command.delete_product.handler import (
+    DeleteProductHandler,
+)
+from src.modules.catalog.application.product.query.get_variant.handler import (
+    GetVariantHandler,
+)
+from src.modules.catalog.application.product.query.list_products.handler import (
+    ListProductsHandler,
+)
 from src.modules.catalog.application.product.command.put_product_content.handler import (
     PutProductContentHandler,
 )
@@ -132,3 +159,108 @@ def get_put_product_categories_handler(
 PutProductCategoriesHandlerDep = Annotated[
     PutProductCategoriesHandler, Depends(get_put_product_categories_handler)
 ]
+
+
+def get_list_products_handler(
+    repository: ProductQueryRepositoryDep,
+) -> ListProductsHandler:
+    return ListProductsHandler(repository)
+
+
+ListProductsHandlerDep = Annotated[
+    ListProductsHandler, Depends(get_list_products_handler)
+]
+
+
+def get_delete_product_handler(
+    repository: ProductRepositoryDep,
+) -> DeleteProductHandler:
+    return DeleteProductHandler(repository)
+
+
+DeleteProductHandlerDep = Annotated[
+    DeleteProductHandler, Depends(get_delete_product_handler)
+]
+
+
+def get_create_variable_product_handler(
+    repository: ProductRepositoryDep,
+    skus: SkuReaderDep,
+    locales: LocaleReaderDep,
+    clock: ClockDep,
+    uuids: UuidDep,
+) -> CreateVariableProductHandler:
+    return CreateVariableProductHandler(repository, skus, locales, clock, uuids)
+
+
+CreateVariableProductHandlerDep = Annotated[
+    CreateVariableProductHandler, Depends(get_create_variable_product_handler)
+]
+
+
+def get_put_variant_structure_handler(
+    repository: ProductRepositoryDep,
+    skus: SkuReaderDep,
+    clock: ClockDep,
+    uuids: UuidDep,
+) -> PutVariantStructureHandler:
+    return PutVariantStructureHandler(repository, skus, clock, uuids)
+
+
+PutVariantStructureHandlerDep = Annotated[
+    PutVariantStructureHandler, Depends(get_put_variant_structure_handler)
+]
+
+
+def get_create_variant_handler(
+    repository: ProductRepositoryDep,
+    skus: SkuReaderDep,
+    clock: ClockDep,
+    uuids: UuidDep,
+) -> CreateVariantHandler:
+    return CreateVariantHandler(repository, skus, clock, uuids)
+
+
+CreateVariantHandlerDep = Annotated[
+    CreateVariantHandler, Depends(get_create_variant_handler)
+]
+
+
+def get_put_variant_handler(
+    repository: ProductRepositoryDep, skus: SkuReaderDep, clock: ClockDep
+) -> PutVariantHandler:
+    return PutVariantHandler(repository, skus, clock)
+
+
+PutVariantHandlerDep = Annotated[PutVariantHandler, Depends(get_put_variant_handler)]
+
+
+def get_delete_variant_handler(
+    repository: ProductRepositoryDep, clock: ClockDep
+) -> DeleteVariantHandler:
+    return DeleteVariantHandler(repository, clock)
+
+
+DeleteVariantHandlerDep = Annotated[
+    DeleteVariantHandler, Depends(get_delete_variant_handler)
+]
+
+
+def get_put_variant_content_handler(
+    repository: ProductRepositoryDep, locales: LocaleReaderDep, clock: ClockDep
+) -> PutVariantContentHandler:
+    return PutVariantContentHandler(repository, locales, clock)
+
+
+PutVariantContentHandlerDep = Annotated[
+    PutVariantContentHandler, Depends(get_put_variant_content_handler)
+]
+
+
+def get_get_variant_handler(
+    repository: ProductQueryRepositoryDep, skus: SkuReaderDep
+) -> GetVariantHandler:
+    return GetVariantHandler(repository, skus)
+
+
+GetVariantHandlerDep = Annotated[GetVariantHandler, Depends(get_get_variant_handler)]

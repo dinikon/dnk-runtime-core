@@ -20,6 +20,9 @@ from src.modules.catalog.infrastructure.persistence.models.content import (
 )
 from src.modules.catalog.infrastructure.persistence.models.product import ProductModel
 from src.modules.catalog.infrastructure.persistence.models.variant import VariantModel
+from src.modules.catalog.infrastructure.persistence.models.variant_content import (
+    VariantContentModel,
+)
 from src.modules.catalog.infrastructure.persistence.models.product_category import (
     ProductCategoryModel,
 )
@@ -89,6 +92,19 @@ class SqlAlchemyProductRepository:
             .scalars()
             .all()
         )
+        variant_content_rows = (
+            (
+                await self._session.execute(
+                    select(VariantContentModel)
+                    .join(
+                        VariantModel, VariantContentModel.variant_id == VariantModel.id
+                    )
+                    .where(VariantModel.product_id == product_id.uuid)
+                )
+            )
+            .scalars()
+            .all()
+        )
         content_rows = (
             (
                 await self._session.execute(
@@ -118,6 +134,11 @@ class SqlAlchemyProductRepository:
                 ProductVariant(
                     VariantIdVO.from_value(variant.id),
                     EntityIdVO.from_value(variant.sku_id),
+                    {
+                        item.locale_code: item.short_description
+                        for item in variant_content_rows
+                        if item.variant_id == variant.id
+                    },
                 )
                 for variant in variants
             ),
@@ -184,4 +205,87 @@ class SqlAlchemyProductRepository:
             update(ProductModel)
             .where(ProductModel.id == product.id.uuid)
             .values(updated_at=product.updated_at, updated_by=product.updated_by.uuid)
+        )
+
+    async def save_variants(self, product: Product) -> None:
+        desired = {item.id.uuid: item for item in product.variants}
+        existing = set(
+            (
+                await self._session.execute(
+                    select(VariantModel.id).where(
+                        VariantModel.product_id == product.id.uuid
+                    )
+                )
+            ).scalars()
+        )
+        removed = existing - desired.keys()
+        if removed:
+            await self._session.execute(
+                delete(VariantModel).where(
+                    VariantModel.product_id == product.id.uuid,
+                    VariantModel.id.in_(removed),
+                )
+            )
+        for variant_id, variant in desired.items():
+            if variant_id in existing:
+                await self._session.execute(
+                    update(VariantModel)
+                    .where(
+                        VariantModel.id == variant_id,
+                        VariantModel.product_id == product.id.uuid,
+                    )
+                    .values(sku_id=variant.sku_id.uuid)
+                )
+            else:
+                await self._session.execute(
+                    insert(VariantModel).values(
+                        ProductMapper.variant_values(product, variant)
+                    )
+                )
+            for locale, description in variant.contents.items():
+                statement = pg_insert(VariantContentModel).values(
+                    variant_id=variant_id,
+                    locale_code=locale,
+                    short_description=description,
+                )
+                await self._session.execute(
+                    statement.on_conflict_do_update(
+                        constraint="pk_catalog_variant_contents",
+                        set_={"short_description": description},
+                    )
+                )
+        await self._session.execute(
+            update(ProductModel)
+            .where(ProductModel.id == product.id.uuid)
+            .values(
+                kind=product.kind.value,
+                updated_at=product.updated_at,
+                updated_by=product.updated_by.uuid,
+            )
+        )
+
+    async def save_variant_content(
+        self, product: Product, variant_id: VariantIdVO, locale: ProductLocaleVO
+    ) -> None:
+        description = product.get_variant(variant_id).contents[locale.value]
+        statement = pg_insert(VariantContentModel).values(
+            variant_id=variant_id.uuid,
+            locale_code=locale.value,
+            short_description=description,
+        )
+        await self._session.execute(
+            statement.on_conflict_do_update(
+                constraint="pk_catalog_variant_contents",
+                set_={"short_description": description},
+            )
+        )
+        await self._session.execute(
+            update(ProductModel)
+            .where(ProductModel.id == product.id.uuid)
+            .values(updated_at=product.updated_at, updated_by=product.updated_by.uuid)
+        )
+
+    async def delete(self, product: Product) -> None:
+        await self._session.execute(
+            delete(ProductModel).where(ProductModel.id == product.id.uuid)
         )

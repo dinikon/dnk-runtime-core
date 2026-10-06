@@ -8,7 +8,28 @@ from src.modules.catalog.application.product.query.get_product.dto import (
     ProductContentDTO,
     ProductDetailsDTO,
     ProductCategoryDTO,
+    ProductVariantDTO,
 )
+
+
+class GetProductVariantResponse(BaseModel):
+    id: UUID
+    sku_id: UUID
+    sku_code: str
+    content_locales: list[str]
+    short_description: str | None
+
+    @classmethod
+    def from_dto(cls, dto: ProductVariantDTO) -> "GetProductVariantResponse":
+        if dto.sku_code is None:
+            raise ValueError("Variant SKU code must be resolved.")
+        return cls(
+            id=dto.id,
+            sku_id=dto.sku_id,
+            sku_code=dto.sku_code,
+            content_locales=list(dto.content_locales),
+            short_description=dto.short_description,
+        )
 
 
 class GetProductContentResponse(BaseModel):
@@ -37,9 +58,9 @@ class GetProductCategoryResponse(BaseModel):
 class GetProductResponse(BaseModel):
     id: UUID
     kind: ProductKind
-    variant_id: UUID
-    sku_id: UUID
-    sku_code: str
+    variant_id: UUID | None
+    sku_id: UUID | None
+    sku_code: str | None
     requested_locale: str
     content_locales: list[str]
     content: GetProductContentResponse | None
@@ -49,6 +70,7 @@ class GetProductResponse(BaseModel):
     updated_at: datetime
     created_by: UUID
     updated_by: UUID
+    variants: list[GetProductVariantResponse]
 
     @classmethod
     def from_dto(cls, dto: ProductDetailsDTO) -> "GetProductResponse":
@@ -57,9 +79,9 @@ class GetProductResponse(BaseModel):
         return cls(
             id=dto.id,
             kind=dto.kind,
-            variant_id=dto.variant_id,
-            sku_id=dto.sku_id,
-            sku_code=dto.sku_code,
+            variant_id=dto.variant_id if dto.kind is ProductKind.SIMPLE else None,
+            sku_id=dto.sku_id if dto.kind is ProductKind.SIMPLE else None,
+            sku_code=dto.sku_code if dto.kind is ProductKind.SIMPLE else None,
             requested_locale=dto.requested_locale,
             content_locales=list(dto.content_locales),
             content=(
@@ -75,4 +97,7 @@ class GetProductResponse(BaseModel):
             updated_at=dto.updated_at,
             created_by=dto.created_by,
             updated_by=dto.updated_by,
+            variants=[
+                GetProductVariantResponse.from_dto(item) for item in dto.variants
+            ],
         )

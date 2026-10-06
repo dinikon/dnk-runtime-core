@@ -1,10 +1,14 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.catalog.application.product.query.get_product.dto import (
     ProductContentDTO,
     ProductDetailsDTO,
     ProductCategoryDTO,
+    ProductVariantDTO,
+)
+from src.modules.catalog.application.product.query.list_products.dto import (
+    ProductListItemDTO,
 )
 from src.modules.catalog.domain.product.value_object.identifier import ProductIdVO
 from src.modules.catalog.domain.product.value_object.kind import ProductKind
@@ -14,6 +18,9 @@ from src.modules.catalog.infrastructure.persistence.models.content import (
 )
 from src.modules.catalog.infrastructure.persistence.models.product import ProductModel
 from src.modules.catalog.infrastructure.persistence.models.variant import VariantModel
+from src.modules.catalog.infrastructure.persistence.models.variant_content import (
+    VariantContentModel,
+)
 from src.modules.catalog.infrastructure.persistence.models.category_content import (
     CategoryContentModel,
 )
@@ -35,10 +42,29 @@ class SqlAlchemyProductQueryRepository:
         if row is None:
             return None
         variant = (
-            await self._session.execute(
-                select(VariantModel).where(VariantModel.product_id == product_id.uuid)
+            (
+                await self._session.execute(
+                    select(VariantModel)
+                    .where(VariantModel.product_id == product_id.uuid)
+                    .order_by(VariantModel.id)
+                )
             )
-        ).scalar_one()
+            .scalars()
+            .all()
+        )
+        variant_contents = (
+            (
+                await self._session.execute(
+                    select(VariantContentModel)
+                    .join(
+                        VariantModel, VariantContentModel.variant_id == VariantModel.id
+                    )
+                    .where(VariantModel.product_id == product_id.uuid)
+                )
+            )
+            .scalars()
+            .all()
+        )
         contents = (
             (
                 await self._session.execute(
@@ -75,8 +101,8 @@ class SqlAlchemyProductQueryRepository:
         return ProductDetailsDTO(
             id=row.id,
             kind=ProductKind(row.kind),
-            variant_id=variant.id,
-            sku_id=variant.sku_id,
+            variant_id=variant[0].id,
+            sku_id=variant[0].sku_id,
             sku_code=None,
             requested_locale=locale.value,
             content_locales=tuple(item.locale_code for item in contents),
@@ -100,4 +126,85 @@ class SqlAlchemyProductQueryRepository:
             updated_at=row.updated_at,
             created_by=row.created_by,
             updated_by=row.updated_by,
+            variants=tuple(
+                ProductVariantDTO(
+                    id=item.id,
+                    sku_id=item.sku_id,
+                    sku_code=None,
+                    content_locales=tuple(
+                        sorted(
+                            content.locale_code
+                            for content in variant_contents
+                            if content.variant_id == item.id
+                        )
+                    ),
+                    short_description=next(
+                        (
+                            content.short_description
+                            for content in variant_contents
+                            if content.variant_id == item.id
+                            and content.locale_code == locale.value
+                        ),
+                        None,
+                    ),
+                )
+                for item in variant
+            ),
+        )
+
+    async def list_products(
+        self, locale: ProductLocaleVO
+    ) -> tuple[ProductListItemDTO, ...]:
+        counts = (
+            select(
+                VariantModel.product_id,
+                func.count(VariantModel.id).label("variant_count"),
+            )
+            .group_by(VariantModel.product_id)
+            .subquery()
+        )
+        rows = (
+            await self._session.execute(
+                select(
+                    ProductModel.id,
+                    ProductModel.kind,
+                    ProductContentModel.name,
+                    counts.c.variant_count,
+                    ProductCategoryModel.category_id,
+                    CategoryContentModel.name.label("category_name"),
+                    ProductModel.updated_at,
+                )
+                .outerjoin(
+                    ProductContentModel,
+                    (ProductContentModel.product_id == ProductModel.id)
+                    & (ProductContentModel.locale_code == locale.value),
+                )
+                .outerjoin(counts, counts.c.product_id == ProductModel.id)
+                .outerjoin(
+                    ProductCategoryModel,
+                    (ProductCategoryModel.product_id == ProductModel.id)
+                    & ProductCategoryModel.is_primary,
+                )
+                .outerjoin(
+                    CategoryContentModel,
+                    (
+                        CategoryContentModel.category_id
+                        == ProductCategoryModel.category_id
+                    )
+                    & (CategoryContentModel.locale_code == locale.value),
+                )
+                .order_by(ProductModel.updated_at.desc(), ProductModel.id)
+            )
+        ).all()
+        return tuple(
+            ProductListItemDTO(
+                row.id,
+                ProductKind(row.kind),
+                row.name,
+                row.variant_count or 0,
+                row.category_id,
+                row.category_name,
+                row.updated_at,
+            )
+            for row in rows
         )
