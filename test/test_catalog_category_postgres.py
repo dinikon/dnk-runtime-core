@@ -285,7 +285,7 @@ class CatalogCategoryPostgresTests(unittest.IsolatedAsyncioTestCase):
             await uow.session.execute(
                 insert(ProductModel).values(
                     id=product_id,
-                    type="SIMPLE",
+                    kind="simple",
                     created_by=self.actor.uuid,
                     updated_by=self.actor.uuid,
                 )

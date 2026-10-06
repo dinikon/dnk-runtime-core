@@ -8,6 +8,7 @@ from src.modules.catalog.domain.product.error import (
     InvalidProductVariantError,
 )
 from src.modules.catalog.domain.product.value_object.content import ProductContentVO
+from src.modules.catalog.domain.product.value_object.kind import ProductKind
 from src.modules.catalog.domain.product.value_object.identifier import (
     ProductIdVO,
     VariantIdVO,
@@ -29,7 +30,7 @@ class Product:
     """Простой товар владеет одним Variant и переводами карточки."""
 
     id: ProductIdVO
-    product_type: str
+    kind: ProductKind
     variants: tuple[ProductVariant, ...]
     created_at: datetime
     updated_at: datetime
@@ -41,16 +42,16 @@ class Product:
 
     @staticmethod
     def _validate_variants(
-        product_type: str, variants: tuple[ProductVariant, ...]
+        kind: ProductKind, variants: tuple[ProductVariant, ...]
     ) -> None:
-        if product_type != "SIMPLE" or len(variants) != 1:
+        if (
+            not isinstance(kind, ProductKind)
+            or kind is not ProductKind.SIMPLE
+            or len(variants) != 1
+        ):
             raise InvalidProductVariantError("SIMPLE requires one plain variant.")
         if not isinstance(variants[0], ProductVariant):
             raise InvalidProductVariantError("Product variant is invalid.")
-
-    @property
-    def type(self) -> str:
-        return self.product_type
 
     @property
     def variant(self) -> ProductVariant:
@@ -68,7 +69,7 @@ class Product:
         now: datetime,
     ) -> Self:
         variants = (ProductVariant(variant_id, sku_id),)
-        cls._validate_variants("SIMPLE", variants)
+        cls._validate_variants(ProductKind.SIMPLE, variants)
         by_locale: dict[str, ProductContentVO] = {}
         for content in contents:
             if not isinstance(content, ProductContentVO):
@@ -79,7 +80,7 @@ class Product:
             by_locale[code] = content
         return cls(
             id=product_id,
-            product_type="SIMPLE",
+            kind=ProductKind.SIMPLE,
             variants=variants,
             created_at=now,
             updated_at=now,
@@ -93,7 +94,7 @@ class Product:
         cls,
         *,
         product_id: ProductIdVO,
-        product_type: str,
+        kind: ProductKind,
         variants: tuple[ProductVariant, ...],
         created_at: datetime,
         updated_at: datetime,
@@ -103,10 +104,10 @@ class Product:
         category_ids: tuple[CategoryIdVO, ...] = (),
         primary_category_id: CategoryIdVO | None = None,
     ) -> Self:
-        cls._validate_variants(product_type, variants)
+        cls._validate_variants(kind, variants)
         return cls(
             id=product_id,
-            product_type=product_type,
+            kind=kind,
             variants=variants,
             created_at=created_at,
             updated_at=updated_at,

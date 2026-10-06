@@ -57,7 +57,7 @@ class InMemoryProducts:
         content = product.contents.get(locale.value)
         return ProductDetailsDTO(
             id=product.id.uuid,
-            type=product.type,
+            kind=product.kind,
             variant_id=product.variant.id.uuid,
             sku_id=product.variant.sku_id.uuid,
             sku_code=None,
@@ -145,16 +145,19 @@ class ProductHttpTests(unittest.IsolatedAsyncioTestCase):
             self.collection, json={"sku_id": str(self.sku)}, headers=self.headers
         )
         self.assertEqual(created.status_code, 201, created.text)
+        self.assertEqual(created.json()["kind"], "simple")
+        self.assertNotIn("type", created.json())
         self.assertEqual(created.json()["content_locales"], [])
         self.assertEqual(created.json()["sku_code"], "SKU-1")
         missing = await self.client.get(self.item, params={"locale": "uk"})
         self.assertEqual(missing.status_code, 200, missing.text)
+        self.assertEqual(missing.json()["kind"], "simple")
         self.assertIsNone(missing.json()["content"])
         self.assertEqual(
             set(missing.json()),
             {
                 "id",
-                "type",
+                "kind",
                 "variant_id",
                 "sku_id",
                 "sku_code",

@@ -34,7 +34,12 @@ schemas before using the SKU API; fresh tenants receive it through the same boot
 Revision `0012_catalog_simple` adds tenant-local Product, Variant and translation
 tables. It does not create locale settings or a default language; translation codes
 are validated against active public reference data at write time.
-Catalog migrations currently end at `0012_catalog_simple`. Disposable development
+Revision `0013_catalog_categories` adds the category tree, translations and explicit
+Product assignments. Revision `0014_catalog_product_kind` renames Product `type`
+to `kind` and converts `SIMPLE` to `simple`, preserving existing rows and relations.
+Its downgrade restores the previous column and value. Upgrade tenant schemas before
+starting the matching API; deploy Console with the new `kind` response contract.
+Catalog migrations currently end at `0014_catalog_product_kind`. Disposable development
 schemas that previously reached the removed `0013_catalog_variable` revision must
 be recreated before running tenant migrations again.
 Revisions contain no fixed tenant names and do not import current ORM models.

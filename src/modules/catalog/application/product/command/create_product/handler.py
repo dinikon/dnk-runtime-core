@@ -66,7 +66,7 @@ class CreateProductHandler:
         await self._repository.add(product)
         return CreateProductResultDTO(
             id=product.id.uuid,
-            type=product.type,
+            kind=product.kind,
             variant_id=product.variant.id.uuid,
             sku_id=product.variant.sku_id.uuid,
             sku_code=sku_code,

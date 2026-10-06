@@ -299,8 +299,8 @@ const formatDate = (value: string) => new Date(value).toLocaleString("ru-RU");
                 <dd class="break-all">{{ product.data.value.id }}</dd>
               </div>
               <div>
-                <dt class="text-muted-foreground">Тип</dt>
-                <dd>{{ product.data.value.type }}</dd>
+                <dt class="text-muted-foreground">Вид</dt>
+                <dd>{{ product.data.value.kind }}</dd>
               </div>
               <div>
                 <dt class="text-muted-foreground">SKU</dt>

@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI, Request, Response
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import insert, select, update
+from sqlalchemy import insert, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -42,6 +42,7 @@ from src.modules.catalog.domain.product.error import (
     ProductSkuNotFoundError,
 )
 from src.modules.catalog.domain.product.value_object.identifier import ProductIdVO
+from src.modules.catalog.domain.product.value_object.kind import ProductKind
 from src.modules.catalog.domain.product.value_object.locale import ProductLocaleVO
 from src.modules.catalog.infrastructure.persistence.models.product import ProductModel
 from src.modules.catalog.infrastructure.persistence.models.variant import VariantModel
@@ -168,6 +169,68 @@ class CatalogProductPostgresTests(unittest.IsolatedAsyncioTestCase):
             GetProductHandler(SqlAlchemyProductQueryRepository(session), skus),
             PutProductContentHandler(repository, locales, clock),
         )
+
+    async def test_kind_migration_roundtrip_preserves_product_and_content(self) -> None:
+        async with self.tenant_uow(0) as uow:
+            create, _, _ = self.handlers(uow.session)
+            created = await create.execute(
+                CreateProductCommand(
+                    self.actor,
+                    self.sku_id,
+                    (CreateProductContent("uk", "Назва", "Опис"),),
+                )
+            )
+        migrator = TenantMigrator()
+        schema = self.schemas[0]
+        async with self.engine.begin() as connection:
+            await migrator.downgrade(connection, schema, "0013_catalog_categories")
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            f'SELECT * FROM "{schema}".catalog_products WHERE id = :id'
+                        ),
+                        {"id": created.id},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            self.assertEqual(row["type"], "SIMPLE")
+            self.assertNotIn("kind", row)
+            await migrator.upgrade(connection, schema)
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            f'SELECT * FROM "{schema}".catalog_products WHERE id = :id'
+                        ),
+                        {"id": created.id},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            self.assertEqual(row["kind"], "simple")
+            self.assertNotIn("type", row)
+        async with self.tenant_uow(0) as uow:
+            restored = await SqlAlchemyProductRepository(uow.session).get_for_update(
+                ProductIdVO(created.id)
+            )
+            _, read, _ = self.handlers(uow.session)
+            details = await read.execute(
+                GetProductQuery(ProductIdVO(created.id), ProductLocaleVO("uk"))
+            )
+            self.assertIs(restored.kind, ProductKind.SIMPLE)
+            self.assertIs(details.kind, ProductKind.SIMPLE)
+            self.assertEqual(details.variant_id, created.variant_id)
+            self.assertEqual(details.sku_id, created.sku_id)
+            self.assertEqual(details.content.name, "Назва")
+            self.assertEqual(details.content.description, "Опис")
+            self.assertEqual(details.created_at, created.created_at)
+            self.assertEqual(details.updated_at, created.updated_at)
+            self.assertEqual(details.created_by, created.created_by)
+            self.assertEqual(details.updated_by, created.updated_by)
 
     async def test_create_reuse_translate_and_read_inactive_locale(self) -> None:
         async with self.tenant_uow(0) as uow:

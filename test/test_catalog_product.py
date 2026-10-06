@@ -21,10 +21,12 @@ from src.modules.catalog.application.product.command.put_product_content.handler
 from src.modules.catalog.domain.product.aggregate import Product
 from src.modules.catalog.domain.product.error import (
     InvalidProductContentError,
+    InvalidProductVariantError,
     ProductLocaleUnavailableError,
     ProductSkuNotFoundError,
 )
 from src.modules.catalog.domain.product.value_object.content import ProductContentVO
+from src.modules.catalog.domain.product.value_object.kind import ProductKind
 from src.modules.catalog.domain.product.value_object.identifier import (
     ProductIdVO,
     VariantIdVO,
@@ -51,11 +53,34 @@ class ProductDomainTests(unittest.TestCase):
 
     def test_simple_can_start_without_content_and_has_one_variant(self) -> None:
         product = self.create()
-        self.assertEqual(product.type, "SIMPLE")
+        self.assertIs(product.kind, ProductKind.SIMPLE)
         self.assertEqual(product.variant.sku_id, self.sku)
         self.assertEqual(product.contents, {})
         self.assertEqual(product.created_at, product.updated_at)
         self.assertEqual(product.created_by, product.updated_by)
+
+    def test_restore_requires_typed_kind_and_keeps_simple_invariants(self) -> None:
+        product = self.create()
+        values = dict(
+            product_id=product.id,
+            kind=ProductKind.SIMPLE,
+            variants=product.variants,
+            contents=product.contents,
+            created_at=product.created_at,
+            updated_at=product.updated_at,
+            created_by=product.created_by,
+            updated_by=product.updated_by,
+        )
+        self.assertIs(Product.restore(**values).kind, ProductKind.SIMPLE)
+        for kind in ("simple", "SIMPLE", ProductKind.VARIABLE):
+            with self.subTest(kind=kind), self.assertRaises(InvalidProductVariantError):
+                Product.restore(**(values | {"kind": kind}))
+        for variants in ((), product.variants * 2):
+            with (
+                self.subTest(variants=variants),
+                self.assertRaises(InvalidProductVariantError),
+            ):
+                Product.restore(**(values | {"variants": variants}))
 
     def test_content_normalization_and_duplicate_locale(self) -> None:
         content = ProductContentVO(

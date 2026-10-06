@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
+from src.modules.catalog.domain.product.value_object.kind import ProductKind
 
 @dataclass(frozen=True, slots=True)
 class ProductContentDTO:
@@ -19,7 +20,7 @@ class ProductCategoryDTO:
 @dataclass(frozen=True, slots=True)
 class ProductDetailsDTO:
     id: UUID
-    type: str
+    kind: ProductKind
     variant_id: UUID
     sku_id: UUID
     sku_code: str | None

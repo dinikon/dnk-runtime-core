@@ -9,7 +9,7 @@ class ProductMapper:
     def product_values(product: Product) -> dict[str, object]:
         return dict(
             id=product.id.uuid,
-            type=product.type,
+            kind=product.kind.value,
             created_at=product.created_at,
             updated_at=product.updated_at,
             created_by=product.created_by.uuid,

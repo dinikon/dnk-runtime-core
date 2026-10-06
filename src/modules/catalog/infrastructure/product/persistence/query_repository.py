@@ -7,6 +7,7 @@ from src.modules.catalog.application.product.query.get_product.dto import (
     ProductCategoryDTO,
 )
 from src.modules.catalog.domain.product.value_object.identifier import ProductIdVO
+from src.modules.catalog.domain.product.value_object.kind import ProductKind
 from src.modules.catalog.domain.product.value_object.locale import ProductLocaleVO
 from src.modules.catalog.infrastructure.persistence.models.content import (
     ProductContentModel,
@@ -73,7 +74,7 @@ class SqlAlchemyProductQueryRepository:
         ).all()
         return ProductDetailsDTO(
             id=row.id,
-            type=row.type,
+            kind=ProductKind(row.kind),
             variant_id=variant.id,
             sku_id=variant.sku_id,
             sku_code=None,

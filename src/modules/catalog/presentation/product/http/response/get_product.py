@@ -3,6 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from src.modules.catalog.domain.product.value_object.kind import ProductKind
 from src.modules.catalog.application.product.query.get_product.dto import (
     ProductContentDTO,
     ProductDetailsDTO,
@@ -35,7 +36,7 @@ class GetProductCategoryResponse(BaseModel):
 
 class GetProductResponse(BaseModel):
     id: UUID
-    type: str
+    kind: ProductKind
     variant_id: UUID
     sku_id: UUID
     sku_code: str
@@ -55,7 +56,7 @@ class GetProductResponse(BaseModel):
             raise ValueError("GetProductHandler must resolve the SKU code.")
         return cls(
             id=dto.id,
-            type=dto.type,
+            kind=dto.kind,
             variant_id=dto.variant_id,
             sku_id=dto.sku_id,
             sku_code=dto.sku_code,

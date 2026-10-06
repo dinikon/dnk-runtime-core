@@ -14,7 +14,7 @@ class ProductModel(EntityAuditMixin, AudienceMixin, TenantBase):
     __tablename__ = "catalog_products"
     __table_args__ = (
         sa.PrimaryKeyConstraint("id", name="pk_catalog_products"),
-        sa.CheckConstraint("type = 'SIMPLE'", name="ck_catalog_products_type"),
+        sa.CheckConstraint("kind = 'simple'", name="ck_catalog_products_kind"),
     )
 
-    type: Mapped[str] = mapped_column(sa.String(16), nullable=False)
+    kind: Mapped[str] = mapped_column(sa.String(16), nullable=False)

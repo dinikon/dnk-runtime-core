@@ -1,6 +1,6 @@
 # План модуля Catalog и представлений товаров в Channels
 
-Дата обновления: 2026-10-05. Статус: рабочий документ для дополнения.
+Дата обновления: 2026-10-06. Статус: рабочий документ для дополнения.
 
 Документ структурирует целевую модель каталога и способ её использования каналами.
 Описание относится к планируемой архитектуре. Предложения по деталям реализации
@@ -21,14 +21,14 @@ Channels хранит представления этого товара, поз
 и сопоставления с внешними справочниками. Коннекторы преобразуют подготовленное
 представление в формат конкретной платформы и взаимодействуют с её API.
 
-| Слой | Ответственность |
-| --- | --- |
-| Catalog | Product, Variant, ProductContent, переводы, Category, Attribute и значения |
-| Inventory | Самостоятельная сущность SKU и учёт остатков по SKU; Catalog использует её через ссылку и публичный контракт |
-| Reference Data | Глобальные коды локалей; не выбирает локали для tenant |
-| Channels | ProductRepresentation, RepresentationItem, Overrides, CategoryMapping, AttributeMapping, AttributeValueMapping, resolver и стратегии публикации |
-| Коннектор платформы | Platform Mapper, API Adapter, особенности протокола и внешних ресурсов |
-| Storefront | Чтение разрешённого представления через Read Model → GraphQL → custom frontend |
+| Слой                | Ответственность                                                                                                                                 |
+|---------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
+| Catalog             | Product, ProductType, ContentBlockDefinition, Variant, ProductContent, VariantContent, переводы, Category, Attribute и значения                 |
+| Inventory           | Самостоятельная сущность SKU и учёт остатков по SKU; Catalog использует её через ссылку и публичный контракт                                    |
+| Reference Data      | Глобальные коды локалей; не выбирает локали для tenant                                                                                          |
+| Channels            | ProductRepresentation, RepresentationItem, Overrides, CategoryMapping, AttributeMapping, AttributeValueMapping, resolver и стратегии публикации |
+| Коннектор платформы | Platform Mapper, API Adapter, особенности протокола и внешних ресурсов                                                                          |
+| Storefront          | Чтение разрешённого представления через Read Model → GraphQL → custom frontend                                                                  |
 
 Термин «CRM Product» из исходных примеров означает внутренний `Catalog.Product`.
 Он не вводит второй товарный каталог внутри модуля работы с клиентами.
@@ -43,7 +43,7 @@ Catalog не хранит отдельную копию товара для ка
 flowchart TB
     INV["INVENTORY<br/>SKU · учёт остатков"]
     LOC["REFERENCE DATA<br/>глобальные коды локалей"]
-    CAT["CATALOG<br/>Product · Variant · Content<br/>Category · Attribute"]
+    CAT["CATALOG<br/>Product · ProductType · ContentBlockDefinition<br/>Variant · Content · Category · Attribute"]
     CH["CHANNELS<br/>Representation · RepresentationItem<br/>Overrides · CategoryMapping · AttributeMapping"]
     INV -->|sku_id| CAT
     LOC --> CAT
@@ -73,34 +73,42 @@ flowchart TB
 
 ## 3. Каноническая модель Catalog
 
-| Объект | Назначение и основные данные |
-| --- | --- |
-| Product | Стабильный внутренний ID, тип товара `SIMPLE` / `VARIABLE`, связи с контентом, вариантами, категориями и общими атрибутами |
-| Variant | Стабильный внутренний ID, product_id, ссылка sku_id на Inventory.SKU, значения атрибутов варианта, изображение и габариты при наличии |
-| ProductContent | Локализованный контент карточки: name и description; состав и применение при необходимости входят в описание |
-| Перевод контента | Значения контентных полей для определённой locale |
-| Category | Внутренняя категория, её название/переводы и связь с родительской категорией |
-| Attribute | Внутренний атрибут: стабильный code, название/переводы, тип значения и назначение |
-| AttributeOption | Стабильный ID варианта значения перечислимого атрибута, code и переводы |
-| Значение атрибута | Значение общего атрибута товара либо атрибута конкретного варианта |
+| Объект                 | Назначение и основные данные                                                                                                                                                      |
+|------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Product                | Стабильный внутренний ID, `kind: ProductKind` (`simple` / `variable`), ссылка `product_type_id` на схему контента, связи с контентом, вариантами, категориями и общими атрибутами |
+| Variant                | Стабильный внутренний ID, product_id, ссылка sku_id на Inventory.SKU, собственный локализованный VariantContent, значения атрибутов варианта, изображение и габариты при наличии  |
+| ContentBlockDefinition | Определение блока: стабильные ID и code, scope PRODUCT/VARIANT, тип значения, is_system и переводы названия блока                                                                 |
+| ProductType            | Тип товара со схемой контента: код, переводы названия, is_system и упорядоченный набор определений блоков                                                                         |
+| ProductContent         | Значения блоков scope PRODUCT выбранного ProductType для конкретного товара и locale                                                                                              |
+| VariantContent         | Значения блоков scope VARIANT того же ProductType для конкретного варианта и locale                                                                                               |
+| Перевод контента       | Значения контентных полей для определённой locale                                                                                                                                 |
+| Category               | Внутренняя категория, её название/переводы и связь с родительской категорией                                                                                                      |
+| Attribute              | Внутренний атрибут: стабильный code, название/переводы, тип значения и назначение                                                                                                 |
+| AttributeOption        | Стабильный ID варианта значения перечислимого атрибута, code и переводы                                                                                                           |
+| Значение атрибута      | Значение общего атрибута товара либо атрибута конкретного варианта                                                                                                                |
 
-Для вариативного товара общий текст принадлежит `ProductContent`, а отличия
-позиций — `Variant`. Число капсул не требует создания трёх независимых карточек
+Для вариативного товара общий текст принадлежит `ProductContent`, а локализованный
+контент конкретной позиции — `VariantContent` внутри `Variant`. Число капсул не требует создания трёх независимых
+карточек
 каталога. Категория Catalog также существует независимо от дерева Prom или Woo.
 
 **Подтверждённое требование:** у простого товара `SIMPLE` также есть Variant —
 ровно один. Product хранит карточку и контент, а его единственный Variant — ссылку
 на Inventory.SKU и данные продаваемой позиции. Для обоих типов товаров используется
 одна модель Product → Variant → Inventory.SKU.
-Тип `SIMPLE` не означает отсутствие вариантов или перенос SKU в Product.
+Kind `SIMPLE` не означает отсутствие вариантов или перенос SKU в Product.
 
 **Предлагаемые инварианты:** вариант принадлежит одному товару; комбинация значений
 вариативных атрибутов не дублируется внутри товара; типы значений проверяются
 схемой атрибутов; дерево категорий не допускает циклов. Область уникальности кода SKU
 уточняется отдельно. Для SIMPLE обязательна ровно одна запись Variant;
 создание товара и его единственного варианта должно сохранять это условие.
-Второй вариант нельзя добавлять при сохранении типа SIMPLE; удаление единственного
+Второй вариант нельзя добавлять при сохранении kind SIMPLE; удаление единственного
 варианта не должно оставлять существующий простой товар без продаваемой позиции.
+
+**Подтверждённое требование для VARIABLE:** больше одного Variant, то есть минимум
+два. Создание или изменение VARIABLE не может оставить ноль или один вариант;
+сокращение до одного требует явной смены kind на SIMPLE в том же сценарии.
 
 ### SKU и граница Inventory
 
@@ -124,17 +132,275 @@ flowchart TB
 Inventory с учётом по SKU; контракт доступности для канала и источник расчёта цен
 должны быть определены отдельно.
 
+### Kind и тип товара
+
+`Product.kind` определяет структуру продаваемых позиций. В домене используется VO
+в форме строкового Enum; API и хранение используют его значения в нижнем регистре:
+
+```python
+class ProductKind(str, Enum):
+    SIMPLE = "simple"
+    VARIABLE = "variable"
+```
+
+Далее `SIMPLE` и `VARIABLE` обозначают члены этого Enum. Прежнее поле `type`
+переименовано в `kind`; строковое поле `product_type` доменного агрегата также заменено
+на `kind: ProductKind`. `ProductType` — отдельная сущность, задающая схему контента (в первом срезе только системный
+Default). Один ProductType применим и к SIMPLE,
+и к VARIABLE; он описывает состав контента Product и его Variants.
+Изменение схемы контента не меняет варианты, SKU или topology публикации.
+
+Статус на 2026-10-06: переименование и ProductKind входят в текущую реализацию;
+ProductType, ContentBlockDefinition, DefinitionScope и динамический контент
+Product/Variant — следующий срез.
+Наличие `ProductKind.VARIABLE` в Enum ещё не означает поддержку вариативного товара.
+
 ### Контент и переводы
 
-Для NOW Omega 3 базовый набор полей: `name` и `description`. Состав и применение
-входят в текст описания, если нужны товару.
-В примере наследования также используются `warning` и `brand`.
-Окончательное размещение brand и перечень дополнительных полей требуют уточнения.
+**Подтверждённое требование:** ProductType описывает схему продукта через
+ContentBlockDefinition. Определение задаёт тип контента и область его владельца;
+Product и Variant хранят локализованные значения согласно этой схеме.
+Добавление блока не требует новой колонки контента.
+Канонические коды — `title`, `description`, `short_description`; названия
+Title, Description и Short Description являются подписями, а не другими полями.
+Существующее поле `name` переносится в блок `title` при реализации этого среза.
 
-Catalog хранит переводы исходного контента. Representation и item могут иметь
-переопределения для выбранной locale. Resolver получает locale явно; правило
-fallback при отсутствии перевода нужно зафиксировать до реализации.
-Нельзя автоматически брать текст из другого языка без согласованной политики.
+#### DefinitionScope
+
+```python
+class DefinitionScope(str, Enum):
+    PRODUCT = "product"
+    VARIANT = "variant"
+```
+
+`ContentBlockDefinition.scope` определяет, где сохраняется значение:
+
+| Scope   | Владелец значения                     | Пример                          |
+|---------|---------------------------------------|---------------------------------|
+| PRODUCT | Product, перевод по locale            | title, description, ingredients |
+| VARIANT | Конкретный Variant, перевод по locale | short_description               |
+
+Scope принадлежит определению и одинаков во всех ProductType, использующих его.
+Нельзя менять владельца значения через настройку типа товара или payload записи.
+`DefinitionScope.VARIANT` не означает `ProductKind.VARIABLE`: у SIMPLE также есть
+один Variant. Kind определяет число позиций, scope — владельца контентного блока.
+
+#### ContentBlockDefinition
+
+Catalog владеет отдельным определением блока; оно переиспользуется в типах товара
+внутри tenant. Определение не содержит текст конкретного товара или варианта.
+
+| Поле         | Контракт                                                                                              |
+|--------------|-------------------------------------------------------------------------------------------------------|
+| id           | Стабильный внутренний ID определения                                                                  |
+| code         | Уникальный внутри tenant машинный код, например ingredients; после использования не переименовывается |
+| scope        | DefinitionScope: product либо variant                                                                 |
+| type         | Тип значения блока; для первого среза предлагаются text и rich_text                                   |
+| is_system    | Признак системного определения; задаётся сервером                                                     |
+| translations | Названия блока по явным кодам локалей, например uk → Склад                                            |
+
+Структура пользовательского определения, которое в дальнейшем можно включить
+в схему типа товара на уровне Product:
+
+```yaml
+ContentBlockDefinition:
+  code: ingredients
+  scope: product
+  type: rich_text
+  is_system: false
+  translations:
+    uk: "Склад"
+    ru: "Состав"
+    en: "Ingredients"
+```
+
+`translations` здесь — подписи полей редактора. Текст «Риб'ячий жир…» является
+значением блока у Product, а не переводом определения. Локаль подписи и локаль
+редактируемого контента выбираются независимо; отсутствие перевода подписи
+позволяет показать code, но не подставлять контент из другого языка.
+`is_system` не задаёт scope: как системные, так и пользовательские блоки
+могут относиться к Product либо Variant.
+
+#### ProductType и Default
+
+ProductType — отдельный корень агрегата Catalog: `id`, уникальный `code`,
+`is_system`, переводы названия и набор `blocks`. Каждый элемент схемы содержит
+`content_block_definition_id`, `position` и `is_required`. Code, scope, тип значения
+и подписи берутся из определения; обязательность и порядок принадлежат схеме.
+Одно определение не повторяется внутри одного ProductType; порядок отображения
+применяется отдельно внутри PRODUCT и VARIANT; position уникальна в пределах
+одного ProductType и scope.
+
+**Подтверждённый объём первого среза:** один ProductType с `code = default`,
+названием Default и `is_system = true`. Он назначается всем существующим товарам
+при миграции и новым товарам по умолчанию. Его нельзя удалить; системную структуру
+нельзя менять пользовательским запросом.
+
+В каждом tenant вместе с Default создаются системные определения:
+
+| Code              | Scope   | Type (предлагаемый) | is_system | is_required (предлагаемый) | Position |
+|-------------------|---------|---------------------|-----------|----------------------------|----------|
+| title             | PRODUCT | text                | true      | true                       | 1        |
+| description       | PRODUCT | rich_text           | true      | false                      | 2        |
+| short_description | VARIANT | rich_text           | true      | false                      | 1        |
+
+```text
+Default ProductType (is_system = true)
+├── PRODUCT
+│   ├── title
+│   └── description
+└── VARIANT
+    └── short_description
+
+Product
+├── product_type = Default
+├── kind = VARIABLE
+├── title                  [PRODUCT, по locale]
+├── description            [PRODUCT, по locale]
+└── Variants               [количество > 1]
+    ├── Variant V100
+    │   └── short_description [VARIANT, по locale]
+    └── Variant V200
+        └── short_description [VARIANT, по locale]
+```
+
+Product хранит `product_type_id`. Variant не выбирает отдельный ProductType:
+его схема VARIANT выводится из ProductType родительского Product.
+Default также применяется к SIMPLE: Product имеет title/description,
+единственный Variant — собственный short_description. Это применение общей
+схемы к уже принятой структуре SIMPLE; контент не переносится из Variant в Product.
+Правила количества вариантов задаёт ProductKind, а не редактируемый набор блоков.
+
+Создание пользовательских типов (например Витамины), управление составом их схем
+и включение ingredients/usage — последующее расширение. Определения для таких
+блоков предусмотрены моделью, но не входят в начальную схему Default и не seed-ятся
+как обязательные поля. В дальнейшем ProductType содержит ссылки на общие
+определения, а не их копии; скрытого наследования между типами нет.
+
+**Предлагаемый контракт значений:** title обязателен при записи перевода Product,
+содержит 1–255 символов после trim. Description входит в схему, но необязателен,
+как в текущем коде. Short_description также необязателен; необходимость заполнения
+не следует из самого наличия блока. Создать Product или Variant без переводов
+по-прежнему можно. Сохранение перевода проверяет обязательные блоки только для
+его scope и записываемой locale: перевод Variant не требует title.
+Формат rich_text (HTML либо структурированный JSON), лимиты и правила очистки
+фиксируются до реализации хранения и редактора; один формат применяется
+к значениям Catalog и overrides Channels.
+
+#### ProductContent и VariantContent: значения схемы
+
+ProductContent содержит `locale` и значения определений scope PRODUCT.
+VariantContent содержит `locale` и значения определений scope VARIANT.
+Публичное представление адресует блок по code; примеры значений rich_text
+показаны текстом для наглядности:
+
+```yaml
+Product:
+  id: 123 # иллюстративный ID
+  kind: variable
+  product_type_code: default
+  content:
+    locale: uk
+    blocks:
+      title: "Омега-3 1000 мг"
+      description: "Харчова добавка..."
+  variants:
+    - id: V100
+      content:
+        locale: uk
+        blocks:
+          short_description: "Упаковка 100 капсул..."
+    - id: V200
+      content:
+        locale: uk
+        blocks:
+          short_description: "Упаковка 200 капсул..."
+```
+
+Логическая структура: Product → ProductType → определения блоков; отдельно
+Product → locale → значения PRODUCT и Variant → locale → значения VARIANT.
+Ни значение, ни подпись не дублируют схему. Переводы Product и каждого Variant
+независимы: у одного варианта может быть uk, у другого — en или вообще нет контента.
+Отсутствие перевода Variant возвращается как `content: null`, даже если Product
+имеет перевод той же locale. Description не является fallback для short_description.
+Запись ingredients в Default отклоняется: определение не включено в эту схему.
+
+**Предлагаемые инварианты схемы и значений:**
+
+- Неизвестный code, блок вне ProductType, неверный scope и неподходящий тип значения
+  отклоняются. Product не принимает short_description, Variant — title/description.
+- Значение PRODUCT уникально по `(product_id, locale, content_block_definition_id)`;
+  значение VARIANT — по `(variant_id, locale, content_block_definition_id)`.
+- При записи Variant проверяется его принадлежность указанному Product и tenant;
+  схема берётся только из ProductType этого Product.
+- Системные определения нельзя удалить или изменить их code/scope/type/is_system.
+- Используемые определения нельзя удалить или менять их scope/type; подписи
+  редактируемы. ProductType нельзя удалить, пока он используется Product.
+- Добавление необязательного блока не создаёт фиктивных переводов или значений.
+  Будущее добавление обязательного блока проверяет переводы соответствующего scope
+  у всех владельцев; изменение отклоняется при несоответствии существующих значений.
+- Удаление блока из схемы отклоняется, если есть его значения у Product или Variants
+  этого типа. Смена ProductType проверяет оба scope и все варианты, сохраняет общие
+  значения и отклоняется, если новая схема исключает заполненные блоки или требует
+  отсутствующих значений. Автоматического удаления либо переноса между scope нет.
+- Изменение схемы и запись контента любого scope сериализуются по ProductType;
+  версия схемы проверяется при сохранении, устаревший редактор получает конфликт.
+
+#### Хранение, API и переход от фиксированных полей
+
+Предлагается tenant-хранение определений и их переводов, ProductType и его переводов,
+связей схемы с определениями, а также отдельных значений Product и Variant.
+Таблица переводов товара сохраняет ключ `(product_id, locale)`; таблица переводов
+варианта — `(variant_id, locale)`. Таблица значений каждого владельца ссылается
+на его перевод и определение. VariantContent входит в агрегат Product через Variant.
+`tenant_id` не дублируется в tenant-таблицах. Репозитории участвуют в общей UoW;
+проверки схемы, владельца и сохранение значений выполняются в одной транзакции.
+
+Первый срез предоставляет чтение Default и его определений, назначение типа товару
+и запись/чтение локализованных блоков обоих scope. Пользовательский CRUD типов
+и определений вводится в последующем расширении. Ответ схемы содержит версию,
+упорядоченные определения, scope, подписи и обязательность. Если тип не указан,
+новый товар получает Default.
+
+Предлагаемые контракты изменения переводов:
+
+| Операция                                                             | Область и проверка                                                                                                               |
+|----------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------|
+| PUT `/products/{product_id}/contents/{locale}`                       | Полная замена PRODUCT-блоков одной locale                                                                                        |
+| PUT `/products/{product_id}/variants/{variant_id}/contents/{locale}` | Полная замена VARIANT-блоков одной locale; Variant принадлежит Product                                                           |
+| GET Product с явной locale                                           | ProductContent и контент каждого Variant для этой locale; для отсутствующего перевода content: null у соответствующего владельца |
+
+Пути относятся к существующему префиксу `/api/console/catalog` и описывают целевые
+контракты. Запись принимает `blocks` и ожидаемую версию схемы; PUT не затрагивает
+другие locale и других владельцев. Отсутствующий необязательный блок не имеет
+значения, обязательный нельзя пропустить. Console строит отдельные группы PRODUCT
+и VARIANT по Default: text input для title, редактор rich_text для description
+и short_description каждого варианта.
+
+Порядок миграции следующего среза:
+
+1. Создать таблицы, DefinitionScope, системные определения title/description/
+   short_description и Default во всех tenant; включить тот же seed в создание
+   новых tenant. Scope хранится значениями product/variant; миграции не импортируют
+   актуальные доменные Enum.
+2. Назначить Default существующим Product, сохранить их ID, kind, варианты и SKU.
+3. Перенести каждую locale Product: name → title, description → значение PRODUCT
+   блока description. NULL остаётся отсутствующим значением. Старый текст
+   преобразуется в выбранный rich_text без интерпретации его как доверенного HTML.
+   VariantContent не заполняется копированием description: раньше этих данных не было.
+4. Сверить количество переводов и значения до/после, затем переключить DTO/API,
+   репозитории и Console на blocks с раздельными PRODUCT/VARIANT-контрактами.
+5. Удалить старые колонки после проверки переноса. Не создавать второго блока name.
+
+Текущая миграция kind выполняется отдельно: `0014_catalog_product_kind` переименовывает
+колонку type → kind и значение SIMPLE → simple; downgrade восстанавливает прежний
+контракт. Контент эта миграция не меняет. ProductType, DefinitionScope и динамические
+значения обоих scope пока описаны только в плане.
+
+Catalog хранит переводы исходного контента Product и Variant. Representation и item
+могут иметь переопределения для выбранной locale по правилам роли канала. Resolver
+получает locale явно; правило fallback при отсутствии перевода нужно зафиксировать
+до реализации. Нельзя автоматически брать текст из другого языка или scope.
 
 ### Языки контента Catalog
 
@@ -156,10 +422,11 @@ Catalog или Tenancy. Локаль публикации выбирают Chann
 
 ```text
 Product: PRODUCT-SIMPLE
-    type: SIMPLE
+    kind: simple
+    product_type_code: default
 
 ProductContent:
-    name: NOW Vitamin C 1000
+    title: NOW Vitamin C 1000
     description: общий текст карточки
     translations: по явным кодам локалей из глобального справочника
 
@@ -170,6 +437,7 @@ Inventory.SKU SKU-C1000:
 Variant V-C1000:
     product_id: PRODUCT-SIMPLE
     sku_id: SKU-C1000
+    VariantContent: short_description по явным locale, при наличии
     attributes: характеристики единственной позиции
     image / dimensions: при наличии
 
@@ -183,7 +451,8 @@ Variant V-C1000:
       Inventory.SKU SKU-C1000
 ```
 
-Общий контент и переводы принадлежат ProductContent. SKU и остатки относятся
+Общий контент и переводы принадлежат ProductContent; short_description единственного
+варианта — VariantContent. SKU и остатки относятся
 к Inventory, связь с ними хранится в единственном Variant. Характеристики позиции
 можно хранить у Variant даже при отсутствии выбора между несколькими вариантами.
 Цена и доступный остаток поступают в представление по тем же контрактам,
@@ -206,7 +475,7 @@ Variant V-C1000:
 
 Resolver объединяет ProductContent, разрешённые overrides и данные единственного
 Variant в одну `EffectiveRepresentationItem`. Контент разрешается по обычному
-каскаду item → representation → Catalog. Для Woo роли `SINGLE` доступны name
+каскаду item → representation → Catalog. Для Woo роли `SINGLE` доступны title
 и description: запрет variation description относится только к роли Woo `VARIANT`.
 
 ```text
@@ -225,17 +494,19 @@ ProductContent + Variant V-C1000 + Inventory data + Overrides
 
 ```text
 Product: PRODUCT-123
+    kind: variable
+    product_type_code: default
 ProductContent:
-    name: NOW Omega 3
+    title: NOW Omega 3
     description: общий текст
 
 Inventory.SKU SKU-100: code = OMEGA-100, остатки учитываются по SKU-100
 Inventory.SKU SKU-200: code = OMEGA-200, остатки учитываются по SKU-200
 Inventory.SKU SKU-500: code = OMEGA-500, остатки учитываются по SKU-500
 
-Variant V100: sku_id = SKU-100, capsules = 100
-Variant V200: sku_id = SKU-200, capsules = 200
-Variant V500: sku_id = SKU-500, capsules = 500
+Variant V100: sku_id = SKU-100, capsules = 100, short_description = упаковка 100 капсул
+Variant V200: sku_id = SKU-200, capsules = 200, short_description = упаковка 200 капсул
+Variant V500: sku_id = SKU-500, capsules = 500, short_description = упаковка 500 капсул
 
                   PRODUCT-123
                   NOW Omega 3
@@ -245,7 +516,8 @@ Variant V500: sku_id = SKU-500, capsules = 500
            V100       V200       V500
 ```
 
-Внутри Catalog это один товар с тремя вариантами. Ни топология внешних публикаций,
+Внутри Catalog это один товар с тремя вариантами. Title/description локализуются
+у Product, short_description — отдельно у V100/V200/V500. Ни топология внешних публикаций,
 ни количество внешних карточек не меняют эту структуру.
 
 ## 5. ProductRepresentation и RepresentationItem
@@ -372,6 +644,10 @@ Woo REST API адресует variation как дочерний ресурс:
 Пример: если Catalog description равен «Omega-3 жирные кислоты…», а у WOO-UA
 задан override «Омега-3 NOW Foods…», Woo parent получает текст override.
 Variation не получает этот текст независимо от возможности API.
+Catalog.VariantContent хранит short_description независимо от платформы. В текущем
+плане экспорта Woo этот блок также не отправляется в variation; его наличие в Catalog
+не включает внешнюю операцию. Правило отображения variant short_description в Woo
+требует отдельного решения Channels.
 Контентные overrides для роли Woo VARIANT должны быть недоступны для редактирования
 и отклоняться при попытке сохранения через API. Overrides разрешённых полей
 изображения и commerce-данных рассматриваются отдельно.
@@ -392,8 +668,11 @@ Prom #86573: NOW Omega 3 500 капсул → description V500
 [Справка Prom о разновидностях](https://support.prom.ua/hc/uk/articles/360005208678-%D0%94%D0%BE%D0%B4%D0%B0%D0%B2%D0%B0%D0%BD%D0%BD%D1%8F-%D1%80%D1%96%D0%B7%D0%BD%D0%BE%D0%B2%D0%B8%D0%B4%D1%96%D0%B2-%D0%B4%D0%BE-%D1%82%D0%BE%D0%B2%D0%B0%D1%80%D1%83).
 
 Название и описание каждой позиции могут задаваться item override. Автоматическое
-построение названия из общего name и атрибутов варианта требует отдельного правила;
-mapper не должен самостоятельно дописывать число капсул.
+построение названия из общего title и атрибутов варианта требует отдельного правила;
+mapper не должен самостоятельно дописывать число капсул. Short_description берётся
+из VariantContent конкретной позиции; как включать его во внешнее описание или
+другое поле, Channels определяет явным правилом проекции до отправки. Он не
+заменяет Product.description автоматически.
 Группировка позиций и конкретные операции их создания через Prom API проверяются
 при проектировании коннектора; приведённая схема не утверждает контракт его API.
 
@@ -402,7 +681,7 @@ mapper не должен самостоятельно дописывать чи�
 Поддерживаются два уровня переопределений: representation и representation item.
 
 ```text
-Canonical Product Content
+Canonical Content по scope (Product / конкретный Variant)
           ↓
 Channel Representation Override
           ↓
@@ -413,16 +692,26 @@ Effective value
 
 Приоритет поля: item override → representation override → Catalog.
 Resolver применяет его по каждому полю и locale, с учётом допустимых полей роли.
-Для нового перевода код должен быть доступен в глобальном справочнике и разрешён
-настройками контента Catalog. Локаль публикации Channels проверяет отдельно.
-Для Woo этот механизм разрешает контент parent, для Prom — каждой товарной позиции.
+Для нового перевода код должен быть активен в глобальном справочнике;
+Catalog не хранит списка разрешённых языков. Локаль публикации Channels проверяет отдельно.
+Источник Catalog выбирается по DefinitionScope: ProductContent для PRODUCT,
+VariantContent связанного Variant для VARIANT. Приоритет overrides применяется
+внутри одного блока, scope и locale, без наследования значений между Product и Variant.
+Для Woo роли PARENT используются PRODUCT-блоки; остальные роли получают только
+разрешённые стратегией блоки. Для Prom базовые данные позиции могут включать оба scope.
 
-| Поле | Catalog | Prom representation | Prom V100 item | Эффективное V100 | Источник |
-| --- | --- | --- | --- | --- | --- |
-| name | Omega 3 | Наследовать | Omega 3 100 капсул | Omega 3 100 капсул | Item |
-| description | Base description | Prom SEO description | V100 description | V100 description | Item |
-| warning | Warning | Наследовать | Наследовать | Warning | Catalog |
-| brand | NOW Foods | Наследовать | Наследовать | NOW Foods | Catalog |
+| Поле                             | Catalog             | Prom representation  | Prom V100 item     | Эффективное V100    | Источник               |
+|----------------------------------|---------------------|----------------------|--------------------|---------------------|------------------------|
+| title                            | Omega 3             | Наследовать          | Omega 3 100 капсул | Omega 3 100 капсул  | Item                   |
+| description                      | Base description    | Prom SEO description | V100 description   | V100 description    | Item                   |
+| short_description (VARIANT V100) | Упаковка 100 капсул | Наследовать          | Наследовать        | Упаковка 100 капсул | Catalog.VariantContent |
+
+В примере товар использует Default: title/description — PRODUCT, short_description
+— VARIANT. Таблица показывает внутренние эффективные значения, а не готовый payload
+Prom. Overrides адресуют определение блока, его scope и locale, проверяются по
+схеме ProductType и ограничениям роли канала. Для VARIANT-блока item должен иметь
+internal_variant_id; PARENT без связанного Variant не может получить такой блок. Произвольный новый блок через override
+не создаётся.
 
 Без item override description берётся из representation, а при отсутствии
 обоих overrides — из Catalog. Переопределение одного канала не меняет другой
@@ -468,8 +757,12 @@ Resolver выбирает значения контента, применяет 
 остатки получает контракт Inventory по связанному `sku_id`.
 Он не вызывает внешние API.
 
-`EffectiveRepresentationItem` содержит уже подготовленные `name`, `description`,
-category, attributes, images, SKU и разрешённые commerce-поля.
+`EffectiveRepresentationItem` содержит разрешённые блоки контента по code (PRODUCT: title/description; VARIANT:
+short_description связанного варианта),
+category, attributes,
+images, SKU и разрешённые commerce-поля. Channels явно задаёт, как дополнительные
+блоки включаются во внешнее описание или отдельные поля; они не склеиваются в Catalog.
+Mapper переводит канонический title в поле названия платформы (например name Woo).
 Набор полей зависит от роли; для Woo variation текстовые поля исключаются.
 
 Контракты mappers из исходной модели:
@@ -598,15 +891,15 @@ Read Model служит для чтения и не становится отд�
 
 ## 16. Этапы реализации
 
-| Этап | Результат |
-| --- | --- |
-| 1. Контракты Catalog и зависимостей | Product, обязательный единственный Variant для SIMPLE и варианты VARIABLE со ссылкой sku_id на Inventory, Content, Category, Attribute/Option; глобальный справочник кодов локалей без настроек языков Catalog |
-| 2. Канонический каталог | Создание/редактирование товарных данных со ссылками на Inventory.SKU и переводами по кодам контента Catalog |
-| 3. Представления Channels | Representation, item, два уровня overrides, внешние связи и mappings по connection |
-| 4. Resolver | Эффективные значения, provenance, locale и валидация доступных полей |
-| 5. Стратегии Prom/Woo | SINGLE_ITEM, VARIANTS_AS_ITEMS, PARENT_WITH_VARIANTS и проверяемые PublicationPlan |
-| 6. Адаптеры | Mappers и API adapters с проверенными контрактами, сохранением результатов по item |
-| 7. Storefront | Read Model, GraphQL и подключение custom frontend после согласования объёма витрины |
+| Этап                                | Результат                                                                                                                                                                                                                                                                                                        |
+|-------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 1. Контракты Catalog и зависимостей | Product, обязательный единственный Variant для SIMPLE и варианты VARIABLE со ссылкой sku_id на Inventory, ProductKind, ProductType (Default), ContentBlockDefinition/DefinitionScope, ProductContent/VariantContent, Category, Attribute/Option; глобальный справочник кодов локалей без настроек языков Catalog |
+| 2. Канонический каталог             | Default и системные определения; чтение схемы, PRODUCT/VARIANT-переводы по scope со ссылками на Inventory.SKU; миграция name/description. Пользовательские типы и определения — последующее расширение                                                                                                           |
+| 3. Представления Channels           | Representation, item, два уровня overrides, внешние связи и mappings по connection                                                                                                                                                                                                                               |
+| 4. Resolver                         | Эффективные значения, provenance, locale и валидация доступных полей                                                                                                                                                                                                                                             |
+| 5. Стратегии Prom/Woo               | SINGLE_ITEM, VARIANTS_AS_ITEMS, PARENT_WITH_VARIANTS и проверяемые PublicationPlan                                                                                                                                                                                                                               |
+| 6. Адаптеры                         | Mappers и API adapters с проверенными контрактами, сохранением результатов по item                                                                                                                                                                                                                               |
+| 7. Storefront                       | Read Model, GraphQL и подключение custom frontend после согласования объёма витрины                                                                                                                                                                                                                              |
 
 В первой версии интеграций рабочими остаются Prom.ua и WooCommerce с товарами.
 Этот документ задаёт целевую структуру Catalog/Channels; точный объём экспорта,
@@ -675,9 +968,12 @@ Catalog будет получать DTO со SKU ID и code через собс�
    ProductContent и переводы по явным кодам; создание, чтение и запись перевода
    через API — реализовано.
 4. Category: дерево, переводы и назначения SIMPLE Product — реализовано.
-5. Пересмотреть структуру Attribute и связь вариантов с атрибутами; затем
-   реализовать Catalog.VARIABLE и значения выбора.
-6. Расширение типов атрибутов и представления Channels — последующие шаги
+5. Default ProductType, ContentBlockDefinition/DefinitionScope: системные определения,
+   динамический PRODUCT/VARIANT-контент, миграция name → title и обновление
+   API/Console — следующий срез; сначала применяется к существующему SIMPLE.
+6. Пересмотреть структуру Attribute и связь вариантов с атрибутами; затем
+   реализовать Catalog.VARIABLE с минимум двумя вариантами и значения выбора.
+7. Расширение типов атрибутов и представления Channels — последующие шаги
    по основной таблице этапов.
 
 Это уточнение порядка реализации зависимостей этапов 1–2, а не изменение целевых
@@ -694,7 +990,7 @@ Catalog будет получать DTO со SKU ID и code через собс�
    internal_variant_id; Woo создаёт один simple product без дочерней variation.
 4. Один товар одновременно представлен в Prom и Woo без копирования Catalog.
 5. Общий контент Woo относится к parent; variation payload не содержит description.
-6. Prom V100/V200/V500 могут иметь разные эффективные name и description.
+6. Prom V100/V200/V500 могут иметь разные эффективные title и description.
 7. Item override приоритетнее representation override, затем используется Catalog.
 8. Намеренно пустое значение отличается от наследования; очистка обязательного поля
    не проходит проверку готовности.
@@ -710,14 +1006,38 @@ Catalog будет получать DTO со SKU ID и code через собс�
     отдельные остатки для того же SKU.
 18. Catalog не ограничивает набор локалей tenant и не задаёт основной язык.
 19. Код перевода проверяется по глобальному справочнику при записи; повтор кода
-    внутри одного товара не допускается.
+    внутри одного владельца (Product или конкретного Variant) не допускается.
 20. Channels выбирает локаль публикации независимо от Tenancy; для отправки товара
     проверяются наличие контента и согласованная политика fallback.
 21. Создание/изменение SIMPLE сохраняет ровно один Variant. Попытка добавить второй
-    вариант при типе SIMPLE или удалить единственный вариант, сохранив товар,
+    вариант при kind SIMPLE или удалить единственный вариант, сохранив товар,
     отклоняется без частичных изменений.
 22. Контентные overrides роли SINGLE работают в Prom и Woo, включая description;
     ограничения контента Woo VARIANT не применяются к внутреннему варианту SIMPLE.
+
+23. Product.kind типизирован ProductKind; API возвращает kind: simple, прежнее поле
+    type отсутствует. Миграция сохраняет существующие ID, переводы и связи с SKU.
+24. Единственный начальный ProductType — Default (code: default, is_system: true):
+    PRODUCT содержит title/description, VARIANT — short_description; тип не удаляется.
+25. Определение ingredients имеет scope PRODUCT, rich_text и подписи Склад/Состав/Ingredients;
+    значения разных товаров и локалей сохраняются отдельно от этих подписей.
+26. Редактор строит отдельные группы Product и Variants по scope определений Default.
+    Пользовательские типы и ingredients/usage добавляются последующим расширением.
+27. Новый блок добавляется без новой колонки контента. Блок вне схемы, неверный
+    тип значения и пропуск обязательного блока отклоняются без частичной записи.
+28. Один ProductType используется товарами разного kind без изменения SKU и вариантов.
+29. Смена типа, удаление блока и конкурентное изменение схемы учитывают Product
+    и все Variants, не теряют значения; используемые определения и типы защищены.
+30. Перенос name → title и description в значения блоков сохраняет все locale и текст;
+    товар без перевода по-прежнему читается с content: null.
+31. VARIABLE имеет минимум два Variant. Один или ноль вариантов при kind VARIABLE
+    отклоняются; SIMPLE сохраняет ровно один Variant.
+32. Short_description локализуется отдельно у каждого Variant, включая единственный
+    Variant SIMPLE. Варианты не получают автоматическую копию Product.description.
+33. Запись VARIANT-блока в Product или PRODUCT-блока в Variant отклоняется;
+    Variant другого Product/tenant не может использоваться как владелец значения.
+34. Отсутствующий перевод Variant возвращает content: null независимо от Product;
+    изменение контента одного варианта не меняет Product и остальные Variants.
 
 Это критерии целевой архитектуры; критерии приёмки первого импорта описаны
 в [плане интеграций](channels-integrations.md#12-критерии-приёмки-первой-версии).
@@ -727,7 +1047,10 @@ Catalog будет получать DTO со SKU ID и code через собс�
 - Как выполняется смена SIMPLE ↔ VARIABLE и обрабатываются существующие внешние
   публикации при изменении topology?
 - Как обрабатывать будущие удаления SKU, используемых несколькими товарами или вариантами?
-- Какие поля контента обязательны, какие типизированы и как размещаются brand/warning?
+- Какой формат rich_text, лимиты и правила очистки принимаем перед реализацией?
+- Где размещается brand: отдельное поле или атрибут? Warning может стать блоком
+  rich_text, если он включён в ProductType.
+- Как Channels проецирует variant short_description для Prom/Woo/Storefront?
 - Как Channels выбирает fallback при отсутствии перевода для локали публикации?
 - Какие поля, кроме текстовых, можно переопределять на уровне representation/item?
 - Как строится название Prom-позиции при отсутствии item override?
@@ -746,14 +1069,16 @@ Catalog будет получать DTO со SKU ID и code через собс�
 
 ## 19. История уточнений
 
-| Дата | Изменение |
-| --- | --- |
-| 2026-10-04 | Структурирована целевая архитектура Catalog → Channels: канонический товар, варианты и переводы, representations/items, два уровня overrides, стратегии Prom/Woo, mappings по connection и Storefront через GraphQL |
-| 2026-10-04 | Подтверждено: SKU — самостоятельная сущность Inventory, остатки учитываются по SKU; Variant хранит sku_id |
-| 2026-10-04 | Подтверждено: SIMPLE также имеет Variant, ровно один. Добавлены пример простого товара, SINGLE_ITEM для Prom/Woo/Storefront, правила контента и критерии приёмки; первый рабочий срез начинается с SIMPLE |
-| 2026-10-04 | Первой задачей разработки определена Inventory.SKU: domain, tenant persistence/migration и create/get/list API |
-| 2026-10-04 | Реализован первый срез Inventory.SKU по DDD/Clean Architecture: tenant migration 0011, create/get/list API и проверки |
-| 2026-10-05 | Публичный SKU lookup удалён при рефакторинге Inventory |
-| 2026-10-05 | Tenancy больше не ограничивает локали; Catalog.SIMPLE реализован без списка разрешённых языков и языка по умолчанию. Глобальные коды предоставляет `reference_data` |
-| 2026-10-05 | Реализация Catalog.VARIABLE и Attribute удалена до пересмотра структуры; рабочим срезом остаётся Catalog.SIMPLE |
-| 2026-10-05 | Category реализована как отдельный корень с деревом, переводами и явными назначениями SIMPLE Product; один из назначенных ID обязателен как основной |
+| Дата       | Изменение                                                                                                                                                                                                                                                          |
+|------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 2026-10-04 | Структурирована целевая архитектура Catalog → Channels: канонический товар, варианты и переводы, representations/items, два уровня overrides, стратегии Prom/Woo, mappings по connection и Storefront через GraphQL                                                |
+| 2026-10-04 | Подтверждено: SKU — самостоятельная сущность Inventory, остатки учитываются по SKU; Variant хранит sku_id                                                                                                                                                          |
+| 2026-10-04 | Подтверждено: SIMPLE также имеет Variant, ровно один. Добавлены пример простого товара, SINGLE_ITEM для Prom/Woo/Storefront, правила контента и критерии приёмки; первый рабочий срез начинается с SIMPLE                                                          |
+| 2026-10-04 | Первой задачей разработки определена Inventory.SKU: domain, tenant persistence/migration и create/get/list API                                                                                                                                                     |
+| 2026-10-04 | Реализован первый срез Inventory.SKU по DDD/Clean Architecture: tenant migration 0011, create/get/list API и проверки                                                                                                                                              |
+| 2026-10-05 | Публичный SKU lookup удалён при рефакторинге Inventory                                                                                                                                                                                                             |
+| 2026-10-05 | Tenancy больше не ограничивает локали; Catalog.SIMPLE реализован без списка разрешённых языков и языка по умолчанию. Глобальные коды предоставляет `reference_data`                                                                                                |
+| 2026-10-05 | Реализация Catalog.VARIABLE и Attribute удалена до пересмотра структуры; рабочим срезом остаётся Catalog.SIMPLE                                                                                                                                                    |
+| 2026-10-05 | Category реализована как отдельный корень с деревом, переводами и явными назначениями SIMPLE Product; один из назначенных ID обязателен как основной                                                                                                               |
+| 2026-10-06 | type переименован в kind; введён ProductKind со значениями simple/variable. ProductType отделён как схема контента; запланированы ContentBlockDefinition, системный Базовый тип, динамические переводы блоков и перенос name → title                               |
+| 2026-10-06 | Уточнена схема контента: начальный системный ProductType Default, DefinitionScope PRODUCT/VARIANT, title/description у Product и short_description у каждого Variant; VARIABLE требует больше одного варианта. Уточнены хранение, API, миграция и границы Channels |

@@ -13,9 +13,11 @@ export interface CreateProductDto {
   sku_id: string;
   contents: ProductContentDto[];
 }
+export type ProductKind = "simple" | "variable";
+
 export interface CreatedProductDto extends AuditDto {
   id: string;
-  type: string;
+  kind: ProductKind;
   variant_id: string;
   sku_id: string;
   sku_code: string;

@@ -13,6 +13,7 @@ from src.modules.catalog.domain.product.value_object.identifier import (
     ProductIdVO,
     VariantIdVO,
 )
+from src.modules.catalog.domain.product.value_object.kind import ProductKind
 from src.modules.catalog.domain.product.value_object.locale import ProductLocaleVO
 from src.modules.catalog.infrastructure.persistence.models.content import (
     ProductContentModel,
@@ -112,7 +113,7 @@ class SqlAlchemyProductRepository:
         )
         return Product.restore(
             product_id=ProductIdVO.from_value(row.id),
-            product_type=row.type,
+            kind=ProductKind(row.kind),
             variants=tuple(
                 ProductVariant(
                     VariantIdVO.from_value(variant.id),
