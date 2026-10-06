@@ -1,22 +1,19 @@
-from fastapi.routing import APIRoute
+from collections.abc import Awaitable, Callable
+
+from fastapi import HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
-from fastapi import HTTPException
-from src.modules.channels.domain.error import (
-    ChannelNotFoundError,
-    ChannelConfigConflictError,
-    ChannelSecretsUnavailableError,
-    ChannelValidationError,
-    InvalidChannelError,
-)
+from fastapi.routing import APIRoute
 
 
 class ChannelRoute(APIRoute):
-    """Единая транспортная граница: ошибки никогда не отражают credentials."""
+    """Удаляет входные значения из ошибок транспортной валидации credentials."""
 
-    def get_route_handler(self):
+    def get_route_handler(self) -> Callable[[Request], Awaitable[Response]]:
+        """Оборачивает только валидацию FastAPI; ошибки сценариев переводят контроллеры."""
         original = super().get_route_handler()
 
-        async def handle(request):
+        async def handle(request: Request) -> Response:
+            """Передаёт безопасную ошибку исключением, сохраняя rollback внешнего UoW."""
             try:
                 return await original(request)
             except RequestValidationError as exc:
@@ -24,34 +21,12 @@ class ChannelRoute(APIRoute):
                     status_code=422,
                     detail=[
                         {
-                            "loc": list(e["loc"]),
+                            "loc": list(error["loc"]),
                             "msg": "Некорректное значение поля.",
-                            "type": e["type"],
+                            "type": error["type"],
                         }
-                        for e in exc.errors()
+                        for error in exc.errors()
                     ],
                 ) from None
-            except ChannelValidationError as exc:
-                raise HTTPException(status_code=422, detail=list(exc.errors)) from None
-            except (
-                ChannelNotFoundError,
-                ChannelConfigConflictError,
-                ChannelSecretsUnavailableError,
-                InvalidChannelError,
-            ) as exc:
-                status = (
-                    404
-                    if isinstance(exc, ChannelNotFoundError)
-                    else (
-                        409
-                        if isinstance(exc, ChannelConfigConflictError)
-                        else (
-                            503
-                            if isinstance(exc, ChannelSecretsUnavailableError)
-                            else 422
-                        )
-                    )
-                )
-                raise HTTPException(status_code=status, detail=str(exc)) from None
 
         return handle

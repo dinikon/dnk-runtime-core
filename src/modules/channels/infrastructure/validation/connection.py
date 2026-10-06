@@ -1,12 +1,17 @@
 from urllib.parse import urlsplit
 from jsonschema import Draft202012Validator, FormatChecker
-from src.modules.channels.domain.error import ChannelValidationError
+from src.modules.channels.application.error import (
+    ChannelFieldError,
+    ChannelValidationError,
+)
+from src.modules.channels.application.port.registry import ChannelDefinition
 
 formats = FormatChecker()
 
 
 @formats.checks("https-store-url")
-def valid_store_url(value):
+def valid_store_url(value: object) -> bool:
+    """Проверяет абсолютный HTTPS URL магазина без credentials, query и fragment."""
     if not isinstance(value, str):
         return True
     try:
@@ -33,29 +38,28 @@ def valid_store_url(value):
 class JsonSchemaConnectionValidator:
     """Проверяет по опубликованной схеме; сообщения не содержат входные значения."""
 
-    def validate(self, definition, settings):
+    def validate(self, definition: ChannelDefinition, settings: dict[str, str]) -> None:
+        """Проверяет формат и ограничения, не включая исходные значения в ошибки."""
         schema = definition.config["connection"]["json_schema"]
         validator = Draft202012Validator(schema, format_checker=formats)
-        errors = []
+        errors: list[ChannelFieldError] = []
         for error in validator.iter_errors(settings):
-            path = ["body", "connection_settings", *error.absolute_path]
+            path = ("connection_settings", *error.absolute_path)
             if error.validator == "required":
                 for key in error.validator_value:
                     if key not in error.instance:
-                        errors.append(
-                            {
-                                "loc": path + [key],
-                                "msg": "Обязательное поле.",
-                                "type": "required",
-                            }
+                        issue = ChannelFieldError(
+                            path + (key,), "Обязательное поле.", "required"
                         )
+                        if issue not in errors:
+                            errors.append(issue)
             else:
                 errors.append(
-                    {
-                        "loc": path,
-                        "msg": "Некорректное значение поля.",
-                        "type": str(error.validator),
-                    }
+                    ChannelFieldError(
+                        path,
+                        "Некорректное значение поля.",
+                        str(error.validator),
+                    )
                 )
         if errors:
             raise ChannelValidationError(tuple(errors))

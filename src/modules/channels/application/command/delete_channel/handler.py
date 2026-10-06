@@ -7,9 +7,15 @@ from src.modules.channels.domain.value_object.identifier import ChannelIdVO
 
 
 class DeleteChannelHandler:
-    def __init__(self, repository: ChannelRepositoryProtocol):
-        self.repository = repository
+    """Координирует удаление канала вместе с credentials в общей транзакции."""
 
-    async def execute(self, command: DeleteChannelCommand):
-        if not await self.repository.delete(ChannelIdVO.from_value(command.channel_id)):
+    def __init__(self, repository: ChannelRepositoryProtocol) -> None:
+        """Принимает порт сценария из внешней сборки зависимостей."""
+        self._repository = repository
+
+    async def execute(self, command: DeleteChannelCommand) -> None:
+        """Удаляет канал либо сообщает об отсутствии, оставляя commit внешнему UoW."""
+        if not await self._repository.delete(
+            ChannelIdVO.from_value(command.channel_id)
+        ):
             raise ChannelNotFoundError("Channel not found.")

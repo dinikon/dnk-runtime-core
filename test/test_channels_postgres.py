@@ -104,6 +104,7 @@ class ChannelsPostgresTests(unittest.IsolatedAsyncioTestCase):
         record = await self.create()
         url = self.base + "/" + record["id"]
         self.assertEqual((await self.client.get(url)).json(), record)
+        self.assertEqual((await self.client.get(self.base)).json(), [record])
         rows = await self.rows()
         self.assertNotIn("secret-original", repr(rows))
         self.assertEqual(

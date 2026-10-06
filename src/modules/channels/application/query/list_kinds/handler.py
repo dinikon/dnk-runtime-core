@@ -1,10 +1,26 @@
+from src.modules.channels.application.query.list_kinds.dto import ChannelKindListItemDTO
 from src.modules.channels.application.port.registry import ChannelRegistryPort
 from src.modules.channels.application.query.list_kinds.query import ListKindsQuery
 
 
 class ListKindsHandler:
-    def __init__(self, registry: ChannelRegistryPort):
-        self.registry = registry
+    """Координирует выдачу доступности платформ из реестра."""
 
-    async def execute(self, query: ListKindsQuery):
-        return self.registry.list_all()
+    def __init__(self, registry: ChannelRegistryPort) -> None:
+        """Принимает порт сценария из внешней сборки зависимостей."""
+        self._registry = registry
+
+    async def execute(
+        self, query: ListKindsQuery
+    ) -> tuple[ChannelKindListItemDTO, ...]:
+        """Преобразует определения реестра в результат конкретного сценария."""
+        return tuple(
+            ChannelKindListItemDTO(
+                kind=definition.kind.value,
+                type=definition.type.value,
+                label=definition.label,
+                can_configure=definition.can_configure,
+                unavailable_reason=definition.unavailable_reason,
+            )
+            for definition in self._registry.list_all()
+        )

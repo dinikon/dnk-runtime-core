@@ -23,6 +23,49 @@ Domain получает только запечатанные credentials; от�
 - Kind нельзя менять: для другой платформы создаётся новый канал.
 - Выключенный канал можно редактировать и удалить.
 
+## Архитектура и контракты сценариев
+
+Правила: [архитектура проекта](../architecture/AGENTS.md) и корневой `AGENTS.md`.
+Для единственного Aggregate Root нет дополнительного каталога `channel/` в слоях.
+
+| Сценарий Application | Вход | Результат | HTTP response |
+| --- | --- | --- | --- |
+| `create_channel` | `CreateChannelCommand` | `CreateChannelResultDTO` | `CreateChannelResponse` |
+| `update_channel` | `UpdateChannelCommand` | `UpdateChannelResultDTO` | `UpdateChannelResponse` |
+| `delete_channel` | `DeleteChannelCommand` | `None` | 204 без тела |
+| `get_channel` | `GetChannelQuery` | `ChannelDetailsDTO` | `GetChannelResponse` |
+| `list_channels` | `ListChannelsQuery` | `tuple[ChannelListItemDTO, ...]` | список `ListChannelItemResponse` |
+| `list_kinds` | `ListKindsQuery` | `tuple[ChannelKindListItemDTO, ...]` | список `ListChannelKindItemResponse` |
+| `get_kind_config` | `GetKindConfigQuery` | `ChannelKindConfigDTO` | `GetKindConfigResponse` |
+
+Каждый сценарий находится в `application/command|query/<scenario>/` с отдельными
+`command.py` или `query.py`, `handler.py` и `dto.py` при наличии результата.
+Удалению пустой DTO не нужен. Все методы имеют явные аннотации и docstrings.
+Каждый HTTP-метод имеет собственные controller/response файлы; request нужен
+только созданию и PATCH. Общих DTO и response для разных методов нет.
+
+`Channel.create` и `Channel.restore` проверяют состояние явно; `__post_init__`
+используется только в VO настроек. Переименование, изменение настроек и активности
+проверяют значения и обновляют audit через методы агрегата. Сохранение одинаковых
+значений сохраняет статус и audit. Фабрики не позволяют восстановить некорректные
+типы ID, статус, версию, название или audit без часового пояса.
+
+`ChannelMapper` преобразует агрегат в значения вставки/обновления и восстанавливает
+его через `Channel.restore`. `ChannelQueryMapper` отдельно собирает карточку и
+строку списка из явной публичной SQL-проекции без загрузки агрегата и credentials.
+
+Handlers получают только порты. Depends собирает SQL-адаптеры на общей сессии
+внешнего UoW; handlers, repositories и mappers не выполняют commit/rollback.
+Команды возвращают собственный безопасный DTO из изменённого агрегата; контроллер
+не вызывает дополнительный query handler для формирования ответа. Успех HTTP
+отправляется только после завершения UoW; ошибка commit не становится успехом.
+
+Ошибки проверки схемы, конфликта версии и хранилища credentials принадлежат
+Application. Ошибки полей имеют независимые от транспорта path/message/code.
+Контроллер каждого метода явно преобразует DTO в свой response и ожидаемые ошибки
+в HTTP-статусы; префикс `body` добавляется только здесь. `ChannelRoute` очищает
+ошибки валидации FastAPI от входных значений. Domain не содержит HTTP-контрактов.
+
 ## Реестр и форма
 
 Реестр находится в `infrastructure/definitions/registry.py`, выдаёт копии определений
@@ -119,7 +162,7 @@ Credentials не сохраняются в web storage или query/mutation cac
 ## Проверки
 
 ```sh
-.venv/bin/python -m unittest test.test_channels test.test_channels_http -q
+.venv/bin/python -m unittest test.test_channels test.test_channels_http test.test_channels_architecture -q
 TEST_POSTGRES_URL='<disposable PostgreSQL URL>' .venv/bin/python -m unittest test.test_channels_postgres -q
 npm --prefix frontends run typecheck:console
 npm --prefix frontends run lint:console
@@ -128,3 +171,10 @@ npm --prefix frontends run build:console
 
 PostgreSQL-тесты создают отдельные временные tenant-схемы, проверяют миграцию,
 шифрование, изоляцию, rollback, конкурентное объединение PATCH и удаление.
+
+`test_channels_architecture.py` проверяет структуру семи сценариев, отдельные DTO
+и HTTP-схемы, аннотации, русские docstrings, запрет `__post_init__` вне VO,
+направление импортов, границы транзакций, mapper-ы и пустые `__init__.py`.
+Он включается стандартным `unittest discover`, используемым `scripts.cicd.checks`,
+и также запускается отдельно без PostgreSQL. Семантику фабрик, audit, безопасных
+результатов команд, ошибок полей и сбоя commit проверяют регрессионные тесты.

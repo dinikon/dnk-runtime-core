@@ -2,7 +2,7 @@
 
 import ast
 import unittest
-from dataclasses import FrozenInstanceError, replace
+from dataclasses import FrozenInstanceError, fields
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,8 +11,8 @@ from uuid import uuid4
 from cryptography.fernet import Fernet
 from jsonschema import Draft202012Validator
 from src.modules.channels.domain.aggregate import Channel
-from src.modules.channels.domain.error import (
-    InvalidChannelError,
+from src.modules.channels.domain.error import InvalidChannelError
+from src.modules.channels.application.error import (
     ChannelValidationError,
     ChannelConfigConflictError,
     ChannelSecretsUnavailableError,
@@ -39,9 +39,9 @@ from src.modules.channels.application.command.update_channel.command import (
 from src.modules.channels.application.command.update_channel.handler import (
     UpdateChannelHandler,
 )
+from src.modules.channels.infrastructure.persistence.models.channel import ChannelModel
 from src.modules.channels.infrastructure.persistence.mapper import (
-    to_values,
-    restore_channel,
+    ChannelMapper,
 )
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.config.feature.channels_config import ChannelsSettings
@@ -110,7 +110,7 @@ class ChannelsTests(unittest.IsolatedAsyncioTestCase):
             self.channel.kind = ChannelKind.ETSY
         with self.assertRaises(TypeError):
             self.channel.settings.public["x"] = "y"
-        connected = replace(self.channel, status=ChannelStatus.CONNECTED)
+        connected = self.restore(status=ChannelStatus.CONNECTED)
         changed = connected.rename(
             "Other", actor_id=EntityIdVO(self.actor), now=self.clock.now()
         ).set_active(False, actor_id=EntityIdVO(self.actor), now=self.clock.now())
@@ -131,13 +131,13 @@ class ChannelsTests(unittest.IsolatedAsyncioTestCase):
             self.channel.set_active(1, actor_id=EntityIdVO(self.actor), now=self.now)
 
     def test_encryption_and_persistence_roundtrip(self):
-        values = to_values(self.channel)
+        values = ChannelMapper.to_insert_values(self.channel)
         self.assertNotIn("test-secret", repr(values))
         self.assertNotIn("test-secret", repr(self.channel))
         self.assertEqual(
             self.cipher.decrypt(values["encrypted_secrets"]), {"api_key": "test-secret"}
         )
-        restored = restore_channel(SimpleNamespace(**values))
+        restored = ChannelMapper.to_domain(ChannelModel(**values))
         self.assertEqual(restored, self.channel)
         with self.assertRaises(ChannelSecretsUnavailableError):
             ChannelSecretCipher("").encrypt({"x": "secret"})
@@ -193,8 +193,8 @@ class ChannelsTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_partial_update_preserves_secret_and_noop_preserves_status(self):
-        self.repo.get_for_update.return_value = replace(
-            self.channel, status=ChannelStatus.CONNECTED
+        self.repo.get_for_update.return_value = self.restore(
+            status=ChannelStatus.CONNECTED
         )
         await self.update.execute(
             UpdateChannelCommand(
@@ -257,7 +257,13 @@ class ChannelsTests(unittest.IsolatedAsyncioTestCase):
         self.repo.save.assert_not_awaited()
 
     async def test_no_key_needed_for_rename_and_activity(self):
-        self.update.cipher = ChannelSecretCipher("")
+        self.update = UpdateChannelHandler(
+            self.repo,
+            self.registry,
+            self.validator,
+            ChannelSecretCipher(""),
+            self.clock,
+        )
         await self.update.execute(
             UpdateChannelCommand(
                 self.tenant,
@@ -321,3 +327,126 @@ class ChannelsTests(unittest.IsolatedAsyncioTestCase):
                         node.func, ast.Attribute
                     ):
                         self.assertNotIn(node.func.attr, ("commit", "rollback"))
+
+    def restore(self, **changes):
+        state = {
+            field.name: getattr(self.channel, field.name) for field in fields(Channel)
+        }
+        return Channel.restore(**(state | changes))
+
+    def test_factories_validate_state_without_post_init(self):
+        restored = self.restore(status=ChannelStatus.CONNECTED)
+        self.assertEqual(restored.status, ChannelStatus.CONNECTED)
+        self.assertEqual(restored.created_at, self.channel.created_at)
+        self.assertEqual(restored.created_by, self.channel.created_by)
+        for state in [
+            {"id": EntityIdVO(uuid4())},
+            {"name": " "},
+            {"name": "x" * 256},
+            {"kind": "prom"},
+            {"status": "connected"},
+            {"settings": {}},
+            {"config_version": True},
+            {"config_version": 0},
+            {"is_active": 1},
+            {"created_by": ChannelIdVO(uuid4())},
+            {"updated_at": self.now.replace(tzinfo=None)},
+        ]:
+            with (
+                self.subTest(fields=tuple(state)),
+                self.assertRaises(InvalidChannelError),
+            ):
+                self.restore(**state)
+        self.assertEqual(self.restore(name="  " + "x" * 255 + "  ").name, "x" * 255)
+        with self.assertRaises(InvalidChannelError):
+            Channel.create(
+                channel_id=ChannelIdVO(uuid4()),
+                name=" ",
+                kind=ChannelKind.PROM,
+                config_version=1,
+                settings=self.settings,
+                actor_id=EntityIdVO(self.actor),
+                now=self.now,
+            )
+
+    def test_domain_methods_validate_transitions_and_audit(self):
+        other_actor = EntityIdVO(uuid4())
+        changed = self.channel.rename(
+            "Renamed", actor_id=other_actor, now=self.clock.now()
+        )
+        self.assertEqual(changed.updated_by, other_actor)
+        self.assertEqual(changed.updated_at, self.clock.now())
+        self.assertEqual(changed.created_by, self.channel.created_by)
+        self.assertEqual(changed.created_at, self.channel.created_at)
+        self.assertEqual(self.channel.name, "Store")
+        for settings, version in [(None, 1), (self.settings, 0), (self.settings, True)]:
+            with self.assertRaises(InvalidChannelError):
+                changed.change_settings(
+                    settings, version, actor_id=other_actor, now=self.now
+                )
+        with self.assertRaises(InvalidChannelError):
+            changed.set_active(False, actor_id=ChannelIdVO(uuid4()), now=self.now)
+        with self.assertRaises(InvalidChannelError):
+            changed.rename(
+                "Valid name", actor_id=other_actor, now=self.now.replace(tzinfo=None)
+            )
+
+    def test_validation_issues_are_transport_independent_and_unique(self):
+        with self.assertRaises(ChannelValidationError) as caught:
+            self.validator.validate(self.registry.get("woocommerce"), {})
+        issues = caught.exception.errors
+        self.assertEqual(len(issues), 3)
+        self.assertEqual(
+            {issue.path for issue in issues},
+            {
+                ("connection_settings", "url"),
+                ("connection_settings", "consumer_key"),
+                ("connection_settings", "consumer_secret"),
+            },
+        )
+        self.assertTrue(all(issue.code == "required" for issue in issues))
+
+    async def test_command_results_are_specific_dtos_without_ciphertext(self):
+        from src.modules.channels.application.command.create_channel.dto import (
+            CreateChannelResultDTO,
+        )
+        from src.modules.channels.application.command.update_channel.dto import (
+            UpdateChannelResultDTO,
+        )
+
+        create = CreateChannelHandler(
+            self.repo,
+            self.registry,
+            self.validator,
+            self.cipher,
+            self.clock,
+            SimpleNamespace(new=uuid4),
+        )
+        created = await create.execute(
+            CreateChannelCommand(
+                self.tenant,
+                self.actor,
+                "Prom",
+                "prom",
+                1,
+                {"api_key": "result-secret"},
+            )
+        )
+        self.assertIs(type(created), CreateChannelResultDTO)
+        self.assertEqual(created.id, self.repo.add.call_args.args[0].id.uuid)
+        self.assertEqual(created.type, "marketplace")
+        self.assertEqual(created.configured_secret_fields, ("api_key",))
+        updated = await self.update.execute(
+            UpdateChannelCommand(
+                self.tenant,
+                self.actor,
+                self.channel.id.uuid,
+                name="Updated",
+            )
+        )
+        self.assertIs(type(updated), UpdateChannelResultDTO)
+        self.assertEqual(updated.name, "Updated")
+        for result in [created, updated]:
+            self.assertNotIn("result-secret", repr(result))
+            self.assertFalse(hasattr(result, "encrypted_secrets"))
+            self.assertEqual(result.connection_settings, {})

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 from pathlib import Path
+from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic_settings import BaseSettings
@@ -15,7 +16,8 @@ class ChannelsSettings(BaseModel):
     encryption_key_path: str = ""
 
     @model_validator(mode="after")
-    def load_and_validate_key(self):
+    def load_and_validate_key(self) -> Self:
+        """Загружает отдельный ключ Channels и проверяет допустимость конфигурации."""
         if self.secret_encryption_key and self.encryption_key_path:
             raise ValueError(
                 "Use CHANNELS secret_encryption_key OR encryption_key_path."
@@ -38,6 +40,8 @@ class ChannelsSettings(BaseModel):
 
 
 class ChannelsConfig(BaseSettings):
+    """Подключает настройки шифрования Channels к конфигурации приложения."""
+
     CHANNELS: ChannelsSettings = Field(default_factory=ChannelsSettings)
 
 

@@ -1,9 +1,22 @@
 from fastapi import APIRouter, Depends
 from src.modules.channels.presentation.http.route import ChannelRoute
-from src.modules.channels.presentation.http.response.channel import (
-    ChannelResponse,
-    ChannelKindResponse,
-    ChannelConfigResponse,
+from src.modules.channels.presentation.http.response.create_channel import (
+    CreateChannelResponse,
+)
+from src.modules.channels.presentation.http.response.update_channel import (
+    UpdateChannelResponse,
+)
+from src.modules.channels.presentation.http.response.get_channel import (
+    GetChannelResponse,
+)
+from src.modules.channels.presentation.http.response.list_channels import (
+    ListChannelItemResponse,
+)
+from src.modules.channels.presentation.http.response.list_kinds import (
+    ListChannelKindItemResponse,
+)
+from src.modules.channels.presentation.http.response.get_kind_config import (
+    GetKindConfigResponse,
 )
 from src.modules.identity.presentation.auth.depends import (
     require_authenticated_request_context,
@@ -37,7 +50,7 @@ router.add_api_route(
     "/kinds",
     list_kinds,
     methods=["GET"],
-    response_model=list[ChannelKindResponse],
+    response_model=list[ListChannelKindItemResponse],
     status_code=200,
     dependencies=[],
 )
@@ -45,7 +58,7 @@ router.add_api_route(
     "/kinds/{kind}/config",
     get_kind_config,
     methods=["GET"],
-    response_model=ChannelConfigResponse,
+    response_model=GetKindConfigResponse,
     status_code=200,
     dependencies=[],
 )
@@ -53,7 +66,7 @@ router.add_api_route(
     "",
     create_channel,
     methods=["POST"],
-    response_model=ChannelResponse,
+    response_model=CreateChannelResponse,
     status_code=201,
     dependencies=[Depends(require_csrf)],
 )
@@ -61,7 +74,7 @@ router.add_api_route(
     "",
     list_channels,
     methods=["GET"],
-    response_model=list[ChannelResponse],
+    response_model=list[ListChannelItemResponse],
     status_code=200,
     dependencies=[],
 )
@@ -69,7 +82,7 @@ router.add_api_route(
     "/{channel_id}",
     get_channel,
     methods=["GET"],
-    response_model=ChannelResponse,
+    response_model=GetChannelResponse,
     status_code=200,
     dependencies=[],
 )
@@ -77,7 +90,7 @@ router.add_api_route(
     "/{channel_id}",
     update_channel,
     methods=["PATCH"],
-    response_model=ChannelResponse,
+    response_model=UpdateChannelResponse,
     status_code=200,
     dependencies=[Depends(require_csrf)],
 )

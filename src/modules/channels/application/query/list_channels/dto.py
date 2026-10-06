@@ -4,8 +4,8 @@ from uuid import UUID
 
 
 @dataclass(frozen=True, slots=True)
-class ChannelDetailsDTO:
-    """Передаёт безопасную карточку канала без credentials."""
+class ChannelListItemDTO:
+    """Передаёт безопасные данные строки списка каналов."""
 
     id: UUID
     name: str

@@ -1,50 +1,59 @@
+from typing import Any
 from uuid import UUID
-from sqlalchemy import select
+
+from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.modules.channels.application.port.registry import ChannelRegistryPort
-from src.modules.channels.application.query.get_channel.dto import ChannelDTO
+from src.modules.channels.application.query.get_channel.dto import ChannelDetailsDTO
+from src.modules.channels.application.query.list_channels.dto import ChannelListItemDTO
 from src.modules.channels.infrastructure.persistence.models.channel import ChannelModel
+from src.modules.channels.infrastructure.persistence.query_mapper import (
+    ChannelQueryMapper,
+)
 
 
 class SqlAlchemyChannelQueryRepository:
-    """Безопасная проекция: encrypted_secrets даже не выбирается из БД."""
+    """Читает безопасные проекции на tenant-сессии без выбора ciphertext."""
 
-    def __init__(self, session: AsyncSession, registry: ChannelRegistryPort):
-        self.session, self.registry = session, registry
+    def __init__(self, session: AsyncSession, registry: ChannelRegistryPort) -> None:
+        """Принимает общую сессию внешнего UoW и порт категорий платформ."""
+        self._session = session
+        self._registry = registry
 
-    def _select(self):
+    def _select(self) -> Select[Any]:
+        """Явно выбирает публичные поля, исключая credentials и будущие поля модели."""
         return select(
-            *(c for c in ChannelModel.__table__.c if c.name != "encrypted_secrets")
+            ChannelModel.id,
+            ChannelModel.name,
+            ChannelModel.kind,
+            ChannelModel.config_version,
+            ChannelModel.connection_settings,
+            ChannelModel.configured_secret_fields,
+            ChannelModel.is_active,
+            ChannelModel.status,
+            ChannelModel.created_at,
+            ChannelModel.updated_at,
+            ChannelModel.created_by,
+            ChannelModel.updated_by,
         )
 
-    def _dto(self, row):
-        values = dict(row)
-        values["type"] = self.registry.get(values["kind"]).type.value
-        values["configured_secret_fields"] = tuple(values["configured_secret_fields"])
-        return ChannelDTO(**values)
-
-    async def get(self, channel_id: UUID):
-        row = (
-            (
-                await self.session.execute(
-                    self._select().where(ChannelModel.id == channel_id)
-                )
-            )
-            .mappings()
-            .one_or_none()
+    async def get(self, channel_id: UUID) -> ChannelDetailsDTO | None:
+        """Возвращает карточку канала текущего tenant или None."""
+        result = await self._session.execute(
+            self._select().where(ChannelModel.id == channel_id)
         )
-        return None if row is None else self._dto(row)
+        row = result.mappings().one_or_none()
+        if row is None:
+            return None
+        return ChannelQueryMapper.to_details(row, self._registry.get(row["kind"]).type)
 
-    async def list_all(self):
-        rows = (
-            (
-                await self.session.execute(
-                    self._select().order_by(
-                        ChannelModel.created_at.desc(), ChannelModel.id
-                    )
-                )
-            )
-            .mappings()
-            .all()
+    async def list_all(self) -> tuple[ChannelListItemDTO, ...]:
+        """Возвращает каналы текущего tenant от новых к старым."""
+        result = await self._session.execute(
+            self._select().order_by(ChannelModel.created_at.desc(), ChannelModel.id)
         )
-        return tuple(self._dto(row) for row in rows)
+        return tuple(
+            ChannelQueryMapper.to_list_item(row, self._registry.get(row["kind"]).type)
+            for row in result.mappings()
+        )

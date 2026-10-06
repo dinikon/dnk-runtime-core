@@ -89,14 +89,7 @@ class ChannelsHttpTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_create_encrypts_and_returns_only_safe_projection(self):
-        self.session.execute.side_effect = [
-            Mock(),
-            Mock(
-                mappings=Mock(
-                    return_value=Mock(one_or_none=Mock(return_value=self.public_row()))
-                )
-            ),
-        ]
+        self.session.execute.return_value = Mock()
         response = await self.client.post(
             self.base, json=self.payload, headers=self.headers
         )
@@ -110,6 +103,7 @@ class ChannelsHttpTests(unittest.IsolatedAsyncioTestCase):
             self.cipher.decrypt(params["encrypted_secrets"]),
             self.payload["connection_settings"],
         )
+        self.session.execute.assert_awaited_once()
         self.session.commit.assert_awaited_once()
 
     async def test_invalid_requests_never_echo_secret_or_write(self):
@@ -174,3 +168,64 @@ class ChannelsHttpTests(unittest.IsolatedAsyncioTestCase):
         )
         self.app.state.test_context = RequestContext(None, None, None, None)
         self.assertEqual((await self.client.get(self.base + "/kinds")).status_code, 401)
+
+    async def test_endpoint_schemas_are_independent(self):
+        schemas = self.app.openapi()["components"]["schemas"]
+        self.assertTrue(
+            {
+                "CreateChannelResponse",
+                "UpdateChannelResponse",
+                "GetChannelResponse",
+                "ListChannelItemResponse",
+                "ListChannelKindItemResponse",
+                "GetKindConfigResponse",
+            }
+            <= schemas.keys()
+        )
+        self.assertNotIn("ChannelResponse", schemas)
+
+    async def test_create_returns_only_after_commit_and_commit_failure_is_not_success(
+        self,
+    ):
+        self.session.execute.return_value = Mock()
+        self.session.commit.side_effect = RuntimeError("test commit failure")
+        with self.assertLogs(
+            "src.modules.shared.infrastructure.persistence.unit_of_work.sqlalchemy",
+            level="ERROR",
+        ):
+            response = await self.client.post(
+                self.base, json=self.payload, headers=self.headers
+            )
+        self.assertEqual(response.status_code, 500)
+        self.assertNotIn("never-return-this", response.text)
+        self.session.close.assert_awaited()
+
+    async def test_names_are_validated_after_trimming(self):
+        self.session.execute.return_value = Mock()
+        response = await self.client.post(
+            self.base,
+            json=self.payload | {"name": "  " + "x" * 255 + "  "},
+            headers=self.headers,
+        )
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertEqual(response.json()["name"], "x" * 255)
+        response = await self.client.post(
+            self.base,
+            json=self.payload | {"name": "  "},
+            headers=self.headers,
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["detail"][0]["loc"], ["body", "name"])
+
+    async def test_schema_error_paths_and_messages_never_echo_credentials(self):
+        response = await self.client.post(
+            self.base,
+            json=self.payload | {"connection_settings": {"api_key": ""}},
+            headers=self.headers,
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(
+            response.json()["detail"][0]["loc"],
+            ["body", "connection_settings", "api_key"],
+        )
+        self.assertEqual(set(response.json()["detail"][0]), {"loc", "msg", "type"})

@@ -1,24 +1,15 @@
 class ChannelError(Exception):
-    """Безопасная предметная ошибка Channels."""
+    """Базовая безопасная ошибка предметной области Channels."""
 
 
 class InvalidChannelError(ChannelError):
-    pass
+    """Сообщает о нарушении инварианта с безопасным именем предметного поля."""
+
+    def __init__(self, message: str, *, field_name: str | None = None) -> None:
+        """Сохраняет описание правила и имя поля без входного значения."""
+        super().__init__(message)
+        self.field_name = field_name
 
 
 class ChannelNotFoundError(ChannelError):
-    pass
-
-
-class ChannelConfigConflictError(ChannelError):
-    pass
-
-
-class ChannelSecretsUnavailableError(ChannelError):
-    pass
-
-
-class ChannelValidationError(InvalidChannelError):
-    def __init__(self, errors: tuple[dict, ...]):
-        super().__init__("Invalid channel settings.")
-        self.errors = errors
+    """Сообщает об отсутствии запрошенного канала или платформы."""

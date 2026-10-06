@@ -1,3 +1,4 @@
+from typing import Any
 from copy import deepcopy
 from src.modules.channels.application.port.registry import ChannelDefinition
 from src.modules.channels.domain.value_object.kind import ChannelKind
@@ -29,7 +30,8 @@ PLATFORMS = [
 ]
 
 
-def connection(fields):
+def connection(fields: list[tuple[str, str, bool]]) -> dict[str, Any]:
+    """Собирает опубликованную схему подключения из подтверждённых полей."""
     return {
         "json_schema": {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -76,9 +78,11 @@ class CodeChannelRegistry:
     """Реестр выдаёт копии: вызывающий код не меняет определения платформ."""
 
     def list_all(self) -> tuple[ChannelDefinition, ...]:
+        """Возвращает независимые определения всех платформ в порядке каталога."""
         return tuple(self.get(kind) for kind, _, _ in PLATFORMS)
 
     def get(self, kind: str) -> ChannelDefinition:
+        """Возвращает копию конфигурации либо безопасную ошибку отсутствия."""
         row = next((row for row in PLATFORMS if row[0] == kind), None)
         if row is None:
             raise ChannelNotFoundError("Platform not found.")

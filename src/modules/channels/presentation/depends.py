@@ -1,3 +1,5 @@
+from src.modules.channels.application.port.registry import ChannelRegistryPort
+from src.modules.channels.application.port.secret_cipher import SecretCipherPort
 from typing import Annotated
 from fastapi import Depends
 from src.config import dnk_config
@@ -34,18 +36,20 @@ from src.modules.channels.application.query.get_kind_config.handler import (
 )
 
 
-def get_registry():
+def get_registry() -> ChannelRegistryPort:
+    """Подключает неизменяемый реестр платформ к порту Application."""
     return CodeChannelRegistry()
 
 
-RegistryDep = Annotated[CodeChannelRegistry, Depends(get_registry)]
+RegistryDep = Annotated[ChannelRegistryPort, Depends(get_registry)]
 
 
-def get_cipher():
+def get_cipher() -> SecretCipherPort:
+    """Подключает шифрование с отдельным ключом модуля Channels."""
     return ChannelSecretCipher(dnk_config.CHANNELS.secret_encryption_key)
 
 
-CipherDep = Annotated[ChannelSecretCipher, Depends(get_cipher)]
+CipherDep = Annotated[SecretCipherPort, Depends(get_cipher)]
 
 
 def get_create_channel_handler(
@@ -54,7 +58,9 @@ def get_create_channel_handler(
     cipher: CipherDep,
     clock: ClockDep,
     uuids: UuidDep,
-):
+) -> CreateChannelHandler:
+    """Собирает обработчик из портов; SQL-репозиторий использует общий внешний UoW."""
+    assert uow.session is not None
     return CreateChannelHandler(
         SqlAlchemyChannelRepository(uow.session),
         registry,
@@ -72,7 +78,9 @@ CreateChannelHandlerDep = Annotated[
 
 def get_update_channel_handler(
     uow: UoWDep, registry: RegistryDep, cipher: CipherDep, clock: ClockDep
-):
+) -> UpdateChannelHandler:
+    """Собирает обработчик из портов; SQL-репозиторий использует общий внешний UoW."""
+    assert uow.session is not None
     return UpdateChannelHandler(
         SqlAlchemyChannelRepository(uow.session),
         registry,
@@ -87,7 +95,9 @@ UpdateChannelHandlerDep = Annotated[
 ]
 
 
-def get_delete_channel_handler(uow: UoWDep):
+def get_delete_channel_handler(uow: UoWDep) -> DeleteChannelHandler:
+    """Собирает обработчик из портов; SQL-репозиторий использует общий внешний UoW."""
+    assert uow.session is not None
     return DeleteChannelHandler(SqlAlchemyChannelRepository(uow.session))
 
 
@@ -96,14 +106,20 @@ DeleteChannelHandlerDep = Annotated[
 ]
 
 
-def get_get_channel_handler(uow: UoWDep, registry: RegistryDep):
+def get_get_channel_handler(uow: UoWDep, registry: RegistryDep) -> GetChannelHandler:
+    """Собирает обработчик из портов; SQL-репозиторий использует общий внешний UoW."""
+    assert uow.session is not None
     return GetChannelHandler(SqlAlchemyChannelQueryRepository(uow.session, registry))
 
 
 GetChannelHandlerDep = Annotated[GetChannelHandler, Depends(get_get_channel_handler)]
 
 
-def get_list_channels_handler(uow: UoWDep, registry: RegistryDep):
+def get_list_channels_handler(
+    uow: UoWDep, registry: RegistryDep
+) -> ListChannelsHandler:
+    """Собирает обработчик из портов; SQL-репозиторий использует общий внешний UoW."""
+    assert uow.session is not None
     return ListChannelsHandler(SqlAlchemyChannelQueryRepository(uow.session, registry))
 
 
@@ -112,14 +128,16 @@ ListChannelsHandlerDep = Annotated[
 ]
 
 
-def get_list_kinds_handler(registry: RegistryDep):
+def get_list_kinds_handler(registry: RegistryDep) -> ListKindsHandler:
+    """Собирает обработчик справочника из порта реестра без доступа к БД."""
     return ListKindsHandler(registry)
 
 
 ListKindsHandlerDep = Annotated[ListKindsHandler, Depends(get_list_kinds_handler)]
 
 
-def get_get_kind_config_handler(registry: RegistryDep):
+def get_get_kind_config_handler(registry: RegistryDep) -> GetKindConfigHandler:
+    """Собирает обработчик справочника из порта реестра без доступа к БД."""
     return GetKindConfigHandler(registry)
 
 

@@ -12,7 +12,8 @@ class ConnectionSettings:
     encrypted_secrets: str = field(repr=False)
     secret_fields: tuple[str, ...]
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
+        """Проверяет значения и защищает публичные настройки от внешней мутации."""
         if not all(
             isinstance(k, str) and isinstance(v, str) for k, v in self.public.items()
         ):
