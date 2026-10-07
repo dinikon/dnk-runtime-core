@@ -270,6 +270,13 @@ class ReferenceDataTests(unittest.IsolatedAsyncioTestCase):
         app = FastAPI()
         app.include_router(router, prefix="/api/console")
         repository = StubRepository()
+        regional_locales = await repository.list_locales()
+        repository.list_locales = AsyncMock(
+            return_value=[
+                Locale(LocaleCode("uk"), "uk", None, None, None, "Ukrainian"),
+                *regional_locales,
+            ]
+        )
         app.dependency_overrides[get_catalog_repository] = lambda: repository
         app.dependency_overrides[require_authenticated_request_context] = (
             lambda: object()
@@ -287,10 +294,9 @@ class ReferenceDataTests(unittest.IsolatedAsyncioTestCase):
                 (await client.get(f"{base}/time-zones")).json()[0]["country_codes"],
                 ["UA"],
             )
-            self.assertEqual(
-                (await client.get(f"{base}/locales")).json()[0]["region_code"],
-                "UA",
-            )
+            locales = (await client.get(f"{base}/locales")).json()
+            self.assertEqual([item["code"] for item in locales], ["uk"])
+            self.assertIsNone(locales[0]["region_code"])
 
     async def test_read_routes_require_authentication(self):
         app = FastAPI()
