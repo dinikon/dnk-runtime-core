@@ -153,6 +153,101 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
         )
         return warehouse_id
 
+    async def test_catalog_removal_preserves_other_modules_and_tenants(self) -> None:
+        """Удаление Catalog ограничено tenant; downgrade возвращает только схему."""
+        schema = await self.new_schema(upgrade=False)
+        other = await self.new_schema(upgrade=False)
+        async with self.engine.begin() as connection:
+            for tenant_schema in (schema, other):
+                await self.migrator.upgrade(connection, tenant_schema)
+                await self.migrator.downgrade(
+                    connection, tenant_schema, "0014_channel_publications"
+                )
+            warehouse_id = await self.insert_warehouse(connection, schema)
+            tables_before = set(
+                await connection.run_sync(
+                    lambda conn: inspect(conn).get_table_names(schema=schema)
+                )
+            )
+            catalog_tables = {
+                name for name in tables_before if name.startswith("catalog_")
+            }
+            self.assertEqual(len(catalog_tables), 14)
+            actor, sku_id = uuid4(), uuid4()
+            await connection.execute(
+                text(
+                    f'INSERT INTO "{schema}".skus '
+                    "(id, code, title, created_by, updated_by) "
+                    "VALUES (:id, 'kept-sku', 'Kept SKU', :actor, :actor)"
+                ),
+                {"id": sku_id, "actor": actor},
+            )
+            product_id = uuid4()
+            await connection.execute(
+                text(
+                    f'INSERT INTO "{schema}".catalog_products '
+                    "(id, kind, product_type_id, created_by, updated_by) "
+                    f"SELECT :id, 'simple', id, :actor, :actor "
+                    f"FROM \"{schema}\".catalog_product_types WHERE code = 'clean'"
+                ),
+                {"id": product_id, "actor": actor},
+            )
+            await connection.execute(
+                text(
+                    f'INSERT INTO "{schema}".catalog_variants (id, product_id, sku_id) '
+                    "VALUES (:id, :product, :sku)"
+                ),
+                {"id": uuid4(), "product": product_id, "sku": sku_id},
+            )
+            await self.migrator.upgrade(connection, schema)
+            tables_after = set(
+                await connection.run_sync(
+                    lambda conn: inspect(conn).get_table_names(schema=schema)
+                )
+            )
+            self.assertEqual(tables_after, tables_before - catalog_tables)
+            self.assertEqual(
+                await connection.scalar(text(f'SELECT id FROM "{schema}".skus')),
+                sku_id,
+            )
+            self.assertEqual(
+                await connection.scalar(text(f'SELECT id FROM "{schema}".warehouses')),
+                warehouse_id,
+            )
+            self.assertTrue(
+                await connection.run_sync(
+                    lambda conn: inspect(conn).has_table(
+                        "catalog_products", schema=other
+                    )
+                )
+            )
+            await self.migrator.downgrade(
+                connection, schema, "0014_channel_publications"
+            )
+            restored = set(
+                await connection.run_sync(
+                    lambda conn: inspect(conn).get_table_names(schema=schema)
+                )
+            )
+            self.assertEqual(restored, tables_before)
+            self.assertEqual(
+                await connection.scalar(
+                    text(f'SELECT count(*) FROM "{schema}".catalog_products')
+                ),
+                0,
+            )
+            self.assertEqual(
+                await connection.scalar(
+                    text(f'SELECT count(*) FROM "{schema}".catalog_product_types')
+                ),
+                1,
+            )
+            await self.migrator.upgrade(connection, schema)
+            self.assertEqual(
+                await self.migrator.current(connection, schema),
+                (self.migrator.head(),),
+            )
+
     async def test_upgrade_repeat_downgrade_and_constraints(self):
         schema = await self.new_schema()
         async with self.engine.begin() as connection:

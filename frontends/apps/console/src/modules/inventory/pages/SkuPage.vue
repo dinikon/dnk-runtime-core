@@ -65,16 +65,7 @@ const formatDate = (value: string) => new Date(value).toLocaleString("ru-RU");
             <dd class="break-all">{{ sku.data.value.updated_by }}</dd>
           </div>
         </dl>
-        <Button as-child class="self-start"
-          ><RouterLink
-            :to="{
-              name: 'catalog-product-new',
-              query: { skuId: sku.data.value.id },
-            }"
-            >Создать товар с этим SKU</RouterLink
-          ></Button
-        ></CardContent
-      ></Card
+      </CardContent></Card
     >
   </div>
 </template>

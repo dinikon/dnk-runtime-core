@@ -1,7 +1,6 @@
 import {
   Building2,
   Plug,
-  Package,
   Warehouse,
   FileSpreadsheet,
   LifeBuoy,
@@ -20,19 +19,6 @@ export const workspaceNavigation: WorkspaceNavigation = {
     {
       title: "Склад",
       items: [{ title: "SKU", url: "/inventory/skus", icon: Warehouse }],
-    },
-    {
-      title: "Каталог",
-      items: [
-        { title: "Товары", url: "/catalog/products", icon: Package },
-        { title: "Категории", url: "/catalog/categories", icon: Package },
-        { title: "Типы товаров", url: "/catalog/product-types", icon: Package },
-        {
-          title: "Контент-блоки",
-          url: "/catalog/content-blocks",
-          icon: Package,
-        },
-      ],
     },
     {
       title: "CRM",

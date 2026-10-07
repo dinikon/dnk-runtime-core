@@ -31,14 +31,15 @@ tenants before running code that reads the new CRM arrays. Existing CRM rows are
 Revision `0011_inventory_skus`, after `0010_crm_company_legal_name`, adds the tenant-local
 Inventory `skus` directory with unique codes and audit fields. Upgrade existing tenant
 schemas before using the SKU API; fresh tenants receive it through the same bootstrap.
-Revision `0012_catalog` is the single initial Catalog schema after Inventory.SKU.
-It creates Product, Variant, categories, content-block definitions, ProductType
-assignments and locale-specific content values. Every tenant receives the `clean`
-ProductType and the system blocks `title`, `description`, `short_description`.
-It does not create tenant locale settings or a default language: locale codes are
-checked against active public reference data when content is written. This revision
-replaces disposable development Catalog revisions; development databases that reached
-an earlier Catalog head must be recreated before upgrading.
+Revision `0012_catalog` is retained as historical schema creation. Revision
+`0015_remove_catalog`, after `0014_channel_publications`, removes all 14 Catalog
+tables and their contents. It preserves Inventory, Channels and other tenant data.
+The historical table names remain registered for migration ownership, while the
+runtime no longer registers Catalog models. Fresh tenants reach a head without
+Catalog tables. Existing tenants need the normal explicit tenant upgrade.
+Downgrading to `0014_channel_publications` restores only the empty Catalog schema
+and its system seeds; deleted product data cannot be recovered by a downgrade.
+The future Catalog is designed independently in [its plan](../plan/catalog.md).
 Revisions contain no fixed tenant names and do not import current ORM models.
 
 The migration environment uses transaction-local `search_path` (through PostgreSQL `set_config(..., true)`) and explicitly sets `version_table_schema`. Successful execution restores the previous path. Failed transactions are rolled back by the owner. Migration files must preserve transactional execution: no internal commit, autocommit block or nontransactional DDL in onboarding revisions.

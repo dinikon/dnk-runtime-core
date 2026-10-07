@@ -11,20 +11,6 @@ import src.modules.contact_points.infrastructure.persistence.models.contact_poin
 import src.modules.contact_points.infrastructure.persistence.models.contact_point_label  # noqa: F401
 import src.modules.inventory.infrastructure.persistence.models.warehouse  # noqa: F401
 import src.modules.inventory.infrastructure.persistence.models.sku  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.product  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.content_block_definition  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.content_block_translation  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.product_type  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.product_type_translation  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.product_type_content_block  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.variant  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.variant_content  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.content  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.product_content_value  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.variant_content_value  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.category  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.category_content  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.product_category  # noqa: F401
 import src.modules.identity.infrastructure.persistence.models.user  # noqa: F401
 import src.modules.identity.infrastructure.persistence.models.user_email  # noqa: F401
 import src.modules.identity.infrastructure.persistence.models.cloud_identity

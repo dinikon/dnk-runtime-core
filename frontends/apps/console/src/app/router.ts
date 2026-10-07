@@ -7,7 +7,6 @@ import { accessRoutes } from "@/modules/access/routes";
 import { authRoutes } from "@/modules/auth/routes";
 import { inventoryRoutes } from "@/modules/inventory";
 import { channelRoutes } from "@/modules/channels";
-import { catalogRoutes } from "@/modules/catalog";
 import { crmRoutes } from "@/modules/crm";
 import { dashboardRoutes } from "@/modules/dashboard";
 import { priceListRoutes } from "@/modules/price-lists";
@@ -33,7 +32,6 @@ export const router = createRouter({
           redirect: { name: "dashboard" },
         },
         ...dashboardRoutes,
-        ...catalogRoutes,
         ...channelRoutes,
         ...inventoryRoutes,
         ...crmRoutes,
