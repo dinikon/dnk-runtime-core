@@ -1,0 +1,274 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Channel platform research dataset",
+  "type": "object",
+  "required": [
+    "dataset_version",
+    "researched_at",
+    "platform_count",
+    "sources",
+    "platforms"
+  ],
+  "properties": {
+    "dataset_version": {
+      "type": "string"
+    },
+    "researched_at": {
+      "type": "string",
+      "format": "date"
+    },
+    "platform_count": {
+      "type": "integer"
+    },
+    "sources": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "title": {
+            "type": "string"
+          },
+          "access_status": {
+            "type": "string"
+          },
+          "checked_at": {
+            "type": "string"
+          },
+          "publisher_type": {
+            "const": "official"
+          }
+        },
+        "additionalProperties": true,
+        "required": [
+          "url",
+          "title",
+          "access_status"
+        ]
+      }
+    },
+    "platforms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "etsy",
+              "amazon",
+              "ebay",
+              "prom",
+              "rozetka",
+              "allo",
+              "kasta",
+              "epicentr",
+              "shopify",
+              "horoshop",
+              "tilda",
+              "wix",
+              "weblium",
+              "shop_express",
+              "webflow",
+              "opencart",
+              "woocommerce",
+              "magento",
+              "prestashop",
+              "okay_cms",
+              "cs_cart"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "channel_type": {
+            "type": "string",
+            "enum": [
+              "marketplace",
+              "shop",
+              "cms"
+            ]
+          },
+          "delivery": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "transport": {
+                  "type": "string"
+                },
+                "direction": {
+                  "type": "string",
+                  "enum": [
+                    "both",
+                    "from_platform",
+                    "to_platform"
+                  ]
+                },
+                "operations": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "evidence_status": {
+                  "type": "string",
+                  "enum": [
+                    "confirmed",
+                    "partially_verified",
+                    "not_verified",
+                    "requires_extension_or_custom_adapter"
+                  ]
+                },
+                "details": {
+                  "type": "string"
+                },
+                "source_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "additionalProperties": true,
+              "required": [
+                "transport",
+                "direction",
+                "operations",
+                "evidence_status",
+                "details",
+                "source_ids"
+              ]
+            }
+          },
+          "taxonomies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "scope": {
+                  "type": "string"
+                },
+                "identity": {
+                  "type": "string"
+                },
+                "discovery": {
+                  "type": "string"
+                },
+                "source_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "values_status": {
+                  "const": "not_fetched"
+                }
+              },
+              "additionalProperties": true,
+              "required": [
+                "key",
+                "scope",
+                "identity",
+                "discovery",
+                "source_ids",
+                "values_status"
+              ]
+            }
+          },
+          "product_schemas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "representation": {
+                  "type": "string",
+                  "enum": [
+                    "native_json",
+                    "graphql_input_json",
+                    "xml_projection",
+                    "csv_row_projection",
+                    "research_descriptor"
+                  ]
+                },
+                "coverage": {
+                  "type": "string",
+                  "enum": [
+                    "documented_subset",
+                    "mapping_draft"
+                  ]
+                },
+                "source_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "json_schema": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": true
+                },
+                "example": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "illustrative_not_live"
+                    },
+                    "value": {}
+                  },
+                  "additionalProperties": true,
+                  "required": [
+                    "kind",
+                    "value"
+                  ]
+                }
+              },
+              "additionalProperties": true,
+              "required": [
+                "key",
+                "representation",
+                "coverage",
+                "source_ids",
+                "json_schema",
+                "example"
+              ]
+            }
+          },
+          "schema_resolution": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": true,
+        "required": [
+          "kind",
+          "name",
+          "channel_type",
+          "delivery",
+          "taxonomies",
+          "product_schemas",
+          "schema_resolution",
+          "limitations"
+        ]
+      }
+    }
+  }
+}

@@ -10,6 +10,7 @@ Catalog строится как самостоятельная товарная 
 
 Связанные документы:
 
+- [Исследование 21 платформы Channels: JSON, товарные схемы и справочники](channel-platforms/README.md).
 - [Архитектурные правила](../architecture/AGENTS.md).
 - [Текущая реализация Catalog](../modules/catalog.md).
 - [Текущая реализация Inventory](../modules/inventory.md).
