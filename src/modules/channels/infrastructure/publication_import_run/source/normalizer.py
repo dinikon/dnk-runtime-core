@@ -92,6 +92,8 @@ class PublicationNormalizer:
         parent_id: str | None = None,
     ) -> PublicationSourceResource:
         """Сохраняет неизвестные native поля и нормализует поддержанные поля карточки."""
+        if kind not in ("prom", "woocommerce"):
+            raise PublicationSourceError("unsupported_platform")
         external_id = raw.get("id")
         if type(external_id) is not int or external_id <= 0:
             raise PublicationSourceError("invalid_source_data")

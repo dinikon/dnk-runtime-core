@@ -69,6 +69,9 @@ from src.modules.channels.infrastructure.publication_import_run.source.prom impo
 from src.modules.channels.infrastructure.publication_import_run.source.woocommerce import (
     WooPublicationSource,
 )
+from src.modules.channels.infrastructure.channel.definitions.registry import (
+    CodeChannelRegistry,
+)
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 
 
@@ -466,7 +469,9 @@ class PublicationImportTests(unittest.IsolatedAsyncioTestCase):
             self.channels, self.runs, self.jobs, self.clock
         )
         self.normalizer = PublicationNormalizer(PublicationHtmlSanitizer())
-        self.starter = PublicationImportStarter(self.runs, self.jobs, self.uuids)
+        self.starter = PublicationImportStarter(
+            self.runs, self.jobs, self.uuids, CodeChannelRegistry()
+        )
 
     async def start(self):
         return await self.starter.start(

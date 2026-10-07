@@ -87,7 +87,7 @@ class ChannelsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual({d.kind for d in definitions}, set(ChannelKind))
         self.assertEqual(
             {d.kind for d in definitions if d.can_configure},
-            {ChannelKind.PROM, ChannelKind.WOOCOMMERCE},
+            {ChannelKind.PROM, ChannelKind.WOOCOMMERCE, ChannelKind.ROZETKA},
         )
         for d in definitions:
             self.assertEqual(

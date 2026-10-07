@@ -18,7 +18,7 @@ class PublicationSourceRegistry:
     async def read_page(
         self, connection: PublicationSourceConnection, checkpoint: str
     ) -> PublicationSourcePage:
-        """Делегирует чтение странице Prom или Woo без fallback между источниками."""
+        """Делегирует чтение выбранному адаптеру без fallback между источниками."""
         source = self._sources.get(connection.kind)
         if source is None:
             raise PublicationSourceError("unsupported_platform")

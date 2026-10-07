@@ -3,6 +3,8 @@
 import asyncio
 import os
 import unittest
+import json
+import httpx
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -36,6 +38,19 @@ from src.modules.channels.presentation.publication_import_run.depends import (
 from src.modules.identity.domain.auth.principal import Principal
 from src.modules.identity.domain.auth.request_context import RequestContext
 from test.test_channels_postgres import ChannelsPostgresTests, TEST_URL
+from test.rozetka_support import RozetkaFixtureApi
+from src.modules.channels.infrastructure.publication_import_run.source.http_client import (
+    PublicationJsonClient,
+)
+from src.modules.channels.infrastructure.publication_import_run.source.rozetka import (
+    RozetkaPublicationSource,
+)
+from src.modules.channels.infrastructure.publication_import_run.source.rozetka_normalizer import (
+    RozetkaPublicationNormalizer,
+)
+from src.modules.channels.infrastructure.persistence.models.publication_import_run import (
+    PublicationImportRunModel,
+)
 
 
 @unittest.skipUnless(
@@ -45,6 +60,191 @@ class ChannelPublicationsPostgresTests(ChannelsPostgresTests):
     async def asyncSetUp(self):
         await super().asyncSetUp()
         self.normalizer = PublicationNormalizer(PublicationHtmlSanitizer())
+
+    async def create_rozetka(self, active=True):
+        response = await self.client.post(
+            self.base,
+            headers=self.headers,
+            json={
+                "name": "Rozetka QA",
+                "kind": "rozetka",
+                "config_version": 1,
+                "connection_settings": {
+                    "username": "fixture-seller",
+                    "password": "rozetka-password-secret",
+                },
+                "is_active": active,
+            },
+        )
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertNotIn("rozetka-password-secret", response.text)
+        self.assertEqual(
+            response.json()["connection_settings"], {"username": "fixture-seller"}
+        )
+        self.assertEqual(response.json()["configured_secret_fields"], ["password"])
+        return response.json()
+
+    async def test_rozetka_real_pipeline_archive_read_repeat_and_safe_settings(self):
+        channel = await self.create_rozetka()
+        url = self.base + "/" + channel["id"]
+        api = RozetkaFixtureApi()
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(api.handle)
+        ) as client:
+            source = RozetkaPublicationSource(
+                PublicationJsonClient(client),
+                RozetkaPublicationNormalizer(PublicationHtmlSanitizer()),
+            )
+            snapshots = []
+            for iteration in range(2):
+                if iteration:
+                    self.assertEqual(
+                        (
+                            await self.client.post(
+                                url + "/publication-imports", headers=self.headers
+                            )
+                        ).status_code,
+                        202,
+                    )
+                await self.drain(source)
+                run = (
+                    await self.client.get(url + "/publication-imports/latest")
+                ).json()
+                self.assertEqual(
+                    (run["status"], run["resources"]), ("succeeded", 5), run
+                )
+                publications = (await self.client.get(url + "/publications")).json()
+                self.assertEqual(publications["total"], 5)
+                self.assertEqual(
+                    {row["external_id"] for row in publications["items"]},
+                    {"11", "12", "13", "14", "15"},
+                )
+                details = []
+                for row in publications["items"]:
+                    response = await self.client.get(url + "/publications/" + row["id"])
+                    self.assertEqual(response.status_code, 200)
+                    self.assertNotIn("raw_payload", response.text)
+                    self.assertNotIn("fixture-token", response.text)
+                    details.append(response.json())
+                card = next(row for row in details if row["external_id"] == "11")
+                self.assertEqual(
+                    (
+                        card["price"],
+                        card["regular_price"],
+                        card["sale_price"],
+                        card["quantity"],
+                    ),
+                    ("999", "1200", "777", "0"),
+                )
+                self.assertEqual(card["attributes"][1]["value"], "Нет")
+                self.assertIsNone(card["currency"])
+                self.assertEqual(card["variants"], [])
+                snapshots.append(
+                    {
+                        row["external_id"]: (row["id"], row["revision"])
+                        for row in details
+                    }
+                )
+            self.assertEqual(snapshots[0], snapshots[1])
+        async with self.sessions() as session:
+            rows = (
+                (
+                    await session.execute(
+                        select(ExternalPublicationModel.raw_payload).execution_options(
+                            schema_translate_map={"tenant": self.schemas[0]}
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            cursors = (
+                (
+                    await session.execute(
+                        select(PublicationImportRunModel.checkpoint).execution_options(
+                            schema_translate_map={"tenant": self.schemas[0]}
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            self.assertTrue(
+                all("list_item" in row and "detail_item" in row for row in rows)
+            )
+            for secret in (
+                "rozetka-password-secret",
+                "fixture-token",
+                "fixture-seller",
+            ):
+                self.assertNotIn(secret, json.dumps([rows, cursors]))
+        response = await self.client.patch(
+            url,
+            headers=self.headers,
+            json={
+                "connection_settings": {"password": "replacement-secret"},
+                "config_version": 1,
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertNotIn("replacement-secret", response.text)
+        self.assertEqual(
+            response.json()["connection_settings"], {"username": "fixture-seller"}
+        )
+        self.assertEqual(
+            (await self.client.get(url + "/publications")).json()["total"], 0
+        )
+        inactive = await self.create_rozetka(active=False)
+        inactive_url = self.base + "/" + inactive["id"]
+        self.assertIsNone(
+            (await self.client.get(inactive_url + "/publication-imports/latest")).json()
+        )
+        self.assertEqual(
+            (
+                await self.client.post(
+                    inactive_url + "/publication-imports", headers=self.headers
+                )
+            ).status_code,
+            409,
+        )
+
+    async def test_rozetka_missing_details_preserve_partial_card_and_cursor(self):
+        channel = await self.create_rozetka()
+        url = self.base + "/" + channel["id"]
+        api = RozetkaFixtureApi()
+
+        def handle(request):
+            if (
+                request.url.path == "/goods/details"
+                and request.url.params["item_id"] == "12"
+            ):
+                return httpx.Response(
+                    200, json={"success": False, "errors": {"code": 1019}}
+                )
+            return api.handle(request)
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+            await self.drain(
+                RozetkaPublicationSource(
+                    PublicationJsonClient(client),
+                    RozetkaPublicationNormalizer(PublicationHtmlSanitizer()),
+                )
+            )
+        run = (await self.client.get(url + "/publication-imports/latest")).json()
+        self.assertEqual(
+            (run["status"], run["resources"], run["error_code"]),
+            ("partial", 1, "source_item_not_found"),
+        )
+        self.assertEqual(
+            (await self.client.get(url + "/publications")).json()["total"], 1
+        )
+        async with self.sessions() as session:
+            cursor = await session.scalar(
+                select(PublicationImportRunModel.checkpoint).execution_options(
+                    schema_translate_map={"tenant": self.schemas[0]}
+                )
+            )
+            self.assertEqual(cursor["pending"][0]["item_id"], 12)
 
     async def drain(self, source):
         runtime = PublicationImportJobRuntime(self.sessions, source, self.cipher)

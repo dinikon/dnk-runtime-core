@@ -7,6 +7,7 @@ from src.modules.channels.application.publication_import_run.error import (
     PublicationImportUnavailableError,
 )
 from src.modules.channels.domain.channel.aggregate import Channel
+from src.modules.channels.application.channel.port.registry import ChannelRegistryPort
 from src.modules.channels.domain.publication_import_run.aggregate import (
     PublicationImportRun,
 )
@@ -30,17 +31,22 @@ class PublicationImportStarter:
         runs: PublicationImportRunRepositoryProtocol,
         jobs: ScheduledJobRepositoryProtocol,
         uuids: UUIdGeneratorProtocol,
+        registry: ChannelRegistryPort,
     ) -> None:
         """Принимает порты одной транзакции и генератор идентификаторов."""
         self._runs, self._jobs, self._uuids = runs, jobs, uuids
+        self._registry = registry
 
     async def start(
         self, *, channel: Channel, tenant_id: UUID, now: datetime
     ) -> PublicationImportRun:
         """Возвращает активный запуск или атомарно создаёт новый с заданием."""
-        if not channel.is_active or channel.kind.value not in ("prom", "woocommerce"):
+        if (
+            not channel.is_active
+            or not self._registry.get(channel.kind.value).reads_publications
+        ):
             raise PublicationImportUnavailableError(
-                "Импорт доступен для активных каналов Prom и WooCommerce."
+                "Импорт доступен для активных каналов с поддержкой чтения публикаций."
             )
         active = await self._runs.active(channel.id)
         if active is not None:

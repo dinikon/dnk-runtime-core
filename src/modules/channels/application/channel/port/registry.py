@@ -17,6 +17,11 @@ class ChannelDefinition:
     config_version: int
     config: dict[str, Any]
 
+    @property
+    def reads_publications(self) -> bool:
+        """Возвращает явно заявленную возможность чтения публикаций платформы."""
+        return self.config.get("capabilities", {}).get("read_publications") is True
+
 
 class ChannelRegistryPort(Protocol):
     """Предоставляет актуальные определения платформ без зависимости от их хранения."""

@@ -11,6 +11,7 @@ import {
   useChannel,
   useChannelTenant,
   usePublicationImport,
+  useKinds,
 } from "../model/queries";
 const route = useRoute(),
   router = useRouter(),
@@ -19,6 +20,13 @@ const id = computed(() => String(route.params.channelId ?? ""));
 const tenant = useChannelTenant(),
   channel = useChannel(id),
   run = usePublicationImport(id);
+const kinds = useKinds();
+const platformLabel = computed(
+  () =>
+    kinds.data.value?.find(
+      (platform) => platform.kind === channel.data.value?.kind,
+    )?.label ?? channel.data.value?.kind,
+);
 const tab = computed(() =>
   route.name === "channel-settings" ? "settings" : "publications",
 );
@@ -45,11 +53,7 @@ function navigate(value: string | number) {
           {{ channel.data.value?.name ?? "Канал" }}
         </h1>
         <Badge v-if="channel.data.value" variant="secondary">{{
-          channel.data.value.kind === "woocommerce"
-            ? "WooCommerce"
-            : channel.data.value.kind === "prom"
-              ? "Prom"
-              : channel.data.value.kind
+          platformLabel
         }}</Badge>
       </div>
       <Button as-child variant="outline"

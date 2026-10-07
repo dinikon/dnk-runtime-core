@@ -478,7 +478,12 @@ async function remove() {
               @replace="replaceSecret"
               @cancel-replace="cancelReplace"
             />
-            <Alert v-if="['prom', 'woocommerce'].includes(kind)">
+            <Alert
+              v-if="
+                config.data.value?.config.capabilities.read_publications ===
+                true
+              "
+            >
               <AlertTitle>Публикации из магазина</AlertTitle>
               <AlertDescription v-if="editing">
                 Загрузите или обновите карточки на вкладке «Публикации».

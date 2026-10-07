@@ -17,6 +17,10 @@ const errors: Record<string, string> = {
   worker_exhausted: "Фоновое задание не завершилось. Повторите загрузку.",
   secrets_unavailable:
     "Хранилище ключей недоступно. Обратитесь к администратору.",
+  source_item_not_found:
+    "Товар исчез из источника во время загрузки. Запустите обновление заново.",
+  pagination_stalled:
+    "Источник повторяет страницы или возвращает неверную пагинацию. Запустите обновление заново.",
 };
 export function importError(code: string | null) {
   return code
@@ -42,6 +46,17 @@ const sourceLabels: Record<string, string> = {
   not_available: "Нет в наличии",
   order: "Под заказ",
   service: "Услуга",
+  "rozetka_upload:0": "Новый (0)",
+  "rozetka_upload:15": "Архивный (15)",
+  "rozetka_status:0": "Скрыт (0)",
+  "rozetka_status:1": "Опубликован (1)",
+  "rozetka_status:2": "Новый (2)",
+  "rozetka_status:3": "Отправлен на модерацию (3)",
+  "rozetka_status:4": "На модерации (4)",
+  "rozetka_status:5": "Отклонён модератором (5)",
+  "rozetka_status:6": "Требует подтверждения модератора (6)",
+  "rozetka_status:7": "Архивный (7)",
+  "rozetka_status:8": "Ожидает модерации (8)",
 };
 export function sourceLabel(value: string | null) {
   return value ? (sourceLabels[value] ?? value) : "Нет данных";

@@ -29,6 +29,8 @@ PLATFORMS = [
     ("cs_cart", "cms", "CS-Cart"),
 ]
 
+READ_PUBLICATION_KINDS = {"prom", "woocommerce", "rozetka"}
+
 
 def connection(fields: list[tuple[str, str, bool]]) -> dict[str, Any]:
     """Собирает опубликованную схему подключения из подтверждённых полей."""
@@ -71,6 +73,41 @@ CONNECTIONS = {
             ("consumer_secret", "Consumer secret", True),
         ]
     ),
+    "rozetka": {
+        "json_schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "username": {
+                    "type": "string",
+                    "title": "Логин",
+                    "minLength": 1,
+                    "maxLength": 4096,
+                },
+                "password": {
+                    "type": "string",
+                    "title": "Пароль",
+                    "minLength": 1,
+                    "maxLength": 4096,
+                    "writeOnly": True,
+                },
+            },
+            "required": ["username", "password"],
+            "additionalProperties": False,
+        },
+        "ui_schema": [
+            {
+                "property": "username",
+                "widget": "text",
+                "help_text": "Логин кабинета продавца Rozetka.",
+            },
+            {
+                "property": "password",
+                "widget": "password",
+                "help_text": "Пароль кабинета продавца Rozetka.",
+            },
+        ],
+    },
 }
 
 
@@ -97,6 +134,6 @@ class CodeChannelRegistry:
             1,
             {
                 "connection": deepcopy(CONNECTIONS.get(key)),
-                "capabilities": {"read_publications": enabled},
+                "capabilities": {"read_publications": key in READ_PUBLICATION_KINDS},
             },
         )

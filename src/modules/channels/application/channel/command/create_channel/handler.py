@@ -1,7 +1,6 @@
 from src.modules.channels.application.publication_import_run.service import (
     PublicationImportStarter,
 )
-from src.modules.channels.domain.channel.value_object.kind import ChannelKind
 from src.modules.channels.application.channel.command.create_channel.dto import (
     CreateChannelResultDTO,
 )
@@ -77,7 +76,7 @@ class CreateChannelHandler:
         if (
             self._imports is not None
             and channel.is_active
-            and channel.kind in (ChannelKind.PROM, ChannelKind.WOOCOMMERCE)
+            and definition.reads_publications
         ):
             await self._imports.start(
                 channel=channel, tenant_id=command.tenant_id, now=self._clock.now()

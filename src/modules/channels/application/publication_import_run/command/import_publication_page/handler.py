@@ -39,7 +39,7 @@ class ImportPublicationPageHandler:
     async def execute(
         self, command: ImportPublicationPageCommand
     ) -> ImportPublicationPageResultDTO:
-        """Повторно проверяет lease и ревизию, затем применяет наблюдаемые снимки."""
+        """Проверяет lease и ревизию; сохраняет первый полный снимок каждого ресурса в run."""
         loaded = await self._state.load(
             tenant_id=command.tenant_id,
             channel_id=command.channel_id,
@@ -51,6 +51,7 @@ class ImportPublicationPageHandler:
             return ImportPublicationPageResultDTO(False, False)
         channel, run = loaded
         now = self._state.clock.now()
+        observed = 0
         for resource in command.page.resources:
             current = await self._publications.find(
                 channel.id,
@@ -58,6 +59,8 @@ class ImportPublicationPageHandler:
                 resource.resource_type,
                 resource.external_id,
             )
+            if current is not None and current.last_run_id == run.id:
+                continue
             if current is None:
                 publication = ExternalPublication.create(
                     id=PublicationIdVO.from_value(self._uuids.new()),
@@ -80,9 +83,10 @@ class ImportPublicationPageHandler:
                     now=now,
                 )
             await self._publications.save(publication)
+            observed += 1
         completed = command.page.next_checkpoint is None
         run = run.record_page(
-            resources=len(command.page.resources),
+            resources=observed,
             checkpoint=command.page.next_checkpoint or run.checkpoint,
             job_id=EntityIdVO.from_value(uuid5(run.id.uuid, str(run.pages + 1))),
             now=now,

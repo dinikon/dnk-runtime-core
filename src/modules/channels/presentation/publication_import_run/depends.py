@@ -82,6 +82,12 @@ from src.modules.channels.infrastructure.publication_import_run.source.woocommer
 from src.modules.channels.infrastructure.publication_import_run.source.registry import (
     PublicationSourceRegistry,
 )
+from src.modules.channels.infrastructure.publication_import_run.source.rozetka import (
+    RozetkaPublicationSource,
+)
+from src.modules.channels.infrastructure.publication_import_run.source.rozetka_normalizer import (
+    RozetkaPublicationNormalizer,
+)
 from src.modules.shared.presentation.persistence.depends import UoWDep
 from src.modules.shared.presentation.time.depends import ClockDep
 from src.modules.shared.presentation.uuid.depends import UuidDep
@@ -106,6 +112,7 @@ def get_import_starter(uow: UoWDep, uuids: UuidDep) -> PublicationImportStarter:
         SqlAlchemyPublicationImportRunRepository(uow.session),
         build_scheduled_job_repository(uow.session),
         uuids,
+        CodeChannelRegistry(),
     )
 
 
@@ -151,6 +158,15 @@ def build_publication_source() -> PublicationSourcePort:
         {
             "prom": PromPublicationSource(client, normalizer),
             "woocommerce": WooPublicationSource(client, normalizer),
+            "rozetka": RozetkaPublicationSource(
+                PublicationJsonClient(timeout=10),
+                RozetkaPublicationNormalizer(PublicationHtmlSanitizer()),
+                budget_seconds=min(
+                    60,
+                    dnk_config.SCHEDULED_JOBS.lock_ttl_seconds / 2,
+                    dnk_config.SCHEDULED_JOBS.job_timeout_seconds / 2,
+                ),
+            ),
         }
     )
 

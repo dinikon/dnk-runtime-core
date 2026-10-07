@@ -35,6 +35,7 @@ import {
   useChannelTenant,
   usePublicationImport,
   usePublications,
+  useChannelConfig,
 } from "../model/queries";
 import {
   importLabels,
@@ -56,8 +57,10 @@ const channel = useChannel(id),
 const active = computed(() =>
   ["queued", "running"].includes(run.data.value?.status ?? ""),
 );
-const supported = computed(() =>
-  ["prom", "woocommerce"].includes(channel.data.value?.kind ?? ""),
+const kind = computed(() => channel.data.value?.kind ?? "");
+const config = useChannelConfig(kind);
+const supported = computed(
+  () => config.data.value?.config.capabilities.read_publications === true,
 );
 let generation = 0,
   operation: AbortController | null = null;
@@ -123,13 +126,21 @@ async function refresh() {
         >
       </CardHeader>
       <CardContent class="flex flex-col gap-4">
-        <Alert v-if="!supported"
+        <Alert v-if="config.isError.value" variant="destructive">
+          <AlertTitle>Не удалось получить возможности платформы</AlertTitle>
+          <AlertDescription
+            ><Button variant="outline" @click="config.refetch()"
+              >Повторить</Button
+            ></AlertDescription
+          >
+        </Alert>
+        <Alert v-else-if="config.data.value && !supported"
           ><AlertTitle>Чтение публикаций пока недоступно</AlertTitle
           ><AlertDescription
-            >В этом срезе поддерживаются Prom и WooCommerce.</AlertDescription
+            >Платформа пока не поддерживает загрузку карточек.</AlertDescription
           ></Alert
         >
-        <Alert v-else-if="!channel.data.value?.is_active"
+        <Alert v-else-if="channel.data.value && !channel.data.value.is_active"
           ><AlertTitle>Канал выключен</AlertTitle
           ><AlertDescription
             >Включите канал в настройках подключения, чтобы загрузить
@@ -143,7 +154,7 @@ async function refresh() {
         >
           <AlertTitle>{{ importLabels[run.data.value.status] }}</AlertTitle>
           <AlertDescription
-            >Ресурсов: {{ run.data.value.resources }} · Страниц:
+            >Карточек: {{ run.data.value.resources }} · Обработано порций:
             {{ run.data.value.pages
             }}<span v-if="run.data.value.error_code"
               >. {{ importError(run.data.value.error_code) }}</span
