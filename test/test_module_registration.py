@@ -1,4 +1,4 @@
-"""Проверки состава API и tenant metadata после удаления Catalog и Inventory."""
+"""Проверки состава API и tenant metadata после первого среза Catalog и удаления Inventory."""
 
 import unittest
 from pathlib import Path
@@ -28,12 +28,12 @@ class ModuleRegistrationTests(unittest.TestCase):
         ):
             self.assertFalse((root / relative_path).exists())
 
-    def test_routes_exclude_catalog_and_inventory_and_keep_channels(self) -> None:
-        """Сборка API не содержит Catalog и Inventory и сохраняет Channels."""
+    def test_routes_include_catalog_and_channels_but_exclude_inventory(self) -> None:
+        """Сборка API содержит Catalog и Channels, Inventory отсутствует."""
         app = FastAPI()
         app.include_router(router)
         paths = set(app.openapi()["paths"])
-        self.assertFalse(any(path.startswith("/api/console/catalog") for path in paths))
+        self.assertTrue(any(path.startswith("/api/console/catalog") for path in paths))
         self.assertFalse(
             any(path.startswith("/api/console/inventory") for path in paths)
         )
@@ -47,7 +47,14 @@ class ModuleRegistrationTests(unittest.TestCase):
     ) -> None:
         """Исторические имена таблиц не регистрируют удалённые ORM-модели."""
         tables = set(migration_metadata().tables)
-        self.assertFalse(any(name.startswith("catalog_") for name in tables))
+        self.assertTrue(
+            {
+                "catalog_products",
+                "catalog_product_translations",
+                "catalog_variant_content_values",
+            }
+            <= tables
+        )
         self.assertTrue({"skus", "warehouses"}.isdisjoint(tables))
         self.assertTrue({"channels", "channel_publications"} <= tables)
         self.assertFalse(any(name.startswith("warehousing_") for name in tables))
@@ -56,8 +63,8 @@ class ModuleRegistrationTests(unittest.TestCase):
         self.assertIn("catalog_products", HISTORICAL_TENANT_TABLE_NAMES)
 
     def test_cancelled_warehousing_migrations_are_absent(self) -> None:
-        """Отмена Warehousing возвращает tenant head к 0016 и удаляет обе ревизии."""
-        self.assertEqual(TenantMigrator().head(), "0016_remove_inventory")
+        """Warehousing отсутствует; новая head принадлежит Catalog."""
+        self.assertEqual(TenantMigrator().head(), "0017_catalog_simple")
         directory = Path(__file__).resolve().parents[1] / "migrations/tenant/versions"
         for name in ("0017_warehousing_warehouses.py", "0018_warehousing_zones.py"):
             self.assertFalse((directory / name).exists())

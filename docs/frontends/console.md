@@ -15,6 +15,7 @@ modules.
 - Authenticates console users through email OTP.
 - Loads and stores the current console user session.
 - Provides tenant-scoped Contact and Company management in CRM.
+- Provides SIMPLE Catalog products, content types, blocks and independent locale editors.
 - Provides price-list and partner-offer workflows.
 - Provides profile and administrator-only workspace access-management screens.
 
@@ -231,6 +232,17 @@ If a local build fails before application compilation while loading Rollup's
 native optional package, treat it as a local dependency installation issue and
 repair the frontend `node_modules` installation before evaluating application
 code changes.
+
+## Catalog
+
+The workspace Catalog navigation opens `/catalog/products`, `/catalog/product-types`
+and `/catalog/content-blocks`. Lazy editor routes include new products, individual
+products, their Variant scope, and content definitions. Locale is explicit and
+stored in the URL; Product/Variant never inherit a missing translation. Forms
+save each section independently and preserve input on version conflicts. System
+schemas are read-only. SKU and downloadable files remain unavailable until their
+owning modules supply contracts. See [Catalog](../modules/catalog.md) and
+[the slice contracts](../plan/catalog-slice-1.md).
 
 ## Related
 

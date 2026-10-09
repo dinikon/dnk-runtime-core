@@ -15,6 +15,19 @@ import src.modules.identity.infrastructure.persistence.models.cloud_identity
 import src.modules.identity.infrastructure.persistence.models.invitation  # noqa: F401
 import src.modules.price_lists.infrastructure.persistence  # noqa: F401
 
+import src.modules.catalog.infrastructure.persistence.models.content_block  # noqa: F401
+import src.modules.catalog.infrastructure.persistence.models.product_type  # noqa: F401
+import src.modules.catalog.infrastructure.persistence.models.product_type_block  # noqa: F401
+import src.modules.catalog.infrastructure.persistence.models.product  # noqa: F401
+import src.modules.catalog.infrastructure.persistence.models.variant  # noqa: F401
+
+import src.modules.catalog.infrastructure.persistence.models.content_block_translation  # noqa: F401
+import src.modules.catalog.infrastructure.persistence.models.product_type_translation  # noqa: F401
+import src.modules.catalog.infrastructure.persistence.models.product_translation  # noqa: F401
+import src.modules.catalog.infrastructure.persistence.models.product_content_value  # noqa: F401
+import src.modules.catalog.infrastructure.persistence.models.variant_translation  # noqa: F401
+import src.modules.catalog.infrastructure.persistence.models.variant_content_value  # noqa: F401
+
 # Не удалять имена при удалении модели: autogenerate должен видеть DROP TABLE.
 HISTORICAL_TENANT_TABLE_NAMES = frozenset(
     {
@@ -29,6 +42,8 @@ HISTORICAL_TENANT_TABLE_NAMES = frozenset(
         "catalog_product_contents",
         "catalog_product_content_values",
         "catalog_variant_contents",
+        "catalog_product_translations",
+        "catalog_variant_translations",
         "catalog_variant_content_values",
         "catalog_content_block_definitions",
         "catalog_content_block_translations",

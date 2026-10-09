@@ -35,11 +35,12 @@ Revision `0012_catalog` is retained as historical schema creation. Revision
 `0015_remove_catalog`, after `0014_channel_publications`, removes all 14 Catalog
 tables and their contents. It preserves Inventory, Channels and other tenant data.
 The historical table names remain registered for migration ownership, while the
-runtime no longer registers Catalog models. Fresh tenants reach a head without
-Catalog tables. Existing tenants need the normal explicit tenant upgrade.
+runtime stopped registering the old Catalog models at that revision. Revision
+`0017_catalog_simple` now introduces the new independent model. Existing tenants
+need the normal explicit tenant upgrade.
 Downgrading to `0014_channel_publications` restores only the empty Catalog schema
 and its system seeds; deleted product data cannot be recovered by a downgrade.
-The future Catalog is designed independently in [its plan](../plan/catalog.md).
+The new Catalog is designed independently in [its plan](../plan/catalog.md).
 Revision `0016_remove_inventory`, after `0015_remove_catalog`, removes `skus` and
 `warehouses` and their contents from the selected tenant schema without CASCADE.
 Runtime no longer registers Inventory models or routes; historical table names and
@@ -47,6 +48,15 @@ creation revisions remain for Alembic ownership and downgrade. Fresh tenants rea
 a head without Inventory tables. Upgrade existing tenants with
 `dnk-manage tenant-migrations upgrade --all`. Downgrading to `0015_remove_catalog`
 restores the empty tables, constraints and warehouse index, but not deleted data.
+Revision `0017_catalog_simple`, after `0016_remove_inventory`, creates the new
+Catalog with 11 structured tables: SIMPLE products/variants, content definitions,
+versioned schema links, label translations, PRODUCT/VARIANT translation markers
+and individual content values. There are no JSON/JSONB columns. The migration seeds
+Default (`default`) and three protected blocks. It preserves other modules and
+requires an explicit tenant upgrade before Catalog API is used. Downgrade removes
+only the new Catalog tables and their data; it does not recover the old Catalog.
+See [Catalog](../modules/catalog.md) for contracts and concurrency requirements.
+
 Revisions contain no fixed tenant names and do not import current ORM models.
 
 The migration environment uses transaction-local `search_path` (through PostgreSQL `set_config(..., true)`) and explicitly sets `version_table_schema`. Successful execution restores the previous path. Failed transactions are rolled back by the owner. Migration files must preserve transactional execution: no internal commit, autocommit block or nontransactional DDL in onboarding revisions.

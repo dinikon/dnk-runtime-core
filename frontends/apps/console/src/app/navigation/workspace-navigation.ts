@@ -12,6 +12,22 @@ import type { WorkspaceNavigation } from "./workspace-navigation.types";
 export const workspaceNavigation: WorkspaceNavigation = {
   navGroups: [
     {
+      title: "Каталог",
+      items: [
+        { title: "Товары", url: "/catalog/products", icon: ShoppingBasket },
+        {
+          title: "Типы контента",
+          url: "/catalog/product-types",
+          icon: FileSpreadsheet,
+        },
+        {
+          title: "Блоки контента",
+          url: "/catalog/content-blocks",
+          icon: FileSpreadsheet,
+        },
+      ],
+    },
+    {
       title: "Интеграции",
       items: [{ title: "Каналы", url: "/channels", icon: Plug }],
     },
