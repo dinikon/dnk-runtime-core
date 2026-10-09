@@ -23,7 +23,9 @@ export function useCatalogContext(
   const tenantId = computed(() => tenant.tenant?.tenant_id ?? "");
   const sessionKey = computed(() => `${tenantId.value}:${user.user?.id ?? ""}`);
   const locale = computed(() =>
-    typeof route.query.locale === "string" ? route.query.locale : "",
+    typeof route.query.locale === "string"
+      ? route.query.locale
+      : (user.user?.interface_language ?? ""),
   );
   const locales = useQuery({
     queryKey: computed(() => [
