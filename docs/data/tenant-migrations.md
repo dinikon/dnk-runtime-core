@@ -49,13 +49,6 @@ a head without Inventory tables. Upgrade existing tenants with
 restores the empty tables, constraints and warehouse index, but not deleted data.
 Revisions contain no fixed tenant names and do not import current ORM models.
 
-Revision `0017_warehousing_warehouses`, after `0016_remove_inventory`, creates the
-new tenant-local `warehousing_warehouses` table for the first Warehousing slice.
-It does not restore historical Inventory tables or data. Deploy the migration
-files and run `dnk-manage tenant-migrations upgrade --all` before starting the
-updated API; new tenants use the new head automatically. Downgrade to `0016`
-drops only the new Warehousing table. See [Warehousing](../modules/warehousing.md).
-
 The migration environment uses transaction-local `search_path` (through PostgreSQL `set_config(..., true)`) and explicitly sets `version_table_schema`. Successful execution restores the previous path. Failed transactions are rolled back by the owner. Migration files must preserve transactional execution: no internal commit, autocommit block or nontransactional DDL in onboarding revisions.
 
 An in-process lock protects Alembic's global context proxies; a schema-specific advisory transaction lock serializes separate workers/processes. The database lock is acquired before the process lock to avoid holding the latter while waiting for another transaction's commit.
