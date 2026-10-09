@@ -64,5 +64,10 @@ dnk-manage reference-data sync --dataset all
 
 Глобальный справочник содержит возможные коды, но не выбирает их за tenant.
 Потребители проверяют активные коды локалей через Application-контракты.
+Проверка одного timezone доступна через публичный Application-сценарий
+`CheckTimeZoneQuery(code) → CheckTimeZoneResultDTO(code, is_active)`.
+Он читает одну запись, без загрузки списка и без передачи Domain/SQL-моделей
+потребителю. Warehousing вызывает его через собственный порт и адаптер на
+session общего UoW. Отдельный HTTP endpoint для этой внутренней проверки не нужен.
 Локаль публикации выбирают Channels. Tenancy не хранит отдельный список
 разрешённых локалей.

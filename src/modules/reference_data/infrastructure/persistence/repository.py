@@ -107,6 +107,16 @@ class SqlAlchemyCatalogRepository:
             )
         )
 
+    async def has_active_time_zone(self, code: str) -> bool:
+        """Проверяет один активный timezone без загрузки всего справочника."""
+        return bool(
+            await self._session.scalar(
+                select(TimeZoneModel.code).where(
+                    TimeZoneModel.code == code, TimeZoneModel.active.is_(True)
+                )
+            )
+        )
+
     async def list_time_zones(self) -> list[TimeZone]:
         zones = (
             await self._session.scalars(

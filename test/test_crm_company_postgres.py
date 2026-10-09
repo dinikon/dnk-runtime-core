@@ -97,7 +97,8 @@ class CompanyPostgresTests(unittest.IsolatedAsyncioTestCase):
             self.collection, headers=self.headers, json={"legal_name": legal_name}
         )
 
-    async def test_crud_isolation_duplicate_name_and_cascade(self):
+    async def test_crud_isolation_duplicate_name_and_cascade(self) -> None:
+        """Проверяет CRUD по ID, tenant-изоляцию и связи при допустимых дублях названия."""
         created = await self.create()
         self.assertEqual(created.status_code, 201, created.text)
         self.assertEqual(created.json()["legal_name"], "ACME  Group")
@@ -128,7 +129,8 @@ class CompanyPostgresTests(unittest.IsolatedAsyncioTestCase):
             self.item, headers=self.headers, json={"legal_name": " Renamed "}
         )
         self.assertEqual(updated.status_code, 200, updated.text)
-        self.assertEqual((await self.rows(CompanyModel))[0]["legal_name"], "Renamed")
+        company_rows = {row["id"]: row for row in await self.rows(CompanyModel)}
+        self.assertEqual(company_rows[self.identifier]["legal_name"], "Renamed")
         self.assertEqual(
             (await self.rows(CompanyModel, self.other))[0]["legal_name"], "Other"
         )

@@ -18,12 +18,14 @@ from src.modules.tenancy.presentation.http.router import router as tenancy_route
 from src.modules.reference_data.presentation.router import (
     router as reference_data_router,
 )
+from src.modules.warehousing.presentation.router import router as warehousing_router
 
 router = APIRouter(prefix="/api/console")
 
 router.include_router(channels_router)
 router.include_router(tenancy_router)
 router.include_router(reference_data_router)
+router.include_router(warehousing_router)
 router.include_router(identity_router)
 router.include_router(contact_points_router)
 router.include_router(contacts_router)

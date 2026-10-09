@@ -34,6 +34,13 @@ class ModuleRegistrationTests(unittest.TestCase):
             any(path.startswith("/api/console/inventory") for path in paths)
         )
         self.assertTrue(any(path.startswith("/api/console/channels") for path in paths))
+        self.assertEqual(
+            {path for path in paths if path.startswith("/api/console/warehousing")},
+            {
+                "/api/console/warehousing/warehouses",
+                "/api/console/warehousing/warehouses/{warehouse_id}",
+            },
+        )
 
     def test_metadata_excludes_removed_modules_but_retains_migration_ownership(
         self,
@@ -43,5 +50,7 @@ class ModuleRegistrationTests(unittest.TestCase):
         self.assertFalse(any(name.startswith("catalog_") for name in tables))
         self.assertTrue({"skus", "warehouses"}.isdisjoint(tables))
         self.assertTrue({"channels", "channel_publications"} <= tables)
+        self.assertIn("warehousing_warehouses", tables)
+        self.assertIn("warehousing_warehouses", HISTORICAL_TENANT_TABLE_NAMES)
         self.assertTrue({"skus", "warehouses"} <= HISTORICAL_TENANT_TABLE_NAMES)
         self.assertIn("catalog_products", HISTORICAL_TENANT_TABLE_NAMES)

@@ -14,6 +14,7 @@ import src.modules.identity.infrastructure.persistence.models.user_email  # noqa
 import src.modules.identity.infrastructure.persistence.models.cloud_identity
 import src.modules.identity.infrastructure.persistence.models.invitation  # noqa: F401
 import src.modules.price_lists.infrastructure.persistence  # noqa: F401
+import src.modules.warehousing.infrastructure.persistence.models.warehouse  # noqa: F401
 
 # Не удалять имена при удалении модели: autogenerate должен видеть DROP TABLE.
 HISTORICAL_TENANT_TABLE_NAMES = frozenset(
@@ -22,6 +23,7 @@ HISTORICAL_TENANT_TABLE_NAMES = frozenset(
         "channel_publications",
         "channel_publication_import_runs",
         "warehouses",
+        "warehousing_warehouses",
         "skus",
         "catalog_products",
         "catalog_variants",

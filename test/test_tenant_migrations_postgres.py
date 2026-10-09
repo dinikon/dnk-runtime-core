@@ -203,8 +203,12 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                     lambda conn: inspect(conn).get_table_names(schema="public")
                 )
             )
-            await self.migrator.upgrade(connection, schema)
-            await self.migrator.upgrade(connection, schema)
+            await self.migrator._migrate(
+                connection, schema, command.upgrade, "0016_remove_inventory"
+            )
+            await self.migrator._migrate(
+                connection, schema, command.upgrade, "0016_remove_inventory"
+            )
             tables_after = set(
                 await connection.run_sync(
                     lambda conn: inspect(conn).get_table_names(schema=schema)
