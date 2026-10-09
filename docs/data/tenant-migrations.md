@@ -29,8 +29,8 @@ indexes. Revision `0008_contact_points` creates the tenant-local directory, bind
 foreign keys. It seeds six labels with fixed identifiers and timestamps; seed actors are null. Upgrade existing
 tenants before running code that reads the new CRM arrays. Existing CRM rows are preserved with empty arrays.
 Revision `0011_inventory_skus`, after `0010_crm_company_legal_name`, adds the tenant-local
-Inventory `skus` directory with unique codes and audit fields. Upgrade existing tenant
-schemas before using the SKU API; fresh tenants receive it through the same bootstrap.
+Inventory `skus` directory with unique codes and audit fields; this revision remains
+in the migration history after removal of the module.
 Revision `0012_catalog` is retained as historical schema creation. Revision
 `0015_remove_catalog`, after `0014_channel_publications`, removes all 14 Catalog
 tables and their contents. It preserves Inventory, Channels and other tenant data.
@@ -40,6 +40,13 @@ Catalog tables. Existing tenants need the normal explicit tenant upgrade.
 Downgrading to `0014_channel_publications` restores only the empty Catalog schema
 and its system seeds; deleted product data cannot be recovered by a downgrade.
 The future Catalog is designed independently in [its plan](../plan/catalog.md).
+Revision `0016_remove_inventory`, after `0015_remove_catalog`, removes `skus` and
+`warehouses` and their contents from the selected tenant schema without CASCADE.
+Runtime no longer registers Inventory models or routes; historical table names and
+creation revisions remain for Alembic ownership and downgrade. Fresh tenants reach
+a head without Inventory tables. Upgrade existing tenants with
+`dnk-manage tenant-migrations upgrade --all`. Downgrading to `0015_remove_catalog`
+restores the empty tables, constraints and warehouse index, but not deleted data.
 Revisions contain no fixed tenant names and do not import current ORM models.
 
 The migration environment uses transaction-local `search_path` (through PostgreSQL `set_config(..., true)`) and explicitly sets `version_table_schema`. Successful execution restores the previous path. Failed transactions are rolled back by the owner. Migration files must preserve transactional execution: no internal commit, autocommit block or nontransactional DDL in onboarding revisions.
@@ -83,7 +90,6 @@ Control Plane v1 targets a fresh database. Migration or adoption of existing ins
 
 ## Related
 
-- [Inventory](../modules/inventory.md)
 - [CRM](../modules/crm.md)
 - [Tenancy](../modules/tenancy.md)
 - [Persistence and UoW](../architecture/persistence-and-uow.md)

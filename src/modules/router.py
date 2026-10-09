@@ -1,7 +1,6 @@
 from src.modules.channels.presentation.router import router as channels_router
 from fastapi import APIRouter
 
-from src.modules.inventory.presentation.sku.router import router as skus_router
 from src.modules.crm.presentation.contact.router import router as contacts_router
 from src.modules.crm.presentation.company.router import router as companies_router
 from src.modules.contact_points.presentation.router import (
@@ -25,7 +24,6 @@ router = APIRouter(prefix="/api/console")
 router.include_router(channels_router)
 router.include_router(tenancy_router)
 router.include_router(reference_data_router)
-router.include_router(skus_router)
 router.include_router(identity_router)
 router.include_router(contact_points_router)
 router.include_router(contacts_router)

@@ -25,13 +25,17 @@ def iter_imports(path: Path) -> list[str]:
 
 
 class ArchitectureBoundariesTests(unittest.TestCase):
-    def test_removed_dynamic_modules_have_no_imports(self) -> None:
+    def test_removed_modules_have_no_imports(self) -> None:
         for root in ("src", "test"):
             for path in iter_python_files(root):
                 for module_name in iter_imports(path):
                     self.assertFalse(
                         module_name.startswith(
-                            ("src.modules.schema_registry", "src.modules.runtime_data")
+                            (
+                                "src.modules.schema_registry",
+                                "src.modules.runtime_data",
+                                "src.modules.inventory",
+                            )
                         ),
                         msg=f"{path} imports removed module {module_name}",
                     )
@@ -145,63 +149,6 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                     self.assertFalse(
                         name.startswith(prefixes), f"{path} imports {name}"
                     )
-
-    def test_inventory_domain_dependencies_point_inward(self) -> None:
-        forbidden = (
-            "sqlalchemy",
-            "alembic",
-            "fastapi",
-            "pydantic",
-            "src.modules.inventory.infrastructure",
-            "src.modules.inventory.presentation",
-            "src.modules.inventory.application",
-            "src.modules.shared.infrastructure",
-            "src.modules.shared.presentation",
-            "src.modules.shared.application",
-        )
-        for path in iter_python_files("src/modules/inventory/domain"):
-            for name in iter_imports(path):
-                self.assertFalse(name.startswith(forbidden), f"{path} imports {name}")
-
-    def test_inventory_sku_application_and_persistence_keep_boundaries(self) -> None:
-        forbidden = (
-            "sqlalchemy",
-            "alembic",
-            "fastapi",
-            "pydantic",
-            "src.config",
-            "src.modules.inventory.infrastructure",
-            "src.modules.inventory.presentation",
-            "src.modules.shared.infrastructure",
-            "src.modules.shared.presentation",
-        )
-        for path in iter_python_files("src/modules/inventory/application/sku"):
-            for name in iter_imports(path):
-                self.assertFalse(name.startswith(forbidden), f"{path}: {name}")
-        for root in ("application/sku", "infrastructure/sku/persistence"):
-            for path in iter_python_files("src/modules/inventory/" + root):
-                for node in ast.walk(ast.parse(path.read_text())):
-                    if isinstance(node, ast.Call) and isinstance(
-                        node.func, ast.Attribute
-                    ):
-                        self.assertNotIn(
-                            node.func.attr, ("commit", "rollback"), str(path)
-                        )
-        for root in (
-            "domain/sku",
-            "application/sku",
-            "infrastructure/sku",
-            "presentation/sku",
-        ):
-            for path in iter_python_files("src/modules/inventory/" + root):
-                if path.name == "__init__.py":
-                    self.assertEqual(path.read_text().strip(), "", str(path))
-                for name in iter_imports(path):
-                    if name.startswith("src.modules"):
-                        self.assertTrue(
-                            (PROJECT_ROOT / (name.replace(".", "/") + ".py")).is_file(),
-                            f"{path}: indirect import {name}",
-                        )
 
     def test_no_modules_namespace_imports_are_used(self) -> None:
         forbidden_prefix = "modules."

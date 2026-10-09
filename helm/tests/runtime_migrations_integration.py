@@ -234,7 +234,7 @@ def inside_tests():
 
         async def test_published_image_bootstrap_migrations_repeat_preserve_existing_data(
             self,
-        ):
+        ) -> None:
             ids = await self.seed_tenants()
             await self.cli()
             await self.cli()
@@ -248,7 +248,7 @@ def inside_tests():
                 self.assertIsNotNone(
                     await self.scalar(
                         "SELECT to_regclass(:name)",
-                        {"name": "dnk_{}.warehouses".format(tenant_id.hex)},
+                        {"name": "dnk_{}.users".format(tenant_id.hex)},
                     )
                 )
             self.assertEqual(
@@ -259,7 +259,9 @@ def inside_tests():
                 "tenant-preserved",
             )
 
-        async def test_published_image_missing_second_tenant_rolls_back_first(self):
+        async def test_published_image_missing_second_tenant_rolls_back_first(
+            self,
+        ) -> None:
             ids = await self.seed_tenants(missing_last=True)
             output = await self.cli(success=False)
             self.assertIn("batch rolled back", output)
@@ -272,7 +274,7 @@ def inside_tests():
             self.assertIsNone(
                 await self.scalar(
                     "SELECT to_regclass(:name)",
-                    {"name": "dnk_{}.warehouses".format(ids[0].hex)},
+                    {"name": "dnk_{}.users".format(ids[0].hex)},
                 )
             )
             self.assertEqual(

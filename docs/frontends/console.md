@@ -1,5 +1,4 @@
-> Dynamic schema/object APIs remain removed. CRM uses static backend contracts and tenant tables. Inventory still has
-> no HTTP API or UI in this version.
+> Dynamic schema/object APIs remain removed. CRM uses static backend contracts and tenant tables. Inventory and its SKU workspace have been removed.
 
 # Console Frontend
 
@@ -213,14 +212,6 @@ Run console commands from `frontends/`:
 Optional environment:
 
 - `VITE_API_BASE_URL`: backend API base URL. Defaults to `/api`.
-
-## SKU Workspace
-
-The `inventory` module adds the **Склад** navigation group. `/inventory/skus`
-loads SKU rows in pages of 50, `/inventory/skus/new` creates a SKU from `code`
-and `title`, and `/inventory/skus/:skuId` displays its details and audit fields.
-The module uses the existing session and CSRF client; editing and deletion are
-not supported by the current API.
 
 ## Quality And Verification
 

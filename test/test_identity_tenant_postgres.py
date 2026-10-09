@@ -304,7 +304,7 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
                         )
                     )
 
-    async def test_upgrade_from_warehouses_and_identity_downgrade(self):
+    async def test_upgrade_from_warehouses_and_identity_downgrade(self) -> None:
         tenant_id = await self.new_tenant_schema()
         schema = self.naming.schema_name(tenant_id)
         async with self.engine.begin() as connection:
@@ -330,7 +330,7 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(foreign_keys[0]["referred_schema"], schema)
             self.assertEqual(foreign_keys[0]["referred_table"], "users")
-            self.assertTrue(
+            self.assertFalse(
                 await connection.run_sync(
                     lambda conn: inspect(conn).has_table("warehouses", schema=schema)
                 )
