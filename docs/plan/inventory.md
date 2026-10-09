@@ -3,6 +3,8 @@
 Дата: 2026-10-09. Статус: целевой план нового функционала; реализация еще не начата.
 Требования из постановки фиксируются как основа модели. Дополнительные решения
 помечены как предложения и уточняются до реализации соответствующего этапа.
+Серийный учет включен в MVP; согласованные решения о нем и об ограничениях
+единиц учета и вместимости перечислены в разделе 14.
 
 Связанные документы:
 
@@ -29,11 +31,11 @@ Catalog проектируется заново и пока не имеет ре
 | Контекст | Владеет | Предоставляет соседям |
 | --- | --- | --- |
 | Warehousing | Склады, зоны, адреса, иерархия, ограничения размещения | Application-контракты структуры и проверки размещения |
-| Inventory | Учетные SKU, партии, запасы, резервы, документы, журнал, инвентаризации | Application-контракты SKU, остатков, доступности и операций |
+| Inventory | Учетные SKU, партии, серийные экземпляры, запасы, резервы, документы, журнал, инвентаризации | Application-контракты SKU, экземпляров, остатков, доступности и операций |
 | Catalog | Product, Variant, товарный контент и связь продаваемой позиции с учетным SKU | Снимок физической/виртуальной позиции через Application-контракт |
 
 **Изменяемое количество принадлежит Inventory.** Warehouse, WarehouseZone,
-StorageLocation, InventoryItem и StockLot не содержат текущего остатка.
+StorageLocation, InventoryItem, StockLot и StockSerial не содержат текущего остатка.
 StorageLocation хранит вместимость и ограничения, но не `quantity` и не
 коллекцию запасов. Inventory использует ID склада и адреса.
 
@@ -117,16 +119,23 @@ ID склада у зоны и ячейки не меняется обычным
 иерархии одного склада сериализуются, иначе две операции могут создать цикл.
 
 LocationPolicy — чистая доменная политика Warehousing. Получает неизменяемые
-снимки склада, зоны, адреса, характеристик SKU, состояния запасов и заполнения.
+снимки склада, зоны, адреса, характеристик SKU и состояния запасов.
 Проверяет активность, принадлежность, разрешенный статус/тип товара, ограничения
-хранения и вместимость. Снимки загружает Application, сама политика не читает БД.
+хранения. Снимки загружает Application, сама политика не читает БД.
 Inventory вызывает ее через публичный Application-контракт Warehousing и свой
 порт; чужой domain service не импортируется в Inventory.
 
-Вместимость по массе и объему считается из всех размещенных запасов под
-блокировкой адреса. Количества разных SKU и UOM нельзя складывать как общие
-«штуки». Незаполненные габариты не заменяются нулем: при включенном ограничении
-размещение отклоняется, если данных недостаточно.
+**В MVP расчет занятого объема/массы и контроль вместимости не реализуются.**
+Вместимость остается опциональной: в HTTP-контрактах MVP она отсутствует или null,
+попытка включить контроль отклоняется как неподдерживаемая настройка (422).
+Масса и габариты SKU также опциональны и не обязательны для приемки;
+неизвестные характеристики не заменяются нулем.
+
+В будущей версии лимиты остаются у Warehousing, а заполнение рассчитывает Inventory
+из размещенных запасов и характеристик единицы/упаковки. LocationPolicy получает
+снимок заполнения; проверка проводится под общей блокировкой адреса. Количества
+разных SKU и UOM нельзя складывать как общие «штуки». При включенном ограничении
+недостаточные данные приводят к отказу размещения, а не к нулевой загрузке.
 
 **Предложение для MVP:** деактивация склада/зоны/адреса, исключение адреса из
 продажи и ужесточение ограничений требуют проверки влияния через порт Inventory.
@@ -140,6 +149,7 @@ Inventory вызывает ее через публичный Application-кон
 | --- | --- | --- |
 | InventoryItem / `inventory_item` | Учетный SKU, код, политика, базовая UOM, активность, характеристики единицы | Корректный режим учета, защищенные изменения политики |
 | StockLot / `stock_lot` | Item ID, номер партии, производство, срок годности, блокировка | Принадлежность одному Item, согласованные даты |
+| StockSerial / `stock_serial` | Идентичность экземпляра: Item ID, строковый номер, optional Lot ID, состояние, аудит | Уникальный номер внутри Item, соответствие партии и режиму учета, допустимые переходы; без второго баланса |
 | StockReservation / `stock_reservation` | Потребность, Item, склад, owner, зарезервировано/потреблено/освобождено | Потребление и освобождение не превышают активный остаток резерва |
 | GoodsReceipt / `goods_receipt` | Черновик приемки и GoodsReceiptLine | Положительные строки, проведение один раз, проведенное неизменяемо |
 | StockTransfer / `stock_transfer` | Склады, строки, отправленное/принятое количество, статус | Приемка не больше отправленного, контроль каждой частичной приемки |
@@ -165,6 +175,50 @@ StockStatus, Quantity VO, StockBalance и StockAvailability.
 - Проверки достаточности, сохранения резервов и сохранения количества для
   внутренних операций выполняют политики на свежих снимках под блокировками.
 
+### 3.3. StockSerial: идентичность и жизненный цикл
+
+StockSerial — самостоятельный Aggregate Root, а не поле карточки товара или
+внутренняя Entity партии. Хранит `id`, `inventory_item_id`, `serial_number`,
+`lot_id: UUID | None`, `state`, `created_at`, `created_by`, `updated_at`,
+`updated_by`, `revision`. Аудит использует доверенного actor и UTC.
+Текущие quantity, warehouse_id и location_id в агрегате не хранятся:
+Inventory определяет размещение по единственному положительному StockBalance.
+
+Номер — строка: удаляются только внешние пробелы, пустое значение отклоняется.
+Регистр и ведущие нули сохраняются; `001a` и `001A` — разные номера.
+Уникальность действует внутри Item и tenant, включая уже выданные и списанные
+экземпляры. Один номер разных Item допустим. После первого проведения Item,
+номер и принадлежность партии не изменяются обычным обновлением.
+
+| Состояние StockSerial | Значение и согласованный баланс |
+| --- | --- |
+| IN_STOCK | Один физический баланс +1; пригодность задается отдельным StockStatus |
+| IN_TRANSIT | Один транзитный баланс +1, физического размещения нет |
+| ISSUED | Экземпляр выдан за пределы учета; положительного баланса нет |
+| WRITTEN_OFF | Экземпляр списан или удален отрицательной корректировкой; положительного баланса нет |
+
+Фабрика `create(...)` вызывается при проведении обычной приемки, положительной
+корректировки с основанием или утверждении обнаруженного излишка.
+Черновик приемки содержит номера, но не регистрирует StockSerial.
+Отдельный сценарий предварительной регистрации экземпляров не вводится.
+`restore(...)` восстанавливает агрегат без событий создания; изменения
+выполняются явными методами `dispatch`, `receive`, `issue`, `write_off`,
+`return_from_issue` и методом компенсации с проверенным основанием.
+
+Обычные переходы: IN_STOCK → IN_TRANSIT → IN_STOCK при transfer;
+IN_STOCK → ISSUED при выдаче; IN_STOCK → WRITTEN_OFF при списании/недостаче.
+Перенос адреса и смена StockStatus сохраняют IN_STOCK.
+Возврат по последней невозвращенной выдаче переводит ISSUED → IN_STOCK
+с StockStatus QUARANTINE. Компенсация восстанавливает состояние только после
+проверки исходной и последующих операций. Списание из транзита, если оно
+разрешено соответствующим документом, переводит IN_TRANSIT → WRITTEN_OFF.
+Произвольный PATCH состояния, номера или размещения не предусматривается.
+
+Инварианты собственного жизненного цикла проверяет StockSerial; чистые правила
+соответствия Item/Lot/Serial и допустимости записей — StockPostingPolicy на
+снимках. Application загружает их после блокировок и сохраняет агрегат, документ,
+журнал, баланс, резерв и Outbox в общей UoW. Mapper только преобразует данные.
+
 ## 4. Связь InventoryItem и Catalog.Variant
 
 InventoryItem — самостоятельная идентичность складируемой единицы, а не копия
@@ -184,7 +238,7 @@ Catalog до их реализации. На такую ссылку не ста
 быть черновиком без связи. Смена/удаление связи не удаляет InventoryItem,
 его партии, документы или историю.
 
-Регистрация Item принимает учетный код и политику. Опциональный исходный
+Регистрация Item принимает учетный код и разрешенные настройки политики. Опциональный исходный
 `product_id + variant_id` служит для проверки складируемости через
 CatalogVariantReaderProtocol, а не для определения владельца Item.
 Без исходного Variant регистрируется самостоятельная физическая учетная единица.
@@ -193,21 +247,39 @@ Handlers регистрации Item и привязки Variant не вызыв
 
 Размеры и масса единицы остаются у Inventory, как в плане Catalog. Транспортная
 упаковка и PackingPlan не входят в складской MVP. Первый этап работает только
-с базовой UOM; коэффициенты продаваемых упаковок вводятся отдельным решением.
+с базовой единицей `piece`; справочник единиц, другие UOM, упаковочные коэффициенты
+и конвертация вводятся после MVP. Новые единицы не переосмысливают существующие
+остатки и журнал. В будущем документ с упаковками сохраняет исходные количество
+и единицу, использованный коэффициент и количество в базовой единице;
+баланс продолжает вестись в базовой единице Item.
 
 InventoryPolicy включает `tracking_mode`, `base_uom`, `allow_fractional`,
 `track_expiration`, `allow_negative_stock=False`.
 
-- MVP реализует `NONE` и `LOT`. SERIAL и LOT_AND_SERIAL — следующие этапы:
-  API отклоняет их, пока нет учета серийных экземпляров и их идентичности.
-- Проверка `requires_lot()` для полной модели учитывает LOT и LOT_AND_SERIAL;
-  проверка только равенства LOT из наброска непригодна для расширения.
-- В режиме NONE `lot_id` запрещен; в LOT обязателен и должен принадлежать Item.
+- Все Item в MVP имеют `base_uom="piece"`, `allow_fractional=False`.
+  Поля сохраняются в модели и результатах, но пользователь не выбирает единицу:
+  фабрика регистрации задает значения автоматически. Request/Command регистрации
+  и обновления политики не принимают изменение этих полей в MVP.
+- MVP реализует все четыре режима TrackingMode по матрице ниже.
+- `requires_lot()` учитывает LOT и LOT_AND_SERIAL;
+  `requires_serial()` — SERIAL и LOT_AND_SERIAL.
 - Учет срока годности требует партий; обязательность `expires_at` определяется
   политикой Item. Политика запрещает некорректное сочетание настроек.
 - После первого движения `base_uom` и `tracking_mode` не меняются обычным
   обновлением. Миграция количеств и режимов — отдельная управляемая процедура.
 - Отрицательный физический и транзитный баланс в MVP запрещен всегда.
+
+| Режим | Партия | Серийный экземпляр |
+| --- | --- | --- |
+| NONE | Запрещена | Запрещен |
+| LOT | Обязательна и принадлежит Item | Запрещен |
+| SERIAL | Запрещена | Обязателен и принадлежит Item |
+| LOT_AND_SERIAL | Обязательна и принадлежит Item | Обязателен и принадлежит указанной партии и Item |
+
+Приемка новых номеров проверяет ту же матрицу до создания ID; остальные движения
+передают существующие Serial ID. `track_expiration` разрешен только для LOT
+и LOT_AND_SERIAL. Изменение tracking_mode после движений требует управляемой
+миграции идентичностей и остатков, включая журнал; обычный update ее не выполняет.
 
 StockLot хранит `inventory_item_id`, `lot_number`, `manufactured_at`, `expires_at`,
 `is_blocked`, `created_at`, но не остаток. Одна партия может находиться в нескольких
@@ -227,6 +299,7 @@ inventory_item_id
 warehouse_id
 location_id
 lot_id             optional только при допустимом tracking mode
+serial_id          optional только при допустимом tracking mode
 owner_id
 stock_status
 ```
@@ -249,12 +322,23 @@ Tenant ID и организация-владелец не считаются о�
 Резерв не является StockStatus. Заблокированная партия исключает доступность
 всех своих измерений без переименования их физического статуса.
 
-Количество хранится в Decimal и NUMERIC, не float. **Предложение:**
-NUMERIC(24, 6), единицы из явного набора MVP, без автоматической конвертации.
+Количество хранится в Decimal / NUMERIC(24,6), не float.
+В MVP единица всегда `piece`, `allow_fractional=False`.
 Количество операции положительное; signed delta ненулевой; баланс неотрицателен.
-Для целочисленного Item дробь запрещена. NaN, Infinity и превышение точности
-отклоняются без скрытого округления. Для этих разных смыслов используются
-раздельные VO, а не один положительный Quantity для всех полей.
+Дробные значения всех количественных полей, NaN, Infinity и превышение точности
+отклоняются без округления. `Decimal("2.000000")` допустим, `Decimal("2.5")` — нет.
+Раздельные VO положительного количества, signed delta и баланса сохраняются;
+один положительный Quantity не заменяет эти разные смыслы.
+
+Для SERIAL/LOT_AND_SERIAL `serial_id` обязателен. Баланс одного серийного
+измерения равен 0 или 1, а один экземпляр одновременно имеет максимум одно
+положительное измерение во всех физических и транзитных областях tenant,
+включая разные склады, владельцев и StockStatus. Нулевые строки могут оставаться
+для истории. Для NONE/LOT `serial_id` запрещен.
+Сводный баланс SKU суммирует единичные балансы экземпляров; учет количества
+не дублируется отдельной суммарной write-строкой того же серийного запаса.
+StockStatus AVAILABLE/QUARANTINE/DAMAGED/BLOCKED и state StockSerial независимы:
+например, возвращенный экземпляр IN_STOCK размещен в QUARANTINE.
 
 ### 5.2. Неизменяемый журнал и текущий баланс
 
@@ -270,10 +354,15 @@ StockTransaction содержит `id`, `operation_type`, `document_reference`,
 | Отгрузка/списание за пределы учета | −Q с физического адреса |
 | Корректировка | Signed delta по конкретному измерению с основанием |
 
-Для внутренних операций сумма равна нулю отдельно для каждой пары Item + Lot +
-Owner; статус и адрес могут меняться в рамках допустимого перехода. Приемка
+Для внутренних операций сумма равна нулю отдельно для набора Item + Lot +
+Serial + Owner; статус и адрес могут меняться в рамках допустимого перехода. Приемка
 и внешний расход не требуют искусственного отрицательного баланса контрагента.
 Источник и назначение внутреннего движения должны различаться.
+
+Запись конкретного серийного экземпляра имеет delta только +1 или −1.
+При перемещении обе записи сохраняют один Serial ID, Item и Lot; документ
+на несколько экземпляров разворачивается в отдельные единичные записи.
+Приемка возврата использует прежний Serial ID, а не создает новую идентичность.
 
 Журнал добавляется и баланс синхронно обновляется в той же транзакции.
 StockPostingService в Application загружает снимки, вызывает StockPostingPolicy
@@ -286,6 +375,9 @@ StockBalanceRepositoryProtocol — Application-порт работы с техн
 Исправление создает новую операцию с ссылкой на исходную, проверяет текущую
 достаточность и учитывает зависимые документы. Нельзя просто сменить знак всех
 записей, игнорируя уже отгруженный запас или принятый transfer.
+Для серийного учета используются исходные Serial ID, проверяется их текущее
+состояние и вся цепочка последующих операций. Компенсация не создает копии
+экземпляров и атомарно согласует восстановленное состояние с балансом.
 **Предложение MVP:** одна полная компенсация исходной транзакции, с UNIQUE
 по `reverses_transaction_id`; повтор с другим ключом не создает вторую компенсацию.
 Частичные компенсации требуют отдельного контроля накопленных количеств и
@@ -298,7 +390,7 @@ StockBalanceRepositoryProtocol — Application-порт работы с техн
 Dispatch и Receive — разные операции и разные UoW. **Предложение:** Inventory
 вводит `StockScopeKind.PHYSICAL | IN_TRANSIT`. Физическая область сохраняет
 измерения выше; транзитная содержит `transfer_id`, ID строки, исходный и
-целевой склады, Item, Lot, Owner и статус груза. Это специализированный VO
+целевой склады, Item, Lot, Serial, Owner и статус груза. Это специализированный VO
 учетной области, а не искусственная ячейка Warehousing.
 
 Отправка пишет −Q физического запаса и +Q транзитного. Приемка пишет −Q
@@ -307,7 +399,12 @@ Dispatch и Receive — разные операции и разные UoW. **П�
 его отдельно. У каждой частичной приемки свой ключ идемпотентности.
 
 Строка transfer контролирует `received <= dispatched <= planned` и сохраняет
-Item/Lot/Owner. Приемка может разбиваться по адресам и допустимым статусам,
+Item/Lot/Owner и для серийной строки — множество отправленных Serial ID.
+Dispatch переводит выбранные экземпляры в IN_TRANSIT; Receive — в IN_STOCK.
+Список принятого должен быть подмножеством отправленного и еще не принятого:
+повторная приемка экземпляра запрещена даже с новым ключом. Частичная приемка
+выбирает явный поднабор Serial ID; количество равно его мощности.
+Приемка может разбиваться по адресам и допустимым статусам,
 например AVAILABLE/QUARANTINE, с сохранением количества. Необъяснимая недостача
 не исчезает: остается в пути до отдельного решения о возврате/списании.
 До отправки черновик отменяется; после отправки возврат/компенсация — новые
@@ -317,7 +414,9 @@ Item/Lot/Owner. Приемка может разбиваться по адрес
 
 Мягкий резерв MVP создается на Item + Warehouse + Owner под
 `source_type`, `source_id`, `source_line_id`. Он не выбирает Lot и Location.
-Будущий StockAllocation для жесткого выделения партии/адреса — вне MVP.
+Он также не закрепляет Serial ID: для серийного SKU сохраняется тот же мягкий
+резерв. Конкретные пригодные экземпляры выбираются при выдаче.
+Будущий StockAllocation для жесткого выделения партии/адреса/экземпляра — вне MVP.
 
 ```text
 active_reserved = quantity_reserved − quantity_consumed − quantity_released
@@ -346,6 +445,12 @@ EligibleOnHand для продажи включает только физиче�
 Одновременно уменьшаются физический баланс и собственный резерв. Повторное
 вычитание «отобранного» количества не допускается; отдельного PICKED в MVP нет.
 Выдача без резерва не может расходовать количество, необходимое другим резервам.
+Серийная выдача проверяет каждый выбранный экземпляр: IN_STOCK, физический
+баланс 1, соответствие Item/Lot, допустимые адрес, StockStatus и срок годности.
+Расход экземпляров и потребление собственного резерва атомарны; Soft reservation
+не гарантирует доступность конкретного Serial ID. Возврат не восстанавливает
+потребленный резерв; полученный в QUARANTINE запас не увеличивает EligibleOnHand
+до проверки и отдельного ChangeStockStatus в AVAILABLE.
 
 Операции списания, переноса на другой склад, смены статуса, блокировки партии,
 уменьшения баланса и изменения доступности адреса проверяют:
@@ -372,19 +477,33 @@ tenant-local `inventory_stock_scopes` с уникальным ключом Item 
 
 1. Получить общие блокировки жизненного цикла затронутых складов и активных
    областей инвентаризации, проверить состояние склада/области.
-2. В стабильном порядке заблокировать учетные политики Item/Lot, затем все
-   StockScope, адреса с проверяемой вместимостью и изменяемые документы/резервы.
+2. В стабильном порядке заблокировать учетные политики Item/Lot, серийные
+   идентичности, затем все StockScope, затронутые адреса и изменяемые
+   документы/резервы.
    При нескольких складах и SKU ключи сортируются одинаково у всех операций.
 3. После блокировок повторно загрузить баланс, резервы, документ, пригодность
-   и заполнение; чтения до блокировки не используются для решения о проведении.
-4. Вызвать Domain policies и методы; записать документы, резервы, транзакцию,
-   баланс, запись идемпотентности и Outbox в одной session.
+   и состояние/размещение StockSerial; чтения до блокировки не используются
+   для решения о проведении.
+4. Вызвать Domain policies и методы; записать новые/измененные StockSerial,
+   документы, резервы, транзакцию, баланс, запись идемпотентности и Outbox
+   в одной session и UoW.
 5. Внешний UoW завершает транзакцию. Любая ошибка откатывает весь результат.
 
-Конкретная иерархия shared/exclusive locks для Item, Lot и адресов уточняется
+StockSerialLockerProtocol блокирует идентичность по tenant + Item +
+нормализованному номеру, в том числе еще не существующую. Для известных Serial ID
+адаптер определяет тот же ключ и блокирует строку агрегата в общем порядке.
+Технический механизм для отсутствующего номера (строка ключа блокировки либо
+транзакционный advisory lock) выбирается при migration, не раскрывается в Domain.
+После ожидания проверяются номер, состояние и положительный баланс заново.
+UNIQUE и частичный индекс положительного баланса дополнительно защищают хранение.
+Один snapshot до lock или блокировка только существующей строки недостаточны.
+
+Конкретная иерархия shared/exclusive locks для Item, Lot, Serial и адресов уточняется
 на этапе ядра и проверяется тестами deadlock/retry. Она должна охватывать
 гонки изменения TrackingMode с первым движением, блокировки партии с резервом,
-заполнения одной ячейки разными SKU и деактивации адреса с приемкой.
+приемок одного номера на разных складах, выдач одного экземпляра и деактивации
+адреса с приемкой. Проверки заполнения одной ячейки разными SKU добавляются
+вместе с контролем вместимости после MVP под тем же протоколом адресных locks.
 Изменение метаданных получает несовместимую блокировку с операциями, использующими
 эти метаданные; один только snapshot без такой синхронизации недостаточен.
 
@@ -403,7 +522,9 @@ Application service Inventory на той же session. Обратный Invento
 Идемпотентность команд с внешним повтором:
 
 - Область ключа: tenant + тип сценария + idempotency_key; canonical payload hash
-  включает документ/строки/количества, а не технические request_id.
+  включает документ/строки/количества, нормализованные номера или Serial ID,
+  основание возврата, а не технические request_id. Порядок множества экземпляров
+  канонизируется, распределение по строкам/адресам сохраняется.
 - Такой же ключ и payload возвращают сохраненный результат исходной операции.
   Другой payload с тем же ключом дает конфликт.
 - UNIQUE записи идемпотентности и ссылок проведения документа защищают
@@ -414,6 +535,12 @@ Application service Inventory на той же session. Обратный Invento
   операции во внешней сборке; handler не продолжает работу в сломанной транзакции.
 - Deadlock/serialization failure допускает ограниченный retry всей транзакции
   вне handler с тем же ключом. Бизнес-отказ не повторяется автоматически.
+
+Конфликты уникальности номера, повторной приемки/возврата и одновременной выдачи
+переводятся адаптерами в ошибки внутренних контрактов. SQLAlchemy/DB exceptions
+не выходят в Domain/Application. Транзакция с техническим конфликтом откатывается
+целиком или безопасно повторяется внешней сборкой; частично созданный StockSerial,
+проведенный документ или успешный ответ не остаются.
 
 Идемпотентность не заменяет блокировки остатков. Ни резерв, ни выдача не строятся
 по схеме «прочитал → проверил → записал» без синхронизации.
@@ -428,11 +555,11 @@ Application service Inventory на той же session. Обратный Invento
 Обозначения портов в таблицах:
 
 - W, Z, L: Warehouse, WarehouseZone, StorageLocation Domain Repository Protocol.
-- I, B, R, G, T, E, O, A, C, J: InventoryItem, StockLot, StockReservation,
+- I, B, S, R, G, T, E, O, A, C, J: InventoryItem, StockLot, StockSerial, StockReservation,
   GoodsReceipt, StockTransfer, StockIssue, StockWriteOff, StockAdjustment,
   StockCount, StockTransaction Domain Repository Protocol.
 - P: StockPostingService с StockScopeLocker, StockBalanceRepository,
-  StockPostingRepository (проекция/идемпотентность), WarehouseLocationReader,
+  StockSerialLocker, StockPostingRepository (проекция/идемпотентность), WarehouseLocationReader,
   соответствующими Domain repositories, Clock и Outbox.
 - V: CatalogVariantReader; X: InventoryLocationImpactReader и структура Warehousing.
 - Q: Query Repository соответствующего сценария, объявленный в Application.
@@ -455,40 +582,46 @@ Application service Inventory на той же session. Обратный Invento
 PATCH изменяет только явно переданные поля; изменение жизненного цикла не
 скрывается в универсальном update. Архивирование предпочтительнее удаления
 объектов, на которые ссылается журнал; hard delete API в MVP не планируется.
+В Create/UpdateStorageLocation параметр capacity опционален и в MVP допускает
+только отсутствие/null; включение контроля не поддерживается. Остальные правила
+принадлежности и допустимости размещения действуют независимо от вместимости.
 
 ### 8.2. Inventory: команды
 
 Для операций проведения требуются idempotency_key и основание. Позиции передают
-Item, Lot, Owner, адрес/статус и количество в базовой UOM. Каждый вид строк имеет
+Item, Lot, Owner, адрес/статус и количество в базовой UOM. Серийные строки приемки
+передают новые serial_numbers, возврата и остальных операций — serial_ids;
+count также допускает обнаруженные номера без ID. Каждый вид строк имеет
 собственный Command line contract; общий `DocumentDTO` не вводится.
 
 | Сценарий / Aggregate Root | Вход помимо контекста | `Handler.execute ->` и поля результата | Порты | HTTP |
 | --- | --- | --- | --- | --- |
-| RegisterInventoryItem / inventory_item | code, policy, характеристики, optional исходный Variant | RegisterInventoryItemResultDTO(id, code, base_uom, tracking_mode, revision) | I, V при Variant | POST /inventory/items → 201 |
-| UpdateInventoryItemPolicy / inventory_item | id, разрешенные настройки, expected_revision | UpdateInventoryItemPolicyResultDTO(id, policy, revision) | I, J, locker | PATCH /inventory/items/{id}/policy → 200 |
+| RegisterInventoryItem / inventory_item | code, tracking_mode, track_expiration, optional характеристики/исходный Variant; UOM задается фабрикой | RegisterInventoryItemResultDTO(id, code, base_uom, tracking_mode, revision) | I, V при Variant | POST /inventory/items → 201 |
+| UpdateInventoryItemPolicy / inventory_item | id, разрешенные настройки без base_uom/allow_fractional, expected_revision | UpdateInventoryItemPolicyResultDTO(id, policy с base_uom, revision) | I, J, locker | PATCH /inventory/items/{id}/policy → 200 |
 | RegisterStockLot / stock_lot | item_id, lot_number, manufactured_at, expires_at | RegisterStockLotResultDTO(id, item_id, lot_number, revision) | B, I | POST /inventory/lots → 201 |
 | ChangeStockLotBlock / stock_lot | id, is_blocked, reason, expected_revision | None | B, I, P, R | POST /inventory/lots/{id}/change-block → 204 |
-| CreateGoodsReceipt / goods_receipt | warehouse_id, external_reference, строки | CreateGoodsReceiptResultDTO(id, status, revision) | G, I, B, location reader | POST /inventory/receipts → 201 |
-| UpdateGoodsReceiptDraft / goods_receipt | id, replacement строк, expected_revision | UpdateGoodsReceiptDraftResultDTO(id, status, revision) | G, I, B, location reader | PATCH /inventory/receipts/{id} → 200 |
+| CreateGoodsReceipt / goods_receipt | warehouse_id, external_reference, строки; для серийных SKU новые номера | CreateGoodsReceiptResultDTO(id, status, revision, items) | G, I, B, location reader | POST /inventory/receipts → 201 |
+| CreateSerialReturnReceipt / goods_receipt | source_issue_id, warehouse_id, строки serial_ids и адресов приемки | CreateSerialReturnReceiptResultDTO(document_id, status, revision) | G, E, I, B, S, location reader | POST /inventory/receipts/serial-returns → 201 |
+| UpdateGoodsReceiptDraft / goods_receipt | id, replacement строк с номерами или ID возврата, expected_revision | UpdateGoodsReceiptDraftResultDTO(id, status, revision, items) | G, I, B, S/E для возврата, location reader | PATCH /inventory/receipts/{id} → 200 |
 | CancelGoodsReceipt / goods_receipt | id, reason, expected_revision | None | G | POST /inventory/receipts/{id}/cancel → 204 |
-| PostGoodsReceipt / goods_receipt | id, expected_revision, ключ | PostGoodsReceiptResultDTO(document_id, transaction_id, status, posted_at) | G, P | POST /inventory/receipts/{id}/post → 200 |
-| MoveStock / stock_transaction | исходное/целевое измерения, quantity, ключ | MoveStockResultDTO(transaction_id, occurred_at) | P | POST /inventory/stock/move → 200 |
-| ChangeStockStatus / stock_transaction | измерение, target_status, quantity, reason, ключ | ChangeStockStatusResultDTO(transaction_id, occurred_at) | P | POST /inventory/stock/change-status → 200 |
+| PostGoodsReceipt / goods_receipt | id, expected_revision, ключ; создает новые Serial или возвращает прежние | PostGoodsReceiptResultDTO(document_id, transaction_id, status, posted_at, items) | G, S, E для возврата, P | POST /inventory/receipts/{id}/post → 200 |
+| MoveStock / stock_transaction | исходное/целевое измерения, quantity, для серийных SKU serial_ids, ключ | MoveStockResultDTO(transaction_id, occurred_at, items) | S, P | POST /inventory/stock/move → 200 |
+| ChangeStockStatus / stock_transaction | измерение, target_status, quantity, serial_ids по режиму, reason, ключ | ChangeStockStatusResultDTO(transaction_id, occurred_at, items) | S, P | POST /inventory/stock/change-status → 200 |
 | CreateStockTransfer / stock_transfer | source/destination warehouse, строки | CreateStockTransferResultDTO(id, status, revision) | T, I, B, location reader | POST /inventory/transfers → 201 |
 | CancelStockTransfer / stock_transfer | id, reason, expected_revision; только до отправки | None | T | POST /inventory/transfers/{id}/cancel → 204 |
-| DispatchStockTransfer / stock_transfer | id, строки отправки, expected_revision, ключ | DispatchStockTransferResultDTO(document_id, transaction_id, status, dispatched_at) | T, P | POST /inventory/transfers/{id}/dispatch → 200 |
-| ReceiveStockTransfer / stock_transfer | id, количества по transfer line, адресам/статусам, revision, ключ | ReceiveStockTransferResultDTO(document_id, transaction_id, status, received_at) | T, P | POST /inventory/transfers/{id}/receive → 200 |
-| ReserveStock / stock_reservation | item_id, warehouse_id, owner, source IDs, quantity, eligibility_at, ключ | ReserveStockResultDTO(id, quantity_reserved, active_quantity, status) | R, I, P | POST /inventory/reservations → 201 |
-| IncreaseStockReservation / stock_reservation | id, quantity, eligibility_at, revision, ключ | IncreaseStockReservationResultDTO(id, active_quantity, revision) | R, P | POST /inventory/reservations/{id}/increase → 200 |
+| DispatchStockTransfer / stock_transfer | id, строки отправки с quantity и serial_ids по режиму, expected_revision, ключ | DispatchStockTransferResultDTO(document_id, transaction_id, status, dispatched_at, items) | T, S, P | POST /inventory/transfers/{id}/dispatch → 200 |
+| ReceiveStockTransfer / stock_transfer | id, количества и поднаборы отправленных serial_ids по transfer line, адресам/статусам, revision, ключ | ReceiveStockTransferResultDTO(document_id, transaction_id, status, received_at, items) | T, S, P | POST /inventory/transfers/{id}/receive → 200 |
+| ReserveStock / stock_reservation | item_id, warehouse_id, owner, source IDs, quantity, eligibility_at, ключ; без serial_ids | ReserveStockResultDTO(id, quantity_reserved, active_quantity, base_uom, status) | R, I, P | POST /inventory/reservations → 201 |
+| IncreaseStockReservation / stock_reservation | id, quantity, eligibility_at, revision, ключ | IncreaseStockReservationResultDTO(id, active_quantity, base_uom, revision) | R, P | POST /inventory/reservations/{id}/increase → 200 |
 | ReleaseStockReservation / stock_reservation | id, quantity, reason, revision, ключ | None | R, locker, Outbox | POST /inventory/reservations/{id}/release → 204 |
 | CancelStockReservation / stock_reservation | id, reason, revision, ключ | None | R, locker, Outbox | POST /inventory/reservations/{id}/cancel → 204 |
-| IssueStock / stock_issue | источник потребности, строки фактического расхода, optional reservation_id, ключ | IssueStockResultDTO(document_id, transaction_id, posted_at, consumed_reservations) | E, R, P | POST /inventory/issues → 201 |
-| WriteOffStock / stock_write_off | строки, причины, ключ | WriteOffStockResultDTO(document_id, transaction_id, posted_at) | O, P | POST /inventory/write-offs → 201 |
-| AdjustStock / stock_adjustment | измерения, signed delta, reason, ключ | AdjustStockResultDTO(document_id, transaction_id, posted_at) | A, P | POST /inventory/adjustments → 201 |
-| CompensateStockTransaction / stock_transaction | original_id, явные компенсирующие строки, reason, ключ | CompensateStockTransactionResultDTO(transaction_id, original_id, occurred_at) | J, затронутые документы, P | POST /inventory/transactions/{id}/compensate → 201 |
+| IssueStock / stock_issue | источник потребности, строки фактического расхода с serial_ids по режиму, optional reservation_id, ключ | IssueStockResultDTO(document_id, transaction_id, posted_at, consumed_reservations, items) | E, S, R, P | POST /inventory/issues → 201 |
+| WriteOffStock / stock_write_off | строки с serial_ids по режиму, причины, ключ | WriteOffStockResultDTO(document_id, transaction_id, posted_at, items) | O, S, P | POST /inventory/write-offs → 201 |
+| AdjustStock / stock_adjustment | измерения, signed delta, для серийных строк ID расхода или новые номера прихода, reason, ключ | AdjustStockResultDTO(document_id, transaction_id, posted_at, items) | A, S, P | POST /inventory/adjustments → 201 |
+| CompensateStockTransaction / stock_transaction | original_id, явные компенсирующие строки с исходными Serial ID, reason, ключ | CompensateStockTransactionResultDTO(transaction_id, original_id, occurred_at, items) | J, S, затронутые документы, P | POST /inventory/transactions/{id}/compensate → 201 |
 | StartStockCount / stock_count | warehouse_id, область, ключ | StartStockCountResultDTO(id, status, snapshot_at, revision) | C, balance reader, scope gate | POST /inventory/counts → 201 |
-| SubmitStockCount / stock_count | id, измерения и counted_quantity, expected_revision | SubmitStockCountResultDTO(id, status, revision, discrepancies) | C | POST /inventory/counts/{id}/submit → 200 |
-| ApproveStockCount / stock_count | id, expected_revision, ключ | ApproveStockCountResultDTO(count_id, adjustment_id, transaction_id, approved_at) | C, A, P | POST /inventory/counts/{id}/approve → 200 |
+| SubmitStockCount / stock_count | id, измерения, counted_quantity и наборы обнаруженных номеров для серийных SKU, expected_revision | SubmitStockCountResultDTO(id, status, revision, discrepancies) | C, I, B, S | POST /inventory/counts/{id}/submit → 200 |
+| ApproveStockCount / stock_count | id, expected_revision, ключ; регистрация неизвестных номеров и расхождения | ApproveStockCountResultDTO(count_id, adjustment_id, transaction_id, approved_at, items) | C, A, S, P | POST /inventory/counts/{id}/approve → 200 |
 | CancelStockCount / stock_count | id, reason, expected_revision | None | C, scope gate | POST /inventory/counts/{id}/cancel → 204 |
 
 Одношаговые IssueStock, WriteOffStock и AdjustStock создают и проводят документ
@@ -496,6 +629,38 @@ Item, Lot, Owner, адрес/статус и количество в базов�
 отдельный черновой жизненный цикл для этих операций в MVP не требуется.
 При нулевых расхождениях ApproveStockCount завершает сеанс без пустого adjustment
 и транзакции: соответствующие ID в его DTO имеют тип `UUID | None`.
+
+Для всех серийных строк quantity совпадает с числом уникальных экземпляров.
+Move/ChangeStockStatus выводят quantity из списка; если контракт также принимает
+quantity, несовпадение отклоняется. Дубликаты номера/ID внутри строки и между
+строками одного документа запрещены. У приемки новых экземпляров проверяются
+номера после удаления внешних пробелов; ID назначаются только при проведении.
+Повтор обычной приемки уже зарегистрированного номера — конфликт, включая ISSUED
+и WRITTEN_OFF; вернуть выданный экземпляр можно только по основанию возврата.
+
+`items` в каждом результате — tuple собственных DTO строк соответствующего
+use case, например PostGoodsReceiptItemDTO и IssueStockItemDTO. Они содержат
+item_id, quantity, base_uom и serial_ids; receipt дополнительно связывает
+назначенные ID с номерами. Результаты черновиков передают номера новых экземпляров,
+пока ID не созданы; детали возвратов и движений сохраняют прежние ID.
+Прочие DTO/Response с количествами, включая документы, резервы, counts, сводные
+балансы и историю, возвращают base_uom. При наличии экземпляров их ID/номера
+не теряются в Response. Для NONE/LOT список serial_ids пуст; резерв не содержит
+фиктивного выбора экземпляров. Контракты с результатом None остаются без тела.
+
+CreateSerialReturnReceipt создает обычный GoodsReceipt с основанием
+SERIAL_RETURN, source_issue_id и ссылками строк на исходную выдачу. Его результат
+остается CreateSerialReturnReceiptResultDTO(document_id, status, revision);
+состав читается через GetStockDocument. Warehouse и адреса проходят обычные
+проверки размещения, включая возможность приема QUARANTINE.
+PostGoodsReceipt повторно проверяет, что каждый ID относится к последней
+невозвращенной выдаче по указанному Issue, все экземпляры находятся в ISSUED
+и количество не превышает выданное. Один Issue может возвращаться частями,
+но один экземпляр по этой выдаче — только один раз. Создание двух черновиков
+не дает права дважды провести возврат: право проверяется под locks при post.
+Основание возврата не позволяет передать новые номера или произвольный статус:
+принимаются прежние экземпляры в QUARANTINE. Резерв остается потребленным;
+повторная продажа требует проверки и ChangeStockStatus в AVAILABLE.
 
 ### 8.3. Queries
 
@@ -511,8 +676,11 @@ Item, Lot, Owner, адрес/статус и количество в базов�
 | ListInventoryItems / inventory_item | code/search, is_active, cursor, limit | ListInventoryItemsResultDTO(items: tuple[ListInventoryItemRowDTO, ...], next_cursor) | GET /inventory/items |
 | GetStockLot / stock_lot | id | GetStockLotDetailsDTO | GET /inventory/lots/{id} |
 | ListStockLots / stock_lot | item_id, is_blocked, expiry filters, cursor, limit | ListStockLotsResultDTO(items: tuple[ListStockLotRowDTO, ...], next_cursor) | GET /inventory/lots |
+| GetStockSerial / stock_serial | serial_id | GetStockSerialDetailsDTO(id, item_id, serial_number, lot_id, state, base_uom, placement, revision, audit) | GET /inventory/serials/{id} |
+| ListStockSerials / stock_serial | item_id, lot_id, serial_number, state, warehouse_id/location_id, cursor, limit | ListStockSerialsResultDTO(items: tuple[ListStockSerialItemDTO, ...], next_cursor) | GET /inventory/serials |
+| GetStockSerialHistory / stock_serial | serial_id, cursor, limit | GetStockSerialHistoryResultDTO(serial_id, base_uom, items: tuple[GetStockSerialHistoryEntryDTO, ...], next_cursor) | GET /inventory/serials/{id}/history |
 | GetStockBalance / stock_transaction | полное физическое/транзитное измерение | GetStockBalanceResultDTO(dimension, quantity, base_uom, as_of) | GET /inventory/stock/balance |
-| ListStockBalances / stock_transaction | Item, Warehouse, Location, Lot, Owner, Status, scope kind, cursor, limit | ListStockBalancesResultDTO(items: tuple[ListStockBalanceItemDTO, ...], next_cursor) | GET /inventory/stock/balances |
+| ListStockBalances / stock_transaction | Item, Warehouse, Location, Lot, Serial, Owner, Status, scope kind, cursor, limit | ListStockBalancesResultDTO(items: tuple[ListStockBalanceItemDTO, ...], next_cursor) | GET /inventory/stock/balances |
 | GetStockAvailability / stock_transaction | Item, Warehouse, Owner, eligibility_at | GetStockAvailabilityResultDTO(eligible_on_hand, active_reserved, available_to_reserve, reservation_shortage, base_uom, as_of) | GET /inventory/stock/availability |
 | ListStockMovements / stock_transaction | измерения, document, date range, cursor, limit | ListStockMovementsResultDTO(items: tuple[ListStockMovementItemDTO, ...], next_cursor) | GET /inventory/stock/movements |
 | GetStockReservation / stock_reservation | id | GetStockReservationDetailsDTO | GET /inventory/reservations/{id} |
@@ -533,6 +701,20 @@ GetStockDocument — специально ограниченный сценар�
 дает not found. Пагинация стабильна, с дополнительным ID в сортировке.
 Доступность читается одним согласованным DB snapshot, а не набором запросов,
 которые могут увидеть разные моменты commit.
+
+GetStockSerialDetailsDTO содержит отдельный GetStockSerialPlacementDTO для
+текущего физического/транзитного размещения либо None для ISSUED/WRITTEN_OFF.
+Placement передает scope kind, quantity, warehouse/location или transfer/line,
+owner и StockStatus; он читается из StockBalance, не хранится вторым балансом.
+ListStockSerialItemDTO имеет свои поля идентичности, state, base_uom и отдельный
+ListStockSerialPlacementDTO. Фильтры warehouse/location относятся к текущему
+размещению; state не подменяется StockStatus.
+GetStockSerialHistoryEntryDTO передает transaction_id, document reference,
+operation_type, occurred_at, recorded_at, quantity_delta, base_uom, измерение
+с serial_id и performed_by. Источник истории — неизменяемый журнал, включая
+возвраты и компенсации. Сортировка recorded_at + transaction_id + entry_id
+стабильна. Неизвестный Serial ID дает 404, известный с пустой историей — пустую
+страницу. Query Repository читает проекции без восстановления StockSerial.
 
 ### 8.4. Обязательные файлы каждого сценария
 
@@ -561,18 +743,91 @@ presentation/<aggregate_root>/router.py                     регистраци
 Query contracts, persistence adapters и доменные repositories определены
 для каждого агрегата; общие технические порты используются только по назначению.
 
+Новые сценарии серийного учета разворачиваются в конкретные файлы под
+`src/modules/inventory/`:
+
+```text
+application/goods_receipt/command/create_serial_return_receipt/
+    command.py, handler.py, dto.py
+application/stock_serial/query/get_stock_serial/
+    query.py, handler.py, dto.py
+application/stock_serial/query/list_stock_serials/
+    query.py, handler.py, dto.py
+application/stock_serial/query/get_stock_serial_history/
+    query.py, handler.py, dto.py
+application/stock_serial/port/query_repository.py
+domain/stock_serial/aggregate.py
+domain/stock_serial/repository.py
+domain/stock_serial/error.py
+domain/stock_serial/value_object/serial_number.py
+domain/stock_serial/value_object/serial_state.py
+infrastructure/stock_serial/persistence/repository.py
+infrastructure/stock_serial/persistence/mapper.py
+infrastructure/stock_serial/persistence/query_repository.py
+infrastructure/stock_serial/persistence/query_mapper.py
+infrastructure/persistence/models/stock_serial.py
+application/port/stock_serial_locker.py
+infrastructure/persistence/stock_serial_locker.py
+presentation/goods_receipt/http/controller/create_serial_return_receipt.py
+presentation/goods_receipt/http/request/create_serial_return_receipt.py
+presentation/goods_receipt/http/response/create_serial_return_receipt.py
+presentation/stock_serial/http/controller/get_stock_serial.py
+presentation/stock_serial/http/response/get_stock_serial.py
+presentation/stock_serial/http/controller/list_stock_serials.py
+presentation/stock_serial/http/response/list_stock_serials.py
+presentation/stock_serial/http/controller/get_stock_serial_history.py
+presentation/stock_serial/http/response/get_stock_serial_history.py
+presentation/stock_serial/depends.py
+presentation/stock_serial/router.py
+```
+
+| Сценарий | Входной класс / handler | Результат execute | HTTP-схемы и сборка |
+| --- | --- | --- | --- |
+| create_serial_return_receipt | CreateSerialReturnReceiptCommand / CreateSerialReturnReceiptHandler | CreateSerialReturnReceiptResultDTO | CreateSerialReturnReceiptRequest / CreateSerialReturnReceiptResponse; get_create_serial_return_receipt_handler в goods_receipt/depends.py, endpoint в goods_receipt/router.py |
+| get_stock_serial | GetStockSerialQuery / GetStockSerialHandler | GetStockSerialDetailsDTO | Без Request body; GetStockSerialResponse; get_get_stock_serial_handler в stock_serial/depends.py |
+| list_stock_serials | ListStockSerialsQuery / ListStockSerialsHandler | ListStockSerialsResultDTO и ListStockSerialItemDTO | Без Request body; ListStockSerialsResponse со своими строками; get_list_stock_serials_handler в stock_serial/depends.py |
+| get_stock_serial_history | GetStockSerialHistoryQuery / GetStockSerialHistoryHandler | GetStockSerialHistoryResultDTO и GetStockSerialHistoryEntryDTO | Без Request body; GetStockSerialHistoryResponse со своими записями; get_get_stock_serial_history_handler в stock_serial/depends.py |
+
+CreateSerialReturnReceipt использует G/E/I/B/S и WarehouseLocationReader; при
+проведении существующий PostGoodsReceipt подключает S, исходную выдачу и P.
+Три queries используют StockSerialQueryRepositoryProtocol и отдельные DTO своих
+сценариев; SqlAlchemyStockSerialQueryRepository и QueryMapper реализуют чтение.
+Depends подключает репозитории и adapters к общей UoW/session. Router модуля
+включает stock_serial/router.py и новый маршрут goods_receipt; GET-фильтры
+разбирает controller в Query, фиктивные Request-файлы для GET не создаются.
+Измененные существующие сценарии сохраняют свои отдельные command/query,
+handler, dto.py и HTTP-файлы; общая серийная write-модель их не заменяет.
+
 ### 8.5. Порты, снимки и адаптеры
 
 | Application-порт / владелец | Вход и результат | Infrastructure adapter |
 | --- | --- | --- |
 | CatalogVariantReaderProtocol / Inventory | tenant, product_id, variant_id → CatalogVariantForInventorySnapshot; только идентичность и признаки физической позиции | `inventory/infrastructure/adapter/catalog_variant_reader.py`, публичный Application reader Catalog |
-| WarehouseLocationReaderProtocol / Inventory | tenant, адреса, параметры размещения, характеристики и заполнение → WarehousePlacementSnapshot / результат допустимости | `inventory/infrastructure/adapter/warehouse_location_reader.py`, публичный Application service Warehousing с LocationPolicy |
+| WarehouseLocationReaderProtocol / Inventory | tenant, адреса, параметры размещения и optional характеристики → WarehousePlacementSnapshot / результат допустимости; заполнение добавляется после MVP | `inventory/infrastructure/adapter/warehouse_location_reader.py`, публичный Application service Warehousing с LocationPolicy |
 | InventoryLocationImpactReaderProtocol / Warehousing | tenant, область склада/зоны/адреса и предложенное изменение → InventoryLocationImpactSnapshot | `warehousing/infrastructure/adapter/inventory_location_impact_reader.py`, публичный Application service Inventory |
 | StockScopeLockerProtocol / Inventory | tenant, отсортированные StockScope и контекст freeze → None; locks действуют до конца UoW | `inventory/infrastructure/persistence/stock_scope_locker.py` |
+| StockSerialLockerProtocol / Inventory | tenant, отсортированные Item + нормализованный номер и известные Serial ID → None; защищает и отсутствующие идентичности до конца UoW | `inventory/infrastructure/persistence/stock_serial_locker.py` |
 | StockBalanceRepositoryProtocol / Inventory | scope/dimensions → tuple[StockBalance, ...]; применение проверенных записей StockTransaction → None | `inventory/infrastructure/persistence/stock_balance_repository.py` |
 | StockPostingRepositoryProtocol / Inventory | ключ + payload hash → сохраненный результат конкретного сценария или отсутствие; запись результата/связи проведения → None | `inventory/infrastructure/persistence/stock_posting_repository.py` |
 | StockAvailabilityReaderProtocol / Inventory | scope + eligibility_at → StockAvailabilitySnapshot со свежими количествами, резервами и признаками пригодности | `inventory/infrastructure/persistence/stock_availability_reader.py` и адаптер структуры Warehousing |
 | Lifecycle/CountScope gates / владельцы метаданных и Inventory | tenant, область, режим lock → None; чтение freeze → CountScopeStateSnapshot | Адаптеры блокировок внутри соответствующего модуля на общей session |
+
+StockSerialRepositoryProtocol находится в `domain/stock_serial/repository.py`:
+получение по ID/Item + номеру возвращает StockSerial либо None, сохранение
+агрегата имеет `-> None`. SqlAlchemyStockSerialRepository и StockSerialMapper
+из `infrastructure/stock_serial/persistence/` выполняют persistence mechanics
+и преобразования через create/restore без переноса инвариантов в mapper.
+StockSerialQueryRepositoryProtocol находится в Application, имеет отдельные
+методы чтения деталей, списка и истории с возвращаемыми типами
+GetStockSerialDetailsDTO | None, ListStockSerialsResultDTO и
+GetStockSerialHistoryResultDTO | None. Отсутствие результата деталей/истории
+преобразуется handler в ошибку not found.
+
+StockSerialSnapshot для решений содержит ID, Item, нормализованный номер,
+Lot, state, revision; снимок текущего размещения поступает из StockBalance.
+StockPostingPolicy проверяет матрицу tracking, соответствие Item/Lot/Serial,
+единичные записи и допустимость операции на свежих снимках. Сам StockSerial
+защищает переходы состояния; Application только координирует чтение и сохранение.
 
 Snapshots для доменных решений неизменяемы и определены в принимающем контексте.
 Adapter переводит публичные DTO поставщика в эти снимки; чужой Aggregate,
@@ -593,7 +848,7 @@ Application services поставщиков получают порты на в�
 
 ```text
 warehousing: warehouse, warehouse_zone, storage_location
-inventory:   inventory_item, stock_lot, stock_reservation, goods_receipt,
+inventory:   inventory_item, stock_lot, stock_serial, stock_reservation, goods_receipt,
              stock_transfer, stock_issue, stock_write_off, stock_adjustment,
              stock_count, stock_transaction
 ```
@@ -639,6 +894,7 @@ src/modules/<module>/
 ```text
 domain/stock/                         VO, snapshots, policies, ошибки ядра
 application/port/                    stock_scope_locker.py,
+                                     stock_serial_locker.py,
                                      stock_balance_repository.py,
                                      stock_posting_repository.py,
                                      warehouse_location_reader.py,
@@ -649,6 +905,7 @@ application/service/                 stock_posting.py, availability.py,
 application/query/                   get_stock_document, list_stock_documents
 application/event/                   mapping доменных событий в сообщения
 infrastructure/persistence/          stock_scope_locker.py,
+                                     stock_serial_locker.py,
                                      stock_balance_repository.py,
                                      stock_posting_repository.py,
                                      stock_availability_reader.py
@@ -665,6 +922,8 @@ Application-порты влияния Inventory и блокировок жизн
 обертки над ними не создаются. StockJournalRepository — роль append-only
 Domain Repository StockTransaction, а не второй repository тех же записей.
 Пустые каталоги и неиспользуемые файлы заранее не создаются.
+У StockSerial в MVP есть queries и Domain Repository, но нет standalone command
+регистрации или HTTP update состояния: запись координируют документные сценарии.
 
 ## 10. Документы и инвентаризация
 
@@ -673,6 +932,30 @@ Domain Repository StockTransaction, а не второй repository тех же 
 receipt достаточно DRAFT/POSTED/CANCELLED, transfer требует состояний отправки
 и частичной приемки, count — подсчета и утверждения. Общими могут быть VO
 DocumentReference и причина, но не универсальный lifecycle.
+
+### 10.1. Серийные строки складских документов
+
+| Документ/операция | Ответственность в серийном учете |
+| --- | --- |
+| GoodsReceipt: обычная приемка | Хранит номера в черновике; Post атомарно регистрирует StockSerial, пишет +1 для каждого экземпляра, журнал и статус документа. Уже учтенный номер не становится новым экземпляром |
+| GoodsReceipt: SERIAL_RETURN | Хранит исходный Issue и прежние Serial ID; Post проверяет последнюю невозвращенную выдачу, переводит ISSUED → IN_STOCK и принимает в QUARANTINE, не восстанавливая резерв |
+| MoveStock / ChangeStockStatus | Переносят конкретные Serial ID парными записями −1/+1 с сохранением идентичности и состояния IN_STOCK; количество равно числу уникальных экземпляров |
+| StockTransfer | Хранит по строкам отправленные и принятые Serial ID; Dispatch переносит каждый в транзит, Receive допускает только еще не принятое подмножество и меняет IN_TRANSIT → IN_STOCK |
+| StockIssue | Хранит фактически выданные пригодные экземпляры; расход −1, переход в ISSUED и потребление собственного мягкого резерва выполняются в одной UoW |
+| StockWriteOff | Хранит конкретные ID и причины; расход −1 переводит экземпляр в WRITTEN_OFF. Отсутствующий или уже списанный экземпляр повторно не расходуется |
+| StockAdjustment | Отрицательная корректировка расходует конкретные ID; положительная с основанием регистрирует новые номера и +1. Ранее выданный экземпляр не принимается как новый |
+| CompensateStockTransaction | Сохраняет исходные Serial ID и ссылку на оригинал; проверяет последующие операции и текущий баланс, пишет новую транзакцию и согласует состояние, не изменяя старый журнал |
+| StockCount | Фиксирует ожидаемые и обнаруженные экземпляры и применяет согласованные расхождения через StockAdjustment |
+
+Один экземпляр не встречается в нескольких независимых строках документа.
+Парные ledger entries −1/+1 одного внутреннего движения допустимы и не являются
+двойным учетом. Отрицательная корректировка недостачи переводит IN_STOCK
+в WRITTEN_OFF с основанием расхождения. Положительная корректировка не переиспользует
+номер существующего ISSUED/WRITTEN_OFF; его восстановление требует предусмотренного
+возврата или компенсации исходной операции. Ручная корректировка не обходит
+защиту резервов, freeze, tracking и неизменяемость проведенных документов.
+
+### 10.2. Инвентаризация и серийные расхождения
 
 StockCount: **предложение MVP — подсчет с заморозкой физических движений
 в выбранной области.** Start фиксирует учетный снимок и persisted freeze marker
@@ -687,6 +970,19 @@ Submit сохраняет фактические количества, в том
 Нулевое количество — явный результат. CountScope и StockCount проверяют полноту,
 партии, дубликаты измерений и допустимость результатов.
 
+Для SERIAL/LOT_AND_SERIAL учетный снимок включает Serial ID, номера, партии
+и размещение. Фактический результат содержит набор обнаруженных номеров по
+Item/Lot и адресам; известные номера связываются с прежними ID, неизвестные
+сохраняются без ID до Approve. Одного counted_quantity недостаточно: оно
+вычисляется из уникального набора или проверяется на равенство его мощности.
+Явный пустой набор означает подсчитанный ноль; отсутствие результата — не подсчитано.
+
+Сравнение выполняется по идентичности, а не только по числу: ожидаемые,
+найденные, отсутствующие и неизвестные экземпляры отражаются в отдельных
+результатах расхождений. Для LOT_AND_SERIAL найденный номер должен относиться
+к указанным Item и Lot. Один экземпляр нельзя подтвердить в двух адресах;
+перестановка с одинаковым числом экземпляров тоже является расхождением размещения.
+
 Approve в одной UoW создает StockAdjustment с ссылкой на Count, проводит
 расхождения через тот же StockPostingService, переводит Count в APPROVED
 и снимает freeze. Только эта операция может провести собственные расхождения
@@ -695,6 +991,27 @@ Approve в одной UoW создает StockAdjustment с ссылкой на 
 подсчета сохраняется, резервы разрешаются отдельными операциями.
 Cancel снимает freeze и сохраняет историю сеанса. Сбой approve не оставляет
 частично примененных расхождений и не снимает freeze.
+
+При серийном Approve под общими locks повторно проверяются Item, партия,
+уникальность номеров и текущие state/размещение всех затронутых экземпляров:
+
+- Неизвестный номер: StockSerial создается только в этой UoW вместе с
+  положительной корректировкой +1, журналом, балансом и Outbox.
+- Отсутствующий экземпляр: отрицательная корректировка −1 по конкретному
+  Serial ID; состояние становится WRITTEN_OFF с основанием недостачи.
+- Экземпляр найден в другом адресе внутри области count: одна логическая
+  строка расхождения содержит исходное и фактическое размещение и дает парные
+  записи −1/+1 того же ID, без создания нового экземпляра.
+- Известный экземпляр размещен вне области count или находится в транзите:
+  утверждение отклоняется до разрешения расхождения; область freeze не дает
+  права изъять запас другой области положительной корректировкой.
+- Ранее ISSUED нельзя вернуть инвентаризационным излишком: требуется
+  GoodsReceipt с основанием SERIAL_RETURN. Известный WRITTEN_OFF также
+  не считается неизвестным номером и требует разрешения исходной операции.
+
+Набор фактов подсчета сохраняется при отказе Approve. Новый конкурентно
+зарегистрированный номер нельзя повторно создать из устаревшего результата;
+утверждение пересчитывает соответствие после locks и возвращает конфликт.
 
 Учет без заморозки с reconciliation по журналу после snapshot — следующий этап.
 MVP не сравнивает старый снимок с новым балансом как будто между ними не было
@@ -708,11 +1025,21 @@ MVP не сравнивает старый снимок с новым балан
 
 - Warehousing: `warehousing_warehouses`, `warehousing_zones`,
   `warehousing_storage_locations`.
-- Inventory: `inventory_items`, `inventory_lots`, `inventory_reservations`,
+- Inventory: `inventory_items`, `inventory_lots`, `inventory_stock_serials`, `inventory_reservations`,
   таблицы документов и их строк по каждому виду, `inventory_stock_counts`,
   `inventory_stock_count_lines`, `inventory_stock_transactions`,
   `inventory_stock_ledger_entries`, `inventory_stock_balances`,
-  `inventory_stock_scopes`, записи идемпотентности и freeze областей.
+  `inventory_stock_scopes`, ключи блокировки серийных идентичностей при выбранном
+  механизме, записи идемпотентности и freeze областей.
+
+`inventory_stock_serials` хранит идентичность и state с аудитом/revision, без
+текущего количества и адреса. Строки документов сохраняют наборы Serial ID
+через подчиненные записи своего документа; приемка до post и count до approve
+также сохраняют новые номера без назначенного ID. Эти записи не получают
+отдельных Domain repositories. Return сохраняет source_issue_id, исходную
+строку и связь Serial ID с выдачей; повторный возврат пары выдача + экземпляр
+защищается уникальной связью проведения. Положенные в журнал и баланс serial_id
+ссылаются на StockSerial; история возвращает эту идентичность во всех операциях.
 
 Имена с префиксом отделяют новую модель от исторических `skus`/`warehouses`.
 Окончательные названия и decomposition технических таблиц уточняются при
@@ -722,20 +1049,41 @@ MVP не сравнивает старый снимок с новым балан
 
 1. Уникальные code Item/Warehouse, адрес внутри Warehouse, код Zone внутри
    Warehouse, номер Lot внутри Item и ключи идемпотентности.
-2. Уникальное нормализованное измерение баланса. Nullable Lot не допускает
+   UNIQUE StockSerial по Item + serial_number после удаления внешних пробелов,
+   с чувствительностью к регистру; номер непустой, ведущие нули сохранены.
+   Ограничение распространяется на все состояния, не только IN_STOCK.
+2. Уникальное нормализованное измерение баланса. Nullable Lot/Serial не допускают
    дубликатов: явный NULLS NOT DISTINCT либо отдельные partial unique indexes.
    Для физического и транзитного scope — свои согласованные CHECK/unique keys.
+   Дополнительно UNIQUE serial_id WHERE quantity > 0 во всей таблице балансов,
+   независимо от scope, склада, владельца, адреса, партии и StockStatus.
 3. FK строк на владельца-документ/транзакцию; принадлежность Lot своему Item
    и Location своему Warehouse подкрепляется составными ограничениями там,
-   где это возможно. SQL не заменяет проверки Domain.
+   где это возможно. FK Serial + Item и согласованность optional Lot с
+   StockSerial подкрепляют соответствие идентичностей во всех ссылках.
+   Равенство nullable партии, обязательность Serial/Lot по tracking и прочие
+   межтабличные ограничения требуют явного механизма хранения при migration,
+   если составного FK/CHECK недостаточно. SQL не заменяет проверки Domain.
 4. CHECK quantity >= 0 для баланса; reserved/consumed/released >= 0 и
    consumed + released <= reserved; signed delta != 0; корректный scope kind.
+   Все количества NUMERIC(24,6) целые в MVP. При serial_id != NULL баланс
+   ограничен 0/1, delta — −1/+1. Дробь и превышение точности отклоняются до
+   сохранения без округления SQL; ограничения БД подкрепляют целочисленность.
 5. Индексы balance Item + Warehouse + Owner, Location, Lot + expiry,
    активных reservation по области, движений по дате/ID/документу,
-   непогашенного транзита и активных freezes.
+   непогашенного транзита и активных freezes; Serial по Item/номеру/состоянию/партии,
+   ledger по Serial + recorded_at/transaction_id/entry_id и связей возврата.
 6. Optimistic revision для документов и метаданных; для количеств используется
    протокол блокировок. UPDATE/DELETE проведенного журнала ограничены адаптером
    и правами хранения; способ DB-защиты append-only уточняется в migration.
+
+Согласованность StockSerial.state с положительным балансом и журналом проверяется
+в общей операции проведения и reconciliation: IN_STOCK соответствует физической
+единице, IN_TRANSIT — транзитной, ISSUED/WRITTEN_OFF — отсутствию положительного
+баланса. При парной записи источник уменьшается перед увеличением назначения,
+чтобы уникальность положительного размещения не требовала двух одновременных +1.
+Сбой после создания экземпляра или изменения state откатывает также документ,
+резерв, журнал, баланс, связи возврата, идемпотентность и Outbox.
 
 Миграции вводятся новыми ревизиями после фактического head, не изменением
 `0001_warehouses`, `0011_inventory_skus` или удаляющей ревизии. Они не импортируют
@@ -760,6 +1108,10 @@ HTTP ошибки: 404 для неизвестных объектов; 409 дл�
 проведения/ревизии/идемпотентности; 422 для некорректного контракта; 403 для
 недостаточных прав. Стабильные error codes различают причины. Authentication,
 CSRF для изменений и authorization — существующие зависимости Identity.
+Серийные причины различают duplicate_serial_number, serial_already_received,
+serial_not_available, serial_return_conflict и serial_outside_count_scope.
+Ошибки SQLAlchemy/драйвера преобразуются в Infrastructure в ошибки контрактов,
+а Presentation отображает их в HTTP; детали SQL в API не раскрываются.
 
 ## 12. Этапы реализации и критерии готовности
 
