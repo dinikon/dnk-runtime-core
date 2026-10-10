@@ -63,6 +63,23 @@ Catalog has not been deployed to production. Its corrected schema is the single
 0017 baseline; test databases created with an earlier draft must be recreated.
 There is no separate content-alignment revision or compatibility storage.
 
+Revision `0018_catalog_variable` extends the corrected 0017 baseline with eight
+normalized attribute/option/axis/selection tables and ownership foreign keys.
+It enables VARIABLE and deferred final-state structure checks, preserving existing
+SIMPLE products, variant IDs, content and revisions. Default schema stays at version 1;
+Title inheritance is computed at read time. There is no legacy compatibility path.
+Existing tenants require an explicit upgrade to head before using the current API.
+Downgrade to 0017 is blocked while VARIABLE products exist; after their explicit
+removal or conversion it preserves SIMPLE and removes enum definitions.
+
+Revision `0019_catalog_classification` adds seven normalized Category/Tag and
+Product assignment tables. It preserves all existing SIMPLE/VARIABLE IDs, content,
+selections and revisions. Foreign keys protect referenced definitions/options and
+classification roots; deferred triggers check category cycles and exactly one
+primary category for a nonempty assignment set. Downgrade removes this slice's
+classification data without changing existing product content or structure.
+The subsequent `0020_files` revision continues this chain for the Files module.
+
 Revisions contain no fixed tenant names and do not import current ORM models.
 
 The migration environment uses transaction-local `search_path` (through PostgreSQL `set_config(..., true)`) and explicitly sets `version_table_schema`. Successful execution restores the previous path. Failed transactions are rolled back by the owner. Migration files must preserve transactional execution: no internal commit, autocommit block or nontransactional DDL in onboarding revisions.
@@ -106,6 +123,8 @@ Control Plane v1 targets a fresh database. Migration or adoption of existing ins
 
 ## Related
 
+- [Files](../modules/files.md): `0020_files` creates tenant registry tables;
+  `dnk-manage files prepare --all` prepares private buckets after SQL migrations.
 - [CRM](../modules/crm.md)
 - [Tenancy](../modules/tenancy.md)
 - [Persistence and UoW](../architecture/persistence-and-uow.md)

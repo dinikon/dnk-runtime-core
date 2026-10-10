@@ -31,6 +31,7 @@ class ProductQueryRepositoryProtocol(Protocol):
         page: int,
         page_size: int,
         product_type_id: ProductTypeIdVO | None = None,
+        kind: str | None = None,
     ) -> ListProductsPageDTO:
         """Возвращает стабильную страницу с серверным фильтром и количеством."""
         ...

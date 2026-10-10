@@ -4,7 +4,9 @@ from src.modules.tenancy.infrastructure.tenant.persistence.tenant_gate import (
     session_guard,
 )
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Callable
+from contextlib import AbstractAsyncContextManager
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -50,10 +52,11 @@ def build_schedule_scheduled_job_use_case(
     session: AsyncSession,
     clock: ClockPort | None = None,
     uuid_generator: UUIdGeneratorProtocol | None = None,
+    admission: Callable[[UUID], AbstractAsyncContextManager[None]] | None = None,
 ) -> ScheduleScheduledJobUseCase:
     """Builds the scheduled job scheduling use case."""
     return ScheduleScheduledJobUseCase(
-        admission=session_guard(session),
+        admission=admission if admission is not None else session_guard(session),
         repository=build_scheduled_job_repository(session),
         clock=clock or UtcClock(),
         uuid_generator=uuid_generator or UUID7Generator(),

@@ -45,6 +45,9 @@ def build_parser() -> argparse.ArgumentParser:
     register_tenant_migrations(subparsers)
     register_database(subparsers)
     register_reference_data(subparsers)
+    from src.management.commands.files import register as register_files
+
+    register_files(subparsers)
     return parser
 
 

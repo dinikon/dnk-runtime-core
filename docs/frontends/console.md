@@ -15,7 +15,7 @@ modules.
 - Authenticates console users through email OTP.
 - Loads and stores the current console user session.
 - Provides tenant-scoped Contact and Company management in CRM.
-- Provides SIMPLE Catalog products, content types, blocks and independent locale editors.
+- Provides SIMPLE/VARIABLE Catalog products, enum attributes, explicit kind transitions, content types, blocks and independent locale editors; variant Title supports override and return to inheritance in the same locale.
 - Provides price-list and partner-offer workflows.
 - Provides profile and administrator-only workspace access-management screens.
 
@@ -235,14 +235,30 @@ code changes.
 
 ## Catalog
 
-The workspace Catalog navigation opens `/catalog/products`, `/catalog/product-types`
-and `/catalog/content-blocks`. Lazy editor routes include new products, individual
-products, their Variant scope, and content definitions. Locale is explicit and
-stored in the URL; Product/Variant never inherit a missing translation. Forms
-save each section independently and preserve input on version conflicts. System
-schemas are read-only. SKU and downloadable files remain unavailable until their
-owning modules supply contracts. See [Catalog](../modules/catalog.md) and
-[the slice contracts](../plan/catalog-slice-1.md).
+The workspace Catalog navigation opens `/catalog/products`, `/catalog/attributes`,
+`/catalog/categories`, `/catalog/tags`, `/catalog/product-types` and
+`/catalog/content-blocks`. Lazy editor routes include
+SIMPLE/VARIABLE creation, products, individual variants, full structures and enum
+definitions/options, Category/Tag labels and category parent changes. Categories
+load by branch; Product assigns explicit categories with one primary, tags, and
+general enum values independently from VARIABLE axes. Locale is explicit and stored in the URL. Missing translations
+stay absent; VARIABLE inherits only system Title from PRODUCT in the same locale,
+with an explicit override and return action. Variant descriptions stay independent.
+Forms save each section independently and preserve input on version conflicts.
+Kind transitions show affected positions; the server protects retained content.
+System schemas are read-only. SKU and downloadable files remain unavailable until
+their owning modules supply contracts. See [Catalog](../modules/catalog.md),
+[slice 1](../plan/catalog-slice-1.md), [slice 2](../plan/catalog-slice-2.md) and
+[slice 3](../plan/catalog-slice-3.md).
+
+## File Storage
+
+`/files` shows tenant storage connections and private buckets. The system MinIO
+connection carries `Default / System` and has no edit controls. Bucket statistics
+show registered ready files and their total size. The page supports refresh,
+loading, error and empty states; mobile view uses separate bucket cards.
+Both data sources are authenticated read-only Files endpoints. File upload and
+download belong to consuming business modules. See [Files](../modules/files.md).
 
 ## Related
 
@@ -251,6 +267,7 @@ owning modules supply contracts. See [Catalog](../modules/catalog.md) and
 - [HTTP API](../interfaces/http-api.md)
 - [Identity module](../modules/identity.md)
 - [CRM module](../modules/crm.md)
+- [Files module](../modules/files.md)
 - [Contact points and reusable fields](../modules/contact-points.md)
 - [Schema Registry module](../history/modules/schema-registry.md)
 - [Runtime schema](../history/data/runtime-schema.md)

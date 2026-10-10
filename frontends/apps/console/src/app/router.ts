@@ -6,6 +6,7 @@ import { AdminLayout, AppLayout } from "@/layouts";
 import { accessRoutes } from "@/modules/access/routes";
 import { authRoutes } from "@/modules/auth/routes";
 import { catalogRoutes } from "@/modules/catalog/routes";
+import { filesRoutes } from "@/modules/files/routes";
 import { channelRoutes } from "@/modules/channels";
 import { crmRoutes } from "@/modules/crm";
 import { dashboardRoutes } from "@/modules/dashboard";
@@ -33,6 +34,7 @@ export const router = createRouter({
         },
         ...dashboardRoutes,
         ...channelRoutes,
+        ...filesRoutes,
         ...catalogRoutes,
         ...crmRoutes,
         ...priceListRoutes,

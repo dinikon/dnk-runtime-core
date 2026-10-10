@@ -27,6 +27,7 @@ dependencies = [
     "phonenumbers>=9,<10",
     "email-validator>=2.3,<3",
     "nh3>=0.3.7",
+    "minio>=7.2.20,<8",
 ]
 
 [dependency-groups]

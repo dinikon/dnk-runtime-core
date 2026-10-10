@@ -242,6 +242,36 @@ class TenantDeletionTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
 
+    async def test_storage_failure_preserves_schema_until_purge_retry(self) -> None:
+        """Сбой MinIO не удаляет координаты хранилища или tenant-схему."""
+        from unittest.mock import patch, AsyncMock
+        from src.modules.tenancy.infrastructure.adapter.files import (
+            FilesTenantStorageAdapter,
+        )
+        from src.modules.files.application.port.storage import StorageUnavailableError
+
+        payload, runtime_id = await self.install()
+        command = self.command(payload)
+        await self.accept(command)
+        await self.worker.run(command.operation_id)
+        await self.purge(command)
+        with patch.object(
+            FilesTenantStorageAdapter,
+            "purge",
+            AsyncMock(side_effect=StorageUnavailableError()),
+        ):
+            await self.worker.run(command.operation_id)
+        self.assertEqual((await self.state(command)).state, "purging")
+        async with self.sessions() as session:
+            self.assertTrue(
+                await schema_exists(await session.connection(), f"dnk_{runtime_id.hex}")
+            )
+            self.assertEqual(
+                (await session.get(TenantModel, runtime_id)).status, "purging"
+            )
+        await self.worker.run(command.operation_id)
+        self.assertEqual((await self.state(command)).state, "deleted")
+
     async def test_full_purge_removes_schema_models_and_secrets_but_preserves_neighbor(
         self,
     ):
@@ -291,7 +321,7 @@ class TenantDeletionTests(unittest.IsolatedAsyncioTestCase):
                         .select_from(model)
                         .where(model.tenant_id == neighbor_id)
                     ),
-                    1,
+                    2 if model is ScheduledJobModel else 1,
                 )
             for model in (
                 InstallationModel,

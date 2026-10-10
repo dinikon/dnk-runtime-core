@@ -58,5 +58,5 @@ class CreateSimpleProductHandler:
         )
         await self._repository.add(product)
         return CreateSimpleProductResultDTO(
-            product.id.uuid, product.revision, product.variant.id.uuid
+            product.id.uuid, product.revision, product.variants[0].id.uuid
         )

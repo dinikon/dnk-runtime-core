@@ -23,6 +23,43 @@ class Tenant:
     created_at: datetime
     updated_at: datetime
 
+    def activate(self, *, storage_ready: bool) -> None:
+        """Активирует tenant только после подтверждения готовности хранилища."""
+        if not storage_ready or self.status not in {
+            TenantStatus.PROVISIONING,
+            TenantStatus.ACTIVE,
+        }:
+            from src.modules.tenancy.domain.tenant.error import (
+                TenantCannotActivateError,
+            )
+
+            raise TenantCannotActivateError(
+                "Tenant cannot be activated before storage is ready."
+            )
+        self.status = TenantStatus.ACTIVE
+        self.updated_at = datetime.now(UTC)
+
+    @classmethod
+    def restore(
+        cls,
+        *,
+        tenant_id: TenantIdVO,
+        name: str,
+        external_id: str,
+        status: TenantStatus,
+        custom_config: dict[str, object] | None,
+        created_at: datetime,
+        updated_at: datetime,
+    ) -> "Tenant":
+        """Восстанавливает tenant через явную фабрику с проверкой обязательных значений."""
+        if not name.strip():
+            raise InvalidTenantNameError()
+        if not external_id.strip():
+            raise InvalidTenantExternalIdError()
+        return cls(
+            tenant_id, name, external_id, status, custom_config, created_at, updated_at
+        )
+
     def allows_login(self) -> bool:
         """Показывает, разрешен ли login для tenant."""
         return self.status == TenantStatus.ACTIVE

@@ -1,6 +1,9 @@
 import {
   Building2,
+  FolderTree,
+  Tags,
   Plug,
+  HardDrive,
   FileSpreadsheet,
   LifeBuoy,
   ShoppingBasket,
@@ -15,6 +18,13 @@ export const workspaceNavigation: WorkspaceNavigation = {
       title: "Каталог",
       items: [
         { title: "Товары", url: "/catalog/products", icon: ShoppingBasket },
+        { title: "Категории", url: "/catalog/categories", icon: FolderTree },
+        { title: "Метки", url: "/catalog/tags", icon: Tags },
+        {
+          title: "Характеристики",
+          url: "/catalog/attributes",
+          icon: FileSpreadsheet,
+        },
         {
           title: "Типы контента",
           url: "/catalog/product-types",
@@ -29,7 +39,10 @@ export const workspaceNavigation: WorkspaceNavigation = {
     },
     {
       title: "Интеграции",
-      items: [{ title: "Каналы", url: "/channels", icon: Plug }],
+      items: [
+        { title: "Каналы", url: "/channels", icon: Plug },
+        { title: "Файловые хранилища", url: "/files", icon: HardDrive },
+      ],
     },
     {
       title: "CRM",

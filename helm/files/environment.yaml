@@ -68,3 +68,10 @@ PRICE_LISTS__MAX_RECORD_BYTES: application.priceLists.maxRecordBytes
 PRICE_LISTS__STRING_CACHE_BYTES: application.priceLists.stringCacheBytes
 PRICE_LISTS__MAX_TEMP_BYTES: application.priceLists.maxTempBytes
 PRICE_LISTS__FAILED_STAGING_RETENTION_DAYS: application.priceLists.failedStagingRetentionDays
+
+FILES__ENDPOINT: application.files.endpoint
+FILES__SECURE: application.files.secure
+FILES__REGION: application.files.region
+FILES__TIMEOUT_SECONDS: application.files.timeoutSeconds
+FILES__OPERATION_TIMEOUT_SECONDS: application.files.operationTimeoutSeconds
+FILES__CONCURRENCY: application.files.concurrency

@@ -5,6 +5,11 @@ from typing import Annotated
 from fastapi import Depends
 
 from src.config import dnk_config
+from src.modules.tenancy.application.ports.files import TenantStorageProtocol
+from src.modules.tenancy.infrastructure.adapter.files import FilesTenantStorageAdapter
+from src.modules.tenancy.application.tenant.tenant_schema_naming import (
+    TenantSchemaNaming,
+)
 from src.modules.shared.presentation.persistence.depends import UoWDep
 from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
     TenantMigrator,
@@ -39,11 +44,22 @@ from src.modules.tenancy.presentation.depends.infrastructure import (
 from src.modules.tenancy.presentation.depends.infrastructure import TenantsRepositoryDep
 
 
+def get_tenant_storage(uow: UoWDep) -> TenantStorageProtocol:
+    """Собирает файловый адаптер на сессии общего UoW."""
+    return FilesTenantStorageAdapter(
+        uow.session, TenantSchemaNaming(dnk_config.SCHEMA_PREFIX)
+    )
+
+
+TenantStorageDep = Annotated[TenantStorageProtocol, Depends(get_tenant_storage)]
+
+
 def get_create_tenant_use_case(
     tenant_onboarding_service: TenantOnboardingServiceDep,
     identity_provisioning_service: IdentityProvisioningServiceDep,
     tenant_schema_bootstrap_context_factory: "TenantSchemaBootstrapContextFactoryDep",
     tenant_schema_bootstrap_port: "TenantSchemaBootstrapPortDep",
+    tenant_storage: TenantStorageDep,
 ) -> CreateTenantUseCase:
     """Создает use case полного tenant onboarding."""
 
@@ -52,6 +68,7 @@ def get_create_tenant_use_case(
         identity_provisioning_service=identity_provisioning_service,
         tenant_schema_bootstrap_context_factory=tenant_schema_bootstrap_context_factory,
         tenant_schema_bootstrap_port=tenant_schema_bootstrap_port,
+        tenant_storage=tenant_storage,
     )
 
 

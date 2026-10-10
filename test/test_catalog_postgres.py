@@ -196,8 +196,8 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         )
         unchanged = await self.request("GET", item + "?locale=ru")
         self.assertEqual(unchanged["revision"], 2)
-        self.assertIsNone(unchanged["variant_content"])
-        self.assertEqual(unchanged["variant_locales"], [])
+        self.assertIsNone(unchanged["variants"][0]["content"])
+        self.assertEqual(unchanged["variants"][0]["locales"], [])
         await self.request(
             "PUT",
             item + "/content/ru",

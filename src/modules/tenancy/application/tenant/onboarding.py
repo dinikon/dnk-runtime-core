@@ -28,7 +28,7 @@ class TenantOnboardingDraft:
 
 
 class TenantOnboardingService:
-    """Доменный сервис onboarding tenant и его primary domain."""
+    """Application сервис onboarding tenant и его primary domain."""
 
     def __init__(
         self,
@@ -63,9 +63,7 @@ class TenantOnboardingService:
             name=normalized_name,
             external_id=normalized_external_id,
             tenant_id=reserved_tenant_id,
-            status=(
-                TenantStatus.PROVISIONING if reserved_tenant_id else TenantStatus.ACTIVE
-            ),
+            status=TenantStatus.PROVISIONING,
         )
         await self._tenants_repository.add(tenant)
 

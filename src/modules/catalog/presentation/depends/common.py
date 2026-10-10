@@ -91,3 +91,103 @@ def get_schema_service(
 
 
 SchemaServiceDep = Annotated[ProductSchemaService, Depends(get_schema_service)]
+
+from src.modules.catalog.domain.attribute.repository import AttributeRepositoryProtocol
+from src.modules.catalog.infrastructure.attribute.persistence.repository import (
+    SqlAlchemyAttributeRepository,
+)
+from src.modules.catalog.application.product.port.attribute_definitions import (
+    AttributeDefinitionsPort,
+)
+from src.modules.catalog.infrastructure.product.attribute_definitions import (
+    SqlAlchemyAttributeDefinitions,
+)
+from src.modules.catalog.application.product.structure_service import (
+    ProductStructureService,
+)
+from src.modules.shared.presentation.uuid.depends import UuidDep
+
+
+def get_attribute_repository(uow: UoWDep) -> AttributeRepositoryProtocol:
+    """Собирает enum write repository на общей tenant-сессии."""
+    return SqlAlchemyAttributeRepository(uow.session)
+
+
+AttributeRepositoryDep = Annotated[
+    AttributeRepositoryProtocol, Depends(get_attribute_repository)
+]
+
+
+def get_attribute_definitions(uow: UoWDep) -> AttributeDefinitionsPort:
+    """Собирает минимальные снимки на том же UoW, что и Product."""
+    return SqlAlchemyAttributeDefinitions(uow.session)
+
+
+AttributeDefinitionsDep = Annotated[
+    AttributeDefinitionsPort, Depends(get_attribute_definitions)
+]
+
+
+def get_structure_service(
+    definitions: AttributeDefinitionsDep, uuid: UuidDep
+) -> ProductStructureService:
+    """Подключает порты генерации ID и снимков к координатору структуры."""
+    return ProductStructureService(definitions, uuid)
+
+
+StructureServiceDep = Annotated[ProductStructureService, Depends(get_structure_service)]
+
+from src.modules.catalog.domain.category.repository import CategoryRepositoryProtocol
+from src.modules.catalog.infrastructure.category.persistence.repository import (
+    SqlAlchemyCategoryRepository,
+)
+
+
+def get_category_repository(uow: UoWDep) -> CategoryRepositoryProtocol:
+    """Собирает write repository category на общей tenant-сессии."""
+    return SqlAlchemyCategoryRepository(uow.session)
+
+
+CategoryRepositoryDep = Annotated[
+    CategoryRepositoryProtocol, Depends(get_category_repository)
+]
+
+from src.modules.catalog.domain.tag.repository import TagRepositoryProtocol
+from src.modules.catalog.infrastructure.tag.persistence.repository import (
+    SqlAlchemyTagRepository,
+)
+
+
+def get_tag_repository(uow: UoWDep) -> TagRepositoryProtocol:
+    """Собирает write repository tag на общей tenant-сессии."""
+    return SqlAlchemyTagRepository(uow.session)
+
+
+TagRepositoryDep = Annotated[TagRepositoryProtocol, Depends(get_tag_repository)]
+
+from src.modules.catalog.application.category.port.tree import CategoryTreePort
+from src.modules.catalog.infrastructure.category.tree import SqlAlchemyCategoryTree
+from src.modules.catalog.application.product.port.classification_references import (
+    ClassificationReferencesPort,
+)
+from src.modules.catalog.infrastructure.product.classification_references import (
+    SqlAlchemyClassificationReferences,
+)
+
+
+def get_category_tree(uow: UoWDep) -> CategoryTreePort:
+    """Подключает минимальный снимок дерева к тому же UoW."""
+    return SqlAlchemyCategoryTree(uow.session)
+
+
+CategoryTreeDep = Annotated[CategoryTreePort, Depends(get_category_tree)]
+
+
+def get_classification_references(uow: UoWDep) -> ClassificationReferencesPort:
+    """Подключает ссылки справочников на общей tenant-сессии Product."""
+    return SqlAlchemyClassificationReferences(uow.session)
+
+
+ClassificationReferencesDep = Annotated[
+    ClassificationReferencesPort, Depends(get_classification_references)
+]

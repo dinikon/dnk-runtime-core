@@ -1,5 +1,8 @@
 from dataclasses import dataclass
 from typing import Self
+from src.modules.catalog.domain.product.value_object.selection import (
+    VariationSelectionVO,
+)
 from src.modules.catalog.domain.product.value_object.variant_id import VariantIdVO
 from src.modules.catalog.domain.error import (
     CatalogDependencyUnavailableError,
@@ -16,11 +19,17 @@ class Variant:
     virtual: bool
     downloadable: bool
     translations: dict[str, dict[str, str]]
+    selection: VariationSelectionVO
 
     @classmethod
-    def create(cls, identifier: VariantIdVO, virtual: bool) -> Self:
+    def create(
+        cls,
+        identifier: VariantIdVO,
+        virtual: bool,
+        selection: VariationSelectionVO = VariationSelectionVO(),
+    ) -> Self:
         """Создаёт позицию без SKU, файлов и переводов."""
-        return cls.restore(identifier, virtual, False, {})
+        return cls.restore(identifier, virtual, False, {}, selection)
 
     @classmethod
     def restore(
@@ -29,10 +38,17 @@ class Variant:
         virtual: bool,
         downloadable: bool,
         translations: dict[str, dict[str, str]],
+        selection: VariationSelectionVO = VariationSelectionVO(),
     ) -> Self:
         """Восстанавливает позицию, отклоняя недоступное цифровое предложение."""
         if type(virtual) is not bool or type(downloadable) is not bool:
             raise InvalidCatalogValueError("Признаки позиции должны быть булевыми.")
+        if not isinstance(identifier, VariantIdVO) or not isinstance(
+            selection, VariationSelectionVO
+        ):
+            raise InvalidCatalogValueError(
+                "Некорректная идентичность или selection позиции."
+            )
         if downloadable:
             raise CatalogDependencyUnavailableError(
                 "Downloadable требует файлового сервиса."
@@ -44,6 +60,7 @@ class Variant:
             virtual,
             downloadable,
             {k: dict(v) for k, v in translations.items()},
+            selection,
         )
 
     def set_properties(self, virtual: bool, downloadable: bool) -> None:

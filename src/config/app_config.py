@@ -20,6 +20,7 @@ from src.config.deploy import DeploymentConfig
 from src.config.feature import FeatureConfig
 from src.config.infrastructure import DatabaseConfig
 from src.config.infrastructure.email_config import EmailConfig
+from src.config.infrastructure.files_config import FilesConfig
 from src.config.infrastructure.event_bus_config import EventBusConfig
 from src.config.infrastructure.rabbitmq_config import RabbitMQConfig
 from src.config.infrastructure.redis_config import RedisConfig
@@ -101,6 +102,7 @@ class DnkConfig(
     EventBusConfig,
     ScheduledJobsConfig,
     EmailConfig,
+    FilesConfig,
     # Redis config
     RedisConfig,
     # Auth config

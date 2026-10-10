@@ -31,6 +31,7 @@ async def list_products(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     product_type_id: UUID | None = None,
+    kind: str | None = Query(default=None),
 ) -> ListProductsResponse:
     """Преобразует доверенный контекст и конкретный HTTP-контракт в сценарий."""
     principal = context.principal
@@ -41,6 +42,7 @@ async def list_products(
             tenant_id=EntityIdVO.from_value(principal.tenant_id),
             locale=locale,
             search=search,
+            kind=kind,
             page=page,
             page_size=page_size,
             product_type_id=(

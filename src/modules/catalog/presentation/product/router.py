@@ -171,3 +171,114 @@ router.add_api_route(
     response_model=GetVariantResponse,
     dependencies=[Depends(require_authenticated_request_context)],
 )
+
+from src.modules.catalog.presentation.product.http.controller.create_variable_product import (
+    create_variable_product,
+)
+from src.modules.catalog.presentation.product.http.response.create_variable_product import (
+    CreateVariableProductResponse,
+)
+
+router.add_api_route(
+    "/variable",
+    create_variable_product,
+    methods=["POST"],
+    status_code=201,
+    response_model=CreateVariableProductResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
+
+from src.modules.catalog.presentation.product.http.controller.replace_variants import (
+    replace_variants,
+)
+from src.modules.catalog.presentation.product.http.response.replace_variants import (
+    ReplaceVariantsResponse,
+)
+
+router.add_api_route(
+    "/{product_id}/structure",
+    replace_variants,
+    methods=["PUT"],
+    status_code=200,
+    response_model=ReplaceVariantsResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
+
+from src.modules.catalog.presentation.product.http.controller.change_product_kind import (
+    change_product_kind,
+)
+from src.modules.catalog.presentation.product.http.response.change_product_kind import (
+    ChangeProductKindResponse,
+)
+
+router.add_api_route(
+    "/{product_id}/kind",
+    change_product_kind,
+    methods=["PUT"],
+    status_code=200,
+    response_model=ChangeProductKindResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
+
+from src.modules.catalog.presentation.product.http.controller.set_product_attributes import (
+    set_product_attributes,
+)
+from src.modules.catalog.presentation.product.http.response.set_product_attributes import (
+    SetProductAttributesResponse,
+)
+
+router.add_api_route(
+    "/{product_id}/attributes",
+    set_product_attributes,
+    methods=["PUT"],
+    response_model=SetProductAttributesResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
+
+from src.modules.catalog.presentation.product.http.controller.set_product_categories import (
+    set_product_categories,
+)
+from src.modules.catalog.presentation.product.http.response.set_product_categories import (
+    SetProductCategoriesResponse,
+)
+
+router.add_api_route(
+    "/{product_id}/categories",
+    set_product_categories,
+    methods=["PUT"],
+    response_model=SetProductCategoriesResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
+
+from src.modules.catalog.presentation.product.http.controller.set_product_tags import (
+    set_product_tags,
+)
+from src.modules.catalog.presentation.product.http.response.set_product_tags import (
+    SetProductTagsResponse,
+)
+
+router.add_api_route(
+    "/{product_id}/tags",
+    set_product_tags,
+    methods=["PUT"],
+    response_model=SetProductTagsResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)

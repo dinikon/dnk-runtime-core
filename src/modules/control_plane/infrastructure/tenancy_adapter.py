@@ -1,8 +1,17 @@
 """Composition adapter to tenancy and identity; no foreign ORM in application."""
 
 from uuid import UUID
+from sqlalchemy.ext.asyncio import AsyncSession
+from src.modules.control_plane.infrastructure.models import InstallationModel
+from src.modules.tenancy.infrastructure.adapter.files import FilesTenantStorageAdapter
+from src.modules.tenancy.application.tenant.command.activate_tenant.command import (
+    ActivateTenantCommand,
+)
+from src.modules.tenancy.application.tenant.command.activate_tenant.handler import (
+    ActivateTenantHandler,
+)
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import or_, select
 
 from src.modules.shared import EntityIdVO
 from src.modules.tenancy.application.tenant.tenant_schema_naming import (
@@ -23,7 +32,7 @@ from src.modules.tenancy.application.tenant.command.create_tenant_command import
 from src.modules.tenancy.application.tenant.use_case.create_tenant import (
     CreateTenantUseCase,
 )
-from src.modules.tenancy.domain.service.tenant_onboarding import TenantOnboardingService
+from src.modules.tenancy.application.tenant.onboarding import TenantOnboardingService
 from src.modules.tenancy.infrastructure.adapter.identity_provisioning import (
     IdentityProvisioningServiceAdapter,
 )
@@ -43,7 +52,10 @@ from src.modules.tenancy.infrastructure.repository.tenant_repository import (
 
 
 class TenancyAdapter:
-    def __init__(self, session, schema_prefix: str):
+    """Собирает межмодульные сценарии установки и готовности tenant."""
+
+    def __init__(self, session: AsyncSession, schema_prefix: str) -> None:
+        """Собирает tenant-адаптер на внешней сессии процесса установки."""
         self.session = session
         self.naming = TenantSchemaNaming(schema_prefix)
         self.schema_prefix = schema_prefix
@@ -78,7 +90,10 @@ class TenancyAdapter:
             else "absent"
         )
 
-    async def install(self, installation, command: dict):
+    async def install(
+        self, installation: InstallationModel, command: dict[str, object]
+    ) -> None:
+        """Подготавливает SQL-ресурсы tenant без внешнего создания бакета."""
         from src.modules.identity.application.user.command.create_tenant_admin.handler import (
             CreateTenantAdminHandler,
         )
@@ -99,6 +114,7 @@ class TenancyAdapter:
             ),
             TenantSchemaBootstrapContextFactory(schema_prefix=self.schema_prefix),
             AlembicTenantSchemaBootstrapAdapter(self.session, self.migrator),
+            FilesTenantStorageAdapter(self.session, self.naming),
         )
         profile = command["owner"].get("profile", {})
         result = await use_case.execute(
@@ -123,8 +139,13 @@ class TenancyAdapter:
         installation.owner_user_id = result.user_id
 
     async def ready(
-        self, installation, command: dict, *, require_active: bool = False
+        self,
+        installation: InstallationModel,
+        command: dict[str, object],
+        *,
+        require_active: bool = False,
     ) -> bool:
+        """Проверяет SQL-схему, файловое хранилище и необходимые owner bindings."""
         from src.modules.identity.infrastructure.cloud.bootstrap import (
             cloud_owner_ready,
         )
@@ -145,6 +166,10 @@ class TenancyAdapter:
             return False
         if await self.migrator.current(connection, schema) != (self.migrator.head(),):
             return False
+        if not await FilesTenantStorageAdapter(self.session, self.naming).is_ready(
+            tenant.id
+        ):
+            return False
         if require_active:
             # A completed installation stays ready when its original owner is
             # later suspended or explicitly unlinks their cloud account.
@@ -160,9 +185,15 @@ class TenancyAdapter:
             schema_prefix=self.schema_prefix,
         )
 
-    async def activate(self, tenant_id: UUID) -> None:
-        await self.session.execute(
-            update(TenantModel)
-            .where(TenantModel.id == tenant_id)
-            .values(status="active")
+    async def provision_storage(self, installation: InstallationModel) -> None:
+        """Подготавливает ранее зарегистрированный бакет tenant через порт Tenancy."""
+        await FilesTenantStorageAdapter(self.session, self.naming).provision(
+            installation.runtime_tenant_id
         )
+
+    async def activate(self, tenant_id: UUID) -> None:
+        """Активирует tenant через Application handler и доменный переход."""
+        await ActivateTenantHandler(
+            SqlAlchemyTenantRepository(self.session),
+            FilesTenantStorageAdapter(self.session, self.naming),
+        ).execute(ActivateTenantCommand(tenant_id))

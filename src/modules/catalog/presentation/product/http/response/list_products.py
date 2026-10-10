@@ -1,9 +1,9 @@
-from uuid import UUID
 from pydantic import BaseModel
+from uuid import UUID
 
 
 class ProductListItemResponse(BaseModel):
-    """Строка HTTP-списка list_products."""
+    """Одна строка товара, независимо от числа принадлежащих позиций."""
 
     id: UUID
     kind: str
@@ -12,15 +12,12 @@ class ProductListItemResponse(BaseModel):
     schema_version: int
     content: dict[str, str] | None
     locales: tuple[str, ...]
-    variant_id: UUID
-    virtual: bool
-    downloadable: bool
-    variant_content: dict[str, str] | None
-    variant_locales: tuple[str, ...]
+    title: str | None
+    variant_count: int
 
 
 class ListProductsResponse(BaseModel):
-    """Ответ HTTP-сценария list_products."""
+    """Страница результата list_products без повторов Product."""
 
     items: tuple[ProductListItemResponse, ...]
     total: int

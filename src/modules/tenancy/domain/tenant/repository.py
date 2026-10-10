@@ -9,6 +9,10 @@ from src.modules.tenancy.domain.tenant.value_object.tenant_id import TenantIdVO
 class TenantRepositoryProtocol(Protocol):
     """Порт хранения tenant entities."""
 
+    async def save(self, tenant: Tenant) -> None:
+        """Сохраняет состояние tenant без самостоятельного commit."""
+        ...
+
     async def add(self, tenant: Tenant) -> None:
         """Добавляет tenant в хранилище."""
         ...

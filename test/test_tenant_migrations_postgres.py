@@ -1,5 +1,8 @@
 """Real PostgreSQL checks. TEST_POSTGRES_URL must point to a disposable test DB."""
 
+from src.modules.tenancy.infrastructure.adapter.files import FilesTenantStorageAdapter
+
+
 import asyncio
 import contextlib
 import io
@@ -67,7 +70,7 @@ from src.modules.tenancy.application.tenant.command.create_tenant_command import
 from src.modules.tenancy.application.tenant.use_case.create_tenant import (
     CreateTenantUseCase,
 )
-from src.modules.tenancy.domain.service.tenant_onboarding import TenantOnboardingService
+from src.modules.tenancy.application.tenant.onboarding import TenantOnboardingService
 from src.modules.tenancy.domain.tenant.entity import Tenant
 from src.modules.tenancy.domain.tenant.schema_error import (
     TenantSchemaAlreadyExistsError,
@@ -734,6 +737,9 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 ),
                 tenant_schema_bootstrap_port=RecordingBootstrap(
                     uow.session, RecordingMigrator()
+                ),
+                tenant_storage=FilesTenantStorageAdapter(
+                    uow.session, TenantSchemaNaming("dnk_")
                 ),
             )
             return await use_case.execute(

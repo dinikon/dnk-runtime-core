@@ -13,7 +13,6 @@ from src.modules.catalog.application.port.mutation_lock import CatalogMutationLo
 from src.modules.shared.domain.time.clock_port import ClockPort
 
 from src.modules.catalog.domain.error import CatalogConflictError
-from src.modules.catalog.domain.product.error import VariantNotFoundError
 from src.modules.catalog.domain.value_object.locale import LocaleVO
 from src.modules.catalog.application.product.command.put_variant_content.command import (
     PutVariantContentCommand,
@@ -50,8 +49,7 @@ class PutVariantContentHandler:
         await self._lock.acquire(command.tenant_id)
         product = await self._repository.get(command.product_id)
         product.ensure_revision(command.expected_revision)
-        if product.variant.id != command.variant_id:
-            raise VariantNotFoundError("Позиция отсутствует в Product.")
+        product.find_variant(command.variant_id)
         locale = LocaleVO(command.locale)
         await self._locales.ensure_active(locale.value)
         schema = await self._schemas.get(product.product_type_id)
@@ -73,6 +71,7 @@ class PutVariantContentHandler:
             ContentScope.VARIANT,
             command.actor_id,
             self._clock.now(),
+            variant_id=command.variant_id,
         )
         await self._repository.save(product)
         return PutVariantContentResultDTO(product.id.uuid, product.revision)

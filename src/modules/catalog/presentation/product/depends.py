@@ -50,6 +50,16 @@ from src.modules.catalog.application.product.query.list_products.handler import 
 from src.modules.catalog.application.product.query.get_variant.handler import (
     GetVariantHandler,
 )
+from src.modules.catalog.application.product.command.create_variable_product.handler import (
+    CreateVariableProductHandler,
+)
+from src.modules.catalog.presentation.depends.common import StructureServiceDep
+from src.modules.catalog.application.product.command.replace_variants.handler import (
+    ReplaceVariantsHandler,
+)
+from src.modules.catalog.application.product.command.change_product_kind.handler import (
+    ChangeProductKindHandler,
+)
 
 
 def get_query_repository(uow: UoWDep) -> ProductQueryRepositoryProtocol:
@@ -229,3 +239,139 @@ def get_get_variant_handler(
 
 
 GetVariantHandlerDep = Annotated[GetVariantHandler, Depends(get_get_variant_handler)]
+
+
+def get_create_variable_product_handler(
+    repository: ProductRepositoryDep,
+    lock: MutationLockDep,
+    clock: ClockDep,
+    schemas: SchemaServiceDep,
+    structures: StructureServiceDep,
+    uuid: UuidDep,
+    types: ProductTypeRepositoryDep,
+) -> CreateVariableProductHandler:
+    """Собирает сценарий create_variable_product на портах одного tenant UoW."""
+    return CreateVariableProductHandler(
+        repository=repository,
+        lock=lock,
+        clock=clock,
+        schemas=schemas,
+        structures=structures,
+        uuid=uuid,
+        types=types,
+    )
+
+
+CreateVariableProductHandlerDep = Annotated[
+    CreateVariableProductHandler, Depends(get_create_variable_product_handler)
+]
+
+
+def get_replace_variants_handler(
+    repository: ProductRepositoryDep,
+    lock: MutationLockDep,
+    clock: ClockDep,
+    schemas: SchemaServiceDep,
+    structures: StructureServiceDep,
+) -> ReplaceVariantsHandler:
+    """Собирает сценарий replace_variants на портах одного tenant UoW."""
+    return ReplaceVariantsHandler(
+        repository=repository,
+        lock=lock,
+        clock=clock,
+        schemas=schemas,
+        structures=structures,
+    )
+
+
+ReplaceVariantsHandlerDep = Annotated[
+    ReplaceVariantsHandler, Depends(get_replace_variants_handler)
+]
+
+
+def get_change_product_kind_handler(
+    repository: ProductRepositoryDep,
+    lock: MutationLockDep,
+    clock: ClockDep,
+    schemas: SchemaServiceDep,
+    structures: StructureServiceDep,
+) -> ChangeProductKindHandler:
+    """Собирает сценарий change_product_kind на портах одного tenant UoW."""
+    return ChangeProductKindHandler(
+        repository=repository,
+        lock=lock,
+        clock=clock,
+        schemas=schemas,
+        structures=structures,
+    )
+
+
+ChangeProductKindHandlerDep = Annotated[
+    ChangeProductKindHandler, Depends(get_change_product_kind_handler)
+]
+
+from src.modules.catalog.presentation.depends.common import AttributeDefinitionsDep
+from src.modules.catalog.application.product.command.set_product_attributes.handler import (
+    SetProductAttributesHandler,
+)
+
+
+def get_set_product_attributes_handler(
+    repository: ProductRepositoryDep,
+    references: AttributeDefinitionsDep,
+    lock: MutationLockDep,
+    clock: ClockDep,
+) -> SetProductAttributesHandler:
+    """Собирает отдельный сценарий set_product_attributes на портах одной транзакции."""
+    return SetProductAttributesHandler(
+        repository=repository, references=references, lock=lock, clock=clock
+    )
+
+
+SetProductAttributesHandlerDep = Annotated[
+    SetProductAttributesHandler, Depends(get_set_product_attributes_handler)
+]
+
+from src.modules.catalog.presentation.depends.common import ClassificationReferencesDep
+from src.modules.catalog.application.product.command.set_product_categories.handler import (
+    SetProductCategoriesHandler,
+)
+
+
+def get_set_product_categories_handler(
+    repository: ProductRepositoryDep,
+    references: ClassificationReferencesDep,
+    lock: MutationLockDep,
+    clock: ClockDep,
+) -> SetProductCategoriesHandler:
+    """Собирает отдельный сценарий set_product_categories на портах одной транзакции."""
+    return SetProductCategoriesHandler(
+        repository=repository, references=references, lock=lock, clock=clock
+    )
+
+
+SetProductCategoriesHandlerDep = Annotated[
+    SetProductCategoriesHandler, Depends(get_set_product_categories_handler)
+]
+
+from src.modules.catalog.presentation.depends.common import ClassificationReferencesDep
+from src.modules.catalog.application.product.command.set_product_tags.handler import (
+    SetProductTagsHandler,
+)
+
+
+def get_set_product_tags_handler(
+    repository: ProductRepositoryDep,
+    references: ClassificationReferencesDep,
+    lock: MutationLockDep,
+    clock: ClockDep,
+) -> SetProductTagsHandler:
+    """Собирает отдельный сценарий set_product_tags на портах одной транзакции."""
+    return SetProductTagsHandler(
+        repository=repository, references=references, lock=lock, clock=clock
+    )
+
+
+SetProductTagsHandlerDep = Annotated[
+    SetProductTagsHandler, Depends(get_set_product_tags_handler)
+]

@@ -8,6 +8,8 @@ const props = defineProps<{
   pending: boolean;
   disabled: boolean;
   reset: number;
+  inheritedTitle?: string | null;
+  titleInheritance?: boolean;
 }>();
 const emit = defineEmits<{
   submit: [values: Record<string, string>];
@@ -35,6 +37,14 @@ function change(id: string, value: string) {
   dirty.value = true;
   emit("dirty", true);
 }
+function inherit(id: string) {
+  delete values.value[id];
+  dirty.value = true;
+  emit("dirty", true);
+}
+function override(id: string) {
+  change(id, props.inheritedTitle ?? "");
+}
 function submit() {
   errors.value = {};
   for (const b of props.blocks) {
@@ -55,14 +65,55 @@ function submit() {
     <p v-if="!blocks.length" class="text-sm text-muted-foreground">
       В этой области нет блоков. Можно сохранить пустой перевод.
     </p>
-    <label v-for="block in blocks" :key="block.blockId" class="block space-y-2"
-      ><span
+    <div v-for="block in blocks" :key="block.blockId" class="block space-y-2">
+      <span
         >{{ block.label ?? block.code }}
         <span v-if="block.required" class="text-destructive">*</span></span
-      ><textarea
-        :value="values[block.blockId] ?? ''"
+      >
+      <div
+        v-if="titleInheritance && block.code === 'title'"
+        class="space-y-2 rounded-md bg-muted p-3 text-sm"
+      >
+        <p>
+          {{
+            Object.prototype.hasOwnProperty.call(values, block.blockId)
+              ? "Собственное название варианта"
+              : "Наследуется от товара"
+          }}
+          · {{ inheritedTitle ?? "Название товара в этой locale отсутствует" }}
+        </p>
+        <Button
+          v-if="!Object.prototype.hasOwnProperty.call(values, block.blockId)"
+          type="button"
+          variant="outline"
+          :disabled="pending || disabled"
+          @click="override(block.blockId)"
+          >Переопределить Title</Button
+        >
+        <Button
+          v-else
+          type="button"
+          variant="outline"
+          :disabled="pending || disabled"
+          @click="inherit(block.blockId)"
+          >Вернуть наследование</Button
+        >
+      </div>
+      <textarea
+        :value="
+          values[block.blockId] ??
+          (titleInheritance && block.code === 'title'
+            ? (inheritedTitle ?? '')
+            : '')
+        "
         :aria-label="block.label ?? block.code"
-        :disabled="disabled || pending"
+        :disabled="
+          disabled ||
+          pending ||
+          (titleInheritance &&
+            block.code === 'title' &&
+            !Object.prototype.hasOwnProperty.call(values, block.blockId))
+        "
         :rows="block.valueType === 'rich_text' ? 6 : 2"
         class="block w-full rounded-md border bg-background px-3 py-2 text-sm"
         @input="
@@ -77,8 +128,8 @@ function submit() {
         v-if="errors[block.blockId]"
         class="block text-sm text-destructive"
         >{{ errors[block.blockId] }}</span
-      ></label
-    >
+      >
+    </div>
     <div class="flex flex-wrap gap-2">
       <Button type="submit" :disabled="pending || disabled"
         >Сохранить перевод</Button

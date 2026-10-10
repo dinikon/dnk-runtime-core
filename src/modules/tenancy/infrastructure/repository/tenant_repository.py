@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.tenancy.domain.tenant.entity import Tenant
@@ -19,6 +19,14 @@ class SqlAlchemyTenantRepository(TenantRepositoryProtocol):
     def __init__(self, session: AsyncSession) -> None:
         """Инициализирует repository текущей async-сессией."""
         self._session = session
+
+    async def save(self, tenant: Tenant) -> None:
+        """Сохраняет состояние доменной сущности в текущей транзакции."""
+        await self._session.execute(
+            update(TenantModel)
+            .where(TenantModel.id == tenant.id.uuid)
+            .values(status=tenant.status.value, updated_at=tenant.updated_at)
+        )
 
     async def add(self, tenant: Tenant) -> None:
         """Добавляет tenant model и flush-ит сессию."""

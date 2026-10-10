@@ -1,5 +1,8 @@
 """Identity isolation and HTTP checks against a disposable PostgreSQL database."""
 
+from src.modules.tenancy.infrastructure.adapter.files import FilesTenantStorageAdapter
+
+
 import os
 import unittest
 from datetime import UTC, datetime
@@ -10,7 +13,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete, inspect, insert, select, text
 from sqlalchemy.exc import IntegrityError, ProgrammingError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 from sqlalchemy.schema import CreateSchema, DropSchema
 
@@ -50,7 +53,7 @@ from src.modules.tenancy.application.tenant.command.create_tenant_command import
 from src.modules.tenancy.application.tenant.use_case.create_tenant import (
     CreateTenantUseCase,
 )
-from src.modules.tenancy.domain.service.tenant_onboarding import TenantOnboardingService
+from src.modules.tenancy.application.tenant.onboarding import TenantOnboardingService
 from src.modules.tenancy.infrastructure.adapter.schema_bootstrap import (
     AlembicTenantSchemaBootstrapAdapter,
 )
@@ -116,6 +119,18 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         try:
             async with self.engine.begin() as connection:
+                for tenant_id in self.tenant_ids:
+                    async with AsyncSession(
+                        connection, expire_on_commit=False
+                    ) as session:
+                        schema = self.naming.schema_name(
+                            EntityIdVO.from_value(tenant_id)
+                        )
+                        if await schema_exists(connection, schema):
+                            await FilesTenantStorageAdapter(session, self.naming).purge(
+                                tenant_id
+                            )
+                            await session.flush()
                 for schema in self.schemas:
                     await connection.execute(
                         DropSchema(schema, cascade=True, if_exists=True)
@@ -182,8 +197,11 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
                 tenant_schema_bootstrap_port=RecordingBootstrap(
                     uow.session, self.migrator
                 ),
+                tenant_storage=FilesTenantStorageAdapter(
+                    uow.session, TenantSchemaNaming("dnk_")
+                ),
             )
-            return await use_case.execute(
+            result = await use_case.execute(
                 CreateTenantCommand(
                     tenant_name=f"{self.tag}-{suffix}",
                     external_id=f"{self.tag}-{suffix}",
@@ -193,6 +211,15 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
                     user_email="shared@example.com",
                 )
             )
+
+        from src.modules.tenancy.presentation.depends.storage_management import (
+            prepare_tenant_storage,
+        )
+
+        await prepare_tenant_storage(
+            self.sessions, self.naming, result.tenant_id, activate=True
+        )
+        return result
 
     async def test_global_startup_does_not_create_identity_tables(self):
         async with self.engine.begin() as connection:

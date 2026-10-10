@@ -1,6 +1,10 @@
 # Combine with docker-compose.yml. Requires Docker Compose 2.24.4+ for !reset.
 # Supply real certificates and a persistent Fernet key before enabling integration.
 x-integration-environment: &integration-environment
+  FILES__ENDPOINT: minio:9000
+  FILES__ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+  FILES__SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+  FILES__SECURE: "false"
   CONTROL_PLANE__ENABLED: "true"
   CONTROL_PLANE__PUBLIC_ORIGIN: ${CONTROL_PLANE__PUBLIC_ORIGIN}
   CONTROL_PLANE__MANAGEMENT_ORIGIN: ${CONTROL_PLANE__MANAGEMENT_ORIGIN}
@@ -17,6 +21,9 @@ x-integration-environment: &integration-environment
   CONTROL_PLANE__RABBITMQ_URL: ${CONTROL_PLANE__RABBITMQ_URL}
 
 services:
+  minio:
+    ports: !reset []
+
   api:
     ports: !reset []
     environment:
@@ -25,6 +32,7 @@ services:
       - ${CONTROL_PLANE_SECRET_DIRECTORY}:/var/run/dnk/control-plane:ro
     networks:
       default: {}
+      file-storage: {}
       runtime-ingress: {}
 
   frontend:
@@ -52,6 +60,8 @@ services:
     volumes:
       - ${CONTROL_PLANE_SECRET_DIRECTORY}:/var/run/dnk/control-plane:ro
     depends_on:
+      minio:
+        condition: service_healthy
       migrations:
         condition: service_completed_successfully
       provisioning-rabbitmq:
@@ -63,6 +73,7 @@ services:
       retries: 3
     networks:
       default: {}
+      file-storage: {}
       runtime-ingress: {}
 
   provisioning-rabbitmq:

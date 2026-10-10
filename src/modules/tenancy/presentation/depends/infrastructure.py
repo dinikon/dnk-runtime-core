@@ -20,7 +20,7 @@ from src.modules.tenancy.application.tenant.tenant_schema_naming import (
 from src.modules.tenancy.application.ports.identity import (
     IdentityProvisioningServiceProtocol,
 )
-from src.modules.tenancy.domain.service.tenant_onboarding import TenantOnboardingService
+from src.modules.tenancy.application.tenant.onboarding import TenantOnboardingService
 from src.modules.tenancy.domain.tenant.repository import TenantRepositoryProtocol
 from src.modules.tenancy.domain.tenant_domain.repository import (
     TenantDomainRepositoryProtocol,
@@ -81,7 +81,7 @@ def get_tenant_onboarding_service(
     tenants_repository: TenantsRepositoryDep,
     tenant_domains_repository: TenantDomainsRepositoryDep,
 ) -> TenantOnboardingService:
-    """Создает доменный сервис onboarding tenant."""
+    """Собирает Application orchestration подготовки tenant."""
     return TenantOnboardingService(
         tenants_repository=tenants_repository,
         tenant_domains_repository=tenant_domains_repository,

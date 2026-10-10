@@ -2,7 +2,6 @@ from src.modules.catalog.domain.product.repository import ProductRepositoryProto
 from src.modules.catalog.application.port.mutation_lock import CatalogMutationLockPort
 from src.modules.shared.domain.time.clock_port import ClockPort
 
-from src.modules.catalog.domain.product.error import VariantNotFoundError
 from src.modules.catalog.application.product.command.set_variant_properties.command import (
     SetVariantPropertiesCommand,
 )
@@ -32,10 +31,13 @@ class SetVariantPropertiesHandler:
         await self._lock.acquire(command.tenant_id)
         product = await self._repository.get(command.product_id)
         product.ensure_revision(command.expected_revision)
-        if product.variant.id != command.variant_id:
-            raise VariantNotFoundError("Позиция отсутствует в Product.")
+        product.find_variant(command.variant_id)
         product.set_variant_properties(
-            command.virtual, command.downloadable, command.actor_id, self._clock.now()
+            command.variant_id,
+            command.virtual,
+            command.downloadable,
+            command.actor_id,
+            self._clock.now(),
         )
         await self._repository.save(product)
         return SetVariantPropertiesResultDTO(product.id.uuid, product.revision)

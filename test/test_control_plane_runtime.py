@@ -364,6 +364,50 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
                 "succeeded",
             )
 
+    async def test_storage_failure_preserves_registered_tenant_then_recovers(
+        self,
+    ) -> None:
+        """MinIO failure после SQL commit сохраняет tenant для повторной попытки."""
+        from unittest.mock import patch, AsyncMock
+        from src.modules.files.application.port.storage import StorageUnavailableError
+
+        payload, _ = await self.accept()
+        attempt_id = UUID(payload["attempt_id"])
+        with patch.object(
+            TenancyAdapter,
+            "provision_storage",
+            AsyncMock(side_effect=StorageUnavailableError()),
+        ):
+            await Installer(self.sessions, self.config, "dnk_").run(attempt_id)
+        async with self.sessions() as session:
+            result = await ProvisioningRepository(session, self.config).lookup(
+                attempt_id
+            )
+            self.assertEqual(
+                (result.state, result.resources_state), ("failed", "present")
+            )
+            installation = await session.get(
+                InstallationModel, UUID(payload["tenant_id"])
+            )
+            self.assertEqual(
+                (await session.get(TenantModel, installation.runtime_tenant_id)).status,
+                "provisioning",
+            )
+            self.assertIsNotNone(installation.owner_user_id)
+            self.assertIsNotNone(
+                await session.get(CloudConnectionModel, installation.runtime_tenant_id)
+            )
+        await Installer(self.sessions, self.config, "dnk_").run(attempt_id)
+        async with self.sessions() as session:
+            result = await ProvisioningRepository(session, self.config).lookup(
+                attempt_id
+            )
+            self.assertEqual(result.state, "succeeded")
+            self.assertEqual(
+                (await session.get(TenantModel, installation.runtime_tenant_id)).status,
+                "active",
+            )
+
     async def test_missing_attempt_record_never_recreates_registered_tenant(self):
         payload, _ = await self.accept()
         await Installer(self.sessions, self.config, "dnk_").run(
@@ -401,7 +445,7 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
                 "succeeded",
             )
 
-    async def test_lease_expiring_during_ddl_cannot_commit_resources(self):
+    async def test_lease_expiring_after_storage_cannot_activate_durable_resources(self):
         payload, _ = await self.accept()
         attempt_id = UUID(payload["attempt_id"])
 
@@ -422,16 +466,15 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
             installation = await session.get(
                 InstallationModel, UUID(payload["tenant_id"])
             )
-            self.assertIsNone(
-                await session.get(TenantModel, installation.runtime_tenant_id)
-            )
-            self.assertFalse(
+            tenant = await session.get(TenantModel, installation.runtime_tenant_id)
+            self.assertEqual(tenant.status, "provisioning")
+            self.assertTrue(
                 await schema_exists(
                     await session.connection(),
                     f"dnk_{installation.runtime_tenant_id.hex}",
                 )
             )
-            self.assertIsNone(
+            self.assertIsNotNone(
                 await session.get(
                     AccessProjectionModel,
                     (installation.core_tenant_id, UUID(payload["owner"]["sub"])),

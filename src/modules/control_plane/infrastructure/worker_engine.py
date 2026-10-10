@@ -1,5 +1,8 @@
 """Database-authoritative work execution with expiring fencing tokens."""
 
+from collections.abc import Callable
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from src.config.deploy.control_plane import ControlPlaneSettings
 import json
 import random
 import ssl
@@ -41,13 +44,16 @@ def retry_delay(settings, attempts: int) -> float:
 
 
 class Installer:
+    """Выполняет сохраняемые этапы установки tenant с fencing и admission."""
+
     def __init__(
         self,
-        session_factory,
-        settings,
+        session_factory: async_sessionmaker[AsyncSession],
+        settings: ControlPlaneSettings,
         schema_prefix: str,
-        adapter_factory=TenancyAdapter,
-    ):
+        adapter_factory: Callable[[AsyncSession, str], TenancyAdapter] = TenancyAdapter,
+    ) -> None:
+        """Принимает внешние фабрики tenant-сессий и межмодульного адаптера."""
         self.sessions, self.settings, self.schema_prefix = (
             session_factory,
             settings,
@@ -57,11 +63,15 @@ class Installer:
         self.cipher = CredentialCipher(settings.secret_encryption_key)
 
     async def run(self, attempt_id: UUID) -> None:
+        """Запускает одну ограниченную по времени попытку установки."""
         await InstallAttemptUseCase(self, self.settings.step_timeout_seconds)(
             attempt_id
         )
 
-    async def _locked_attempt(self, session, attempt_id):
+    async def _locked_attempt(
+        self, session: AsyncSession, attempt_id: UUID
+    ) -> ProvisioningAttemptModel | None:
+        """Сериализует текущую попытку с удалением tenant."""
         core_id = await session.scalar(
             select(ProvisioningAttemptModel.core_tenant_id).where(
                 ProvisioningAttemptModel.attempt_id == attempt_id
@@ -80,6 +90,7 @@ class Installer:
         )
 
     async def claim(self, attempt_id: UUID) -> InstallationClaim | None:
+        """Захватывает новую lease для доступной текущей попытки."""
         async with self.sessions() as session, session.begin():
             attempt = await self._locked_attempt(session, attempt_id)
             if (
@@ -106,52 +117,87 @@ class Installer:
             return InstallationClaim(attempt_id, attempt.fencing_token, was_failed)
 
     async def execute(self, claim: InstallationClaim) -> None:
-        async with self.sessions() as session, session.begin():
-            attempt, installation = await self._owned(
-                session, claim.attempt_id, claim.token
-            )
-            command = json.loads(self.cipher.decrypt(attempt.encrypted_command))
-            adapter = self.adapter_factory(session, self.schema_prefix)
-            resources = await adapter.inspect(
-                installation.runtime_tenant_id,
-                installation.hostname,
-                str(installation.core_tenant_id),
-            )
-            if resources == "absent":
-                if claim.reconciling_failure:
-                    await self._finish(
-                        session,
-                        attempt,
-                        claim.token,
-                        "failed",
-                        "absent",
-                        "resources_absent",
-                    )
-                    return
-                await adapter.install(installation, command)
-                await AccessProjectionWriter(session).set_available(
-                    installation.runtime_tenant_id,
-                    UUID(command["owner"]["sub"]),
-                    True,
-                    "admin",
-                )
-            elif resources != "present":
-                raise RuntimeError("Unconfirmed resources")
-            connection = await session.get(
-                CloudConnectionModel, installation.runtime_tenant_id
-            )
-            if connection is None or not self.cipher.decrypt(
-                connection.encrypted_secret
-            ):
-                raise RuntimeError("Missing cloud credential")
-            if not await adapter.ready(installation, command):
-                raise RuntimeError("Local installation is incomplete")
-            await adapter.activate(installation.runtime_tenant_id)
-            await self._finish(
-                session, attempt, claim.token, "succeeded", "present", None
-            )
+        """Фиксирует SQL-подготовку до MinIO и сохраняет fencing между этапами."""
+        from src.modules.tenancy.infrastructure.tenant.persistence.tenant_gate import (
+            TenantGate,
+        )
 
-    async def _owned(self, session, attempt_id, token):
+        async with self.sessions() as lookup:
+            runtime_id = await lookup.scalar(
+                select(InstallationModel.runtime_tenant_id)
+                .join(
+                    ProvisioningAttemptModel,
+                    ProvisioningAttemptModel.core_tenant_id
+                    == InstallationModel.core_tenant_id,
+                )
+                .where(ProvisioningAttemptModel.attempt_id == claim.attempt_id)
+            )
+        if runtime_id is None:
+            raise LostLease()
+        async with TenantGate(self.sessions).hold(
+            runtime_id, require_tenant=False
+        ) as connection:
+            async with AsyncSession(connection, expire_on_commit=False) as session:
+                attempt, installation = await self._owned(
+                    session, claim.attempt_id, claim.token
+                )
+                command = json.loads(self.cipher.decrypt(attempt.encrypted_command))
+                adapter = self.adapter_factory(session, self.schema_prefix)
+                resources = await adapter.inspect(
+                    installation.runtime_tenant_id,
+                    installation.hostname,
+                    str(installation.core_tenant_id),
+                )
+                if resources == "absent":
+                    if claim.reconciling_failure:
+                        await self._finish(
+                            session,
+                            attempt,
+                            claim.token,
+                            "failed",
+                            "absent",
+                            "resources_absent",
+                        )
+                        await session.commit()
+                        return
+                    await adapter.install(installation, command)
+                    await AccessProjectionWriter(session).set_available(
+                        installation.runtime_tenant_id,
+                        UUID(command["owner"]["sub"]),
+                        True,
+                        "admin",
+                    )
+                elif resources != "present":
+                    raise RuntimeError("Unconfirmed resources")
+                await self._owned(session, claim.attempt_id, claim.token)
+                # Durable регистрация бакета и cloud owner переживают следующий внешний сбой.
+                await session.commit()
+                attempt, installation = await self._owned(
+                    session, claim.attempt_id, claim.token
+                )
+                await adapter.provision_storage(installation)
+                await self._owned(session, claim.attempt_id, claim.token)
+                await session.commit()
+                attempt, installation = await self._owned(
+                    session, claim.attempt_id, claim.token
+                )
+                cloud = await session.get(
+                    CloudConnectionModel, installation.runtime_tenant_id
+                )
+                if cloud is None or not self.cipher.decrypt(cloud.encrypted_secret):
+                    raise RuntimeError("Missing cloud credential")
+                if not await adapter.ready(installation, command):
+                    raise RuntimeError("Local installation is incomplete")
+                await adapter.activate(installation.runtime_tenant_id)
+                await self._finish(
+                    session, attempt, claim.token, "succeeded", "present", None
+                )
+                await session.commit()
+
+    async def _owned(
+        self, session: AsyncSession, attempt_id: UUID, token: int
+    ) -> tuple[ProvisioningAttemptModel, InstallationModel]:
+        """Подтверждает срок lease, fencing token и актуальную установку."""
         attempt = await self._locked_attempt(session, attempt_id)
         if (
             attempt is None
@@ -166,7 +212,16 @@ class Installer:
             raise LostLease()
         return attempt, installation
 
-    async def _finish(self, session, attempt, token, state, resources, error):
+    async def _finish(
+        self,
+        session: AsyncSession,
+        attempt: ProvisioningAttemptModel,
+        token: int,
+        state: str,
+        resources: str,
+        error: str | None,
+    ) -> None:
+        """Сохраняет итог этапа только при действующем fencing token."""
         # PostgreSQL clock_timestamp, unlike transaction_timestamp, advances during DDL.
         current_time = (
             func.clock_timestamp()
@@ -199,7 +254,8 @@ class Installer:
         if result.rowcount != 1:
             raise LostLease()
 
-    async def record_failure(self, attempt_id, token):
+    async def record_failure(self, attempt_id: UUID, token: int) -> None:
+        """Фиксирует подтверждённое состояние ресурсов для повторной попытки."""
         try:
             async with self.sessions() as session, session.begin():
                 attempt, installation = await self._owned(session, attempt_id, token)

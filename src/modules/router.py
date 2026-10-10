@@ -24,6 +24,9 @@ router = APIRouter(prefix="/api/console")
 
 router.include_router(catalog_router)
 router.include_router(channels_router)
+from src.modules.files.presentation.router import router as files_router
+
+router.include_router(files_router)
 router.include_router(tenancy_router)
 router.include_router(reference_data_router)
 router.include_router(identity_router)

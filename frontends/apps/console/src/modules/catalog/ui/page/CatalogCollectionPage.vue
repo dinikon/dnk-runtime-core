@@ -3,7 +3,13 @@ import { computed, ref } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { getApiErrorMessage, getApiErrorStatus } from "@/app/providers/http";
 import { catalogApi } from "../../api/catalog.api";
-import { productItem, typeItem, blockItem } from "../../api/catalog.mapper";
+import {
+  productItem,
+  typeItem,
+  blockItem,
+  attributeItem,
+  tagItem,
+} from "../../api/catalog.mapper";
 import { useCatalogContext } from "../../model/use-catalog-context";
 import { loadTypes } from "../../model/catalog-options";
 import type { CollectionKind, CollectionItem } from "../../model/catalog.types";
@@ -26,15 +32,29 @@ const ctx = useCatalogContext(
 );
 const titles = {
   products: "Товары",
+  attributes: "Характеристики",
+  tags: "Метки",
   "product-types": "Типы контента",
   "content-blocks": "Блоки контента",
 };
 const search = computed(() => String(ctx.route.query.search ?? "")),
   page = computed(() => Math.max(1, Number(ctx.route.query.page) || 1)),
-  typeId = computed(() => String(ctx.route.query.type ?? ""));
+  typeId = computed(() => String(ctx.route.query.type ?? "")),
+  productKind = computed(() =>
+    ctx.route.query.kind === "simple" || ctx.route.query.kind === "variable"
+      ? ctx.route.query.kind
+      : undefined,
+  );
 const collection = useQuery({
   queryKey: computed(() =>
-    ctx.key("list", props.kind, search.value, page.value, typeId.value),
+    ctx.key(
+      "list",
+      props.kind,
+      search.value,
+      page.value,
+      typeId.value,
+      productKind.value,
+    ),
   ),
   enabled: computed(() => !!ctx.locale.value && !!ctx.tenantId.value),
   refetchOnWindowFocus: false,
@@ -47,8 +67,29 @@ const collection = useQuery({
         20,
         typeId.value || undefined,
         signal,
+        productKind.value,
       );
       return { ...d, items: d.items.map(productItem) };
+    }
+    if (props.kind === "tags") {
+      const d = await catalogApi.listTags(
+        ctx.locale.value,
+        search.value,
+        page.value,
+        20,
+        signal,
+      );
+      return { ...d, items: d.items.map(tagItem) };
+    }
+    if (props.kind === "attributes") {
+      const d = await catalogApi.listAttributes(
+        ctx.locale.value,
+        search.value,
+        page.value,
+        20,
+        signal,
+      );
+      return { ...d, items: d.items.map(attributeItem) };
     }
     if (props.kind === "product-types") {
       const d = await catalogApi.listProductTypes(
@@ -114,6 +155,10 @@ async function remove(item: CollectionItem) {
       await catalogApi.deleteProduct(item.id, item.revision);
     else if (props.kind === "product-types")
       await catalogApi.deleteProductType(item.id, item.revision);
+    else if (props.kind === "attributes")
+      await catalogApi.deleteAttribute(item.id, item.revision);
+    else if (props.kind === "tags")
+      await catalogApi.deleteTag(item.id, item.revision);
     else await catalogApi.deleteContentBlock(item.id, item.revision);
     if (!current()) return;
     await collection.refetch();
@@ -144,6 +189,26 @@ async function remove(item: CollectionItem) {
       @locale="ctx.selectLocale"
       @type="params({ type: $event || undefined, page: undefined })"
     />
+    <label
+      v-if="kind === 'products'"
+      class="flex flex-wrap items-center gap-2 text-sm"
+      >Вид товара
+      <select
+        aria-label="Вид товара"
+        class="rounded-md border bg-background p-2"
+        :value="productKind ?? ''"
+        @change="
+          params({
+            kind: ($event.target as HTMLSelectElement).value || undefined,
+            page: undefined,
+          })
+        "
+      >
+        <option value="">Все виды</option>
+        <option value="simple">SIMPLE</option>
+        <option value="variable">VARIABLE</option>
+      </select>
+    </label>
     <p v-if="ctx.locales.isError.value" role="alert">
       Не удалось загрузить локали.
     </p>
@@ -157,7 +222,7 @@ async function remove(item: CollectionItem) {
       :loading="collection.isPending.value"
       :error="readError"
       :empty="!collection.data.value?.items.length"
-      :filtered="!!search || !!typeId"
+      :filtered="!!search || !!typeId || !!productKind"
       @retry="collection.refetch()"
       ><CatalogResults
         :items="collection.data.value?.items ?? []"

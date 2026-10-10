@@ -12,6 +12,7 @@ from uuid import uuid4
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.catalog.domain.product.aggregate import Product, ProductKind
 from src.modules.catalog.domain.product.entity.variant import Variant
+from src.modules.catalog.domain.product.entity.structure import SimpleProductStructure
 from src.modules.catalog.domain.product.value_object.identifier import ProductIdVO
 from src.modules.catalog.domain.product.value_object.variant_id import VariantIdVO
 from src.modules.catalog.domain.product_type.value_object.identifier import (
@@ -82,7 +83,7 @@ class CatalogDomainTests(unittest.TestCase):
             self.now,
         )
         self.assertEqual(self.product.translations["en"][str(self.block)], "Product")
-        self.assertEqual(self.product.variant.translations, {})
+        self.assertEqual(self.product.variants[0].translations, {})
         with self.assertRaises(InvalidCatalogValueError):
             self.product.put_content(
                 LocaleVO("en"),
@@ -114,7 +115,7 @@ class CatalogDomainTests(unittest.TestCase):
             )
         self.assertEqual(self.product.revision, 1)
         self.assertEqual(self.product.translations, {})
-        self.assertEqual(self.product.variant.translations, {})
+        self.assertEqual(self.product.variants[0].translations, {})
 
     def test_type_change_checks_all_content_without_loss(self) -> None:
         """Несовместимый тип отклоняется; исходный перевод сохраняется."""
@@ -142,7 +143,7 @@ class CatalogDomainTests(unittest.TestCase):
             identifier=self.product.id,
             kind=ProductKind.SIMPLE,
             product_type_id=self.schema.product_type_id,
-            variant=self.product.variant,
+            structure=self.product.structure,
             translations={},
             revision=1,
             created_at=self.now,
@@ -150,7 +151,9 @@ class CatalogDomainTests(unittest.TestCase):
             created_by=self.actor,
             updated_by=self.actor,
         )
-        self.assertEqual(Product.restore(**kwargs).variant.id, self.product.variant.id)
+        self.assertEqual(
+            Product.restore(**kwargs).variants[0].id, self.product.variants[0].id
+        )
         with self.assertRaises(InvalidCatalogValueError):
             Product.restore(**{**kwargs, "kind": ProductKind.VARIABLE})
         for translations in ({"en": {}}, {"ru": {str(self.block): "Legacy"}}):
@@ -161,8 +164,10 @@ class CatalogDomainTests(unittest.TestCase):
                 Product.restore(
                     **{
                         **kwargs,
-                        "variant": Variant.restore(
-                            self.product.variant.id, False, False, translations
+                        "structure": SimpleProductStructure.create(
+                            Variant.restore(
+                                self.product.variants[0].id, False, False, translations
+                            )
                         ),
                     }
                 )
@@ -172,8 +177,10 @@ class CatalogDomainTests(unittest.TestCase):
     def test_downloadable_requires_file_contract(self) -> None:
         """Без файлового контракта незавершённое предложение не объявляется готовым."""
         with self.assertRaises(CatalogDependencyUnavailableError):
-            self.product.set_variant_properties(True, True, self.actor, self.now)
-        self.assertFalse(self.product.variant.virtual)
+            self.product.set_variant_properties(
+                self.product.variants[0].id, True, True, self.actor, self.now
+            )
+        self.assertFalse(self.product.variants[0].virtual)
 
 
 class CatalogArchitectureTests(unittest.TestCase):

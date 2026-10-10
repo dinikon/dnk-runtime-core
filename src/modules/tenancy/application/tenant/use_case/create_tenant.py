@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from src.modules.tenancy.application.ports.files import TenantStorageProtocol
+
 from src.modules.tenancy.application.ports.identity import (
     IdentityProvisioningServiceProtocol,
 )
@@ -15,12 +17,12 @@ from src.modules.tenancy.application.tenant.command.create_tenant_command import
 from src.modules.tenancy.application.tenant.dto.create_tenant_result_dto import (
     CreateTenantResultDTO,
 )
-from src.modules.tenancy.domain.service.tenant_onboarding import TenantOnboardingService
+from src.modules.tenancy.application.tenant.onboarding import TenantOnboardingService
 from src.modules.tenancy.domain.tenant.value_object.tenant_id import TenantIdVO
 
 
 class CreateTenantUseCase:
-    """Use case создания tenant, администратора и tenant-схемы."""
+    """Подготовка tenant, администратора, схемы и регистрации приватного хранилища."""
 
     def __init__(
         self,
@@ -28,8 +30,10 @@ class CreateTenantUseCase:
         identity_provisioning_service: IdentityProvisioningServiceProtocol,
         tenant_schema_bootstrap_context_factory: TenantSchemaBootstrapContextFactory,
         tenant_schema_bootstrap_port: TenantSchemaBootstrapPort,
+        tenant_storage: TenantStorageProtocol,
     ) -> None:
         """Инициализирует orchestration зависимости tenant onboarding."""
+        self._tenant_storage = tenant_storage
         self._tenant_onboarding_service = tenant_onboarding_service
         self._identity_provisioning_service = identity_provisioning_service
         self._tenant_schema_bootstrap_context_factory = (
@@ -38,10 +42,11 @@ class CreateTenantUseCase:
         self._tenant_schema_bootstrap_port = tenant_schema_bootstrap_port
 
     async def execute(self, command: CreateTenantCommand) -> CreateTenantResultDTO:
-        """Выполняет onboarding tenant, identity provisioning и bootstrap schema.
+        """Подготавливает tenant, оставляя активацию следующему durable этапу.
 
         Сначала создается tenant и primary domain, затем bootstrap tenant-схемы
-        через внешний порт, после этого tenant admin в готовой схеме.
+        через внешний порт, регистрирует файловый бакет, затем tenant admin.
+        Внешняя сборка фиксирует этап до обращения к MinIO.
         """
         onboarding = (
             await self._tenant_onboarding_service.create_tenant_with_primary_domain(
@@ -65,6 +70,7 @@ class CreateTenantUseCase:
                 tenant_id=onboarding.tenant.id,
             )
         )
+        await self._tenant_storage.register(onboarding.tenant.id.uuid)
         user = await self._identity_provisioning_service.create_tenant_admin(
             tenant_id=onboarding.tenant.id,
             first_name=command.user_first_name,

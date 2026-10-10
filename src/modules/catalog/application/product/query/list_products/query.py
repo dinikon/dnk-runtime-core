@@ -15,3 +15,4 @@ class ListProductsQuery:
     page: int = 1
     page_size: int = 20
     product_type_id: ProductTypeIdVO | None = None
+    kind: str | None = None

@@ -12,7 +12,7 @@ from src.modules.tenancy.application.tenant.command.create_tenant_command import
 from src.modules.tenancy.application.tenant.use_case.create_tenant import (
     CreateTenantUseCase,
 )
-from src.modules.tenancy.domain.service.tenant_onboarding import TenantOnboardingDraft
+from src.modules.tenancy.application.tenant.onboarding import TenantOnboardingDraft
 from src.modules.tenancy.domain.tenant.entity import Tenant
 from src.modules.tenancy.domain.tenant_domain.entity import TenantDomain
 
@@ -58,6 +58,10 @@ class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 recorded_context = context
                 steps.append("schema")
 
+        class TenantStorageStub:
+            async def register(self, tenant_id):
+                steps.append("files")
+
         use_case = CreateTenantUseCase(
             tenant_onboarding_service=TenantOnboardingServiceStub(),
             identity_provisioning_service=IdentityProvisioningServiceStub(),
@@ -65,6 +69,7 @@ class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 schema_prefix="dnk_",
             ),
             tenant_schema_bootstrap_port=TenantSchemaBootstrapPortStub(),
+            tenant_storage=TenantStorageStub(),
         )
 
         result = await use_case.execute(
@@ -78,7 +83,7 @@ class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):
             )
         )
 
-        self.assertEqual(steps, ["tenant", "schema", "admin"])
+        self.assertEqual(steps, ["tenant", "schema", "files", "admin"])
         self.assertIsNotNone(recorded_context)
         self.assertEqual(
             recorded_context.schema_name,

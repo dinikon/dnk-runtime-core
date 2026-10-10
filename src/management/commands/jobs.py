@@ -114,6 +114,12 @@ async def handle_worker(_args: argparse.Namespace) -> int:
             loop.add_signal_handler(event, stop.set)
         except NotImplementedError:
             pass
+    from src.modules.files.presentation.jobs.cleanup import (
+        FilesCleanupJobHandler,
+        ensure_cleanup_jobs,
+        JOB_TYPE as FILES_CLEANUP_JOB_TYPE,
+    )
+
     dispatcher = build_scheduled_job_dispatcher(
         {
             "price_list.sync": PriceListSyncJobHandler(
@@ -123,6 +129,7 @@ async def handle_worker(_args: argparse.Namespace) -> int:
                 get_cleanup_price_list_use_case(db_helper.session_factory)
             ),
             JOB_TYPE: ReferenceDataRefreshJobHandler(db_helper.session_factory),
+            FILES_CLEANUP_JOB_TYPE: FilesCleanupJobHandler(db_helper.session_factory),
             CHANNEL_IMPORT_JOB_TYPE: PublicationImportJobRuntime(
                 db_helper.session_factory
             ),
@@ -150,6 +157,7 @@ async def handle_worker(_args: argparse.Namespace) -> int:
         while not stop.is_set():
             try:
                 await ensure_weekly_jobs(db_helper.session_factory, datetime.now(UTC))
+                await ensure_cleanup_jobs(db_helper.session_factory, datetime.now(UTC))
             except Exception:
                 logger.exception("Could not register weekly reference data jobs")
             try:

@@ -39,3 +39,7 @@ __all__ = [
     "TenantExternalIdAlreadyExistsError",
     "TenantNameAlreadyExistsError",
 ]
+
+
+class TenantCannotActivateError(DomainError):
+    """Tenant не может стать активным до готовности обязательных ресурсов."""

@@ -4,7 +4,6 @@ from src.modules.catalog.domain.product.repository import ProductRepositoryProto
 from src.modules.catalog.application.port.mutation_lock import CatalogMutationLockPort
 from src.modules.shared.domain.time.clock_port import ClockPort
 
-from src.modules.catalog.domain.product.error import VariantNotFoundError
 from src.modules.catalog.domain.value_object.locale import LocaleVO
 from src.modules.catalog.application.product.command.delete_variant_content.command import (
     DeleteVariantContentCommand,
@@ -30,12 +29,12 @@ class DeleteVariantContentHandler:
         await self._lock.acquire(command.tenant_id)
         product = await self._repository.get(command.product_id)
         product.ensure_revision(command.expected_revision)
-        if product.variant.id != command.variant_id:
-            raise VariantNotFoundError("Позиция отсутствует в Product.")
+        product.find_variant(command.variant_id)
         product.delete_content(
             LocaleVO(command.locale),
             ContentScope.VARIANT,
             command.actor_id,
             self._clock.now(),
+            variant_id=command.variant_id,
         )
         await self._repository.save(product)

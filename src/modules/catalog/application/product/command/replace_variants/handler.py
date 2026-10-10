@@ -1,0 +1,51 @@
+from src.modules.catalog.domain.product.repository import ProductRepositoryProtocol
+from src.modules.catalog.application.product_type.schema_service import (
+    ProductSchemaService,
+)
+from src.modules.catalog.application.product.structure_service import (
+    ProductStructureService,
+)
+from src.modules.catalog.application.port.mutation_lock import CatalogMutationLockPort
+from src.modules.shared.domain.time.clock_port import ClockPort
+from src.modules.catalog.application.product.command.replace_variants.command import (
+    ReplaceVariantsCommand,
+)
+from src.modules.catalog.application.product.command.replace_variants.dto import (
+    ReplaceVariantsResultDTO,
+)
+
+
+class ReplaceVariantsHandler:
+    """Координирует replace_variants; весь переход состояния выполняет Product."""
+
+    def __init__(
+        self,
+        repository: ProductRepositoryProtocol,
+        lock: CatalogMutationLockPort,
+        clock: ClockPort,
+        schemas: ProductSchemaService,
+        structures: ProductStructureService,
+    ) -> None:
+        """Принимает необходимые порты и координатор снимков на общем UoW."""
+        self._repository = repository
+        self._lock = lock
+        self._clock = clock
+        self._schemas = schemas
+        self._structures = structures
+
+    async def execute(
+        self, command: ReplaceVariantsCommand
+    ) -> ReplaceVariantsResultDTO:
+        """Применяет полную структуру и сохраняет агрегат без самостоятельного commit."""
+        await self._lock.acquire(command.tenant_id)
+        product = await self._repository.get(command.product_id)
+        product.ensure_revision(command.expected_revision)
+        schema = await self._schemas.get(product.product_type_id)
+        structure, definitions = await self._structures.prepare(
+            command.structure, product
+        )
+        product.replace_variants(
+            structure, definitions, schema, command.actor_id, self._clock.now()
+        )
+        await self._repository.save(product)
+        return ReplaceVariantsResultDTO(product.id.uuid, product.revision)

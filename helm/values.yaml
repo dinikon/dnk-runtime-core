@@ -24,6 +24,19 @@ application:
     otpTokenTtlSeconds: 300
     sessionTtlSeconds: 432000
     sessionCookieName: dnk_session
+  files:
+    endpoint: ''
+    secure: true
+    region: ''
+    timeoutSeconds: 30
+    operationTimeoutSeconds: 600
+    concurrency: 4
+    accessKey:
+      value: ''
+      existingSecret: {name: '', key: ''}
+    secretKey:
+      value: ''
+      existingSecret: {name: '', key: ''}
   priceLists:
     batchSize: 1000
     maxErrorRatio: 0.5

@@ -38,6 +38,9 @@ class ModuleRegistrationTests(unittest.TestCase):
             any(path.startswith("/api/console/inventory") for path in paths)
         )
         self.assertTrue(any(path.startswith("/api/console/channels") for path in paths))
+        self.assertTrue(
+            {"/api/console/files/providers/", "/api/console/files/buckets/"} <= paths
+        )
         self.assertFalse(
             any(path.startswith("/api/console/warehousing") for path in paths)
         )
@@ -57,14 +60,17 @@ class ModuleRegistrationTests(unittest.TestCase):
         )
         self.assertTrue({"skus", "warehouses"}.isdisjoint(tables))
         self.assertTrue({"channels", "channel_publications"} <= tables)
+        self.assertTrue(
+            {"files_providers", "files_buckets", "files_registry"} <= tables
+        )
         self.assertFalse(any(name.startswith("warehousing_") for name in tables))
         self.assertIn("warehousing_warehouses", HISTORICAL_TENANT_TABLE_NAMES)
         self.assertTrue({"skus", "warehouses"} <= HISTORICAL_TENANT_TABLE_NAMES)
         self.assertIn("catalog_products", HISTORICAL_TENANT_TABLE_NAMES)
 
     def test_cancelled_warehousing_migrations_are_absent(self) -> None:
-        """Warehousing отсутствует; новая head принадлежит Catalog."""
-        self.assertEqual(TenantMigrator().head(), "0017_catalog_simple")
+        """Warehousing отсутствует; Files продолжает цепочку Catalog."""
+        self.assertEqual(TenantMigrator().head(), "0020_files")
         directory = Path(__file__).resolve().parents[1] / "migrations/tenant/versions"
         for name in ("0017_warehousing_warehouses.py", "0018_warehousing_zones.py"):
             self.assertFalse((directory / name).exists())

@@ -15,7 +15,9 @@ class ProductModel(EntityAuditMixin, AudienceMixin, TenantBase):
     __tablename__ = "catalog_products"
     __table_args__ = (
         sa.CheckConstraint("revision>0", name="ck_product_revision"),
-        sa.CheckConstraint("kind='simple'", name="ck_catalog_product_simple"),
+        sa.CheckConstraint(
+            "kind IN ('simple','variable')", name="ck_catalog_product_kind"
+        ),
     )
     revision: Mapped[int] = mapped_column(sa.Integer, nullable=False)
     kind: Mapped[str] = mapped_column(sa.String(20), nullable=False)

@@ -6,10 +6,11 @@ from src.modules.tenancy.infrastructure.tenant.persistence.tenant_base import Te
 
 
 class VariantModel(TenantBase):
-    """Позиция SIMPLE; уникальный product_id фиксирует максимум одну позицию."""
+    """Продаваемая позиция Product; ownership защищён составным ключом."""
 
     __tablename__ = "catalog_variants"
     __table_args__ = (
+        sa.UniqueConstraint("product_id", "id", name="uq_catalog_variant_owner"),
         sa.CheckConstraint(
             "downloadable=false", name="ck_catalog_variant_files_unavailable"
         ),
@@ -19,7 +20,6 @@ class VariantModel(TenantBase):
         StringUUID,
         sa.ForeignKey("tenant.catalog_products.id", ondelete="CASCADE"),
         nullable=False,
-        unique=True,
     )
     virtual: Mapped[bool] = mapped_column(sa.Boolean, nullable=False)
     downloadable: Mapped[bool] = mapped_column(sa.Boolean, nullable=False)
