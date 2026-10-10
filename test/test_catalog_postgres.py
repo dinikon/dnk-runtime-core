@@ -125,9 +125,22 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         return await self.request("POST", "/products/simple", fields, 201)
 
     async def test_translations_html_isolation_and_revisions(self) -> None:
-        """Проверяет два scope, локали, sanitizer, принадлежность и tenant isolation."""
+        """Проверяет PRODUCT, запрет VARIANT у SIMPLE, версии, HTML и tenant isolation."""
         types = await self.request("GET", "/product-types?locale=ru")
         default = types["items"][0]
+        schema_version = default["schema_version"]
+        self.assertEqual(schema_version, 1)
+        self.assertEqual(default["revision"], 1)
+        self.assertEqual(
+            {(b["code"], b["scope"]) for b in default["blocks"]},
+            {
+                ("title", "PRODUCT"),
+                ("description", "PRODUCT"),
+                ("short_description", "PRODUCT"),
+                ("title", "VARIANT"),
+                ("description", "VARIANT"),
+            },
+        )
         title = next(
             b["block_id"]
             for b in default["blocks"]
@@ -147,7 +160,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             item + "/content/ru",
             {
                 "expected_revision": 1,
-                "expected_schema_version": 1,
+                "expected_schema_version": schema_version,
                 "values": {
                     title: "Термобутылка",
                     description: '<p onclick="bad()">Текст<script>alert(1)</script></p>',
@@ -163,16 +176,34 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             variant + "/content/en",
             {
                 "expected_revision": 2,
-                "expected_schema_version": 1,
+                "expected_schema_version": schema_version,
                 "values": {title: "Position"},
             },
+            422,
         )
+        await self.request(
+            "PUT",
+            variant + "/content/en",
+            {
+                "expected_revision": 2,
+                "expected_schema_version": schema_version,
+                "values": {},
+            },
+            422,
+        )
+        await self.request(
+            "DELETE", variant + "/content/en?expected_revision=2", status=422
+        )
+        unchanged = await self.request("GET", item + "?locale=ru")
+        self.assertEqual(unchanged["revision"], 2)
+        self.assertIsNone(unchanged["variant_content"])
+        self.assertEqual(unchanged["variant_locales"], [])
         await self.request(
             "PUT",
             item + "/content/ru",
             {
                 "expected_revision": 1,
-                "expected_schema_version": 1,
+                "expected_schema_version": schema_version,
                 "values": {title: "stale"},
             },
             409,
@@ -197,8 +228,8 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             "PUT",
             item + "/content/ru",
             {
-                "expected_revision": 3,
-                "expected_schema_version": 1,
+                "expected_revision": 2,
+                "expected_schema_version": schema_version,
                 "values": {title: "new"},
             },
             422,
@@ -427,19 +458,23 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         """Проверяет реальные FK, отсутствие JSON и round-trip пустого перевода."""
         from sqlalchemy.exc import IntegrityError
 
-        p = await self.create_product()
-        variant = "/products/" + p["id"] + "/variants/" + p["variant_id"]
+        typ = await self.request(
+            "POST",
+            "/product-types",
+            {"code": "empty", "locale": "en", "label": "Empty", "blocks": []},
+            201,
+        )
+        p = await self.create_product(product_type_id=typ["id"])
+        item = "/products/" + p["id"]
         await self.request(
             "PUT",
-            variant + "/content/en",
+            item + "/content/en",
             {"expected_revision": 1, "expected_schema_version": 1, "values": {}},
         )
         self.assertEqual(
-            (await self.request("GET", variant + "?locale=en"))["content"], {}
+            (await self.request("GET", item + "?locale=en"))["content"], {}
         )
-        self.assertIsNone(
-            (await self.request("GET", variant + "?locale=ru"))["content"]
-        )
+        self.assertIsNone((await self.request("GET", item + "?locale=ru"))["content"])
         async with self.engine.begin() as connection:
             types = (
                 (
@@ -459,9 +494,9 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
                 (
                     await connection.execute(
                         text(
-                            f'SELECT locale FROM "{self.schemas[0]}".catalog_variant_translations WHERE variant_id=:id'
+                            f'SELECT locale FROM "{self.schemas[0]}".catalog_product_translations WHERE product_id=:id'
                         ),
-                        {"id": p["variant_id"]},
+                        {"id": p["id"]},
                     )
                 )
                 .scalars()
@@ -472,9 +507,9 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
                 async with connection.begin_nested():
                     await connection.execute(
                         text(
-                            f"""INSERT INTO "{self.schemas[0]}".catalog_variant_content_values(variant_id,locale,block_id,value) VALUES (:id,'ru','c0000000-0000-4000-8000-000000000002','orphan')"""
+                            f"""INSERT INTO "{self.schemas[0]}".catalog_product_content_values(product_id,locale,block_id,value) VALUES (:id,'ru','c0000000-0000-4000-8000-000000000002','orphan')"""
                         ),
-                        {"id": p["variant_id"]},
+                        {"id": p["id"]},
                     )
 
             await TenantMigrator().downgrade(

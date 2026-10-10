@@ -114,19 +114,19 @@ async function save(input: DefinitionInput) {
       if (!current()) return;
     } else {
       const d = definition.data.value!;
-      if (props.block)
+      if (props.block) {
         await catalogApi.updateContentBlock(d.id, {
           expected_revision: d.revision,
           locale: ctx.locale.value,
           label: input.label,
           value_type: input.valueType,
         });
-      if (!current()) return;
-      else
+      } else {
         await catalogApi.putProductTypeTranslation(d.id, ctx.locale.value, {
           expected_revision: d.revision,
           label: input.label,
         });
+      }
       if (!current()) return;
       await definition.refetch();
       if (!current()) return;
@@ -211,9 +211,11 @@ async function remove() {
     return;
   pending.value = true;
   try {
-    if (props.block) await catalogApi.deleteContentBlock(d.id, d.revision);
-    if (!current()) return;
-    else await catalogApi.deleteProductType(d.id, d.revision);
+    if (props.block) {
+      await catalogApi.deleteContentBlock(d.id, d.revision);
+    } else {
+      await catalogApi.deleteProductType(d.id, d.revision);
+    }
     if (!current()) return;
     dirty.value = { definition: false, schema: false };
     pending.value = false;

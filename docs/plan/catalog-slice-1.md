@@ -20,6 +20,46 @@ __init__.py пустые, SQL-модели по одной в файле. Лог
 Запись контента и схемы дополнительно требует expected_schema_version.
 У GET locale обязательна; отсутствие перевода — null, fallback отсутствует.
 
+### Выравнивание SIMPLE (2026-10-10)
+
+Product владеет всем редактируемым контентом SIMPLE. Его единственный Variant
+сохраняет продаваемые свойства, но не имеет активных переводов. PRODUCT-схема
+Default содержит title, description, short_description; VARIANT-схема содержит
+необязательные title и description для следующего среза VARIABLE.
+Наследование Title реализуется вместе с VARIABLE; сейчас его нет.
+
+Применяются все архитектурные требования выше: инвариант SIMPLE проверяется
+в Product.restore и domain methods, а не в mapper. Корни и границы слоёв не меняются.
+Методы аннотированы, имеют русские docstrings; __post_init__ остаётся только в VO;
+пакетные __init__.py
+пустые. Миграция не коммитит и не импортирует текущие ORM-модели.
+
+Затронутые сценарии и обязательные файлы:
+
+| Сценарий | Вход и результат execute | Изменение и файлы |
+| --- | --- | --- |
+| put_variant_content | Прежний PutVariantContentCommand → PutVariantContentResultDTO | Product.put_content отклоняет SIMPLE с 422; command.py, handler.py, dto.py, HTTP request/controller/response и Depends сохранены |
+| delete_variant_content | Прежний DeleteVariantContentCommand → None | Product.delete_content отклоняет SIMPLE с 422; command.py, handler.py, HTTP controller и Depends сохранены; пустой DTO/Response не создаётся |
+| get_product | Product ID, tenant, locale → GetProductDetailsDTO | Собственные dto.py и HTTP response/get_product.py, query_repository port, SQL query_repository/query_mapper и Depends сохраняют контракт |
+| change_product_type / replace_product_type_schema | Прежние команды → свои ChangeProductTypeResultDTO / ReplaceProductTypeSchemaResultDTO | Проверяется сохранённый контент Product; у SIMPLE нет переводов позиции |
+| update_content_block / delete_content_block | Прежние команды → UpdateContentBlockResultDTO / None | is_used проверяет ссылки схем; исправляются ветвления Console |
+
+Модуль не выходил в production. Единственная новая tenant-миграция
+0017_catalog_simple сразу создаёт исправленную схему: 11 таблиц, Default с
+schema_version=1/revision=1, три PRODUCT-связи и две VARIANT-связи без
+short_description. Отдельной миграции выравнивания и поддержки прежних данных нет.
+Тестовые базы со старой редакцией Catalog пересоздаются перед использованием.
+
+Console показывает только PRODUCT-форму контента SIMPLE.
+Старые VARIANT URL направляются на контент товара; URL позиции показывает свойства.
+AppLayout инициализирует tenant даже при закрытом мобильном sidebar: загрузка
+Catalog не зависит от монтирования WorkspaceTenantInfo внутри меню.
+
+Проверки: доменные отказы без изменения состояния; HTTP 422/404/409;
+локали, пустые переводы и значения; upgrade/downgrade, tenant isolation,
+rollback, FK и autogenerate; смена типа/схемы; архитектурный checklist; Console
+lint/typecheck/build и браузерные SIMPLE, изменение/удаление блока.
+
 | Корень | Сценарий | Вход command/query | Результат execute | HTTP после /api/console/catalog |
 | --- | --- | --- | --- | --- |
 | product | create_simple_product | tenant_id: EntityIdVO; actor_id: EntityIdVO; product_type_id: ProductTypeIdVO \| None = None; virtual: bool = False | CreateSimpleProductResultDTO | POST /products/simple |
@@ -56,7 +96,8 @@ presentation/<root>/router.py и depends.py с именованной завис
 infrastructure/<root>/persistence/{repository,mapper,query_repository,query_mapper}.py.
 SQL-модели: infrastructure/persistence/models/{product,variant,product_type,
 content_block,product_type_block,content_block_translation,product_type_translation,
-product_translation,variant_translation,product_content_value,variant_content_value}.py. Tenant-миграция 0017_catalog_simple.
+product_translation,variant_translation,product_content_value,variant_content_value}.py.
+Tenant-миграция: 0017_catalog_simple.
 
 Порты: locales (reference_data), rich_text sanitizer, mutation_lock,
 product/schema snapshot, query repositories. Schema service координирует
@@ -74,8 +115,9 @@ product/schema snapshot, query repositories. Schema service координиру
 Это намеренная грубая блокировка первого среза; будущая оптимизация обязана
 сохранить защиту гонок и единый порядок блокировок.
 
-Изменение пользовательской схемы проверяет все сохранённые переводы Product и
-Variant. Несовместимость отклоняется, миграция контента не выполняется автоматически.
+Изменение пользовательской схемы проверяет все активные переводы Product.
+У SIMPLE нет активных переводов Variant.
+Несовместимость отклоняется, миграция контента не выполняется автоматически.
 Системные определения меняются только миграцией. Код стабилен; используемый
 value_type нельзя изменить. Физическая позиция без SKU допустима как карточка,
 но не получает обещания готовности к продаже. Downloadable отвергается до файлового
@@ -89,7 +131,8 @@ value_type нельзя изменить. Физическая позиция б
 ## Приёмка
 
 Domain create/restore и переходы; пользовательский тип без title; независимые
-локали/scopes; очистка HTML; used/system protection; tenant isolation; rollback,
+локали PRODUCT и запрет VARIANT у SIMPLE;
+очистка HTML; used/system protection; tenant isolation; rollback,
 ошибка commit; конкурирующая схема/контент и устаревшие ревизии. Проверка всего
 архитектурного diff и обязательных файлов. Console: lint, typecheck, build и
 браузерные создание/редактирование, отсутствие fallback, конфликты и dirty guards.
@@ -104,3 +147,6 @@ value TEXT). Отдельная строка перевода сохраняет
 перевода и существующим переводом без необязательных значений. Значения имеют
 составной FK к переводу и FK к определению блока. Locale хранится явно, без
 каскадной зависимости от активности глобального справочника.
+
+VARIANT-таблицы сохранены для следующего среза VARIABLE; команды записи и удаления
+VARIANT-перевода у SIMPLE возвращают 422.

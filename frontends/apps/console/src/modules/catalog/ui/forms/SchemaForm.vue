@@ -63,7 +63,9 @@ function submit() {
 <template>
   <form class="space-y-4" @submit.prevent="submit">
     <p class="text-sm text-muted-foreground">
-      Обязательность и порядок задаются отдельно для PRODUCT и VARIANT.
+      PRODUCT задаёт контент товара. VARIANT задаёт контент вариантов VARIABLE;
+      SIMPLE использует только PRODUCT. Обязательность и порядок задаются
+      отдельно.
     </p>
     <fieldset :disabled="disabled || pending" class="space-y-3">
       <div

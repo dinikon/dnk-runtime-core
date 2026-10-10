@@ -2,6 +2,7 @@ import type {
   GetProductResponse,
   GetProductTypeResponse,
   GetContentBlockResponse,
+  ProductListItemDTO,
 } from "./catalog.dto";
 import type {
   Product,
@@ -56,7 +57,7 @@ export function blockFromDto(d: GetContentBlockResponse): ContentBlock {
     locales: d.locales,
   };
 }
-export function productItem(d: GetProductResponse): CollectionItem {
+export function productItem(d: ProductListItemDTO): CollectionItem {
   return {
     id: d.id,
     label:

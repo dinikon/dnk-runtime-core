@@ -16,7 +16,7 @@ const dirty = ref<Record<string, boolean>>({}),
   pending = ref(false),
   error = ref(""),
   conflict = ref(false),
-  resets = ref({ PRODUCT: 0, VARIANT: 0, properties: 0, type: 0 });
+  resets = ref({ PRODUCT: 0, properties: 0, type: 0 });
 const ctx = useCatalogContext(
   () => Object.values(dirty.value).some(Boolean),
   () => pending.value,
@@ -75,12 +75,15 @@ const schema = useQuery({
     ),
   select: typeFromDto,
 });
-const section = computed(() =>
-  String(
+const section = computed(() => {
+  const requested = String(
     ctx.route.query.section ??
-      (ctx.route.params.variantId ? "VARIANT" : "PRODUCT"),
-  ),
-);
+      (ctx.route.params.variantId ? "properties" : "PRODUCT"),
+  );
+  return ["PRODUCT", "properties", "type"].includes(requested)
+    ? requested
+    : "PRODUCT";
+});
 const failure = computed(() =>
   variant.isError.value
     ? "Позиция не найдена или недоступна."
@@ -106,7 +109,7 @@ watch(section, (_next, previous) => {
   dirty.value[previous] = false;
 });
 async function act(
-  section: "PRODUCT" | "VARIANT" | "properties" | "type",
+  section: "PRODUCT" | "properties" | "type",
   fn: () => Promise<unknown>,
 ) {
   const current = ctx.captureSession();
@@ -136,7 +139,7 @@ async function act(
     if (current()) pending.value = false;
   }
 }
-function content(scope: "PRODUCT" | "VARIANT", values: Record<string, string>) {
+function content(values: Record<string, string>) {
   const p = product.data.value,
     s = schema.data.value;
   if (!p || !s) return;
@@ -145,24 +148,15 @@ function content(scope: "PRODUCT" | "VARIANT", values: Record<string, string>) {
     expected_schema_version: s.schemaVersion,
     values,
   };
-  void act(scope, () =>
-    scope === "PRODUCT"
-      ? catalogApi.putProductContent(p.id, ctx.locale.value, body)
-      : catalogApi.putVariantContent(p.id, p.variantId, ctx.locale.value, body),
+  void act("PRODUCT", () =>
+    catalogApi.putProductContent(p.id, ctx.locale.value, body),
   );
 }
-function removeContent(scope: "PRODUCT" | "VARIANT") {
+function removeContent() {
   const p = product.data.value;
   if (!p || !window.confirm("Удалить перевод выбранной locale?")) return;
-  void act(scope, () =>
-    scope === "PRODUCT"
-      ? catalogApi.deleteProductContent(p.id, ctx.locale.value, p.revision)
-      : catalogApi.deleteVariantContent(
-          p.id,
-          p.variantId,
-          ctx.locale.value,
-          p.revision,
-        ),
+  void act("PRODUCT", () =>
+    catalogApi.deleteProductContent(p.id, ctx.locale.value, p.revision),
   );
 }
 function properties(virtual: boolean) {
@@ -267,7 +261,6 @@ async function remove() {
         <Button
           v-for="tab in [
             { id: 'PRODUCT', label: 'Контент товара' },
-            { id: 'VARIANT', label: 'Контент позиции' },
             { id: 'properties', label: 'Свойства позиции' },
             { id: 'type', label: 'Тип контента' },
           ]"
@@ -282,20 +275,16 @@ async function remove() {
         >
       </nav>
       <ContentForm
-        v-if="section === 'PRODUCT' || section === 'VARIANT'"
+        v-if="section === 'PRODUCT'"
         :key="id + section + ctx.locale.value + ctx.sessionKey.value"
-        :blocks="schema.data.value.blocks.filter((b) => b.scope === section)"
-        :content="
-          section === 'PRODUCT'
-            ? product.data.value.content
-            : product.data.value.variantContent
-        "
+        :blocks="schema.data.value.blocks.filter((b) => b.scope === 'PRODUCT')"
+        :content="product.data.value.content"
         :pending="pending"
         :disabled="!ctx.active.value || conflict"
-        :reset="resets[section as 'PRODUCT' | 'VARIANT']"
-        @dirty="dirty[section] = $event"
-        @submit="content(section as 'PRODUCT' | 'VARIANT', $event)"
-        @delete="removeContent(section as 'PRODUCT' | 'VARIANT')"
+        :reset="resets.PRODUCT"
+        @dirty="dirty.PRODUCT = $event"
+        @submit="content"
+        @delete="removeContent"
       /><VariantPropertiesForm
         v-if="section === 'properties'"
         :key="id + ctx.sessionKey.value"

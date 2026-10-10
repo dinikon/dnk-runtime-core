@@ -89,6 +89,10 @@ class Product:
             raise InvalidCatalogValueError("Неподдержанная структура Product.")
         for locale in translations:
             LocaleVO(locale)
+        if variant.translations:
+            raise InvalidCatalogValueError(
+                "Контент SIMPLE принадлежит Product, а не его позиции."
+            )
         return cls(
             identifier,
             kind,
@@ -103,7 +107,8 @@ class Product:
         )
 
     def validate_content(self, schema: ProductSchemaSnapshot) -> None:
-        """Проверяет оба scope во всех сохранённых локалях при смене схемы."""
+        """Проверяет активный контент во всех локалях и отсутствие переводов SIMPLE-позиции."""
+        self._ensure_content_scope(ContentScope.PRODUCT)
         for values in self.translations.values():
             ProductContentPolicy.validate(values, schema, ContentScope.PRODUCT)
         for values in self.variant.translations.values():
@@ -126,7 +131,8 @@ class Product:
         actor: EntityIdVO,
         now: datetime,
     ) -> None:
-        """Проверяет и сохраняет один перевод PRODUCT либо VARIANT."""
+        """Проверяет и сохраняет перевод допустимой для вида товара области."""
+        self._ensure_content_scope(scope)
         if schema.product_type_id != self.product_type_id:
             raise CatalogConflictError("Тип контента изменился.")
         ProductContentPolicy.validate(values, schema, scope)
@@ -140,11 +146,21 @@ class Product:
         self, locale: LocaleVO, scope: ContentScope, actor: EntityIdVO, now: datetime
     ) -> None:
         """Удаляет один перевод выбранного scope и увеличивает ревизию."""
+        self._ensure_content_scope(scope)
         if scope == ContentScope.PRODUCT:
             self.translations.pop(locale.value, None)
         else:
             self.variant.delete_content(locale)
         self._touch(actor, now)
+
+    def _ensure_content_scope(self, scope: ContentScope) -> None:
+        """Запрещает отдельный активный контент единственной позиции SIMPLE."""
+        if self.kind == ProductKind.SIMPLE and (
+            scope == ContentScope.VARIANT or self.variant.translations
+        ):
+            raise InvalidCatalogValueError(
+                "Контент SIMPLE редактируется только у Product."
+            )
 
     def set_variant_properties(
         self, virtual: bool, downloadable: bool, actor: EntityIdVO, now: datetime

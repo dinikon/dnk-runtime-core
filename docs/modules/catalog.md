@@ -8,28 +8,33 @@ checklist — в [catalog-slice-1.md](../plan/catalog-slice-1.md).
 ## Модель и правила
 
 Самостоятельные корни: Product, ProductType и ContentBlockDefinition. Product
-владеет ровно одним Variant и независимым контентом PRODUCT/VARIANT. Variant
-не имеет своего write repository. Создание товара не создаёт SKU и допускается
-без переводов. ProductKind содержит simple/variable, однако создание VARIABLE
+владеет ровно одним Variant и контентом PRODUCT. Единственный Variant SIMPLE
+хранит продаваемые свойства без активных переводов и не имеет своего write
+repository. Создание товара не создаёт SKU и допускается без переводов.
+ProductKind содержит simple/variable, однако создание VARIABLE
 и переходы вида ещё не реализованы.
 
 Системный Default / «Чистый», код `default`, создаётся tenant-миграцией. Блоки
-`title` (text), `description` и `short_description` (rich_text) доступны в обоих
-scope. Title обязателен только при записи PRODUCT-перевода Default. Пользовательский
-тип может не иметь title. Обязательность и порядок принадлежат связи блока с
-типом; одно определение допускает разные настройки PRODUCT и VARIANT.
+`title` (text), `description` и `short_description` (rich_text) доступны в PRODUCT.
+VARIANT содержит только необязательные title и description для будущего VARIABLE;
+у SIMPLE эти связи не создают форму или разрешение записи. Версия схемы Default
+в `0017_catalog_simple` — 1. Title обязателен при записи PRODUCT-перевода
+Default. Пользовательский тип может не иметь title. Обязательность и порядок
+принадлежат связи блока с типом; одно определение допускает разные настройки
+PRODUCT и VARIANT.
 
 Все изменения проходят через доменные методы; create/restore проверяют создание
 и восстановление. Схема передаётся Product как immutable snapshot. Смена типа и
-схемы проверяет весь сохранённый контент, включая Variant и все локали. Несовместимое
+схемы проверяет весь активный контент Product во всех локалях. Несовместимое
 изменение отклоняется, данные не удаляются автоматически. Системные определения
 изменяются только миграцией. Коды стабильны, используемый value_type изменить
 нельзя, используемые определения нельзя удалить.
 
 Локали проверяются через Application-контракт reference_data. GET требует locale;
 отсутствующий перевод возвращается как null. Нет fallback между языками и
-наследования VARIANT от PRODUCT. Запись разрешена только для активной locale;
-существующий перевод деактивированной locale остаётся читаемым. Catalog не задаёт
+наследования Title в текущем срезе. Наследование Title той же locale с возможностью
+переопределения добавится вместе с VARIABLE. Запись разрешена только для активной
+locale; существующий перевод деактивированной locale остаётся читаемым. Catalog не задаёт
 язык tenant. HTML очищается NH3-адаптером за Application-портом до проверки Domain.
 
 ## Таблицы
@@ -46,7 +51,7 @@ JSON и JSONB для хранения Catalog не используются.
 | catalog_product_type_translations | (product_type_id, locale), label |
 | catalog_content_block_translations | (content_block_id, locale), label |
 | catalog_product_translations | (product_id, locale), наличие перевода PRODUCT |
-| catalog_variant_translations | (variant_id, locale), наличие перевода VARIANT |
+| catalog_variant_translations | (variant_id, locale), переводы VARIANT для будущего VARIABLE |
 | catalog_product_content_values | (product_id, locale, block_id), value TEXT |
 | catalog_variant_content_values | (variant_id, locale, block_id), value TEXT |
 
@@ -89,7 +94,7 @@ page_size (1–100); список товаров также принимает p
 - `/products/{product_id}/type`: PUT смены типа.
 - `/products/{product_id}/content/{locale}`: PUT/DELETE PRODUCT-перевода.
 - `/products/{product_id}/variants/{variant_id}`: GET позиции через оба ID.
-- `/products/{product_id}/variants/{variant_id}/content/{locale}`: PUT/DELETE VARIANT-перевода.
+- `/products/{product_id}/variants/{variant_id}/content/{locale}`: сохранённый контракт VARIANT; PUT/DELETE у SIMPLE возвращает 422.
 - `/products/{product_id}/variants/{variant_id}/properties`: PUT свойств позиции.
 - `/product-types`: GET/POST; `/product-types/{product_type_id}`: GET/DELETE.
 - `/product-types/{product_type_id}/translations/{locale}`: PUT подписи.
@@ -104,9 +109,14 @@ expected_revision в query и возвращает 204 без пустого DTO
 
 Раздел «Каталог» содержит товары, типы и блоки. Маршруты находятся в существующем
 защищённом workspace layout. Список сохраняет locale, поиск, тип и страницу в URL.
-Карточка товара сохраняет активный раздел в URL. Формы PRODUCT, VARIANT, свойств,
+Карточка товара сохраняет активный раздел в URL. Формы PRODUCT, свойств,
 типа, подписей и схемы сохраняются отдельно. Создание типа сначала создаёт пустую
 схему; связи добавляются в его редакторе отдельной явной операцией.
+Отдельной формы VARIANT-контента SIMPLE нет. Прежние URL с section=VARIANT показывают
+контент товара; маршрут позиции открывает её свойства.
+Редактор блока сохраняет и удаляет только блок, без дополнительных команд ProductType.
+AppLayout запускает определение tenant независимо от открытого мобильного меню;
+прямое открытие карточки не остаётся в загрузке из-за скрытого sidebar.
 
 Данные HTTP и frontend-модели разделены. Pages координируют API, queries и navigation;
 остальные UI получают props/emits. Query keys включают tenant/session, use case,
@@ -143,24 +153,35 @@ locale; запись блокирует повторную отправку. С�
 готовой к продаже. Нет публикационного статуса магазина или складских остатков
 в Product. GetProductPublicationSnapshot появится вместе с потребителем Channels.
 
-Существующие tenant нужно явно обновить до `0017_catalog_simple`; миграция не
-запускается автоматически при открытии Console. Downgrade удаляет новый Catalog
-и данные, поэтому применяется только как отдельная согласованная операция.
+Catalog не выходил в production. Исправленная `0017_catalog_simple` — единственная
+новая миграция; поддержка прежних данных не нужна. Тестовые базы с ранней редакцией
+Catalog пересоздаются. Остальные tenant обновляются явно до 0017 перед запуском
+API; миграция не запускается автоматически при открытии Console. Downgrade до
+0016 удаляет Catalog и его данные.
 
-## Результат проверки первого среза
+## Проверка выравнивания SIMPLE (2026-10-10)
 
-Проверено локально на отдельной PostgreSQL 16: общий набор unittest — 626 проверок,
-успешно, 133 пропущены без соответствующего окружения; дополнительные 5 Catalog
-интеграционных тестов и 17 tenant migration тестов выполнены с TEST_POSTGRES_URL.
-После финального аудита DTO и Depends повторены Domain/architecture и реальные
-Catalog HTTP-тесты. Проверены black и diff whitespace; Console lint/typecheck/build
-успешны.
+Domain/architecture проверяют инвариант SIMPLE, обязательные файлы сценариев,
+аннотации и направление импортов. PostgreSQL-тесты покрывают PRODUCT-переводы,
+запрет VARIANT, версии, очистку HTML, tenant isolation, FK, null/пустой перевод,
+rollback, ошибки commit, гонку схемы и контента, downgrade/upgrade. Tenant migration
+тесты проверяют onboarding и транзакционность; autogenerate на head должен быть пустым.
+Обязательны Black, diff whitespace, Console lint/typecheck/build и браузерная проверка.
 
-Chromium через установленный Playwright (Browser plugin отсутствует): создание
-SIMPLE, очищенный HTML после сохранения, независимые PRODUCT/VARIANT переводы,
-смена языка и вкладки с несохранённым вводом, пользовательские блок/тип/схема без
-обязательного title, конфликт двух редакторов с сохранением ввода и явным
-обновлением, неизвестная позиция. Desktop 1440×1000 и mobile 390×844: нет
-горизонтального переполнения, runtime ошибок или framework overlay. HTTP 409/404
-в отрицательных сценариях ожидаемы. Браузерный вход использовал тестовую
-auth-сессию; production SSO и другие браузеры в этой проверке не покрыты.
+В браузере проверяются три PRODUCT-поля без отдельной VARIANT-формы,
+сохранение перевода, выбор locale, section=VARIANT и маршрут позиции.
+Редактор блока должен отправлять один PUT или DELETE блока без команды ProductType,
+а редактор ProductType — сохранять собственную ветку. Desktop и mobile включают
+прямую загрузку с закрытым sidebar, проверку Console, framework overlay и переполнения.
+Используется отдельная тестовая PostgreSQL с искусственной auth-сессией;
+production SSO и другие браузеры проверяются отдельно.
+
+После сборки единственной 0017 выполнены 65 unittest: 43 Domain/architecture/
+ownership/registration/management и 22 PostgreSQL (5 Catalog, 17 tenant migrations).
+Все успешны, autogenerate на head пустой. Black, diff whitespace и Console
+lint/typecheck/build прошли. Chromium/Playwright на 127.0.0.1:4173, desktop
+1440×1000 и mobile 390×844: сохранение PRODUCT, отсутствие fallback, маршрут
+позиции, прямое открытие с закрытым меню, сохранение/удаление блоков и типов.
+API и форма товара содержат только текущий контракт. Console/runtime ошибок,
+framework overlay и горизонтального переполнения нет. Browser plugin отсутствует;
+использован установленный Playwright и реальный тестовый Catalog API/SQL.

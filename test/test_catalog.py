@@ -62,8 +62,8 @@ class CatalogDomainTests(unittest.TestCase):
             self.now,
         )
 
-    def test_independent_locales_and_scopes(self) -> None:
-        """PRODUCT, VARIANT и разные locale не наследуют друг друга."""
+    def test_simple_content_locales_are_independent(self) -> None:
+        """Контент SIMPLE хранится только у Product с независимыми локалями."""
         self.assertEqual(self.product.translations, {})
         self.product.put_content(
             LocaleVO("ru"),
@@ -75,14 +75,14 @@ class CatalogDomainTests(unittest.TestCase):
         )
         self.product.put_content(
             LocaleVO("en"),
-            {str(self.block): "Variant"},
+            {str(self.block): "Product"},
             self.schema,
-            ContentScope.VARIANT,
+            ContentScope.PRODUCT,
             self.actor,
             self.now,
         )
-        self.assertNotIn("en", self.product.translations)
-        self.assertNotIn("ru", self.product.variant.translations)
+        self.assertEqual(self.product.translations["en"][str(self.block)], "Product")
+        self.assertEqual(self.product.variant.translations, {})
         with self.assertRaises(InvalidCatalogValueError):
             self.product.put_content(
                 LocaleVO("en"),
@@ -92,6 +92,29 @@ class CatalogDomainTests(unittest.TestCase):
                 self.actor,
                 self.now,
             )
+
+    def test_simple_rejects_variant_content_without_mutating_state(self) -> None:
+        """Даже пустой VARIANT-перевод SIMPLE отклоняется до изменения ревизии."""
+        for values in ({}, {str(self.block): "Position"}):
+            with (
+                self.subTest(values=values),
+                self.assertRaises(InvalidCatalogValueError),
+            ):
+                self.product.put_content(
+                    LocaleVO("en"),
+                    values,
+                    self.schema,
+                    ContentScope.VARIANT,
+                    self.actor,
+                    self.now,
+                )
+        with self.assertRaises(InvalidCatalogValueError):
+            self.product.delete_content(
+                LocaleVO("en"), ContentScope.VARIANT, self.actor, self.now
+            )
+        self.assertEqual(self.product.revision, 1)
+        self.assertEqual(self.product.translations, {})
+        self.assertEqual(self.product.variant.translations, {})
 
     def test_type_change_checks_all_content_without_loss(self) -> None:
         """Несовместимый тип отклоняется; исходный перевод сохраняется."""
@@ -130,6 +153,19 @@ class CatalogDomainTests(unittest.TestCase):
         self.assertEqual(Product.restore(**kwargs).variant.id, self.product.variant.id)
         with self.assertRaises(InvalidCatalogValueError):
             Product.restore(**{**kwargs, "kind": ProductKind.VARIABLE})
+        for translations in ({"en": {}}, {"ru": {str(self.block): "Legacy"}}):
+            with (
+                self.subTest(translations=translations),
+                self.assertRaises(InvalidCatalogValueError),
+            ):
+                Product.restore(
+                    **{
+                        **kwargs,
+                        "variant": Variant.restore(
+                            self.product.variant.id, False, False, translations
+                        ),
+                    }
+                )
         with self.assertRaises(CatalogConflictError):
             self.product.ensure_revision(2)
 

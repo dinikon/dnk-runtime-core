@@ -52,10 +52,16 @@ Revision `0017_catalog_simple`, after `0016_remove_inventory`, creates the new
 Catalog with 11 structured tables: SIMPLE products/variants, content definitions,
 versioned schema links, label translations, PRODUCT/VARIANT translation markers
 and individual content values. There are no JSON/JSONB columns. The migration seeds
-Default (`default`) and three protected blocks. It preserves other modules and
+Default (`default`, schema_version/revision 1) and three protected blocks. Default
+has three PRODUCT links and two optional VARIANT links (title and description)
+reserved for VARIABLE. SIMPLE edits only PRODUCT content. It preserves other modules and
 requires an explicit tenant upgrade before Catalog API is used. Downgrade removes
 only the new Catalog tables and their data; it does not recover the old Catalog.
 See [Catalog](../modules/catalog.md) for contracts and concurrency requirements.
+
+Catalog has not been deployed to production. Its corrected schema is the single
+0017 baseline; test databases created with an earlier draft must be recreated.
+There is no separate content-alignment revision or compatibility storage.
 
 Revisions contain no fixed tenant names and do not import current ORM models.
 

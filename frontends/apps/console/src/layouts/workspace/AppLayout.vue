@@ -4,6 +4,8 @@ export const iframeHeight = "800px";
 </script>
 
 <script setup lang="ts">
+import { onMounted } from "vue";
+import { useTenantStore } from "@/app/stores/tenant";
 import { Separator } from "@/components/ui/separator";
 import {
   SidebarInset,
@@ -11,6 +13,13 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import WorkspaceSidebar from "./components/WorkspaceSidebar.vue";
+
+const tenantStore = useTenantStore();
+onMounted(() => {
+  if (!tenantStore.tenant && !tenantStore.isResolvingTenant) {
+    void tenantStore.resolveTenant();
+  }
+});
 </script>
 
 <template>
