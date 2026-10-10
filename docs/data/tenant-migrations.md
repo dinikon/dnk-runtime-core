@@ -1,5 +1,10 @@
 # Tenant migrations
 
+> The revision history below describes the current code. The
+> [CatalogItem rewrite plan](../plan/catalog.md) replaces all Catalog revisions
+> for a fresh database and rewires the remaining tenant chain. Those migration
+> changes have not been implemented by the documentation update.
+
 ## Ownership
 
 Alembic owns both global and static tenant tables. Global revisions live in `migrations/global/`; run `dnk-manage database upgrade` before starting API and workers. Startup only checks their version. The fresh global baseline refuses an existing unversioned database rather than adopting or deleting its tables. No dynamic object subsystem is active.
@@ -125,7 +130,5 @@ Control Plane v1 targets a fresh database. Migration or adoption of existing ins
 
 - [Files](../modules/files.md): `0020_files` creates tenant registry tables;
   `dnk-manage files prepare --all` prepares private buckets after SQL migrations.
-- [CRM](../modules/crm.md)
 - [Tenancy](../modules/tenancy.md)
-- [Persistence and UoW](../architecture/persistence-and-uow.md)
-- [Historical dynamic schema](../history/data/runtime-schema.md)
+- [Persistence and UoW rules](../architecture/AGENTS.md#unit-of-work)

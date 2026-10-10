@@ -23,6 +23,19 @@ class StoredFileMapper:
             size=FileSizeVO(row.size_bytes),
             status=row.status,
             created_at=row.created_at,
+            deleted_at=row.deleted_at,
+            deleted_by=(
+                EntityIdVO.from_value(row.deleted_by)
+                if row.deleted_by is not None
+                else None
+            ),
+            purge_after=row.purge_after,
+            purge_requested_at=row.purge_requested_at,
+            purge_job_id=(
+                EntityIdVO.from_value(row.purge_job_id)
+                if row.purge_job_id is not None
+                else None
+            ),
         )
 
     @staticmethod
@@ -35,8 +48,19 @@ class StoredFileMapper:
             "name": aggregate.name.value,
             "content_type": aggregate.content_type,
             "size_bytes": aggregate.size.value,
-            "status": aggregate.status,
+            "status": aggregate.status.value,
             "created_at": aggregate.created_at,
+            "deleted_at": aggregate.deleted_at,
+            "deleted_by": (
+                aggregate.deleted_by.uuid if aggregate.deleted_by is not None else None
+            ),
+            "purge_after": aggregate.purge_after,
+            "purge_requested_at": aggregate.purge_requested_at,
+            "purge_job_id": (
+                aggregate.purge_job_id.uuid
+                if aggregate.purge_job_id is not None
+                else None
+            ),
         }
 
     @staticmethod

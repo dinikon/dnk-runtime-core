@@ -70,6 +70,10 @@ from src.modules.files.application.stored_file.command.cleanup_orphaned_objects.
     CleanupOrphanedObjectsCommand,
 )
 from src.modules.files.domain.error import FileNotFoundError, InvalidFileError
+from src.modules.shared.domain.value_object.entity_id import EntityIdVO
+from src.modules.files.infrastructure.stored_file.persistence.repository import (
+    SqlAlchemyStoredFileRepository,
+)
 from src.modules.identity.domain.auth.principal import Principal
 from src.modules.identity.domain.auth.request_context import RequestContext
 from src.modules.shared.infrastructure.persistence.tenant_cleanup import (
@@ -238,6 +242,70 @@ class FilesPostgresTests(unittest.IsolatedAsyncioTestCase):
                     (stats[0].files_count, stats[0].size_bytes),
                     (3, 5 + 11 * 1024 * 1024),
                 )
+
+    async def test_trash_and_purging_keep_objects_and_restore_preserves_content(
+        self,
+    ) -> None:
+        """Cleanup сохраняет обе фазы корзины, а восстановление возвращает исходные байты."""
+        tenant = self.tenants[0]
+        trashed = await self.upload(tenant, b"keep-in-trash")
+        purging = await self.upload(tenant, b"keep-while-purging")
+        now = datetime.now(UTC)
+        async with self.engine.connect() as connection:
+            await bind_tenant_schema(connection, tenant, self.naming)
+            async with UnitOfWork(
+                async_sessionmaker(connection, expire_on_commit=False)
+            ) as uow:
+                repo = SqlAlchemyStoredFileRepository(uow.session)
+                for upload in (trashed, purging):
+                    file = await repo.get_for_update(
+                        EntityIdVO.from_value(upload.file_id)
+                    )
+                    file.move_to_trash(EntityIdVO.from_value(uuid4()), now)
+                    if upload == purging:
+                        file.request_purge(now, EntityIdVO.from_value(uuid4()))
+                    await repo.save(file)
+            async with UnitOfWork(
+                async_sessionmaker(connection, expire_on_commit=False)
+            ) as uow:
+                handlers = build_files_handlers(uow.session, self.resolver)
+                for upload in (trashed, purging):
+                    with self.assertRaises(FileNotFoundError):
+                        await handlers.content.execute(
+                            GetFileContentQuery(tenant, upload.file_id)
+                        )
+                stats = await handlers.buckets.execute(ListBucketsQuery(tenant))
+                self.assertEqual((stats[0].files_count, stats[0].size_bytes), (0, 0))
+                result = await handlers.cleanup.execute(
+                    CleanupOrphanedObjectsCommand(tenant, now + timedelta(days=2))
+                )
+                self.assertEqual(result.removed_objects, 0)
+            for upload in (trashed, purging):
+                stat = await self.adapter.call(
+                    lambda: self.adapter._client.stat_object(
+                        self.location(tenant).bucket_name, upload.file_id.hex
+                    )
+                )
+                self.assertEqual(stat.size, upload.size_bytes)
+            async with UnitOfWork(
+                async_sessionmaker(connection, expire_on_commit=False)
+            ) as uow:
+                repo = SqlAlchemyStoredFileRepository(uow.session)
+                file = await repo.get_for_update(EntityIdVO.from_value(trashed.file_id))
+                file.restore_from_trash(now + timedelta(days=2))
+                await repo.save(file)
+            async with UnitOfWork(
+                async_sessionmaker(connection, expire_on_commit=False)
+            ) as uow:
+                content = await build_files_handlers(
+                    uow.session, self.resolver
+                ).content.execute(GetFileContentQuery(tenant, trashed.file_id))
+            try:
+                self.assertEqual(
+                    b"".join([part async for part in content.stream]), b"keep-in-trash"
+                )
+            finally:
+                await content.stream.aclose()
 
     async def test_other_tenant_and_anonymous_storage_access_are_denied(self) -> None:
         """ID чужого файла не раскрывается; anonymous S3-запрос запрещён."""

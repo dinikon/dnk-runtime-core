@@ -1,9 +1,14 @@
 # Catalog
 
+> Этот документ описывает текущий код Product/Variant. Целевая замена с 2026-10-11 —
+> [CatalogItem](../plan/catalog.md): одна товарная модель, fresh database
+> и переписанные Catalog-миграции. План новой модели не означает, что код ниже
+> уже переработан; отчёты проверок относятся к прежней реализации.
+
 Catalog реализует SIMPLE/VARIABLE, enum-характеристики, пользовательские типы
 и блоки контента, общие enum-значения, Category/Tag, явные локали, HTTP API и Console. Полный целевой план находится в
-[docs/plan/catalog.md](../plan/catalog.md), матрица сценариев и архитектурный
-checklist — в [catalog-slice-1.md](../plan/catalog-slice-1.md) и
+[docs/plan/catalog.md](../plan/catalog.md), исторические матрицы сценариев и
+checklist текущего кода — в [catalog-slice-1.md](../plan/catalog-slice-1.md) и
 [catalog-slice-2.md](../plan/catalog-slice-2.md) и
 [catalog-slice-3.md](../plan/catalog-slice-3.md).
 

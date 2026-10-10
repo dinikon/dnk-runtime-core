@@ -70,7 +70,7 @@ class ModuleRegistrationTests(unittest.TestCase):
 
     def test_cancelled_warehousing_migrations_are_absent(self) -> None:
         """Warehousing отсутствует; Files продолжает цепочку Catalog."""
-        self.assertEqual(TenantMigrator().head(), "0020_files")
+        self.assertEqual(TenantMigrator().head(), "0021_files_lifecycle")
         directory = Path(__file__).resolve().parents[1] / "migrations/tenant/versions"
         for name in ("0017_warehousing_warehouses.py", "0018_warehousing_zones.py"):
             self.assertFalse((directory / name).exists())

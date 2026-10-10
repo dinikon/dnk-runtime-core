@@ -17,3 +17,11 @@ class StoredFileRepositoryProtocol(Protocol):
     async def save(self, aggregate: StoredFile) -> None:
         """Сохраняет состояние без самостоятельного commit."""
         ...
+
+    async def get_for_update(self, identifier: EntityIdVO) -> StoredFile:
+        """Загружает актуальное состояние под блокировкой внешней транзакции."""
+        ...
+
+    async def remove(self, aggregate: StoredFile) -> None:
+        """Удаляет регистрацию только после подтверждения текущей purge job."""
+        ...
