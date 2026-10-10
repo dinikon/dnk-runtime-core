@@ -103,7 +103,10 @@ Files возвращает backend-потребителю поток и техн
 
 MinIO доступен только backend/worker. Docker Compose использует отдельную
 internal network. В dev Compose по отдельному запросу разрешены только loopback
-порты 9000/9001 для PyCharm; Control Plane override отключает их через `!reset []`.
+порты 9000/9001 для PyCharm. Для их публикации MinIO в dev также подключён к
+отдельной bridge-сети `file-storage-local`, в которой нет других сервисов.
+Control Plane override отключает порты через `!reset []` и убирает локальную
+сеть через `!override [file-storage]`.
 Для внешнего MinIO в Kubernetes
 эквивалентную изоляцию обеспечивает инфраструктура Instance.
 

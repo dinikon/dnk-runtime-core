@@ -140,13 +140,22 @@ class FilesArchitectureTests(unittest.TestCase):
             )
         )
         self.assertTrue(base["networks"]["file-storage"]["internal"])
-        self.assertEqual(base["services"]["minio"]["networks"], ["file-storage"])
+        self.assertEqual(
+            base["services"]["minio"]["networks"],
+            ["file-storage", "file-storage-local"],
+        )
+        self.assertEqual(base["networks"]["file-storage-local"]["driver"], "bridge")
+        self.assertFalse(base["networks"]["file-storage-local"].get("internal", False))
+        for name, service in base["services"].items():
+            if name != "minio":
+                self.assertNotIn("file-storage-local", service.get("networks", []))
         # BaseLoader допускает Compose !reset без выполнения interpolation/env_file.
         overlay = yaml.load(
             (project / "docker-compose.control-plane.yml").read_text(),
             Loader=yaml.BaseLoader,
         )
         self.assertEqual(overlay["services"]["minio"]["ports"], [])
+        self.assertEqual(overlay["services"]["minio"]["networks"], ["file-storage"])
         for name in ("api", "lifecycle-worker"):
             self.assertIn("file-storage", overlay["services"][name]["networks"])
         self.assertEqual(

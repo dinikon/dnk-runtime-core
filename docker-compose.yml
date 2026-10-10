@@ -225,7 +225,9 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
-    networks: [file-storage]
+    # Docker does not publish host ports for a container on internal networks only.
+    # The local bridge enables loopback access for scripts run outside Docker.
+    networks: [file-storage, file-storage-local]
     ports:
       - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
       - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
@@ -252,3 +254,5 @@ volumes:
 networks:
   file-storage:
     internal: true
+  file-storage-local:
+    driver: bridge

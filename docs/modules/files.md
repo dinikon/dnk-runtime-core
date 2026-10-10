@@ -28,10 +28,20 @@ Helm не создаёт внешний MinIO: его DNS, TLS и network isolat
 В Compose MinIO подключён к `file-storage` (`internal: true`); backend и workers
 имеют доступ к этой сети по `minio:9000`. API и консоль опубликованы только на
 `127.0.0.1`, порты задаются `MINIO_API_PORT` (9000) и `MINIO_CONSOLE_PORT` (9001).
-Control Plane override отключает публикацию этих портов через `!reset []`.
+Для публикации локальных портов MinIO дополнительно подключён к отдельной bridge
+сети `file-storage-local`: Docker не публикует порты контейнера, подключённого
+только к internal-сетям. Другие сервисы к локальной сети не подключаются.
+Control Plane override отключает публикацию портов через `!reset []` и оставляет
+MinIO только в `file-storage` через `!override [file-storage]`.
 Для локального запуска backend используется `FILES__ENDPOINT=127.0.0.1:9000`
 (либо выбранный API-порт) и `FILES__SECURE=false`. Значения `.env` в текущем
 workspace не изменяются автоматически.
+
+После изменения Compose пересоздайте только MinIO: `docker compose up -d minio`.
+Проверка с хоста: `curl -f http://127.0.0.1:9000/minio/health/live` (либо выбранный
+API-порт). Если `create_tenant.py` уже завершился ошибкой на подготовке хранилища,
+tenant остаётся в статусе `provisioning`. Продолжите его создание командой
+`dnk-manage files resume <tenant_uuid>`, вместо повторного создания tenant.
 
 ## Rollout и восстановление
 

@@ -1,4 +1,4 @@
-# Combine with docker-compose.yml. Requires Docker Compose 2.24.4+ for !reset.
+# Combine with docker-compose.yml. Requires Docker Compose 2.24.4+ for !reset/!override.
 # Supply real certificates and a persistent Fernet key before enabling integration.
 x-integration-environment: &integration-environment
   FILES__ENDPOINT: minio:9000
@@ -23,6 +23,7 @@ x-integration-environment: &integration-environment
 services:
   minio:
     ports: !reset []
+    networks: !override [file-storage]
 
   api:
     ports: !reset []
