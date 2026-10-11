@@ -6,7 +6,7 @@ from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 
 @dataclass(frozen=True, slots=True)
 class GetCurrentUserQuery:
-    """DTO команды получения текущего пользователя по session."""
+    """Запрашивает профиль по доверенным User ID и Tenant ID."""
 
     tenant_id: EntityIdVO
     user_id: UserIdVO
