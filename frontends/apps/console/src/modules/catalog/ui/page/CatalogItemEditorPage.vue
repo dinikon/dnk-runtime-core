@@ -250,7 +250,9 @@ function toSimple() {
 }
 </script>
 <template>
-  <div class="mx-auto min-w-0 max-w-5xl space-y-5 p-6">
+  <div
+    class="mx-auto min-h-0 w-full min-w-0 max-w-5xl flex-1 space-y-5 overflow-y-auto p-6"
+  >
     <div class="flex flex-wrap justify-between gap-3">
       <div class="min-w-0">
         <h1 class="break-words text-2xl font-semibold">

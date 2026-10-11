@@ -73,7 +73,7 @@ async function remove(item: CollectionItem) {
 }
 </script>
 <template>
-  <div class="space-y-5 p-6">
+  <div class="min-h-0 min-w-0 flex-1 space-y-5 overflow-y-auto p-6">
     <CatalogHeader
       :title="kind === 'attributes' ? 'Характеристики' : 'Метки'"
       description="Глобальные справочники каталога"

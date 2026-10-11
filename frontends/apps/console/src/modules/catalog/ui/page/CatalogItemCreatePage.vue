@@ -54,7 +54,9 @@ async function create(structure?: StructureDTO) {
 }
 </script>
 <template>
-  <div class="mx-auto max-w-4xl space-y-5 p-6">
+  <div
+    class="mx-auto min-h-0 w-full min-w-0 max-w-4xl flex-1 space-y-5 overflow-y-auto p-6"
+  >
     <h1 class="text-2xl font-semibold">Новый товар</h1>
     <CatalogToolbar
       :locale="ctx.locale.value"

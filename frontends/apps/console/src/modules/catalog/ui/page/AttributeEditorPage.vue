@@ -198,7 +198,9 @@ async function remove() {
 }
 </script>
 <template>
-  <div class="max-w-3xl space-y-6 p-6">
+  <div
+    class="min-h-0 w-full min-w-0 max-w-3xl flex-1 space-y-6 overflow-y-auto p-6"
+  >
     <CatalogHeader
       :title="id ? 'Enum-характеристика' : 'Новая enum-характеристика'"
       description="Устойчивые определения и значения для осей VARIABLE."
