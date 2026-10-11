@@ -12,9 +12,6 @@ from src.modules.identity.infrastructure.user.persistence.repository import (
 )
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.modules.tenancy.infrastructure.tenant.persistence.tenant_connection import (
-    bind_tenant_schema,
-)
 from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
@@ -50,7 +47,6 @@ async def cloud_owner_ready(
     naming = TenantSchemaNaming(schema_prefix or dnk_config.SCHEMA_PREFIX)
     repo = AccessRepository(session, naming)
     identity = await repo.identity_for_user(tenant_id, user_id)
-    await bind_tenant_schema(await session.connection(), tenant_id, naming)
     user = await SqlAlchemyUserRepository(session, naming).get_by_id(
         UserIdVO.from_value(user_id), tenant_id=EntityIdVO.from_value(tenant_id)
     )
