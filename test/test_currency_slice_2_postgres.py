@@ -505,7 +505,7 @@ class CurrencySliceTwoPostgresTests(unittest.IsolatedAsyncioTestCase):
             await TenantMigrator().upgrade(connection, schema)
             self.assertEqual(
                 await TenantMigrator().current(connection, schema),
-                ("0024_currency_exchange_rates",),
+                (TenantMigrator().head(),),
             )
             tables = await connection.run_sync(
                 lambda conn: inspect(conn).get_table_names(schema=schema)

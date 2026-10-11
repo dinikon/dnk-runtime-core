@@ -255,11 +255,15 @@ class CurrencyProfileTests(unittest.IsolatedAsyncioTestCase):
         app.state.token_manager = TokenManager(InMemoryTokenBackend())
         app.include_router(router, prefix="/auth")
         context = RequestContext(
+            request_id=None,
+            ip=None,
+            user_agent=None,
             principal=Principal(
                 user_id=str(self.user.id.uuid),
                 tenant_id=str(self.tenant_id.uuid),
                 session_id="test",
-            )
+                roles=("admin",),
+            ),
         )
         app.dependency_overrides[require_authenticated_request_context] = (
             lambda: context

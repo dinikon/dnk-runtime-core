@@ -3,7 +3,8 @@
 Первый этап ниже описывает существующее приватное хранилище. Следующий этап —
 [файловый менеджер в Admin Console](#следующий-этап-файловый-менеджер-в-admin-console).
 Статус следующего этапа на 2026-10-11: выполнены срезы 1 (Domain/persistence)
-2 (Read API), 3 (мутации Console) и 4 (worker/recovery); следующий срез — Console UI.
+2 (Read API), 3 (мутации Console), 4 (worker/recovery) и 5 (Console UI);
+следующий срез — rollout и smoke test на отдельном tenant.
 
 ## Границы первого этапа
 
@@ -856,9 +857,66 @@ registrars/архитектуры и 6 target tests boundary/recovery/backlog/а
 и внешние UoW/shared-session boundaries проверены отдельно от функциональных
 тестов. Сервисы одноразовые и удалены; production rollout не выполнялся.
 
-Следующий срез — этап 5: AdminLayout/routes/navigation, shadcn Vue таблицы,
-фильтры, upload/trash/purge dialogs и polling корзины. Затем этап 6 — rollout.
+После worker-среза реализован этап 5 ниже. Следующий срез — этап 6: rollout.
 Рабочие данные, tenant dates и рабочие миграции в этом срезе не изменялись.
+
+#### Выполненный срез 5: файловый менеджер Console
+
+Реализован 2026-10-11 без изменений backend-контрактов и зависимостей frontend.
+`filesRoutes` находятся в `AdminLayout`: `/admin/files`, `/admin/files/trash`,
+`/admin/files/disks`; `/files` сохраняет query при перенаправлении. «Файлы»
+перенесены из workspace navigation в admin «Модули»; breadcrumb и активный
+пункт меню работают на всех трёх страницах. «Диски» переиспользуют read-only
+просмотр providers/buckets.
+
+Собраны установленные shadcn-vue Card/Tabs/Table/InputGroup/Popover/Command,
+Field/Dialog/AlertDialog/Progress, Skeleton/Alert/Empty и Sonner. Четыре
+карточки категорий и сводка используют реальные серверные счётчики без
+демонстрационной квоты. Фильтры, поиск с debounce 300 ms, страница и размер
+сохраняются в URL. Используется OffsetPagination с необязательной русской
+локализацией; после удаления последней строки URL переходит на оставшуюся
+страницу с сохранением фильтров. На мобильном таблицы заменяются карточками
+с теми же действиями.
+
+Upload отправляет native FormData через общий Axios-клиент с прежней CSRF
+защитой; фиксированный JSON Content-Type снимается для multipart boundary.
+Показаны имя/размер, выбор готового диска, native input и drag-and-drop.
+Передача файла отделена от ожидания сохранения. Исправимые ошибки сохраняют
+выбранный файл. Автоматический retry выключен: при потере ответа список
+сначала обновляется, повторная отправка требует явного подтверждения риска
+создания ещё одного файла. Trash/purge dialogs остаются открытыми до ответа
+сервера; purge сообщает о фоновом окончательном удалении, а не о немедленном
+освобождении места. `purging` и истёкший срок исключают восстановление.
+
+Query keys включают tenant и параметры, все GET получают AbortSignal;
+мутации отменяются при смене tenant/уходе со страницы и инвалидируют только
+кеш захваченного tenant. Корзина опрашивается каждые 5 секунд только при
+видимой вкладке и наличии `purging` на текущей странице; после завершения
+опрос прекращается, overview обновляется. Неуспешный tenant resolve имеет
+собственный Alert вместо бесконечного Skeleton.
+
+Проверки: Console typecheck, lint и production build; форматирование и scoped
+`git diff --check`. Playwright Chromium на `http://127.0.0.1:5173`, desktop
+1440×1100 и mobile 390×844, светлая/тёмная темы. Browser plugin отсутствует;
+использован уже установленный Playwright без новых зависимостей. Все 15 групп
+браузерных проверок прошли: маршруты/redirect/menu, search/empty/reset,
+несколько дисков и preparing, категории, пагинация/last row, multipart/CSRF,
+413 и сохранение файла, upload pending, trash/restore/purge 202, expired,
+polling/hidden/stop, read-only диски, клавиатура, отмена поиска и смена tenant,
+неопределённый результат upload, GET error/retry, мобильные действия/диалоги.
+Ошибок приложения, Vue warnings и горизонтального overflow не обнаружено.
+
+Ограничения проверки: API подменялся изолированными контрактными fixtures;
+событие 100% upload progress задавалось синтетически, проверяя отсутствие
+раннего успеха до задержанного ответа сервера. Это не end-to-end проверка
+MinIO/session cookies/worker. Скрипт и снимки находятся в `/tmp`, не в исходном
+коде; постоянный frontend e2e runner не добавлен. Реальные данные не менялись;
+backend-тесты не повторялись, поскольку backend не изменён этим срезом.
+
+Следующий срез — rollout: доставить frontend/backend/config/worker, применить
+миграции на отдельном тестовом tenant и проверить полный цикл с настоящим
+MinIO и session/CSRF. Отдельно проверить реальную передачу файла с progress,
+лимит reverse proxy, восстановление и завершение worker purge.
 
 | Этап | Работы | Критерий готовности |
 | --- | --- | --- |
@@ -866,7 +924,7 @@ registrars/архитектуры и 6 target tests boundary/recovery/backlog/а
 | 2. Read API — выполнен | Два списка, overview, query ports/adapters, admin Depends | Search/диски/пагинация работают на сервере; HTTP DTO и архитектурные файлы полны |
 | 3. Мутации — выполнен | Console upload, trash, restore, request purge; очередь в общем UoW | CSRF/admin/tenant проверены; rollback не оставляет ложный успех |
 | 4. Worker — выполнен | Hourly trash cleanup, per-file purge, recovery, версии/ownership | Срок 30 дней, безопасные retries/crashes и отсутствие раннего удаления |
-| 5. Console | Admin routes/navigation, shadcn-композиция, форма и корзина | Все пользовательские сценарии и responsive/error/empty/pending состояния проверены |
+| 5. Console — выполнен | Admin routes/navigation, shadcn-композиция, форма и корзина | Все пользовательские сценарии и responsive/error/empty/pending состояния проверены |
 | 6. Rollout | Docs, настройки upload/worker, tenant migration, smoke test | Реальный tenant проходит загрузку → поиск → корзину → восстановление/удаление |
 
 Проверки реализации:
@@ -921,7 +979,7 @@ router/layout/navigation, установленными Vue/shadcn-компоне
 аннотации/транзакции, разделение HTTP-контрактов) прошли. Они проверяют
 существующую реализацию, а не ещё не созданные сценарии этого этапа.
 
-Domain/persistence, SQL-миграция, Read API, HTTP-мутации и worker срезов 1–4 реализованы;
-Console остаётся следующим срезом. Backend-проверки не подтверждают работу будущего
-Admin UI или rollout. Реальный quota и импорты внешних объектов отсутствуют; мгновенное
+Domain/persistence, SQL-миграция, Read API, HTTP-мутации, worker и Admin UI
+срезов 1–5 реализованы. Следующий срез — rollout с реальным tenant; браузерные
+проверки на fixtures не заменяют end-to-end smoke test. Реальный quota и импорты внешних объектов отсутствуют; мгновенное
 удаление ровно в момент истечения срока не гарантируется при сбоях очереди/storage.

@@ -7,7 +7,7 @@ from sqlalchemy import DateTime, Index, PrimaryKeyConstraint, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.modules.tenancy.infrastructure.tenant.persistence.tenant_base import TenantBase
-from src.modules.shared.infrastructure.persistence import StringUUID
+from src.modules.shared.infrastructure.persistence.string_uuid import StringUUID
 
 
 class UserModel(TenantBase):

@@ -99,7 +99,10 @@ function changeLimit(value: unknown) {
         :disabled="disabled"
         @update:model-value="changeLimit"
       >
-        <SelectTrigger class="h-9 w-32" :aria-label="locale === 'ru' ? 'Строк на странице' : 'Rows per page'">
+        <SelectTrigger
+          class="h-9 w-32"
+          :aria-label="locale === 'ru' ? 'Строк на странице' : 'Rows per page'"
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent
