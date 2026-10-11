@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 import re
 import time
 from typing import BinaryIO, TypeVar, cast
+from anyio import CancelScope
 
 from minio import Minio
 from minio.error import S3Error
@@ -88,8 +89,9 @@ class MinioFileContentStream:
     async def aclose(self) -> None:
         """Идемпотентно закрывает response и возвращает соединение в pool."""
         if not self._closed:
-            self._closed = True
-            await self._adapter.call(self._close)
+            with CancelScope(shield=True):
+                await self._adapter.call(self._close)
+                self._closed = True
 
     def _close(self) -> None:
         """Освобождает синхронный HTTP-ресурс SDK."""
@@ -136,7 +138,17 @@ class MinioStorageAdapter:
                 return await asyncio.shield(task)
             except asyncio.CancelledError:
                 # Поток нельзя остановить отменой coroutine: сначала ждём его завершения.
-                await asyncio.gather(task, return_exceptions=True)
+                # ASGI отменяет scope; повторный Task.cancel также не должен отпустить SDK.
+                with CancelScope(shield=True):
+                    while not task.done():
+                        try:
+                            await asyncio.shield(task)
+                        except asyncio.CancelledError:
+                            continue
+                        except Exception:
+                            break
+                if not task.cancelled():
+                    task.exception()
                 raise
             except S3Error as exc:
                 logger.warning(

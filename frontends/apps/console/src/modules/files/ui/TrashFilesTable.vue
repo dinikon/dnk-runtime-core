@@ -13,21 +13,38 @@ import {
   type TrashFileItem,
 } from "../model/types";
 import FileName from "./FileName.vue";
+import { Checkbox } from "@/components/ui/checkbox";
 import TrashFileActions from "./TrashFileActions.vue";
-defineProps<{ items: TrashFileItem[]; busy: boolean }>();
-defineEmits<{ restore: [file: TrashFileItem]; purge: [file: TrashFileItem] }>();
+defineProps<{ items: TrashFileItem[]; busy: boolean; selected: string[] }>();
+defineEmits<{
+  restore: [file: TrashFileItem];
+  purge: [file: TrashFileItem];
+  select: [id: string, checked: boolean];
+}>();
 </script>
 <template>
   <div class="hidden xl:block">
     <Table
       ><TableHeader
         ><TableRow
+          ><TableHead class="w-10"><span class="sr-only">Выбор</span></TableHead
           ><TableHead>Название / диск</TableHead><TableHead>Размер</TableHead
           ><TableHead>Удалён</TableHead><TableHead>Хранится до</TableHead
           ><TableHead>Действия</TableHead></TableRow
         ></TableHeader
       ><TableBody
-        ><TableRow v-for="file in items" :key="file.file_id"
+        ><TableRow
+          v-for="file in items"
+          :key="file.file_id"
+          :data-state="selected.includes(file.file_id) ? 'selected' : undefined"
+          ><TableCell
+            ><Checkbox
+              :model-value="selected.includes(file.file_id)"
+              :disabled="busy || file.status === 'purging'"
+              :aria-label="`Выбрать: ${file.name}`"
+              @update:model-value="
+                $emit('select', file.file_id, $event === true)
+              " /></TableCell
           ><TableCell class="max-w-64"
             ><FileName :file="file" />
             <p
@@ -61,7 +78,14 @@ defineEmits<{ restore: [file: TrashFileItem]; purge: [file: TrashFileItem] }>();
       :key="file.file_id"
       class="flex min-w-0 flex-col gap-3 rounded-lg border p-4"
     >
-      <FileName :file="file" />
+      <div class="flex min-w-0 items-start gap-3">
+        <Checkbox
+          :model-value="selected.includes(file.file_id)"
+          :disabled="busy || file.status === 'purging'"
+          :aria-label="`Выбрать: ${file.name}`"
+          @update:model-value="$emit('select', file.file_id, $event === true)"
+        /><FileName class="min-w-0" :file="file" />
+      </div>
       <p class="break-all text-sm text-muted-foreground">
         {{ file.bucket_name }} · {{ formatStorageBytes(file.size_bytes) }}
       </p>

@@ -114,7 +114,7 @@ class FilesMultipartTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         """HTTP limit имеет самостоятельный default и не заменяет transfer timeout."""
-        self.assertEqual(FilesSettings().console_max_upload_bytes, 104857600)
+        self.assertEqual(FilesSettings().console_max_upload_bytes, 1073741824)
         self.assertEqual(
             FilesSettings(console_max_upload_bytes=1).operation_timeout_seconds, 600
         )
@@ -152,3 +152,76 @@ class FilesMultipartTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(HTTPException) as caught:
                 await anext(parse_upload_file_request(request, 100000))
         self.assertEqual(caught.exception.status_code, 408)
+
+    async def test_one_gib_stream_boundary_without_content_length(self) -> None:
+        """Проверяет реальный счётчик parser на 1 ГиБ без хранения гигабайта в тесте."""
+        limit = FilesSettings().console_max_upload_bytes
+
+        class CountingSpool:
+            """Заменяет только запись на диск; multipart parser получает все bytes."""
+
+            _rolled = False
+            _max_size = 0
+
+            def __init__(self) -> None:
+                """Инициализирует счётчик записанных данных и признак закрытия."""
+                self.written = 0
+                self.closed = False
+
+            def write(self, data: bytes) -> int:
+                """Учитывает bytes без сохранения содержимого."""
+                self.written += len(data)
+                return len(data)
+
+            def seek(self, offset: int) -> int:
+                """Поддерживает возврат источника в начало после parsing."""
+                return offset
+
+            def tell(self) -> int:
+                """Возвращает позицию для проверки rollover в UploadFile."""
+                return self.written
+
+            def close(self) -> None:
+                """Фиксирует освобождение источника."""
+                self.closed = True
+
+        for extra in (0, 1):
+            with self.subTest(extra=extra):
+                remaining = limit + extra
+                started = False
+                block = b"x" * (64 * 1024)
+
+                async def receive() -> dict[str, object]:
+                    """Генерирует поток запроса порциями с постоянным потреблением памяти."""
+                    nonlocal remaining, started
+                    if not started:
+                        started = True
+                        chunk = self.body(b"", ending=False)
+                    elif remaining:
+                        chunk = block[: min(remaining, len(block))]
+                        remaining -= len(chunk)
+                    else:
+                        return {
+                            "type": "http.request",
+                            "body": b"\r\n--file-test--\r\n",
+                            "more_body": False,
+                        }
+                    return {"type": "http.request", "body": chunk, "more_body": True}
+
+                request = self.request(b"")
+                request._receive = receive
+                source = CountingSpool()
+                with patch(
+                    "starlette.formparsers.SpooledTemporaryFile", return_value=source
+                ):
+                    parser = parse_upload_file_request(request, limit)
+                    if extra:
+                        with self.assertRaises(HTTPException) as caught:
+                            await anext(parser)
+                        self.assertEqual(caught.exception.status_code, 413)
+                    else:
+                        payload = await anext(parser)
+                        self.assertEqual(payload.file.size, limit)
+                        self.assertEqual(source.written, limit)
+                        await parser.aclose()
+                self.assertTrue(source.closed)

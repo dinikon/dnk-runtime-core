@@ -23,6 +23,15 @@ function params(filters: FilesFilters): URLSearchParams {
   return result;
 }
 export const filesApi = {
+  async preview(id: string, signal: AbortSignal): Promise<Blob> {
+    return (
+      await httpClient.get<Blob>(`${base}/items/${id}/preview/`, {
+        signal,
+        responseType: "blob",
+        headers: { Accept: "*/*" },
+      })
+    ).data;
+  },
   async providers(signal?: AbortSignal): Promise<StorageProvider[]> {
     return (
       await httpClient.get<StorageProvider[]>(`${base}/providers/`, { signal })
@@ -103,5 +112,15 @@ export const filesApi = {
   },
   async purge(id: string, signal: AbortSignal): Promise<void> {
     await httpClient.delete(`${base}/trash/${id}/`, { signal });
+  },
+  async emptyTrash(
+    signal: AbortSignal,
+  ): Promise<{ job_id: string; cutoff: string }> {
+    return (
+      await httpClient.delete<{ job_id: string; cutoff: string }>(
+        `${base}/trash/`,
+        { signal },
+      )
+    ).data;
   },
 };

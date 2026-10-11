@@ -6,6 +6,12 @@ from src.modules.files.application.stored_file.command.cleanup_expired_trash.dto
     CleanupExpiredTrashBacklogDTO,
 )
 from datetime import datetime
+from src.modules.files.application.stored_file.command.empty_trash.command import (
+    EmptyTrashCommand,
+)
+from src.modules.files.application.stored_file.command.empty_trash.dto import (
+    EmptyTrashCandidateDTO,
+)
 from collections.abc import Mapping, Sequence
 from typing import Any
 from uuid import UUID
@@ -59,6 +65,24 @@ class SqlAlchemyStoredFileQueryRepository:
     def __init__(self, session: AsyncSession) -> None:
         """Принимает сессию, привязанную к trusted tenant внешней сборкой."""
         self._session = session
+
+    async def empty_trash_candidates(
+        self, command: EmptyTrashCommand
+    ) -> tuple[EmptyTrashCandidateDTO, ...]:
+        """Читает keyset-порцию корзины всех дисков выбранной tenant-схемы."""
+        statement = sa.select(File.id).where(
+            File.status == "trashed", File.deleted_at <= command.cutoff
+        )
+        if command.after_id is not None:
+            statement = statement.where(File.id > command.after_id)
+        rows = (
+            await self._session.execute(
+                statement.order_by(File.id).limit(command.batch_size)
+            )
+        ).mappings()
+        return tuple(
+            StoredFileQueryMapper.to_empty_trash_candidate(row) for row in rows
+        )
 
     async def cleanup_backlog(self, cutoff: datetime) -> CleanupExpiredTrashBacklogDTO:
         """Вычисляет counts/bytes/старейший срок одним SQL без ORM-агрегатов."""

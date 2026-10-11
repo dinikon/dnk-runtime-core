@@ -6,6 +6,12 @@ from src.modules.files.application.stored_file.command.cleanup_expired_trash.dto
     CleanupExpiredTrashBacklogDTO,
 )
 from datetime import datetime
+from src.modules.files.application.stored_file.command.empty_trash.command import (
+    EmptyTrashCommand,
+)
+from src.modules.files.application.stored_file.command.empty_trash.dto import (
+    EmptyTrashCandidateDTO,
+)
 from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
@@ -39,6 +45,12 @@ class FileReadBucketDTO:
 
 class StoredFileQueryRepositoryProtocol(Protocol):
     """Читает специализированные страницы и сводку в выбранной tenant-схеме."""
+
+    async def empty_trash_candidates(
+        self, command: EmptyTrashCommand
+    ) -> tuple[EmptyTrashCandidateDTO, ...]:
+        """Читает не более 100 ID корзины всех дисков на границу ручного запроса."""
+        ...
 
     async def cleanup_backlog(self, cutoff: datetime) -> CleanupExpiredTrashBacklogDTO:
         """Возвращает агрегированный снимок состояний без загрузки всего реестра."""

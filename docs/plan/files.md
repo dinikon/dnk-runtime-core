@@ -101,8 +101,9 @@ uploads. Зарегистрированные файлы не удаляются
 
 ## Доставка файла
 
-Files возвращает backend-потребителю поток и технические метаданные. Files не
-публикует бинарный HTTP endpoint, presigned URL и redirect. Потребляющий модуль
+Files возвращает backend-потребителю поток и технические метаданные. Первый этап не
+публикует бинарный HTTP endpoint, presigned URL и redirect. Отдельный admin-preview
+добавлен [последующим расширением](#административный-предпросмотр). Потребляющий модуль
 проверяет доступ к своей сущности, получает файл через адаптер и отдаёт поток
 через собственный endpoint. Ответственность за бизнес-ACL и HTTP-заголовки лежит
 на этом модуле. Поток обязательно закрывается при EOF, ошибке или отмене.
@@ -152,9 +153,10 @@ rollback обслуживает существующая orphan cleanup; имп�
 
 Первый этап остаётся основой: приватность MinIO, tenant isolation, UUID-ключи,
 потоковая загрузка и UoW потребителя сохраняются. Новым HTTP-методом будет
-загрузка из консоли; скачивание, preview, presigned URL и redirect на MinIO
-этим планом не вводятся. Получение содержимого по-прежнему принадлежит
-endpoint потребляющего бизнес-модуля.
+загрузка из консоли; скачивание, presigned URL и redirect на MinIO
+этим этапом не вводятся. Административный preview добавлен отдельным расширением
+ниже. Получение содержимого для бизнес-сущности по-прежнему принадлежит endpoint
+потребляющего бизнес-модуля.
 
 ### Что уже есть и что требуется изменить
 
@@ -413,7 +415,8 @@ dependencies импортировать из Identity, проверку Console 
 
 ### Загрузка и SQL-миграция
 
-Форма принимает один файл и готовый диск; по умолчанию системный. При фильтре
+Форма принимает пакет файлов и готовый диск; каждый файл отправляется отдельным
+запросом последовательно (см. расширение пакетной загрузки ниже); по умолчанию системный. При фильтре
 одного диска форма предварительно выбирает его. Другой диск выбирается явно.
 Одинаковые имена разрешены: каждая загрузка имеет отдельный UUID-ключ и никогда
 не перезаписывает существующий объект.
@@ -424,8 +427,8 @@ handle, фактический размер `UploadFile.size` (не общий m
 Если MIME отсутствует, используется `application/octet-stream`. Имена проверяет
 `FileNameVO`. Источник закрывается в `finally` при успехе, ошибке и отмене.
 
-Предлагаемый Console limit — 100 МиБ, Instance setting
-`FILES__CONSOLE_MAX_UPLOAD_BYTES=104857600`. Он относится к HTTP-загрузке,
+Console limit — 1 ГиБ, Instance setting
+`FILES__CONSOLE_MAX_UPLOAD_BYTES=1073741824`. Он относится к HTTP-загрузке,
 не ограничивает внутренний consumer API. Применить лимит во время приёма
 multipart (включая запрос без Content-Length), а не только после записи spool;
 ограничения ingress/proxy согласовать с multipart overhead. Файл не читается
@@ -735,7 +738,7 @@ Multipart parser принимает один файл и optional bucket ID, з�
 повторные поля, ограничивает bytes до записи в spool, включая запросы без
 Content-Length. Файл свыше 1 МиБ спулируется на диск; источник закрывается при
 успехе, ошибке, отмене и обрыве. Console limit — отдельный Instance setting
-`FILES__CONSOLE_MAX_UPLOAD_BYTES` (100 МиБ); добавлен в Config, template env,
+`FILES__CONSOLE_MAX_UPLOAD_BYTES` (1 ГиБ); добавлен в Config, template env,
 Compose и Helm `application.files.consoleMaxUploadBytes`. Полное тело ограничено
 limit + 64 КиБ, заголовки части — 64 КиБ, текстовое поле — 1 КиБ. Превышение —
 `413`; приём ограничен operation timeout, истечение — `408`. Бинарный SDK upload
@@ -983,3 +986,204 @@ Domain/persistence, SQL-миграция, Read API, HTTP-мутации, worker 
 срезов 1–5 реализованы. Следующий срез — rollout с реальным tenant; браузерные
 проверки на fixtures не заменяют end-to-end smoke test. Реальный quota и импорты внешних объектов отсутствуют; мгновенное
 удаление ровно в момент истечения срока не гарантируется при сбоях очереди/storage.
+
+## Административный предпросмотр
+
+По отдельному запросу добавлен backend-метод предпросмотра зарегистрированного
+файла на диске Files. Это расширяет прежний запрет на preview. Произвольные пути
+ОС, незарегистрированные объекты и публичные MinIO URL не принимаются.
+
+Aggregate Roots сохраняются: `StorageProvider`, `Bucket`, `StoredFile`. Для
+нового сценария применимы требования архитектуры выше: отдельные Query, handler,
+DTO и HTTP Response; типизированные методы и русские docstrings; прямые импорты
+из файлов определения; Application работает через порты; общая сессия внешнего
+UoW без commit/rollback в handler/repository. Domain, фабрики и миграции не меняются.
+
+| Сценарий | Вход | Результат | Обязательные файлы и сборка |
+| --- | --- | --- | --- |
+| `get_file_preview` | trusted `tenant_id: UUID`, `file_id: UUID` | `GetFilePreviewResultDTO`: ID, имя, MIME ответа, размер, `FileContentStream` | `application/stored_file/query/get_file_preview/{query,handler,dto}.py`; `presentation/stored_file/http/{controller,response}/get_file_preview.py`; `GetFilePreviewHandlerDep`, `FilesPreviewContextDep`, `PreviewStreamsDep`; route и Infrastructure assembly |
+
+Используются существующие `StorageQueryRepositoryProtocol.content_location`,
+`StorageResolverProtocol`, `StorageAdapterProtocol.exists_owned/open` и их
+SQLAlchemy/MinIO adapters. Проекция возвращает только `ready`-файл на `ready`-диске
+из tenant-схемы внешнего UoW. Перед открытием объекта проверяются ownership tags
+бакета и metadata объекта. Новый handler не вызывает `GetFileContentHandler`.
+
+`GET /api/console/files/items/{file_id}/preview/` без тела запроса требует trusted
+tenant principal с ролью `admin` и `files.read` для `stored_file` с конкретным
+`resource_id=file_id`. Отказ происходит до открытия UoW, включая default allow-all
+authorization adapter. Tenant ID, bucket name и object key клиент не задаёт.
+
+Ответ `200` — исходные bytes порциями, `Content-Length` и `Content-Disposition:
+inline` с UTF-8 filename. Разрешены PDF, PNG/JPEG/GIF/WebP/AVIF/BMP,
+аудио MPEG/MP4/OGG/WebM/WAV и видео MP4/WebM/OGG. Plain text, CSV, Markdown и JSON
+показываются как `text/plain; charset=utf-8`, без преобразования bytes. Для
+HTML, SVG, XML, Office, архивов и остальных MIME возвращается `415`.
+Поддержка конкретного media codec зависит от браузера. Range/HEAD, транскодирование
+и конвертация Office отсутствуют. Frontend добавлен следующим отдельным запросом.
+
+Заголовки ответа: `private, no-store`, `nosniff`, CSP sandbox без scripts и
+разрешёнными same-origin image/media, `frame-ancestors 'self'`,
+`X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: no-referrer`.
+Ошибки: `401/403` — доступ; `404` — недоступная запись/объект; `409` — ownership;
+`415` — формат; `503` — storage/configuration; `422` — неверный UUID.
+
+Request-scoped cleanup закрывает поток после передачи и при ошибке завершения
+function-scoped UoW до отправки ответа. Response закрывает его при EOF, ошибке
+чтения, send failure и disconnect. MinIO ждёт завершения SDK thread при повторной
+отмене и освобождает HTTP response в защищённом от ASGI CancelScope блоке.
+Существующий tenant admission действует до конца потокового HTTP-ответа.
+
+Проверки: `test/test_files_preview.py` покрывает доступ, file-specific ACL,
+MIME, заголовки, OpenAPI, ошибки, cleanup и отмены SDK. Scenario matrix и whitelist
+обновлены в `test/test_files_architecture.py`. PostgreSQL-проверка в
+`test/test_files_read_postgres.py` проверяет фильтрацию tenant, состояния файла
+и готовности диска; она требует disposable `TEST_POSTGRES_URL`. Проверка
+реального MinIO/браузерного просмотра остаётся частью integration smoke test.
+
+Проверки реализации: 47 Files/Catalog тестов и 14 тестов module registration /
+scheduled jobs прошли; архитектурная проверка включает новый сценарий и весь
+модуль. Black (185 Python-файлов), compileall и `git diff --check` успешны.
+47 PostgreSQL/MinIO тестов и один внешний scheduled-jobs тест пропущены без
+настроенных disposable подключений. Предпросмотр с реальным tenant/MinIO не проверялся.
+
+### Предпросмотр из списка на frontend
+
+В активной таблице и мобильных карточках Files добавлено действие «Предпросмотр».
+`FilesTable` передаёт выбранный `FileItem` странице, `FilesPage` открывает отдельный
+`FilePreviewDialog` на существующих shadcn-vue компонентах. Отдельный
+`use-file-preview.ts` управляет запросом `filesApi.preview`, AbortController,
+состояниями loading/error и Blob URL. Admin route guard и backend file-specific
+авторизация сохраняются; в корзине это действие отсутствует.
+
+Используется authenticated Axios client с cookies и `responseType: blob`.
+Предпросмотр появляется после загрузки всего файла; Blob не хранится в TanStack
+Query cache. Фактический MIME ответа определяет image/PDF/text/audio/video viewer,
+а не расширение имени. PDF отображается нативным просмотрщиком браузера. Текст
+выводится через interpolation без выполнения HTML; отображаются первые 256 КиБ
+с видимой отметкой при усечении. Для неизвестного MIME, 415, отсутствующего файла,
+отказа доступа, ownership conflict, storage outage и media decode failure
+предусмотрены сообщения и повтор запроса.
+
+Close/Escape возвращает фокус к действию списка. Закрытие, смена файла/tenant,
+вкладки и unmount отменяют запрос/освобождают URL; ответ отменённого запроса
+не заменяет текущий файл. Новые зависимости и изменения backend для UI не нужны.
+
+Проверки frontend: vue-tsc, ESLint, Prettier, production Vite build и
+`git diff --check` прошли. Browser plugin отсутствует; Playwright Chromium
+проверил реальную страницу Vite с API fixtures на 1440×1000 и 390×844:
+image/PDF/text/audio/video, воспроизведение видео, повреждённое изображение,
+ошибки 403/404/409/415/503 и retry, 401 redirect, escaped HTML в тексте,
+усечение большого текста, отмену загрузки/поздний ответ, смену tenant/вкладки,
+освобождение URL, Escape/focus, обе темы и отсутствие clipping/overflow.
+Скриншоты просмотрены; framework overlays и JS/Vue errors отсутствуют.
+В console есть только ожидаемые HTTP errors отрицательных fixtures.
+End-to-end с живым backend и другие браузеры остаются непроверенными.
+
+## Расширение: пакетная загрузка и лимит 1 ГиБ
+
+Очередь Console принимает несколько файлов через native multiple input,
+drag-and-drop или вставку файлов из буфера; выбор можно дополнять и удалять
+элементы перед загрузкой. Используется существующий `upload_file`:
+`UploadFileCommand` → `UploadFileResultDTO` → `201 UploadFileResponse`.
+Новый bulk handler/DTO не требуется: один POST, один StoredFile и одна транзакция
+на каждый файл; tenant admin, CSRF и `files.upload` проверяются для каждого POST.
+
+Очередь отправляется последовательно и хранит прогресс/результат каждого файла.
+`201` подтверждает успех; 100% передачи ждёт ответа. Успешные элементы не входят
+в повтор, обычные ошибки можно повторить вручную. Неопределённый результат
+(network/408/5xx) останавливает пакет и требует проверки списка и явного
+подтверждения перед повтором этого файла. `401/403/429` останавливают пакет.
+Остановка вручную завершается после текущего файла; остальные остаются в очереди.
+Смена tenant или unmount отменяет запрос и очищает очередь. Ошибка обновления
+списка не превращает подтверждённую загрузку в ошибку и не вызывает повтор.
+
+Лимит 1073741824 bytes на один файл установлен в FilesSettings, Compose,
+template env и Helm; UI отклоняет больший файл до отправки. Multipart сохраняет
+счётчик bytes во время приёма и spool на диск после 1 МиБ. Nginx Console и
+control-plane tenant proxy допускают лимит + 64 КиБ, передают тело без полного
+request buffering и используют timeout 600 s. Helm nginx ingress вычисляет
+лимит с overhead и read/send timeout из настроек Files, сохраняя явные annotations.
+Другой ingress controller требует настройки оператором. Изменение Compose
+setting требует согласования статического Nginx лимита; старые явные env/values
+не заменяются автоматически. Timeout backend остаётся 600 s.
+
+Проверки границы: потоковый multipart без Content-Length ровно 1 ГиБ принимается,
+1 ГиБ + 1 byte возвращает 413; источник закрывается в обоих случаях. Тест
+генерирует все bytes, заменяя запись spool счётчиком; реальная запись гигабайта
+и передача в MinIO остаются rollout smoke test. Helm render проверяет default,
+кастомный лимит с overhead, явный override и другой ingress class.
+
+
+Проверки реализации расширения: 32 теста Files/архитектуры/Helm прошли;
+Black (188 файлов), compileall, vue-tsc, ESLint, Prettier, Vite production build
+и git diff --check успешны. Оба Nginx конфига прошли nginx -t в изолированном
+контейнере; control-plane использовал тестовые hosts и сертификаты.
+Playwright Chromium с API fixtures проверил очередь на 1440×1000 и 390×844:
+дополнение выбора, вставку/перетаскивание, одинаковые имена, последовательность
+POST и CSRF, частичный успех/повтор, 100% перед 201, stop/resume, 403/429/503,
+ошибку обновления списка после commit, границу размера в UI, выбор системного/
+отфильтрованного диска, Escape/focus и смену tenant с отменой запроса.
+Скриншоты просмотрены; горизонтального overflow, JS errors и Vue warnings нет.
+100% progress моделировался синтетически с отложенным HTTP-ответом; тест UI
+границы размера использовал метаданные File без выделения гигабайта памяти.
+Реальная гигабайтная передача в MinIO, live cookies и другие браузеры не проверялись.
+
+
+## Расширение: массовые действия и ручная очистка корзины
+
+Aggregate Root изменяемых файлов — `StoredFile`; `StorageProvider` и `Bucket`
+сохраняют прежние самостоятельные границы. Массовое UI-действие использует
+существующие trash/restore/request_file_purge по одному файлу, с отдельными
+транзакциями и результатами. Выбор ограничен текущей страницей и сбрасывается
+при смене контекста/фильтров/страницы. Восстановление исключает истёкшие файлы;
+`purging` нельзя выбрать. Подтверждение показывает состав и результат пакета,
+повтор обрабатывает только оставшиеся элементы. Отменённый/устаревший запрос
+не продолжает очередь другого tenant, ошибки refetch не повторяют успешную мутацию.
+
+| Сценарий | Вход | Результат | Необходимые элементы |
+| --- | --- | --- | --- |
+| `request_trash_empty` | trusted tenant_id, actor_id; cutoff из ClockPort | `RequestTrashEmptyResultDTO(job_id, cutoff)` | собственные command/handler/dto, порт FilePurgeQueueProtocol.schedule_empty, ScheduledFilePurgeQueue; controller/response/Depends, DELETE /trash/ → 202 |
+| `empty_trash` | tenant_id, неизменный cutoff, optional after_id, batch_size 1–100 | `EmptyTrashResultDTO(queued_count, next_after_id)` и отдельный EmptyTrashCandidateDTO | собственные command/handler/dto, StoredFileQueryRepositoryProtocol.empty_trash_candidates и SQL query mapper/adapter, StoredFileRepositoryProtocol, FilePurgeQueueProtocol, Clock/UUID; worker FilesEmptyTrashJobHandler |
+
+HTTP request schema не нужна: тела запроса нет. Response отделён от Application
+DTO. Endpoint требует tenant admin + CSRF + global files.purge с resource_id=None
+до UoW; tenant, cutoff и filters не принимаются от клиента. Запрос сохраняет
+`files.trash.empty` в function-scoped UoW и возвращает 202 после commit.
+
+Worker обрабатывает все диски и страницы порциями не более 100 ID, без storage
+I/O, через Domain.request_purge. Начальный cutoff исключает новые попадания в
+корзину. Повторная проверка под lock исключает исчезнувшие, восстановленные,
+новые удаления того же файла и уже purging. Состояние + purge jobs + continuation
+коммитятся в одном внешнем UoW; потеря lease или ошибка continuation откатывает
+порцию. Lease/admission используют штатные контракты; повтор не заменяет текущую
+purge job. Continuation имеет UUID5 от предыдущего job ID и курсора. Физическое
+удаление выполняет существующий files.purge; hourly recovery остаётся для
+остановившихся purge jobs. Новые миграции не требуются. Dispatcher management
+jobs worker регистрирует files.trash.empty.
+
+UI «Очистить корзину» использует нефильтрованную сводку для доступности кнопки,
+поэтому пустая выдача поиска не блокирует очистку. Подтверждение предупреждает,
+что действие охватывает все диски/страницы. 202 отображается как запуск фоновой
+очистки; открытая видимая корзина обновляется каждые 5 секунд, в том числе до
+первого перехода в purging. Дополнительный polling прекращается при пустой
+корзине или выходе из вкладки/tenant; обычный polling purging сохраняется.
+
+Проверки расширения: 70 тестов прошли, включая 15 на одноразовом PostgreSQL;
+один отдельный тест scheduled jobs пропущен без его внешнего окружения.
+Проверены tenant isolation, права и CSRF до UoW, ответ только после commit,
+105 файлов на разных дисках, неизменный cutoff, повтор задания, rollback всей
+порции при ошибке continuation/потере lease и восстановление/повторное удаление
+между проекцией и блокировкой агрегата. Архитектурные проверки, Black,
+compileall, vue-tsc, ESLint, Prettier, Vite production build и git diff --check
+успешны.
+
+Playwright Chromium с API fixtures проверил 1440×1000 и 390×844: выбор и
+indeterminate checkbox, сброс при фильтрации, подтверждение, частичный успех и
+повтор оставшихся, восстановление с исключением истёкших файлов, запрет выбора
+purging, массовое окончательное удаление, очистку всех страниц при пустом поиске,
+отмену подтверждения, polling до первого purging, остановку при 403 и смене
+tenant, Escape и возврат фокуса. Скриншоты просмотрены; горизонтального overflow,
+JS errors и Vue warnings нет. Browser plugin недоступен; использован локальный
+Playwright. Физическое удаление в MinIO и другие браузеры не проверялись.
+После обновления необходимо перезапустить jobs worker с новым dispatcher.

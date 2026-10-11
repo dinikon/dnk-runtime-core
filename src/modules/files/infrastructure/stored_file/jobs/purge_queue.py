@@ -40,6 +40,29 @@ class ScheduledFilePurgeQueue:
             )
         )
 
+    async def schedule_empty(
+        self,
+        tenant_id: UUID,
+        job_id: UUID,
+        cutoff: datetime,
+        after_id: UUID | None = None,
+        batch_size: int = 100,
+    ) -> None:
+        """Сохраняет ручную очистку и её продолжение в общей транзакции."""
+        await self._scheduler(
+            ScheduleScheduledJobCommand(
+                tenant_id=tenant_id,
+                job_id=job_id,
+                job_type="files.trash.empty",
+                payload={
+                    "cutoff": cutoff.isoformat(),
+                    "after_id": str(after_id) if after_id else None,
+                    "batch_size": batch_size,
+                },
+                run_at=cutoff,
+            )
+        )
+
     async def schedule_cleanup(
         self,
         tenant_id: UUID,

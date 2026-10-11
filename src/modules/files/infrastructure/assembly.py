@@ -5,6 +5,12 @@ from src.modules.files.application.stored_file.command.cleanup_expired_trash.han
     CleanupExpiredTrashHandler,
 )
 from dataclasses import dataclass
+from src.modules.files.application.stored_file.command.request_trash_empty.handler import (
+    RequestTrashEmptyHandler,
+)
+from src.modules.files.application.stored_file.command.empty_trash.handler import (
+    EmptyTrashHandler,
+)
 from functools import lru_cache
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.config import dnk_config
@@ -19,6 +25,9 @@ from src.modules.files.application.stored_file.command.upload_file.handler impor
 )
 from src.modules.files.application.stored_file.query.get_file_content.handler import (
     GetFileContentHandler,
+)
+from src.modules.files.application.stored_file.query.get_file_preview.handler import (
+    GetFilePreviewHandler,
 )
 from src.modules.files.application.storage_provider.query.list_providers.handler import (
     ListProvidersHandler,
@@ -112,6 +121,9 @@ class FilesHandlers:
     request_purge: RequestFilePurgeHandler
     purge_file: PurgeFileHandler
     cleanup_trash: CleanupExpiredTrashHandler
+    preview: GetFilePreviewHandler
+    request_trash_empty: RequestTrashEmptyHandler
+    empty_trash: EmptyTrashHandler
 
 
 def build_files_handlers(
@@ -156,4 +168,7 @@ def build_files_handlers(
         RequestFilePurgeHandler(files, queue, actual_clock, actual_uuid),
         PurgeFileHandler(files, buckets, providers, resolver),
         CleanupExpiredTrashHandler(files, file_queries, queue, actual_uuid),
+        GetFilePreviewHandler(queries, resolver),
+        RequestTrashEmptyHandler(queue, actual_clock, actual_uuid),
+        EmptyTrashHandler(files, file_queries, queue, actual_clock, actual_uuid),
     )

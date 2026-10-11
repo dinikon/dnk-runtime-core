@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 import os
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, Request
@@ -19,6 +19,20 @@ from src.modules.files.application.stored_file.file_category import (
     FileCategory,
     DOCUMENT_MIME_TYPES,
     classify_file,
+)
+from src.modules.files.application.port.storage import (
+    StorageAdapterProtocol,
+    StorageResolverProtocol,
+)
+from src.modules.files.application.stored_file.query.get_file_preview.handler import (
+    GetFilePreviewHandler,
+)
+from src.modules.files.application.stored_file.query.get_file_preview.query import (
+    GetFilePreviewQuery,
+)
+from src.modules.files.domain.error import FileNotFoundError
+from src.modules.files.infrastructure.persistence.query_repository import (
+    SqlAlchemyStorageQueryRepository,
 )
 from src.modules.files.domain.stored_file.aggregate import StoredFile
 from src.modules.files.domain.value_object.file_name import FileNameVO
@@ -200,6 +214,40 @@ class FilesReadPostgresTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.get(f"/api/console/files/{path}/", params=params)
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()
+
+    async def test_preview_filters_tenant_file_state_and_bucket_readiness(self) -> None:
+        """Реальная SQL-проекция не открывает чужой файл, корзину или preparing-диск."""
+        ready = await self.add_file("visible.pdf")
+        hidden = [
+            await self.add_file(f"{status}.pdf", status=status)
+            for status in ("uploading", "trashed", "purging")
+        ]
+        hidden.append(await self.add_file("preparing.pdf", bucket=self.buckets[2]))
+        hidden.append(
+            await self.add_file(
+                "foreign.pdf", tenant=self.tenants[1], bucket=self.foreign_bucket
+            )
+        )
+        adapter = AsyncMock(spec=StorageAdapterProtocol)
+        adapter.exists_owned.return_value = True
+        resolver = Mock(spec=StorageResolverProtocol)
+        resolver.resolve.return_value = adapter
+        async with self.session() as session:
+            handler = GetFilePreviewHandler(
+                SqlAlchemyStorageQueryRepository(session), resolver
+            )
+            for file_id in [uuid4(), *(file.id.uuid for file in hidden)]:
+                with self.assertRaises(FileNotFoundError):
+                    await handler.execute(GetFilePreviewQuery(self.tenants[0], file_id))
+            resolver.resolve.assert_not_called()
+            result = await handler.execute(
+                GetFilePreviewQuery(self.tenants[0], ready.id.uuid)
+            )
+            self.assertEqual(result.file_id, ready.id.uuid)
+            self.assertEqual(result.content_type, "application/pdf")
+            adapter.exists_owned.assert_awaited_once()
+            adapter.open.assert_awaited_once()
+            await result.stream.aclose()
 
     async def test_states_empty_pages_and_secret_free_metadata(self) -> None:
         """Списки разделены по состояниям; пустая страница сохраняет настоящий total."""
