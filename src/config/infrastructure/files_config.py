@@ -14,7 +14,7 @@ class FilesSettings(BaseModel):
     timeout_seconds: float = Field(default=30, gt=0, le=60)
     operation_timeout_seconds: float = Field(default=600, gt=0, le=600)
     concurrency: int = Field(default=4, ge=1, le=32)
-    console_max_upload_bytes: int = Field(default=104857600, gt=0)
+    console_max_upload_bytes: int = Field(default=1073741824, gt=0)
 
 
 class FilesConfig(BaseSettings):

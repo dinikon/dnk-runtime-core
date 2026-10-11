@@ -1,4 +1,8 @@
 from __future__ import annotations
+from src.modules.files.presentation.jobs.empty_trash import (
+    FilesEmptyTrashJobHandler,
+    JOB_TYPE as FILES_EMPTY_TRASH_JOB_TYPE,
+)
 from src.modules.files.presentation.jobs.purge_file import (
     FilesPurgeJobHandler,
     JOB_TYPE as FILES_PURGE_JOB_TYPE,
@@ -140,6 +144,9 @@ async def handle_worker(_args: argparse.Namespace) -> int:
             JOB_TYPE: ReferenceDataRefreshJobHandler(db_helper.session_factory),
             FILES_CLEANUP_JOB_TYPE: FilesCleanupJobHandler(db_helper.session_factory),
             FILES_PURGE_JOB_TYPE: FilesPurgeJobHandler(db_helper.session_factory),
+            FILES_EMPTY_TRASH_JOB_TYPE: FilesEmptyTrashJobHandler(
+                db_helper.session_factory
+            ),
             FILES_TRASH_JOB_TYPE: FilesTrashCleanupJobHandler(
                 db_helper.session_factory
             ),

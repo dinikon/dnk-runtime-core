@@ -8,6 +8,7 @@ import type { FilesFilters } from "./types";
 export function useTrashQuery(
   filters: Ref<FilesFilters>,
   active: Ref<boolean>,
+  clearing: Ref<boolean>,
 ) {
   const store = useTenantStore();
   const tenant = computed(() => store.tenant?.tenant_id ?? "");
@@ -20,7 +21,8 @@ export function useTrashQuery(
     refetchInterval: (query) =>
       active.value &&
       visibility.value === "visible" &&
-      query.state.data?.items.some((item) => item.status === "purging")
+      (clearing.value ||
+        query.state.data?.items.some((item) => item.status === "purging"))
         ? 5000
         : false,
   });

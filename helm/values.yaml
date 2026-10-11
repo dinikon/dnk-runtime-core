@@ -31,7 +31,7 @@ application:
     timeoutSeconds: 30
     operationTimeoutSeconds: 600
     concurrency: 4
-    consoleMaxUploadBytes: 104857600
+    consoleMaxUploadBytes: 1073741824
     accessKey:
       value: ''
       existingSecret: {name: '', key: ''}

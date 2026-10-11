@@ -48,8 +48,37 @@ from src.modules.files.presentation.stored_file.http.controller.request_file_pur
 )
 from src.modules.files.presentation.depends.admin import require_files_purge_context
 from fastapi import Response
+from src.modules.files.presentation.depends.admin import require_files_preview_context
+from src.modules.files.presentation.stored_file.http.controller.get_file_preview import (
+    get_file_preview,
+)
+from src.modules.files.presentation.stored_file.http.response.get_file_preview import (
+    GetFilePreviewResponse,
+)
+
+from src.modules.files.presentation.stored_file.http.controller.request_trash_empty import (
+    request_trash_empty,
+)
+from src.modules.files.presentation.stored_file.http.response.request_trash_empty import (
+    RequestTrashEmptyResponse,
+)
+from src.modules.files.presentation.depends.admin import (
+    require_files_empty_trash_context,
+)
 
 router = APIRouter(tags=["Files"])
+router.add_api_route(
+    "/files/trash/",
+    request_trash_empty,
+    methods=["DELETE"],
+    status_code=202,
+    response_model=RequestTrashEmptyResponse,
+    dependencies=[Depends(require_files_empty_trash_context), Depends(require_csrf)],
+    responses={
+        401: {"description": "Unauthorized"},
+        403: {"description": "Tenant admin and global files.purge permission required"},
+    },
+)
 router.add_api_route(
     "/files/items/",
     list_files,
@@ -166,6 +195,32 @@ router.add_api_route(
         404: {"description": "File or storage not found"},
         409: {"description": "File or storage state conflict"},
         422: {"description": "Invalid fields"},
+        503: {"description": "Storage unavailable"},
+    },
+)
+
+router.add_api_route(
+    "/files/items/{file_id}/preview/",
+    get_file_preview,
+    methods=["GET"],
+    status_code=200,
+    response_class=GetFilePreviewResponse,
+    response_model=None,
+    dependencies=[Depends(require_files_preview_context)],
+    responses={
+        200: {
+            "description": "Inline browser preview of a ready file; text is served as text/plain",
+            "content": {
+                "application/octet-stream": {
+                    "schema": {"type": "string", "format": "binary"}
+                }
+            },
+        },
+        401: {"description": "Unauthorized"},
+        403: {"description": "Tenant admin or file read permission required"},
+        404: {"description": "Ready file or owned object not found"},
+        409: {"description": "Storage ownership conflict"},
+        415: {"description": "File format does not support preview"},
         503: {"description": "Storage unavailable"},
     },
 )

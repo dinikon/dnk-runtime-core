@@ -1,4 +1,7 @@
 from typing import Annotated
+from src.modules.files.application.stored_file.command.request_trash_empty.handler import (
+    RequestTrashEmptyHandler,
+)
 from fastapi import Depends
 from src.modules.shared.presentation.persistence.depends import UoWDep
 from src.modules.files.infrastructure.assembly import build_files_handlers
@@ -10,6 +13,9 @@ from src.modules.files.application.stored_file.query.list_trashed_files.handler 
 )
 from src.modules.files.application.stored_file.query.get_files_overview.handler import (
     GetFilesOverviewHandler,
+)
+from src.modules.files.application.stored_file.query.get_file_preview.handler import (
+    GetFilePreviewHandler,
 )
 from src.modules.shared.presentation.time.depends import ClockDep
 from src.modules.shared.presentation.uuid.depends import UuidDep
@@ -52,6 +58,16 @@ def get_get_files_overview_handler(uow: UoWDep) -> GetFilesOverviewHandler:
 
 GetFilesOverviewHandlerDep = Annotated[
     GetFilesOverviewHandler, Depends(get_get_files_overview_handler)
+]
+
+
+def get_get_file_preview_handler(uow: UoWDep) -> GetFilePreviewHandler:
+    """Собирает предпросмотр на сессии внешнего tenant UoW."""
+    return build_files_handlers(uow.session).preview
+
+
+GetFilePreviewHandlerDep = Annotated[
+    GetFilePreviewHandler, Depends(get_get_file_preview_handler)
 ]
 
 
@@ -102,4 +118,18 @@ def get_request_file_purge_handler(
 
 RequestFilePurgeHandlerDep = Annotated[
     RequestFilePurgeHandler, Depends(get_request_file_purge_handler)
+]
+
+
+def get_request_trash_empty_handler(
+    uow: UoWDep, clock: ClockDep, uuid_generator: UuidDep
+) -> RequestTrashEmptyHandler:
+    """Собирает запрос очистки на общей сессии function-scoped tenant UoW."""
+    return build_files_handlers(
+        uow.session, clock=clock, uuid_generator=uuid_generator
+    ).request_trash_empty
+
+
+RequestTrashEmptyHandlerDep = Annotated[
+    RequestTrashEmptyHandler, Depends(get_request_trash_empty_handler)
 ]

@@ -46,6 +46,20 @@ async def check_files_admin(
 FilesAdminContextDep = Annotated[RequestContext, Depends(require_files_admin_context)]
 
 
+async def require_files_preview_context(
+    file_id: UUID,
+    context: AuthenticatedRequestContextDep,
+    authorization: AuthorizationServiceDep,
+) -> RequestContext:
+    """Требует tenant admin и разрешение files.read для конкретного файла."""
+    return await check_files_admin(context, authorization, "files.read", file_id)
+
+
+FilesPreviewContextDep = Annotated[
+    RequestContext, Depends(require_files_preview_context)
+]
+
+
 async def require_files_upload_context(
     context: AuthenticatedRequestContextDep, authorization: AuthorizationServiceDep
 ) -> RequestContext:
@@ -92,3 +106,16 @@ async def require_files_purge_context(
 
 
 FilesPurgeContextDep = Annotated[RequestContext, Depends(require_files_purge_context)]
+
+
+async def require_files_empty_trash_context(
+    context: AuthenticatedRequestContextDep,
+    authorization: AuthorizationServiceDep,
+) -> RequestContext:
+    """Требует tenant admin и разрешение files.purge на всю корзину tenant."""
+    return await check_files_admin(context, authorization, "files.purge", None)
+
+
+FilesEmptyTrashContextDep = Annotated[
+    RequestContext, Depends(require_files_empty_trash_context)
+]

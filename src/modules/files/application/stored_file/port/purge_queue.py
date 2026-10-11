@@ -6,6 +6,17 @@ from uuid import UUID
 class FilePurgeQueueProtocol(Protocol):
     """Порт durable заданий purge в общей транзакции, без брокера и ORM."""
 
+    async def schedule_empty(
+        self,
+        tenant_id: UUID,
+        job_id: UUID,
+        cutoff: datetime,
+        after_id: UUID | None = None,
+        batch_size: int = 100,
+    ) -> None:
+        """Записывает ограниченный проход ручной очистки с неизменной границей корзины."""
+        ...
+
     async def schedule(
         self, tenant_id: UUID, file_id: UUID, job_id: UUID, run_at: datetime
     ) -> None:

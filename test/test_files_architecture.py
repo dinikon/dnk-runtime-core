@@ -10,6 +10,7 @@ SCENARIOS = {
     "bucket/command/provision_system_bucket": "ProvisionSystemBucketResultDTO",
     "stored_file/command/upload_file": "UploadFileResultDTO",
     "stored_file/query/get_file_content": "GetFileContentResultDTO",
+    "stored_file/query/get_file_preview": "GetFilePreviewResultDTO",
     "storage_provider/query/list_providers": "tuple[ProviderListItemDTO, ...]",
     "bucket/query/list_buckets": "tuple[BucketListItemDTO, ...]",
     "stored_file/command/cleanup_orphaned_objects": "CleanupOrphanedObjectsResultDTO",
@@ -22,6 +23,8 @@ SCENARIOS = {
     "stored_file/command/request_file_purge": "None",
     "stored_file/command/purge_file": "None",
     "stored_file/command/cleanup_expired_trash": "CleanupExpiredTrashResultDTO",
+    "stored_file/command/request_trash_empty": "RequestTrashEmptyResultDTO",
+    "stored_file/command/empty_trash": "EmptyTrashResultDTO",
 }
 
 
@@ -118,7 +121,7 @@ class FilesArchitectureTests(unittest.TestCase):
                 self.assertFalse(any(isinstance(n, ast.Await) for n in ast.walk(tree)))
 
     def test_http_has_explicit_method_whitelist_and_separate_contracts(self) -> None:
-        """Семь сценариев StoredFile разделены; нет download, presigned и пустых schemas."""
+        """Preview явно разрешён; методы разделены, нет download/presigned и пустых schemas."""
         for root, scenarios in {
             "storage_provider": [("list_providers", True, False)],
             "bucket": [("list_buckets", True, False)],
@@ -130,6 +133,8 @@ class FilesArchitectureTests(unittest.TestCase):
                 ("trash_file", True, False),
                 ("restore_file", True, False),
                 ("request_file_purge", False, False),
+                ("get_file_preview", True, False),
+                ("request_trash_empty", True, False),
             ],
         }.items():
             folder = ROOT / "presentation" / root
@@ -160,7 +165,12 @@ class FilesArchitectureTests(unittest.TestCase):
                         self.assertIn("Depends(require_csrf)", dependencies)
                     else:
                         self.assertIn(
-                            "Depends(require_files_admin_context)", dependencies
+                            (
+                                "Depends(require_files_preview_context)"
+                                if path.endswith("/preview/")
+                                else "Depends(require_files_admin_context)"
+                            ),
+                            dependencies,
                         )
             if root == "stored_file":
                 self.assertEqual(
@@ -173,6 +183,8 @@ class FilesArchitectureTests(unittest.TestCase):
                         ("/files/items/{file_id}/", ("DELETE",)),
                         ("/files/items/{file_id}/restore/", ("POST",)),
                         ("/files/trash/{file_id}/", ("DELETE",)),
+                        ("/files/items/{file_id}/preview/", ("GET",)),
+                        ("/files/trash/", ("DELETE",)),
                     },
                 )
                 purge = routes[("/files/trash/{file_id}/", ("DELETE",))]
@@ -187,6 +199,7 @@ class FilesArchitectureTests(unittest.TestCase):
         paths = [
             *ROOT.glob("application/stored_file/query/list_*/*.py"),
             *ROOT.glob("application/stored_file/query/get_files_overview/*.py"),
+            *ROOT.glob("application/stored_file/query/get_file_preview/*.py"),
             ROOT / "infrastructure/stored_file/persistence/query_repository.py",
             ROOT / "infrastructure/stored_file/persistence/query_mapper.py",
         ]

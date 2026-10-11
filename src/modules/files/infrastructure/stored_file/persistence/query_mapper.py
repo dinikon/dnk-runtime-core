@@ -3,6 +3,9 @@ from src.modules.files.application.stored_file.command.cleanup_expired_trash.dto
     CleanupExpiredTrashBacklogDTO,
 )
 from collections.abc import Mapping, Sequence
+from src.modules.files.application.stored_file.command.empty_trash.dto import (
+    EmptyTrashCandidateDTO,
+)
 from typing import Any
 
 from src.modules.files.application.stored_file.file_category import FileCategory
@@ -23,6 +26,11 @@ from src.modules.files.application.stored_file.query.get_files_overview.dto impo
 
 class StoredFileQueryMapper:
     """Преобразует SQL-проекции в конкретные DTO без I/O и правил агрегатов."""
+
+    @staticmethod
+    def to_empty_trash_candidate(row: Mapping[str, Any]) -> EmptyTrashCandidateDTO:
+        """Преобразует ID ручной очистки в контракт отдельного сценария."""
+        return EmptyTrashCandidateDTO(file_id=row["id"])
 
     @staticmethod
     def to_cleanup_backlog(row: Mapping[str, Any]) -> CleanupExpiredTrashBacklogDTO:

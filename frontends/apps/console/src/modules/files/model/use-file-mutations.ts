@@ -5,6 +5,7 @@ import { toast } from "vue-sonner";
 import { useTenantStore } from "@/app/stores/tenant";
 import { filesApi } from "../api/files.api";
 import { filesKeys } from "./query-keys";
+import type { BulkFileAction } from "./use-bulk-file-actions";
 export function useFileMutations() {
   const store = useTenantStore();
   const client = useQueryClient();
@@ -38,10 +39,6 @@ export function useFileMutations() {
         input.onProgress,
         signal(input.tenant),
       ),
-    onSuccess: async (_, input) => {
-      if (tenant.value === input.tenant) toast.success("Файл загружен");
-      await refresh(input.tenant);
-    },
   });
   const trash = useMutation({
     retry: false,
@@ -72,5 +69,24 @@ export function useFileMutations() {
       await refresh(input.tenant);
     },
   });
-  return { upload, trash, restore, purge, refresh };
+  const bulk = useMutation({
+    retry: false,
+    mutationFn: async (input: {
+      tenant: string;
+      id: string;
+      action: BulkFileAction;
+    }): Promise<void> => {
+      const abortSignal = signal(input.tenant);
+      if (input.action === "trash") await filesApi.trash(input.id, abortSignal);
+      else if (input.action === "restore")
+        await filesApi.restore(input.id, abortSignal);
+      else await filesApi.purge(input.id, abortSignal);
+    },
+  });
+  const emptyTrash = useMutation({
+    retry: false,
+    mutationFn: (input: { tenant: string }) =>
+      filesApi.emptyTrash(signal(input.tenant)),
+  });
+  return { upload, trash, restore, purge, bulk, emptyTrash, refresh };
 }

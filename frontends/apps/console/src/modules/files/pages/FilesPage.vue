@@ -3,7 +3,17 @@ import { computed, onScopeDispose, ref, watch } from "vue";
 import { useRoute, useRouter, type LocationQueryRaw } from "vue-router";
 import { useQueryClient } from "@tanstack/vue-query";
 import { toast } from "vue-sonner";
-import { RefreshCw, Upload, Files, Trash2, HardDrive } from "@lucide/vue";
+import { useNow } from "@vueuse/core";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  RefreshCw,
+  Upload,
+  Files,
+  Trash2,
+  HardDrive,
+  Check,
+  Minus,
+} from "@lucide/vue";
 import type { AxiosProgressEvent } from "axios";
 import { useTenantStore } from "@/app/stores/tenant";
 import { Button } from "@/components/ui/button";
@@ -46,6 +56,13 @@ import TrashFilesTable from "../ui/TrashFilesTable.vue";
 import UploadFileDialog from "../ui/UploadFileDialog.vue";
 import TrashFileDialog from "../ui/TrashFileDialog.vue";
 import PurgeFileDialog from "../ui/PurgeFileDialog.vue";
+import FilePreviewDialog from "../ui/FilePreviewDialog.vue";
+import BulkFileActionDialog from "../ui/BulkFileActionDialog.vue";
+import EmptyTrashDialog from "../ui/EmptyTrashDialog.vue";
+import type {
+  BulkFileAction,
+  BulkFileTarget,
+} from "../model/use-bulk-file-actions";
 import FileStoragePage from "./FileStoragePage.vue";
 const route = useRoute();
 const router = useRouter();
@@ -149,18 +166,41 @@ function switchTab(value: unknown): void {
   });
 }
 const storage = useFileStorage();
+const defaultUploadBucket = computed(() => {
+  const ready = (storage.buckets.data.value ?? []).filter(
+    (bucket) => bucket.status === "ready",
+  );
+  if (filters.value.bucket_ids.length === 1) {
+    const selected = ready.find(
+      (bucket) => bucket.id === filters.value.bucket_ids[0],
+    );
+    if (selected) return selected.id;
+  }
+  const system = storage.providers.data.value?.find(
+    (provider) => provider.is_system,
+  );
+  return ready.find((bucket) => bucket.provider_id === system?.id)?.id;
+});
 const active = useFilesQuery(
   filters,
   computed(() => tab.value === "files"),
 );
+const clearingTrash = ref(false);
 const trash = useTrashQuery(
   filters,
   computed(() => tab.value === "trash"),
+  clearingTrash,
 );
 const overview = useFilesOverviewQuery(
   computed(() => filters.value.bucket_ids),
 );
 const mutations = useFileMutations();
+const entireOverview = useFilesOverviewQuery(computed(() => []));
+watch(entireOverview.data, (value) => {
+  if (value?.trashed_count === 0) clearingTrash.value = false;
+});
+const batchUploading = ref(false);
+const bulkRunning = ref(false);
 const data = computed(() =>
   tab.value === "trash" ? trash.data.value : active.data.value,
 );
@@ -176,6 +216,10 @@ const fetching = computed(() =>
 const busy = computed(
   () =>
     mutations.upload.isPending.value ||
+    batchUploading.value ||
+    bulkRunning.value ||
+    mutations.bulk.isPending.value ||
+    mutations.emptyTrash.isPending.value ||
     mutations.trash.isPending.value ||
     mutations.restore.isPending.value ||
     mutations.purge.isPending.value,
@@ -187,20 +231,92 @@ const filtered = computed(
     !!filters.value.category,
 );
 const uploadOpen = ref(false);
+const selected = ref<string[]>([]);
+const bulkTarget = ref<BulkFileTarget | null>(null);
+const emptyTrashOpen = ref(false);
+const emptyTrashError = ref("");
+const now = useNow({ interval: 1000 });
+const selectableFiles = computed(() =>
+  tab.value === "trash"
+    ? (trash.data.value?.items ?? []).filter(
+        (file) => file.status === "trashed",
+      )
+    : (active.data.value?.items ?? []),
+);
+const selectedFiles = computed(() =>
+  selectableFiles.value.filter((file) => selected.value.includes(file.file_id)),
+);
+const restorableFiles = computed(() =>
+  (trash.data.value?.items ?? []).filter(
+    (file) =>
+      selected.value.includes(file.file_id) &&
+      file.status === "trashed" &&
+      new Date(file.purge_after).getTime() > now.value.getTime(),
+  ),
+);
+const selectionState = computed<boolean | "indeterminate">(() =>
+  selected.value.length && selected.value.length < selectableFiles.value.length
+    ? "indeterminate"
+    : !!selected.value.length,
+);
+function selectFile(id: string, checked: boolean): void {
+  if (busy.value || fetching.value) return;
+  selected.value = checked
+    ? [...new Set([...selected.value, id])]
+    : selected.value.filter((value) => value !== id);
+}
+function selectPage(checked: boolean | "indeterminate"): void {
+  if (!busy.value && !fetching.value)
+    selected.value =
+      checked === true ? selectableFiles.value.map((file) => file.file_id) : [];
+}
+function openBulk(action: BulkFileAction): void {
+  if (busy.value || fetching.value) return;
+  const files =
+    action === "restore" ? restorableFiles.value : selectedFiles.value;
+  if (files.length) bulkTarget.value = { action, files: [...files] };
+}
+function bulkCompleted(id: string): void {
+  selected.value = selected.value.filter((value) => value !== id);
+}
+watch(
+  () => `${tenant.value}:${route.path}:${JSON.stringify(filters.value)}`,
+  () => {
+    selected.value = [];
+    bulkTarget.value = null;
+    emptyTrashOpen.value = false;
+    emptyTrashError.value = "";
+  },
+  { flush: "sync" },
+);
+watch(selectableFiles, (value) => {
+  const available = new Set(value.map((file) => file.file_id));
+  selected.value = selected.value.filter((id) => available.has(id));
+});
+const previewTarget = ref<FileItem | null>(null);
 const trashTarget = ref<FileItem | null>(null);
 const purgeTarget = ref<FileItem | null>(null);
 const actionError = ref("");
 watch(tenant, () => {
   uploadOpen.value = false;
+  batchUploading.value = false;
+  bulkRunning.value = false;
+  clearingTrash.value = false;
+  previewTarget.value = null;
   trashTarget.value = null;
   purgeTarget.value = null;
   actionError.value = "";
 });
+watch(tab, () => {
+  previewTarget.value = null;
+  clearingTrash.value = false;
+});
 watch([trashTarget, purgeTarget], () => {
   actionError.value = "";
 });
-watch([data, fetching], ([value, isFetching]) => {
+watch([data, fetching, bulkTarget], ([value, isFetching, target]) => {
   if (
+    !target &&
     value &&
     !isFetching &&
     value.total < (filters.value.page - 1) * filters.value.page_size + 1 &&
@@ -222,6 +338,12 @@ watch(trash.dataUpdatedAt, (value, previous) => {
 async function refresh(): Promise<void> {
   await client.invalidateQueries({ queryKey: filesKeys.tenant(tenant.value) });
 }
+async function refreshUploadedFiles(): Promise<void> {
+  await client.invalidateQueries(
+    { queryKey: filesKeys.tenant(tenant.value) },
+    { throwOnError: true },
+  );
+}
 async function upload(
   file: File,
   bucketId: string,
@@ -233,6 +355,33 @@ async function upload(
     bucketId,
     onProgress,
   });
+}
+async function submitBulk(action: BulkFileAction, id: string): Promise<void> {
+  await mutations.bulk.mutateAsync({ tenant: tenant.value, action, id });
+}
+async function confirmEmptyTrash(): Promise<void> {
+  if (busy.value) return;
+  const currentTenant = tenant.value;
+  emptyTrashError.value = "";
+  try {
+    await mutations.emptyTrash.mutateAsync({ tenant: currentTenant });
+    if (currentTenant !== tenant.value) return;
+    emptyTrashOpen.value = false;
+    selected.value = [];
+    clearingTrash.value = true;
+    toast.success("Очистка корзины запущена. Удаление выполняется в фоне.");
+    try {
+      await refreshUploadedFiles();
+    } catch {
+      if (currentTenant === tenant.value)
+        toast.error(
+          "Запрос очистки принят, но список не обновлён. Нажмите «Обновить».",
+        );
+    }
+  } catch (cause) {
+    if (currentTenant === tenant.value)
+      emptyTrashError.value = fileError(cause);
+  }
 }
 async function confirmTrash(): Promise<void> {
   if (!trashTarget.value || busy.value) return;
@@ -281,6 +430,16 @@ async function restore(file: TrashFileItem): Promise<void> {
         </p>
       </div>
       <div class="flex flex-wrap items-center gap-2">
+        <Button
+          v-if="tab === 'trash'"
+          variant="destructive"
+          :disabled="busy || entireOverview.data.value?.trashed_count === 0"
+          @click="
+            emptyTrashError = '';
+            emptyTrashOpen = true;
+          "
+          ><Trash2 data-icon="inline-start" />Очистить корзину</Button
+        >
         <Button variant="outline" :disabled="fetching || busy" @click="refresh"
           ><RefreshCw data-icon="inline-start" />Обновить</Button
         ><Button
@@ -289,7 +448,7 @@ async function restore(file: TrashFileItem): Promise<void> {
             !storage.buckets.data.value?.some((item) => item.status === 'ready')
           "
           @click="uploadOpen = true"
-          ><Upload data-icon="inline-start" />Загрузить файл</Button
+          ><Upload data-icon="inline-start" />Загрузить файлы</Button
         >
       </div>
     </header>
@@ -373,6 +532,81 @@ async function restore(file: TrashFileItem): Promise<void> {
                 @category="changeFilters({ category: $event })"
                 @reset="reset"
               />
+              <Alert v-if="tab === 'trash' && clearingTrash"
+                ><AlertTitle>Запрос очистки принят</AlertTitle
+                ><AlertDescription
+                  >Удаление выполняется в фоне. Список обновляется
+                  автоматически, пока эта вкладка открыта.</AlertDescription
+                ></Alert
+              >
+              <div
+                v-if="data?.items.length && !loading && !error"
+                class="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 p-3"
+                aria-label="Массовые действия"
+              >
+                <label class="flex items-center gap-2 text-sm"
+                  ><Checkbox
+                    :model-value="selectionState"
+                    :disabled="busy || fetching || !selectableFiles.length"
+                    aria-label="Выбрать все на странице"
+                    @update:model-value="selectPage"
+                    ><Minus
+                      v-if="selectionState === 'indeterminate'"
+                      class="size-3.5" /><Check
+                      v-else
+                      class="size-3.5" /></Checkbox
+                  >Все на странице</label
+                >
+                <span
+                  role="status"
+                  aria-live="polite"
+                  class="text-sm text-muted-foreground"
+                  >Выбрано: {{ selected.length }}</span
+                >
+                <Button
+                  v-if="tab === 'files'"
+                  size="sm"
+                  variant="outline"
+                  :disabled="busy || fetching || !selectedFiles.length"
+                  @click="openBulk('trash')"
+                  ><Trash2 data-icon="inline-start" />В корзину выбранные ({{
+                    selectedFiles.length
+                  }})</Button
+                >
+                <template v-else>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    :disabled="busy || fetching || !restorableFiles.length"
+                    @click="openBulk('restore')"
+                    >Восстановить выбранные ({{
+                      restorableFiles.length
+                    }})</Button
+                  >
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    :disabled="busy || fetching || !selectedFiles.length"
+                    @click="openBulk('purge')"
+                    >Удалить выбранные ({{ selectedFiles.length }})</Button
+                  >
+                  <span
+                    v-if="selected.length > restorableFiles.length"
+                    class="w-full text-xs text-muted-foreground"
+                    >Для
+                    {{ selected.length - restorableFiles.length }} выбранных
+                    файлов срок восстановления истёк.</span
+                  >
+                </template>
+                <Button
+                  v-if="selected.length"
+                  variant="ghost"
+                  size="sm"
+                  :disabled="busy"
+                  @click="selected = []"
+                  >Снять выделение</Button
+                >
+              </div>
               <Alert v-if="storage.buckets.isError.value" variant="destructive"
                 ><AlertTitle>Не удалось получить диски</AlertTitle
                 ><AlertDescription
@@ -423,13 +657,18 @@ async function restore(file: TrashFileItem): Promise<void> {
                     v-else-if="tab === 'trash'"
                     :items="trash.data.value?.items ?? []"
                     :busy="busy || fetching"
+                    :selected="selected"
+                    @select="selectFile"
                     @restore="restore"
                     @purge="purgeTarget = $event"
                   /><FilesTable
                     v-else
                     :items="active.data.value?.items ?? []"
                     :busy="busy || fetching"
+                    :selected="selected"
+                    @select="selectFile"
                     @trash="trashTarget = $event"
+                    @preview="previewTarget = $event"
                   />
                 </div>
                 <OffsetPagination
@@ -447,10 +686,33 @@ async function restore(file: TrashFileItem): Promise<void> {
         :key="tenant"
         :open="uploadOpen"
         :buckets="storage.buckets.data.value ?? []"
+        :default-bucket-id="defaultUploadBucket"
         :busy="mutations.upload.isPending.value"
         :submit="upload"
-        :refresh="refresh"
+        :refresh="refreshUploadedFiles"
+        @busy="batchUploading = $event"
         @close="uploadOpen = false"
+      />
+      <BulkFileActionDialog
+        :key="`bulk:${tenant}`"
+        :target="bulkTarget"
+        :submit="submitBulk"
+        :refresh="refreshUploadedFiles"
+        @busy="bulkRunning = $event"
+        @completed="bulkCompleted"
+        @close="bulkTarget = null"
+      />
+      <EmptyTrashDialog
+        :open="emptyTrashOpen"
+        :busy="mutations.emptyTrash.isPending.value"
+        :error="emptyTrashError"
+        @close="emptyTrashOpen = false"
+        @confirm="confirmEmptyTrash"
+      />
+      <FilePreviewDialog
+        :file="previewTarget"
+        :tenant="tenant"
+        @close="previewTarget = null"
       />
       <TrashFileDialog
         :file="trashTarget"
