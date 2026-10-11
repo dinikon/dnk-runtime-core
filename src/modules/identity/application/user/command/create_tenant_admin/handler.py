@@ -11,16 +11,18 @@ from src.modules.identity.application.user.command.create_tenant_admin.command i
 
 
 class CreateTenantAdminHandler:
+    """Создаёт агрегат администратора и его primary email через доменные фабрики."""
 
-    def __init__(self, users_repository: UserRepositoryProtocol):
+    def __init__(self, users_repository: UserRepositoryProtocol) -> None:
+        """Принимает порт агрегата на сессии внешнего onboarding UoW."""
         self._users_repository = users_repository
 
     async def execute(self, command: CreateTenantAdminCommand) -> CreatedTenantAdmin:
+        """Проверяет уникальность email и сохраняет администратора без commit."""
         tenant_id = command.tenant_id
         first_name = command.first_name
         last_name = command.last_name
         email = command.email
-        "Создает tenant admin и primary email после проверки уникальности email."
         normalized_first_name = first_name.strip()
         normalized_last_name = last_name.strip()
         normalized_email = email.strip().lower()

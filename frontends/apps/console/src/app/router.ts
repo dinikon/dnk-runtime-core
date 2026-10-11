@@ -17,6 +17,10 @@ export const router = createRouter({
   routes: [
     ...authRoutes,
     {
+      path: "/files",
+      redirect: (to) => ({ name: "admin-files", query: to.query }),
+    },
+    {
       path: "/accept-invitation",
       name: "accept-invitation",
       component: () =>
@@ -34,7 +38,6 @@ export const router = createRouter({
         },
         ...dashboardRoutes,
         ...channelRoutes,
-        ...filesRoutes,
         ...catalogRoutes,
         ...crmRoutes,
         ...priceListRoutes,
@@ -59,6 +62,7 @@ export const router = createRouter({
           redirect: { name: "admin-users" },
         },
         ...accessRoutes,
+        ...filesRoutes,
         {
           path: "contact-points",
           name: "admin-contact-points",

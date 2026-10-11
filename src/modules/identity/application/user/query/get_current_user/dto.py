@@ -19,5 +19,7 @@ class GetCurrentUserResultDTO:
     interface_language: str
     interface_theme: str
     timezone: str
+    display_currency: str | None
+    effective_display_currency: str
     emails: list[GetCurrentUserEmailDTO] = field(default_factory=list)
     role: str = "member"

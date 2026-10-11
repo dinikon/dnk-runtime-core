@@ -40,6 +40,8 @@ const visibleGroups = computed(() =>
 function isActive(url?: string) {
   if (!url) return false;
   const target = router.resolve(url);
+  if (target.path === "/admin/files" && route.path.startsWith("/admin/files/"))
+    return true;
   if (target.path !== route.path) return false;
   const tab = target.query.tab;
   if (typeof tab === "string") {

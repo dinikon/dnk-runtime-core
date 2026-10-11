@@ -10,20 +10,25 @@ from src.modules.identity.infrastructure.access.persistence.repository import (
 from src.modules.identity.infrastructure.user.persistence.repository import (
     SqlAlchemyUserRepository,
 )
-from src.modules.shared import EntityIdVO
+from src.modules.shared.domain.value_object.entity_id import EntityIdVO
+from sqlalchemy.ext.asyncio import AsyncSession
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_connection import (
+    bind_tenant_schema,
+)
 from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
 
 
 async def bind_cloud_owner(
-    session,
+    session: AsyncSession,
     tenant_id: UUID,
     user_id: UUID,
     issuer: str,
     subject: str,
     schema_prefix: str | None = None,
 ) -> None:
+    """Связывает владельца Cloud в текущем installation UoW без commit."""
     # The contract defines Core sub as the global user UUID.
     UUID(subject)
     repo = AccessRepository(
@@ -34,16 +39,18 @@ async def bind_cloud_owner(
 
 
 async def cloud_owner_ready(
-    session,
+    session: AsyncSession,
     tenant_id: UUID,
     user_id: UUID,
     issuer: str,
     subject: str,
     schema_prefix: str | None = None,
 ) -> bool:
+    """Проверяет связь и доступность владельца на явно привязанном tenant-соединении."""
     naming = TenantSchemaNaming(schema_prefix or dnk_config.SCHEMA_PREFIX)
     repo = AccessRepository(session, naming)
     identity = await repo.identity_for_user(tenant_id, user_id)
+    await bind_tenant_schema(await session.connection(), tenant_id, naming)
     user = await SqlAlchemyUserRepository(session, naming).get_by_id(
         UserIdVO.from_value(user_id), tenant_id=EntityIdVO.from_value(tenant_id)
     )

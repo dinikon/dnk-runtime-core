@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from uuid import UUID
 
 
-class CurrentUserEmailResponseSchema(BaseModel):
+class UpdateCurrentUserProfileEmailResponseSchema(BaseModel):
     """Pydantic-схема email текущего пользователя."""
 
     id: UUID

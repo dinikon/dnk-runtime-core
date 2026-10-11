@@ -1,67 +1,55 @@
-from __future__ import annotations
-from fastapi import APIRouter, HTTPException, Request, status
-from src.modules.identity.application.auth.port.tenant_context_reader import (
-    IdentityTenantNotFoundError,
-)
-from src.modules.identity.application.auth.port.tenant_context_reader import (
-    IdentityTenantUnavailableError,
-)
-from src.modules.identity.application.user.query.get_current_user.dto import (
-    GetCurrentUserResultDTO,
-)
+from fastapi import HTTPException, status
 from src.modules.identity.application.user.query.get_current_user.query import (
     GetCurrentUserQuery,
 )
 from src.modules.identity.domain.auth.error import InvalidSessionError
 from src.modules.identity.domain.user.error import UserLoginUnavailableError
-from src.modules.identity.presentation.auth.providers import AuthSettingsDep
+from src.modules.identity.presentation.auth.depends import (
+    AuthenticatedRequestContextDep,
+)
 from src.modules.identity.presentation.user.depends import GetCurrentUserHandlerDep
-from src.modules.identity.presentation.user.http.response.current_user import (
-    CurrentUserResponseSchema,
+from src.modules.identity.presentation.user.http.response.get_current_user import (
+    GetCurrentUserResponseSchema,
 )
-from src.modules.identity.presentation.user.http.response.current_user_email import (
-    CurrentUserEmailResponseSchema,
+from src.modules.identity.presentation.user.http.response.get_current_user_email import (
+    GetCurrentUserEmailResponseSchema,
 )
-from src.modules.shared.presentation.http.depends import RequestHostDep
+from src.modules.identity.domain.user.value_object.user_id import UserIdVO
+from src.modules.shared.domain.value_object.entity_id import EntityIdVO
+from src.modules.shared.domain.domain_error import DomainError
+from src.modules.tenancy.domain.tenant_currency_settings.error import (
+    TenantCurrencySettingsNotFoundError,
+)
 
-router = APIRouter(tags=["console-auth"])
 
-
-@router.get("/me", response_model=CurrentUserResponseSchema)
 async def get_current_user(
-    request: Request,
-    host: RequestHostDep,
-    settings: AuthSettingsDep,
-    use_case: GetCurrentUserHandlerDep,
-) -> CurrentUserResponseSchema:
-    """HTTP endpoint получения профиля текущего пользователя."""
+    context: AuthenticatedRequestContextDep,
+    handler: GetCurrentUserHandlerDep,
+) -> GetCurrentUserResponseSchema:
+    """Преобразует доверенный контекст и поля сценария в отдельный HTTP-контракт."""
+    principal = context.principal
+    if principal is None or principal.tenant_id is None:
+        raise HTTPException(status_code=403, detail="Tenant context is required.")
     try:
-        result = await use_case.execute(
+        result = await handler.execute(
             GetCurrentUserQuery(
-                host=host,
-                session_token=request.cookies.get(settings.session_cookie_name),
+                tenant_id=EntityIdVO.from_value(principal.tenant_id),
+                user_id=UserIdVO.from_value(principal.user_id),
             )
         )
-    except IdentityTenantNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
-        ) from exc
-    except (IdentityTenantUnavailableError, UserLoginUnavailableError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)
-        ) from exc
     except InvalidSessionError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except UserLoginUnavailableError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except TenantCurrencySettingsNotFoundError as exc:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)
+            status_code=503, detail="Tenant currency settings unavailable."
         ) from exc
-    return _to_current_user_response(result)
-
-
-def _to_current_user_response(
-    result: GetCurrentUserResultDTO,
-) -> CurrentUserResponseSchema:
-    """Мапит DTO текущего пользователя в HTTP response schema."""
-    return CurrentUserResponseSchema(
+    except DomainError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+    return GetCurrentUserResponseSchema(
         id=result.id,
         status=result.status,
         role=result.role,
@@ -72,8 +60,10 @@ def _to_current_user_response(
         interface_language=result.interface_language,
         interface_theme=result.interface_theme,
         timezone=result.timezone,
+        display_currency=result.display_currency,
+        effective_display_currency=result.effective_display_currency,
         emails=[
-            CurrentUserEmailResponseSchema(
+            GetCurrentUserEmailResponseSchema(
                 id=email.id,
                 email=email.email,
                 is_primary=email.is_primary,

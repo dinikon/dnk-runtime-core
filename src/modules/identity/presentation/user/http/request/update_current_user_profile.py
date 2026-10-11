@@ -12,3 +12,5 @@ class UpdateCurrentUserProfileRequestSchema(BaseModel):
     interface_language: Literal["uk", "en"]
     interface_theme: Literal["system", "dark", "light"]
     timezone: Literal["Europe/Kyiv", "Europe/Warsaw"]
+
+    display_currency: str | None = None

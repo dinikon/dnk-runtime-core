@@ -1,4 +1,8 @@
 from __future__ import annotations
+from src.modules.identity.domain.user.value_object.user_id import UserIdVO
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+from src.modules.shared.domain.value_object.currency import CurrencyVO
 
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -143,7 +147,9 @@ class _UserRepositoryStub:
         self.tenant_calls.append(tenant_id)
         self.added_users.append(user)
 
-    async def get_by_id(self, user_id, *, tenant_id: EntityIdVO):
+    async def get_by_id(
+        self, user_id, *, tenant_id: EntityIdVO, for_update: bool = False
+    ):
         self.tenant_calls.append(tenant_id)
         if self.user is not None and self.user.id == user_id:
             return self.user
@@ -426,20 +432,20 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(users_repository.tenant_calls, [self.tenant_id_vo])
 
-    async def test_get_current_user_raises_for_missing_session_token(self) -> None:
-        use_case = GetCurrentUserHandler(
-            tenant_context_reader=_TenantContextReaderStub(self.context),
-            users_repository=_UserRepositoryStub(),
-            session_store=_SessionStoreStub(),
-        )
+    async def test_get_current_user_raises_for_missing_profile(self) -> None:
+        from unittest.mock import AsyncMock
 
+        repository = AsyncMock()
+        repository.get_current_user.return_value = None
+        settings = AsyncMock()
+        use_case = GetCurrentUserHandler(repository, settings)
         with self.assertRaises(InvalidSessionError):
             await use_case.execute(
                 GetCurrentUserQuery(
-                    host=self.context.host,
-                    session_token=None,
+                    tenant_id=self.tenant_id_vo, user_id=UserIdVO.from_value(uuid4())
                 )
             )
+        settings.get_base_currency.assert_not_awaited()
 
     async def test_update_current_user_profile_persists_changes(self) -> None:
         user = User.create_tenant_admin(
@@ -464,16 +470,17 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         uow = _UnitOfWorkStub()
 
         use_case = UpdateCurrentUserProfileHandler(
-            uow=uow,
-            tenant_context_reader=_TenantContextReaderStub(self.context),
             users_repository=users_repository,
-            session_store=session_store,
+            currency_validator=AsyncMock(),
+            settings=SimpleNamespace(
+                get_base_currency=AsyncMock(return_value=CurrencyVO("UAH"))
+            ),
         )
 
         result = await use_case.execute(
             UpdateCurrentUserProfileCommand(
-                host=self.context.host,
-                session_token="sess-token",
+                tenant_id=self.tenant_id_vo,
+                user_id=user.id,
                 last_name="Smith",
                 first_name="Jane",
                 middle_name="A",
@@ -483,7 +490,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
             )
         )
 
-        self.assertTrue(uow.committed)
+        self.assertFalse(uow.committed)
         self.assertEqual(result.last_name, "Smith")
         self.assertEqual(result.first_name, "Jane")
         self.assertEqual(result.interface_language, "en")
@@ -518,17 +525,18 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         uow = _UnitOfWorkStub()
 
         use_case = UpdateCurrentUserProfileHandler(
-            uow=uow,
-            tenant_context_reader=_TenantContextReaderStub(self.context),
             users_repository=users_repository,
-            session_store=session_store,
+            currency_validator=AsyncMock(),
+            settings=SimpleNamespace(
+                get_base_currency=AsyncMock(return_value=CurrencyVO("UAH"))
+            ),
         )
 
         with self.assertRaises(DomainError):
             await use_case.execute(
                 UpdateCurrentUserProfileCommand(
-                    host=self.context.host,
-                    session_token="sess-token",
+                    tenant_id=self.tenant_id_vo,
+                    user_id=user.id,
                     last_name="Smith",
                     first_name="Jane",
                     middle_name="A",

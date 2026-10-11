@@ -32,9 +32,6 @@ const loading = computed(
   () => providers.isPending.value || buckets.isPending.value,
 );
 const failed = computed(() => providers.isError.value || buckets.isError.value);
-const refreshing = computed(
-  () => providers.isFetching.value || buckets.isFetching.value,
-);
 const connections = computed(() =>
   (providers.data.value ?? []).map((provider) => ({
     ...provider,
@@ -48,23 +45,15 @@ async function refresh() {
 }
 </script>
 <template>
-  <div class="flex min-h-0 flex-col gap-5 overflow-y-auto pb-6">
-    <header class="flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <h1 class="text-2xl font-semibold">Файловые хранилища</h1>
-        <p class="text-sm text-muted-foreground">
-          Подключения и приватные бакеты вашего рабочего пространства
-        </p>
-      </div>
-      <Button variant="outline" :disabled="refreshing" @click="refresh"
-        >Обновить</Button
-      >
-    </header>
+  <div class="flex flex-col gap-5">
     <Skeleton v-if="loading" class="h-48" aria-label="Загрузка хранилищ" />
     <Alert v-else-if="failed" variant="destructive">
       <AlertTitle>Не удалось загрузить хранилища</AlertTitle>
       <AlertDescription
-        >Повторите попытку с помощью кнопки «Обновить».</AlertDescription
+        >Повторите попытку с помощью кнопки «Обновить».
+        <Button variant="outline" size="sm" @click="refresh"
+          >Повторить</Button
+        ></AlertDescription
       >
     </Alert>
     <Card v-else-if="!connections.length">
@@ -110,11 +99,11 @@ async function refresh() {
             ></Empty
           >
           <template v-else>
-            <div class="space-y-3 sm:hidden">
+            <div class="flex flex-col gap-3 sm:hidden">
               <div
                 v-for="bucket in connection.buckets"
                 :key="bucket.id"
-                class="space-y-3 rounded-md border p-3"
+                class="flex flex-col gap-3 rounded-md border p-3"
               >
                 <p class="break-all text-sm font-medium">{{ bucket.name }}</p>
                 <Badge variant="outline">{{

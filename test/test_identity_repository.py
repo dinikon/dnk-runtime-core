@@ -4,6 +4,7 @@ import unittest
 from datetime import UTC, datetime
 from uuid import uuid4
 from unittest.mock import AsyncMock
+from types import SimpleNamespace
 
 from src.modules.identity.domain.user.entity import User
 from src.modules.shared import DomainError
@@ -51,6 +52,22 @@ class _AsyncSessionStub:
     def __init__(self, *, scalars_results=None) -> None:
         self._scalars_results = list(scalars_results or [])
         self.statements = []
+        self.options = {}
+
+    async def connection(self):
+        return SimpleNamespace(
+            sync_connection=SimpleNamespace(get_execution_options=lambda: self.options)
+        )
+
+    def bind_tenant(self, tenant_id, prefix="test"):
+        self.options = {
+            "schema_translate_map": {
+                "tenant": TenantSchemaNaming(prefix).schema_name(
+                    EntityIdVO.from_value(tenant_id)
+                )
+            }
+        }
+        return self
 
     async def execute(self, statement):
         self.statements.append(statement)
@@ -80,6 +97,8 @@ class SqlAlchemyUserRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.user_model = UserModel(
             id=self.user_id,
             status="active",
+            role="member",
+            session_epoch=0,
             last_name="Doe",
             first_name="John",
             middle_name=None,
@@ -109,7 +128,7 @@ class SqlAlchemyUserRepositoryTests(unittest.IsolatedAsyncioTestCase):
         repository = SqlAlchemyUserRepository(
             _AsyncSessionStub(
                 scalars_results=[None],
-            ),
+            ).bind_tenant(self.tenant_id),
             TenantSchemaNaming("test"),
         )
 
@@ -120,11 +139,11 @@ class SqlAlchemyUserRepositoryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(result)
 
-    async def test_get_by_id_maps_user_and_emails_without_mapper_module(self) -> None:
+    async def test_get_by_id_restores_user_and_emails_through_mapper(self) -> None:
         repository = SqlAlchemyUserRepository(
             _AsyncSessionStub(
                 scalars_results=[self.user_model, [self.primary_email_model]],
-            ),
+            ).bind_tenant(self.tenant_id),
             TenantSchemaNaming("test"),
         )
 
@@ -149,7 +168,7 @@ class SqlAlchemyUserRepositoryTests(unittest.IsolatedAsyncioTestCase):
         repository = SqlAlchemyUserRepository(
             _AsyncSessionStub(
                 scalars_results=[None],
-            ),
+            ).bind_tenant(self.tenant_id),
             TenantSchemaNaming("test"),
         )
 
@@ -164,7 +183,7 @@ class SqlAlchemyUserRepositoryTests(unittest.IsolatedAsyncioTestCase):
         repository = SqlAlchemyUserRepository(
             _AsyncSessionStub(
                 scalars_results=[self.user_model, [self.primary_email_model]],
-            ),
+            ).bind_tenant(self.tenant_id),
             TenantSchemaNaming("test"),
         )
 
@@ -211,22 +230,26 @@ class SqlAlchemyUserRepositoryTests(unittest.IsolatedAsyncioTestCase):
             {"ix_user_emails_user_id", "uq_user_emails_live_email"},
         )
 
-    async def test_reads_apply_configured_schema_to_user_and_email_queries(self):
+    async def test_reads_preserve_connection_binding_without_statement_schema_options(
+        self,
+    ):
         session = _AsyncSessionStub(
             scalars_results=[self.user_model, [self.primary_email_model]]
         )
         naming = TenantSchemaNaming("test")
         tenant_id = EntityIdVO.from_value(self.tenant_id)
+        session.bind_tenant(self.tenant_id)
         repository = SqlAlchemyUserRepository(session, naming)
         await repository.get_by_id(
             UserIdVO.from_value(self.user_id), tenant_id=tenant_id
         )
         self.assertEqual(len(session.statements), 2)
         for statement in session.statements:
-            self.assertEqual(
-                statement.get_execution_options()["schema_translate_map"],
-                {"tenant": naming.schema_name(tenant_id)},
-            )
+            self.assertNotIn("schema_translate_map", statement.get_execution_options())
+        self.assertEqual(
+            session.options["schema_translate_map"],
+            {"tenant": naming.schema_name(tenant_id)},
+        )
 
     async def test_cross_tenant_writes_fail_before_sql(self):
         user = User.create_tenant_admin(

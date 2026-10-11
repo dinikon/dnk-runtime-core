@@ -72,6 +72,7 @@ class UserModel(TenantBase):
         nullable=False,
         server_default="system",
     )
+    display_currency: Mapped[str | None] = mapped_column(sa.String(3), nullable=True)
     timezone: Mapped[str] = mapped_column(
         String(255),
         nullable=False,

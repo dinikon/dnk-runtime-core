@@ -3,7 +3,6 @@ import {
   FolderTree,
   Tags,
   Plug,
-  HardDrive,
   FileSpreadsheet,
   LifeBuoy,
   ShoppingBasket,
@@ -29,10 +28,7 @@ export const workspaceNavigation: WorkspaceNavigation = {
     },
     {
       title: "Интеграции",
-      items: [
-        { title: "Каналы", url: "/channels", icon: Plug },
-        { title: "Файловые хранилища", url: "/files", icon: HardDrive },
-      ],
+      items: [{ title: "Каналы", url: "/channels", icon: Plug }],
     },
     {
       title: "CRM",

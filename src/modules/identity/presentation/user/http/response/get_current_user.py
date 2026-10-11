@@ -1,11 +1,11 @@
 from pydantic import BaseModel, Field
-from src.modules.identity.presentation.user.http.response.current_user_email import (
-    CurrentUserEmailResponseSchema,
+from src.modules.identity.presentation.user.http.response.get_current_user_email import (
+    GetCurrentUserEmailResponseSchema,
 )
 from uuid import UUID
 
 
-class CurrentUserResponseSchema(BaseModel):
+class GetCurrentUserResponseSchema(BaseModel):
     """Pydantic-схема профиля текущего пользователя."""
 
     id: UUID
@@ -18,4 +18,6 @@ class CurrentUserResponseSchema(BaseModel):
     interface_language: str
     interface_theme: str
     timezone: str
-    emails: list[CurrentUserEmailResponseSchema] = Field(default_factory=list)
+    display_currency: str | None
+    effective_display_currency: str
+    emails: list[GetCurrentUserEmailResponseSchema] = Field(default_factory=list)
