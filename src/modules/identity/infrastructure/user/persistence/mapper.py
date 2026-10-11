@@ -1,6 +1,7 @@
 from collections.abc import Mapping, Sequence
 from typing import Any
-from src.modules.identity.domain.user.entity import User, UserEmail
+from src.modules.identity.domain.user.aggregate import User
+from src.modules.identity.domain.user.entity import UserEmail
 from src.modules.identity.domain.user.value_object.user_id import UserIdVO
 from src.modules.identity.domain.user.value_object.user_email_id import UserEmailIdVO
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO

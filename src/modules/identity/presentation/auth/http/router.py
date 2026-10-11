@@ -1,4 +1,4 @@
-from src.modules.identity.presentation.user.http.router import router as user_router
+from src.modules.identity.presentation.user.router import router as user_router
 from fastapi import APIRouter, Depends
 from src.modules.identity.presentation.auth.http.controller.confirm_email_otp import (
     router as confirm_email_otp_router,

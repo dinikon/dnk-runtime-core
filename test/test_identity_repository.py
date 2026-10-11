@@ -6,7 +6,7 @@ from uuid import uuid4
 from unittest.mock import AsyncMock
 from types import SimpleNamespace
 
-from src.modules.identity.domain.user.entity import User
+from src.modules.identity.domain.user.aggregate import User
 from src.modules.shared import DomainError
 from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,

@@ -60,7 +60,7 @@ from src.modules.identity.domain.auth.error import InvalidOtpChallengeError
 from src.modules.identity.domain.auth.error import InvalidOtpCodeError
 from src.modules.identity.domain.auth.error import InvalidSessionError
 from src.modules.identity.domain.user.error import UserEmailAlreadyExistsError
-from src.modules.identity.domain.user.entity import User
+from src.modules.identity.domain.user.aggregate import User
 from src.modules.shared import EntityIdVO
 from src.modules.shared import DomainError
 from src.modules.shared.domain.email import EmailDeliveryError

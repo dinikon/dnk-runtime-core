@@ -19,7 +19,7 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.schema import CreateSchema, DropSchema
 
 from src.config import dnk_config
-from src.modules.identity.domain.user.entity import User
+from src.modules.identity.domain.user.aggregate import User
 from src.modules.identity.domain.user.value_object.user_email_id import UserEmailIdVO
 from src.modules.identity.domain.user.value_object.user_id import UserIdVO
 from src.modules.identity.infrastructure.persistence.models.user import UserModel
@@ -333,17 +333,14 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(IntegrityError):
                 async with uow.session.begin_nested():
                     await uow.session.execute(
-                        insert(UserEmailModel.__table__)
-                        .values(
-                            id=uuid4(),
-                            user_id=user.id.uuid,
-                            email="foreign@example.com",
-                        )
-                        .execution_options(
-                            schema_translate_map={
-                                "tenant": self.naming.schema_name(right)
-                            }
-                        )
+                        text(
+                            f'INSERT INTO "{self.naming.schema_name(right)}".user_emails (id,user_id,email) VALUES (:id,:user_id,:email)'
+                        ),
+                        {
+                            "id": str(uuid4()),
+                            "user_id": str(user.id.uuid),
+                            "email": "foreign@example.com",
+                        },
                     )
             with self.assertRaises(IntegrityError):
                 async with uow.session.begin_nested():

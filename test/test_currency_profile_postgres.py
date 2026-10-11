@@ -29,7 +29,7 @@ from src.modules.identity.application.user.query.get_current_user.query import (
 from src.modules.identity.application.user.query.get_current_user.handler import (
     GetCurrentUserHandler,
 )
-from src.modules.identity.domain.user.entity import User
+from src.modules.identity.domain.user.aggregate import User
 from src.modules.identity.domain.user.value_object.user_id import UserIdVO
 from src.modules.identity.infrastructure.user.persistence.repository import (
     SqlAlchemyUserRepository,

@@ -1,6 +1,6 @@
 from sqlalchemy import Select, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.modules.identity.domain.user.entity import User
+from src.modules.identity.domain.user.aggregate import User
 from src.modules.identity.domain.user.value_object.user_id import UserIdVO
 from src.modules.identity.domain.user.value_object.user_email_id import UserEmailIdVO
 from src.modules.identity.domain.user.repository import UserRepositoryProtocol

@@ -34,7 +34,9 @@ def get_session_issuer(
     settings: AuthSettingsDep,
 ) -> SessionIssuer:
     return SessionIssuer(
-        session_service=session_service, sessions=sessions, settings=settings
+        session_service=session_service,
+        sessions=sessions,
+        session_ttl_seconds=settings.session_ttl_seconds,
     )
 
 

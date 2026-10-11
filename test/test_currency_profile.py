@@ -24,7 +24,7 @@ from src.modules.identity.application.user.query.get_current_user.handler import
 from src.modules.identity.application.user.query.get_current_user.record_dto import (
     GetCurrentUserRecordDTO,
 )
-from src.modules.identity.domain.user.entity import User
+from src.modules.identity.domain.user.aggregate import User
 from src.modules.identity.domain.auth.principal import Principal
 from src.modules.identity.domain.auth.request_context import RequestContext
 from src.modules.identity.domain.auth.error import InvalidSessionError
@@ -43,7 +43,7 @@ from src.modules.identity.presentation.user.depends import (
     get_current_user_handler,
     get_update_current_user_profile_handler,
 )
-from src.modules.identity.presentation.user.http.router import router
+from src.modules.identity.presentation.user.router import router
 from src.modules.identity.presentation.user.http.request.update_current_user_profile import (
     UpdateCurrentUserProfileRequestSchema,
 )

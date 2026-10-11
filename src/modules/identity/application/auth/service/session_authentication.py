@@ -1,11 +1,11 @@
-from src.modules.identity.domain.user.entity import User
+from src.modules.identity.domain.user.aggregate import User
 from src.modules.identity.application.auth.port.tenant_context_reader import (
     TenantRequestContext,
 )
 from src.modules.identity.application.auth.port.session_store import SessionRecord
 from src.modules.identity.domain.access.error import IdentityAccessError
 from src.modules.identity.domain.user.value_object.user_id import UserIdVO
-from src.modules.shared import EntityIdVO
+from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.identity.domain.user.repository import UserRepositoryProtocol
 from src.modules.identity.application.auth.port.session_store import SessionStorePort
 from src.modules.identity.application.auth.port.tenant_context_reader import (
@@ -17,6 +17,7 @@ from src.modules.identity.application.access.port.repository import (
 
 
 class SessionAuthenticationService:
+    """Проверяет session и доступ пользователя в контексте своего Tenant."""
 
     def __init__(
         self,
@@ -26,6 +27,7 @@ class SessionAuthenticationService:
         tenant_reader: TenantContextReaderPort,
         users: UserRepositoryProtocol,
     ) -> None:
+        """Принимает порты доступа, sessions, tenant-контекста и агрегата User."""
         self.access = access
         self.sessions = sessions
         self.tenant_reader = tenant_reader
@@ -39,6 +41,7 @@ class SessionAuthenticationService:
         admin: bool = False,
         locked: bool = False,
     ) -> tuple[TenantRequestContext, User, SessionRecord]:
+        """Возвращает доверенного пользователя и session с проверкой epoch и роли."""
         context = await self.tenant_reader.get_by_host(host)
         if locked:
             await self.access.lock(context.tenant_id)

@@ -2,7 +2,7 @@ from __future__ import annotations
 from src.modules.identity.application.user.command.create_tenant_admin.dto import (
     CreatedTenantAdmin,
 )
-from src.modules.identity.domain.user.entity import User
+from src.modules.identity.domain.user.aggregate import User
 from src.modules.identity.domain.user.error import UserEmailAlreadyExistsError
 from src.modules.identity.domain.user.repository import UserRepositoryProtocol
 from src.modules.identity.application.user.command.create_tenant_admin.command import (

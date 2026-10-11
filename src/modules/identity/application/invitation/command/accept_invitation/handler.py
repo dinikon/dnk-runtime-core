@@ -1,6 +1,6 @@
 from src.modules.identity.domain.access.error import IdentityAccessError
-from src.modules.identity.domain.user.entity import User
-from src.modules.shared import EntityIdVO
+from src.modules.identity.domain.user.aggregate import User
+from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.identity.domain.user.repository import UserRepositoryProtocol
 from src.modules.identity.application.auth.port.tenant_context_reader import (
     TenantContextReaderPort,
@@ -24,6 +24,7 @@ from src.modules.identity.application.invitation.command.accept_invitation.dto i
 
 
 class AcceptInvitationHandler:
+    """Проверяет приглашение и создаёт пользователя через фабрику агрегата."""
 
     def __init__(
         self,
@@ -37,6 +38,7 @@ class AcceptInvitationHandler:
         uow: UnitOfWorkProtocol,
         users: UserRepositoryProtocol,
     ) -> None:
+        """Получает порты приглашений и пользователя в общем процессе acceptance."""
         self.access = access
         self.invitations = invitations
         self.issuer = issuer
@@ -49,6 +51,7 @@ class AcceptInvitationHandler:
     async def execute(
         self, request: AcceptInvitationCommand
     ) -> AcceptInvitationResultDTO:
+        """Подтверждает одноразовый код, сохраняет нового участника и выдаёт session."""
         host = request.host
         invitation_token = request.invitation_token
         token = request.token
@@ -83,8 +86,7 @@ class AcceptInvitationHandler:
             )
         if not first_name.strip() or not last_name.strip():
             raise IdentityAccessError("First and last name are required.", 422)
-        user = User.create_tenant_admin(tenant_id, first_name, last_name)
-        user.role = invitation.role
+        user = User.create(tenant_id, first_name, last_name, role=invitation.role)
         user.add_email(invitation.email, is_primary=True, is_verified=True)
         await self.users.add(user, tenant_id=tenant_id)
         await self.access.finish_invitation(

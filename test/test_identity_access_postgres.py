@@ -20,7 +20,7 @@ from src.modules.identity.application.cloud.port.cloud import CloudConnection
 from src.modules.identity.application.auth.service.otp_service import OtpService
 from src.modules.identity.application.auth.service.session_service import SessionService
 from src.modules.identity.domain.access.error import IdentityAccessError
-from src.modules.identity.domain.user.entity import User
+from src.modules.identity.domain.user.aggregate import User
 from src.modules.identity.infrastructure.access.persistence.repository import (
     AccessRepository,
 )

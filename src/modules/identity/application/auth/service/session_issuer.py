@@ -1,4 +1,4 @@
-from src.modules.identity.domain.user.entity import User
+from src.modules.identity.domain.user.aggregate import User
 from src.modules.identity.application.auth.port.tenant_context_reader import (
     TenantRequestContext,
 )
@@ -7,28 +7,28 @@ from src.modules.identity.application.auth.port.session_store import SessionStor
 from src.modules.identity.application.auth.service.session_service import (
     SessionServiceProtocol,
 )
-from src.config.feature.identity.auth_config import IdentityAuthSettings
 
 
 class SessionIssuer:
+    """Создаёт tenant-session с текущей ролью и epoch пользователя."""
 
     def __init__(
         self,
         *,
         session_service: SessionServiceProtocol,
         sessions: SessionStorePort,
-        settings: IdentityAuthSettings,
+        session_ttl_seconds: int,
     ) -> None:
+        """Принимает генератор, хранилище sessions и срок действия в секундах."""
         self.session_service = session_service
         self.sessions = sessions
-        self.settings = settings
+        self._session_ttl_seconds = session_ttl_seconds
 
     async def issue_session(
         self, context: TenantRequestContext, user: User
     ) -> SessionRecord:
-        generated = self.session_service.generate(
-            ttl_seconds=self.settings.session_ttl_seconds
-        )
+        """Генерирует запись session и сохраняет её через порт хранилища."""
+        generated = self.session_service.generate(ttl_seconds=self._session_ttl_seconds)
         record = SessionRecord(
             token=generated.token,
             session_id=generated.session_id,
@@ -40,5 +40,5 @@ class SessionIssuer:
             expires_at=generated.expires_at,
             session_epoch=user.session_epoch,
         )
-        await self.sessions.create_session(record, self.settings.session_ttl_seconds)
+        await self.sessions.create_session(record, self._session_ttl_seconds)
         return record
