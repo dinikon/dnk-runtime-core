@@ -11,7 +11,6 @@ from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.shared.domain.domain_error import DomainError
 from src.modules.shared.domain.value_object.currency import CurrencyVO
 
-
 from src.modules.identity.domain.user.entity import UserEmail
 
 

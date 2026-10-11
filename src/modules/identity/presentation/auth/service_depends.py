@@ -18,6 +18,7 @@ def get_session_authentication(
     tenant_reader: TenantContextReaderDep,
     users: UsersRepositoryDep,
 ) -> SessionAuthenticationService:
+    """Собирает проверку session из портов текущего внешнего UoW."""
     return SessionAuthenticationService(
         access=access, sessions=sessions, tenant_reader=tenant_reader, users=users
     )
@@ -33,6 +34,7 @@ def get_session_issuer(
     sessions: SessionStoreDep,
     settings: AuthSettingsDep,
 ) -> SessionIssuer:
+    """Передаёт генератору session срок жизни без инфраструктурного config внутри."""
     return SessionIssuer(
         session_service=session_service,
         sessions=sessions,

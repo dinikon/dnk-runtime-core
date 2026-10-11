@@ -90,7 +90,9 @@ class AccessScenarios:
             }
         )
         self.issuer = SessionIssuer(
-            **{k: dependencies[k] for k in ("session_service", "settings", "sessions")}
+            session_service=dependencies["session_service"],
+            sessions=dependencies["sessions"],
+            session_ttl_seconds=dependencies["settings"].session_ttl_seconds,
         )
         self.invitations = InvitationValidator(access=self.access)
 
