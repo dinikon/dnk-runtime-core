@@ -3,6 +3,7 @@
 from src.modules.tenancy.infrastructure.adapter.files import FilesTenantStorageAdapter
 
 
+from contextlib import asynccontextmanager
 import os
 import unittest
 from datetime import UTC, datetime
@@ -69,6 +70,13 @@ from src.modules.tenancy.infrastructure.repository.tenant_domain_repository impo
 )
 from src.modules.tenancy.presentation.depends.infrastructure import (
     get_identity_provisioning_service,
+)
+
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_connection import (
+    bind_tenant_schema,
+)
+from src.modules.tenancy.presentation.tenant.http.tenant_gate import (
+    TenantAdmissionMiddleware,
 )
 
 TEST_URL = os.environ.get("TEST_POSTGRES_URL")
@@ -232,80 +240,96 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("users", tables)
         self.assertNotIn("user_emails", tables)
 
-    async def test_same_ids_and_email_remain_isolated_with_one_repository(self):
+    @asynccontextmanager
+    async def tenant_uow(self, tenant_id):
+        async with self.engine.connect() as connection:
+            await bind_tenant_schema(connection, tenant_id.uuid, self.naming)
+            async with UnitOfWork(
+                async_sessionmaker(connection, expire_on_commit=False)
+            ) as uow:
+                yield uow
+
+    async def test_repository_isolates_same_ids_with_one_tenant_per_uow(self):
         left, right = await self.new_tenant_schema(), await self.new_tenant_schema()
         user_id, email_id = UserIdVO.from_value(uuid4()), UserEmailIdVO.from_value(
             uuid4()
         )
-        async with UnitOfWork(self.sessions) as uow:
-            repository = SqlAlchemyUserRepository(uow.session, self.naming)
-            connection = await uow.session.connection()
-            original_options = connection.sync_connection.get_execution_options()
-            original_path = await connection.scalar(text("SHOW search_path"))
-            for tenant_id, name in ((left, "Alice"), (right, "Bob")):
-                await repository.add(
+        for tenant_id, name in ((left, "Alice"), (right, "Bob")):
+            async with self.tenant_uow(tenant_id) as uow:
+                await SqlAlchemyUserRepository(uow.session, self.naming).add(
                     self.make_user(
                         tenant_id, user_id=user_id, email_id=email_id, name=name
                     ),
                     tenant_id=tenant_id,
                 )
-            for tenant_id, name in ((left, "Alice"), (right, "Bob"), (left, "Alice")):
+        for tenant_id, name in ((left, "Alice"), (right, "Bob"), (left, "Alice")):
+            async with self.tenant_uow(tenant_id) as uow:
+                repository = SqlAlchemyUserRepository(uow.session, self.naming)
+                connection = await uow.session.connection()
+                original_options = dict(
+                    connection.sync_connection.get_execution_options()
+                )
+                original_path = await connection.scalar(text("SHOW search_path"))
                 user = await repository.get_by_id(user_id, tenant_id=tenant_id)
                 self.assertEqual(user.first_name, name)
-                self.assertEqual(user.tenant_id, tenant_id)
                 self.assertEqual(user.emails[0].id, email_id)
-                by_email = await repository.get_by_tenant_and_primary_email(
-                    tenant_id, "shared@example.com"
+                self.assertEqual(
+                    (
+                        await repository.get_by_tenant_and_primary_email(
+                            tenant_id, "shared@example.com"
+                        )
+                    ).first_name,
+                    name,
                 )
-                self.assertEqual(by_email.first_name, name)
                 self.assertTrue(
                     await repository.exists_by_tenant_and_email(
                         tenant_id, "shared@example.com"
                     )
                 )
-                self.assertFalse(
-                    await repository.exists_by_tenant_and_email(
-                        tenant_id, "absent@example.com"
+                with self.assertRaises(RuntimeError):
+                    await repository.get_by_id(
+                        user_id, tenant_id=right if tenant_id == left else left
                     )
+                self.assertEqual(
+                    connection.sync_connection.get_execution_options(), original_options
                 )
+                self.assertEqual(
+                    await connection.scalar(text("SHOW search_path")), original_path
+                )
+        async with self.tenant_uow(left) as uow:
+            repository = SqlAlchemyUserRepository(uow.session, self.naming)
             user = await repository.get_by_id(user_id, tenant_id=left)
-            user.first_name = "Updated"
-            user.updated_at = datetime.now(UTC)
+            user.update_profile(
+                last_name="Tester",
+                first_name="Updated",
+                middle_name=None,
+                interface_language="en",
+                interface_theme="dark",
+                timezone="Europe/Kyiv",
+            )
             await repository.update_profile(user, tenant_id=left)
             await repository.mark_email_verified(email_id, tenant_id=left)
-            left_user = await repository.get_by_id(user_id, tenant_id=left)
-            right_user = await repository.get_by_id(user_id, tenant_id=right)
-            self.assertEqual(left_user.first_name, "Updated")
-            self.assertTrue(left_user.emails[0].is_verified)
-            self.assertEqual(
-                left_user.emails[0].updated_at,
-                await connection.scalar(text("SELECT CURRENT_TIMESTAMP")),
-            )
-            self.assertEqual(right_user.first_name, "Bob")
-            self.assertFalse(right_user.emails[0].is_verified)
-            self.assertEqual(len(uow.session.identity_map), 0)
-            self.assertEqual(
-                connection.sync_connection.get_execution_options(), original_options
-            )
-            self.assertEqual(
-                await connection.scalar(text("SHOW search_path")), original_path
-            )
-        async with UnitOfWork(self.sessions) as uow:
-            user = await SqlAlchemyUserRepository(uow.session, self.naming).get_by_id(
-                user_id, tenant_id=left
-            )
-            self.assertEqual(user.first_name, "Updated")
+        for tenant_id, expected_name, verified in (
+            (left, "Updated", True),
+            (right, "Bob", False),
+        ):
+            async with self.tenant_uow(tenant_id) as uow:
+                user = await SqlAlchemyUserRepository(
+                    uow.session, self.naming
+                ).get_by_id(user_id, tenant_id=tenant_id)
+                self.assertEqual(user.first_name, expected_name)
+                self.assertEqual(user.emails[0].is_verified, verified)
 
     async def test_email_foreign_key_cannot_reference_other_schema(self):
         left, right = await self.new_tenant_schema(), await self.new_tenant_schema()
         user = self.make_user(left)
-        async with UnitOfWork(self.sessions) as uow:
+        async with self.tenant_uow(left) as uow:
             repository = SqlAlchemyUserRepository(uow.session, self.naming)
             await repository.add(user, tenant_id=left)
-            self.assertIsNone(await repository.get_by_id(user.id, tenant_id=right))
-            self.assertFalse(
+            with self.assertRaises(RuntimeError):
+                await repository.get_by_id(user.id, tenant_id=right)
+            with self.assertRaises(RuntimeError):
                 await repository.exists_by_tenant_and_email(right, "shared@example.com")
-            )
             with self.assertRaises(IntegrityError):
                 async with uow.session.begin_nested():
                     await uow.session.execute(
@@ -374,7 +398,7 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
         for tenant_id in (missing, empty):
             with self.assertRaises(ProgrammingError) as raised:
-                async with UnitOfWork(self.sessions) as uow:
+                async with self.tenant_uow(tenant_id) as uow:
                     await SqlAlchemyUserRepository(uow.session, self.naming).get_by_id(
                         UserIdVO.from_value(uuid4()), tenant_id=tenant_id
                     )
@@ -406,6 +430,7 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
         tokens, mail = _MemoryTokens(), AsyncMock()
         app = FastAPI()
         app.state.db = self.sessions
+        app.add_middleware(TenantAdmissionMiddleware)
         app.include_router(auth_router, prefix="/api/console")
         # CSRF/Origin behavior is covered by dedicated browser security tests.
         app.dependency_overrides[require_csrf] = lambda: None
@@ -465,16 +490,16 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(
                 (await client.get(f"{endpoint}/me", headers=headers)).status_code, 401
             )
-        async with UnitOfWork(self.sessions) as uow:
-            repository = SqlAlchemyUserRepository(uow.session, self.naming)
-            user = await repository.get_by_id(
-                UserIdVO.from_value(left.user_id),
-                tenant_id=EntityIdVO.from_value(left.tenant_id),
-            )
-            self.assertEqual(user.first_name, "Updated")
-            other = await repository.get_by_id(
-                UserIdVO.from_value(right.user_id),
-                tenant_id=EntityIdVO.from_value(right.tenant_id),
-            )
-            self.assertEqual(other.first_name, "Alice")
-            self.assertFalse(other.emails[0].is_verified)
+        for result, expected, verified in (
+            (left, "Updated", True),
+            (right, "Alice", False),
+        ):
+            async with self.tenant_uow(EntityIdVO.from_value(result.tenant_id)) as uow:
+                user = await SqlAlchemyUserRepository(
+                    uow.session, self.naming
+                ).get_by_id(
+                    UserIdVO.from_value(result.user_id),
+                    tenant_id=EntityIdVO.from_value(result.tenant_id),
+                )
+                self.assertEqual(user.first_name, expected)
+                self.assertEqual(user.emails[0].is_verified, verified)

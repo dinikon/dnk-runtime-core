@@ -1,6 +1,7 @@
 """Real tenant migrations, invitation concurrency and access/session revocation."""
 
 import asyncio
+from contextlib import asynccontextmanager
 import os
 import unittest
 from types import SimpleNamespace
@@ -22,6 +23,9 @@ from src.modules.identity.domain.access.error import IdentityAccessError
 from src.modules.identity.domain.user.entity import User
 from src.modules.identity.infrastructure.access.persistence.repository import (
     AccessRepository,
+)
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_connection import (
+    bind_tenant_schema,
 )
 from src.modules.identity.infrastructure.user.persistence.repository import (
     SqlAlchemyUserRepository,
@@ -73,7 +77,7 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.member = User.create_tenant_admin(self.tenant, "Local", "Member")
         self.member.role = "member"
         self.member.add_email("member@example.com", is_primary=True, is_verified=True)
-        async with UnitOfWork(self.sessions) as uow:
+        async with self.tenant_uow() as uow:
             service = self.service(uow)
             await service.users.add(self.admin, tenant_id=self.tenant)
             await service.users.add(self.member, tenant_id=self.tenant)
@@ -84,6 +88,15 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
         async with self.engine.begin() as connection:
             await connection.execute(DropSchema(self.schema, cascade=True))
         await self.engine.dispose()
+
+    @asynccontextmanager
+    async def tenant_uow(self):
+        async with self.engine.connect() as connection:
+            await bind_tenant_schema(connection, self.tenant.uuid, self.naming)
+            async with UnitOfWork(
+                async_sessionmaker(connection, expire_on_commit=False)
+            ) as uow:
+                yield uow
 
     def service(self, uow):
         return AccessScenarios(
@@ -103,7 +116,7 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
     async def test_revoke_reenable_never_resurrects_old_sessions_and_last_admin_guard(
         self,
     ):
-        async with UnitOfWork(self.sessions) as uow:
+        async with self.tenant_uow() as uow:
             service = self.service(uow)
             with self.assertRaises(IdentityAccessError):
                 await service.change_user(
@@ -147,7 +160,7 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
     async def test_invitation_creates_only_after_one_time_otp_and_refuses_existing_account(
         self,
     ):
-        async with UnitOfWork(self.sessions) as uow:
+        async with self.tenant_uow() as uow:
             service = self.service(uow)
             with self.assertRaises(IdentityAccessError):
                 await service.invite(
@@ -179,7 +192,7 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
 
         async def accept():
             try:
-                async with UnitOfWork(self.sessions) as uow:
+                async with self.tenant_uow() as uow:
                     return await self.service(uow).accept_invitation(
                         "tenant.example",
                         secret,
@@ -193,7 +206,7 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
 
         results = await asyncio.gather(accept(), accept())
         self.assertEqual(sum(r is not None for r in results), 1)
-        async with UnitOfWork(self.sessions) as uow:
+        async with self.tenant_uow() as uow:
             service = self.service(uow)
             users = await service.access.list_users(self.tenant.uuid)
             self.assertEqual(
@@ -216,7 +229,7 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
         oidc = AsyncMock()
         oidc.authorization_url.return_value = "https://core.example/authorize"
         oidc.exchange.return_value = str(uuid4())
-        async with UnitOfWork(self.sessions) as uow:
+        async with self.tenant_uow() as uow:
             service = self.service(uow)
             cloud = CloudScenarios(service, reader, oidc)
             await cloud.start(
@@ -282,7 +295,7 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_role_only_changes_publish_the_bound_users_current_role(self):
         subject = uuid4()
-        async with UnitOfWork(self.sessions) as uow:
+        async with self.tenant_uow() as uow:
             service = self.service(uow)
             await service.access.bind(
                 self.tenant.uuid,
@@ -334,7 +347,7 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.projections.set_available.side_effect = RuntimeError(
             "injected outbox write failure"
         )
-        async with UnitOfWork(self.sessions) as uow:
+        async with self.tenant_uow() as uow:
             local = self.service(uow)
             cloud = CloudScenarios(local, reader, oidc)
             await cloud.start(
