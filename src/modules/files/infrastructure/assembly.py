@@ -1,3 +1,9 @@
+from src.modules.files.application.stored_file.command.purge_file.handler import (
+    PurgeFileHandler,
+)
+from src.modules.files.application.stored_file.command.cleanup_expired_trash.handler import (
+    CleanupExpiredTrashHandler,
+)
 from dataclasses import dataclass
 from functools import lru_cache
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,6 +47,41 @@ from src.modules.files.infrastructure.stored_file.persistence.repository import 
 from src.modules.files.infrastructure.persistence.query_repository import (
     SqlAlchemyStorageQueryRepository,
 )
+from src.modules.files.infrastructure.stored_file.persistence.query_repository import (
+    SqlAlchemyStoredFileQueryRepository,
+)
+from src.modules.files.application.stored_file.query.list_files.handler import (
+    ListFilesHandler,
+)
+from src.modules.files.application.stored_file.query.list_trashed_files.handler import (
+    ListTrashedFilesHandler,
+)
+from src.modules.files.application.stored_file.query.get_files_overview.handler import (
+    GetFilesOverviewHandler,
+)
+
+from src.modules.files.application.stored_file.command.trash_file.handler import (
+    TrashFileHandler,
+)
+from src.modules.files.application.stored_file.command.restore_file.handler import (
+    RestoreFileHandler,
+)
+from src.modules.files.application.stored_file.command.request_file_purge.handler import (
+    RequestFilePurgeHandler,
+)
+from src.modules.files.infrastructure.stored_file.jobs.purge_queue import (
+    ScheduledFilePurgeQueue,
+)
+from src.modules.shared.application.jobs.schedule_scheduled_job_use_case import (
+    ScheduleScheduledJobUseCase,
+)
+from src.modules.shared.infrastructure.jobs.sqlalchemy_scheduled_job_repository import (
+    SqlAlchemyScheduledJobRepository,
+)
+from src.modules.shared.domain.time.clock_port import ClockPort
+from src.modules.shared.application.uuid.uuid_port import UUIdGeneratorProtocol
+from src.modules.shared.infrastructure.time.utc_clock import UtcClock
+from src.modules.shared.infrastructure.uuid.uuid7_generator import UUID7Generator
 
 
 @lru_cache(maxsize=1)
@@ -63,17 +104,41 @@ class FilesHandlers:
     buckets: ListBucketsHandler
     cleanup: CleanupOrphanedObjectsHandler
     purge: PurgeTenantStorageHandler
+    files: ListFilesHandler
+    trash: ListTrashedFilesHandler
+    overview: GetFilesOverviewHandler
+    trash_file: TrashFileHandler
+    restore: RestoreFileHandler
+    request_purge: RequestFilePurgeHandler
+    purge_file: PurgeFileHandler
+    cleanup_trash: CleanupExpiredTrashHandler
 
 
 def build_files_handlers(
-    session: AsyncSession, storage: StorageResolverProtocol | None = None
+    session: AsyncSession,
+    storage: StorageResolverProtocol | None = None,
+    *,
+    clock: ClockPort | None = None,
+    uuid_generator: UUIdGeneratorProtocol | None = None,
 ) -> FilesHandlers:
     """Подключает все репозитории процесса к сессии внешнего UoW."""
     providers = SqlAlchemyStorageProviderRepository(session)
     buckets = SqlAlchemyBucketRepository(session)
     files = SqlAlchemyStoredFileRepository(session)
     queries = SqlAlchemyStorageQueryRepository(session)
+    file_queries = SqlAlchemyStoredFileQueryRepository(session)
     resolver = storage if storage is not None else get_storage_resolver()
+    actual_clock = clock if clock is not None else UtcClock()
+    actual_uuid = uuid_generator if uuid_generator is not None else UUID7Generator()
+    jobs = SqlAlchemyScheduledJobRepository(session)
+    queue = ScheduledFilePurgeQueue(
+        ScheduleScheduledJobUseCase(
+            repository=jobs,
+            clock=actual_clock,
+            uuid_generator=actual_uuid,
+        ),
+        jobs,
+    )
     return FilesHandlers(
         RegisterSystemStorageHandler(providers, buckets),
         ProvisionSystemBucketHandler(providers, buckets, resolver),
@@ -83,4 +148,12 @@ def build_files_handlers(
         ListBucketsHandler(queries),
         CleanupOrphanedObjectsHandler(providers, buckets, queries, resolver),
         PurgeTenantStorageHandler(providers, buckets, resolver),
+        ListFilesHandler(file_queries),
+        ListTrashedFilesHandler(file_queries),
+        GetFilesOverviewHandler(file_queries),
+        TrashFileHandler(files, actual_clock),
+        RestoreFileHandler(files, buckets, providers, resolver, actual_clock),
+        RequestFilePurgeHandler(files, queue, actual_clock, actual_uuid),
+        PurgeFileHandler(files, buckets, providers, resolver),
+        CleanupExpiredTrashHandler(files, file_queries, queue, actual_uuid),
     )

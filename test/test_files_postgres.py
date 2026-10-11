@@ -498,7 +498,7 @@ class FilesPostgresTests(unittest.IsolatedAsyncioTestCase):
         """Console API не раскрывает credentials и не разрешает запись или выдачу файлов."""
         tenant = self.tenants[0]
         context = RequestContext(
-            Principal(str(uuid4()), str(tenant), "test", ("member",)), None, None, None
+            Principal(str(uuid4()), str(tenant), "test", ("admin",)), None, None, None
         )
         app = company_app(self.sessions, context, scoped_connection=True)
         app.include_router(router, prefix="/api/console")

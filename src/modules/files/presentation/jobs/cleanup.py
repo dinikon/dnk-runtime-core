@@ -79,6 +79,8 @@ async def ensure_cleanup_jobs(
                     {"name": f"{schema}.files_buckets"},
                 ):
                     continue
+                # Завершаем lookup-транзакцию, чтобы commit UoW фиксировал INSERT jobs.
+                await connection.commit()
                 await bind_tenant_schema(connection, identifier, naming)
                 async with AsyncSession(connection, expire_on_commit=False) as session:
                     await schedule_cleanup(session, identifier, stamp)

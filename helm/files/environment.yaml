@@ -75,3 +75,4 @@ FILES__REGION: application.files.region
 FILES__TIMEOUT_SECONDS: application.files.timeoutSeconds
 FILES__OPERATION_TIMEOUT_SECONDS: application.files.operationTimeoutSeconds
 FILES__CONCURRENCY: application.files.concurrency
+FILES__CONSOLE_MAX_UPLOAD_BYTES: application.files.consoleMaxUploadBytes

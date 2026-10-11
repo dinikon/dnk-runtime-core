@@ -5,7 +5,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
 revision = "0013_channels"
-down_revision = "0012_catalog"
+down_revision = "0011_inventory_skus"
 branch_labels = None
 depends_on = None
 

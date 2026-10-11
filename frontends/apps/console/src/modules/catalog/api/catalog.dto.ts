@@ -1,268 +1,6 @@
-export interface BlockLinkDTO {
-  block_id: string;
-  scope: "PRODUCT" | "VARIANT";
-  required: boolean;
-  position: number;
-}
-export interface SchemaBlockDTO extends BlockLinkDTO {
-  code: string;
-  value_type: "text" | "rich_text";
-  label: string | null;
-}
 export interface LocaleDTO {
   code: string;
   name: string;
-}
-export interface CreateSimpleProductRequest {
-  product_type_id?: string | null;
-  virtual?: boolean;
-}
-export interface CreateSimpleProductResponse {
-  id: string;
-  revision: number;
-  variant_id: string;
-}
-export interface ChangeProductTypeRequest {
-  expected_revision: number;
-  product_type_id: string;
-}
-export interface ChangeProductTypeResponse {
-  id: string;
-  revision: number;
-}
-export interface SetVariantPropertiesRequest {
-  expected_revision: number;
-  virtual: boolean;
-  downloadable: boolean;
-}
-export interface SetVariantPropertiesResponse {
-  id: string;
-  revision: number;
-}
-export interface PutProductContentRequest {
-  expected_revision: number;
-  expected_schema_version: number;
-  values: Record<string, string>;
-}
-export interface PutProductContentResponse {
-  id: string;
-  revision: number;
-}
-export interface PutVariantContentRequest {
-  expected_revision: number;
-  expected_schema_version: number;
-  values: Record<string, string>;
-}
-export interface PutVariantContentResponse {
-  id: string;
-  revision: number;
-}
-export interface CreateProductTypeRequest {
-  code: string;
-  locale: string;
-  label: string;
-  blocks: BlockLinkDTO[];
-}
-export interface CreateProductTypeResponse {
-  id: string;
-  revision: number;
-  schema_version: number;
-}
-export interface PutProductTypeTranslationRequest {
-  expected_revision: number;
-  label: string;
-}
-export interface PutProductTypeTranslationResponse {
-  id: string;
-  revision: number;
-}
-export interface ReplaceProductTypeSchemaRequest {
-  expected_revision: number;
-  expected_schema_version: number;
-  blocks: BlockLinkDTO[];
-}
-export interface ReplaceProductTypeSchemaResponse {
-  id: string;
-  revision: number;
-  schema_version: number;
-}
-export interface CreateContentBlockRequest {
-  code: string;
-  locale: string;
-  label: string;
-  value_type: "text" | "rich_text";
-}
-export interface CreateContentBlockResponse {
-  id: string;
-  revision: number;
-}
-export interface UpdateContentBlockRequest {
-  expected_revision: number;
-  locale: string;
-  label: string;
-  value_type: "text" | "rich_text";
-}
-export interface UpdateContentBlockResponse {
-  id: string;
-  revision: number;
-}
-export interface ProductAxisDTO {
-  attribute_id: string;
-  option_ids: string[];
-  position: number;
-}
-export interface ProductVariantDTO {
-  id: string;
-  selection: Record<string, string>;
-  virtual: boolean;
-  downloadable: boolean;
-  content: Record<string, string> | null;
-  locales: string[];
-  effective_title: string | null;
-  title_source: "PRODUCT" | "VARIANT" | null;
-}
-export interface ProductAttributeValueDTO {
-  attribute_id: string;
-  option_id: string;
-  visible: boolean;
-  position: number;
-}
-export interface GetProductResponse {
-  attribute_values: ProductAttributeValueDTO[];
-  category_ids: string[];
-  primary_category_id: string | null;
-  tag_ids: string[];
-  id: string;
-  kind: "simple" | "variable";
-  product_type_id: string;
-  revision: number;
-  schema_version: number;
-  content: Record<string, string> | null;
-  locales: string[];
-  title: string | null;
-  axes: ProductAxisDTO[];
-  default_selection: Record<string, string> | null;
-  variants: ProductVariantDTO[];
-}
-export interface ProductListItemDTO {
-  id: string;
-  kind: "simple" | "variable";
-  product_type_id: string;
-  revision: number;
-  schema_version: number;
-  content: Record<string, string> | null;
-  locales: string[];
-  title: string | null;
-  variant_count: number;
-}
-export interface ListProductsResponse {
-  items: ProductListItemDTO[];
-  total: number;
-  page: number;
-  page_size: number;
-}
-export interface GetProductTypeResponse {
-  id: string;
-  code: string;
-  is_system: boolean;
-  revision: number;
-  label: string | null;
-  locales: string[];
-  schema_version: number;
-  blocks: SchemaBlockDTO[];
-}
-export interface ProductTypeListItemDTO {
-  id: string;
-  code: string;
-  is_system: boolean;
-  revision: number;
-  label: string | null;
-  locales: string[];
-  schema_version: number;
-  blocks: SchemaBlockDTO[];
-}
-export interface ListProductTypesResponse {
-  items: ProductTypeListItemDTO[];
-  total: number;
-  page: number;
-  page_size: number;
-}
-export interface GetContentBlockResponse {
-  id: string;
-  code: string;
-  is_system: boolean;
-  revision: number;
-  label: string | null;
-  locales: string[];
-  value_type: "text" | "rich_text";
-}
-export interface ContentBlockListItemDTO {
-  id: string;
-  code: string;
-  is_system: boolean;
-  revision: number;
-  label: string | null;
-  locales: string[];
-  value_type: "text" | "rich_text";
-}
-export interface ListContentBlocksResponse {
-  items: ContentBlockListItemDTO[];
-  total: number;
-  page: number;
-  page_size: number;
-}
-export interface GetVariantResponse {
-  id: string;
-  product_id: string;
-  kind: "simple" | "variable";
-  revision: number;
-  schema_version: number;
-  selection: Record<string, string>;
-  content: Record<string, string> | null;
-  locales: string[];
-  virtual: boolean;
-  downloadable: boolean;
-  effective_title: string | null;
-  title_source: "PRODUCT" | "VARIANT" | null;
-}
-export interface VariantStructureDTO {
-  variant_id: string | null;
-  selection: Record<string, string>;
-  virtual: boolean;
-}
-export interface VariableStructureDTO {
-  kind: "variable";
-  axes: ProductAxisDTO[];
-  default_selection: Record<string, string> | null;
-  variants: VariantStructureDTO[];
-}
-export interface SimpleStructureDTO {
-  kind: "simple";
-  variant: VariantStructureDTO;
-}
-export interface CreateVariableProductRequest {
-  product_type_id: string | null;
-  structure: VariableStructureDTO;
-}
-export interface CreateVariableProductResponse {
-  id: string;
-  revision: number;
-}
-export interface ReplaceVariantsRequest {
-  expected_revision: number;
-  structure: VariableStructureDTO;
-}
-export interface ReplaceVariantsResponse {
-  id: string;
-  revision: number;
-}
-export interface ChangeProductKindRequest {
-  expected_revision: number;
-  structure: SimpleStructureDTO | VariableStructureDTO;
-}
-export interface ChangeProductKindResponse {
-  id: string;
-  revision: number;
 }
 export interface CreateAttributeRequest {
   code: string;
@@ -317,7 +55,6 @@ export interface ListAttributesResponse {
   page: number;
   page_size: number;
 }
-
 export interface GetCategoryResponse {
   id: string;
   label: string | null;
@@ -356,7 +93,6 @@ export interface PutCategoryContentResponse {
   id: string;
   revision: number;
 }
-
 export interface GetTagResponse {
   id: string;
   label: string | null;
@@ -398,28 +134,203 @@ export interface MoveCategoryResponse {
   id: string;
   revision: number;
 }
-export interface SetProductAttributesRequest {
-  expected_revision: number;
-  values: ProductAttributeValueDTO[];
+export type ItemKind = "simple" | "variable" | "variant";
+export type ItemStatus = "draft" | "active" | "archived";
+export type ItemSection =
+  | "content"
+  | "status"
+  | "sku"
+  | "virtual"
+  | "price"
+  | "stock"
+  | "measurements"
+  | "metadata"
+  | "attributes"
+  | "categories"
+  | "tags"
+  | "galleries"
+  | "structure"
+  | "kind";
+export interface OverrideDTO<T> {
+  mode: "inherit" | "set" | "clear";
+  value: T | null;
 }
-export interface SetProductAttributesResponse {
+export interface PriceDTO {
+  regular_price: string;
+  currency: string;
+  sale_price: string | null;
+  date_on_sale_from: string | null;
+  date_on_sale_to: string | null;
+}
+export interface DimensionsDTO {
+  length: string;
+  width: string;
+  height: string;
+}
+export interface StockDTO {
+  manage_stock: "none" | "own" | "parent";
+  stock_quantity: number | null;
+  stock_status: "in_stock" | "out_of_stock" | "on_backorder" | null;
+  backorders: "no" | "notify" | "yes" | null;
+}
+export interface AttributeDTO {
+  attribute_id: string;
+  option_ids: string[];
+  visible: boolean;
+  position: number;
+  mode: "set" | "clear";
+}
+export interface MetadataDTO {
+  key: string;
+  value_type: "text" | "decimal" | "boolean" | null;
+  value: string | boolean | null;
+  position: number;
+  mode: "set" | "clear";
+}
+export interface ImageDTO {
   id: string;
-  revision: number;
+  file_id: string;
+  position: number;
+  alt: string;
+  caption: string;
 }
-export interface SetProductCategoriesRequest {
-  expected_revision: number;
+export interface GalleryDTO {
+  images: ImageDTO[];
+  primary_image_id: string | null;
+}
+export interface AxisDTO {
+  attribute_id: string;
+  option_ids: string[];
+  position: number;
+  visible: boolean;
+}
+export interface SelectionDTO {
+  attribute_id: string;
+  option_id: string;
+}
+export interface StructureDTO {
+  axes: AxisDTO[];
+  variants: { item_id: string | null; selection: SelectionDTO[] }[];
+  default_selection: SelectionDTO[] | null;
+}
+export interface OwnItemDTO {
+  id: string;
+  kind: ItemKind;
+  parent_id: string | null;
+  product_type_id: string | null;
+  status: ItemStatus;
+  sku: string | null;
+  virtual: OverrideDTO<boolean>;
+  price: OverrideDTO<PriceDTO>;
+  weight: OverrideDTO<string>;
+  dimensions: OverrideDTO<DimensionsDTO>;
+  stock: StockDTO | null;
+  translations: Record<string, Record<string, OverrideDTO<string>>>;
+  galleries: Record<string, GalleryDTO>;
+  attributes: AttributeDTO[];
+  metadata: MetadataDTO[];
+  selection: { values: [string, string][] };
+  axes: AxisDTO[];
+  default_selection: { values: [string, string][] } | null;
   category_ids: string[];
   primary_category_id: string | null;
-}
-export interface SetProductCategoriesResponse {
-  id: string;
-  revision: number;
-}
-export interface SetProductTagsRequest {
-  expected_revision: number;
   tag_ids: string[];
-}
-export interface SetProductTagsResponse {
-  id: string;
   revision: number;
+  created_at: string;
+  updated_at: string;
+}
+export interface ReadItemDTO {
+  root_id: string;
+  root_revision: number;
+  own: OwnItemDTO;
+  effective: {
+    content: Record<string, string> | null;
+    virtual: boolean;
+    price_specification: PriceDTO | null;
+    price: string | null;
+    weight: string | null;
+    dimensions: DimensionsDTO | null;
+    stock: StockDTO | null;
+    stock_source_id: string | null;
+    gallery: GalleryDTO | null;
+    attributes: AttributeDTO[];
+    metadata: MetadataDTO[];
+    available_for_publication: boolean;
+    origins: Record<
+      string,
+      { source: string; item_id: string | null; locale: string | null }
+    >;
+  };
+  stock_status: string | null;
+  backorders_allowed: boolean | null;
+  backordered: boolean | null;
+  price_min: string | null;
+  price_max: string | null;
+  price_incomplete: boolean;
+  price_currency: string | null;
+}
+export interface GetItemResponse {
+  item: ReadItemDTO;
+  as_of: string;
+}
+export interface ListItemsResponse {
+  items: ListItemDTO[];
+  total: number;
+  offset: number;
+  limit: number;
+  as_of: string;
+}
+export interface CreateItemResponse {
+  id: string;
+  root_revision: number;
+  child_ids: string[];
+}
+export interface MutationResponse {
+  item_id: string;
+  root_id: string;
+  revision: number;
+  root_revision: number;
+  child_ids?: string[];
+}
+export interface DefaultSchemaResponse {
+  locale: string;
+  schema: {
+    id: string;
+    code: string;
+    label: string | null;
+    schema_version: number;
+    blocks: {
+      id: string;
+      code: string;
+      value_type: string;
+      required: boolean;
+      position: number;
+      label: string | null;
+    }[];
+  };
+}
+
+export interface ListItemDTO {
+  id: string;
+  kind: ItemKind;
+  root_id: string;
+  root_revision: number;
+  revision: number;
+  status: ItemStatus;
+  sku: string | null;
+  title: string | null;
+  price: string | null;
+  currency: string | null;
+  price_min: string | null;
+  price_max: string | null;
+  price_incomplete: boolean;
+  stock_status: string | null;
+  primary_image: ImageDTO | null;
+}
+export interface ListVariantsResponse {
+  items: ReadItemDTO[];
+  total: number;
+  offset: number;
+  limit: number;
+  as_of: string;
 }

@@ -4,7 +4,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = "0020_files"
-down_revision = "0019_catalog_classification"
+down_revision = "0016_remove_inventory"
 branch_labels = None
 depends_on = None
 

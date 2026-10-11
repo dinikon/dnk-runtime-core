@@ -2,7 +2,8 @@
 
 Первый этап ниже описывает существующее приватное хранилище. Следующий этап —
 [файловый менеджер в Admin Console](#следующий-этап-файловый-менеджер-в-admin-console).
-Статус следующего этапа на 2026-10-11: запланирован, реализация не начата.
+Статус следующего этапа на 2026-10-11: выполнены срезы 1 (Domain/persistence)
+2 (Read API), 3 (мутации Console) и 4 (worker/recovery); следующий срез — Console UI.
 
 ## Границы первого этапа
 
@@ -163,7 +164,7 @@ endpoint потребляющего бизнес-модуля.
 | Upload | Внутренний `UploadFileHandler`, без Console endpoint | Multipart HTTP-контракт и форма, использующие существующий handler |
 | StoredFile | Lifecycle корзины реализован в Domain и persistence; HTTP-мутаций ещё нет | Подключить сценарии управления и worker к готовым переходам |
 | Обслуживание | `files.cleanup`, orphan/multipart старше 24 часов | Отдельные `files.trash.cleanup` и `files.purge`, срок корзины 30 дней |
-| Доступ | Files GET требуют authenticated context | Управление Files в Console доступно только tenant admin; сервер проверяет права |
+| Доступ | Files Console требуют tenant admin и отдельные разрешения операций | Frontend guard дополняет серверную проверку |
 
 ### Применимые архитектурные требования
 
@@ -630,12 +631,241 @@ trash/purging при orphan cleanup и возврат исходного сод�
 Рабочие tenant-схемы не мигрировались. Срез задаёт правила и хранение состояния;
 автоочистка корзины, новые API и Admin Console выполняются на следующих этапах.
 
+#### Выполненный срез 2: Read API
+
+Реализован 2026-10-11. Aggregate Roots и write-side не меняются. Добавлены три
+независимых сценария чтения со своими контрактами:
+
+| Сценарий | Вход | Результат / HTTP |
+| --- | --- | --- |
+| `list_files` | trusted tenant UUID, search, bucket IDs, category, page/page_size | `ListFilesResultDTO` / `GET /api/console/files/items/` → `ListFilesResponse` |
+| `list_trashed_files` | те же параметры | `ListTrashedFilesResultDTO` / `GET /api/console/files/trash/` → `ListTrashedFilesResponse` |
+| `get_files_overview` | trusted tenant UUID, bucket IDs | `GetFilesOverviewResultDTO` / `GET /api/console/files/overview/` → `GetFilesOverviewResponse` |
+
+Для каждого сценария есть `application/stored_file/query/<scenario>/`
+с `query.py`, `handler.py`, `dto.py`; собственные controller/response и
+именованный Depends в `presentation/stored_file/`. Query port размещён в
+`application/stored_file/port/query_repository.py`, SQL adapter и mapper —
+в `infrastructure/stored_file/persistence/{query_repository,query_mapper}.py`.
+Сборка использует единую сессию внешнего UoW; Domain не загружается,
+внутренних commit/rollback и обращений к MinIO в read-side нет.
+
+Реализованы параметры и MIME-классификация из HTTP-контрактов выше.
+COUNT и страница читаются одним statement, включая выход за последнюю
+страницу; одинаковые даты разрешаются сортировкой по UUID. Сводка тоже
+использует один statement, возвращает все четыре категории, сохраняет точные
+целочисленные размеры и не зависит от поиска/категории таблицы.
+Без bucket-фильтра учитываются готовые диски; явный неготовый диск даёт `409`,
+неизвестный и чужой — одинаковый `404`.
+
+`presentation/depends/admin.py` проверяет trusted роль `admin`, tenant и
+дополнительное разрешение `files.read` для `stored_file` без resource ID.
+Все пять Files Console GET, включая старые providers/buckets, используют
+эту зависимость. Отказ предшествует открытию UoW даже при default allow-all
+authorization adapter. Tenant/actor/ключи/credentials не входят в HTTP-ввод,
+Response явно отделены от DTO, GET не имеют фиктивных Request body.
+
+Новые проверки: `test/test_files_read.py`, `test/test_files_read_postgres.py`;
+архитектурная matrix расширена с 8 до 11 сценариев, отдельно проверяется
+отсутствие Aggregate/write repository в проекциях. PostgreSQL/HTTP покрывают
+буквальные спецсимволы поиска, Unicode, все MIME-соответствия, несколько дисков,
+tenant isolation, admin/authorization, границы/пустые страницы, большие размеры,
+OpenAPI и один SQL statement для COUNT/items и overview.
+
+Проверки: 28 тестов прикладного слоя, нового HTTP/SQL и Domain/архитектуры
+прошли на текущем Files в копии workspace с изолированной регистрацией моделей.
+Регрессия из 96 тестов Files, PostgreSQL/MinIO, lifecycle, tenant-миграций,
+регистрации модулей, scheduled jobs и удаления tenant прошла на текущем Files
+поверх последнего коммита остальных модулей. Сервисы одноразовые, конфигурация
+тестовая; рабочие данные не затрагивались. Black, compile, архитектурный аудит
+полного Files diff и `git diff --check` выполнены.
+
+Ограничение совместной проверки: в текущем workspace параллельная перестройка
+Catalog временно оставила импорт `product_type_block` в tenant metadata без
+соответствующего файла. Исходный прогон с общей регистрацией остановился на
+этом импорте до SQL-проверок. Чужие изменения не исправлялись и не откатывались;
+полная совместимость с их окончательной версией требует отдельного прогона.
+
+Следующий срез — этап 3: Console upload, trash, restore и request purge,
+их собственные Command/DTO/Request/Response/Depends, CSRF и действия
+`files.upload|trash|restore|purge`. Постановка purge job и переход состояния
+должны фиксироваться в одном внешнем UoW; затем этап 4 подключает worker,
+этап 5 — AdminLayout/shadcn UI, этап 6 — rollout. В этом срезе формы,
+HTTP-мутации и автоматическая физическая очистка ещё не подключаются.
+
+#### Выполненный срез 3: HTTP-мутации Console
+
+Реализован 2026-10-11. Сохраняются `StorageProvider`, `Bucket`, `StoredFile`;
+нового Aggregate Root корзины нет. Применены нормативные требования слоёв,
+фабрик/методов Domain, аннотаций/docstrings, пустых init и внешнего UoW.
+
+| Сценарий | Вход | Конкретный результат |
+| --- | --- | --- |
+| `upload_file` | trusted tenant, spool BinaryIO, фактический size, name/MIME, optional bucket | существующий `UploadFileResultDTO` → `201 UploadFileResponse` |
+| `trash_file` | trusted tenant/actor, file UUID | `TrashFileResultDTO(file_id, deleted_at, purge_after)` → `200 TrashFileResponse` |
+| `restore_file` | trusted tenant/actor, file UUID | `RestoreFileResultDTO(file_id, status)` → `200 RestoreFileResponse` |
+| `request_file_purge` | trusted tenant/actor, file UUID | `None` → `202 Response` без тела |
+
+Три новые команды имеют собственные `command.py`, `handler.py`, `dto.py`
+для двух результатов; сценарий `None` не имеет DTO. Добавлены четыре отдельных
+controller, три Response и только один Request для multipart. Именованные Depends
+и assembly подключают write repositories, clock и UUID generator на общей сессии.
+Новые handlers не вызывают друг друга; Console upload использует существующий.
+
+`trash_file`, `restore_file`, `request_file_purge` загружают файл через
+`get_for_update`. Domain задаёт сроки/идемпотентность и запрещённые переходы.
+`ensure_can_restore(now)` проверяет состояние без изменения перед storage I/O;
+после stat `restore_from_trash(clock.now())` повторно проверяет срок, чтобы
+медленный MinIO не позволил позднее восстановление. `exists_owned` подтверждает
+ownership бакета/метаданных и наличие объекта без чтения содержимого.
+
+`FilePurgeQueueProtocol` и `ScheduledFilePurgeQueue` используют Application
+contracts shared jobs (`ScheduleScheduledJobUseCase`, `schedule_once`,
+`terminal_or_missing`). Переход в `purging` и job используют тот же SQL UoW;
+payload содержит только tenant/file/job IDs. Повторный запрос сохраняет job/dates.
+Нет публикации в брокер, отдельной транзакции или physical delete в HTTP.
+
+Все четыре маршрута требуют tenant admin, реальный CSRF и отдельные действия
+`files.upload|trash|restore|purge`, для существующих файлов — resource ID.
+Неизвестный/чужой ID даёт `404`; состояние/срок/ownership — `409`, неправильные
+метаданные — `422`, недоступный storage — `503`. Ошибка commit не даёт успех.
+
+Multipart parser принимает один файл и optional bucket ID, запрещает лишние/
+повторные поля, ограничивает bytes до записи в spool, включая запросы без
+Content-Length. Файл свыше 1 МиБ спулируется на диск; источник закрывается при
+успехе, ошибке, отмене и обрыве. Console limit — отдельный Instance setting
+`FILES__CONSOLE_MAX_UPLOAD_BYTES` (100 МиБ); добавлен в Config, template env,
+Compose и Helm `application.files.consoleMaxUploadBytes`. Полное тело ограничено
+limit + 64 КиБ, заголовки части — 64 КиБ, текстовое поле — 1 КиБ. Превышение —
+`413`; приём ограничен operation timeout, истечение — `408`. Бинарный SDK upload
+сохраняет прежние timeout/concurrency и UUID-ключи без перезаписи имён.
+Настройки ingress/proxy должны пропускать limit с multipart overhead и
+согласованный timeout. Реальный disk quota по-прежнему не вводится.
+
+Тесты: `test/test_files_mutations_postgres.py`, `test/test_files_multipart.py`;
+архитектурная matrix содержит 14 сценариев и явный HTTP whitelist. Проверяются
+реальные CSRF/admin/action/tenant, пустой файл/точный limit/без Content-Length,
+одинаковые имена, сроки/повторы, потерянный/чужой объект, storage outage,
+rollback после записи job и на commit, два конкурентных purge request,
+закрытие spool и OpenAPI. Итоговые проверки: 109 тестов Files, PostgreSQL/MinIO, lifecycle, архитектуры,
+tenant-миграций, регистрации API, jobs и удаления tenant прошли на текущем Files
+поверх последнего коммита остальных модулей. После финального изменения Domain
+также прошли 18 offline-проверок lifecycle/архитектуры/parser; 98 Helm tests
+успешны. Black, compile и аудит всего Files diff по нормативному перечню выполнены;
+обязательные файлы всех 14 сценариев и HTTP Request/Response/Depends проверены.
+Тестовая ошибка подготовки таблицы jobs исправлена: используется штатный
+GlobalMigrator, без создания таблицы до Alembic. Сервисы одноразовые.
+
+Ограничение совместного прогона текущего workspace: параллельно изменяемая
+Catalog-миграция задаёт integer default для boolean `is_variation`; PostgreSQL
+останавливает tenant upgrade до файловых сценариев. Этот чужой код не менялся.
+Совместимость с окончательной версией этих изменений требует повторной проверки;
+в итоговом успешном прогоне другие модули взяты из последнего коммита.
+
+Этот срез подготовил durable запрос для этапа 4, реализованного ниже.
+Forms/AdminLayout и shadcn-композиция выполняются этапом 5.
+Рабочие tenant-схемы не изменялись.
+
+#### Выполненный срез 4: worker, автоочистка и recovery
+
+Реализован 2026-10-11. Aggregate Roots остаются `StorageProvider`, `Bucket`,
+`StoredFile`; новое состояние и инварианты корзины не вводились. Перед реализацией
+прочитан полный `docs/architecture/AGENTS.md`: применены направление импортов,
+организация по агрегатам/сценариям, конкретные DTO, фабрики/методы Domain,
+аннотации и русские docstrings, пустые init, mapper без I/O и внешняя транзакция.
+
+| Use case | Вход | Результат и файлы |
+| --- | --- | --- |
+| `purge_file` | trusted tenant UUID, file UUID, current job UUID | `-> None`; отдельные `command.py`, `handler.py`, без `dto.py` |
+| `cleanup_expired_trash` | trusted tenant UUID, aware cutoff, optional after_id, batch_size 1–100 | `CleanupExpiredTrashResultDTO(queued_count, requeued_count, next_after_id)`; `command.py`, `handler.py`, `dto.py` |
+
+Оба сценария добавлены в `infrastructure/assembly.py` и нормативную matrix
+(16 Files use cases). `StoredFileQueryRepositoryProtocol` предоставляет отдельные
+`CleanupExpiredTrashCandidateDTO` и `CleanupExpiredTrashBacklogDTO`; SQL mapper
+создаёт проекции без Aggregate. Write repositories восстанавливают `StoredFile`
+через существующую фабрику и получают ту же сессию UoW, что и durable queue.
+HTTP-контракты/Depends не добавлены: фоновые сценарии собираются в
+`presentation/jobs/{purge_file,trash_cleanup}.py`.
+
+`FilesPurgeJobHandler` проверяет envelope tenant/job IDs, открывает собственные
+admission и tenant UoW, проверяет действующую lease. Use case блокирует файл,
+пропускает отсутствующую регистрацию/старый file job ID, подтверждает готовность
+диска и удаляет owned-версии через новый storage port `remove_owned_versions`.
+MinIO adapter лениво перечисляет страницы, проверяет metadata каждой версии,
+удаляет все версии и delete markers только точного ключа и повторным listing
+подтверждает отсутствие. Бакет, соседние ключи и совпадающий prefix сохраняются.
+Отсутствующий объект/бакет допускает повтор. Время и SDK concurrency ограничены;
+отмена ждёт завершения текущего синхронного вызова до release gate/row lock.
+
+После storage подтверждения Domain `mark_purged` разрешает SQL removal. Перед
+commit worker повторно проверяет и кратко блокирует текущую shared job lease;
+блокировка jobs не удерживается во время SDK, чтобы heartbeat мог её продлевать.
+Потеря lease откатывает SQL. Storage outage сохраняет `purging`; crash после
+physical delete до commit допускает повтор с отсутствующим объектом.
+
+`FilesTrashCleanupJobHandler` читает keyset-порцию до 100 ID: истёкшие `trashed`
+и все `purging`. Под lock повторно проверяются Domain и сроки. Terminal/missing
+job IDs проверяются одной ограниченной выборкой; замена job сохраняет даты.
+`scheduled`/`running`, включая штатные retries и ещё не восстановленные leases,
+не дублируются. Истёкшие running возвращает shared `recover_stuck_jobs`; exhausted
+становятся terminal и получают новую purge job на очередном проходе корзины.
+
+Переходы, новые purge jobs и continuation атомарны в одном UoW. Продолжение
+сохраняет исходный cutoff/cursor/batch_size в payload, ID равен UUID5 от parent
+job ID и cursor; повтор родителя не создаёт дубль. Первый проход каждого нового
+часового окна стартует без cursor. Внешний dispatcher `jobs worker` содержит
+оба job types, а periodic registrar запускается при старте и каждый час.
+Регистраторы модулей независимы: сбой reference data не мешает Files.
+
+Регистрация старых/новых tenant использует bounded keyset lookup, проверяет
+наличие `files_registry` и штатный TenantGate. `freeze` допускается текущей
+политикой gate; exclusive admission и deleting/blocked состояния не обходятся.
+Устранён обнаруженный rollback registration: lookup таблицы теперь завершает
+свою connection-транзакцию до открытия UoW; исправлены обе регистрации Files,
+включая прежнюю `files.cleanup`. Orphan/multipart защитный интервал и tenant
+storage purge сохраняют прежние гарантии.
+
+После commit публикуются безопасные итоги и метрики expired/pending files/bytes,
+максимальной задержки, новых/recovery запросов, worker outcomes/duration.
+Backlog — снимок последнего committed scan данного worker, а не live storage
+quota; retry/exhausted различаются по production `SCHEDULED_JOBS` setting.
+
+Проверки среза: `test/test_files_workers_postgres.py` покрывает 720-часовую границу,
+111 кандидатов с первыми 100 running, durable continuation/restart/repeat,
+terminal/missing/scheduled/running, outages и failed commit, потерю lease,
+отмену SDK с удержанием gate/row lock, ownership бакета и исторических версий,
+1005 версий одного ключа, markers/соседние ключи, отсутствующий бакет,
+подмену envelope IDs, registrar для старых/freeze/unprepared tenant, recovery
+штатного worker и rollback continuation.
+
+Регрессия из 121 теста Files/PostgreSQL/MinIO/tenant migrations/registration/jobs/
+tenant deletion прошла на текущем Files поверх последнего коммита остальных
+модулей. Совместный прогон текущего workspace: 107 из 108 тестов успешны,
+включая все Files/worker/jobs; один новый Catalog/Currency migration test
+теряет ожидаемые `currency_exchange_rate_books/quotes` при downgrade.
+Более ранний совместный прогон из 121 теста выявил 13 ошибок tenant deletion
+(включая subtests): `administrator_required`, отсутствующая `cloud_identities`
+и HTTP admission. Эти параллельно изменяемые модули не исправлялись и не
+откатывались; полный workspace suite пока не зелёный.
+
+Финальные проверки на текущем workspace: 8 target tests ownership/absent bucket/
+registrars/архитектуры и 6 target tests boundary/recovery/backlog/архитектуры
+успешны; 18 offline lifecycle/parser/архитектурных проверок успешны. Black
+проверил 178 файлов, compile и scoped diff check прошли. Весь Files diff
+проверен по нормативному перечню, обязательные файлы/результаты всех 16 сценариев
+и внешние UoW/shared-session boundaries проверены отдельно от функциональных
+тестов. Сервисы одноразовые и удалены; production rollout не выполнялся.
+
+Следующий срез — этап 5: AdminLayout/routes/navigation, shadcn Vue таблицы,
+фильтры, upload/trash/purge dialogs и polling корзины. Затем этап 6 — rollout.
+Рабочие данные, tenant dates и рабочие миграции в этом срезе не изменялись.
+
 | Этап | Работы | Критерий готовности |
 | --- | --- | --- |
 | 1. Domain и миграция — выполнен | Lifecycle, фабрики/ошибки/locks, поля и constraints | Старые записи сохранены; инварианты и конкурентные переходы проверены |
-| 2. Read API | Два списка, overview, query ports/adapters, admin Depends | Search/диски/пагинация работают на сервере; HTTP DTO и архитектурные файлы полны |
-| 3. Мутации | Console upload, trash, restore, request purge; очередь в общем UoW | CSRF/admin/tenant проверены; rollback не оставляет ложный успех |
-| 4. Worker | Hourly trash cleanup, per-file purge, recovery, версии/ownership | Срок 30 дней, безопасные retries/crashes и отсутствие раннего удаления |
+| 2. Read API — выполнен | Два списка, overview, query ports/adapters, admin Depends | Search/диски/пагинация работают на сервере; HTTP DTO и архитектурные файлы полны |
+| 3. Мутации — выполнен | Console upload, trash, restore, request purge; очередь в общем UoW | CSRF/admin/tenant проверены; rollback не оставляет ложный успех |
+| 4. Worker — выполнен | Hourly trash cleanup, per-file purge, recovery, версии/ownership | Срок 30 дней, безопасные retries/crashes и отсутствие раннего удаления |
 | 5. Console | Admin routes/navigation, shadcn-композиция, форма и корзина | Все пользовательские сценарии и responsive/error/empty/pending состояния проверены |
 | 6. Rollout | Docs, настройки upload/worker, tenant migration, smoke test | Реальный tenant проходит загрузку → поиск → корзину → восстановление/удаление |
 
@@ -691,7 +921,7 @@ router/layout/navigation, установленными Vue/shadcn-компоне
 аннотации/транзакции, разделение HTTP-контрактов) прошли. Они проверяют
 существующую реализацию, а не ещё не созданные сценарии этого этапа.
 
-Domain/persistence, SQL-миграция и тесты среза 1 реализованы; остальные этапы
-остаются планом. Эти проверки не подтверждают работу будущих endpoints,
-Admin UI или worker. Реальный quota и импорты внешних объектов отсутствуют; мгновенное
+Domain/persistence, SQL-миграция, Read API, HTTP-мутации и worker срезов 1–4 реализованы;
+Console остаётся следующим срезом. Backend-проверки не подтверждают работу будущего
+Admin UI или rollout. Реальный quota и импорты внешних объектов отсутствуют; мгновенное
 удаление ровно в момент истечения срока не гарантируется при сбоях очереди/storage.

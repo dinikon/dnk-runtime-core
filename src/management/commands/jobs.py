@@ -1,4 +1,13 @@
 from __future__ import annotations
+from src.modules.files.presentation.jobs.purge_file import (
+    FilesPurgeJobHandler,
+    JOB_TYPE as FILES_PURGE_JOB_TYPE,
+)
+from src.modules.files.presentation.jobs.trash_cleanup import (
+    FilesTrashCleanupJobHandler,
+    ensure_trash_cleanup_jobs,
+    JOB_TYPE as FILES_TRASH_JOB_TYPE,
+)
 from src.modules.channels.application.publication_import_run.service import (
     JOB_TYPE as CHANNEL_IMPORT_JOB_TYPE,
 )
@@ -130,6 +139,10 @@ async def handle_worker(_args: argparse.Namespace) -> int:
             ),
             JOB_TYPE: ReferenceDataRefreshJobHandler(db_helper.session_factory),
             FILES_CLEANUP_JOB_TYPE: FilesCleanupJobHandler(db_helper.session_factory),
+            FILES_PURGE_JOB_TYPE: FilesPurgeJobHandler(db_helper.session_factory),
+            FILES_TRASH_JOB_TYPE: FilesTrashCleanupJobHandler(
+                db_helper.session_factory
+            ),
             CHANNEL_IMPORT_JOB_TYPE: PublicationImportJobRuntime(
                 db_helper.session_factory
             ),
@@ -152,20 +165,33 @@ async def handle_worker(_args: argparse.Namespace) -> int:
         shutdown_grace_seconds=settings.shutdown_grace_seconds,
     )
 
-    async def register_reference_jobs() -> None:
+    async def register_recurring_jobs() -> None:
+        """Регистрирует периодические задания независимо при сбое одного из модулей."""
         logger = logging.getLogger(__name__)
+        registrars = (
+            ("reference_data", ensure_weekly_jobs),
+            ("files.orphans", ensure_cleanup_jobs),
+            ("files.trash", ensure_trash_cleanup_jobs),
+        )
         while not stop.is_set():
-            try:
-                await ensure_weekly_jobs(db_helper.session_factory, datetime.now(UTC))
-                await ensure_cleanup_jobs(db_helper.session_factory, datetime.now(UTC))
-            except Exception:
-                logger.exception("Could not register weekly reference data jobs")
+            for kind, register_jobs in registrars:
+                try:
+                    await register_jobs(db_helper.session_factory, datetime.now(UTC))
+                except Exception as error:
+                    logger.warning(
+                        "Recurring job registration failed",
+                        extra={
+                            "event": "jobs.registration.failed",
+                            "job_kind": kind,
+                            "error_type": type(error).__name__,
+                        },
+                    )
             try:
                 await asyncio.wait_for(stop.wait(), timeout=3600)
             except TimeoutError:
                 pass
 
-    registrar = asyncio.create_task(register_reference_jobs())
+    registrar = asyncio.create_task(register_recurring_jobs())
     try:
         await worker.run(stop)
         return 0

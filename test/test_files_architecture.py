@@ -14,6 +14,14 @@ SCENARIOS = {
     "bucket/query/list_buckets": "tuple[BucketListItemDTO, ...]",
     "stored_file/command/cleanup_orphaned_objects": "CleanupOrphanedObjectsResultDTO",
     "bucket/command/purge_tenant_storage": "None",
+    "stored_file/query/list_files": "ListFilesResultDTO",
+    "stored_file/query/list_trashed_files": "ListTrashedFilesResultDTO",
+    "stored_file/query/get_files_overview": "GetFilesOverviewResultDTO",
+    "stored_file/command/trash_file": "TrashFileResultDTO",
+    "stored_file/command/restore_file": "RestoreFileResultDTO",
+    "stored_file/command/request_file_purge": "None",
+    "stored_file/command/purge_file": "None",
+    "stored_file/command/cleanup_expired_trash": "CleanupExpiredTrashResultDTO",
 }
 
 
@@ -109,23 +117,89 @@ class FilesArchitectureTests(unittest.TestCase):
             if path.name.endswith("mapper.py"):
                 self.assertFalse(any(isinstance(n, ast.Await) for n in ast.walk(tree)))
 
-    def test_http_is_read_only_and_has_separate_contracts(self) -> None:
-        """Отсутствуют download, upload, публичные URL и фиктивные request schemas."""
-        for root, scenario in [
-            ("storage_provider", "list_providers"),
-            ("bucket", "list_buckets"),
-        ]:
+    def test_http_has_explicit_method_whitelist_and_separate_contracts(self) -> None:
+        """Семь сценариев StoredFile разделены; нет download, presigned и пустых schemas."""
+        for root, scenarios in {
+            "storage_provider": [("list_providers", True, False)],
+            "bucket": [("list_buckets", True, False)],
+            "stored_file": [
+                ("list_files", True, False),
+                ("list_trashed_files", True, False),
+                ("get_files_overview", True, False),
+                ("upload_file", True, True),
+                ("trash_file", True, False),
+                ("restore_file", True, False),
+                ("request_file_purge", False, False),
+            ],
+        }.items():
             folder = ROOT / "presentation" / root
-            self.assertTrue((folder / "http/controller" / f"{scenario}.py").exists())
-            self.assertTrue((folder / "http/response" / f"{scenario}.py").exists())
-            self.assertFalse((folder / "http/request").exists())
+            for scenario, response, request in scenarios:
+                self.assertTrue(
+                    (folder / "http/controller" / f"{scenario}.py").exists()
+                )
+                self.assertEqual(
+                    (folder / "http/response" / f"{scenario}.py").exists(), response
+                )
+                self.assertEqual(
+                    (folder / "http/request" / f"{scenario}.py").exists(), request
+                )
             tree = ast.parse((folder / "router.py").read_text())
+            routes = {}
             for node in ast.walk(tree):
-                if isinstance(node, ast.keyword) and node.arg == "methods":
-                    self.assertEqual(ast.literal_eval(node.value), ["GET"])
+                if (
+                    isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "add_api_route"
+                ):
+                    kwargs = {item.arg: item.value for item in node.keywords}
+                    path = ast.literal_eval(node.args[0])
+                    methods = tuple(ast.literal_eval(kwargs["methods"]))
+                    routes[(path, methods)] = kwargs
+                    dependencies = ast.unparse(kwargs["dependencies"])
+                    if methods != ("GET",):
+                        self.assertIn("Depends(require_csrf)", dependencies)
+                    else:
+                        self.assertIn(
+                            "Depends(require_files_admin_context)", dependencies
+                        )
+            if root == "stored_file":
+                self.assertEqual(
+                    set(routes),
+                    {
+                        ("/files/items/", ("GET",)),
+                        ("/files/trash/", ("GET",)),
+                        ("/files/overview/", ("GET",)),
+                        ("/files/items/", ("POST",)),
+                        ("/files/items/{file_id}/", ("DELETE",)),
+                        ("/files/items/{file_id}/restore/", ("POST",)),
+                        ("/files/trash/{file_id}/", ("DELETE",)),
+                    },
+                )
+                purge = routes[("/files/trash/{file_id}/", ("DELETE",))]
+                self.assertEqual(ast.literal_eval(purge["status_code"]), 202)
+                self.assertEqual(ast.literal_eval(purge["response_model"]), None)
         for path in ROOT.rglob("*.py"):
             self.assertNotIn("presigned_get_object(", path.read_text())
             self.assertNotIn("presigned_put_object(", path.read_text())
+
+    def test_file_read_projections_do_not_load_or_change_aggregates(self) -> None:
+        """Read-side использует порт проекций, без фабрик агрегатов и write repository."""
+        paths = [
+            *ROOT.glob("application/stored_file/query/list_*/*.py"),
+            *ROOT.glob("application/stored_file/query/get_files_overview/*.py"),
+            ROOT / "infrastructure/stored_file/persistence/query_repository.py",
+            ROOT / "infrastructure/stored_file/persistence/query_mapper.py",
+        ]
+        for path in paths:
+            tree = ast.parse(path.read_text())
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and node.module:
+                    self.assertNotIn("domain.stored_file.aggregate", node.module)
+                    self.assertNotIn("domain.stored_file.repository", node.module)
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                    self.assertNotIn(
+                        node.func.attr, {"to_domain", "mark_uploaded", "move_to_trash"}
+                    )
 
     def test_compose_storage_is_private_and_lifecycle_worker_can_reach_it(self) -> None:
         """Dev-порты доступны только localhost; Instance override закрывает MinIO."""

@@ -167,8 +167,8 @@ class StoredFile:
         self.purge_after = instant + timedelta(days=30)
         self.status = StoredFileStatus.TRASHED
 
-    def restore_from_trash(self, now: datetime) -> None:
-        """Восстанавливает файл строго до истечения срока хранения корзины."""
+    def ensure_can_restore(self, now: datetime) -> None:
+        """Проверяет возможность восстановления без изменения состояния перед внешним I/O."""
         instant = self._operation_time(now)
         if self.status == StoredFileStatus.READY:
             return
@@ -176,6 +176,12 @@ class StoredFile:
             raise FileStateConflictError("Only trashed files can be restored.")
         if instant >= self.purge_after:
             raise FileTrashExpiredError("File trash retention has expired.")
+
+    def restore_from_trash(self, now: datetime) -> None:
+        """Восстанавливает файл строго до истечения срока хранения корзины."""
+        self.ensure_can_restore(now)
+        if self.status == StoredFileStatus.READY:
+            return
         self.deleted_at = None
         self.deleted_by = None
         self.purge_after = None

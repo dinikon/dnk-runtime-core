@@ -1,7 +1,5 @@
 from fastapi import APIRouter, Depends
-from src.modules.identity.presentation.auth.depends import (
-    require_authenticated_request_context,
-)
+from src.modules.files.presentation.depends.admin import require_files_admin_context
 from src.modules.files.presentation.bucket.http.controller.list_buckets import (
     list_buckets,
 )
@@ -15,5 +13,6 @@ router.add_api_route(
     list_buckets,
     methods=["GET"],
     response_model=list[ListBucketsItemResponse],
-    dependencies=[Depends(require_authenticated_request_context)],
+    dependencies=[Depends(require_files_admin_context)],
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )

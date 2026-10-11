@@ -7,8 +7,8 @@ from src.modules.catalog.infrastructure.persistence.models.category import Categ
 from src.modules.catalog.infrastructure.persistence.models.category_translation import (
     CategoryTranslationModel,
 )
-from src.modules.catalog.infrastructure.persistence.models.product_category import (
-    ProductCategoryModel,
+from src.modules.catalog.infrastructure.persistence.models.catalog_item_category import (
+    CatalogItemCategoryModel,
 )
 from src.modules.catalog.infrastructure.category.persistence.mapper import (
     CategoryMapper,
@@ -90,8 +90,8 @@ class SqlAlchemyCategoryRepository:
         """Читает наличие назначений и дочерних узлов без бизнес-решения."""
         return bool(
             await self._session.scalar(
-                select(ProductCategoryModel.product_id)
-                .where(ProductCategoryModel.category_id == identifier.uuid)
+                select(CatalogItemCategoryModel.catalog_item_id)
+                .where(CatalogItemCategoryModel.category_id == identifier.uuid)
                 .limit(1)
             )
         ) or bool(

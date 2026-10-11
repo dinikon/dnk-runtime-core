@@ -1,7 +1,5 @@
-from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.orm import Mapped, mapped_column
-from src.modules.shared.infrastructure.persistence.string_uuid import StringUUID
 from src.modules.tenancy.infrastructure.tenant.persistence.tenant_base import TenantBase
 from src.modules.shared.infrastructure.persistence.entity_audit_mixin import (
     EntityAuditMixin,

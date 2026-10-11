@@ -7,8 +7,8 @@ from src.modules.catalog.infrastructure.persistence.models.tag import TagModel
 from src.modules.catalog.infrastructure.persistence.models.tag_translation import (
     TagTranslationModel,
 )
-from src.modules.catalog.infrastructure.persistence.models.product_tag import (
-    ProductTagModel,
+from src.modules.catalog.infrastructure.persistence.models.catalog_item_tag import (
+    CatalogItemTagModel,
 )
 from src.modules.catalog.infrastructure.tag.persistence.mapper import TagMapper
 
@@ -86,8 +86,8 @@ class SqlAlchemyTagRepository:
         """Читает наличие назначений и дочерних узлов без бизнес-решения."""
         return bool(
             await self._session.scalar(
-                select(ProductTagModel.product_id)
-                .where(ProductTagModel.tag_id == identifier.uuid)
+                select(CatalogItemTagModel.catalog_item_id)
+                .where(CatalogItemTagModel.tag_id == identifier.uuid)
                 .limit(1)
             )
         )

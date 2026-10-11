@@ -1,5 +1,4 @@
 from pydantic import BaseModel, ConfigDict, Field
-from uuid import UUID
 
 
 class CreateTagRequest(BaseModel):

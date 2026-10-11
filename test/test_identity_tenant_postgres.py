@@ -47,11 +47,11 @@ from src.modules.identity.presentation.email.depends import get_email_service
 from src.modules.tenancy.application.ports.schema_bootstrap import (
     TenantSchemaBootstrapContextFactory,
 )
-from src.modules.tenancy.application.tenant.command.create_tenant_command import (
+from src.modules.tenancy.application.tenant.command.create_tenant.command import (
     CreateTenantCommand,
 )
-from src.modules.tenancy.application.tenant.use_case.create_tenant import (
-    CreateTenantUseCase,
+from src.modules.tenancy.application.tenant.command.create_tenant.handler import (
+    CreateTenantHandler,
 )
 from src.modules.tenancy.application.tenant.onboarding import TenantOnboardingService
 from src.modules.tenancy.infrastructure.adapter.schema_bootstrap import (
@@ -185,7 +185,9 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
                     raise RuntimeError("Injected admin failure after insert")
 
                 provisioning.create_tenant_admin = fail_after_insert
-            use_case = CreateTenantUseCase(
+            use_case = CreateTenantHandler(
+                currency_validator=AsyncMock(),
+                currency_settings_writer=AsyncMock(),
                 tenant_onboarding_service=TenantOnboardingService(
                     SqlAlchemyTenantRepository(uow.session),
                     SqlAlchemyTenantDomainRepository(uow.session),

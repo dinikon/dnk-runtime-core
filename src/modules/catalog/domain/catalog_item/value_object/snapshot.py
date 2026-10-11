@@ -1,0 +1,87 @@
+from src.modules.shared.domain.value_object.entity_id import EntityIdVO
+from dataclasses import dataclass
+from datetime import datetime
+from decimal import Decimal
+from src.modules.catalog.domain.catalog_item.value_object.kind import (
+    CatalogItemKind,
+    CatalogItemStatus,
+)
+from src.modules.catalog.domain.catalog_item.value_object.override import OverrideVO
+from src.modules.catalog.domain.catalog_item.value_object.price import (
+    PriceSpecificationVO,
+)
+from src.modules.catalog.domain.catalog_item.value_object.stock import (
+    StockSpecificationVO,
+)
+from src.modules.catalog.domain.catalog_item.value_object.measurements import (
+    DimensionsVO,
+)
+from src.modules.catalog.domain.catalog_item.value_object.attribute import (
+    EnumAttributeAssignmentVO,
+)
+from src.modules.catalog.domain.catalog_item.entity.gallery import CatalogItemGallery
+from src.modules.catalog.domain.catalog_item.entity.metadata import CatalogMetadataEntry
+from src.modules.catalog.domain.catalog_item.value_object.selection import (
+    VariationSelectionVO,
+)
+from src.modules.catalog.domain.catalog_item.value_object.axis import VariationAxis
+
+
+@dataclass(frozen=True, slots=True)
+class CatalogItemValuesSnapshot:
+    """Значения одного узла для чистой политики без восстановления агрегата в query."""
+
+    id: EntityIdVO
+    kind: CatalogItemKind
+    parent_id: EntityIdVO | None
+    product_type_id: EntityIdVO | None
+    status: CatalogItemStatus
+    sku: str | None
+    virtual: OverrideVO[bool]
+    price: OverrideVO[PriceSpecificationVO]
+    weight: OverrideVO[Decimal]
+    dimensions: OverrideVO[DimensionsVO]
+    stock: StockSpecificationVO | None
+    translations: dict[str, dict[str, OverrideVO[str]]]
+    galleries: dict[str, CatalogItemGallery]
+    attributes: tuple[EnumAttributeAssignmentVO, ...]
+    metadata: tuple[CatalogMetadataEntry, ...]
+    selection: VariationSelectionVO
+    axes: tuple[VariationAxis, ...]
+    default_selection: VariationSelectionVO | None
+    category_ids: tuple[EntityIdVO, ...]
+    primary_category_id: EntityIdVO | None
+    tag_ids: tuple[EntityIdVO, ...]
+    revision: int
+    created_at: datetime
+    updated_at: datetime
+    created_by: EntityIdVO
+    updated_by: EntityIdVO
+
+
+@dataclass(frozen=True, slots=True)
+class ValueOrigin:
+    """Источник эффективного значения для редакторов и канальных проекций."""
+
+    source: str
+    item_id: EntityIdVO | None
+    locale: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class EffectiveCatalogItemValues:
+    """Разрешённые значения одного узла без канальных overrides."""
+
+    content: dict[str, str] | None
+    virtual: bool
+    price_specification: PriceSpecificationVO | None
+    price: Decimal | None
+    weight: Decimal | None
+    dimensions: DimensionsVO | None
+    stock: StockSpecificationVO | None
+    stock_source_id: EntityIdVO | None
+    gallery: CatalogItemGallery | None
+    attributes: tuple[EnumAttributeAssignmentVO, ...]
+    metadata: tuple[CatalogMetadataEntry, ...]
+    available_for_publication: bool
+    origins: dict[str, ValueOrigin]

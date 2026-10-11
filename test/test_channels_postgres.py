@@ -244,7 +244,7 @@ class ChannelsPostgresTests(unittest.IsolatedAsyncioTestCase):
                 {c["name"] for c in columns}, set(ChannelModel.__table__.c.keys())
             )
             await TenantMigrator().downgrade(
-                connection, self.schemas[0], "0012_catalog"
+                connection, self.schemas[0], "0011_inventory_skus"
             )
             exists = await connection.run_sync(
                 lambda sync: inspect(sync).has_table("channels", schema=self.schemas[0])

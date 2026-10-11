@@ -11,6 +11,7 @@ x-backend-common: &backend-common
     FILES__ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
     FILES__SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
     FILES__SECURE: "false"
+    FILES__CONSOLE_MAX_UPLOAD_BYTES: ${FILES__CONSOLE_MAX_UPLOAD_BYTES:-104857600}
     DB_HOST: postgres
     DB_PORT: 5432
     DB_USERNAME: ${DB_USERNAME:-postgres}
@@ -89,7 +90,7 @@ services:
     container_name: dnk-frontend
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${FRONTEND_PORT:-80}:80"
+      - "${FRONTEND_PORT:-80}:80"
     depends_on:
       api:
         condition: service_healthy

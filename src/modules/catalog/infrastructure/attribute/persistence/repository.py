@@ -1,5 +1,8 @@
-from src.modules.catalog.infrastructure.persistence.models.product_attribute_value import (
-    ProductAttributeValueModel,
+from src.modules.catalog.infrastructure.persistence.models.catalog_item_attribute import (
+    CatalogItemAttributeModel,
+)
+from src.modules.catalog.infrastructure.persistence.models.catalog_item_attribute_option import (
+    CatalogItemAttributeOptionModel,
 )
 from src.modules.catalog.infrastructure.persistence.models.attribute import (
     AttributeModel,
@@ -22,12 +25,6 @@ from src.modules.catalog.domain.attribute.value_object.option_id import (
     AttributeOptionIdVO,
 )
 from src.modules.catalog.domain.attribute.error import AttributeNotFoundError
-from src.modules.catalog.infrastructure.persistence.models.product_axis import (
-    ProductAxisModel,
-)
-from src.modules.catalog.infrastructure.persistence.models.product_axis_option import (
-    ProductAxisOptionModel,
-)
 from src.modules.catalog.infrastructure.attribute.persistence.mapper import (
     AttributeMapper,
 )
@@ -146,17 +143,11 @@ class SqlAlchemyAttributeRepository:
         )
 
     async def is_used(self, identifier: AttributeIdVO) -> bool:
-        """Проверяет наличие осей, ссылающихся на определение."""
+        """Читает наличие общих назначений или осей CatalogItem."""
         return bool(
             await self._session.scalar(
-                select(ProductAttributeValueModel.product_id)
-                .where(ProductAttributeValueModel.attribute_id == identifier.uuid)
-                .limit(1)
-            )
-        ) or bool(
-            await self._session.scalar(
-                select(ProductAxisModel.attribute_id)
-                .where(ProductAxisModel.attribute_id == identifier.uuid)
+                select(CatalogItemAttributeModel.catalog_item_id)
+                .where(CatalogItemAttributeModel.attribute_id == identifier.uuid)
                 .limit(1)
             )
         )
@@ -164,21 +155,12 @@ class SqlAlchemyAttributeRepository:
     async def used_options(
         self, identifier: AttributeIdVO
     ) -> frozenset[AttributeOptionIdVO]:
-        """Читает разрешённые options всех осей, а не только выбранных позиций."""
+        """Читает все разрешённые options, включая невыбранные варианты осей."""
         ids = (
             await self._session.scalars(
-                select(ProductAxisOptionModel.option_id).where(
-                    ProductAxisOptionModel.attribute_id == identifier.uuid
+                select(CatalogItemAttributeOptionModel.option_id).where(
+                    CatalogItemAttributeOptionModel.attribute_id == identifier.uuid
                 )
             )
         ).all()
-        general = (
-            await self._session.scalars(
-                select(ProductAttributeValueModel.option_id).where(
-                    ProductAttributeValueModel.attribute_id == identifier.uuid
-                )
-            )
-        ).all()
-        return frozenset(
-            AttributeOptionIdVO(identifier) for identifier in (*ids, *general)
-        )
+        return frozenset(AttributeOptionIdVO(i) for i in ids)

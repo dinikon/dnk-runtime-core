@@ -25,9 +25,6 @@ from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations imp
     TenantMigrator,
 )
 from src.modules.catalog.presentation.router import router
-from src.modules.catalog.infrastructure.product.persistence.repository import (
-    SqlAlchemyProductRepository,
-)
 from src.modules.shared.infrastructure.persistence.unit_of_work.sqlalchemy import (
     UnitOfWork,
 )
@@ -66,6 +63,11 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
                     ),
                     {"code": code},
                 )
+            await connection.execute(
+                text(
+                    "INSERT INTO public.ref_currencies(code,numeric_code,name,minor_units,active) VALUES ('UAH','980','UAH',2,true) ON CONFLICT(code) DO UPDATE SET active=true"
+                )
+            )
             for schema in self.schemas:
                 await connection.execute(CreateSchema(schema))
                 await TenantMigrator().upgrade(connection, schema)
@@ -80,7 +82,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         scheme = "http" if dnk_config.AUTH.allow_insecure_http else "https"
         origin = f"{scheme}://tenant.example"
         self.client = AsyncClient(
-            transport=ASGITransport(app=self.app, raise_app_exceptions=False),
+            transport=ASGITransport(app=self.app, raise_app_exceptions=True),
             base_url=origin,
         )
         token = (await self.client.get("/csrf")).json()["csrf_token"]
@@ -120,407 +122,626 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, status, response.text)
         return response.json() if status != 204 and status < 500 else {}
 
-    async def create_product(self, **fields: object) -> dict:
-        """Создаёт настоящий SIMPLE через HTTP."""
-        return await self.request("POST", "/products/simple", fields, 201)
+    async def create_item(self) -> dict:
+        return await self.request("POST", "/items/simple", {}, 201)
 
-    async def test_translations_html_isolation_and_revisions(self) -> None:
-        """Проверяет PRODUCT, запрет VARIANT у SIMPLE, версии, HTML и tenant isolation."""
-        types = await self.request("GET", "/product-types?locale=ru")
-        default = types["items"][0]
-        schema_version = default["schema_version"]
-        self.assertEqual(schema_version, 1)
-        self.assertEqual(default["revision"], 1)
+    async def test_fixed_default_schema_localized_labels(self) -> None:
+        """Default и три блока имеют фиксированные подписи, без редактора схемы."""
+        result = await self.request("GET", "/product-type/default?locale=ru")
+        self.assertEqual(result["locale"], "ru")
+        self.assertEqual(result["schema"]["label"], "Стандартный")
         self.assertEqual(
-            {(b["code"], b["scope"]) for b in default["blocks"]},
-            {
-                ("title", "PRODUCT"),
-                ("description", "PRODUCT"),
-                ("short_description", "PRODUCT"),
-                ("title", "VARIANT"),
-                ("description", "VARIANT"),
-            },
+            [b["code"] for b in result["schema"]["blocks"]],
+            ["name", "desc", "short_desc"],
         )
-        title = next(
-            b["block_id"]
-            for b in default["blocks"]
-            if b["code"] == "title" and b["scope"] == "PRODUCT"
+        self.assertEqual(
+            [b["label"] for b in result["schema"]["blocks"]],
+            ["Название", "Описание", "Краткое описание"],
         )
-        description = next(
-            b["block_id"]
-            for b in default["blocks"]
-            if b["code"] == "description" and b["scope"] == "PRODUCT"
+        missing = await self.request("GET", "/product-type/default?locale=fr")
+        self.assertIsNone(missing["schema"]["label"])
+        self.assertTrue(all(b["label"] is None for b in missing["schema"]["blocks"]))
+        await self.request("GET", "/product-type/default", status=422)
+        await self.request("GET", "/product-type/default?locale=bad_locale", status=422)
+
+    async def test_read_snapshot_precedes_identity_sql(self) -> None:
+        """Read isolation назначается до SQL аутентификации на общем UoW."""
+        from src.modules.identity.presentation.auth.depends import (
+            get_optional_request_context,
         )
-        p = await self.create_product()
-        item = "/products/" + p["id"]
-        variant = item + "/variants/" + p["variant_id"]
-        self.assertIsNone((await self.request("GET", item + "?locale=ru"))["content"])
-        await self.request(
+        from src.modules.shared.presentation.persistence.depends import UoWDep
+
+        created = await self.create_item()
+        isolation: list[str] = []
+
+        async def authenticate(uow: UoWDep) -> RequestContext:
+            await uow.session.execute(text("SELECT 1"))
+            isolation.append(
+                await uow.session.scalar(text("SHOW transaction_isolation"))
+            )
+            return self.context
+
+        self.app.dependency_overrides[get_optional_request_context] = authenticate
+        await self.request("GET", f"/items/{created['id']}?locale=en")
+        self.assertEqual(isolation, ["repeatable read"])
+
+    async def test_content_revisions_locale_and_sanitization(self) -> None:
+        item = await self.create_item()
+        ident = item["id"]
+        changed = await self.request(
             "PUT",
-            item + "/content/ru",
+            f"/items/{ident}/content/en",
             {
-                "expected_revision": 1,
-                "expected_schema_version": schema_version,
+                "expected_root_revision": 1,
+                "expected_schema_version": 1,
                 "values": {
-                    title: "Термобутылка",
-                    description: '<p onclick="bad()">Текст<script>alert(1)</script></p>',
+                    "name": {"mode": "set", "value": "Title"},
+                    "desc": {
+                        "mode": "set",
+                        "value": "<p>Good</p><script>alert(1)</script>",
+                    },
                 },
             },
         )
-        saved = await self.request("GET", item + "?locale=ru")
-        self.assertNotIn("script", saved["content"][description])
-        self.assertNotIn("onclick", saved["content"][description])
-        self.assertIsNone((await self.request("GET", item + "?locale=en"))["content"])
+        self.assertEqual(changed["root_revision"], 2)
+        read = await self.request("GET", f"/items/{ident}?locale=en")
+        self.assertEqual(read["item"]["effective"]["content"]["name"], "Title")
+        self.assertNotIn("<script", read["item"]["effective"]["content"]["desc"])
+        missing = await self.request("GET", f"/items/{ident}?locale=ru")
+        self.assertIsNone(missing["item"]["effective"]["content"])
         await self.request(
             "PUT",
-            variant + "/content/en",
-            {
-                "expected_revision": 2,
-                "expected_schema_version": schema_version,
-                "values": {title: "Position"},
-            },
-            422,
-        )
-        await self.request(
-            "PUT",
-            variant + "/content/en",
-            {
-                "expected_revision": 2,
-                "expected_schema_version": schema_version,
-                "values": {},
-            },
-            422,
-        )
-        await self.request(
-            "DELETE", variant + "/content/en?expected_revision=2", status=422
-        )
-        unchanged = await self.request("GET", item + "?locale=ru")
-        self.assertEqual(unchanged["revision"], 2)
-        self.assertIsNone(unchanged["variants"][0]["content"])
-        self.assertEqual(unchanged["variants"][0]["locales"], [])
-        await self.request(
-            "PUT",
-            item + "/content/ru",
-            {
-                "expected_revision": 1,
-                "expected_schema_version": schema_version,
-                "values": {title: "stale"},
-            },
+            f"/items/{ident}/status",
+            {"expected_root_revision": 1, "status": "active"},
             409,
         )
-        await self.request(
-            "GET", item + "/variants/" + str(uuid4()) + "?locale=ru", status=404
-        )
-        await self.request("GET", item, status=422)
-        found = await self.request(
-            "GET", "/products?locale=ru&search=Термобутылка&page_size=1"
-        )
-        self.assertEqual(found["total"], 1)
-        async with self.engine.begin() as connection:
-            await connection.execute(
-                text("UPDATE public.ref_locales SET active=false WHERE code='ru'")
-            )
-        self.assertEqual(
-            (await self.request("GET", item + "?locale=ru"))["content"][title],
-            "Термобутылка",
-        )
-        await self.request(
-            "PUT",
-            item + "/content/ru",
-            {
-                "expected_revision": 2,
-                "expected_schema_version": schema_version,
-                "values": {title: "new"},
-            },
-            422,
-        )
+        # A parallel tenant cannot resolve the item identity.
         self.app.state.test_context = replace(
             self.context,
             principal=replace(self.context.principal, tenant_id=str(self.other)),
         )
-        await self.request("GET", item + "?locale=ru", status=404)
-        self.assertEqual((await self.request("GET", "/products?locale=ru"))["total"], 0)
+        await self.request("GET", f"/items/{ident}?locale=en", status=404)
 
-    async def test_custom_type_without_title_and_schema_protection(self) -> None:
-        """Проверяет пользовательскую схему, ссылки, смену типа и удаление."""
-        block = await self.request(
+    async def test_single_table_structure_effective_and_stock(self) -> None:
+        attribute = await self.request(
             "POST",
-            "/content-blocks",
+            "/attributes",
             {
-                "code": "instructions",
+                "code": "color",
                 "locale": "en",
-                "label": "Instructions",
-                "value_type": "text",
+                "label": "Color",
+                "options": [
+                    {"code": "red", "label": "Red"},
+                    {"code": "blue", "label": "Blue"},
+                ],
             },
             201,
         )
-        links = [
+        details = await self.request("GET", f"/attributes/{attribute['id']}?locale=en")
+        options = [o["id"] for o in details["options"]]
+        structure = {
+            "axes": [
+                {
+                    "attribute_id": attribute["id"],
+                    "option_ids": options,
+                    "position": 0,
+                    "visible": False,
+                }
+            ],
+            "variants": [
+                {"selection": [{"attribute_id": attribute["id"], "option_id": o}]}
+                for o in options
+            ],
+        }
+        created = await self.request(
+            "POST", "/items/variable", {"structure": structure}, 201
+        )
+        root = created["id"]
+        child = created["child_ids"][0]
+        await self.request(
+            "PUT",
+            f"/items/{root}/price",
             {
-                "block_id": block["id"],
-                "scope": "PRODUCT",
-                "required": True,
-                "position": 0,
-            }
-        ]
-        typ = await self.request(
-            "POST",
-            "/product-types",
-            {
-                "code": "equipment",
-                "locale": "en",
-                "label": "Equipment",
-                "blocks": links,
+                "expected_root_revision": 1,
+                "price": {
+                    "mode": "set",
+                    "value": {"regular_price": "10.100001", "currency": "UAH"},
+                },
             },
+        )
+        await self.request(
+            "PUT",
+            f"/items/{root}/stock",
+            {
+                "expected_root_revision": 2,
+                "stock": {
+                    "manage_stock": "own",
+                    "stock_quantity": 0,
+                    "backorders": "notify",
+                },
+            },
+        )
+        await self.request(
+            "PUT",
+            f"/items/{child}/stock",
+            {"expected_root_revision": 3, "stock": {"manage_stock": "parent"}},
+        )
+        read = await self.request("GET", f"/items/{child}?locale=en")
+        self.assertEqual(read["item"]["root_id"], root)
+        self.assertEqual(read["item"]["effective"]["price"], "10.100001")
+        self.assertEqual(read["item"]["stock_status"], "on_backorder")
+        self.assertEqual(read["item"]["effective"]["stock_source_id"], root)
+        self.assertFalse(read["item"]["effective"]["attributes"][0]["visible"])
+        listed = await self.request("GET", f"/items/{root}/variants?locale=en&limit=1")
+        self.assertEqual(listed["total"], 2)
+        await self.request(
+            "DELETE", f"/attributes/{attribute['id']}?expected_revision=1", status=409
+        )
+
+        # The public batch port keeps source revisions and rejects an outdated plan.
+        from datetime import datetime, UTC
+        from src.modules.catalog.domain.catalog_item.value_object.identifier import (
+            CatalogItemIdVO,
+        )
+        from src.modules.catalog.application.catalog_item.query.get_catalog_items_publication_snapshot.query import (
+            GetCatalogItemsPublicationSnapshotQuery,
+        )
+        from src.modules.catalog.infrastructure.catalog_item.persistence.query_repository import (
+            SqlAlchemyCatalogItemQueryRepository,
+        )
+        from src.modules.catalog.domain.error import CatalogConflictError
+        from src.modules.tenancy.infrastructure.tenant.persistence.tenant_connection import (
+            bind_tenant_schema,
+        )
+
+        async with self.engine.connect() as connection:
+            from uuid import UUID
+
+            await bind_tenant_schema(connection, self.tenant.uuid, self.naming)
+            async with UnitOfWork(
+                async_sessionmaker(connection, expire_on_commit=False)
+            ) as uow:
+                await uow.session.execute(
+                    text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+                )
+                repository = SqlAlchemyCatalogItemQueryRepository(uow.session)
+                query = GetCatalogItemsPublicationSnapshotQuery(
+                    self.tenant,
+                    (CatalogItemIdVO.from_value(child),),
+                    "en",
+                    expected_root_revisions={UUID(root): 4},
+                )
+                snapshot = await repository.snapshot(query, datetime.now(UTC))
+                self.assertEqual(snapshot.items[0].root_revision, 4)
+                self.assertEqual(
+                    snapshot.items[0].effective.stock_source_id.uuid, UUID(root)
+                )
+                with self.assertRaises(CatalogConflictError):
+                    await repository.snapshot(
+                        replace(query, expected_root_revisions={UUID(root): 3}),
+                        datetime.now(UTC),
+                    )
+
+        # A variable without its own price still exposes the currency of priced children.
+        await self.request(
+            "PUT",
+            f"/items/{root}/status",
+            {"expected_root_revision": 4, "status": "active"},
+        )
+        await self.request(
+            "PUT",
+            f"/items/{child}/status",
+            {"expected_root_revision": 5, "status": "active"},
+        )
+        await self.request(
+            "PUT",
+            f"/items/{child}/price",
+            {
+                "expected_root_revision": 6,
+                "price": {
+                    "mode": "set",
+                    "value": {"regular_price": "10.100001", "currency": "UAH"},
+                },
+            },
+        )
+        await self.request(
+            "PUT",
+            f"/items/{root}/price",
+            {"expected_root_revision": 7, "price": {"mode": "clear"}},
+        )
+        listed = await self.request("GET", "/items?locale=en")
+        row = next(i for i in listed["items"] if i["id"] == root)
+        self.assertEqual(
+            (row["price_min"], row["price_max"], row["currency"]),
+            ("10.100001", "10.100001", "UAH"),
+        )
+
+    async def test_classification_gallery_and_unique_sku(self) -> None:
+        item = await self.create_item()
+        ident = item["id"]
+        category = await self.request(
+            "POST",
+            "/categories",
+            {"locale": "en", "label": "Category", "parent_id": None},
             201,
         )
-        p = await self.create_product(product_type_id=typ["id"])
-        item = "/products/" + p["id"]
         await self.request(
             "PUT",
-            item + "/content/en",
+            f"/items/{ident}/categories",
             {
-                "expected_revision": 1,
-                "expected_schema_version": 1,
-                "values": {block["id"]: "Manual"},
+                "expected_root_revision": 1,
+                "category_ids": [category["id"]],
+                "primary_category_id": category["id"],
+            },
+        )
+        await self.request(
+            "DELETE", f"/categories/{category['id']}?expected_revision=1", status=409
+        )
+        await self.request(
+            "PUT",
+            f"/items/{ident}/gallery/en",
+            {
+                "expected_root_revision": 2,
+                "gallery": {"images": [], "primary_image_id": None},
             },
         )
         await self.request(
             "PUT",
-            "/product-types/" + typ["id"] + "/schema",
-            {"expected_revision": 1, "expected_schema_version": 1, "blocks": []},
-            422,
+            f"/items/{ident}/sku",
+            {"expected_root_revision": 3, "sku": " SKU-1 "},
         )
-        await self.request(
-            "DELETE",
-            "/content-blocks/" + block["id"] + "?expected_revision=1",
-            status=409,
-        )
+        another = await self.create_item()
         await self.request(
             "PUT",
-            "/content-blocks/" + block["id"],
-            {
-                "expected_revision": 1,
-                "locale": "en",
-                "label": "Manual",
-                "value_type": "rich_text",
-            },
+            f"/items/{another['id']}/sku",
+            {"expected_root_revision": 1, "sku": "SKU-1"},
             409,
         )
-        await self.request(
-            "DELETE", "/product-types/" + typ["id"] + "?expected_revision=1", status=409
+        read = await self.request("GET", f"/items/{another['id']}?locale=en")
+        self.assertEqual(read["item"]["root_revision"], 1)
+        listed = await self.request(
+            "GET", f"/items?locale=en&category_id={category['id']}"
         )
-        await self.request(
-            "PUT",
-            item + "/type",
-            {
-                "expected_revision": 2,
-                "product_type_id": "c0000000-0000-4000-8000-000000000001",
-            },
-            422,
-        )
-        await self.request(
-            "PUT",
-            "/product-types/" + typ["id"] + "/translations/ru",
-            {"expected_revision": 1, "label": "Оборудование"},
-        )
-        await self.request(
-            "PUT",
-            "/product-types/" + typ["id"] + "/schema",
-            {
-                "expected_revision": 2,
-                "expected_schema_version": 1,
-                "blocks": [{**links[0], "required": False}],
-            },
-        )
-        await self.request(
-            "PUT",
-            item + "/content/en",
-            {
-                "expected_revision": 2,
-                "expected_schema_version": 1,
-                "values": {block["id"]: "stale schema"},
-            },
-            409,
-        )
-        await self.request(
-            "DELETE", item + "/content/en?expected_revision=2", status=204
-        )
-        self.assertIsNone((await self.request("GET", item + "?locale=en"))["content"])
-        await self.request(
-            "PUT",
-            item + "/variants/" + p["variant_id"] + "/properties",
-            {"expected_revision": 3, "virtual": True, "downloadable": False},
-        )
-        await self.request(
-            "PUT",
-            item + "/variants/" + p["variant_id"] + "/properties",
-            {"expected_revision": 4, "virtual": True, "downloadable": True},
-            422,
-        )
-        await self.request("DELETE", item + "?expected_revision=4", status=204)
-        await self.request(
-            "DELETE", "/product-types/" + typ["id"] + "?expected_revision=3", status=204
-        )
-        await self.request(
-            "DELETE",
-            "/content-blocks/" + block["id"] + "?expected_revision=1",
-            status=204,
+        self.assertEqual(listed["total"], 1)
+
+    async def test_competing_writes_and_csrf(self) -> None:
+        created = await self.create_item()
+        ident = created["id"]
+
+        async def change(status: str) -> int:
+            response = await self.client.put(
+                self.base + f"/items/{ident}/status",
+                headers=self.headers,
+                json={"expected_root_revision": 1, "status": status},
+            )
+            return response.status_code
+
+        statuses = await asyncio.gather(change("active"), change("archived"))
+        self.assertEqual(sorted(statuses), [200, 409])
+        denied = await self.client.post(self.base + "/items/simple", json={})
+        self.assertEqual(denied.status_code, 403)
+
+    async def test_fresh_baseline_downgrade_upgrade_and_drift(self) -> None:
+        from alembic.autogenerate import compare_metadata
+        from alembic.migration import MigrationContext
+        from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migration_metadata import (
+            migration_metadata,
         )
 
-    async def test_system_definitions_duplicates_csrf_and_rollback(self) -> None:
-        """Защищает системные данные и откатывает отказ после INSERT и commit."""
-        await self.request(
-            "DELETE",
-            "/product-types/c0000000-0000-4000-8000-000000000001?expected_revision=1",
-            status=409,
-        )
-        await self.request(
-            "POST",
-            "/content-blocks",
-            {
-                "code": "title",
-                "locale": "en",
-                "label": "Duplicate",
-                "value_type": "text",
-            },
-            409,
-        )
-        response = await self.client.post(self.base + "/products/simple", json={})
-        self.assertEqual(response.status_code, 403)
-        original = SqlAlchemyProductRepository.add
+        async with self.engine.begin() as connection:
+            schema = self.schemas[0]
+            await TenantMigrator().downgrade(
+                connection, schema, "0022_tenant_currency_settings"
+            )
+            self.assertIsNone(
+                await connection.scalar(
+                    text("SELECT to_regclass(:table)"),
+                    {"table": schema + ".catalog_item"},
+                )
+            )
+            self.assertIsNotNone(
+                await connection.scalar(
+                    text("SELECT to_regclass(:table)"),
+                    {"table": schema + ".files_registry"},
+                )
+            )
+            await TenantMigrator().upgrade(connection, schema)
+            await connection.execute(
+                text("SELECT set_config('search_path',:schema,true)"),
+                {"schema": schema},
+            )
 
-        async def fail(
-            repository: SqlAlchemyProductRepository, product: Product
-        ) -> None:
-            """Имитирует сбой после записи всех частей агрегата."""
-            await original(repository, product)
-            raise RuntimeError("write failed")
+            def compare(sync):
+                old_default = sync.dialect.default_schema_name
+                sync.dialect.default_schema_name = schema
+                try:
+                    return compare_metadata(
+                        MigrationContext.configure(
+                            sync, opts={"include_schemas": False, "compare_type": True}
+                        ),
+                        migration_metadata(),
+                    )
+                finally:
+                    sync.dialect.default_schema_name = old_default
 
-        with patch.object(SqlAlchemyProductRepository, "add", fail):
-            await self.request("POST", "/products/simple", {}, 500)
-        self.assertEqual((await self.request("GET", "/products?locale=en"))["total"], 0)
+            differences = await connection.run_sync(compare)
+            self.assertEqual(differences, [])
 
-        async def commit_failure(uow: UnitOfWork) -> None:
-            """Имитирует отказ commit внешнего UoW."""
-            raise RuntimeError("commit failed")
-
-        with patch.object(UnitOfWork, "commit", commit_failure):
-            await self.request("POST", "/products/simple", {}, 500)
-        self.assertEqual((await self.request("GET", "/products?locale=en"))["total"], 0)
-
-    async def test_concurrent_schema_and_content_are_serialized(self) -> None:
-        """Блокировка не оставляет контент, несовместимый с новой схемой."""
-        block = await self.request(
-            "POST",
-            "/content-blocks",
-            {"code": "note", "locale": "en", "label": "Note", "value_type": "text"},
-            201,
-        )
-        links = [
-            {
-                "block_id": block["id"],
-                "scope": "PRODUCT",
-                "required": False,
-                "position": 0,
-            }
-        ]
-        typ = await self.request(
-            "POST",
-            "/product-types",
-            {"code": "notes", "locale": "en", "label": "Notes", "blocks": links},
-            201,
-        )
-        p = await self.create_product(product_type_id=typ["id"])
-        content = self.client.put(
-            self.base + "/products/" + p["id"] + "/content/en",
-            headers=self.headers,
-            json={
-                "expected_revision": 1,
-                "expected_schema_version": 1,
-                "values": {block["id"]: "keep"},
-            },
-        )
-        schema = self.client.put(
-            self.base + "/product-types/" + typ["id"] + "/schema",
-            headers=self.headers,
-            json={"expected_revision": 1, "expected_schema_version": 1, "blocks": []},
-        )
-        a, b = await asyncio.gather(content, schema)
-        self.assertIn((a.status_code, b.status_code), [(200, 422), (409, 200)])
-        product = await self.request("GET", "/products/" + p["id"] + "?locale=en")
-        current = await self.request(
-            "GET", "/product-types/" + typ["id"] + "?locale=en"
-        )
-        if product["content"] is not None:
-            self.assertEqual(len(current["blocks"]), 1)
-
-    async def test_relational_constraints_empty_translation_and_migration(self) -> None:
-        """Проверяет реальные FK, отсутствие JSON и round-trip пустого перевода."""
+    async def test_inactive_locale_reads_and_sql_constraints(self) -> None:
         from sqlalchemy.exc import IntegrityError
 
-        typ = await self.request(
-            "POST",
-            "/product-types",
-            {"code": "empty", "locale": "en", "label": "Empty", "blocks": []},
-            201,
-        )
-        p = await self.create_product(product_type_id=typ["id"])
-        item = "/products/" + p["id"]
+        created = await self.create_item()
+        ident = created["id"]
         await self.request(
             "PUT",
-            item + "/content/en",
-            {"expected_revision": 1, "expected_schema_version": 1, "values": {}},
+            f"/items/{ident}/content/en",
+            {
+                "expected_root_revision": 1,
+                "expected_schema_version": 1,
+                "values": {"name": {"mode": "set", "value": "Kept"}},
+            },
         )
-        self.assertEqual(
-            (await self.request("GET", item + "?locale=en"))["content"], {}
-        )
-        self.assertIsNone((await self.request("GET", item + "?locale=ru"))["content"])
         async with self.engine.begin() as connection:
-            types = (
-                (
-                    await connection.execute(
-                        text(
-                            "SELECT data_type FROM information_schema.columns WHERE table_schema=:schema AND table_name LIKE 'catalog_%'"
-                        ),
-                        {"schema": self.schemas[0]},
-                    )
-                )
-                .scalars()
-                .all()
+            await connection.execute(
+                text("UPDATE public.ref_locales SET active=false WHERE code='en'")
             )
-            self.assertTrue(types)
-            self.assertTrue({"json", "jsonb"}.isdisjoint(types))
-            rows = (
-                (
-                    await connection.execute(
-                        text(
-                            f'SELECT locale FROM "{self.schemas[0]}".catalog_product_translations WHERE product_id=:id'
-                        ),
-                        {"id": p["id"]},
-                    )
-                )
-                .scalars()
-                .all()
-            )
-            self.assertEqual(rows, ["en"])
+        result = await self.request("GET", f"/items/{ident}?locale=en")
+        self.assertEqual(result["item"]["effective"]["content"]["name"], "Kept")
+        await self.request(
+            "PUT",
+            f"/items/{ident}/content/en",
+            {
+                "expected_root_revision": 2,
+                "expected_schema_version": 1,
+                "values": {"name": {"mode": "set", "value": "Denied"}},
+            },
+            422,
+        )
+        schema = self.schemas[0]
+        for assignment in [
+            "kind='variant',parent_id=id,product_type_id=NULL",
+            "price_mode='set',regular_price=1,currency=NULL",
+            "weight_mode='set',weight='NaN'::numeric",
+            "manage_stock='own',stock_quantity=0,backorders=NULL",
+        ]:
             with self.assertRaises(IntegrityError):
-                async with connection.begin_nested():
+                async with self.engine.begin() as connection:
                     await connection.execute(
                         text(
-                            f"""INSERT INTO "{self.schemas[0]}".catalog_product_content_values(product_id,locale,block_id,value) VALUES (:id,'ru','c0000000-0000-4000-8000-000000000002','orphan')"""
+                            f'UPDATE "{schema}".catalog_item SET {assignment} WHERE id=:id'
                         ),
-                        {"id": p["id"]},
+                        {"id": ident},
                     )
 
-            await TenantMigrator().downgrade(
-                connection, self.schemas[0], "0016_remove_inventory"
+    async def test_batch_query_count_and_explain(self) -> None:
+        from sqlalchemy import event
+
+        for _ in range(12):
+            await self.create_item()
+        statements = []
+
+        def capture(connection, cursor, statement, parameters, context, executemany):
+            if statement.lstrip().upper().startswith("SELECT"):
+                statements.append(statement)
+
+        event.listen(self.engine.sync_engine, "before_cursor_execute", capture)
+        try:
+            single = await self.request("GET", "/items?locale=en&limit=1")
+            single_count = len(statements)
+            statements.clear()
+            page = await self.request("GET", "/items?locale=en&limit=12")
+            page_count = len(statements)
+        finally:
+            event.remove(self.engine.sync_engine, "before_cursor_execute", capture)
+        self.assertEqual(single_count, page_count)
+        self.assertEqual(len(page["items"]), 12)
+        self.assertNotIn("own", page["items"][0])
+        async with self.engine.begin() as connection:
+            plan = await connection.scalar(
+                text(
+                    f'EXPLAIN (ANALYZE,FORMAT JSON) SELECT id FROM "{self.schemas[0]}".catalog_item WHERE parent_id IS NULL ORDER BY created_at DESC,id LIMIT 12'
+                )
             )
-            await TenantMigrator().upgrade(connection, self.schemas[0])
-        self.assertEqual((await self.request("GET", "/products?locale=en"))["total"], 0)
-        self.assertEqual(
-            (await self.request("GET", "/product-types?locale=en"))["items"][0]["code"],
-            "default",
+            self.assertIn("Plan", plan[0])
+
+    async def test_kind_transition_and_explicit_family_deletion(self) -> None:
+        attr = await self.request(
+            "POST",
+            "/attributes",
+            {
+                "code": "size",
+                "locale": "en",
+                "label": "Size",
+                "options": [{"code": "s", "label": "S"}, {"code": "m", "label": "M"}],
+            },
+            201,
+        )
+        details = await self.request("GET", f"/attributes/{attr['id']}?locale=en")
+        options = [o["id"] for o in details["options"]]
+        structure = {
+            "axes": [
+                {"attribute_id": attr["id"], "option_ids": options, "position": 0}
+            ],
+            "variants": [
+                {"selection": [{"attribute_id": attr["id"], "option_id": o}]}
+                for o in options
+            ],
+        }
+        simple = await self.create_item()
+        ident = simple["id"]
+        await self.request(
+            "PUT", f"/items/{ident}/sku", {"expected_root_revision": 1, "sku": "CARRY"}
+        )
+        await self.request(
+            "PUT",
+            f"/items/{ident}/content/en",
+            {
+                "expected_root_revision": 2,
+                "expected_schema_version": 1,
+                "values": {"name": {"mode": "set", "value": "Family"}},
+            },
+        )
+        family = await self.request(
+            "PUT",
+            f"/items/{ident}/kind",
+            {
+                "expected_root_revision": 3,
+                "kind": "variable",
+                "structure": structure,
+                "carry_to_index": 0,
+            },
+        )
+        self.assertEqual(family["root_id"], ident)
+        children = family["child_ids"]
+        await self.request(
+            "DELETE", f"/items/{ident}?expected_root_revision=4", status=422
+        )
+        # Materialization keeps root identity and deliberately discards all children.
+        changed = await self.request(
+            "PUT",
+            f"/items/{ident}/kind",
+            {
+                "expected_root_revision": 4,
+                "kind": "simple",
+                "selected_item_id": children[0],
+                "discarded_ids": children,
+            },
+        )
+        result = await self.request("GET", f"/items/{ident}?locale=en")
+        self.assertEqual(result["item"]["effective"]["content"]["name"], "Family")
+        for child in children:
+            await self.request("GET", f"/items/{child}?locale=en", status=404)
+        self.assertEqual(changed["root_revision"], 5)
+        await self.request(
+            "DELETE", f"/items/{ident}?expected_root_revision=5", status=204
         )
 
+    async def test_media_upload_order_primary_and_stream_close(self) -> None:
+        from typing import BinaryIO
+        from uuid import UUID
+        from collections.abc import AsyncIterator
+        from src.modules.catalog.application.catalog_item.port.files import (
+            UploadedCatalogImageFile,
+            CatalogImageFileContent,
+        )
+        from src.modules.catalog.presentation.catalog_item.depends import get_files
+        from src.modules.catalog.domain.error import CatalogNotFoundError
 
-from src.modules.catalog.domain.product.aggregate import Product
+        class Stream:
+            def __init__(self, data: bytes) -> None:
+                self.data = data
+                self.closed = False
+
+            def __aiter__(self) -> AsyncIterator[bytes]:
+                async def chunks() -> AsyncIterator[bytes]:
+                    yield self.data
+
+                return chunks()
+
+            async def aclose(self) -> None:
+                self.closed = True
+
+        class Files:
+            def __init__(self) -> None:
+                self.data: dict[UUID, bytes] = {}
+                self.streams: list[Stream] = []
+
+            async def upload(
+                self,
+                tenant_id: UUID,
+                source: BinaryIO,
+                size_bytes: int,
+                name: str,
+                content_type: str,
+            ) -> UploadedCatalogImageFile:
+                identifier = uuid4()
+                self.data[identifier] = source.read()
+                return UploadedCatalogImageFile(
+                    identifier, name, content_type, size_bytes
+                )
+
+            async def ensure_images(
+                self, tenant_id: UUID, file_ids: tuple[UUID, ...]
+            ) -> None:
+                if any(i not in self.data for i in file_ids):
+                    raise CatalogNotFoundError("Missing image")
+
+            async def content(
+                self, tenant_id: UUID, file_id: UUID
+            ) -> CatalogImageFileContent:
+                stream = Stream(self.data[file_id])
+                self.streams.append(stream)
+                return CatalogImageFileContent(
+                    file_id, "image.png", "image/png", len(stream.data), stream
+                )
+
+        files = Files()
+        self.app.dependency_overrides[get_files] = lambda: files
+        created = await self.create_item()
+        ident = created["id"]
+        import base64
+
+        data = base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jR9sAAAAASUVORK5CYII="
+        )
+        images = []
+        for revision in (1, 2):
+            uploaded = await self.client.post(
+                self.base + f"/items/{ident}/images/en/upload",
+                headers=self.headers,
+                files={"image": ("image.png", data, "image/png")},
+                data={"expected_root_revision": str(revision), "main": "false"},
+            )
+            self.assertEqual(uploaded.status_code, 201, uploaded.text)
+            self.assertEqual(uploaded.json()["root_revision"], revision + 1)
+            images.append(uploaded.json()["image_id"])
+        read = await self.request("GET", f"/items/{ident}?locale=en")
+        gallery = read["item"]["own"]["galleries"]["en"]
+        self.assertEqual(gallery["primary_image_id"], images[0])
+        gallery["images"] = list(reversed(gallery["images"]))
+        for position, image in enumerate(gallery["images"]):
+            image["position"] = position
+        gallery["primary_image_id"] = images[1]
+        await self.request(
+            "PUT",
+            f"/items/{ident}/gallery/en",
+            {"expected_root_revision": 3, "gallery": gallery},
+        )
+        image = await self.client.get(
+            self.base + f"/items/{ident}/images/en/{images[1]}/content"
+        )
+        self.assertEqual(image.status_code, 200, image.text)
+        self.assertEqual(image.content, data)
+        self.assertTrue(files.streams[-1].closed)
+        await self.request(
+            "GET", f"/items/{ident}/images/en/{uuid4()}/content", status=404
+        )
+
+        # UoW failure before streaming still closes the opened Files resource.
+        async def fail_commit(uow: UnitOfWork) -> None:
+            raise RuntimeError("Test commit failure")
+
+        with patch.object(UnitOfWork, "commit", fail_commit):
+            with self.assertRaisesRegex(RuntimeError, "Test commit failure"):
+                await self.client.get(
+                    self.base + f"/items/{ident}/images/en/{images[1]}/content"
+                )
+        self.assertTrue(files.streams[-1].closed)
+        rejected = await self.client.post(
+            self.base + f"/items/{ident}/images/en/upload",
+            headers=self.headers,
+            files={"image": ("image.png", data, "image/png")},
+            data={"expected_root_revision": "4", "alt": "x" * 1001},
+        )
+        self.assertEqual(rejected.status_code, 422)
+        self.assertEqual(len(files.data), 2)
+        # Removing a reference retains the Files object.
+        await self.request(
+            "PUT",
+            f"/items/{ident}/gallery/en",
+            {
+                "expected_root_revision": 4,
+                "gallery": {"images": [], "primary_image_id": None},
+            },
+        )
+        self.assertEqual(len(files.data), 2)

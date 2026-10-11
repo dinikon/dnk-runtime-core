@@ -1,186 +1,6 @@
-"""Доменные и архитектурные проверки первого среза Catalog."""
-
-from src.modules.catalog.domain.content_block.value_object.value_type import (
-    ContentValueType,
-)
-
 import ast
 import unittest
-from datetime import UTC, datetime
 from pathlib import Path
-from uuid import uuid4
-from src.modules.shared.domain.value_object.entity_id import EntityIdVO
-from src.modules.catalog.domain.product.aggregate import Product, ProductKind
-from src.modules.catalog.domain.product.entity.variant import Variant
-from src.modules.catalog.domain.product.entity.structure import SimpleProductStructure
-from src.modules.catalog.domain.product.value_object.identifier import ProductIdVO
-from src.modules.catalog.domain.product.value_object.variant_id import VariantIdVO
-from src.modules.catalog.domain.product_type.value_object.identifier import (
-    ProductTypeIdVO,
-)
-from src.modules.catalog.domain.content_block.value_object.identifier import (
-    ContentBlockIdVO,
-)
-from src.modules.catalog.domain.product.value_object.schema import (
-    ProductSchemaSnapshot,
-    ContentBlockSnapshot,
-)
-from src.modules.catalog.domain.product_type.value_object.block_link import ContentScope
-from src.modules.catalog.domain.value_object.locale import LocaleVO
-from src.modules.catalog.domain.error import (
-    CatalogConflictError,
-    InvalidCatalogValueError,
-    CatalogDependencyUnavailableError,
-)
-
-
-class CatalogDomainTests(unittest.TestCase):
-    """Проверяет инварианты, независимые переводы и фабрику восстановления."""
-
-    def setUp(self) -> None:
-        """Готовит явную схему и новый SIMPLE без переводов."""
-        self.now = datetime.now(UTC)
-        self.actor = EntityIdVO(uuid4())
-        self.block = ContentBlockIdVO(uuid4())
-        self.schema = ProductSchemaSnapshot(
-            ProductTypeIdVO(uuid4()),
-            1,
-            (
-                ContentBlockSnapshot(
-                    self.block, ContentValueType.TEXT, ContentScope.PRODUCT, True, 0
-                ),
-                ContentBlockSnapshot(
-                    self.block, ContentValueType.TEXT, ContentScope.VARIANT, False, 0
-                ),
-            ),
-        )
-        self.product = Product.create(
-            ProductIdVO(uuid4()),
-            self.schema,
-            VariantIdVO(uuid4()),
-            False,
-            self.actor,
-            self.now,
-        )
-
-    def test_simple_content_locales_are_independent(self) -> None:
-        """Контент SIMPLE хранится только у Product с независимыми локалями."""
-        self.assertEqual(self.product.translations, {})
-        self.product.put_content(
-            LocaleVO("ru"),
-            {str(self.block): "Товар"},
-            self.schema,
-            ContentScope.PRODUCT,
-            self.actor,
-            self.now,
-        )
-        self.product.put_content(
-            LocaleVO("en"),
-            {str(self.block): "Product"},
-            self.schema,
-            ContentScope.PRODUCT,
-            self.actor,
-            self.now,
-        )
-        self.assertEqual(self.product.translations["en"][str(self.block)], "Product")
-        self.assertEqual(self.product.variants[0].translations, {})
-        with self.assertRaises(InvalidCatalogValueError):
-            self.product.put_content(
-                LocaleVO("en"),
-                {},
-                self.schema,
-                ContentScope.PRODUCT,
-                self.actor,
-                self.now,
-            )
-
-    def test_simple_rejects_variant_content_without_mutating_state(self) -> None:
-        """Даже пустой VARIANT-перевод SIMPLE отклоняется до изменения ревизии."""
-        for values in ({}, {str(self.block): "Position"}):
-            with (
-                self.subTest(values=values),
-                self.assertRaises(InvalidCatalogValueError),
-            ):
-                self.product.put_content(
-                    LocaleVO("en"),
-                    values,
-                    self.schema,
-                    ContentScope.VARIANT,
-                    self.actor,
-                    self.now,
-                )
-        with self.assertRaises(InvalidCatalogValueError):
-            self.product.delete_content(
-                LocaleVO("en"), ContentScope.VARIANT, self.actor, self.now
-            )
-        self.assertEqual(self.product.revision, 1)
-        self.assertEqual(self.product.translations, {})
-        self.assertEqual(self.product.variants[0].translations, {})
-
-    def test_type_change_checks_all_content_without_loss(self) -> None:
-        """Несовместимый тип отклоняется; исходный перевод сохраняется."""
-        self.product.put_content(
-            LocaleVO("ru"),
-            {str(self.block): "Товар"},
-            self.schema,
-            ContentScope.PRODUCT,
-            self.actor,
-            self.now,
-        )
-        before = self.product.product_type_id
-        with self.assertRaises(InvalidCatalogValueError):
-            self.product.change_type(
-                ProductSchemaSnapshot(ProductTypeIdVO(uuid4()), 1, ()),
-                self.actor,
-                self.now,
-            )
-        self.assertEqual(self.product.product_type_id, before)
-        self.assertEqual(self.product.translations["ru"][str(self.block)], "Товар")
-
-    def test_restore_rejects_unsupported_structure_and_revision(self) -> None:
-        """Restore не превращает неподдержанную структуру в SIMPLE."""
-        kwargs = dict(
-            identifier=self.product.id,
-            kind=ProductKind.SIMPLE,
-            product_type_id=self.schema.product_type_id,
-            structure=self.product.structure,
-            translations={},
-            revision=1,
-            created_at=self.now,
-            updated_at=self.now,
-            created_by=self.actor,
-            updated_by=self.actor,
-        )
-        self.assertEqual(
-            Product.restore(**kwargs).variants[0].id, self.product.variants[0].id
-        )
-        with self.assertRaises(InvalidCatalogValueError):
-            Product.restore(**{**kwargs, "kind": ProductKind.VARIABLE})
-        for translations in ({"en": {}}, {"ru": {str(self.block): "Legacy"}}):
-            with (
-                self.subTest(translations=translations),
-                self.assertRaises(InvalidCatalogValueError),
-            ):
-                Product.restore(
-                    **{
-                        **kwargs,
-                        "structure": SimpleProductStructure.create(
-                            Variant.restore(
-                                self.product.variants[0].id, False, False, translations
-                            )
-                        ),
-                    }
-                )
-        with self.assertRaises(CatalogConflictError):
-            self.product.ensure_revision(2)
-
-    def test_downloadable_requires_file_contract(self) -> None:
-        """Без файлового контракта незавершённое предложение не объявляется готовым."""
-        with self.assertRaises(CatalogDependencyUnavailableError):
-            self.product.set_variant_properties(
-                self.product.variants[0].id, True, True, self.actor, self.now
-            )
-        self.assertFalse(self.product.variants[0].virtual)
 
 
 class CatalogArchitectureTests(unittest.TestCase):
@@ -245,6 +65,9 @@ class CatalogArchitectureTests(unittest.TestCase):
                     and execute.returns.value is None
                 )
                 scenario, aggregate = path.parent.name, path.parents[2].name
+                if scenario == "get_catalog_items_publication_snapshot":
+                    self.assertTrue((path.parent / "dto.py").exists())
+                    continue
                 http = root / "presentation" / aggregate / "http"
                 self.assertTrue(
                     (http / "controller" / f"{scenario}.py").exists(), str(path)
@@ -254,9 +77,10 @@ class CatalogArchitectureTests(unittest.TestCase):
                 )
                 if has_result:
                     self.assertTrue((path.parent / "dto.py").exists(), str(path))
-                    self.assertTrue(
-                        (http / "response" / f"{scenario}.py").exists(), str(path)
-                    )
+                    if scenario != "get_catalog_item_image_content":
+                        self.assertTrue(
+                            (http / "response" / f"{scenario}.py").exists(), str(path)
+                        )
                 else:
                     self.assertFalse((path.parent / "dto.py").exists(), str(path))
                     self.assertFalse(

@@ -476,7 +476,7 @@ EnumAttributeAssignmentInput и VariableStructureInput. Они не заменя
 | delete_catalog_item_gallery | locale, удалить own-галерею / вернуть наследование | None | DELETE /items/{item_id}/gallery/{locale} |
 | delete_catalog_item | SIMPLE либо вся семья; план зависимостей и явное удаление детей | None | DELETE /items/{root_id} |
 | get_catalog_item | item ID, locale; own + effective + origins | GetCatalogItemDetailsDTO | GET /items/{item_id} |
-| list_catalog_items | locale, поиск, kind/status, root/parent filter, page/page_size | ListCatalogItemsPageDTO | GET /items |
+| list_catalog_items | locale, поиск, kind/status, root/parent filter, offset/limit | ListCatalogItemsPageDTO | GET /items |
 | list_catalog_item_variants | root ID, locale, filters, pagination | ListCatalogItemVariantsPageDTO | GET /items/{root_id}/variants |
 | get_catalog_item_image_content | item ID, locale, effective image ID | GetCatalogItemImageContentResultDTO | GET /items/{item_id}/images/{locale}/{image_id}/content |
 | get_catalog_items_publication_snapshot | item IDs, locale, as_of, ожидаемые ревизии optional | GetCatalogItemsPublicationSnapshotDTO | Межмодульный Application-контракт; отдельный HTTP не нужен |
@@ -499,7 +499,7 @@ kind/parent фильтром. Counts считаются по центральн�
 
 | Корень / сценарий | Бизнес-вход | execute → | HTTP после префикса |
 | --- | --- | --- | --- |
-| product_type/get_default_product_type | locale для подписей | GetDefaultProductTypeDTO | GET /product-types/default |
+| product_type/get_default_product_type | locale для подписей | GetDefaultProductTypeDTO | GET /product-type/default |
 | attribute/create_attribute | code, locale, label, options(code/label) | CreateAttributeResultDTO | POST /attributes |
 | attribute/put_attribute_translation | ID, locale, label | PutAttributeTranslationResultDTO | PUT /attributes/{id}/translations/{locale} |
 | attribute/replace_attribute_options | ID, ordered options с сохранением ID/code и переводом locale | ReplaceAttributeOptionsResultDTO | PUT /attributes/{id}/options/{locale} |
@@ -710,8 +710,8 @@ Self JOIN и JOIN справочников допустимы. Цель — ко
 - `0018_catalog_variable.py`;
 - `0019_catalog_classification.py`.
 
-Создать одну новую Catalog baseline: `0021_catalog_item.py`,
-revision `0021_catalog_item`, down_revision `0020_files`.
+Создать одну новую Catalog baseline: `0023_catalog_item.py`,
+revision `0023_catalog_item`, down_revision `0022_tenant_currency_settings`.
 Она создаёт новую центральную модель, связанные таблицы, ограничения/индексы
 и seed Default/name/desc/short_desc. До завершения этой переработки baseline
 дополняется в рамках одной новой реализации; поэтапного сохранения старого
@@ -724,7 +724,7 @@ Catalog и цепочки переходов между его моделями 
 | 0013_channels.py | 0011_inventory_skus | Удалён 0012_catalog |
 | 0016_remove_inventory.py | 0014_channel_publications | Удалён 0015_remove_catalog |
 | 0020_files.py | 0016_remove_inventory | Удалены 0017/0018/0019 Catalog |
-| 0021_catalog_item.py | 0020_files | Files существует до нового Catalog |
+| 0023_catalog_item.py | 0022_tenant_currency_settings | После сохранённых Files lifecycle и currency settings |
 
 Промежутки в числовых именах допустимы; порядок задаёт down_revision.
 Создание/удаление Inventory и ревизии других модулей не переписываются под
@@ -1055,3 +1055,36 @@ npm run build:console
 Единая CatalogItem-модель, фиксированный Default, enum-only атрибуты,
 категории/теги только SIMPLE, локализованные галереи, наследование одного уровня
 и fresh database уже являются решениями этого плана, а не открытыми вопросами.
+
+## 17. Реализация CatalogItem (октябрь 2026)
+
+Заменены этапы 1–4: Domain CatalogItem, write/read ports и адаптеры, отдельные
+HTTP use cases, fixed Default, enum, категории/теги, локализованные галереи,
+Files consumer adapter и Console `/catalog/items`. SIMPLE не создаёт скрытой
+позиции. VARIANT использует тот же класс и `catalog_item`, сохраняя роль внутренней
+Entity корня VARIABLE. Старых runtime Product/Variant моделей и endpoints нет.
+
+Baseline называется `0023_catalog_item`, потому что перед ней уже добавлены
+`0021_files_lifecycle` и `0022_tenant_currency_settings`. Пять прежних Catalog
+ревизий удалены; 0013/0016/0020 переподключены. Содержимое миграций других
+модулей сохранено. Нужна пустая база; автоматического drop или переноса данных нет.
+
+Список использует отдельный компактный row DTO и offset/limit (1..100), details
+выдаёт own/effective/origins. Обычные HTTP query получают REPEATABLE READ в router Depends
+до SQL аутентификации. Потребитель batch publication snapshot должен собрать его на
+своём кратком согласованном UoW, также до первого чтения. Snapshot принимает
+optional ожидаемые root revisions. Для чтения деактивированной locale достаточно
+валидного LocaleVO; active locale проверяется командами записи.
+
+Удаление VARIABLE требует явных discarded_ids всех детей. Команды структуры
+принимают только root ID; варианты не перемещаются между семьями. Decimal точность
+MVP — до шести знаков после запятой без округления, вес в граммах, размеры в мм.
+Галерея ограничена 100 изображениями на locale, upload PNG/JPEG/WebP до 10 MiB
+с проверкой сигнатуры и MIME. Files должен быть заранее подготовлен своим модулем.
+
+Публичный Application snapshot адаптирован для будущих representations/mappings/
+overrides Channels. Существующие observed/read коннекторы продолжают работать.
+Bindings и исходящая доставка этапов 5–6 по-прежнему не реализованы; текущий usage
+adapter пустой, поскольку observed Channels не содержит Catalog source ссылок.
+При добавлении bindings этот адаптер обязательно заменяется проверкой владельца
+Channels, а consumer события связываются с Outbox общего UoW.

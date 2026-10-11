@@ -76,12 +76,20 @@ class StorageAdapterProtocol(Protocol):
         """Открывает поток без формирования внешней ссылки."""
         ...
 
+    async def exists_owned(self, location: StorageLocation, key: str) -> bool:
+        """Подтверждает наличие и ownership объекта/бакета без чтения содержимого."""
+        ...
+
     def objects(self, location: StorageLocation) -> AsyncIterator[StorageObject]:
         """Перечисляет объекты порциями для обслуживания хранилища."""
         ...
 
     async def remove(self, location: StorageLocation, key: str) -> None:
         """Удаляет объект; его отсутствие считается успехом."""
+        ...
+
+    async def remove_owned_versions(self, location: StorageLocation, key: str) -> None:
+        """Удаляет все owned-версии и markers одного ключа, подтверждая отсутствие содержимого."""
         ...
 
     async def abort_incomplete(

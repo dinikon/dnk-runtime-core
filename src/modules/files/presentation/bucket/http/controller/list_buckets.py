@@ -1,8 +1,6 @@
 from uuid import UUID
 from fastapi import HTTPException
-from src.modules.identity.presentation.auth.depends import (
-    AuthenticatedRequestContextDep,
-)
+from src.modules.files.presentation.depends.admin import FilesAdminContextDep
 from src.modules.files.presentation.bucket.depends import ListBucketsHandlerDep
 from src.modules.files.application.bucket.query.list_buckets.query import (
     ListBucketsQuery,
@@ -13,7 +11,7 @@ from src.modules.files.presentation.bucket.http.response.list_buckets import (
 
 
 async def list_buckets(
-    context: AuthenticatedRequestContextDep,
+    context: FilesAdminContextDep,
     handler: ListBucketsHandlerDep,
     provider_id: UUID | None = None,
 ) -> list[ListBucketsItemResponse]:

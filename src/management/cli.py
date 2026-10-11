@@ -48,6 +48,9 @@ def build_parser() -> argparse.ArgumentParser:
     from src.management.commands.files import register as register_files
 
     register_files(subparsers)
+    from src.management.commands.currency import register as register_currency
+
+    register_currency(subparsers)
     return parser
 
 

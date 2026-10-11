@@ -1,14 +1,27 @@
 from typing import Protocol
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
+from src.modules.catalog.domain.catalog_item.value_object.identifier import (
+    CatalogItemIdVO,
+)
 
 
 class CatalogMutationLockPort(Protocol):
-    """Сериализация записей Catalog до завершения внешнего tenant UoW."""
+    """Согласованный порядок справочного guard и независимых family locks."""
 
     async def acquire(self, tenant_id: EntityIdVO) -> None:
-        """Получает блокировку общего порядка изменений схем и содержимого."""
+        """Получает exclusive reference guard для мутации справочников."""
         ...
 
     async def acquire_read(self, tenant_id: EntityIdVO) -> None:
-        """Защищает согласованное чтение табличных частей от конкурентной записи."""
+        """Обычная read projection не требует advisory lock."""
+        ...
+
+    async def acquire_reference(self, tenant_id: EntityIdVO) -> None:
+        """Получает shared reference guard перед изменением семьи."""
+        ...
+
+    async def acquire_family(
+        self, tenant_id: EntityIdVO, root_id: CatalogItemIdVO
+    ) -> None:
+        """Сериализует записи только одной семьи до конца UoW."""
         ...

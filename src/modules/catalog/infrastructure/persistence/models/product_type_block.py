@@ -6,17 +6,14 @@ from src.modules.tenancy.infrastructure.tenant.persistence.tenant_base import Te
 
 
 class ProductTypeBlockModel(TenantBase):
-    """Связь схемы с определением; scope и required принадлежат этой связи."""
+    """Нормализованное tenant-хранение; инварианты находятся в Domain."""
 
     __tablename__ = "catalog_product_type_content_blocks"
     __table_args__ = (
-        sa.CheckConstraint(
-            "scope IN ('PRODUCT','VARIANT')", name="ck_catalog_link_scope"
-        ),
-        sa.CheckConstraint("position>=0", name="ck_catalog_link_position"),
         sa.UniqueConstraint(
-            "product_type_id", "scope", "position", name="uq_catalog_link_position"
+            "product_type_id", "position", name="uq_catalog_type_block_position"
         ),
+        sa.CheckConstraint("position>=0", name="ck_catalog_type_block_position"),
     )
     product_type_id: Mapped[UUID] = mapped_column(
         StringUUID,
@@ -30,6 +27,5 @@ class ProductTypeBlockModel(TenantBase):
         ),
         primary_key=True,
     )
-    scope: Mapped[str] = mapped_column(sa.String(10), primary_key=True)
     required: Mapped[bool] = mapped_column(sa.Boolean, nullable=False)
     position: Mapped[int] = mapped_column(sa.Integer, nullable=False)

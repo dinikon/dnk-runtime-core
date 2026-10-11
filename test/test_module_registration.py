@@ -52,9 +52,9 @@ class ModuleRegistrationTests(unittest.TestCase):
         tables = set(migration_metadata().tables)
         self.assertTrue(
             {
-                "catalog_products",
-                "catalog_product_translations",
-                "catalog_variant_content_values",
+                "catalog_item",
+                "catalog_item_translations",
+                "catalog_item_content_values",
             }
             <= tables
         )
@@ -69,8 +69,17 @@ class ModuleRegistrationTests(unittest.TestCase):
         self.assertIn("catalog_products", HISTORICAL_TENANT_TABLE_NAMES)
 
     def test_cancelled_warehousing_migrations_are_absent(self) -> None:
-        """Warehousing отсутствует; Files продолжает цепочку Catalog."""
-        self.assertEqual(TenantMigrator().head(), "0021_files_lifecycle")
+        """Warehousing отсутствует; fresh Catalog присутствует в единой tenant-цепочке."""
+        from alembic.config import Config
+        from alembic.script import ScriptDirectory
+
+        config = Config()
+        config.set_main_option("script_location", "migrations/tenant")
+        script = ScriptDirectory.from_config(config)
+        self.assertEqual(len(script.get_heads()), 1)
+        self.assertIn(
+            "0023_catalog_item", {r.revision for r in script.walk_revisions()}
+        )
         directory = Path(__file__).resolve().parents[1] / "migrations/tenant/versions"
         for name in ("0017_warehousing_warehouses.py", "0018_warehousing_zones.py"):
             self.assertFalse((directory / name).exists())

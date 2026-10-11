@@ -29,7 +29,10 @@ watch(
 </script>
 <template>
   <form class="space-y-4" @submit.prevent="emit('submit', label)">
-    <p v-if="existing && props.label === null" class="text-sm text-muted-foreground">
+    <p
+      v-if="existing && props.label === null"
+      class="text-sm text-muted-foreground"
+    >
       Перевод отсутствует. Введите название для выбранной locale.
     </p>
     <label class="block space-y-2"

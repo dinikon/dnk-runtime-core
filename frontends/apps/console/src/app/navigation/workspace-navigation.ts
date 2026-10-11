@@ -17,22 +17,12 @@ export const workspaceNavigation: WorkspaceNavigation = {
     {
       title: "Каталог",
       items: [
-        { title: "Товары", url: "/catalog/products", icon: ShoppingBasket },
+        { title: "Товары", url: "/catalog/items", icon: ShoppingBasket },
         { title: "Категории", url: "/catalog/categories", icon: FolderTree },
         { title: "Метки", url: "/catalog/tags", icon: Tags },
         {
           title: "Характеристики",
           url: "/catalog/attributes",
-          icon: FileSpreadsheet,
-        },
-        {
-          title: "Типы контента",
-          url: "/catalog/product-types",
-          icon: FileSpreadsheet,
-        },
-        {
-          title: "Блоки контента",
-          url: "/catalog/content-blocks",
           icon: FileSpreadsheet,
         },
       ],

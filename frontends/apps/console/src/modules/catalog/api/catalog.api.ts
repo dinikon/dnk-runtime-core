@@ -124,72 +124,6 @@ export const catalogApi = {
       )
     ).data;
   },
-  async setProductAttributes(
-    id: string,
-    body: DTO.SetProductAttributesRequest,
-  ): Promise<DTO.SetProductAttributesResponse> {
-    return (
-      await httpClient.put<DTO.SetProductAttributesResponse>(
-        base + `/products/${encodeURIComponent(id)}/attributes`,
-        body,
-      )
-    ).data;
-  },
-  async setProductCategories(
-    id: string,
-    body: DTO.SetProductCategoriesRequest,
-  ): Promise<DTO.SetProductCategoriesResponse> {
-    return (
-      await httpClient.put<DTO.SetProductCategoriesResponse>(
-        base + `/products/${encodeURIComponent(id)}/categories`,
-        body,
-      )
-    ).data;
-  },
-  async setProductTags(
-    id: string,
-    body: DTO.SetProductTagsRequest,
-  ): Promise<DTO.SetProductTagsResponse> {
-    return (
-      await httpClient.put<DTO.SetProductTagsResponse>(
-        base + `/products/${encodeURIComponent(id)}/tags`,
-        body,
-      )
-    ).data;
-  },
-
-  async createVariableProduct(
-    body: DTO.CreateVariableProductRequest,
-  ): Promise<DTO.CreateVariableProductResponse> {
-    return (
-      await httpClient.post<DTO.CreateVariableProductResponse>(
-        base + "/products/variable",
-        body,
-      )
-    ).data;
-  },
-  async replaceVariants(
-    id: string,
-    body: DTO.ReplaceVariantsRequest,
-  ): Promise<DTO.ReplaceVariantsResponse> {
-    return (
-      await httpClient.put<DTO.ReplaceVariantsResponse>(
-        base + `/products/${encodeURIComponent(id)}/structure`,
-        body,
-      )
-    ).data;
-  },
-  async changeProductKind(
-    id: string,
-    body: DTO.ChangeProductKindRequest,
-  ): Promise<DTO.ChangeProductKindResponse> {
-    return (
-      await httpClient.put<DTO.ChangeProductKindResponse>(
-        base + `/products/${encodeURIComponent(id)}/kind`,
-        body,
-      )
-    ).data;
-  },
   async createAttribute(
     body: DTO.CreateAttributeRequest,
   ): Promise<DTO.CreateAttributeResponse> {
@@ -265,295 +199,134 @@ export const catalogApi = {
       })
     ).data;
   },
-  async createSimpleProduct(
-    body: DTO.CreateSimpleProductRequest,
-    signal?: AbortSignal,
-  ): Promise<DTO.CreateSimpleProductResponse> {
-    return (
-      await httpClient.post<DTO.CreateSimpleProductResponse>(
-        base + `/products/simple`,
-        body,
-        { signal },
-      )
-    ).data;
-  },
-  async changeProductType(
-    product_id: string,
-    body: DTO.ChangeProductTypeRequest,
-    signal?: AbortSignal,
-  ): Promise<DTO.ChangeProductTypeResponse> {
-    return (
-      await httpClient.put<DTO.ChangeProductTypeResponse>(
-        base + `/products/${encodeURIComponent(product_id)}/type`,
-        body,
-        { signal },
-      )
-    ).data;
-  },
-  async setVariantProperties(
-    product_id: string,
-    variant_id: string,
-    body: DTO.SetVariantPropertiesRequest,
-    signal?: AbortSignal,
-  ): Promise<DTO.SetVariantPropertiesResponse> {
-    return (
-      await httpClient.put<DTO.SetVariantPropertiesResponse>(
-        base +
-          `/products/${encodeURIComponent(product_id)}/variants/${encodeURIComponent(variant_id)}/properties`,
-        body,
-        { signal },
-      )
-    ).data;
-  },
-  async putProductContent(
-    product_id: string,
-    locale: string,
-    body: DTO.PutProductContentRequest,
-    signal?: AbortSignal,
-  ): Promise<DTO.PutProductContentResponse> {
-    return (
-      await httpClient.put<DTO.PutProductContentResponse>(
-        base +
-          `/products/${encodeURIComponent(product_id)}/content/${encodeURIComponent(locale)}`,
-        body,
-        { signal },
-      )
-    ).data;
-  },
-  async deleteProductContent(
-    product_id: string,
-    locale: string,
-    expectedRevision: number,
-    signal?: AbortSignal,
-  ): Promise<void> {
-    await httpClient.delete(
-      base +
-        `/products/${encodeURIComponent(product_id)}/content/${encodeURIComponent(locale)}`,
-      { signal, params: { expected_revision: expectedRevision } },
-    );
-  },
-  async putVariantContent(
-    product_id: string,
-    variant_id: string,
-    locale: string,
-    body: DTO.PutVariantContentRequest,
-    signal?: AbortSignal,
-  ): Promise<DTO.PutVariantContentResponse> {
-    return (
-      await httpClient.put<DTO.PutVariantContentResponse>(
-        base +
-          `/products/${encodeURIComponent(product_id)}/variants/${encodeURIComponent(variant_id)}/content/${encodeURIComponent(locale)}`,
-        body,
-        { signal },
-      )
-    ).data;
-  },
-  async deleteVariantContent(
-    product_id: string,
-    variant_id: string,
-    locale: string,
-    expectedRevision: number,
-    signal?: AbortSignal,
-  ): Promise<void> {
-    await httpClient.delete(
-      base +
-        `/products/${encodeURIComponent(product_id)}/variants/${encodeURIComponent(variant_id)}/content/${encodeURIComponent(locale)}`,
-      { signal, params: { expected_revision: expectedRevision } },
-    );
-  },
-  async deleteProduct(
-    product_id: string,
-    expectedRevision: number,
-    signal?: AbortSignal,
-  ): Promise<void> {
-    await httpClient.delete(
-      base + `/products/${encodeURIComponent(product_id)}`,
-      { signal, params: { expected_revision: expectedRevision } },
-    );
-  },
-  async createProductType(
-    body: DTO.CreateProductTypeRequest,
-    signal?: AbortSignal,
-  ): Promise<DTO.CreateProductTypeResponse> {
-    return (
-      await httpClient.post<DTO.CreateProductTypeResponse>(
-        base + `/product-types`,
-        body,
-        { signal },
-      )
-    ).data;
-  },
-  async deleteProductType(
-    product_type_id: string,
-    expectedRevision: number,
-    signal?: AbortSignal,
-  ): Promise<void> {
-    await httpClient.delete(
-      base + `/product-types/${encodeURIComponent(product_type_id)}`,
-      { signal, params: { expected_revision: expectedRevision } },
-    );
-  },
-  async putProductTypeTranslation(
-    product_type_id: string,
-    locale: string,
-    body: DTO.PutProductTypeTranslationRequest,
-    signal?: AbortSignal,
-  ): Promise<DTO.PutProductTypeTranslationResponse> {
-    return (
-      await httpClient.put<DTO.PutProductTypeTranslationResponse>(
-        base +
-          `/product-types/${encodeURIComponent(product_type_id)}/translations/${encodeURIComponent(locale)}`,
-        body,
-        { signal },
-      )
-    ).data;
-  },
-  async replaceProductTypeSchema(
-    product_type_id: string,
-    body: DTO.ReplaceProductTypeSchemaRequest,
-    signal?: AbortSignal,
-  ): Promise<DTO.ReplaceProductTypeSchemaResponse> {
-    return (
-      await httpClient.put<DTO.ReplaceProductTypeSchemaResponse>(
-        base + `/product-types/${encodeURIComponent(product_type_id)}/schema`,
-        body,
-        { signal },
-      )
-    ).data;
-  },
-  async createContentBlock(
-    body: DTO.CreateContentBlockRequest,
-    signal?: AbortSignal,
-  ): Promise<DTO.CreateContentBlockResponse> {
-    return (
-      await httpClient.post<DTO.CreateContentBlockResponse>(
-        base + `/content-blocks`,
-        body,
-        { signal },
-      )
-    ).data;
-  },
-  async deleteContentBlock(
-    content_block_id: string,
-    expectedRevision: number,
-    signal?: AbortSignal,
-  ): Promise<void> {
-    await httpClient.delete(
-      base + `/content-blocks/${encodeURIComponent(content_block_id)}`,
-      { signal, params: { expected_revision: expectedRevision } },
-    );
-  },
-  async updateContentBlock(
-    content_block_id: string,
-    body: DTO.UpdateContentBlockRequest,
-    signal?: AbortSignal,
-  ): Promise<DTO.UpdateContentBlockResponse> {
-    return (
-      await httpClient.put<DTO.UpdateContentBlockResponse>(
-        base + `/content-blocks/${encodeURIComponent(content_block_id)}`,
-        body,
-        { signal },
-      )
-    ).data;
-  },
-  async getProduct(
-    product_id: string,
-    locale: string,
-    signal?: AbortSignal,
-  ): Promise<DTO.GetProductResponse> {
-    return (
-      await httpClient.get<DTO.GetProductResponse>(
-        base + `/products/${encodeURIComponent(product_id)}`,
-        { signal, params: { locale } },
-      )
-    ).data;
-  },
-  async listProducts(
+  async listItems(
     locale: string,
     search = "",
-    page = 1,
-    pageSize = 20,
-    typeId?: string,
+    offset = 0,
+    limit = 20,
+    kind?: DTO.ItemKind,
+    status?: DTO.ItemStatus,
     signal?: AbortSignal,
-    kind?: "simple" | "variable",
-  ): Promise<DTO.ListProductsResponse> {
+  ): Promise<DTO.ListItemsResponse> {
     return (
-      await httpClient.get<DTO.ListProductsResponse>(base + `/products`, {
+      await httpClient.get<DTO.ListItemsResponse>(base + "/items", {
+        params: { locale, search, offset, limit, kind, status },
         signal,
-        params: {
-          locale,
-          search,
-          page,
-          page_size: pageSize,
-          product_type_id: typeId,
-          kind,
-        },
       })
     ).data;
   },
-  async getProductType(
-    product_type_id: string,
+  async getItem(
+    id: string,
     locale: string,
     signal?: AbortSignal,
-  ): Promise<DTO.GetProductTypeResponse> {
+  ): Promise<DTO.GetItemResponse> {
     return (
-      await httpClient.get<DTO.GetProductTypeResponse>(
-        base + `/product-types/${encodeURIComponent(product_type_id)}`,
-        { signal, params: { locale } },
+      await httpClient.get<DTO.GetItemResponse>(
+        base + `/items/${encodeURIComponent(id)}`,
+        { params: { locale }, signal },
       )
     ).data;
   },
-  async listProductTypes(
+  async listVariants(
+    id: string,
     locale: string,
-    search = "",
-    page = 1,
-    pageSize = 20,
+    offset = 0,
+    limit = 100,
     signal?: AbortSignal,
-  ): Promise<DTO.ListProductTypesResponse> {
+  ): Promise<DTO.ListVariantsResponse> {
     return (
-      await httpClient.get<DTO.ListProductTypesResponse>(
-        base + `/product-types`,
-        { signal, params: { locale, search, page, page_size: pageSize } },
+      await httpClient.get<DTO.ListVariantsResponse>(
+        base + `/items/${encodeURIComponent(id)}/variants`,
+        { params: { locale, offset, limit }, signal },
       )
     ).data;
   },
-  async getContentBlock(
-    content_block_id: string,
-    locale: string,
-    signal?: AbortSignal,
-  ): Promise<DTO.GetContentBlockResponse> {
+  async createSimple(virtual = false): Promise<DTO.CreateItemResponse> {
     return (
-      await httpClient.get<DTO.GetContentBlockResponse>(
-        base + `/content-blocks/${encodeURIComponent(content_block_id)}`,
-        { signal, params: { locale } },
-      )
+      await httpClient.post<DTO.CreateItemResponse>(base + "/items/simple", {
+        virtual,
+      })
     ).data;
   },
-  async listContentBlocks(
-    locale: string,
-    search = "",
-    page = 1,
-    pageSize = 20,
-    signal?: AbortSignal,
-  ): Promise<DTO.ListContentBlocksResponse> {
+  async createVariable(
+    structure: DTO.StructureDTO,
+  ): Promise<DTO.CreateItemResponse> {
     return (
-      await httpClient.get<DTO.ListContentBlocksResponse>(
-        base + `/content-blocks`,
-        { signal, params: { locale, search, page, page_size: pageSize } },
-      )
+      await httpClient.post<DTO.CreateItemResponse>(base + "/items/variable", {
+        structure,
+      })
     ).data;
   },
-  async getVariant(
-    product_id: string,
-    variant_id: string,
+  async saveItem(
+    id: string,
+    section: DTO.ItemSection,
+    expectedRootRevision: number,
+    value: Record<string, unknown>,
     locale: string,
-    signal?: AbortSignal,
-  ): Promise<DTO.GetVariantResponse> {
+  ): Promise<DTO.MutationResponse> {
+    const localized = ["content", "galleries"].includes(section);
     return (
-      await httpClient.get<DTO.GetVariantResponse>(
+      await httpClient.put<DTO.MutationResponse>(
         base +
-          `/products/${encodeURIComponent(product_id)}/variants/${encodeURIComponent(variant_id)}`,
-        { signal, params: { locale } },
+          `/items/${encodeURIComponent(id)}/${section === "galleries" ? "gallery" : section}` +
+          (localized ? `/${encodeURIComponent(locale)}` : ""),
+        { expected_root_revision: expectedRootRevision, ...value },
+      )
+    ).data;
+  },
+  async deleteItem(
+    id: string,
+    revision: number,
+    discardedIds: string[] = [],
+  ): Promise<void> {
+    await httpClient.delete(base + `/items/${encodeURIComponent(id)}`, {
+      params: { expected_root_revision: revision, discarded_ids: discardedIds },
+      paramsSerializer: { indexes: null },
+    });
+  },
+  async inheritSection(
+    id: string,
+    section: "content" | "galleries",
+    locale: string,
+    revision: number,
+  ): Promise<void> {
+    await httpClient.delete(
+      base +
+        `/items/${encodeURIComponent(id)}/${section === "galleries" ? "gallery" : section}/${encodeURIComponent(locale)}`,
+      { params: { expected_root_revision: revision } },
+    );
+  },
+  async uploadImage(
+    id: string,
+    locale: string,
+    revision: number,
+    file: File,
+    main: boolean,
+  ): Promise<DTO.MutationResponse> {
+    const body = new FormData();
+    body.append("image", file);
+    body.append("expected_root_revision", String(revision));
+    body.append("main", String(main));
+    return (
+      await httpClient.post<DTO.MutationResponse>(
+        base +
+          `/items/${encodeURIComponent(id)}/images/${encodeURIComponent(locale)}/upload`,
+        body,
+        { headers: { "Content-Type": undefined } },
+      )
+    ).data;
+  },
+  imageUrl(id: string, locale: string, imageId: string): string {
+    return `/api${base}/items/${encodeURIComponent(id)}/images/${encodeURIComponent(locale)}/${encodeURIComponent(imageId)}/content`;
+  },
+  async defaultSchema(
+    locale: string,
+    signal?: AbortSignal,
+  ): Promise<DTO.DefaultSchemaResponse> {
+    return (
+      await httpClient.get<DTO.DefaultSchemaResponse>(
+        base + "/product-type/default",
+        { params: { locale }, signal },
       )
     ).data;
   },

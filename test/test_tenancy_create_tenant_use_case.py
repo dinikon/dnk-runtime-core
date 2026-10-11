@@ -1,23 +1,24 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 from src.modules.tenancy.application.ports.schema_bootstrap import (
     TenantSchemaBootstrapContextFactory,
 )
-from src.modules.tenancy.application.tenant.command.create_tenant_command import (
+from src.modules.tenancy.application.tenant.command.create_tenant.command import (
     CreateTenantCommand,
 )
-from src.modules.tenancy.application.tenant.use_case.create_tenant import (
-    CreateTenantUseCase,
+from src.modules.tenancy.application.tenant.command.create_tenant.handler import (
+    CreateTenantHandler,
 )
 from src.modules.tenancy.application.tenant.onboarding import TenantOnboardingDraft
 from src.modules.tenancy.domain.tenant.entity import Tenant
 from src.modules.tenancy.domain.tenant_domain.entity import TenantDomain
 
 
-class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):
+class CreateTenantHandlerTests(unittest.IsolatedAsyncioTestCase):
     async def test_bootstraps_schema_with_hex_schema_name(self) -> None:
         tenant = Tenant.create(name="Tenant", external_id="tenant-1")
         tenant_domain = TenantDomain.create_primary_console_domain(
@@ -62,7 +63,9 @@ class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):
             async def register(self, tenant_id):
                 steps.append("files")
 
-        use_case = CreateTenantUseCase(
+        use_case = CreateTenantHandler(
+            currency_validator=AsyncMock(),
+            currency_settings_writer=AsyncMock(),
             tenant_onboarding_service=TenantOnboardingServiceStub(),
             identity_provisioning_service=IdentityProvisioningServiceStub(),
             tenant_schema_bootstrap_context_factory=TenantSchemaBootstrapContextFactory(

@@ -304,6 +304,34 @@ class MinioStorageAdapter:
                 await MinioFileContentStream(response, self).aclose()
             raise
 
+    async def exists_owned(self, location: StorageLocation, key: str) -> bool:
+        """Проверяет бакет и метаданные текущего объекта без открытия потока."""
+
+        def inspect() -> bool:
+            """Читает stat только после подтверждения ownership контейнера."""
+            if not re.fullmatch("[0-9a-f]{32}", key):
+                raise StorageOwnershipError("Invalid owned object key.")
+            if not self._owned_bucket(location):
+                return False
+            try:
+                obj = self._client.stat_object(location.bucket_name, key)
+            except S3Error as error:
+                if error.code in {"NoSuchKey", "NoSuchObject"}:
+                    return False
+                raise
+            metadata = {
+                name.lower(): value for name, value in (obj.metadata or {}).items()
+            }
+            if (
+                metadata.get("x-amz-meta-dnk-tenant") != str(location.tenant_id)
+                or metadata.get("x-amz-meta-dnk-bucket") != str(location.bucket_id)
+                or metadata.get("x-amz-meta-dnk-file") != key
+            ):
+                raise StorageOwnershipError("Object ownership is not confirmed.")
+            return True
+
+        return await self.call(inspect)
+
     def objects(self, location: StorageLocation) -> AsyncIterator[StorageObject]:
         """Перечисляет объекты лениво, не загружая весь контейнер в память."""
         return self._objects(location)
@@ -337,6 +365,69 @@ class MinioStorageAdapter:
         """Удаляет известный объект только из подтверждённого контейнера."""
         self._validate_location(location)
         await self.call(lambda: self._client.remove_object(location.bucket_name, key))
+
+    async def remove_owned_versions(self, location: StorageLocation, key: str) -> None:
+        """Удаляет только версии заданного owned-ключа, сохраняя соседние объекты и бакет."""
+        if not re.fullmatch("[0-9a-f]{32}", key):
+            raise StorageOwnershipError("Invalid owned object key.")
+        deadline = time.monotonic() + self.operation_timeout
+        if not await self.call(lambda: self._owned_bucket(location)):
+            return
+        versions = self._client.list_objects(
+            location.bucket_name, prefix=key, recursive=True, include_version=True
+        )
+        while True:
+            if time.monotonic() >= deadline:
+                raise StorageUnavailableError("File purge deadline exceeded.")
+            obj = await self.call(lambda: next(versions, None))
+            if obj is None:
+                break
+            if obj.object_name != key:
+                continue
+
+            def remove_version() -> None:
+                """Подтверждает метаданные каждой содержательной версии перед удалением."""
+                if not obj.is_delete_marker:
+                    try:
+                        stat = self._client.stat_object(
+                            location.bucket_name, key, version_id=obj.version_id
+                        )
+                    except S3Error as error:
+                        if error.code in {"NoSuchKey", "NoSuchObject", "NoSuchVersion"}:
+                            return
+                        raise
+                    metadata = {
+                        name.lower(): value
+                        for name, value in (stat.metadata or {}).items()
+                    }
+                    if (
+                        metadata.get("x-amz-meta-dnk-tenant") != str(location.tenant_id)
+                        or metadata.get("x-amz-meta-dnk-bucket")
+                        != str(location.bucket_id)
+                        or metadata.get("x-amz-meta-dnk-file") != key
+                    ):
+                        raise StorageOwnershipError(
+                            "Object version ownership is not confirmed."
+                        )
+                self._client.remove_object(
+                    location.bucket_name, key, version_id=obj.version_id
+                )
+
+            await self.call(remove_version)
+        # Новый независимый listing подтверждает отсутствие также скрытых версий/markers.
+        remaining = self._client.list_objects(
+            location.bucket_name, prefix=key, recursive=True, include_version=True
+        )
+        while True:
+            if time.monotonic() >= deadline:
+                raise StorageUnavailableError(
+                    "File purge verification deadline exceeded."
+                )
+            obj = await self.call(lambda: next(remaining, None))
+            if obj is None:
+                return
+            if obj.object_name == key:
+                raise StorageUnavailableError("File versions remain after purge.")
 
     async def abort_incomplete(
         self, location: StorageLocation, older_than: datetime

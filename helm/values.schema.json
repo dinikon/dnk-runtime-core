@@ -430,6 +430,10 @@
               "exclusiveMinimum": 0,
               "maximum": 600
             },
+            "consoleMaxUploadBytes": {
+              "type": "integer",
+              "minimum": 1
+            },
             "concurrency": {
               "type": "integer",
               "minimum": 1,

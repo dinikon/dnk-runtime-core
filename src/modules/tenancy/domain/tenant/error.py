@@ -1,4 +1,4 @@
-from src.modules.shared import DomainError
+from src.modules.shared.domain.domain_error import DomainError
 
 
 class InvalidTenantNameError(DomainError):

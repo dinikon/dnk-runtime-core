@@ -11,6 +11,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest.mock import AsyncMock
 from pathlib import Path
 from unittest.mock import patch
 from uuid import UUID, uuid4
@@ -64,11 +65,11 @@ from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations imp
 from src.modules.tenancy.application.ports.schema_bootstrap import (
     TenantSchemaBootstrapContextFactory,
 )
-from src.modules.tenancy.application.tenant.command.create_tenant_command import (
+from src.modules.tenancy.application.tenant.command.create_tenant.command import (
     CreateTenantCommand,
 )
-from src.modules.tenancy.application.tenant.use_case.create_tenant import (
-    CreateTenantUseCase,
+from src.modules.tenancy.application.tenant.command.create_tenant.handler import (
+    CreateTenantHandler,
 )
 from src.modules.tenancy.application.tenant.onboarding import TenantOnboardingService
 from src.modules.tenancy.domain.tenant.entity import Tenant
@@ -169,7 +170,10 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
         async with self.engine.begin() as connection:
             for tenant_schema in (schema, other):
                 await self.migrator._migrate(
-                    connection, tenant_schema, command.upgrade, "0015_remove_catalog"
+                    connection,
+                    tenant_schema,
+                    command.upgrade,
+                    "0014_channel_publications",
                 )
                 await self.insert_warehouse(connection, tenant_schema)
                 await connection.execute(
@@ -229,7 +233,8 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 "preserved",
             )
             self.assertEqual(
-                await self.migrator.current(connection, other), ("0015_remove_catalog",)
+                await self.migrator.current(connection, other),
+                ("0014_channel_publications",),
             )
             self.assertEqual(
                 await connection.scalar(text(f'SELECT id FROM "{other}".skus')),
@@ -249,7 +254,9 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 ),
                 public_before,
             )
-            await self.migrator.downgrade(connection, schema, "0015_remove_catalog")
+            await self.migrator.downgrade(
+                connection, schema, "0014_channel_publications"
+            )
             restored = set(
                 await connection.run_sync(
                     lambda conn: inspect(conn).get_table_names(schema=schema)
@@ -299,101 +306,68 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 await self.migrator.current(connection, schema), (self.migrator.head(),)
             )
 
-    async def test_catalog_removal_preserves_other_modules_and_tenants(self) -> None:
-        """Удаление Catalog ограничено tenant; downgrade возвращает только схему."""
-        schema = await self.new_schema(upgrade=False)
-        other = await self.new_schema(upgrade=False)
+    async def test_catalog_baseline_preserves_other_modules_and_tenants(self) -> None:
+        """Fresh baseline и его откат ограничены одной tenant-схемой."""
+        schema = await self.new_schema()
+        other = await self.new_schema()
         async with self.engine.begin() as connection:
-            for tenant_schema in (schema, other):
-                await self.migrator.upgrade(connection, tenant_schema)
-                await self.migrator.downgrade(
-                    connection, tenant_schema, "0014_channel_publications"
-                )
-            warehouse_id = await self.insert_warehouse(connection, schema)
+            # Isolate this baseline from later migrations owned by other modules.
+            await self.migrator.downgrade(connection, schema, "0023_catalog_item")
             tables_before = set(
                 await connection.run_sync(
                     lambda conn: inspect(conn).get_table_names(schema=schema)
                 )
             )
-            catalog_tables = {
-                name for name in tables_before if name.startswith("catalog_")
-            }
-            self.assertEqual(len(catalog_tables), 14)
-            actor, sku_id = uuid4(), uuid4()
-            await connection.execute(
-                text(
-                    f'INSERT INTO "{schema}".skus '
-                    "(id, code, title, created_by, updated_by) "
-                    "VALUES (:id, 'kept-sku', 'Kept SKU', :actor, :actor)"
-                ),
-                {"id": sku_id, "actor": actor},
+            await self.migrator.downgrade(
+                connection, schema, "0022_tenant_currency_settings"
             )
-            product_id = uuid4()
-            await connection.execute(
-                text(
-                    f'INSERT INTO "{schema}".catalog_products '
-                    "(id, kind, product_type_id, created_by, updated_by) "
-                    f"SELECT :id, 'simple', id, :actor, :actor "
-                    f"FROM \"{schema}\".catalog_product_types WHERE code = 'clean'"
-                ),
-                {"id": product_id, "actor": actor},
+            self.assertIsNone(
+                await connection.scalar(
+                    text("SELECT to_regclass(:table)"),
+                    {"table": schema + ".catalog_item"},
+                )
             )
-            await connection.execute(
-                text(
-                    f'INSERT INTO "{schema}".catalog_variants (id, product_id, sku_id) '
-                    "VALUES (:id, :product, :sku)"
-                ),
-                {"id": uuid4(), "product": product_id, "sku": sku_id},
-            )
-            await self.migrator._migrate(
-                connection, schema, command.upgrade, "0015_remove_catalog"
+            self.assertIsNotNone(
+                await connection.scalar(
+                    text("SELECT to_regclass(:table)"),
+                    {"table": other + ".catalog_item"},
+                )
             )
             tables_after = set(
                 await connection.run_sync(
                     lambda conn: inspect(conn).get_table_names(schema=schema)
                 )
             )
-            self.assertEqual(tables_after, tables_before - catalog_tables)
             self.assertEqual(
-                await connection.scalar(text(f'SELECT id FROM "{schema}".skus')),
-                sku_id,
+                tables_after, {t for t in tables_before if not t.startswith("catalog_")}
             )
-            self.assertEqual(
-                await connection.scalar(text(f'SELECT id FROM "{schema}".warehouses')),
-                warehouse_id,
-            )
-            self.assertTrue(
-                await connection.run_sync(
-                    lambda conn: inspect(conn).has_table(
-                        "catalog_products", schema=other
-                    )
-                )
-            )
-            await self.migrator.downgrade(
-                connection, schema, "0014_channel_publications"
-            )
-            restored = set(
-                await connection.run_sync(
-                    lambda conn: inspect(conn).get_table_names(schema=schema)
-                )
-            )
-            self.assertEqual(restored, tables_before)
-            self.assertEqual(
+            self.assertIsNotNone(
                 await connection.scalar(
-                    text(f'SELECT count(*) FROM "{schema}".catalog_products')
-                ),
-                0,
+                    text("SELECT to_regclass(:table)"),
+                    {"table": schema + ".files_registry"},
+                )
             )
+            await self.migrator.upgrade(connection, schema)
             self.assertEqual(
                 await connection.scalar(
                     text(f'SELECT count(*) FROM "{schema}".catalog_product_types')
                 ),
                 1,
             )
-            await self.migrator.upgrade(connection, schema)
+            self.assertIsNone(
+                await connection.scalar(
+                    text("SELECT to_regclass(:table)"),
+                    {"table": schema + ".catalog_products"},
+                )
+            )
+            self.assertIsNone(
+                await connection.scalar(
+                    text("SELECT to_regclass(:table)"),
+                    {"table": schema + ".catalog_variants"},
+                )
+            )
             self.assertEqual(
-                await self.migrator.current(connection, schema),
-                (self.migrator.head(),),
+                await self.migrator.current(connection, schema), (self.migrator.head(),)
             )
 
     async def test_upgrade_repeat_downgrade_and_constraints(self) -> None:
@@ -408,7 +382,9 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 await self.migrator.current(connection, schema),
                 (self.migrator.head(),),
             )
-            await self.migrator.downgrade(connection, schema, "0015_remove_catalog")
+            await self.migrator.downgrade(
+                connection, schema, "0014_channel_publications"
+            )
             indexes = await connection.run_sync(
                 lambda conn: inspect(conn).get_indexes("warehouses", schema=schema)
             )
@@ -681,7 +657,9 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
             await self.migrator.upgrade(connection, right)
             for schema in (left, right):
-                await self.migrator.downgrade(connection, schema, "0015_remove_catalog")
+                await self.migrator.downgrade(
+                    connection, schema, "0014_channel_publications"
+                )
             root = await self.insert_warehouse(connection, left)
             with self.assertRaises(IntegrityError):
                 async with connection.begin_nested():
@@ -720,7 +698,9 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 await super().bootstrap(context=context)
 
         async with UnitOfWork(sessions) as uow:
-            use_case = CreateTenantUseCase(
+            use_case = CreateTenantHandler(
+                currency_validator=AsyncMock(),
+                currency_settings_writer=AsyncMock(),
                 tenant_onboarding_service=TenantOnboardingService(
                     SqlAlchemyTenantRepository(uow.session),
                     SqlAlchemyTenantDomainRepository(uow.session),

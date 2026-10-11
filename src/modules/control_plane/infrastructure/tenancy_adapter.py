@@ -1,6 +1,18 @@
 """Composition adapter to tenancy and identity; no foreign ORM in application."""
 
 from uuid import UUID
+from src.modules.reference_data.application.currency.query.validate_currency.handler import (
+    ValidateCurrencyHandler,
+)
+from src.modules.reference_data.infrastructure.currency.persistence.query_repository import (
+    SqlAlchemyCurrencyQueryRepository,
+)
+from src.modules.tenancy.infrastructure.adapter.currency_validator import (
+    ReferenceDataCurrencyValidator,
+)
+from src.modules.tenancy.infrastructure.adapter.tenant_currency_settings import (
+    TenantCurrencySettingsPersistenceAdapter,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.control_plane.infrastructure.models import InstallationModel
 from src.modules.tenancy.infrastructure.adapter.files import FilesTenantStorageAdapter
@@ -26,11 +38,11 @@ from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations imp
 from src.modules.tenancy.application.ports.schema_bootstrap import (
     TenantSchemaBootstrapContextFactory,
 )
-from src.modules.tenancy.application.tenant.command.create_tenant_command import (
+from src.modules.tenancy.application.tenant.command.create_tenant.command import (
     CreateTenantCommand,
 )
-from src.modules.tenancy.application.tenant.use_case.create_tenant import (
-    CreateTenantUseCase,
+from src.modules.tenancy.application.tenant.command.create_tenant.handler import (
+    CreateTenantHandler,
 )
 from src.modules.tenancy.application.tenant.onboarding import TenantOnboardingService
 from src.modules.tenancy.infrastructure.adapter.identity_provisioning import (
@@ -102,7 +114,7 @@ class TenancyAdapter:
         )
         from src.modules.identity.infrastructure.cloud.bootstrap import bind_cloud_owner
 
-        use_case = CreateTenantUseCase(
+        use_case = CreateTenantHandler(
             TenantOnboardingService(
                 SqlAlchemyTenantRepository(self.session),
                 SqlAlchemyTenantDomainRepository(self.session),
@@ -115,6 +127,10 @@ class TenancyAdapter:
             TenantSchemaBootstrapContextFactory(schema_prefix=self.schema_prefix),
             AlembicTenantSchemaBootstrapAdapter(self.session, self.migrator),
             FilesTenantStorageAdapter(self.session, self.naming),
+            ReferenceDataCurrencyValidator(
+                ValidateCurrencyHandler(SqlAlchemyCurrencyQueryRepository(self.session))
+            ),
+            TenantCurrencySettingsPersistenceAdapter(self.session, self.naming),
         )
         profile = command["owner"].get("profile", {})
         result = await use_case.execute(

@@ -3,7 +3,7 @@
 from alembic import op
 
 revision = "0016_remove_inventory"
-down_revision = "0015_remove_catalog"
+down_revision = "0014_channel_publications"
 branch_labels = None
 depends_on = None
 
