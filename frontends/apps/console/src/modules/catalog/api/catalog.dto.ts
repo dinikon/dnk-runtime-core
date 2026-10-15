@@ -162,16 +162,24 @@ export interface PriceDTO {
   date_on_sale_from: string | null;
   date_on_sale_to: string | null;
 }
+export type WeightUnit = "g" | "kg";
+export type LengthUnit = "cm" | "m";
+export interface MeasurementDTO<U extends WeightUnit | LengthUnit> {
+  value: string;
+  unit: U;
+}
+export type WeightDTO = MeasurementDTO<WeightUnit>;
+export type LengthDTO = MeasurementDTO<LengthUnit>;
 export interface DimensionsDTO {
-  length: string;
-  width: string;
-  height: string;
+  length: LengthDTO | null;
+  width: LengthDTO | null;
+  height: LengthDTO | null;
 }
 export interface StockDTO {
-  manage_stock: "none" | "own" | "parent";
+  manage_stock: boolean;
   stock_quantity: number | null;
   stock_status: "in_stock" | "out_of_stock" | "on_backorder" | null;
-  backorders: "no" | "notify" | "yes" | null;
+  backorders: "no" | "notify" | "yes";
 }
 export interface AttributeDTO {
   attribute_id: string;
@@ -220,11 +228,11 @@ export interface OwnItemDTO {
   product_type_id: string | null;
   status: ItemStatus;
   sku: string | null;
-  virtual: OverrideDTO<boolean>;
-  price: OverrideDTO<PriceDTO>;
-  weight: OverrideDTO<string>;
-  dimensions: OverrideDTO<DimensionsDTO>;
-  stock: StockDTO | null;
+  virtual: boolean;
+  price: PriceDTO | null;
+  weight: WeightDTO | null;
+  dimensions: DimensionsDTO | null;
+  stock: StockDTO;
   translations: Record<string, Record<string, OverrideDTO<string>>>;
   galleries: Record<string, GalleryDTO>;
   attributes: AttributeDTO[];
@@ -248,13 +256,14 @@ export interface ReadItemDTO {
     virtual: boolean;
     price_specification: PriceDTO | null;
     price: string | null;
-    weight: string | null;
+    weight: WeightDTO | null;
     dimensions: DimensionsDTO | null;
-    stock: StockDTO | null;
+    stock: StockDTO;
     stock_source_id: string | null;
     gallery: GalleryDTO | null;
     attributes: AttributeDTO[];
     metadata: MetadataDTO[];
+    available_for_sale: boolean;
     available_for_publication: boolean;
     origins: Record<
       string,
@@ -326,6 +335,9 @@ export interface ListItemDTO {
   price_incomplete: boolean;
   stock_status: string | null;
   primary_image: ImageDTO | null;
+  weight: WeightDTO | null;
+  dimensions: DimensionsDTO | null;
+  available_for_sale: boolean;
 }
 export interface ListVariantsResponse {
   items: ReadItemDTO[];

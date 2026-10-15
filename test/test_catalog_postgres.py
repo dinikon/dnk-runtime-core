@@ -240,13 +240,10 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         child = created["child_ids"][0]
         await self.request(
             "PUT",
-            f"/items/{root}/price",
+            f"/items/{child}/price",
             {
                 "expected_root_revision": 1,
-                "price": {
-                    "mode": "set",
-                    "value": {"regular_price": "10.100001", "currency": "UAH"},
-                },
+                "price": {"regular_price": "10.100001", "currency": "UAH"},
             },
         )
         await self.request(
@@ -255,7 +252,8 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             {
                 "expected_root_revision": 2,
                 "stock": {
-                    "manage_stock": "own",
+                    "manage_stock": True,
+                    "stock_status": None,
                     "stock_quantity": 0,
                     "backorders": "notify",
                 },
@@ -264,7 +262,15 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         await self.request(
             "PUT",
             f"/items/{child}/stock",
-            {"expected_root_revision": 3, "stock": {"manage_stock": "parent"}},
+            {
+                "expected_root_revision": 3,
+                "stock": {
+                    "manage_stock": False,
+                    "stock_quantity": None,
+                    "stock_status": "in_stock",
+                    "backorders": "no",
+                },
+            },
         )
         read = await self.request("GET", f"/items/{child}?locale=en")
         self.assertEqual(read["item"]["root_id"], root)
@@ -338,16 +344,14 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             f"/items/{child}/price",
             {
                 "expected_root_revision": 6,
-                "price": {
-                    "mode": "set",
-                    "value": {"regular_price": "10.100001", "currency": "UAH"},
-                },
+                "price": {"regular_price": "10.100001", "currency": "UAH"},
             },
         )
         await self.request(
             "PUT",
             f"/items/{root}/price",
-            {"expected_root_revision": 7, "price": {"mode": "clear"}},
+            {"expected_root_revision": 7, "price": None},
+            status=422,
         )
         listed = await self.request("GET", "/items?locale=en")
         row = next(i for i in listed["items"] if i["id"] == root)
@@ -355,6 +359,177 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             (row["price_min"], row["price_max"], row["currency"]),
             ("10.100001", "10.100001", "UAH"),
         )
+
+        await self.request(
+            "PUT",
+            f"/items/{root}/measurements",
+            {
+                "expected_root_revision": 7,
+                "weight": {"value": "1.5", "unit": "kg"},
+                "dimensions": {
+                    "length": {"value": "0.8", "unit": "m"},
+                    "width": {"value": "40", "unit": "cm"},
+                    "height": {"value": "20", "unit": "cm"},
+                },
+            },
+        )
+        await self.request(
+            "PUT",
+            f"/items/{child}/measurements",
+            {
+                "expected_root_revision": 8,
+                "weight": {"value": "0", "unit": "g"},
+                "dimensions": {
+                    "length": None,
+                    "width": {"value": "0", "unit": "m"},
+                    "height": None,
+                },
+            },
+        )
+        detail = (await self.request("GET", f"/items/{child}?locale=en"))["item"]
+        self.assertEqual(
+            detail["own"]["dimensions"]["width"], {"value": "0", "unit": "m"}
+        )
+        self.assertEqual(
+            detail["effective"]["dimensions"]["length"], {"value": "0.8", "unit": "m"}
+        )
+        self.assertEqual(
+            detail["effective"]["origins"]["dimensions.length"]["source"], "parent"
+        )
+        self.assertEqual(detail["effective"]["weight"], {"value": "0", "unit": "g"})
+        self.assertTrue(detail["effective"]["available_for_sale"])
+        variants = await self.request("GET", f"/items/{root}/variants?locale=en")
+        matching = next(v for v in variants["items"] if v["own"]["id"] == child)
+        self.assertEqual(matching["effective"], detail["effective"])
+        family = (await self.request("GET", f"/items/{root}?locale=en"))["item"]
+        self.assertTrue(family["effective"]["available_for_sale"])
+        self.assertEqual(family["stock_status"], "on_backorder")
+        rows = await self.request("GET", "/items?locale=en&include_variants=true")
+        row = next(v for v in rows["items"] if v["id"] == child)
+        self.assertEqual(row["dimensions"], detail["effective"]["dimensions"])
+        self.assertEqual(row["weight"], detail["effective"]["weight"])
+        self.assertTrue(row["available_for_sale"])
+        async with self.engine.connect() as connection:
+            await bind_tenant_schema(connection, self.tenant.uuid, self.naming)
+            async with UnitOfWork(
+                async_sessionmaker(connection, expire_on_commit=False)
+            ) as uow:
+                repository = SqlAlchemyCatalogItemQueryRepository(uow.session)
+                snapshot = await repository.snapshot(
+                    replace(query, expected_root_revisions={UUID(root): 9}),
+                    datetime.now(UTC),
+                )
+                self.assertEqual(snapshot.items[0].effective.weight.value, 0)
+                self.assertEqual(snapshot.items[0].effective.weight.unit.value, "g")
+                self.assertEqual(
+                    snapshot.items[0].effective.dimensions.length.unit.value, "m"
+                )
+                self.assertTrue(snapshot.items[0].effective.available_for_sale)
+
+    async def test_measurement_contract_round_trip_and_legacy_rejection(self) -> None:
+        """HTTP сохраняет единицы и точность, отклоняет старые режимы и неполные пары."""
+        created = await self.create_item()
+        ident = created["id"]
+        body = {
+            "expected_root_revision": 1,
+            "weight": {"value": "0.000000001", "unit": "kg"},
+            "dimensions": {
+                "length": {"value": "12.5", "unit": "cm"},
+                "width": None,
+                "height": None,
+            },
+        }
+        await self.request("PUT", f"/items/{ident}/measurements", body)
+        item = (await self.request("GET", f"/items/{ident}?locale=en"))["item"]
+        self.assertEqual(item["own"]["weight"]["unit"], "kg")
+        self.assertEqual(
+            item["own"]["dimensions"]["length"], {"value": "12.5", "unit": "cm"}
+        )
+        self.assertIsNone(item["effective"]["dimensions"]["height"])
+        for weight in [
+            "10",
+            {"value": "1"},
+            {"unit": "kg"},
+            {"value": "1", "unit": "cm"},
+            {"value": "0.0000000001", "unit": "kg"},
+            {"mode": "set", "value": "1"},
+        ]:
+            await self.request(
+                "PUT",
+                f"/items/{ident}/measurements",
+                {**body, "expected_root_revision": 2, "weight": weight},
+                422,
+            )
+        await self.request(
+            "PUT",
+            f"/items/{ident}/measurements",
+            {
+                "expected_root_revision": 2,
+                "weight": None,
+                "dimensions": {"length": None},
+            },
+            422,
+        )
+        for section, payload in [
+            ("price", {"price": {"mode": "clear"}}),
+            ("virtual", {"virtual": {"mode": "set", "value": False}}),
+            ("virtual", {"virtual": "false"}),
+            ("stock", {"stock": None}),
+            (
+                "stock",
+                {
+                    "stock": {
+                        "manage_stock": "parent",
+                        "stock_quantity": None,
+                        "stock_status": "in_stock",
+                        "backorders": "no",
+                    }
+                },
+            ),
+        ]:
+            await self.request(
+                "PUT",
+                f"/items/{ident}/{section}",
+                {"expected_root_revision": 2, **payload},
+                422,
+            )
+        await self.request(
+            "PUT",
+            f"/items/{ident}/stock",
+            {
+                "expected_root_revision": 2,
+                "stock": {
+                    "manage_stock": True,
+                    "stock_quantity": -2,
+                    "stock_status": None,
+                    "backorders": "yes",
+                },
+            },
+        )
+        await self.request(
+            "PUT",
+            f"/items/{ident}/stock",
+            {
+                "expected_root_revision": 3,
+                "stock": {
+                    "manage_stock": False,
+                    "stock_quantity": None,
+                    "stock_status": "on_backorder",
+                    "backorders": "no",
+                },
+            },
+        )
+        read = (await self.request("GET", f"/items/{ident}?locale=en"))["item"]
+        self.assertEqual(read["stock_status"], "on_backorder")
+        self.assertIsNone(read["own"]["stock"]["stock_quantity"])
+        await self.request(
+            "PUT",
+            f"/items/{ident}/measurements",
+            {"expected_root_revision": 4, "weight": None, "dimensions": None},
+        )
+        read = (await self.request("GET", f"/items/{ident}?locale=en"))["item"]
+        self.assertIsNone(read["own"]["weight"])
+        self.assertIsNone(read["effective"]["dimensions"])
 
     async def test_classification_gallery_and_unique_sku(self) -> None:
         item = await self.create_item()
@@ -500,9 +675,13 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         schema = self.schemas[0]
         for assignment in [
             "kind='variant',parent_id=id,product_type_id=NULL",
-            "price_mode='set',regular_price=1,currency=NULL",
-            "weight_mode='set',weight='NaN'::numeric",
-            "manage_stock='own',stock_quantity=0,backorders=NULL",
+            "regular_price=1,currency=NULL",
+            "weight='NaN'::numeric,weight_unit='g'",
+            "manage_stock=true,stock_quantity=0,backorders=NULL",
+            "weight=1,weight_unit=NULL",
+            "length=1,length_unit='kg'",
+            "height=0.0000000001,height_unit='m'",
+            "width=-1,width_unit='cm'",
         ]:
             with self.assertRaises(IntegrityError):
                 async with self.engine.begin() as connection:

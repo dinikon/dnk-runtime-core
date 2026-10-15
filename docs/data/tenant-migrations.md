@@ -39,7 +39,11 @@ in the migration history after removal of the module.
 Catalog now uses a fresh `0023_catalog_item` baseline after
 `0022_tenant_currency_settings`. It creates `catalog_item` for simple, variable
 and variant nodes, normalized content/media/enum/classification links and the
-fixed Default schema. It does not migrate old Product/Variant rows.
+fixed Default schema. The 2026-10-15 rebuild removes scalar override modes,
+uses boolean stock management and stores each measurement as a nullable value/unit
+pair (g/kg for weight, cm/m for each dimension). Revision identity remains
+0023_catalog_item; 0024_currency_exchange_rates still depends on it. It does not
+migrate old Product/Variant rows or existing CatalogItem data.
 
 The five Catalog revisions 0012/0015/0017/0018/0019 are removed. Only chain links
 in preserved migrations change: 0013 -> 0011, 0016 -> 0014, 0020 -> 0016. Files

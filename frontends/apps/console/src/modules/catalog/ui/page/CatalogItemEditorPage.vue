@@ -125,8 +125,9 @@ const sections = computed<ItemSection[]>(() => [
   "content",
   "status",
   ...(item.data.value?.kind === "variable" ? [] : ["sku" as const]),
-  "virtual",
-  "price",
+  ...(item.data.value?.kind === "variable"
+    ? []
+    : ["virtual" as const, "price" as const]),
   "stock",
   "measurements",
   "metadata",
@@ -230,7 +231,7 @@ function toVariable(value: StructureDTO) {
   void save("kind", {
     kind: "variable",
     structure: value,
-    carry_to_index: item.data.value?.own.sku ? carry.value : null,
+    carry_to_index: carry.value,
   });
   transition.value = false;
 }
@@ -460,8 +461,8 @@ function toSimple() {
           Перед преобразованием снимите категории и метки.
         </p>
         <template v-if="transition"
-          ><label v-if="item.data.value.own.sku" class="block"
-            >Номер варианта для переноса SKU (с нуля)<input
+          ><label class="block"
+            >Номер варианта для переноса SKU, цены и наличия (с нуля)<input
               v-model.number="carry"
               type="number"
               min="0"

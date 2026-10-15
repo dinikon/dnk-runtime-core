@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 from typing import Generic, TypeVar, Literal
-from pydantic import BaseModel, ConfigDict, Field, StrictBool
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 from src.modules.catalog.domain.catalog_item.value_object.override import (
     OverrideVO,
     OverrideMode,
@@ -13,10 +13,13 @@ from src.modules.catalog.domain.catalog_item.value_object.price import (
 )
 from src.modules.catalog.domain.catalog_item.value_object.measurements import (
     DimensionsVO,
+    WeightVO,
+    WeightUnit,
+    LengthVO,
+    LengthUnit,
 )
 from src.modules.catalog.domain.catalog_item.value_object.stock import (
     StockSpecificationVO,
-    StockManagement,
     StockStatus,
     BackorderPolicy,
 )
@@ -78,35 +81,63 @@ class PriceValue(BaseModel):
         )
 
 
-class DimensionsValue(BaseModel):
-    """Полная группа измерений в миллиметрах."""
+class WeightValue(BaseModel):
+    """Масса с собственной единицей измерения."""
 
     model_config = ConfigDict(extra="forbid")
-    length: Decimal
-    width: Decimal
-    height: Decimal
+    value: Decimal
+    unit: Literal["g", "kg"]
+
+    def to_vo(self) -> WeightVO:
+        """Передаёт массу и её единицу без округления."""
+        return WeightVO(self.value, WeightUnit(self.unit))
+
+
+class LengthValue(BaseModel):
+    """Один линейный размер с собственной единицей."""
+
+    model_config = ConfigDict(extra="forbid")
+    value: Decimal
+    unit: Literal["cm", "m"]
+
+    def to_vo(self) -> LengthVO:
+        """Передаёт размер и его единицу без округления."""
+        return LengthVO(self.value, LengthUnit(self.unit))
+
+
+class DimensionsValue(BaseModel):
+    """Полный раздел независимо необязательных измерений."""
+
+    model_config = ConfigDict(extra="forbid")
+    length: LengthValue | None
+    width: LengthValue | None
+    height: LengthValue | None
 
     def to_vo(self) -> DimensionsVO:
-        """Преобразует все три измерения одной группой."""
-        return DimensionsVO(self.length, self.width, self.height)
+        """Преобразует каждый компонент вместе с его собственной единицей."""
+        return DimensionsVO(
+            self.length.to_vo() if self.length is not None else None,
+            self.width.to_vo() if self.width is not None else None,
+            self.height.to_vo() if self.height is not None else None,
+        )
 
 
 class StockValue(BaseModel):
-    """Собственное, заявленное или общее наличие."""
+    """Собственный boolean учёта и согласованные настройки наличия."""
 
     model_config = ConfigDict(extra="forbid")
-    manage_stock: Literal["none", "own", "parent"]
-    stock_quantity: int | None = None
-    stock_status: Literal["in_stock", "out_of_stock", "on_backorder"] | None = None
-    backorders: Literal["no", "notify", "yes"] | None = None
+    manage_stock: StrictBool
+    stock_quantity: StrictInt | None
+    stock_status: Literal["in_stock", "out_of_stock", "on_backorder"] | None
+    backorders: Literal["no", "notify", "yes"]
 
     def to_vo(self) -> StockSpecificationVO:
         """Передаёт проверку сочетаний доменному VO."""
         return StockSpecificationVO(
-            StockManagement(self.manage_stock),
+            self.manage_stock,
             self.stock_quantity,
             StockStatus(self.stock_status) if self.stock_status else None,
-            BackorderPolicy(self.backorders) if self.backorders else None,
+            BackorderPolicy(self.backorders),
         )
 
 
@@ -286,11 +317,11 @@ class OwnItemResponse(BaseModel):
     product_type_id: UUID | None
     status: Literal["draft", "active", "archived"]
     sku: str | None
-    virtual: ValueOverride[bool]
-    price: ValueOverride[PriceValue]
-    weight: ValueOverride[Decimal]
-    dimensions: ValueOverride[DimensionsValue]
-    stock: StockValue | None
+    virtual: bool
+    price: PriceValue | None
+    weight: WeightValue | None
+    dimensions: DimensionsValue | None
+    stock: StockValue
     translations: dict[str, dict[str, ValueOverride[str]]]
     galleries: dict[str, GalleryValue]
     attributes: tuple[AttributeValue, ...]
@@ -315,13 +346,14 @@ class EffectiveItemResponse(BaseModel):
     virtual: bool
     price_specification: PriceValue | None
     price: Decimal | None
-    weight: Decimal | None
+    weight: WeightValue | None
     dimensions: DimensionsValue | None
-    stock: StockValue | None
+    stock: StockValue
     stock_source_id: UUID | None
     gallery: GalleryValue | None
     attributes: tuple[AttributeValue, ...]
     metadata: tuple[MetadataValue, ...]
+    available_for_sale: bool
     available_for_publication: bool
     origins: dict[str, OriginResponse]
 
@@ -381,3 +413,6 @@ class ListItemResponse(BaseModel):
     price_incomplete: bool
     stock_status: str | None
     primary_image: ImageValue | None
+    available_for_sale: bool
+    weight: WeightValue | None
+    dimensions: DimensionsValue | None

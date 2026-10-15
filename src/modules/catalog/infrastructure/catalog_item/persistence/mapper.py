@@ -53,12 +53,15 @@ from src.modules.catalog.domain.catalog_item.value_object.price import (
 )
 from src.modules.catalog.domain.catalog_item.value_object.stock import (
     StockSpecificationVO,
-    StockManagement,
     StockStatus,
     BackorderPolicy,
 )
 from src.modules.catalog.domain.catalog_item.value_object.measurements import (
     DimensionsVO,
+    WeightVO,
+    WeightUnit,
+    LengthVO,
+    LengthUnit,
 )
 from src.modules.catalog.domain.catalog_item.value_object.sku import SkuCodeVO
 from src.modules.catalog.domain.catalog_item.value_object.snapshot import (
@@ -106,23 +109,23 @@ class CatalogItemMapper:
                 row["date_on_sale_from"],
                 row["date_on_sale_to"],
             )
-            if row["price_mode"] == "set"
+            if row["regular_price"] is not None
             else None
         )
-        dimensions = (
-            DimensionsVO(row["length"], row["width"], row["height"])
-            if row["dimensions_mode"] == "set"
-            else None
-        )
-        stock = (
-            StockSpecificationVO(
-                StockManagement(row["manage_stock"]),
-                row["stock_quantity"],
-                StockStatus(row["stock_status"]) if row["stock_status"] else None,
-                BackorderPolicy(row["backorders"]) if row["backorders"] else None,
+        sizes = tuple(
+            (
+                LengthVO(row[name], LengthUnit(row[f"{name}_unit"]))
+                if row[name] is not None
+                else None
             )
-            if row["manage_stock"]
-            else None
+            for name in ("length", "width", "height")
+        )
+        dimensions = DimensionsVO(*sizes) if any(v is not None for v in sizes) else None
+        stock = StockSpecificationVO(
+            row["manage_stock"],
+            row["stock_quantity"],
+            StockStatus(row["stock_status"]) if row["stock_status"] else None,
+            BackorderPolicy(row["backorders"]),
         )
         translations = {r["locale"]: {} for r in rows("catalog_item_translations")}
         codes = {v.uuid: k for k, v in BLOCK_IDS.items()}
@@ -230,10 +233,14 @@ class CatalogItemMapper:
             EntityIdVO(row["product_type_id"]) if row["product_type_id"] else None,
             CatalogItemStatus(row["status"]),
             row["sku"],
-            OverrideVO(OverrideMode(row["virtual_mode"]), row["virtual"]),
-            OverrideVO(OverrideMode(row["price_mode"]), price),
-            OverrideVO(OverrideMode(row["weight_mode"]), row["weight"]),
-            OverrideVO(OverrideMode(row["dimensions_mode"]), dimensions),
+            row["virtual"],
+            price,
+            (
+                WeightVO(row["weight"], WeightUnit(row["weight_unit"]))
+                if row["weight"] is not None
+                else None
+            ),
+            dimensions,
             stock,
             translations,
             galleries,
@@ -298,8 +305,8 @@ class CatalogItemMapper:
     @staticmethod
     def to_insert_values(item: CatalogItem) -> dict[str, Any]:
         """Извлекает центральную строку без вычисления inherited/effective полей."""
-        price = item.price.value
-        dimensions = item.dimensions.value
+        price = item.price
+        dimensions = item.dimensions
         stock = item.stock
         return dict(
             id=item.id.uuid,
@@ -313,21 +320,35 @@ class CatalogItemMapper:
             updated_at=item.updated_at,
             created_by=item.created_by.uuid,
             updated_by=item.updated_by.uuid,
-            virtual_mode=item.virtual.mode.value,
-            virtual=item.virtual.value,
-            price_mode=item.price.mode.value,
+            virtual=item.virtual,
             regular_price=price.regular_price if price else None,
             sale_price=price.sale_price if price else None,
             currency=price.currency if price else None,
             date_on_sale_from=price.date_on_sale_from if price else None,
             date_on_sale_to=price.date_on_sale_to if price else None,
-            weight_mode=item.weight.mode.value,
-            weight=item.weight.value,
-            dimensions_mode=item.dimensions.mode.value,
-            length=dimensions.length if dimensions else None,
-            width=dimensions.width if dimensions else None,
-            height=dimensions.height if dimensions else None,
-            manage_stock=stock.manage_stock.value if stock else None,
+            weight=item.weight.value if item.weight else None,
+            weight_unit=item.weight.unit.value if item.weight else None,
+            length=(
+                dimensions.length.value if dimensions and dimensions.length else None
+            ),
+            length_unit=(
+                dimensions.length.unit.value
+                if dimensions and dimensions.length
+                else None
+            ),
+            width=dimensions.width.value if dimensions and dimensions.width else None,
+            width_unit=(
+                dimensions.width.unit.value if dimensions and dimensions.width else None
+            ),
+            height=(
+                dimensions.height.value if dimensions and dimensions.height else None
+            ),
+            height_unit=(
+                dimensions.height.unit.value
+                if dimensions and dimensions.height
+                else None
+            ),
+            manage_stock=stock.manage_stock,
             stock_quantity=stock.stock_quantity if stock else None,
             stock_status=(
                 stock.stock_status.value if stock and stock.stock_status else None

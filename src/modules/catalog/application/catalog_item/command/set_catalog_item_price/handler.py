@@ -33,8 +33,8 @@ class SetCatalogItemPriceHandler:
             command.tenant_id, command.item_id, command.expected_root_revision
         )
         now = self._clock.now()
-        if command.price.value:
-            await self._currencies.ensure_active(command.price.value.currency)
+        if command.price is not None:
+            await self._currencies.ensure_active(command.price.currency)
         root.set_price(command.item_id, command.price, command.actor_id, now)
         await self._mutations.save(root)
         item = root.find_item(command.item_id)

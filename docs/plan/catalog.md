@@ -1,6 +1,6 @@
 # План переработки Catalog: единая модель CatalogItem
 
-Дата обновления: 2026-10-11. Статус: целевая архитектура и план замены текущей
+Дата обновления: 2026-10-15. Статус: целевая архитектура и план замены текущей
 реализации в существующем проекте. Изменение плана не означает, что описанные
 ниже код, API и миграции уже реализованы.
 
@@ -60,7 +60,7 @@
    будущего Inventory. Код SKU не является идентификатором складского агрегата.
 8. Catalog не реализует склады, резервы, движения, заказы, списание остатков,
    налоги, оплату и права на скачивание. Количество здесь — заявленное наличие
-   карточки; будущий складской модуль подключается через публичный контракт.
+   карточки; подключение Inventory и fallback сейчас не проектируются.
 9. `price`, `backorders_allowed`, `backordered` и effective stock status —
    вычисляемые поля чтения. Они не получают самостоятельных команд записи.
 10. `virtual` входит в MVP. Downloadable, цифровая выдача, упаковка, бренды,
@@ -137,143 +137,112 @@ Application-порт поиска владельца, загружает VARIABL
 в таблице Woo не меняет внутренний формат ID. Внешние числовые ID принадлежат
 Channels и не используются как PK Catalog.
 
-## 3. Поля CatalogItem и правила записи
+## 3. Поля CatalogItem, единицы и наличие
 
-Типы в Domain не повторяют строковые представления Woo. Денежные значения
-и измерения используют Decimal/VO; HTTP передаёт точные числа строками,
-SQL — NUMERIC. Время — timezone-aware UTC, SQL timestamptz.
+ID, kind, parent_id, product_type, status, SKU, audit/revision и структура
+сохраняют правила разделов 1–2. Status — draft/active/archived; это жизненный
+цикл Catalog, а не статус внешнего канала. SKU — собственный trim-код
+SIMPLE/VARIANT, уникальный в tenant с сохранением регистра, у VARIABLE отсутствует.
 
-| Поле | Канонический тип и владелец | Правила по kind и наследование |
-| --- | --- | --- |
-| id | CatalogItemIdVO / UUID | Собственная идентичность каждого узла, не наследуется |
-| kind | CatalogItemKind: simple, variable, variant | Меняется только сценарием структуры, не обычным PATCH |
-| parent_id | CatalogItemIdVO или None | Только VARIANT → VARIABLE; не поле свободного редактирования |
-| product_type | ProductTypeIdVO; read code `default` | Хранится у корня; для VARIANT разрешается через родителя, override запрещён |
-| status | CatalogItemStatus: draft, active, archived | Собственный у каждого узла; channel status преобразуется отдельно |
-| sku | SkuCodeVO или None | Собственный код SIMPLE/VARIANT; у VARIABLE отсутствует, не наследуется |
-| regular_price | Decimal или None в PriceSpecificationVO | SIMPLE — своё; VARIABLE — default для детей; VARIANT — наследование или полная своя спецификация |
-| sale_price | Decimal или None в PriceSpecificationVO | Вместе с regular price, валютой и интервалом скидки |
-| date_on_sale_from, date_on_sale_to | datetime или None | Часть единой спецификации цены, UTC |
-| currency | CurrencyCodeVO | Обязательна при заданной цене; необходимое дополнение к исходной таблице |
-| price | Decimal или None, вычисляется | Цена продажи SIMPLE/VARIANT на `as_of`; у VARIABLE отдельный диапазон цен детей |
-| virtual | bool с режимом set/inherit у VARIANT | SIMPLE/VARIABLE — своё; VARIANT может переопределить, false является значением |
-| manage_stock | StockManagement: none, own, parent | Нормализует Woo false/true/`parent`; parent допустим только VARIANT |
-| stock_quantity | int или None | Хранится только у источника own; при parent читается из общего источника |
-| stock_status | StockStatus: in_stock, out_of_stock, on_backorder | Вход только при none; при own/parent вычисляется; у VARIABLE отдельно availability summary |
-| backorders | BackorderPolicy: no, notify, yes | Политика собственного источника наличия; parent использует политику источника |
-| backorders_allowed | bool, вычисляется | backorders != no; не записывается независимо |
-| backordered | bool или None, вычисляется | Признак effective stock status on_backorder; неизвестное наличие даёт None |
-| weight | Decimal или None + каноническая единица g | Свойство карточки, может наследоваться; 0 отличается от отсутствия |
-| dimensions | DimensionsVO или None, length/width/height в mm | Наследуется или переопределяется объектом целиком; размеры не смешиваются покомпонентно |
-| meta_data | Упорядоченные записи CatalogMetadataEntry | Типизированные канонические ключи; не произвольный Woo payload |
-| revision, created_at, updated_at, actor IDs | Системные поля | Собственные, не наследуются и не назначаются из внешнего payload |
+| Поле | SIMPLE | VARIABLE | VARIANT |
+| --- | --- | --- | --- |
+| price specification | Собственная nullable | Всегда отсутствует | Собственная nullable, без наследования |
+| virtual | bool, default false | Всегда false | Собственный bool, default false |
+| weight | Nullable value/unit g или kg | Общий default | Собственный либо пара родителя при null |
+| dimensions.length/width/height | Независимые nullable пары cm или m | Общие defaults | Каждый компонент наследует пару родителя при null |
+| manage_stock | Собственный boolean | Boolean общего запаса | Собственный boolean; false использует запас родителя при его true |
 
-`status` описывает локальный жизненный цикл Catalog, а не Woo publish/private.
-Архивирование VARIABLE делает семью недоступной для новых публикаций без
-перезаписи статусов всех детей. Позиция доступна только при active у себя
-и у родителя, если он есть; наличие перевода и цена проверяются отдельно
-схемой выбранного канала. Draft может существовать без цены и контента.
+Отдельные mode-поля цены, virtual, веса и размеров отсутствуют во всех слоях.
+0 в измерениях — собственное значение, а не отсутствие. Отрицательные и
+нечисловые измерения недопустимы. Единица обязательна при заданном значении;
+одна единица не может существовать без числа. HTTP использует Decimal-строки:
 
-SKU-код уникален среди непустых кодов SIMPLE/VARIANT текущего tenant;
-нормализация пробелов и правила регистра фиксируются в SkuCodeVO и одинаково
-применяются индексом БД. MVP сохраняет регистр и сравнивает коды точно после trim.
-Virtual не запрещает SKU-код: это идентификатор карточки, а не складская связь.
-Если нужна ссылка на будущую Inventory.SKU, она будет отдельным ID и контрактом.
+```json
+{
+  "expected_root_revision": 1,
+  "weight": {"value": "1.5", "unit": "kg"},
+  "dimensions": {
+    "length": {"value": "0.8", "unit": "m"},
+    "width": {"value": "40", "unit": "cm"},
+    "height": null
+  }
+}
+```
 
-PriceSpecificationVO содержит regular price, optional sale price, валюту
-и optional начало/конец скидки. Суммы неотрицательны; sale price не выше regular
-price; без regular price sale price и интервал отсутствуют. Начало не позже
-конца; интервал трактуется как `[from, to)`, отсутствующая граница не ограничивает
-соответствующую сторону. Доменная политика определяет `price` по `as_of`,
-переданному clock-портом; Domain не читает системные часы. VARIABLE возвращает
-min/max effective prices активных детей с указанием неполноты, а не вымышленную
-собственную продаваемую цену. В MVP цены семьи используют одну валюту.
+PUT measurements заменяет весь собственный раздел, все компоненты dimensions
+передаются явно; dimensions=null означает отсутствие всех собственных размеров.
+Измерение наследуется целиком вместе с единицей. Происхождение возвращается для
+weight и каждого dimensions.length/width/height. Масса точно переводится в g,
+размеры в mm (1 kg=1000 g, 1 m=100 cm). Допустимо до шести значащих дробных
+разрядов канонической единицы; округления и float нет. SQL хранит только
+собственные исходные числа и их единицы, канонические копии не сохраняются.
 
-Наличие в MVP вводится вручную, без расчёта движений. Режим own требует известное
-неотрицательное stock quantity. При количестве > 0 статус in_stock; при 0
-и backorders=no — out_of_stock; при 0 и разрешённом backorder — on_backorder.
-Режим none хранит явно выбранный stock status без количества; on_backorder
-требует разрешённого backorder. Отсутствие настройки означает неизвестное
-наличие, а не нулевой остаток. `backordered` здесь — состояние карточки,
-не количество уже заказанного долга.
+PriceSpecificationVO сохраняет regular/sale price, currency и UTC-интервал
+[from,to). Суммы неотрицательны, sale не выше regular; период требует sale.
+Цена 0 допустима. Clock передаёт as_of; Domain не читает системные часы.
+У семьи одна валюта. VARIABLE возвращает min/max цен активных детей и
+price_incomplete, если у активного ребёнка отсутствует цена. У неактивной семьи
+диапазон отсутствует. Цена родителя никогда не подставляется варианту.
+Virtual не меняет наличие; измерения можно хранить, но shipping-проекция
+не использует их для виртуальной позиции.
 
-VARIABLE может владеть stock specification own как общим источником семьи.
-VARIANT с parent использует этот источник, его quantity и backorder policy.
-Режим parent запрещён, если у родителя нет источника own. Режим own у VARIANT
-создаёт независимый источник. Переключение режима очищает несовместимые локальные
-поля только как явная часть команды; эти изменения показаны в результате.
+### 3.1. Заявленные остатки
 
-Пример: у родителя общий quantity=10, два ребёнка с parent показывают один
-`stock_source_id = parent.id` и количество 10. Нельзя объявлять наличие семьи
-равным 20. Availability summary VARIABLE показывает доступность детей;
-общая quantity не суммируется по публикациям и не дублируется при экспорте
-семьи в несколько простых карточек. Channels показывает общий источник
-и проверяет возможности управления наличием целевой платформы.
+Все узлы создаются с manage_stock=false, stock_quantity=null,
+stock_status=in_stock, backorders=no. Спецификация обязательна, stock=null
+не принимается. Boolean строгий; строки none/own/parent больше не принимаются.
 
-Virtual определяет необходимость доставки. Weight/dimensions можно хранить
-как описание, но shipping-проекция не использует их для виртуальной позиции.
-Виртуальная позиция может иметь ограничения наличия; виртуальность сама по себе
-не включает бесконечный остаток и не меняет режим управления.
+- При true обязательно целое количество (включая отрицательное) и политика
+  no/notify/yes; записываемый stock_status отсутствует. При quantity>0 наличие
+  in_stock, при quantity<=0 — on_backorder с разрешёнными предзаказами,
+  иначе out_of_stock. Порог MVP равен 0.
+- При false количество отсутствует, backorders=no, ручной статус
+  in_stock/out_of_stock/on_backorder. Ручной on_backorder разрешён независимо
+  от backorders. Полный вход переключения true→false очищает количество;
+  false→true требует количество и политику.
+- VARIANT с false и родителем с true использует его количество и политику,
+  локальный ручной статус не влияет на effective. Собственный true перекрывает
+  общий запас. stock_source_id и origins указывают источник; количество
+  не копируется и не суммируется по детям или внешним публикациям.
+- VARIABLE отдельно показывает собственный общий источник и сводное наличие
+  активных детей: in_stock > on_backorder > out_of_stock. Без активных детей
+  сводный статус out_of_stock.
 
-Metadata имеет явные key, value_type, value, position. MVP принимает только
-text, decimal, boolean; один key на узел. Объектные и массивные Woo/plugin values
-остаются в native snapshot Channels до появления отдельного согласованного
-контракта. Зарезервированные ключи не позволяют обходить name, sku, price,
-stock и остальные типизированные сценарии. Локализованный текст относится
-к контенту, а не к metadata. Наследование metadata — по key с явным override
-или clear. Родительские ключи сохраняют порядок; override заменяет значение
-на прежнем месте, clear убирает ключ, новые собственные ключи идут следом
-в порядке position. Это правило также определяет место нового ключа родителя.
+Catalog не списывает количество, не ведёт движения и резервы. Inventory,
+его контракты и fallback в текущем изменении не проектируются.
 
-## 4. Наследование, очистка и effective read model
+### 3.2. Доступность
 
-Наследование идёт только VARIABLE → его VARIANT. SIMPLE ничего не наследует;
-наследования между соседними вариантами и отдельного inheritance_parent_id нет.
-В каждом случае различаются три действия: inherit, set(value), clear.
-`false`, `0` и пустой необязательный текст являются собственными значениями.
-Нельзя использовать проверку truthy или один nullable-столбец там, где нужно
-отличать наследование от явной очистки.
+available_for_sale SIMPLE/VARIANT требует active самого узла и родителя,
+заданную собственную цену (0 допустим) и effective наличие in_stock/on_backorder.
+У VARIABLE результат true при хотя бы одном продаваемом ребёнке.
+available_for_publication сохраняет проверку жизненного цикла; канальные
+ограничения контента и публикации проверяются потребителем отдельно.
+backorders_allowed и backordered остаются вычисляемыми полями чтения.
 
-| Группа | Правило VARIANT |
-| --- | --- |
-| name, desc, short_desc | Наследование каждого блока в той же locale, собственное значение или явная очистка optional блока |
-| product_type | Всегда схема родителя, собственного выбора нет |
-| status, SKU, selection, ID, audit | Всегда собственные, наследования нет |
-| virtual | Inherit или set(bool); clear недопустим |
-| Цена | Inherit, set всей PriceSpecificationVO или clear всей спецификации |
-| Weight | Inherit, set или clear |
-| Dimensions | Inherit, set полного DimensionsVO или clear |
-| Наличие | Явный выбор none/own/parent; parent обозначает общий источник, не копирование числа |
-| Общие enum-характеристики | По attribute ID: inherit, replace собственным набором options или clear |
-| Оси/selection | Оси у VARIABLE; VARIANT выбирает ровно один option каждой оси |
-| Галерея | Inherit той же locale, replace всей галереи или явно empty |
-| Metadata | По key: inherit, set или clear; порядок разрешённых ключей задаётся явно |
-| Category/Tag | Только SIMPLE; назначения VARIABLE/VARIANT и их наследование отсутствуют в MVP |
+## 4. Наследование и effective read model
 
-Состояние own и результат effective разделены. Хранение содержит только явно
-заданные значения, режимы и связи; read DTO содержит собственное состояние,
-effective значения и происхождение: item/parent/calculated/unknown,
-source item ID и locale, когда применимо. Это вложенные структуры конкретного
-read DTO, а не один универсальный CatalogDTO для всех сценариев.
+Наследование идёт только VARIABLE → его VARIANT, без связей между соседями.
+Контент наследуется по блоку в той же locale с set/clear; optional пустой текст
+остаётся собственным значением. ProductType всегда родительский. Status, SKU,
+selection и audit всегда собственные. Цена и virtual не наследуются.
 
-На уровне persistence у наследуемых скалярных групп есть явный mode.
-У контентного блока отсутствие записи означает inherit для VARIANT; запись
-с mode=clear блокирует наследование; mode=set хранит значение. У корня отсутствие
-значения означает отсутствие, режим inherit запрещён. Для необязательных групп
-clear допустим; для обязательного name и virtual запрещён.
+Вес и каждый размер наследуются при null вместе с единицей, собственный 0
+сохраняется. Блокировать наследование отдельным clear для них нельзя.
+Остатки разрешаются по boolean-правилам раздела 3.1.
+Enum-характеристики наследуются по attribute ID с replace/clear; metadata —
+по key с set/clear. Parent key сохраняет своё место, новые ключи идут следом
+в собственном порядке. Metadata принимает только text/decimal/boolean;
+канонические ключи зарезервированы, native payload остаётся в Channels.
+Галерея наследуется целиком по locale, replace заменяет набор, empty блокирует
+наследование, delete возвращает наследование. Category/Tag принадлежат SIMPLE.
 
-Сохранение VARIANT проверяет совместимость own и effective состояния по снимку
-родителя. Изменение родительского значения проверяет детей, для которых меняется
-effective состояние: валюту, совместимость stock source и другие инварианты.
-Доменная политика `CatalogItemEffectiveValuesPolicy` чистая и используется
-в командах и проекциях. Query mapper только преобразует уже разрешённые данные.
-Реализация не должна дублировать расходящиеся правила в SQL COALESCE и Domain.
-
-Read snapshot фиксирует root revision, собственные item revisions, schema version,
-locale и `as_of`. Изменение родителя инвалидирует effective-проекции детей
-и связанные Channels representations, хотя own-значения детей остаются прежними.
-Наступление границы скидки тоже меняет desired price: срок актуальности snapshot
-ограничивается ближайшей границей цены либо цена пересчитывается при preview.
+Хранится только собственное состояние. Read DTO разделяет own/effective/origins;
+вычисления выполняет общая чистая CatalogItemEffectiveValuesPolicy для Command
+и Query. Mapper преобразует значения и не переносит в себя инварианты агрегата.
+Read snapshot содержит root/item revisions, schema version, locale и as_of.
+Изменение parent defaults инвалидирует эффективные проекции без переписывания
+собственных значений и audit детей. Наступление границы акции меняет цену на as_of.
 
 ## 5. ProductType и мультиязычный контент
 
@@ -413,7 +382,9 @@ Category имеет собственный parent ID и переводы. Дер
 Переход SIMPLE → VARIABLE сохраняет ID корня: прежняя SIMPLE-запись становится
 семейством, дети получают новые CatalogItem ID. Команда содержит полную
 структуру и явное правило, как применить прежние продаваемые значения к одному
-из новых детей или к defaults семьи. SKU корня не остаётся SKU семейства.
+из новых детей. Получатель обязателен для SKU, цены, virtual и наличия;
+у корня цена очищается, virtual=false, manage_stock=false. Измерения остаются
+defaults семьи. SKU корня не остаётся SKU семейства.
 Категории/теги не могут остаться у VARIABLE: при непустых назначениях переход
 отклоняется до их явного снятия. Они не переносятся автоматически в Channels.
 
@@ -460,10 +431,10 @@ EnumAttributeAssignmentInput и VariableStructureInput. Они не заменя
 | change_catalog_item_kind | Целевой kind, полная структура и политика перехода из раздела 8 | ChangeCatalogItemKindResultDTO | PUT /items/{root_id}/kind |
 | set_catalog_item_status | status | SetCatalogItemStatusResultDTO | PUT /items/{item_id}/status |
 | set_catalog_item_sku | SKU-код либо None | SetCatalogItemSkuResultDTO | PUT /items/{item_id}/sku |
-| set_catalog_item_virtual | set(bool) либо inherit | SetCatalogItemVirtualResultDTO | PUT /items/{item_id}/virtual |
-| set_catalog_item_price | inherit/set/clear и полная спецификация цены | SetCatalogItemPriceResultDTO | PUT /items/{item_id}/price |
-| set_catalog_item_stock | Полная none/own/parent спецификация | SetCatalogItemStockResultDTO | PUT /items/{item_id}/stock |
-| set_catalog_item_measurements | Режим/weight и режим/полные dimensions | SetCatalogItemMeasurementsResultDTO | PUT /items/{item_id}/measurements |
+| set_catalog_item_virtual | Собственный bool SIMPLE/VARIANT | SetCatalogItemVirtualResultDTO | PUT /items/{item_id}/virtual |
+| set_catalog_item_price | Собственная спецификация или None, только SIMPLE/VARIANT | SetCatalogItemPriceResultDTO | PUT /items/{item_id}/price |
+| set_catalog_item_stock | Полная спецификация с boolean manage_stock | SetCatalogItemStockResultDTO | PUT /items/{item_id}/stock |
+| set_catalog_item_measurements | Nullable вес и независимые размеры как value/unit пары | SetCatalogItemMeasurementsResultDTO | PUT /items/{item_id}/measurements |
 | put_catalog_item_content | locale, полный own-набор блоков с set/clear | PutCatalogItemContentResultDTO | PUT /items/{item_id}/content/{locale} |
 | delete_catalog_item_content | locale, удалить own-перевод | None | DELETE /items/{item_id}/content/{locale} |
 | set_catalog_item_attributes | Полные неосевые assignments/overrides, порядок/visible | SetCatalogItemAttributesResultDTO | PUT /items/{item_id}/attributes |
@@ -475,9 +446,9 @@ EnumAttributeAssignmentInput и VariableStructureInput. Они не заменя
 | set_catalog_item_primary_image | locale, image ID в own-наборе | SetCatalogItemPrimaryImageResultDTO | PUT /items/{item_id}/gallery/{locale}/primary |
 | delete_catalog_item_gallery | locale, удалить own-галерею / вернуть наследование | None | DELETE /items/{item_id}/gallery/{locale} |
 | delete_catalog_item | SIMPLE либо вся семья; план зависимостей и явное удаление детей | None | DELETE /items/{root_id} |
-| get_catalog_item | item ID, locale; own + effective + origins | GetCatalogItemDetailsDTO | GET /items/{item_id} |
-| list_catalog_items | locale, поиск, kind/status, root/parent filter, offset/limit | ListCatalogItemsPageDTO | GET /items |
-| list_catalog_item_variants | root ID, locale, filters, pagination | ListCatalogItemVariantsPageDTO | GET /items/{root_id}/variants |
+| get_catalog_item | item ID, locale; own + effective + origins | GetCatalogItemResultDTO | GET /items/{item_id} |
+| list_catalog_items | locale, поиск, kind/status, root/parent filter, offset/limit | ListCatalogItemsResultDTO | GET /items |
+| list_catalog_item_variants | root ID, locale, filters, pagination | ListCatalogItemVariantsResultDTO | GET /items/{root_id}/variants |
 | get_catalog_item_image_content | item ID, locale, effective image ID | GetCatalogItemImageContentResultDTO | GET /items/{item_id}/images/{locale}/{image_id}/content |
 | get_catalog_items_publication_snapshot | item IDs, locale, as_of, ожидаемые ревизии optional | GetCatalogItemsPublicationSnapshotDTO | Межмодульный Application-контракт; отдельный HTTP не нужен |
 
@@ -489,7 +460,7 @@ Upload использует multipart request, не JSON с закодирова
 Get image content возвращает потребительский DTO управляемого потока;
 HTTP StreamingResponse не имеет фиктивной JSON response schema.
 
-GetCatalogItemDetailsDTO отличается от строки ListCatalogItemsPageDTO:
+GetCatalogItemResultDTO отличается от строки ListCatalogItemsResultDTO:
 детали содержат own/effective/origins, список — только необходимые экрану поля.
 Список по умолчанию показывает корни SIMPLE/VARIABLE; VARIANT включается явным
 kind/parent фильтром. Counts считаются по центральным записям, без умножения
@@ -582,8 +553,9 @@ Usage port нужен для удаления/переходов; до появ�
 
 `CatalogItemModel`, файл `catalog_item.py`, `__tablename__ = "catalog_item"`:
 UUID id, kind, parent_id, root product_type_id, status, sku, revision/audit,
-virtual value/mode, price specification value/mode, stock specification,
-weight value/mode, dimensions value/mode. Группы имеют явные режимы из раздела 4.
+virtual bool, nullable price specification, обязательная stock specification,
+nullable weight/length/width/height и отдельные unit-столбцы. Mode-столбцов этих
+полей нет; SQL проверяет согласованность пар, единицы и точность канонических значений.
 Вычисляемая price, inherited quantity, backorders_allowed/backordered и effective
 контент в таблицу как независимые значения не записываются.
 
@@ -912,7 +884,9 @@ ProductType/ContentBlock редакторы и меню удаляются; до
 может включать VARIANT. Цены и наличие редактора используют канонические
 спецификации, вычисляемые поля read-only. Parent stock показывает общий
 источник, а не редактируемую локальную копию. VARIANT редактор показывает
-наследуемые значения и отдельные действия переопределения/очистки.
+наследуемые измерения с единицами и источниками. Каждое поле имеет выбор g/kg
+либо cm/m; пустое поле не создаёт значение. Смена единицы точно пересчитывает
+число. Начальные единицы UI — g и cm. У VARIABLE нет редакторов цены и virtual.
 
 Locale выбирается явно и включается в URL/query key. Галерея не переключает
 язык скрыто. Query keys включают tenant, сценарий, item/root ID, locale,
@@ -1005,8 +979,8 @@ Channels contracts и документы срезов. Исторические 
 | Inheritance | same locale, set/clear/inherit, false/0/empty optional text, no sibling inheritance, изменение defaults проверяет детей |
 | Default content | Только name/desc/short_desc, read-only схема, own marker, schema version, rich text sanitizer |
 | Price | Decimal/currency, интервал UTC и границы, full-spec override/clear, min/max, price as_of и устаревание |
-| Stock | none/own/parent, общий source без удвоения, нулевой/unknown quantity, backorders/status computed, запрещённый parent |
-| Measurements / metadata | Канонические units, целые dimensions overrides, типы/keys/order/clear, отсутствие native payload в Catalog |
+| Stock | Boolean, общий source без удвоения, отрицательное/нулевое количество, manual backorder, семейная сводка и available_for_sale |
+| Measurements / metadata | value/unit пары, точные преобразования, независимое наследование размеров, типы/keys/order/clear, отсутствие native payload в Catalog |
 | Media / Files | Main принадлежит набору, порядок, localized replace/empty/inherit, tenant/file validation, upload rollback, stream close |
 | Classifications | Только SIMPLE, primary membership, cycles, delete protection и concurrent assign/delete |
 | HTTP / UoW | Request/Response на сценарий, 204/stream, CSRF/tenant, 404/409/422, rollback и commit failure |
@@ -1078,7 +1052,8 @@ optional ожидаемые root revisions. Для чтения деактиви
 
 Удаление VARIABLE требует явных discarded_ids всех детей. Команды структуры
 принимают только root ID; варианты не перемещаются между семьями. Decimal точность
-MVP — до шести знаков после запятой без округления, вес в граммах, размеры в мм.
+Цены MVP — до шести знаков после запятой без округления. Измерения
+хранят собственные единицы g/kg или cm/m; точность проверяется в канонических g/mm.
 Галерея ограничена 100 изображениями на locale, upload PNG/JPEG/WebP до 10 MiB
 с проверкой сигнатуры и MIME. Files должен быть заранее подготовлен своим модулем.
 

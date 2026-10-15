@@ -46,7 +46,7 @@ async def set_catalog_item_stock(
                 tenant_id=EntityIdVO.from_value(principal.tenant_id),
                 actor_id=EntityIdVO.from_value(principal.user_id),
                 item_id=CatalogItemIdVO(item_id),
-                stock=payload.stock.to_vo() if payload.stock else None,
+                stock=payload.stock.to_vo(),
                 expected_root_revision=payload.expected_root_revision,
             )
         )

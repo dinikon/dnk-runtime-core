@@ -13,10 +13,6 @@ from src.modules.catalog.domain.error import (
 from src.modules.catalog.domain.catalog_item.value_object.identifier import (
     CatalogItemIdVO,
 )
-from src.modules.catalog.domain.catalog_item.value_object.override import (
-    OverrideVO,
-    OverrideMode,
-)
 from src.modules.catalog.presentation.catalog_item.http.serialization import (
     transport_value,
 )
@@ -50,10 +46,7 @@ async def set_catalog_item_price(
                 tenant_id=EntityIdVO.from_value(principal.tenant_id),
                 actor_id=EntityIdVO.from_value(principal.user_id),
                 item_id=CatalogItemIdVO(item_id),
-                price=OverrideVO(
-                    OverrideMode(payload.price.mode),
-                    payload.price.value.to_vo() if payload.price.value else None,
-                ),
+                price=payload.price.to_vo() if payload.price is not None else None,
                 expected_root_revision=payload.expected_root_revision,
             )
         )

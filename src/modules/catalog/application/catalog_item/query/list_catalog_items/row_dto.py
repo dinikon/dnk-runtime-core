@@ -1,3 +1,7 @@
+from src.modules.catalog.domain.catalog_item.value_object.measurements import (
+    WeightVO,
+    DimensionsVO,
+)
 from dataclasses import dataclass
 from uuid import UUID
 from decimal import Decimal
@@ -27,3 +31,6 @@ class CatalogItemListRowDTO:
     price_incomplete: bool
     stock_status: str | None
     primary_image: CatalogItemImage | None
+    available_for_sale: bool
+    weight: WeightVO | None
+    dimensions: DimensionsVO | None

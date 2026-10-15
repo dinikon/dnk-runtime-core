@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
+import CatalogMeasurementField from "./CatalogMeasurementField.vue";
 import { Button } from "@/components/ui/button";
 import { clone } from "../../model/clone";
 import type { CatalogItem, CatalogAttribute } from "../../model/catalog.types";
@@ -7,6 +8,7 @@ import type {
   ItemSection,
   OverrideDTO,
   PriceDTO,
+  WeightDTO,
   StockDTO,
   DimensionsDTO,
   MetadataDTO,
@@ -25,6 +27,11 @@ const emit = defineEmits<{
   dirty: [value: boolean];
   inherit: [];
 }>();
+const stockStatusLabels: Record<string, string> = {
+  in_stock: "В наличии",
+  out_of_stock: "Нет в наличии",
+  on_backorder: "Предзаказ",
+};
 const contentLabels: Record<string, string> = {
   name: "Название",
   desc: "Описание",
@@ -34,11 +41,16 @@ const dirty = ref(false),
   text = ref<Record<string, OverrideDTO<string>>>({}),
   status = ref("draft"),
   sku = ref(""),
-  virtual = ref<OverrideDTO<boolean>>({ mode: "set", value: false }),
-  price = ref<OverrideDTO<PriceDTO>>({ mode: "clear", value: null }),
-  stock = ref<StockDTO | null>(null),
-  weight = ref<OverrideDTO<string>>({ mode: "clear", value: null }),
-  dimensions = ref<OverrideDTO<DimensionsDTO>>({ mode: "clear", value: null }),
+  virtual = ref(false),
+  price = ref<PriceDTO | null>(null),
+  stock = ref<StockDTO>({
+    manage_stock: false,
+    stock_quantity: null,
+    stock_status: "in_stock",
+    backorders: "no",
+  }),
+  weight = ref<WeightDTO | null>(null),
+  dimensions = ref<DimensionsDTO>({ length: null, width: null, height: null }),
   metadata = ref<MetadataDTO[]>([]),
   assignments = ref<AttributeDTO[]>([]);
 function mark() {
@@ -54,7 +66,9 @@ function resetFields() {
   price.value = clone(own.price);
   stock.value = clone(own.stock);
   weight.value = clone(own.weight);
-  dimensions.value = clone(own.dimensions);
+  dimensions.value = clone(
+    own.dimensions ?? { length: null, width: null, height: null },
+  );
   metadata.value = clone(own.metadata);
   assignments.value = clone(own.attributes);
   dirty.value = false;
@@ -78,59 +92,34 @@ function contentMode(code: string, mode: string) {
     };
   mark();
 }
-function priceMode() {
-  price.value.value =
-    price.value.mode === "set"
-      ? clone(
-          props.item.effective.price_specification ?? {
-            regular_price: "0",
-            currency: "UAH",
-            sale_price: null,
-            date_on_sale_from: null,
-            date_on_sale_to: null,
-          },
-        )
-      : null;
-  mark();
-}
-function dimensionsMode() {
-  dimensions.value.value =
-    dimensions.value.mode === "set"
-      ? clone(
-          props.item.effective.dimensions ?? {
-            length: "0",
-            width: "0",
-            height: "0",
-          },
-        )
+function priceMode(event: Event) {
+  price.value =
+    (event.target as HTMLSelectElement).value === "set"
+      ? {
+          regular_price: "0",
+          currency: "UAH",
+          sale_price: null,
+          date_on_sale_from: null,
+          date_on_sale_to: null,
+        }
       : null;
   mark();
 }
 function stockMode(event: Event) {
-  const mode = (event.target as HTMLSelectElement).value;
-  stock.value =
-    mode === "unknown"
-      ? null
-      : mode === "parent"
-        ? {
-            manage_stock: "parent",
-            stock_quantity: null,
-            stock_status: null,
-            backorders: null,
-          }
-        : mode === "own"
-          ? {
-              manage_stock: "own",
-              stock_quantity: 0,
-              stock_status: null,
-              backorders: "no",
-            }
-          : {
-              manage_stock: "none",
-              stock_quantity: null,
-              stock_status: "in_stock",
-              backorders: "no",
-            };
+  const managed = (event.target as HTMLInputElement).checked;
+  stock.value = managed
+    ? {
+        manage_stock: true,
+        stock_quantity: 0,
+        stock_status: null,
+        backorders: "no",
+      }
+    : {
+        manage_stock: false,
+        stock_quantity: null,
+        stock_status: "in_stock",
+        backorders: "no",
+      };
   mark();
 }
 function addAttribute() {
@@ -258,58 +247,41 @@ function submit() {
           maxlength="128"
           class="w-full rounded border bg-background p-2"
       /></label>
-      <template v-else-if="section === 'virtual'"
-        ><select
-          v-model="virtual.mode"
-          aria-label="Источник virtual"
-          class="w-full rounded border bg-background p-2"
-          @change="
-            virtual.value =
-              virtual.mode === 'set' ? item.effective.virtual : null
-          "
+      <template v-else-if="section === 'virtual'">
+        <label class="flex gap-2"
+          ><input v-model="virtual" type="checkbox" /> Виртуальный товар</label
         >
-          <option v-if="item.kind === 'variant'" value="inherit">
-            Наследовать
-          </option>
-          <option value="set">Собственное значение</option></select
-        ><label v-if="virtual.mode === 'set'" class="flex gap-2"
-          ><input v-model="virtual.value" type="checkbox" /> Виртуальный
-          товар</label
-        ></template
-      >
+      </template>
       <template v-else-if="section === 'price'"
         ><select
-          v-model="price.mode"
-          aria-label="Источник цены"
+          :value="price ? 'set' : 'clear'"
+          aria-label="Цена"
           class="w-full rounded border bg-background p-2"
           @change="priceMode"
         >
-          <option v-if="item.kind === 'variant'" value="inherit">
-            Наследовать
-          </option>
           <option value="set">Задать цену</option>
           <option value="clear">Цена не задана</option>
         </select>
-        <div v-if="price.value" class="grid gap-3 sm:grid-cols-2">
+        <div v-if="price" class="grid gap-3 sm:grid-cols-2">
           <label
             >Обычная цена<input
-              v-model="price.value.regular_price"
+              v-model="price.regular_price"
               inputmode="decimal"
               class="w-full rounded border bg-background p-2"
               required /></label
           ><label
             >Валюта<input
-              v-model="price.value.currency"
+              v-model="price.currency"
               class="w-full rounded border bg-background p-2"
               maxlength="3"
               required /></label
           ><label
             >Акционная цена<input
-              :value="price.value.sale_price ?? ''"
+              :value="price.sale_price ?? ''"
               inputmode="decimal"
               class="w-full rounded border bg-background p-2"
               @input="
-                price.value.sale_price =
+                price.sale_price =
                   ($event.target as HTMLInputElement).value || null
               " /></label
           ><label
@@ -320,12 +292,11 @@ function submit() {
                 ? "Начало акции (ISO UTC)"
                 : "Конец акции (ISO UTC)"
             }}<input
-              :value="price.value[field] ?? ''"
+              :value="price[field] ?? ''"
               placeholder="2026-10-11T00:00:00Z"
               class="w-full rounded border bg-background p-2"
               @input="
-                price.value[field] =
-                  ($event.target as HTMLInputElement).value || null
+                price[field] = ($event.target as HTMLInputElement).value || null
               "
           /></label>
         </div>
@@ -334,100 +305,111 @@ function submit() {
           {{ item.effective.price_specification?.currency }}
         </p></template
       >
-      <template v-else-if="section === 'stock'"
-        ><label class="block"
-          >Учёт наличия<select
-            :value="stock?.manage_stock ?? 'unknown'"
-            class="w-full rounded border bg-background p-2"
+      <template v-else-if="section === 'stock'">
+        <label class="flex gap-2"
+          ><input
+            :checked="stock.manage_stock"
+            type="checkbox"
             @change="stockMode"
-          >
-            <option value="unknown">Не задано</option>
-            <option value="none">Заявленный статус</option>
-            <option value="own">Собственное количество</option>
-            <option v-if="item.kind === 'variant'" value="parent">
-              Общий источник родителя
-            </option>
-          </select></label
-        ><label v-if="stock?.manage_stock === 'own'" class="block"
-          >Количество<input
+          />
+          Учитывать собственное количество</label
+        >
+        <label v-if="stock.manage_stock" class="block"
+          >Количество
+          <input
             v-model.number="stock.stock_quantity"
             type="number"
-            min="0"
             step="1"
-            class="w-full rounded border bg-background p-2" /></label
-        ><select
-          v-if="stock?.manage_stock === 'none'"
+            required
+            class="w-full rounded border bg-background p-2"
+          />
+        </label>
+        <select
+          v-if="!stock.manage_stock && item.kind !== 'variable'"
           v-model="stock.stock_status"
           aria-label="Наличие"
           class="w-full rounded border bg-background p-2"
         >
           <option value="in_stock">В наличии</option>
           <option value="out_of_stock">Нет в наличии</option>
-          <option value="on_backorder">Предзаказ</option></select
-        ><label v-if="stock && stock.manage_stock !== 'parent'" class="block"
-          >Предзаказ<select
+          <option value="on_backorder">Предзаказ</option>
+        </select>
+        <label v-if="stock.manage_stock" class="block"
+          >Предзаказ
+          <select
             v-model="stock.backorders"
             class="w-full rounded border bg-background p-2"
           >
             <option value="no">Запрещён</option>
             <option value="notify">С уведомлением</option>
             <option value="yes">Разрешён</option>
-          </select></label
+          </select>
+        </label>
+        <p
+          v-if="item.kind === 'variant' && !stock.manage_stock"
+          class="text-sm text-muted-foreground"
         >
+          Если родитель учитывает количество, используется его общий остаток.
+          Иначе действует собственный статус.
+        </p>
         <p class="text-sm text-muted-foreground">
-          Эффективное наличие: {{ item.stockStatus ?? "Не задано" }} · Источник:
-          {{ item.effective.origins.stock?.source }}
-        </p></template
-      >
-      <template v-else-if="section === 'measurements'"
-        ><label class="block"
-          >Вес (г)<select
-            v-model="weight.mode"
-            class="w-full rounded border bg-background p-2"
-            @change="
-              weight.value =
-                weight.mode === 'set' ? (item.effective.weight ?? '0') : null
-            "
-          >
-            <option v-if="item.kind === 'variant'" value="inherit">
-              Наследовать
-            </option>
-            <option value="set">Задать</option>
-            <option value="clear">Не задано</option></select
-          ><input
-            v-if="weight.mode === 'set'"
-            v-model="weight.value"
-            inputmode="decimal"
-            class="mt-2 w-full rounded border bg-background p-2" /></label
-        ><label class="block"
-          >Размеры (мм)<select
-            v-model="dimensions.mode"
-            class="w-full rounded border bg-background p-2"
-            @change="dimensionsMode"
-          >
-            <option v-if="item.kind === 'variant'" value="inherit">
-              Наследовать
-            </option>
-            <option value="set">Задать</option>
-            <option value="clear">Не задано</option>
-          </select></label
+          Эффективное наличие:
+          {{ stockStatusLabels[item.stockStatus ?? ""] ?? "Неизвестно" }} ·
+          Источник:
+          {{
+            item.effective.origins.stock?.source === "parent"
+              ? "Общий остаток родителя"
+              : "Собственное наличие"
+          }}
+        </p>
+        <p
+          v-if="item.kind === 'variable' && item.own.stock.manage_stock"
+          class="text-sm text-muted-foreground"
         >
-        <div v-if="dimensions.value" class="grid grid-cols-3 gap-2">
-          <label
+          Общий запас семьи: {{ item.own.stock.stock_quantity }}
+        </p>
+        <p class="text-sm text-muted-foreground">
+          {{
+            item.effective.available_for_sale
+              ? "Доступен для продажи"
+              : "Недоступен для продажи"
+          }}
+        </p>
+      </template>
+      <template v-else-if="section === 'measurements'">
+        <div class="grid gap-4 sm:grid-cols-2">
+          <CatalogMeasurementField
+            v-model="weight"
+            label="Вес"
+            :units="['g', 'kg'] as const"
+            default-unit="g"
+            :effective="item.effective.weight"
+            :inherited="item.effective.origins.weight?.source === 'parent'"
+          />
+          <CatalogMeasurementField
             v-for="field in ['length', 'width', 'height'] as const"
             :key="field"
-            >{{
-              field === "length"
-                ? "Длина"
-                : field === "width"
-                  ? "Ширина"
-                  : "Высота"
-            }}<input
-              v-model="dimensions.value[field]"
-              inputmode="decimal"
-              class="w-full rounded border bg-background p-2"
-          /></label></div
-      ></template>
+            v-model="dimensions[field]"
+            :label="
+              field === 'length'
+                ? 'Длина'
+                : field === 'width'
+                  ? 'Ширина'
+                  : 'Высота'
+            "
+            :units="['cm', 'm'] as const"
+            default-unit="cm"
+            :effective="item.effective.dimensions?.[field] ?? null"
+            :inherited="
+              item.effective.origins[`dimensions.${field}`]?.source === 'parent'
+            "
+          />
+        </div>
+        <p v-if="item.kind === 'variant'" class="text-sm text-muted-foreground">
+          Пустое поле наследует значение и единицу родителя. Ноль сохраняется
+          как собственное значение.
+        </p>
+      </template>
       <template v-else-if="section === 'metadata'"
         ><div
           v-for="(entry, index) in metadata"

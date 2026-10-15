@@ -12,9 +12,11 @@ from src.modules.catalog.domain.catalog_item.value_object.price import (
 )
 from src.modules.catalog.domain.catalog_item.value_object.stock import (
     StockSpecificationVO,
+    StockStatus,
 )
 from src.modules.catalog.domain.catalog_item.value_object.measurements import (
     DimensionsVO,
+    WeightVO,
 )
 from src.modules.catalog.domain.catalog_item.value_object.attribute import (
     EnumAttributeAssignmentVO,
@@ -37,11 +39,11 @@ class CatalogItemValuesSnapshot:
     product_type_id: EntityIdVO | None
     status: CatalogItemStatus
     sku: str | None
-    virtual: OverrideVO[bool]
-    price: OverrideVO[PriceSpecificationVO]
-    weight: OverrideVO[Decimal]
-    dimensions: OverrideVO[DimensionsVO]
-    stock: StockSpecificationVO | None
+    virtual: bool
+    price: PriceSpecificationVO | None
+    weight: WeightVO | None
+    dimensions: DimensionsVO | None
+    stock: StockSpecificationVO
     translations: dict[str, dict[str, OverrideVO[str]]]
     galleries: dict[str, CatalogItemGallery]
     attributes: tuple[EnumAttributeAssignmentVO, ...]
@@ -76,12 +78,25 @@ class EffectiveCatalogItemValues:
     virtual: bool
     price_specification: PriceSpecificationVO | None
     price: Decimal | None
-    weight: Decimal | None
+    weight: WeightVO | None
     dimensions: DimensionsVO | None
-    stock: StockSpecificationVO | None
+    stock: StockSpecificationVO
     stock_source_id: EntityIdVO | None
     gallery: CatalogItemGallery | None
     attributes: tuple[EnumAttributeAssignmentVO, ...]
     metadata: tuple[CatalogMetadataEntry, ...]
+    available_for_sale: bool
     available_for_publication: bool
     origins: dict[str, ValueOrigin]
+
+
+@dataclass(frozen=True, slots=True)
+class CatalogFamilySummary:
+    """Вычисляемые наличие, доступность и диапазон цен активной семьи."""
+
+    stock_status: StockStatus
+    available_for_sale: bool
+    price_min: Decimal | None
+    price_max: Decimal | None
+    price_incomplete: bool
+    price_currency: str | None

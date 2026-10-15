@@ -9,4 +9,4 @@ class SetCatalogItemStockRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     expected_root_revision: int = Field(ge=1)
-    stock: StockValue | None
+    stock: StockValue

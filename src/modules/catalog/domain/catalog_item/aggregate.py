@@ -20,10 +20,10 @@ from src.modules.catalog.domain.catalog_item.value_object.price import (
 )
 from src.modules.catalog.domain.catalog_item.value_object.stock import (
     StockSpecificationVO,
-    StockManagement,
 )
 from src.modules.catalog.domain.catalog_item.value_object.measurements import (
     DimensionsVO,
+    WeightVO,
 )
 from src.modules.catalog.domain.catalog_item.value_object.sku import SkuCodeVO
 from src.modules.catalog.domain.catalog_item.value_object.axis import VariationAxis
@@ -67,11 +67,11 @@ class CatalogItem:
     product_type_id: EntityIdVO | None
     status: CatalogItemStatus
     sku: SkuCodeVO | None
-    virtual: OverrideVO[bool]
-    price: OverrideVO[PriceSpecificationVO]
-    weight: OverrideVO[Decimal]
-    dimensions: OverrideVO[DimensionsVO]
-    stock: StockSpecificationVO | None
+    virtual: bool
+    price: PriceSpecificationVO | None
+    weight: WeightVO | None
+    dimensions: DimensionsVO | None
+    stock: StockSpecificationVO
     revision: int
     created_at: datetime
     updated_at: datetime
@@ -105,11 +105,11 @@ class CatalogItem:
             product_type_id=DEFAULT_TYPE_ID,
             status=CatalogItemStatus.DRAFT,
             sku=None,
-            virtual=OverrideVO(OverrideMode.SET, virtual),
-            price=OverrideVO(OverrideMode.CLEAR),
-            weight=OverrideVO(OverrideMode.CLEAR),
-            dimensions=OverrideVO(OverrideMode.CLEAR),
-            stock=None,
+            virtual=virtual,
+            price=None,
+            weight=None,
+            dimensions=None,
+            stock=StockSpecificationVO(),
             revision=1,
             created_at=now,
             updated_at=now,
@@ -134,11 +134,11 @@ class CatalogItem:
             product_type_id=None,
             status=CatalogItemStatus.DRAFT,
             sku=None,
-            virtual=OverrideVO(OverrideMode.INHERIT),
-            price=OverrideVO(OverrideMode.INHERIT),
-            weight=OverrideVO(OverrideMode.INHERIT),
-            dimensions=OverrideVO(OverrideMode.INHERIT),
-            stock=None,
+            virtual=False,
+            price=None,
+            weight=None,
+            dimensions=None,
+            stock=StockSpecificationVO(),
             revision=1,
             created_at=now,
             updated_at=now,
@@ -180,11 +180,11 @@ class CatalogItem:
         product_type_id: EntityIdVO | None,
         status: CatalogItemStatus,
         sku: SkuCodeVO | None,
-        virtual: OverrideVO[bool],
-        price: OverrideVO[PriceSpecificationVO],
-        weight: OverrideVO[Decimal],
-        dimensions: OverrideVO[DimensionsVO],
-        stock: StockSpecificationVO | None,
+        virtual: bool,
+        price: PriceSpecificationVO | None,
+        weight: WeightVO | None,
+        dimensions: DimensionsVO | None,
+        stock: StockSpecificationVO,
         revision: int,
         created_at: datetime,
         updated_at: datetime,
@@ -389,39 +389,24 @@ class CatalogItem:
             )
         if self.kind == CatalogItemKind.VARIABLE and self.sku is not None:
             raise InvalidCatalogValueError("SKU принадлежит продаваемой позиции.")
-        if self.virtual.mode == OverrideMode.CLEAR or (
-            self.virtual.mode == OverrideMode.SET
-            and type(self.virtual.value) is not bool
-        ):
-            raise InvalidCatalogValueError("Virtual требует bool либо inherit.")
-        if self.kind != CatalogItemKind.VARIANT and any(
-            v.mode == OverrideMode.INHERIT
-            for v in (self.virtual, self.price, self.weight, self.dimensions)
-        ):
-            raise InvalidCatalogValueError("Корень ничего не наследует.")
-        if self.price.mode == OverrideMode.SET and not isinstance(
-            self.price.value, PriceSpecificationVO
-        ):
-            raise InvalidCatalogValueError("Некорректная спецификация цены.")
-        if self.dimensions.mode == OverrideMode.SET and not isinstance(
-            self.dimensions.value, DimensionsVO
-        ):
-            raise InvalidCatalogValueError("Нужны полные dimensions.")
-        if self.weight.mode == OverrideMode.SET and (
-            not isinstance(self.weight.value, Decimal)
-            or not self.weight.value.is_finite()
-            or self.weight.value < 0
-            or self.weight.value.as_tuple().exponent < -6
+        if type(self.virtual) is not bool:
+            raise InvalidCatalogValueError("Virtual требует bool.")
+        if self.kind == CatalogItemKind.VARIABLE and (
+            self.virtual or self.price is not None
         ):
             raise InvalidCatalogValueError(
-                "Вес должен быть конечным неотрицательным Decimal."
+                "VARIABLE не имеет собственной цены и virtual=true."
             )
-        if (
-            self.stock
-            and self.stock.manage_stock == StockManagement.PARENT
-            and self.kind != CatalogItemKind.VARIANT
+        if self.price is not None and not isinstance(self.price, PriceSpecificationVO):
+            raise InvalidCatalogValueError("Некорректная спецификация цены.")
+        if self.dimensions is not None and not isinstance(
+            self.dimensions, DimensionsVO
         ):
-            raise InvalidCatalogValueError("Только VARIANT использует parent stock.")
+            raise InvalidCatalogValueError("Размеры требуют значения с единицами.")
+        if self.weight is not None and not isinstance(self.weight, WeightVO):
+            raise InvalidCatalogValueError("Вес требует значение и единицу.")
+        if not isinstance(self.stock, StockSpecificationVO):
+            raise InvalidCatalogValueError("Настройки наличия обязательны.")
         for locale, values in self.translations.items():
             LocaleVO(locale)
             self._validate_content(values, self.kind == CatalogItemKind.VARIANT)
@@ -517,8 +502,6 @@ class CatalogItem:
                             "SKU детей должны быть уникальны."
                         )
                     skus.add(child.sku.value)
-            if self.price.mode == OverrideMode.SET:
-                currencies.add(self.price.value.currency)
             if len(currencies) > 1:
                 raise InvalidCatalogValueError("Семья использует одну валюту.")
             if (
@@ -691,27 +674,31 @@ class CatalogItem:
     def set_virtual(
         self,
         item_id: CatalogItemIdVO,
-        value: OverrideVO[bool],
+        value: bool,
         actor: EntityIdVO,
         now: datetime,
     ) -> None:
-        """Задаёт собственную виртуальность или наследование без потери false."""
+        """Задаёт собственную виртуальность продаваемой позиции."""
+        if self.find_item(item_id).kind == CatalogItemKind.VARIABLE:
+            raise InvalidCatalogValueError("Virtual задаётся только SIMPLE/VARIANT.")
         self._replace_item(item_id, actor, now, virtual=value)
 
     def set_price(
         self,
         item_id: CatalogItemIdVO,
-        value: OverrideVO[PriceSpecificationVO],
+        value: PriceSpecificationVO | None,
         actor: EntityIdVO,
         now: datetime,
     ) -> None:
-        """Заменяет цельную цену и проверяет единую валюту семьи."""
+        """Заменяет собственную цену и проверяет единую валюту семьи."""
+        if self.find_item(item_id).kind == CatalogItemKind.VARIABLE:
+            raise InvalidCatalogValueError("Цена задаётся только SIMPLE/VARIANT.")
         self._replace_item(item_id, actor, now, price=value)
 
     def set_stock(
         self,
         item_id: CatalogItemIdVO,
-        value: StockSpecificationVO | None,
+        value: StockSpecificationVO,
         actor: EntityIdVO,
         now: datetime,
     ) -> None:
@@ -721,12 +708,12 @@ class CatalogItem:
     def set_measurements(
         self,
         item_id: CatalogItemIdVO,
-        weight: OverrideVO[Decimal],
-        dimensions: OverrideVO[DimensionsVO],
+        weight: WeightVO | None,
+        dimensions: DimensionsVO | None,
         actor: EntityIdVO,
         now: datetime,
     ) -> None:
-        """Задаёт вес и полные размеры с явными режимами очистки."""
+        """Заменяет собственные измерения вместе с единицами."""
         self._replace_item(item_id, actor, now, weight=weight, dimensions=dimensions)
 
     def put_content(
@@ -968,8 +955,10 @@ class CatalogItem:
             raise CatalogConflictError(
                 "Переход требует SIMPLE без классификации и внешних зависимостей."
             )
-        if self.sku is not None and carry_to_id is None:
-            raise InvalidCatalogValueError("SKU требует явно выбранного получателя.")
+        if carry_to_id is None:
+            raise InvalidCatalogValueError(
+                "Переход требует явно выбранного получателя коммерческих значений."
+            )
         if carry_to_id is not None:
             if carry_to_id not in {c.id for c in children}:
                 raise InvalidCatalogValueError("Получатель не входит в новую семью.")
@@ -979,8 +968,6 @@ class CatalogItem:
                         c,
                         sku=self.sku,
                         price=self.price,
-                        weight=self.weight,
-                        dimensions=self.dimensions,
                         stock=self.stock,
                         virtual=self.virtual,
                     )
@@ -993,6 +980,9 @@ class CatalogItem:
             self,
             kind=CatalogItemKind.VARIABLE,
             sku=None,
+            price=None,
+            virtual=False,
+            stock=StockSpecificationVO(),
             axes=axes,
             children=children,
             default_selection=default,
@@ -1004,6 +994,9 @@ class CatalogItem:
             now,
             kind=CatalogItemKind.VARIABLE,
             sku=None,
+            price=None,
+            virtual=False,
+            stock=StockSpecificationVO(),
             axes=axes,
             children=children,
             default_selection=default,
@@ -1055,22 +1048,10 @@ class CatalogItem:
             kind=CatalogItemKind.SIMPLE,
             sku=selected.sku,
             status=selected.status,
-            virtual=OverrideVO(OverrideMode.SET, effective.virtual),
-            price=(
-                OverrideVO(OverrideMode.SET, effective.price_specification)
-                if effective.price_specification
-                else OverrideVO(OverrideMode.CLEAR)
-            ),
-            weight=(
-                OverrideVO(OverrideMode.SET, effective.weight)
-                if effective.weight is not None
-                else OverrideVO(OverrideMode.CLEAR)
-            ),
-            dimensions=(
-                OverrideVO(OverrideMode.SET, effective.dimensions)
-                if effective.dimensions
-                else OverrideVO(OverrideMode.CLEAR)
-            ),
+            virtual=effective.virtual,
+            price=effective.price_specification,
+            weight=effective.weight,
+            dimensions=effective.dimensions,
             stock=effective.stock,
             translations=translations,
             galleries=galleries,

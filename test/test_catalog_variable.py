@@ -4,6 +4,14 @@ import unittest
 from datetime import datetime, UTC, timedelta
 from decimal import Decimal
 from dataclasses import replace
+from decimal import localcontext
+from src.modules.catalog.domain.catalog_item.value_object.measurements import (
+    WeightVO,
+    WeightUnit,
+    LengthVO,
+    LengthUnit,
+    DimensionsVO,
+)
 from uuid import uuid4
 from src.modules.catalog.domain.catalog_item.aggregate import CatalogItem
 from src.modules.catalog.domain.catalog_item.value_object.identifier import (
@@ -22,7 +30,6 @@ from src.modules.catalog.domain.catalog_item.value_object.price import (
 )
 from src.modules.catalog.domain.catalog_item.value_object.stock import (
     StockSpecificationVO,
-    StockManagement,
     StockStatus,
     BackorderPolicy,
 )
@@ -163,21 +170,18 @@ class CatalogItemDomainTests(unittest.TestCase):
             self.now,
         )
         self.assertEqual(self.effective().content, {"name": "Parent", "short_desc": ""})
-        self.root.set_virtual(
-            self.root.id, OverrideVO(OverrideMode.SET, True), self.actor, self.now
-        )
-        self.root.set_virtual(
-            self.child, OverrideVO(OverrideMode.SET, False), self.actor, self.now
-        )
+        with self.assertRaises(InvalidCatalogValueError):
+            self.root.set_virtual(self.root.id, True, self.actor, self.now)
+        self.root.set_virtual(self.child, False, self.actor, self.now)
         self.root.set_measurements(
             self.child,
-            OverrideVO(OverrideMode.SET, Decimal("0")),
-            OverrideVO(OverrideMode.CLEAR),
+            WeightVO(Decimal("0"), WeightUnit.G),
+            None,
             self.actor,
             self.now,
         )
         self.assertFalse(self.effective().virtual)
-        self.assertEqual(self.effective().weight, Decimal("0"))
+        self.assertEqual(self.effective().weight.value, Decimal("0"))
         self.assertIsNone(
             CatalogItemEffectiveValuesPolicy.resolve(
                 self.root.find_item(self.child).snapshot(),
@@ -193,14 +197,12 @@ class CatalogItemDomainTests(unittest.TestCase):
         )
         self.assertEqual(price.at(self.now), 0)
         self.assertEqual(price.at(self.now + timedelta(hours=1)), 10)
-        self.root.set_price(
-            self.root.id, OverrideVO(OverrideMode.SET, price), self.actor, self.now
-        )
+        self.root.set_price(self.root.children[1].id, price, self.actor, self.now)
         before = self.root.revision
         with self.assertRaises(InvalidCatalogValueError):
             self.root.set_price(
                 self.child,
-                OverrideVO(OverrideMode.SET, PriceSpecificationVO(Decimal("3"), "USD")),
+                PriceSpecificationVO(Decimal("3"), "USD"),
                 self.actor,
                 self.now,
             )
@@ -210,23 +212,21 @@ class CatalogItemDomainTests(unittest.TestCase):
                 PriceSpecificationVO(Decimal(value), "UAH")
 
     def test_shared_stock_no_local_copy_and_revisions(self) -> None:
+        self.assertEqual(
+            self.effective().stock.effective_status(), StockStatus.IN_STOCK
+        )
         with self.assertRaises(InvalidCatalogValueError):
-            self.root.set_stock(
-                self.child,
-                StockSpecificationVO(StockManagement.PARENT),
-                self.actor,
-                self.now,
-            )
+            StockSpecificationVO("parent")
         self.root.set_stock(
             self.root.id,
-            StockSpecificationVO(StockManagement.OWN, 0, None, BackorderPolicy.NOTIFY),
+            StockSpecificationVO(True, 0, None, BackorderPolicy.NOTIFY),
             self.actor,
             self.now,
         )
         revision = self.root.revision
         self.root.set_stock(
             self.child,
-            StockSpecificationVO(StockManagement.PARENT),
+            StockSpecificationVO(),
             self.actor,
             self.now,
         )
@@ -329,3 +329,265 @@ class CatalogItemDomainTests(unittest.TestCase):
         self.assertEqual(self.root.kind, CatalogItemKind.SIMPLE)
         self.assertEqual(self.root.translations["en"]["name"].value, "Parent")
         self.assertEqual(self.root.children, ())
+
+    def test_measurements_inherit_each_pair_and_keep_zero(self) -> None:
+        """Компоненты наследуют родителя независимо и сохраняют собственный ноль."""
+        self.root.set_measurements(
+            self.root.id,
+            WeightVO(Decimal("1.5"), WeightUnit.KG),
+            DimensionsVO(
+                LengthVO(Decimal("0.8"), LengthUnit.M),
+                LengthVO(Decimal("40"), LengthUnit.CM),
+                LengthVO(Decimal("20"), LengthUnit.CM),
+            ),
+            self.actor,
+            self.now,
+        )
+        self.root.set_measurements(
+            self.child,
+            WeightVO(Decimal("0"), WeightUnit.G),
+            DimensionsVO(width=LengthVO(Decimal("0"), LengthUnit.M)),
+            self.actor,
+            self.now,
+        )
+        effective = self.effective()
+        self.assertEqual(effective.weight, WeightVO(Decimal("0"), WeightUnit.G))
+        self.assertEqual(
+            effective.dimensions.length, LengthVO(Decimal("0.8"), LengthUnit.M)
+        )
+        self.assertEqual(
+            effective.dimensions.width, LengthVO(Decimal("0"), LengthUnit.M)
+        )
+        self.assertEqual(effective.origins["dimensions.length"].source, "parent")
+        self.assertEqual(effective.origins["dimensions.width"].source, "item")
+        self.root.set_measurements(self.child, None, None, self.actor, self.now)
+        self.assertEqual(self.effective().weight.in_grams(), Decimal("1500"))
+        self.assertEqual(
+            self.effective().dimensions.length.in_millimeters(), Decimal("800")
+        )
+        self.root.set_measurements(self.root.id, None, None, self.actor, self.now)
+        self.assertIsNone(self.effective().weight)
+        self.assertIsNone(self.effective().dimensions)
+
+    def test_measurement_precision_units_and_exact_conversion(self) -> None:
+        """Точность считается в канонических единицах и не зависит от Decimal context."""
+        for unit, value, expected in [
+            (WeightUnit.G, "0.000001", "0.000001"),
+            (WeightUnit.KG, "0.000000001", "0.000001"),
+        ]:
+            self.assertEqual(
+                WeightVO(Decimal(value), unit).in_grams(), Decimal(expected)
+            )
+        for unit, value in [
+            (LengthUnit.CM, "0.0000001"),
+            (LengthUnit.M, "0.000000001"),
+        ]:
+            self.assertEqual(
+                LengthVO(Decimal(value), unit).in_millimeters(), Decimal("0.000001")
+            )
+        with localcontext() as context:
+            context.prec = 5
+            result = WeightVO(
+                Decimal("123456789012345678901234567890.123456789"), WeightUnit.KG
+            ).in_grams()
+            self.assertEqual(str(result), "123456789012345678901234567890123.456789")
+        for value in ["NaN", "Infinity", "-1", "0.0000000001"]:
+            with self.subTest(value=value), self.assertRaises(InvalidCatalogValueError):
+                WeightVO(Decimal(value), WeightUnit.KG)
+        for factory in [
+            lambda: WeightVO(Decimal("1"), "kg"),
+            lambda: LengthVO(Decimal("1"), WeightUnit.G),
+            lambda: DimensionsVO(Decimal("1")),
+        ]:
+            with self.assertRaises(InvalidCatalogValueError):
+                factory()
+
+    def test_stock_manual_signed_quantity_and_independent_child(self) -> None:
+        """Отрицательный запас разрешён, а собственный учёт перекрывает общий."""
+        for policy in BackorderPolicy:
+            value = StockSpecificationVO(True, -3, None, policy)
+            self.assertEqual(
+                value.effective_status(),
+                (
+                    StockStatus.OUT_OF_STOCK
+                    if policy == BackorderPolicy.NO
+                    else StockStatus.ON_BACKORDER
+                ),
+            )
+        self.root.set_stock(
+            self.root.id, StockSpecificationVO(True, 10, None), self.actor, self.now
+        )
+        self.root.set_stock(
+            self.child, StockSpecificationVO(True, -1, None), self.actor, self.now
+        )
+        self.assertEqual(self.effective().stock_source_id, self.child)
+        self.assertEqual(
+            self.effective().stock.effective_status(), StockStatus.OUT_OF_STOCK
+        )
+        self.root.set_stock(self.child, StockSpecificationVO(), self.actor, self.now)
+        self.assertEqual(self.effective().stock_source_id, self.root.id)
+        self.assertEqual(self.effective().stock.stock_quantity, 10)
+        self.root.set_stock(self.root.id, StockSpecificationVO(), self.actor, self.now)
+        self.assertEqual(self.effective().stock_source_id, self.child)
+        self.assertIsNone(self.effective().stock.stock_quantity)
+        manual = StockSpecificationVO(False, None, StockStatus.ON_BACKORDER)
+        self.assertEqual(manual.effective_status(), StockStatus.ON_BACKORDER)
+        for factory in [
+            lambda: StockSpecificationVO(True),
+            lambda: StockSpecificationVO(True, True, None),
+            lambda: StockSpecificationVO(False, 1),
+            lambda: StockSpecificationVO(
+                False, None, StockStatus.IN_STOCK, BackorderPolicy.YES
+            ),
+        ]:
+            with self.assertRaises(InvalidCatalogValueError):
+                factory()
+
+    def test_sale_availability_and_family_summary(self) -> None:
+        """Продажа требует активной семьи, цены и наличия; сводка не суммирует запас."""
+        self.root.set_price(
+            self.child, PriceSpecificationVO(Decimal("0"), "UAH"), self.actor, self.now
+        )
+        self.root.set_status(self.child, CatalogItemStatus.ACTIVE, self.actor, self.now)
+        self.assertFalse(self.effective().available_for_sale)
+        self.root.set_status(
+            self.root.id, CatalogItemStatus.ACTIVE, self.actor, self.now
+        )
+        self.assertTrue(self.effective().available_for_sale)
+        self.root.set_stock(
+            self.root.id, StockSpecificationVO(True, 0, None), self.actor, self.now
+        )
+        self.assertFalse(self.effective().available_for_sale)
+        self.root.set_stock(
+            self.root.id,
+            StockSpecificationVO(True, -2, None, BackorderPolicy.YES),
+            self.actor,
+            self.now,
+        )
+        self.assertTrue(self.effective().available_for_sale)
+        self.root.set_status(
+            self.root.children[1].id, CatalogItemStatus.ACTIVE, self.actor, self.now
+        )
+        children = tuple(
+            CatalogItemEffectiveValuesPolicy.resolve(
+                c.snapshot(), self.root.snapshot(), "en", self.now
+            )
+            for c in self.root.children
+        )
+        summary = CatalogItemEffectiveValuesPolicy.family_summary(
+            self.root.snapshot(), children
+        )
+        self.assertTrue(summary.available_for_sale)
+        self.assertTrue(summary.price_incomplete)
+        self.assertEqual(summary.price_min, 0)
+        self.assertEqual(summary.stock_status, StockStatus.ON_BACKORDER)
+        self.root.set_stock(
+            self.root.children[1].id,
+            StockSpecificationVO(True, 5, None),
+            self.actor,
+            self.now,
+        )
+        self.root.set_stock(
+            self.child, StockSpecificationVO(True, 0, None), self.actor, self.now
+        )
+        children = tuple(
+            CatalogItemEffectiveValuesPolicy.resolve(
+                c.snapshot(), self.root.snapshot(), "en", self.now
+            )
+            for c in self.root.children
+        )
+        summary = CatalogItemEffectiveValuesPolicy.family_summary(
+            self.root.snapshot(), children
+        )
+        self.assertEqual(summary.stock_status, StockStatus.IN_STOCK)
+        self.assertFalse(summary.available_for_sale)
+        self.root.set_status(
+            self.root.id, CatalogItemStatus.ARCHIVED, self.actor, self.now
+        )
+        children = tuple(
+            CatalogItemEffectiveValuesPolicy.resolve(
+                c.snapshot(), self.root.snapshot(), "en", self.now
+            )
+            for c in self.root.children
+        )
+        summary = CatalogItemEffectiveValuesPolicy.family_summary(
+            self.root.snapshot(), children
+        )
+        self.assertFalse(summary.available_for_sale)
+        self.assertEqual(summary.stock_status, StockStatus.OUT_OF_STOCK)
+
+    def test_kind_transitions_keep_units_and_materialize_shared_stock(self) -> None:
+        """Переходы явно переносят коммерческие значения и материализуют измерения."""
+        self.simple.set_price(
+            self.simple.id,
+            PriceSpecificationVO(Decimal("5"), "UAH"),
+            self.actor,
+            self.now,
+        )
+        self.simple.set_virtual(self.simple.id, True, self.actor, self.now)
+        self.simple.set_stock(
+            self.simple.id, StockSpecificationVO(True, 7, None), self.actor, self.now
+        )
+        self.simple.set_measurements(
+            self.simple.id,
+            WeightVO(Decimal("2"), WeightUnit.KG),
+            DimensionsVO(height=LengthVO(Decimal("0.3"), LengthUnit.M)),
+            self.actor,
+            self.now,
+        )
+        children = tuple(
+            CatalogItem.create_variant(
+                CatalogItemIdVO(uuid4()),
+                self.simple.id,
+                VariationSelectionVO(((self.attribute, o),)),
+                self.actor,
+                self.now,
+            )
+            for o in self.options
+        )
+        with self.assertRaises(InvalidCatalogValueError):
+            self.simple.change_to_variable(
+                (self.axis,),
+                children,
+                None,
+                self.definitions,
+                None,
+                False,
+                self.actor,
+                self.now,
+            )
+        self.simple.change_to_variable(
+            (self.axis,),
+            children,
+            None,
+            self.definitions,
+            children[0].id,
+            False,
+            self.actor,
+            self.now,
+        )
+        self.assertIsNone(self.simple.price)
+        self.assertFalse(self.simple.virtual)
+        self.assertFalse(self.simple.stock.manage_stock)
+        self.assertEqual(self.simple.children[0].price.regular_price, 5)
+        self.assertIsNone(self.simple.children[1].price)
+        self.assertTrue(self.simple.children[0].virtual)
+        self.assertIsNone(self.simple.children[0].weight)
+        self.simple.set_stock(
+            self.simple.id, StockSpecificationVO(True, 11, None), self.actor, self.now
+        )
+        selected = self.simple.children[1].id
+        self.simple.change_to_simple(
+            selected,
+            frozenset(c.id for c in self.simple.children),
+            False,
+            self.actor,
+            self.now,
+        )
+        self.assertEqual(self.simple.weight, WeightVO(Decimal("2"), WeightUnit.KG))
+        self.assertEqual(
+            self.simple.dimensions.height, LengthVO(Decimal("0.3"), LengthUnit.M)
+        )
+        self.assertTrue(self.simple.stock.manage_stock)
+        self.assertEqual(self.simple.stock.stock_quantity, 11)
+        self.assertEqual(self.simple.children, ())

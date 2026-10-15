@@ -16,4 +16,4 @@ class SetCatalogItemStockCommand:
     actor_id: EntityIdVO
     item_id: CatalogItemIdVO
     expected_root_revision: int
-    stock: StockSpecificationVO | None
+    stock: StockSpecificationVO

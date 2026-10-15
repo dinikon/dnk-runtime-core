@@ -53,35 +53,11 @@ class CatalogItemModel(EntityAuditMixin, AudienceMixin, TenantBase):
             postgresql_where=sa.text("parent_id IS NULL"),
         ),
         sa.CheckConstraint(
-            "virtual_mode IN ('set','inherit','clear') AND (kind='variant' OR virtual_mode<>'inherit')",
-            name="ck_catalog_item_virtual_mode",
+            "kind<>'variable' OR (virtual=false AND regular_price IS NULL)",
+            name="ck_catalog_item_variable_values",
         ),
         sa.CheckConstraint(
-            "price_mode IN ('set','inherit','clear') AND (kind='variant' OR price_mode<>'inherit')",
-            name="ck_catalog_item_price_mode",
-        ),
-        sa.CheckConstraint(
-            "weight_mode IN ('set','inherit','clear') AND (kind='variant' OR weight_mode<>'inherit')",
-            name="ck_catalog_item_weight_mode",
-        ),
-        sa.CheckConstraint(
-            "dimensions_mode IN ('set','inherit','clear') AND (kind='variant' OR dimensions_mode<>'inherit')",
-            name="ck_catalog_item_dimensions_mode",
-        ),
-        sa.CheckConstraint(
-            "virtual_mode<>'clear' AND ((virtual_mode='set' AND virtual IS NOT NULL) OR (virtual_mode='inherit' AND virtual IS NULL))",
-            name="ck_catalog_item_virtual",
-        ),
-        sa.CheckConstraint(
-            "(weight_mode='set' AND weight>=0 AND weight IS NOT NULL) OR (weight_mode<>'set' AND weight IS NULL)",
-            name="ck_catalog_item_weight",
-        ),
-        sa.CheckConstraint(
-            "(dimensions_mode='set' AND length IS NOT NULL AND width IS NOT NULL AND height IS NOT NULL AND length>=0 AND width>=0 AND height>=0) OR (dimensions_mode<>'set' AND length IS NULL AND width IS NULL AND height IS NULL)",
-            name="ck_catalog_item_dimensions",
-        ),
-        sa.CheckConstraint(
-            "(price_mode='set' AND regular_price IS NOT NULL AND regular_price>=0 AND currency IS NOT NULL AND currency ~ '^[A-Z]{3}$') OR (price_mode<>'set' AND regular_price IS NULL AND currency IS NULL AND sale_price IS NULL AND date_on_sale_from IS NULL AND date_on_sale_to IS NULL)",
+            "(regular_price IS NOT NULL AND regular_price>=0 AND currency IS NOT NULL AND currency ~ '^[A-Z]{3}$') OR (regular_price IS NULL AND currency IS NULL AND sale_price IS NULL AND date_on_sale_from IS NULL AND date_on_sale_to IS NULL)",
             name="ck_catalog_item_price",
         ),
         sa.CheckConstraint(
@@ -93,20 +69,20 @@ class CatalogItemModel(EntityAuditMixin, AudienceMixin, TenantBase):
             name="ck_catalog_item_sale_interval",
         ),
         sa.CheckConstraint(
-            "weight IS NULL OR (weight NOT IN ('NaN'::numeric,'Infinity'::numeric,'-Infinity'::numeric) AND scale(weight)<=6)",
-            name="ck_catalog_item_weight_precision",
+            "(weight IS NULL AND weight_unit IS NULL) OR (weight IS NOT NULL AND weight_unit IS NOT NULL AND weight_unit IN ('g','kg') AND weight>=0 AND weight NOT IN ('NaN'::numeric,'Infinity'::numeric,'-Infinity'::numeric) AND weight * (CASE WHEN weight_unit='kg' THEN 1000 ELSE 1 END) = trunc(weight * (CASE WHEN weight_unit='kg' THEN 1000 ELSE 1 END), 6))",
+            name="ck_catalog_item_weight",
         ),
         sa.CheckConstraint(
-            "length IS NULL OR (length NOT IN ('NaN'::numeric,'Infinity'::numeric,'-Infinity'::numeric) AND scale(length)<=6)",
-            name="ck_catalog_item_length_precision",
+            "(length IS NULL AND length_unit IS NULL) OR (length IS NOT NULL AND length_unit IS NOT NULL AND length_unit IN ('cm','m') AND length>=0 AND length NOT IN ('NaN'::numeric,'Infinity'::numeric,'-Infinity'::numeric) AND length * (CASE WHEN length_unit='m' THEN 1000 ELSE 10 END) = trunc(length * (CASE WHEN length_unit='m' THEN 1000 ELSE 10 END), 6))",
+            name="ck_catalog_item_length",
         ),
         sa.CheckConstraint(
-            "width IS NULL OR (width NOT IN ('NaN'::numeric,'Infinity'::numeric,'-Infinity'::numeric) AND scale(width)<=6)",
-            name="ck_catalog_item_width_precision",
+            "(width IS NULL AND width_unit IS NULL) OR (width IS NOT NULL AND width_unit IS NOT NULL AND width_unit IN ('cm','m') AND width>=0 AND width NOT IN ('NaN'::numeric,'Infinity'::numeric,'-Infinity'::numeric) AND width * (CASE WHEN width_unit='m' THEN 1000 ELSE 10 END) = trunc(width * (CASE WHEN width_unit='m' THEN 1000 ELSE 10 END), 6))",
+            name="ck_catalog_item_width",
         ),
         sa.CheckConstraint(
-            "height IS NULL OR (height NOT IN ('NaN'::numeric,'Infinity'::numeric,'-Infinity'::numeric) AND scale(height)<=6)",
-            name="ck_catalog_item_height_precision",
+            "(height IS NULL AND height_unit IS NULL) OR (height IS NOT NULL AND height_unit IS NOT NULL AND height_unit IN ('cm','m') AND height>=0 AND height NOT IN ('NaN'::numeric,'Infinity'::numeric,'-Infinity'::numeric) AND height * (CASE WHEN height_unit='m' THEN 1000 ELSE 10 END) = trunc(height * (CASE WHEN height_unit='m' THEN 1000 ELSE 10 END), 6))",
+            name="ck_catalog_item_height",
         ),
         sa.CheckConstraint(
             "regular_price IS NULL OR (regular_price NOT IN ('NaN'::numeric,'Infinity'::numeric,'-Infinity'::numeric) AND scale(regular_price)<=6)",
@@ -117,11 +93,7 @@ class CatalogItemModel(EntityAuditMixin, AudienceMixin, TenantBase):
             name="ck_catalog_item_sale_price_precision",
         ),
         sa.CheckConstraint(
-            "manage_stock IS NULL OR manage_stock IN ('none','own','parent')",
-            name="ck_catalog_item_stock_mode",
-        ),
-        sa.CheckConstraint(
-            "(manage_stock IS NULL AND stock_quantity IS NULL AND stock_status IS NULL AND backorders IS NULL) OR (manage_stock='parent' AND kind='variant' AND stock_quantity IS NULL AND stock_status IS NULL AND backorders IS NULL) OR (manage_stock='own' AND stock_quantity IS NOT NULL AND stock_quantity>=0 AND stock_status IS NULL AND backorders IS NOT NULL AND backorders IN ('no','notify','yes')) OR (manage_stock='none' AND stock_quantity IS NULL AND stock_status IS NOT NULL AND backorders IS NOT NULL AND stock_status IN ('in_stock','out_of_stock','on_backorder') AND backorders IN ('no','notify','yes') AND (stock_status<>'on_backorder' OR backorders<>'no'))",
+            "(manage_stock=true AND stock_quantity IS NOT NULL AND stock_status IS NULL AND backorders IN ('no','notify','yes')) OR (manage_stock=false AND stock_quantity IS NULL AND stock_status IS NOT NULL AND stock_status IN ('in_stock','out_of_stock','on_backorder') AND backorders='no')",
             name="ck_catalog_item_stock",
         ),
     )
@@ -144,11 +116,9 @@ class CatalogItemModel(EntityAuditMixin, AudienceMixin, TenantBase):
     status: Mapped[str] = mapped_column(sa.String(20), nullable=False)
     sku: Mapped[str | None] = mapped_column(sa.String(128), nullable=True)
     revision: Mapped[int] = mapped_column(sa.Integer, nullable=False)
-    virtual_mode: Mapped[str] = mapped_column(sa.String(10), nullable=False)
-    virtual: Mapped[bool | None] = mapped_column(sa.Boolean, nullable=True)
-    weight_mode: Mapped[str] = mapped_column(sa.String(10), nullable=False)
+    virtual: Mapped[bool] = mapped_column(sa.Boolean, nullable=False)
     weight: Mapped[Decimal | None] = mapped_column(sa.Numeric(), nullable=True)
-    price_mode: Mapped[str] = mapped_column(sa.String(10), nullable=False)
+    weight_unit: Mapped[str | None] = mapped_column(sa.String(2), nullable=True)
     regular_price: Mapped[Decimal | None] = mapped_column(sa.Numeric(), nullable=True)
     sale_price: Mapped[Decimal | None] = mapped_column(sa.Numeric(), nullable=True)
     currency: Mapped[str | None] = mapped_column(sa.String(3), nullable=True)
@@ -158,11 +128,13 @@ class CatalogItemModel(EntityAuditMixin, AudienceMixin, TenantBase):
     date_on_sale_to: Mapped[datetime | None] = mapped_column(
         sa.DateTime(timezone=True), nullable=True
     )
-    dimensions_mode: Mapped[str] = mapped_column(sa.String(10), nullable=False)
     length: Mapped[Decimal | None] = mapped_column(sa.Numeric(), nullable=True)
+    length_unit: Mapped[str | None] = mapped_column(sa.String(2), nullable=True)
     width: Mapped[Decimal | None] = mapped_column(sa.Numeric(), nullable=True)
+    width_unit: Mapped[str | None] = mapped_column(sa.String(2), nullable=True)
     height: Mapped[Decimal | None] = mapped_column(sa.Numeric(), nullable=True)
-    manage_stock: Mapped[str | None] = mapped_column(sa.String(10), nullable=True)
+    height_unit: Mapped[str | None] = mapped_column(sa.String(2), nullable=True)
+    manage_stock: Mapped[bool] = mapped_column(sa.Boolean, nullable=False)
     stock_quantity: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
     stock_status: Mapped[str | None] = mapped_column(sa.String(20), nullable=True)
-    backorders: Mapped[str | None] = mapped_column(sa.String(10), nullable=True)
+    backorders: Mapped[str] = mapped_column(sa.String(10), nullable=False)

@@ -6,13 +6,20 @@ from src.modules.catalog.domain.catalog_item.value_object.snapshot import (
 )
 from src.modules.catalog.domain.catalog_item.value_object.override import (
     OverrideMode,
-    OverrideVO,
 )
 from src.modules.catalog.domain.catalog_item.value_object.kind import (
     CatalogItemKind,
     CatalogItemStatus,
 )
-from src.modules.catalog.domain.catalog_item.value_object.stock import StockManagement
+from src.modules.catalog.domain.catalog_item.value_object.stock import StockStatus
+from src.modules.catalog.domain.catalog_item.value_object.measurements import (
+    DimensionsVO,
+    WeightVO,
+    LengthVO,
+)
+from src.modules.catalog.domain.catalog_item.value_object.snapshot import (
+    CatalogFamilySummary,
+)
 from src.modules.catalog.domain.catalog_item.value_object.attribute import (
     EnumAttributeAssignmentVO,
 )
@@ -38,24 +45,25 @@ class CatalogItemEffectiveValuesPolicy:
             raise InvalidCatalogValueError("Для варианта нужен снимок своего VARIABLE.")
         origins: dict[str, ValueOrigin] = {}
 
-        def scalar(
-            name: str, own: OverrideVO, inherited: OverrideVO | None
-        ) -> object | None:
-            """Разрешает явно типизированную группу без truthy-проверок."""
-            value = own
-            source_id = item.id
-            source = "item"
-            if own.mode == OverrideMode.INHERIT:
-                value = inherited
-                source_id = parent.id if parent else None
-                source = "parent"
-            if value is None or value.mode != OverrideMode.SET:
-                origins[name] = ValueOrigin(
-                    "unknown" if own.mode != OverrideMode.CLEAR else "item", source_id
-                )
-                return None
-            origins[name] = ValueOrigin(source, source_id)
-            return value.value
+        def measurement[T: (WeightVO, LengthVO)](
+            name: str, own: T | None, inherited: T | None
+        ) -> T | None:
+            """Наследует отсутствующее измерение вместе с единицей, сохраняя собственный ноль."""
+            value = own if own is not None else inherited
+            source = (
+                "item"
+                if own is not None
+                else "parent" if inherited is not None else "unknown"
+            )
+            origins[name] = ValueOrigin(
+                source,
+                (
+                    item.id
+                    if own is not None
+                    else parent.id if parent and inherited is not None else None
+                ),
+            )
+            return value
 
         content: dict[str, str] = {}
         own_content = item.translations.get(locale, {})
@@ -76,23 +84,30 @@ class CatalogItemEffectiveValuesPolicy:
             )
             if value is not None and value.mode == OverrideMode.SET:
                 content[code] = value.value
-        virtual = scalar("virtual", item.virtual, parent.virtual if parent else None)
-        price = scalar("price", item.price, parent.price if parent else None)
-        weight = scalar("weight", item.weight, parent.weight if parent else None)
-        dimensions = scalar(
-            "dimensions", item.dimensions, parent.dimensions if parent else None
+        virtual = item.virtual
+        price = item.price
+        origins["virtual"] = ValueOrigin("item", item.id)
+        origins["price"] = ValueOrigin(
+            "item" if price is not None else "unknown",
+            item.id if price is not None else None,
         )
+        weight = measurement("weight", item.weight, parent.weight if parent else None)
+        own_dimensions = item.dimensions or DimensionsVO()
+        parent_dimensions = (
+            parent.dimensions if parent and parent.dimensions else DimensionsVO()
+        )
+        sizes = tuple(
+            measurement(
+                f"dimensions.{name}",
+                getattr(own_dimensions, name),
+                getattr(parent_dimensions, name),
+            )
+            for name in ("length", "width", "height")
+        )
+        dimensions = DimensionsVO(*sizes) if any(v is not None for v in sizes) else None
         stock = item.stock
-        stock_source_id = item.id if stock else None
-        if stock and stock.manage_stock == StockManagement.PARENT:
-            if (
-                parent is None
-                or parent.stock is None
-                or parent.stock.manage_stock != StockManagement.OWN
-            ):
-                raise InvalidCatalogValueError(
-                    "Parent требует собственный источник наличия VARIABLE."
-                )
+        stock_source_id = item.id
+        if parent is not None and not stock.manage_stock and parent.stock.manage_stock:
             stock = parent.stock
             stock_source_id = parent.id
         origins["stock"] = ValueOrigin(
@@ -171,7 +186,50 @@ class CatalogItemEffectiveValuesPolicy:
                 sorted(attrs.values(), key=lambda a: (a.position, str(a.attribute_id)))
             ),
             tuple(metadata.values()),
+            item.kind != CatalogItemKind.VARIABLE
+            and price is not None
+            and stock.effective_status() != StockStatus.OUT_OF_STOCK
+            and item.status == CatalogItemStatus.ACTIVE
+            and (parent is None or parent.status == CatalogItemStatus.ACTIVE),
             item.status == CatalogItemStatus.ACTIVE
             and (parent is None or parent.status == CatalogItemStatus.ACTIVE),
             origins,
+        )
+
+    @staticmethod
+    def family_summary(
+        parent: CatalogItemValuesSnapshot,
+        children: tuple[EffectiveCatalogItemValues, ...],
+    ) -> CatalogFamilySummary:
+        """Сводит активных детей без суммирования общего источника остатков."""
+        active = tuple(
+            c
+            for c in children
+            if parent.status == CatalogItemStatus.ACTIVE and c.available_for_publication
+        )
+        statuses = {c.stock.effective_status() for c in active}
+        status = next(
+            (
+                v
+                for v in (StockStatus.IN_STOCK, StockStatus.ON_BACKORDER)
+                if v in statuses
+            ),
+            StockStatus.OUT_OF_STOCK,
+        )
+        prices = tuple(c.price for c in active if c.price is not None)
+        currency = next(
+            (
+                c.price_specification.currency
+                for c in active
+                if c.price_specification is not None
+            ),
+            None,
+        )
+        return CatalogFamilySummary(
+            status,
+            any(c.available_for_sale for c in active),
+            min(prices) if prices else None,
+            max(prices) if prices else None,
+            any(c.price is None for c in active),
+            currency,
         )

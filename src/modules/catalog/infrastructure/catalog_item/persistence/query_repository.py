@@ -1,3 +1,4 @@
+from dataclasses import replace
 from src.modules.catalog.infrastructure.catalog_item.persistence.query_mapper import (
     CatalogItemQueryMapper,
 )
@@ -127,29 +128,23 @@ class SqlAlchemyCatalogItemQueryRepository:
                 if effective.price_specification
                 else None
             )
-            prices = []
-            incomplete = False
+            summary = None
             if own.kind == CatalogItemKind.VARIABLE:
-                for child in children:
-                    if (
-                        child["parent_id"] != own.id.uuid
-                        or child["status"] != "active"
-                        or own.status != "active"
-                    ):
-                        continue
-                    value = CatalogItemMapper.to_values(child, {})
-                    child_effective = CatalogItemEffectiveValuesPolicy.resolve(
-                        value, own, locale, as_of
+                child_values = tuple(
+                    CatalogItemEffectiveValuesPolicy.resolve(
+                        CatalogItemMapper.to_values(child, {}), own, locale, as_of
                     )
-                    price = child_effective.price
-                    if child_effective.price_specification is not None:
-                        price_currency = child_effective.price_specification.currency
-                    if price is None:
-                        incomplete = True
-                    else:
-                        prices.append(price)
+                    for child in children
+                    if child["parent_id"] == own.id.uuid
+                )
+                summary = CatalogItemEffectiveValuesPolicy.family_summary(
+                    own, child_values
+                )
+                effective = replace(
+                    effective, available_for_sale=summary.available_for_sale
+                )
             stock = effective.stock
-            status = stock.effective_status() if stock else None
+            status = summary.stock_status if summary else stock.effective_status()
             result.append(
                 CatalogItemReadDTO(
                     (own.parent_id or own.id).uuid,
@@ -163,10 +158,10 @@ class SqlAlchemyCatalogItemQueryRepository:
                     status.value if status else None,
                     stock.backorders != BackorderPolicy.NO if stock else None,
                     status == StockStatus.ON_BACKORDER if stock else None,
-                    min(prices) if prices else None,
-                    max(prices) if prices else None,
-                    incomplete,
-                    price_currency,
+                    summary.price_min if summary else None,
+                    summary.price_max if summary else None,
+                    summary.price_incomplete if summary else False,
+                    summary.price_currency if summary else price_currency,
                 )
             )
         return tuple(result)

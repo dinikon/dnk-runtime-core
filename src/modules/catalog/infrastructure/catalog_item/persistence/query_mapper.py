@@ -33,4 +33,7 @@ class CatalogItemQueryMapper:
             value.price_incomplete,
             value.stock_status,
             image,
+            value.effective.available_for_sale,
+            value.effective.weight,
+            value.effective.dimensions,
         )

@@ -68,6 +68,7 @@ export function itemFromDto(value: ReadItemDTO): CatalogItem {
     priceMin: value.price_min,
     priceMax: value.price_max,
     priceIncomplete: value.price_incomplete,
+    availableForSale: value.effective.available_for_sale,
   };
 }
 
@@ -84,5 +85,6 @@ export function listItemFromDto(value: import("./catalog.dto").ListItemDTO) {
     priceMin: value.price_min,
     priceMax: value.price_max,
     priceIncomplete: value.price_incomplete,
+    availableForSale: value.available_for_sale,
   };
 }

@@ -1,8 +1,7 @@
 from pydantic import BaseModel, ConfigDict, Field
-from decimal import Decimal
 from src.modules.catalog.presentation.catalog_item.http.value_contracts import (
-    ValueOverride,
     DimensionsValue,
+    WeightValue,
 )
 
 
@@ -11,5 +10,5 @@ class SetCatalogItemMeasurementsRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     expected_root_revision: int = Field(ge=1)
-    weight: ValueOverride[Decimal]
-    dimensions: ValueOverride[DimensionsValue]
+    weight: WeightValue | None
+    dimensions: DimensionsValue | None

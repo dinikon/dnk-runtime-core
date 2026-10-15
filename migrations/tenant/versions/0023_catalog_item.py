@@ -1,6 +1,7 @@
 """Fresh CatalogItem baseline; перенос данных старого Catalog не предусмотрен."""
 
 from alembic import op
+from src.modules.shared.infrastructure.persistence.string_uuid import StringUUID
 import sqlalchemy as sa
 
 revision = "0023_catalog_item"
@@ -212,7 +213,7 @@ def upgrade() -> None:
     op.create_table(
         "catalog_item",
         sa.Column("kind", sa.String(length=20), nullable=False),
-        sa.Column("parent_id", sa.UUID(), nullable=True),
+        sa.Column("parent_id", StringUUID(), nullable=True),
         sa.Column(
             "required_parent_kind",
             sa.String(length=20),
@@ -221,31 +222,31 @@ def upgrade() -> None:
             ),
             nullable=True,
         ),
-        sa.Column("product_type_id", sa.UUID(), nullable=True),
+        sa.Column("product_type_id", StringUUID(), nullable=True),
         sa.Column("status", sa.String(length=20), nullable=False),
         sa.Column("sku", sa.String(length=128), nullable=True),
         sa.Column("revision", sa.Integer(), nullable=False),
-        sa.Column("virtual_mode", sa.String(length=10), nullable=False),
-        sa.Column("virtual", sa.Boolean(), nullable=True),
-        sa.Column("weight_mode", sa.String(length=10), nullable=False),
+        sa.Column("virtual", sa.Boolean(), nullable=False),
         sa.Column("weight", sa.Numeric(), nullable=True),
-        sa.Column("price_mode", sa.String(length=10), nullable=False),
+        sa.Column("weight_unit", sa.String(length=2), nullable=True),
         sa.Column("regular_price", sa.Numeric(), nullable=True),
         sa.Column("sale_price", sa.Numeric(), nullable=True),
         sa.Column("currency", sa.String(length=3), nullable=True),
         sa.Column("date_on_sale_from", sa.DateTime(timezone=True), nullable=True),
         sa.Column("date_on_sale_to", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("dimensions_mode", sa.String(length=10), nullable=False),
         sa.Column("length", sa.Numeric(), nullable=True),
+        sa.Column("length_unit", sa.String(length=2), nullable=True),
         sa.Column("width", sa.Numeric(), nullable=True),
+        sa.Column("width_unit", sa.String(length=2), nullable=True),
         sa.Column("height", sa.Numeric(), nullable=True),
-        sa.Column("manage_stock", sa.String(length=10), nullable=True),
+        sa.Column("height_unit", sa.String(length=2), nullable=True),
+        sa.Column("manage_stock", sa.Boolean(), nullable=False),
         sa.Column("stock_quantity", sa.Integer(), nullable=True),
         sa.Column("stock_status", sa.String(length=20), nullable=True),
-        sa.Column("backorders", sa.String(length=10), nullable=True),
-        sa.Column("id", sa.UUID(), nullable=False),
-        sa.Column("created_by", sa.UUID(), nullable=False),
-        sa.Column("updated_by", sa.UUID(), nullable=False),
+        sa.Column("backorders", sa.String(length=10), nullable=False),
+        sa.Column("id", StringUUID(), nullable=False),
+        sa.Column("created_by", StringUUID(), nullable=False),
+        sa.Column("updated_by", StringUUID(), nullable=False),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -259,50 +260,42 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.CheckConstraint(
-            "(dimensions_mode='set' AND length IS NOT NULL AND width IS NOT NULL AND height IS NOT NULL AND length>=0 AND width>=0 AND height>=0) OR (dimensions_mode<>'set' AND length IS NULL AND width IS NULL AND height IS NULL)",
-            name="ck_catalog_item_dimensions",
+            "(height IS NULL AND height_unit IS NULL) OR (height IS NOT NULL AND height_unit IS NOT NULL AND height_unit IN ('cm','m') AND height>=0 AND height NOT IN ('NaN'::numeric,'Infinity'::numeric,'-Infinity'::numeric) AND height * (CASE WHEN height_unit='m' THEN 1000 ELSE 10 END) = trunc(height * (CASE WHEN height_unit='m' THEN 1000 ELSE 10 END), 6))",
+            name="ck_catalog_item_height",
         ),
         sa.CheckConstraint(
             "(kind='variant' AND parent_id IS NOT NULL AND parent_id<>id AND product_type_id IS NULL) OR (kind IN ('simple','variable') AND parent_id IS NULL AND product_type_id IS NOT NULL)",
             name="ck_catalog_item_role",
         ),
         sa.CheckConstraint(
-            "(manage_stock IS NULL AND stock_quantity IS NULL AND stock_status IS NULL AND backorders IS NULL) OR (manage_stock='parent' AND kind='variant' AND stock_quantity IS NULL AND stock_status IS NULL AND backorders IS NULL) OR (manage_stock='own' AND stock_quantity IS NOT NULL AND stock_quantity>=0 AND stock_status IS NULL AND backorders IS NOT NULL AND backorders IN ('no','notify','yes')) OR (manage_stock='none' AND stock_quantity IS NULL AND stock_status IS NOT NULL AND backorders IS NOT NULL AND stock_status IN ('in_stock','out_of_stock','on_backorder') AND backorders IN ('no','notify','yes') AND (stock_status<>'on_backorder' OR backorders<>'no'))",
+            "(length IS NULL AND length_unit IS NULL) OR (length IS NOT NULL AND length_unit IS NOT NULL AND length_unit IN ('cm','m') AND length>=0 AND length NOT IN ('NaN'::numeric,'Infinity'::numeric,'-Infinity'::numeric) AND length * (CASE WHEN length_unit='m' THEN 1000 ELSE 10 END) = trunc(length * (CASE WHEN length_unit='m' THEN 1000 ELSE 10 END), 6))",
+            name="ck_catalog_item_length",
+        ),
+        sa.CheckConstraint(
+            "(manage_stock=true AND stock_quantity IS NOT NULL AND stock_status IS NULL AND backorders IN ('no','notify','yes')) OR (manage_stock=false AND stock_quantity IS NULL AND stock_status IS NOT NULL AND stock_status IN ('in_stock','out_of_stock','on_backorder') AND backorders='no')",
             name="ck_catalog_item_stock",
         ),
         sa.CheckConstraint(
-            "(price_mode='set' AND regular_price IS NOT NULL AND regular_price>=0 AND currency IS NOT NULL AND currency ~ '^[A-Z]{3}$') OR (price_mode<>'set' AND regular_price IS NULL AND currency IS NULL AND sale_price IS NULL AND date_on_sale_from IS NULL AND date_on_sale_to IS NULL)",
+            "(regular_price IS NOT NULL AND regular_price>=0 AND currency IS NOT NULL AND currency ~ '^[A-Z]{3}$') OR (regular_price IS NULL AND currency IS NULL AND sale_price IS NULL AND date_on_sale_from IS NULL AND date_on_sale_to IS NULL)",
             name="ck_catalog_item_price",
         ),
         sa.CheckConstraint(
-            "(weight_mode='set' AND weight>=0 AND weight IS NOT NULL) OR (weight_mode<>'set' AND weight IS NULL)",
+            "(weight IS NULL AND weight_unit IS NULL) OR (weight IS NOT NULL AND weight_unit IS NOT NULL AND weight_unit IN ('g','kg') AND weight>=0 AND weight NOT IN ('NaN'::numeric,'Infinity'::numeric,'-Infinity'::numeric) AND weight * (CASE WHEN weight_unit='kg' THEN 1000 ELSE 1 END) = trunc(weight * (CASE WHEN weight_unit='kg' THEN 1000 ELSE 1 END), 6))",
             name="ck_catalog_item_weight",
         ),
         sa.CheckConstraint(
-            "dimensions_mode IN ('set','inherit','clear') AND (kind='variant' OR dimensions_mode<>'inherit')",
-            name="ck_catalog_item_dimensions_mode",
-        ),
-        sa.CheckConstraint(
-            "height IS NULL OR (height NOT IN ('NaN'::numeric,'Infinity'::numeric,'-Infinity'::numeric) AND scale(height)<=6)",
-            name="ck_catalog_item_height_precision",
+            "(width IS NULL AND width_unit IS NULL) OR (width IS NOT NULL AND width_unit IS NOT NULL AND width_unit IN ('cm','m') AND width>=0 AND width NOT IN ('NaN'::numeric,'Infinity'::numeric,'-Infinity'::numeric) AND width * (CASE WHEN width_unit='m' THEN 1000 ELSE 10 END) = trunc(width * (CASE WHEN width_unit='m' THEN 1000 ELSE 10 END), 6))",
+            name="ck_catalog_item_width",
         ),
         sa.CheckConstraint(
             "kind IN ('simple','variable','variant')", name="ck_catalog_item_kind"
         ),
         sa.CheckConstraint(
+            "kind<>'variable' OR (virtual=false AND regular_price IS NULL)",
+            name="ck_catalog_item_variable_values",
+        ),
+        sa.CheckConstraint(
             "kind<>'variable' OR sku IS NULL", name="ck_catalog_item_sku_role"
-        ),
-        sa.CheckConstraint(
-            "length IS NULL OR (length NOT IN ('NaN'::numeric,'Infinity'::numeric,'-Infinity'::numeric) AND scale(length)<=6)",
-            name="ck_catalog_item_length_precision",
-        ),
-        sa.CheckConstraint(
-            "manage_stock IS NULL OR manage_stock IN ('none','own','parent')",
-            name="ck_catalog_item_stock_mode",
-        ),
-        sa.CheckConstraint(
-            "price_mode IN ('set','inherit','clear') AND (kind='variant' OR price_mode<>'inherit')",
-            name="ck_catalog_item_price_mode",
         ),
         sa.CheckConstraint(
             "regular_price IS NULL OR (regular_price NOT IN ('NaN'::numeric,'Infinity'::numeric,'-Infinity'::numeric) AND scale(regular_price)<=6)",
@@ -314,26 +307,6 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint(
             "status IN ('draft','active','archived')", name="ck_catalog_item_status"
-        ),
-        sa.CheckConstraint(
-            "virtual_mode IN ('set','inherit','clear') AND (kind='variant' OR virtual_mode<>'inherit')",
-            name="ck_catalog_item_virtual_mode",
-        ),
-        sa.CheckConstraint(
-            "virtual_mode<>'clear' AND ((virtual_mode='set' AND virtual IS NOT NULL) OR (virtual_mode='inherit' AND virtual IS NULL))",
-            name="ck_catalog_item_virtual",
-        ),
-        sa.CheckConstraint(
-            "weight IS NULL OR (weight NOT IN ('NaN'::numeric,'Infinity'::numeric,'-Infinity'::numeric) AND scale(weight)<=6)",
-            name="ck_catalog_item_weight_precision",
-        ),
-        sa.CheckConstraint(
-            "weight_mode IN ('set','inherit','clear') AND (kind='variant' OR weight_mode<>'inherit')",
-            name="ck_catalog_item_weight_mode",
-        ),
-        sa.CheckConstraint(
-            "width IS NULL OR (width NOT IN ('NaN'::numeric,'Infinity'::numeric,'-Infinity'::numeric) AND scale(width)<=6)",
-            name="ck_catalog_item_width_precision",
         ),
         sa.CheckConstraint(
             "(sale_price IS NULL AND date_on_sale_from IS NULL AND date_on_sale_to IS NULL) OR (sale_price IS NOT NULL AND sale_price>=0 AND sale_price<=regular_price)",

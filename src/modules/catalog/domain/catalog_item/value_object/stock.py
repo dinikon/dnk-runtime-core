@@ -3,14 +3,6 @@ from enum import StrEnum
 from src.modules.catalog.domain.error import InvalidCatalogValueError
 
 
-class StockManagement(StrEnum):
-    """Способ использования заявленного наличия карточки."""
-
-    NONE = "none"
-    OWN = "own"
-    PARENT = "parent"
-
-
 class StockStatus(StrEnum):
     """Эффективное наличие без складских движений и резервов."""
 
@@ -29,51 +21,38 @@ class BackorderPolicy(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class StockSpecificationVO:
-    """Один источник наличия либо ссылка на общий источник родителя."""
+    """Собственные настройки количественного учёта или ручного наличия."""
 
-    manage_stock: StockManagement
+    manage_stock: bool = False
     stock_quantity: int | None = None
-    stock_status: StockStatus | None = None
-    backorders: BackorderPolicy | None = None
+    stock_status: StockStatus | None = StockStatus.IN_STOCK
+    backorders: BackorderPolicy = BackorderPolicy.NO
 
     def __post_init__(self) -> None:
-        """Запрещает смешивание локальных полей и режима общего источника."""
-        if not isinstance(self.manage_stock, StockManagement):
-            raise InvalidCatalogValueError("Некорректный режим наличия.")
-        if self.manage_stock == StockManagement.PARENT:
-            if any(
-                v is not None
-                for v in (self.stock_quantity, self.stock_status, self.backorders)
-            ):
-                raise InvalidCatalogValueError(
-                    "Parent не имеет собственных полей наличия."
-                )
-        elif not isinstance(self.backorders, BackorderPolicy):
-            raise InvalidCatalogValueError("Нужна политика предзаказа.")
-        elif self.manage_stock == StockManagement.OWN:
-            if (
-                type(self.stock_quantity) is not int
-                or self.stock_quantity < 0
-                or self.stock_status is not None
-            ):
-                raise InvalidCatalogValueError(
-                    "Own требует неотрицательное количество и вычисляемый статус."
-                )
-        elif self.stock_quantity is not None or not isinstance(
-            self.stock_status, StockStatus
+        """Проверяет согласованность настроек; источник родителя выбирает политика семьи."""
+        if type(self.manage_stock) is not bool or not isinstance(
+            self.backorders, BackorderPolicy
         ):
-            raise InvalidCatalogValueError("None требует статус без количества.")
+            raise InvalidCatalogValueError(
+                "Нужны boolean manage_stock и политика предзаказа."
+            )
+        if self.manage_stock:
+            if type(self.stock_quantity) is not int or self.stock_status is not None:
+                raise InvalidCatalogValueError(
+                    "Учёт требует целое количество и вычисляемый статус."
+                )
         elif (
-            self.stock_status == StockStatus.ON_BACKORDER
-            and self.backorders == BackorderPolicy.NO
+            self.stock_quantity is not None
+            or self.backorders != BackorderPolicy.NO
+            or not isinstance(self.stock_status, StockStatus)
         ):
-            raise InvalidCatalogValueError("Предзаказ должен быть разрешён.")
+            raise InvalidCatalogValueError(
+                "Ручное наличие требует статус без количества и backorders=no."
+            )
 
-    def effective_status(self) -> StockStatus | None:
-        """Вычисляет статус собственного источника; parent разрешается политикой семьи."""
-        if self.manage_stock == StockManagement.PARENT:
-            return None
-        if self.manage_stock == StockManagement.NONE:
+    def effective_status(self) -> StockStatus:
+        """Вычисляет наличие собственного источника с порогом количества ноль."""
+        if not self.manage_stock:
             return self.stock_status
         if self.stock_quantity > 0:
             return StockStatus.IN_STOCK
