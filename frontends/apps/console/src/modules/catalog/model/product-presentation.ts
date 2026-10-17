@@ -67,7 +67,7 @@ export function overviewModel(
   attributes: CatalogAttribute[],
   categories: CatalogCategory[],
   tags: CatalogTag[],
-  imageUrl: (itemId: string, imageId: string) => string,
+  imageUrl: (imageId: string) => string,
 ): ProductOverviewModel {
   const unitLabels: Record<string, string> = {
     g: "г",
@@ -100,7 +100,7 @@ export function overviewModel(
     },
     images: (item.gallery?.images ?? []).map((v) => ({
       ...v,
-      url: imageUrl(item.id, v.id),
+      url: imageUrl(v.id),
     })),
     primaryImage: item.gallery?.primary_image_id ?? null,
     measurements,

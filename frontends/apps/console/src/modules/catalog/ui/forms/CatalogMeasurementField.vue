@@ -6,6 +6,7 @@ import type {
   LengthUnit,
 } from "../../model/product.types";
 import { convertMeasurement } from "../../model/measurement-conversion";
+import { decimalInput } from "../../model/product-input";
 import {
   Field,
   FieldLabel,
@@ -40,8 +41,8 @@ watch(
   },
   { immediate: true },
 );
-function input(next: string | number) {
-  value.value = String(next);
+function input(next: string | number): void {
+  value.value = decimalInput(next);
   error.value = "";
   emit(
     "update:modelValue",

@@ -11,6 +11,7 @@ import type { UpdateItemRequest } from "../api/catalog.dto";
 import { ProductAutosave, type AutosaveState } from "./product-autosave";
 import { sectionError, fieldSections } from "./product-validation";
 import { productTabs } from "./product-presentation";
+import { useProductContentDraft } from "./use-product-content-draft";
 
 export function useProductPage(editing: boolean) {
   const state = reactive<AutosaveState>({
@@ -22,18 +23,18 @@ export function useProductPage(editing: boolean) {
   });
   const resets = reactive<Partial<Record<ProductSection, number>>>({});
   const uploading = ref(false);
+  const reloading = ref(false);
   let uploadWork: Promise<void> | null = null;
   const cache = useQueryClient();
   function clear() {
     autosave?.cancel();
     uploading.value = false;
+    reloading.value = false;
     uploadWork = null;
-    for (const key of Object.keys(resets) as ProductSection[])
-      delete resets[key];
   }
   const ctx = useCatalogContext(
     () => Object.keys(state.entries).length > 0 || state.paused,
-    () => state.pending || uploading.value,
+    () => state.pending || uploading.value || reloading.value,
     clear,
     async () => {
       await autosave.flush();
@@ -86,19 +87,25 @@ export function useProductPage(editing: boolean) {
   const resetFor = (section: ProductSection) => resets[section] ?? 0;
   const fieldError = (section: ProductSection) =>
     state.entries[section]?.error ?? "";
-  const pending = computed(() => state.pending || uploading.value);
+  const pending = computed(
+    () => state.pending || uploading.value || reloading.value,
+  );
   const error = computed(() => state.error);
-  const blocked = computed(() => !ctx.active.value || !item.data.value);
+  const blocked = computed(
+    () => !ctx.active.value || !item.data.value || reloading.value,
+  );
   const saveStatus = computed(() =>
-    state.paused
-      ? "Не удалось сохранить"
-      : pending.value
-        ? "Сохранение…"
-        : Object.values(state.entries).some((entry) => !!entry?.error)
-          ? "Проверьте поля"
-          : Object.keys(state.entries).length
-            ? "Есть изменения"
-            : "Все изменения сохранены",
+    reloading.value
+      ? "Обновление…"
+      : state.paused
+        ? "Не удалось сохранить"
+        : pending.value
+          ? "Сохранение…"
+          : Object.values(state.entries).some((entry) => !!entry?.error)
+            ? "Проверьте поля"
+            : Object.keys(state.entries).length
+              ? "Есть изменения"
+              : "Все изменения сохранены",
   );
   const autosave = new ProductAutosave(
     state,
@@ -145,6 +152,20 @@ export function useProductPage(editing: boolean) {
         ),
       };
     },
+  );
+  const scope = computed(
+    () => `${ctx.sessionKey.value}:${id.value}:${ctx.locale.value}`,
+  );
+  const contentDraft = useProductContentDraft(
+    () => item.data.value?.content,
+    () => scope.value,
+    () => isDirty("content"),
+    (values) =>
+      save("content", {
+        expected_schema_version: schema.data.value?.schema.schema_version ?? 0,
+        values,
+      }),
+    () => resetFor("content"),
   );
   watch(() => [id.value, ctx.locale.value], clear);
   onBeforeUnmount(clear);
@@ -215,15 +236,39 @@ export function useProductPage(editing: boolean) {
       )
     )
       return;
-    clear();
-    const fresh = await item.refetch();
-    if (fresh.isError) return;
-    for (const section of Object.values(fieldSections))
-      resets[section] = (resets[section] ?? 0) + 1;
-    if (schema.isError.value) await schema.refetch();
-    if (attributes.isError.value) await attributes.refetch();
-    if (categories.isError.value) await categories.refetch();
-    if (tags.isError.value) await tags.refetch();
+    const current = ctx.captureSession();
+    const targetScope = scope.value;
+    const relevant = () => current() && scope.value === targetScope;
+    reloading.value = true;
+    state.held = true;
+    try {
+      const fresh = await item.refetch();
+      if (!relevant()) return;
+      if (fresh.isError) {
+        state.paused = true;
+        state.error = getApiErrorMessage(
+          fresh.error,
+          "Не удалось обновить данные. Ваш ввод сохранён в карточке.",
+        );
+        return;
+      }
+      // Поколения сбросов монотонны: повторный reload сбрасывает даже
+      // структурно неизменившийся ответ, а не оставляет локальный черновик.
+      autosave.cancel();
+      for (const section of new Set(Object.values(fieldSections)))
+        resets[section] = (resets[section] ?? 0) + 1;
+      await Promise.all([
+        ...(schema.isError.value ? [schema.refetch()] : []),
+        ...(attributes.isError.value ? [attributes.refetch()] : []),
+        ...(categories.isError.value ? [categories.refetch()] : []),
+        ...(tags.isError.value ? [tags.refetch()] : []),
+      ]);
+    } finally {
+      if (relevant()) {
+        reloading.value = false;
+        state.held = false;
+      }
+    }
   }
   const retry = async () => {
     // После неизвестного результата upload сверяем галерею, не повторяя POST.
@@ -255,5 +300,9 @@ export function useProductPage(editing: boolean) {
     saveStatus,
     retry,
     uploading,
+    resets,
+    scope,
+    contentValues: contentDraft.values,
+    changeContent: contentDraft.change,
   };
 }

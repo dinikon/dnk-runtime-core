@@ -6,6 +6,7 @@ defineEmits<{ locale: [value: string] }>();
 <template>
   <label class="flex items-center gap-2 text-sm"
     >Язык<select
+      aria-label="Язык"
       class="rounded-md border bg-background px-3 py-2"
       :value="locale"
       @change="$emit('locale', ($event.target as HTMLSelectElement).value)"

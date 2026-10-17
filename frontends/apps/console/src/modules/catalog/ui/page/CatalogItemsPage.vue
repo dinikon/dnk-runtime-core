@@ -5,19 +5,18 @@ import { Button } from "@/components/ui/button";
 import { getApiErrorMessage } from "@/app/providers/http";
 import { catalogApi } from "../../api/catalog.api";
 import { listItemFromDto } from "../../api/catalog.mapper";
-import { useCatalogContext } from "../../model/use-catalog-context";
+import { useCreateCatalogItem } from "../../model/use-create-catalog-item";
 import type { ItemStatus } from "../../api/catalog.dto";
 import CatalogHeader from "../CatalogHeader.vue";
 import CatalogToolbar from "../CatalogToolbar.vue";
 import CatalogSearchBar from "../CatalogSearchBar.vue";
 import CatalogFooter from "../CatalogFooter.vue";
+import ProductCreateDialog from "../product/ProductCreateDialog.vue";
 const pending = ref(false),
   error = ref(""),
   cache = useQueryClient();
-const ctx = useCatalogContext(
-  () => false,
-  () => pending.value,
-);
+const creation = useCreateCatalogItem(false, () => pending.value);
+const { ctx } = creation;
 const search = computed(() => String(ctx.route.query.search ?? "")),
   page = computed(() => Math.max(1, Number(ctx.route.query.page) || 1)),
   status = computed(() =>
@@ -68,12 +67,7 @@ async function remove(id: string) {
       description="Товары, их цены и наличие"
       action="Создать товар"
       :disabled="!ctx.active.value || pending"
-      @create="
-        ctx.router.push({
-          path: '/catalog/items/new',
-          query: { locale: ctx.locale.value },
-        })
-      "
+      @create="creation.show"
     /><CatalogToolbar
       :locale="ctx.locale.value"
       :options="ctx.options.value"
@@ -143,6 +137,14 @@ async function remove(id: string) {
       :total="items.data.value?.total ?? 0"
       :page-size="20"
       @page="(value) => filter({ page: value })"
+    />
+    <ProductCreateDialog
+      :open="creation.open.value"
+      :state="creation.state"
+      :disabled="!ctx.active.value"
+      @choose="creation.choose"
+      @close="creation.close"
+      @check="creation.checkCatalog"
     />
   </div>
 </template>

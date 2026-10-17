@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview --host 0.0.0.0",
     "typecheck": "vue-tsc -b",
-    "test:catalog": "node --experimental-transform-types --test test/catalog-autosave.test.ts"
+    "test:catalog": "node --experimental-transform-types --test test/catalog-*.test.ts"
   },
   "dependencies": {
     "@lucide/vue": "^1.17.0",

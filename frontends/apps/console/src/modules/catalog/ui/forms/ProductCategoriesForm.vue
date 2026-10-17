@@ -1,7 +1,23 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from "vue";
-import { Button } from "@/components/ui/button";
+import { computed } from "vue";
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { CatalogCategory } from "../../model/catalog.types";
+import { useProductSectionDraft } from "../../model/use-product-section-draft";
+import ProductReferencePicker from "./ProductReferencePicker.vue";
+import ProductFieldError from "../product/ProductFieldError.vue";
 const props = defineProps<{
   ids: string[];
   primaryId: string | null;
@@ -15,104 +31,80 @@ const emit = defineEmits<{
   submit: [ids: string[], primaryId: string | null];
   dirty: [value: boolean];
 }>();
-const ids = ref([...props.ids]),
-  primary = ref(props.primaryId ?? ""),
-  dirty = ref(false);
-function mark() {
-  if (!ids.value.includes(primary.value)) primary.value = "";
-  dirty.value = true;
-  emit("dirty", true);
-  void nextTick(() => emit("submit", ids.value, primary.value || null));
-}
-function resetFields() {
-  ids.value = [...props.ids];
-  primary.value = props.primaryId ?? "";
-  dirty.value = false;
-  emit("dirty", false);
-}
-watch(() => props.reset, resetFields);
-watch(
-  () => props.ids,
-  () => {
-    if (!dirty.value) resetFields();
+const { value: selection, change } = useProductSectionDraft(
+  () => ({ ids: props.ids, primary: props.primaryId }),
+  () => props.reset,
+  (value) => {
+    emit("dirty", true);
+    emit("submit", value.ids, value.primary);
   },
 );
 function path(category: CatalogCategory): string {
-  const names = [category.label ?? category.id];
+  const names = [category.label ?? "Нет перевода"];
   const seen = new Set([category.id]);
   let parent = category.parentId;
-  while (parent) {
-    if (seen.has(parent)) break;
+  while (parent && !seen.has(parent)) {
     seen.add(parent);
-    const c = props.categories.find((c) => c.id === parent);
-    if (!c) break;
-    names.unshift(c.label ?? c.id);
-    parent = c.parentId;
+    const entry = props.categories.find((c) => c.id === parent);
+    if (!entry) break;
+    names.unshift(entry.label ?? "Нет перевода");
+    parent = entry.parentId;
   }
   return names.join(" / ");
 }
+const options = computed(() =>
+  props.categories.map((c) => ({ id: c.id, label: path(c) })),
+);
+function select(ids: string[]): void {
+  change({
+    ids,
+    primary:
+      selection.value.primary && ids.includes(selection.value.primary)
+        ? selection.value.primary
+        : null,
+  });
+}
 </script>
 <template>
-  <form
-    class="space-y-4"
-    @submit.prevent="emit('submit', ids, primary || null)"
-  >
-    <p class="text-sm text-muted-foreground">
-      Выберите явные категории и одну основную. Родители не назначаются
-      автоматически.
-    </p>
-    <fieldset class="space-y-2" :disabled="pending || disabled">
-      <legend class="mb-2 font-medium">Назначенные категории</legend>
-      <p v-if="!categories.length">Категории ещё не созданы.</p>
-      <label
-        v-for="c in categories"
-        :key="c.id"
-        class="flex items-start gap-2 break-words"
-        ><input
-          v-model="ids"
-          type="checkbox"
-          :value="c.id"
-          :aria-label="path(c)"
-          class="mt-1"
-          @change="mark"
-        /><span>{{ path(c) }}</span></label
-      >
-    </fieldset>
-    <label v-if="ids.length" class="block space-y-2"
-      ><span>Основная категория</span
-      ><select
-        v-model="primary"
-        aria-label="Основная категория"
-        required
-        :disabled="pending || disabled"
-        class="w-full rounded-md border bg-background p-2"
-        @change="mark()"
-      >
-        <option value="" disabled>Выберите основную</option>
-        <option
-          v-for="c in categories.filter((c) => ids.includes(c.id))"
-          :key="c.id"
-          :value="c.id"
-        >
-          {{ path(c) }}
-        </option>
-      </select></label
+  <FieldGroup class="gap-4">
+    <ProductReferencePicker
+      label="Категории"
+      :ids="selection.ids"
+      :options="options"
+      :disabled="disabled || pending"
+      @change="select"
+    />
+    <Field
+      v-if="selection.ids.length"
+      :data-invalid="!!validationError || undefined"
+      ><FieldLabel for="primary-category">Основная категория</FieldLabel
+      ><Select
+        :model-value="selection.primary ?? ''"
+        :disabled="disabled || pending"
+        @update:model-value="change({ ...selection, primary: String($event) })"
+        ><SelectTrigger
+          id="primary-category"
+          class="w-full"
+          :aria-invalid="!!validationError || undefined"
+          :aria-describedby="validationError ? 'categories-error' : undefined"
+          ><SelectValue placeholder="Выберите основную" /></SelectTrigger
+        ><SelectContent
+          ><SelectGroup
+            ><SelectItem
+              v-for="option in options.filter((o) =>
+                selection.ids.includes(o.id),
+              )"
+              :key="option.id"
+              :value="option.id"
+              >{{ option.label }}</SelectItem
+            ></SelectGroup
+          ></SelectContent
+        ></Select
+      ></Field
     >
-    <div class="flex flex-wrap gap-2">
-      <Button
-        type="button"
-        variant="outline"
-        :disabled="pending || disabled"
-        @click="
-          ids = [];
-          primary = '';
-          mark();
-        "
-        >Очистить набор</Button
-      >
-    </div>
-    <p v-if="validationError" role="alert" class="text-sm text-destructive">
-      {{ validationError }}
-    </p>
-  </form>
+    <FieldDescription
+      >Назначаются только выбранные категории. Родители не добавляются
+      автоматически.</FieldDescription
+    ><ProductFieldError id="categories-error" :error="validationError" />
+  </FieldGroup>
 </template>

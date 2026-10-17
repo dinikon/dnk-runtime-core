@@ -1,6 +1,10 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from "vue";
+import { computed } from "vue";
+import { FieldGroup } from "@/components/ui/field";
 import type { CatalogTag } from "../../model/catalog.types";
+import { useProductSectionDraft } from "../../model/use-product-section-draft";
+import ProductReferencePicker from "./ProductReferencePicker.vue";
+import ProductFieldError from "../product/ProductFieldError.vue";
 const props = defineProps<{
   ids: string[];
   tags: CatalogTag[];
@@ -13,42 +17,27 @@ const emit = defineEmits<{
   submit: [ids: string[]];
   dirty: [value: boolean];
 }>();
-const ids = ref([...props.ids]),
-  dirty = ref(false);
-function resetFields() {
-  ids.value = [...props.ids];
-  dirty.value = false;
-  emit("dirty", false);
-}
-watch(() => props.reset, resetFields);
-watch(
+const { value: ids, change } = useProductSectionDraft(
   () => props.ids,
-  () => {
-    if (!dirty.value) resetFields();
+  () => props.reset,
+  (value) => {
+    emit("dirty", true);
+    emit("submit", value);
   },
+);
+const options = computed(() =>
+  props.tags.map((tag) => ({ id: tag.id, label: tag.label ?? "Нет перевода" })),
 );
 </script>
 <template>
-  <form class="space-y-4" @submit.prevent="emit('submit', ids)">
-    <fieldset class="space-y-2" :disabled="pending || disabled">
-      <legend class="mb-2 font-medium">Назначенные метки</legend>
-      <p v-if="!tags.length">Метки ещё не созданы.</p>
-      <label v-for="t in tags" :key="t.id" class="flex items-center gap-2"
-        ><input
-          v-model="ids"
-          type="checkbox"
-          :value="t.id"
-          :aria-label="t.label ?? t.id"
-          @change="
-            dirty = true;
-            emit('dirty', true);
-            nextTick(() => emit('submit', ids));
-          "
-        />{{ t.label ?? t.id }}</label
-      >
-    </fieldset>
-    <p v-if="validationError" role="alert" class="text-sm text-destructive">
-      {{ validationError }}
-    </p>
-  </form>
+  <FieldGroup class="gap-3"
+    ><ProductReferencePicker
+      label="Метки"
+      :ids="ids"
+      :options="options"
+      :disabled="disabled || pending"
+      @change="change" /><ProductFieldError
+      id="tags-error"
+      :error="validationError"
+  /></FieldGroup>
 </template>

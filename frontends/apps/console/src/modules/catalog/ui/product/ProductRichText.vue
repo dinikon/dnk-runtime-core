@@ -1,28 +1,64 @@
 <script setup lang="ts">
-import { watch } from "vue";
+import { ref, watch, useId } from "vue";
 import { useEditor, EditorContent } from "@tiptap/vue-3";
 import StarterKit from "@tiptap/starter-kit";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Field,
+  FieldGroup,
+  FieldLabel,
+  FieldError,
+} from "@/components/ui/field";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Bold,
   Italic,
   List,
   ListOrdered,
-  Quote,
-  Code,
   Link,
-  Undo2,
-  Redo2,
+  MoreHorizontal,
 } from "@lucide/vue";
 const props = defineProps<{
   modelValue: string;
   disabled?: boolean;
   label: string;
+  errorId?: string;
+  autofocus?: boolean;
 }>();
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
+const linkOpen = ref(false);
+const url = ref("");
+const linkError = ref("");
+const id = useId();
+function attributes(): Record<string, string> {
+  return {
+    role: "textbox",
+    "aria-label": props.label,
+    "aria-multiline": "true",
+    "aria-invalid": props.errorId ? "true" : "false",
+    "aria-describedby": props.errorId ?? "",
+    class: "product-prose min-h-36 px-4 py-3 outline-none",
+  };
+}
 const editor = useEditor({
   content: props.modelValue,
   editable: !props.disabled,
+  autofocus: props.autofocus ? "end" : false,
   extensions: [
     StarterKit.configure({
       heading: { levels: [2, 3] },
@@ -32,49 +68,57 @@ const editor = useEditor({
       link: { openOnClick: false, protocols: ["http", "https", "mailto"] },
     }),
   ],
-  editorProps: {
-    attributes: {
-      role: "textbox",
-      "aria-label": props.label,
-      "aria-multiline": "true",
-      class: "product-prose min-h-36 px-4 py-3 outline-none",
-    },
-  },
-  onUpdate: ({ editor }) => {
-    emit("update:modelValue", editor.getHTML());
-  },
+  editorProps: { attributes: attributes() },
+  onUpdate: ({ editor }) => emit("update:modelValue", editor.getHTML()),
 });
 watch(
   () => props.disabled,
-  (v) => editor.value?.setEditable(!v, false),
+  (value) => editor.value?.setEditable(!value, false),
+);
+watch(
+  () => props.errorId,
+  () => editor.value?.setOptions({ editorProps: { attributes: attributes() } }),
 );
 watch(
   () => props.modelValue,
-  (v) => {
-    if (editor.value && v !== editor.value.getHTML())
-      editor.value.commands.setContent(v, { emitUpdate: false });
+  (value) => {
+    if (editor.value && value !== editor.value.getHTML())
+      editor.value.commands.setContent(value, { emitUpdate: false });
   },
 );
-function link() {
-  const url = window.prompt(
-    "Адрес ссылки (https://, http:// или mailto:)",
-    String(editor.value?.getAttributes("link").href ?? ""),
-  );
-  if (url === null) return;
-  if (!url)
-    editor.value?.chain().focus().extendMarkRange("link").unsetLink().run();
-  else if (/^(https?:\/\/|mailto:)/i.test(url))
+function link(): void {
+  url.value = String(editor.value?.getAttributes("link").href ?? "");
+  linkError.value = "";
+  linkOpen.value = true;
+}
+function applyLink(): void {
+  const value = url.value.trim();
+  if (value) {
+    try {
+      const parsed = new URL(value);
+      if (
+        !["http:", "https:", "mailto:"].includes(parsed.protocol) ||
+        (parsed.protocol === "mailto:" && !parsed.pathname)
+      )
+        throw new Error("scheme");
+    } catch {
+      linkError.value = "Введите адрес с https://, http:// или mailto:.";
+      return;
+    }
     editor.value
       ?.chain()
       .focus()
       .extendMarkRange("link")
-      .setLink({ href: url })
+      .setLink({ href: value })
       .run();
+  } else
+    editor.value?.chain().focus().extendMarkRange("link").unsetLink().run();
+  linkOpen.value = false;
 }
 </script>
 <template>
   <div
-    class="overflow-hidden rounded-md border bg-background"
+    class="min-w-0 overflow-hidden rounded-md border bg-background focus-within:ring-2 focus-within:ring-ring/40"
     :data-disabled="disabled || undefined"
   >
     <div
@@ -83,38 +127,10 @@ function link() {
       role="toolbar"
       :aria-label="`Форматирование: ${label}`"
     >
-      <select
-        aria-label="Формат текста"
-        :disabled="disabled"
-        class="rounded bg-transparent px-2 py-1 text-sm"
-        :value="
-          editor.isActive('heading', { level: 2 })
-            ? '2'
-            : editor.isActive('heading', { level: 3 })
-              ? '3'
-              : 'p'
-        "
-        @change="
-          ($event.target as HTMLSelectElement).value === 'p'
-            ? editor.chain().focus().setParagraph().run()
-            : editor
-                .chain()
-                .focus()
-                .setHeading({
-                  level: Number(($event.target as HTMLSelectElement).value) as
-                    2 | 3,
-                })
-                .run()
-        "
-      >
-        <option value="p">Абзац</option>
-        <option value="2">Заголовок 2</option>
-        <option value="3">Заголовок 3</option>
-      </select>
       <Button
         type="button"
         variant="ghost"
-        size="icon-sm"
+        size="icon"
         aria-label="Жирный"
         :aria-pressed="editor.isActive('bold')"
         :disabled="disabled"
@@ -124,7 +140,7 @@ function link() {
       <Button
         type="button"
         variant="ghost"
-        size="icon-sm"
+        size="icon"
         aria-label="Курсив"
         :aria-pressed="editor.isActive('italic')"
         :disabled="disabled"
@@ -134,8 +150,8 @@ function link() {
       <Button
         type="button"
         variant="ghost"
-        size="icon-sm"
-        aria-label="Список"
+        size="icon"
+        aria-label="Маркированный список"
         :aria-pressed="editor.isActive('bulletList')"
         :disabled="disabled"
         @click="editor.chain().focus().toggleBulletList().run()"
@@ -144,7 +160,7 @@ function link() {
       <Button
         type="button"
         variant="ghost"
-        size="icon-sm"
+        size="icon"
         aria-label="Нумерованный список"
         :aria-pressed="editor.isActive('orderedList')"
         :disabled="disabled"
@@ -154,51 +170,86 @@ function link() {
       <Button
         type="button"
         variant="ghost"
-        size="icon-sm"
-        aria-label="Цитата"
-        :aria-pressed="editor.isActive('blockquote')"
-        :disabled="disabled"
-        @click="editor.chain().focus().toggleBlockquote().run()"
-        ><Quote
-      /></Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        aria-label="Код"
-        :aria-pressed="editor.isActive('code')"
-        :disabled="disabled"
-        @click="editor.chain().focus().toggleCode().run()"
-        ><Code
-      /></Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        aria-label="Ссылка"
+        size="icon"
+        aria-label="Вставить ссылку"
         :disabled="disabled"
         @click="link"
         ><Link
       /></Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        aria-label="Отменить форматирование"
-        :disabled="disabled || !editor.can().undo()"
-        @click="editor.chain().focus().undo().run()"
-        ><Undo2
-      /></Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        aria-label="Повторить форматирование"
-        :disabled="disabled || !editor.can().redo()"
-        @click="editor.chain().focus().redo().run()"
-        ><Redo2
-      /></Button>
+      <DropdownMenu
+        ><DropdownMenuTrigger as-child
+          ><Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Другие команды форматирования"
+            :disabled="disabled"
+            ><MoreHorizontal /></Button></DropdownMenuTrigger
+        ><DropdownMenuContent
+          ><DropdownMenuGroup>
+            <DropdownMenuItem
+              @select="editor.chain().focus().setParagraph().run()"
+              >Абзац</DropdownMenuItem
+            ><DropdownMenuItem
+              @select="editor.chain().focus().toggleHeading({ level: 2 }).run()"
+              >Заголовок 2</DropdownMenuItem
+            ><DropdownMenuItem
+              @select="editor.chain().focus().toggleHeading({ level: 3 }).run()"
+              >Заголовок 3</DropdownMenuItem
+            ><DropdownMenuItem
+              @select="editor.chain().focus().toggleBlockquote().run()"
+              >Цитата</DropdownMenuItem
+            ><DropdownMenuItem
+              @select="editor.chain().focus().toggleCodeBlock().run()"
+              >Код</DropdownMenuItem
+            ><DropdownMenuItem
+              :disabled="!editor.can().undo()"
+              @select="editor.chain().focus().undo().run()"
+              >Отменить</DropdownMenuItem
+            ><DropdownMenuItem
+              :disabled="!editor.can().redo()"
+              @select="editor.chain().focus().redo().run()"
+              >Повторить</DropdownMenuItem
+            >
+          </DropdownMenuGroup></DropdownMenuContent
+        ></DropdownMenu
+      >
     </div>
     <EditorContent :editor="editor" />
+    <Dialog v-model:open="linkOpen"
+      ><DialogContent
+        ><DialogHeader
+          ><DialogTitle>Ссылка</DialogTitle
+          ><DialogDescription
+            >Укажите адрес. Пустое поле удалит ссылку из выбранного
+            текста.</DialogDescription
+          ></DialogHeader
+        >
+        <form class="flex flex-col gap-5" @submit.prevent="applyLink">
+          <FieldGroup
+            ><Field :data-invalid="!!linkError || undefined"
+              ><FieldLabel :for="`${id}-url`">Адрес ссылки</FieldLabel
+              ><Input
+                :id="`${id}-url`"
+                v-model="url"
+                inputmode="url"
+                placeholder="https://example.com"
+                :aria-invalid="!!linkError || undefined"
+                :aria-describedby="linkError ? `${id}-url-error` : undefined"
+              /><FieldError
+                v-if="linkError"
+                :id="`${id}-url-error`"
+                role="alert"
+                >{{ linkError }}</FieldError
+              ></Field
+            ></FieldGroup
+          ><DialogFooter
+            ><Button type="button" variant="outline" @click="linkOpen = false"
+              >Отмена</Button
+            ><Button type="submit">Применить</Button></DialogFooter
+          >
+        </form></DialogContent
+      ></Dialog
+    >
   </div>
 </template>

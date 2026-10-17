@@ -237,16 +237,30 @@ code changes.
 
 MVP v1 supports simple standalone products only. The product routes are
 `/catalog/items`, `/catalog/items/new`, `/catalog/items/:itemId` (overview),
-and `/catalog/items/:itemId/edit` (section editor). Creation explicitly creates
-a draft; there is no kind selector, variant filter, variant editor, structure
-form or kind transition. Legacy kind/variant query parameters are removed and
+and `/catalog/items/:itemId/edit` (section editor). The Create action opens a
+desktop dialog or mobile bottom drawer with two presets: simple product sends
+`virtual=false`, service sends `virtual=true` through the same existing POST.
+Both create an ordinary draft and open the same editor. Opening, cancelling or
+reloading `/new` never creates a record. A pending request cannot be submitted
+twice; a successful POST followed by a navigation failure retains its id and
+retries only opening the card. An ambiguous POST result requires checking the
+catalog before another explicit creation. There is no new domain kind, variant
+filter, variant editor, structure form or kind transition.
+Legacy kind/variant query parameters are removed and
 `tab=variants` is normalized to `general`; nested variant routes are absent.
 
 The product screens retain Console semantic tokens, existing shadcn-vue components,
-a 1440 px content limit and a 320 px desktop sidebar. Overview shows safe HTML,
+a 1440 px content limit. Overview shows safe HTML,
 gallery, measurements, enum characteristics, classification, current price and
-availability. The editor has general, inventory, shipping, attributes and additional
-sections, plus localized texts, status, gallery, categories and tags.
+availability. The mobile editor is one continuous column: identity, pricing and
+availability, gallery, descriptions, classification, attributes, measurements,
+metadata. At 1280 px the additional groups use a 320 px right column; media stays
+in the main column. A compact sticky strip exposes saving state, status and
+section navigation; it becomes static on short viewports. Pricing/availability,
+gallery and classification join the optional sections as accordion rows with
+saved-value summaries; collapsing never unmounts their forms. Existing `tab` links reveal the matching
+group. Reference pickers search loaded options, preserve selected IDs and display
+long category paths. Reference failures disable only the affected picker.
 
 `use-product-page` owns queries and the shared product draft. `ProductAutosave`
 serializes PATCH writes after an 800 ms debounce. Only changed, valid sections are
@@ -269,13 +283,26 @@ errors retain input and pause until the single Retry action is used. A 409 repre
 a business conflict such as duplicate SKU, with a field error where available.
 
 Navigation and locale changes flush the queue, then ask before discarding remaining
-invalid or failed edits. Tabs retain the draft. Tenant/session changes clear drafts
+invalid or failed edits. Collapsing groups and changing viewport widths retain
+the draft. Tenant/session changes clear drafts
 and timers and ignore responses from the previous context. Closing a dirty or busy
-tab triggers the browser's standard warning. Reload explicitly discards drafts.
+tab triggers the browser's standard warning. Reload explicitly discards drafts
+only after a successful read; a failed read retains input and pauses the queue.
+Reset generations remain monotonic, including repeated reads of identical data.
 
 Texts replace the full name/desc/short_desc dictionary with schema version. Name is
 required; omitted optional blocks are deleted, explicit empty strings are retained.
+Name and descriptions share `use-product-content-draft`: each visual editor
+updates the same full localized dictionary, so a refetch cannot erase newer input.
 Tiptap edits HTML, the backend sanitizes it and DOMPurify cleans the overview.
+Links use a validated dialog. Decimal keyboard commas normalize to dots while
+amounts remain exact strings; no floating-point conversion is used for money.
+Price fields are immediately editable inside their accordion, without an enable
+switch or an implicit zero price. A blank price remains null; zero remains a
+valid explicit value. Clearing the price or using the removal action sends null.
+Optional descriptions show their editor on expansion without an Add step;
+opening an empty editor does not create content or send a PATCH. Switches remain
+for persisted boolean properties such as virtual and stock management.
 Characteristics/metadata are full sets; false/zero values and precise Decimal strings
 are preserved. Units convert exact quantities. Gallery changes save automatically;
 upload waits for them and uses the same write queue. Gallery controls pause during
@@ -287,8 +314,10 @@ and `/items/simple` are absent. Omitted PATCH fields stay unchanged; nullable va
 can be cleared explicitly. Concurrent edits to the same field or set use the last
 successful write. Query keys retain tenant/item/locale/filter isolation.
 
-Run `test:catalog` with Node 24 to check the autosave queue using the built-in test
-runner; browser regression covers the rendered editor and real HTTP persistence.
+Run `test:catalog` with Node 24 to check the autosave queue, creation state,
+content scope and decimal input using the built-in test runner. Browser regression
+covers the rendered editor and real HTTP persistence. See the implementation and
+acceptance record in the [Mobile First editor plan](../plan/catalog-product-editor-mobile-first.md).
 
 Backend and Console must be released together because API contracts changed.
 The new tenant migration `0026_catalog_attribute_ids` removes attribute and option
