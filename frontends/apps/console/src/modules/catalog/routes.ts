@@ -11,11 +11,22 @@ export const catalogRoutes: RouteRecordRaw[] = [
   },
   {
     path: "catalog/items/:itemId",
+    component: () => import("./ui/page/CatalogItemOverviewPage.vue"),
+  },
+  {
+    path: "catalog/items/:itemId/edit",
     component: () => import("./ui/page/CatalogItemEditorPage.vue"),
   },
   {
     path: "catalog/items/:rootId/variants/:itemId",
-    component: () => import("./ui/page/CatalogItemEditorPage.vue"),
+    redirect: (to) => ({
+      path: `/catalog/items/${to.params.rootId}/edit`,
+      query: {
+        ...to.query,
+        tab: "variants",
+        variant: String(to.params.itemId),
+      },
+    }),
   },
   {
     path: "catalog/categories",

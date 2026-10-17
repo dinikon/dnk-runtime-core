@@ -1,21 +1,33 @@
 <script setup lang="ts" generic="U extends WeightUnit | LengthUnit">
-import { ref, watch } from "vue";
+import { ref, watch, useId } from "vue";
 import type {
-  MeasurementDTO,
+  ProductMeasurement,
   WeightUnit,
   LengthUnit,
-} from "../../api/catalog.dto";
+} from "../../model/product.types";
 import { convertMeasurement } from "../../model/measurement-conversion";
+import {
+  Field,
+  FieldLabel,
+  FieldDescription,
+  FieldError,
+} from "@/components/ui/field";
+import {
+  InputGroup,
+  InputGroupInput,
+  InputGroupAddon,
+} from "@/components/ui/input-group";
+const fieldId = useId();
 const props = defineProps<{
   label: string;
-  modelValue: MeasurementDTO<U> | null;
-  effective: MeasurementDTO<U> | null;
+  modelValue: ProductMeasurement<U> | null;
+  effective: ProductMeasurement<U> | null;
   units: readonly U[];
   defaultUnit: U;
   inherited: boolean;
 }>();
 const emit = defineEmits<{
-  "update:modelValue": [value: MeasurementDTO<U> | null];
+  "update:modelValue": [value: ProductMeasurement<U> | null];
 }>();
 const value = ref("");
 const unit = ref<U>(props.defaultUnit);
@@ -29,8 +41,8 @@ watch(
   },
   { immediate: true },
 );
-function input(event: Event) {
-  value.value = (event.target as HTMLInputElement).value;
+function input(next: string | number) {
+  value.value = String(next);
   error.value = "";
   emit(
     "update:modelValue",
@@ -56,34 +68,38 @@ function changeUnit(event: Event) {
 </script>
 
 <template>
-  <div class="space-y-1">
-    <label class="block">
-      <span>{{ label }}</span>
-      <input
-        :value="value"
+  <Field class="min-w-0" :data-invalid="!!error || undefined">
+    <FieldLabel :for="fieldId">{{ label }}</FieldLabel>
+    <InputGroup>
+      <InputGroupInput
+        :id="fieldId"
+        :model-value="value"
         :aria-label="label"
+        :aria-invalid="!!error || undefined"
+        :aria-describedby="`${fieldId}-hint`"
         inputmode="decimal"
         placeholder="Не задано"
-        class="w-full rounded border bg-background p-2"
-        @input="input"
+        @update:model-value="input"
       />
-    </label>
-    <select
-      :value="unit"
-      :aria-label="`Единица: ${label}`"
-      class="w-full rounded border bg-background p-2"
-      @change="changeUnit"
-    >
-      <option v-for="option in units" :key="option" :value="option">
-        {{ labels[option] }}
-      </option>
-    </select>
-    <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
-    <p class="text-sm text-muted-foreground">
-      {{ inherited ? "От родителя" : "Эффективно" }}:
+      <InputGroupAddon align="inline-end"
+        ><select
+          :value="unit"
+          :aria-label="`Единица: ${label}`"
+          class="rounded bg-transparent p-1 text-sm text-foreground"
+          @change="changeUnit"
+        >
+          <option v-for="option in units" :key="option" :value="option">
+            {{ labels[option] }}
+          </option>
+        </select></InputGroupAddon
+      >
+    </InputGroup>
+    <FieldError v-if="error">{{ error }}</FieldError>
+    <FieldDescription :id="`${fieldId}-hint`"
+      >{{ inherited ? "От родителя" : "Текущее значение" }}:
       {{
         effective ? `${effective.value} ${labels[effective.unit]}` : "Не задано"
-      }}
-    </p>
-  </div>
+      }}</FieldDescription
+    >
+  </Field>
 </template>

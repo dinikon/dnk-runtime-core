@@ -15,7 +15,7 @@ modules.
 - Authenticates console users through email OTP.
 - Loads and stores the current console user session.
 - Provides tenant-scoped Contact and Company management in CRM.
-- Provides SIMPLE/VARIABLE Catalog products, enum attributes, explicit kind transitions, content types, blocks and independent locale editors; variant Title supports override and return to inheritance in the same locale.
+- Provides SIMPLE/VARIABLE Catalog products with separate overview and section editor, nested variant editors, enum attributes, explicit kind transitions and independent locale editors.
 - Provides price-list and partner-offer workflows.
 - Provides profile and administrator-only workspace access-management screens.
 
@@ -235,21 +235,50 @@ code changes.
 
 ## Catalog
 
-The workspace Catalog navigation opens `/catalog/products`, `/catalog/attributes`,
-`/catalog/categories`, `/catalog/tags`, `/catalog/product-types` and
-`/catalog/content-blocks`. Lazy editor routes include
-SIMPLE/VARIABLE creation, products, individual variants, full structures and enum
-definitions/options, Category/Tag labels and category parent changes. Categories
-load by branch; Product assigns explicit categories with one primary, tags, and
-general enum values independently from VARIABLE axes. Locale is explicit and stored in the URL. Missing translations
-stay absent; VARIABLE inherits only system Title from PRODUCT in the same locale,
-with an explicit override and return action. Variant descriptions stay independent.
-Forms save each section independently and preserve input on version conflicts.
-Kind transitions show affected positions; the server protects retained content.
-System schemas are read-only. SKU and downloadable files remain unavailable until
-their owning modules supply contracts. See [Catalog](../modules/catalog.md),
-[slice 1](../plan/catalog-slice-1.md), [slice 2](../plan/catalog-slice-2.md) and
-[slice 3](../plan/catalog-slice-3.md).
+Product routes:
+
+- `/catalog/items` lists products; `/catalog/items/new` creates a draft explicitly.
+- `/catalog/items/:itemId` opens the read-only overview, with gallery, safe HTML,
+  measurements, attributes, classification and price/stock/sale summaries.
+- `/catalog/items/:itemId/edit` opens the editor. `tab`, `variant` and `locale`
+  are URL state. Legacy `/catalog/items/:rootId/variants/:itemId` redirects to the
+  parent editor. A direct VARIANT overview redirects to its parent overview.
+- Variant pages load 20 rows. Full combinations load only when editing structure
+  or selecting a variant for a kind transition. Direct-linked variants use GET.
+
+The product screens use Console semantic tokens and existing shadcn-vue primitives,
+with a 1440 px content limit and a 320 px sidebar above the 1280 px breakpoint.
+The existing application theme now observes the profile `interface_theme`; unknown
+or automatic values continue to follow the system preference. Color tokens and
+other modules' styling remain unchanged.
+The overview follows the supplied Shadcnblocks product-detail reference. Editing
+uses WooCommerce-style groups: general, inventory, shipping, attributes, variants
+and additional fields. VARIABLE has no own SKU, price or virtual control.
+
+`use-product-page` owns queries, API calls, family write serialization and revision
+updates. `product-presentation` maps read data to `ProductOverviewModel` and
+`VariantRowModel`. Presentational product components only consume props and emit
+user actions. `ProductEditorDraft` tracks section changes/resets by item and locale
+(localized sections only). Mounted forms retain their values across tab/variant
+changes; only the saved section resets. A family write disables other writes.
+A 409 preserves input and requires explicit reload with discard confirmation.
+Leaving the editor or changing locale/product prompts for unsaved changes; internal
+navigation does not. Session changes remove cached tenant data and drafts.
+
+Texts save as one section (name, description, short description), using the current
+schema version. Tiptap 3 provides the visual HTML editor. Unsupported sanitizer
+formats are disabled; initialization does not emit edits. Untouched HTML blocks
+are sent unchanged. DOMPurify additionally cleans HTML before overview rendering.
+Measurement fields retain exact Decimal strings and their units; changing a unit
+preserves the physical quantity, and an explicit zero remains own. Gallery upload
+is an immediate operation, blocked while local order/captions are unsaved.
+
+Axes and combinations share one structure form and one save. Existing variant IDs
+are retained; deletions and kind transitions require confirmation. Ordinary
+attribute assignments must be removed explicitly before using an attribute as an
+axis. Kind transitions are under Additional and select the recipient by combination.
+No new backend contracts, migrations, warehouses, purchasing or bulk operations
+are introduced by this UI refactor. See [Catalog](../modules/catalog.md).
 
 ## File Storage
 

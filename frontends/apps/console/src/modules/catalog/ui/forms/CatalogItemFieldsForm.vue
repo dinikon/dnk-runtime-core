@@ -1,26 +1,31 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import CatalogMeasurementField from "./CatalogMeasurementField.vue";
+import ProductRichText from "../product/ProductRichText.vue";
+import { safeProductHtml, saveLabels } from "../../model/product-presentation";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { clone } from "../../model/clone";
 import type { CatalogItem, CatalogAttribute } from "../../model/catalog.types";
 import type {
-  ItemSection,
-  OverrideDTO,
-  PriceDTO,
-  WeightDTO,
-  StockDTO,
-  DimensionsDTO,
-  MetadataDTO,
-  AttributeDTO,
-} from "../../api/catalog.dto";
+  ProductSection,
+  ProductOverride,
+  ProductPrice,
+  ProductWeight,
+  ProductStock,
+  ProductDimensions,
+  ProductMetadata,
+  ProductAttribute,
+} from "../../model/product.types";
 const props = defineProps<{
   item: CatalogItem;
-  section: ItemSection;
+  section: ProductSection;
   locale: string;
   pending: boolean;
   reset: number;
   attributes: CatalogAttribute[];
+  schemaVersion: number;
 }>();
 const emit = defineEmits<{
   save: [value: Record<string, unknown>];
@@ -38,21 +43,25 @@ const contentLabels: Record<string, string> = {
   short_desc: "Краткое описание",
 };
 const dirty = ref(false),
-  text = ref<Record<string, OverrideDTO<string>>>({}),
+  text = ref<Record<string, ProductOverride<string>>>({}),
   status = ref("draft"),
   sku = ref(""),
   virtual = ref(false),
-  price = ref<PriceDTO | null>(null),
-  stock = ref<StockDTO>({
+  price = ref<ProductPrice | null>(null),
+  stock = ref<ProductStock>({
     manage_stock: false,
     stock_quantity: null,
     stock_status: "in_stock",
     backorders: "no",
   }),
-  weight = ref<WeightDTO | null>(null),
-  dimensions = ref<DimensionsDTO>({ length: null, width: null, height: null }),
-  metadata = ref<MetadataDTO[]>([]),
-  assignments = ref<AttributeDTO[]>([]);
+  weight = ref<ProductWeight | null>(null),
+  dimensions = ref<ProductDimensions>({
+    length: null,
+    width: null,
+    height: null,
+  }),
+  metadata = ref<ProductMetadata[]>([]),
+  assignments = ref<ProductAttribute[]>([]);
 function mark() {
   dirty.value = true;
   emit("dirty", true);
@@ -122,12 +131,18 @@ function stockMode(event: Event) {
       };
   mark();
 }
-function addAttribute() {
-  const a = props.attributes.find(
+const selectedAttribute = ref("");
+const availableAttributes = computed(() =>
+  props.attributes.filter(
     (a) =>
       !assignments.value.some((v) => v.attribute_id === a.id) &&
       !props.item.own.axes.some((v) => v.attribute_id === a.id) &&
       !props.item.own.selection.values.some(([id]) => id === a.id),
+  ),
+);
+function addAttribute() {
+  const a = availableAttributes.value.find(
+    (a) => a.id === selectedAttribute.value,
   );
   if (a) {
     assignments.value.push({
@@ -140,11 +155,30 @@ function addAttribute() {
     mark();
   }
 }
+function localDate(value: string | null): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 16);
+}
+function saleDate(
+  field: "date_on_sale_from" | "date_on_sale_to",
+  event: Event,
+): void {
+  if (!price.value) return;
+  const value = (event.target as HTMLInputElement).value;
+  price.value[field] = value ? new Date(value).toISOString() : null;
+}
 function submit() {
   const section = props.section;
   let value: Record<string, unknown> = {};
   if (section === "content")
-    value = { expected_schema_version: 1, values: text.value };
+    value = {
+      expected_schema_version: props.schemaVersion,
+      values: text.value,
+    };
   if (section === "status") value = { status: status.value };
   if (section === "sku") value = { sku: sku.value || null };
   if (section === "virtual") value = { virtual: virtual.value };
@@ -173,64 +207,90 @@ function submit() {
 }
 </script>
 <template>
-  <form class="space-y-4" @submit.prevent="submit">
+  <form class="flex flex-col gap-4" @submit.prevent="submit">
     <fieldset
       :disabled="pending"
-      class="space-y-4"
-      @input="mark"
-      @change="mark"
+      class="flex flex-col gap-4"
+      @input="section !== 'content' && mark()"
+      @change="section !== 'content' && mark()"
     >
-      <template v-if="section === 'content'"
-        ><div
-          v-for="code in ['name', 'desc', 'short_desc']"
-          :key="code"
-          class="space-y-2"
-        >
-          <label :for="`content-${code}`">{{ contentLabels[code] }}</label
-          ><select
-            :aria-label="`Источник ${code}`"
-            class="w-full rounded border bg-background p-2"
-            :value="
-              text[code]?.mode ?? (item.kind === 'variant' ? 'inherit' : 'set')
-            "
-            @change="
-              contentMode(code, ($event.target as HTMLSelectElement).value)
-            "
-          >
-            <option v-if="item.kind === 'variant'" value="inherit">
-              Наследовать
-            </option>
-            <option value="set">Собственное значение</option>
-            <option v-if="code !== 'name'" value="clear">
-              Очистить
-            </option></select
-          ><textarea
-            v-if="text[code]?.mode === 'set'"
-            :id="`content-${code}`"
-            v-model="text[code]!.value"
-            class="w-full rounded border bg-background p-2"
-            :rows="code === 'name' ? 1 : 4"
-          />
-          <p class="text-sm text-muted-foreground">
-            Эффективно: {{ item.effective.content?.[code] ?? "Не задано" }} ·
-            {{ item.effective.origins[code]?.source }}
-          </p>
-          <Button
-            v-if="!text[code] && item.kind !== 'variant'"
-            type="button"
-            variant="outline"
-            @click="contentMode(code, 'set')"
-            >Добавить значение</Button
-          >
-        </div>
+      <template v-if="section === 'content'">
+        <FieldGroup>
+          <Field v-for="code in ['name', 'desc', 'short_desc']" :key="code">
+            <FieldLabel :for="`${item.id}-content-${code}`">{{
+              contentLabels[code]
+            }}</FieldLabel>
+            <select
+              v-if="item.kind === 'variant' || code !== 'name'"
+              :aria-label="`Источник: ${contentLabels[code]}`"
+              class="w-full rounded-md border bg-background p-2 text-sm"
+              :value="
+                text[code]?.mode ??
+                (item.kind === 'variant' ? 'inherit' : 'set')
+              "
+              @change="
+                contentMode(code, ($event.target as HTMLSelectElement).value)
+              "
+            >
+              <option v-if="item.kind === 'variant'" value="inherit">
+                От родителя
+              </option>
+              <option value="set">Задать своё</option>
+              <option v-if="code !== 'name'" value="clear">Очистить</option>
+            </select>
+            <Input
+              v-if="
+                code === 'name' &&
+                (item.kind !== 'variant' || text[code]?.mode === 'set')
+              "
+              :id="`${item.id}-content-${code}`"
+              :model-value="text[code]?.value ?? ''"
+              placeholder="Название товара"
+              @update:model-value="
+                text[code] = { mode: 'set', value: String($event) };
+                mark();
+              "
+            />
+            <ProductRichText
+              v-else-if="
+                code !== 'name' &&
+                (text[code]?.mode === 'set' ||
+                  (!text[code] && item.kind !== 'variant'))
+              "
+              :model-value="text[code]?.value ?? ''"
+              :label="contentLabels[code]!"
+              :disabled="pending"
+              @update:model-value="
+                text[code] = { mode: 'set', value: $event };
+                mark();
+              "
+            />
+            <div
+              v-else-if="item.kind === 'variant' && !text[code]"
+              class="text-sm text-muted-foreground"
+            >
+              <span>От родителя</span>
+              <p v-if="code === 'name'">
+                {{ item.effective.content?.[code] ?? "Не задано" }}
+              </p>
+              <!-- HTML дополнительно очищен на границе представления. -->
+              <!-- eslint-disable-next-line vue/no-v-html -->
+              <div
+                v-else
+                class="product-prose mt-2"
+                v-html="safeProductHtml(item.effective.content?.[code])"
+              />
+            </div>
+          </Field>
+        </FieldGroup>
         <Button
           v-if="item.kind === 'variant'"
           type="button"
           variant="outline"
           @click="emit('inherit')"
-          >Унаследовать весь перевод</Button
-        ></template
-      >
+          >Вернуть все тексты от родителя</Button
+        >
+      </template>
       <label v-else-if="section === 'status'" class="block"
         >Статус<select
           v-model="status"
@@ -248,7 +308,7 @@ function submit() {
           class="w-full rounded border bg-background p-2"
       /></label>
       <template v-else-if="section === 'virtual'">
-        <label class="flex gap-2"
+        <label class="flex flex-wrap gap-2"
           ><input v-model="virtual" type="checkbox" /> Виртуальный товар</label
         >
       </template>
@@ -262,7 +322,7 @@ function submit() {
           <option value="set">Задать цену</option>
           <option value="clear">Цена не задана</option>
         </select>
-        <div v-if="price" class="grid gap-3 sm:grid-cols-2">
+        <div v-if="price" class="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
           <label
             >Обычная цена<input
               v-model="price.regular_price"
@@ -287,17 +347,12 @@ function submit() {
           ><label
             v-for="field in ['date_on_sale_from', 'date_on_sale_to'] as const"
             :key="field"
-            >{{
-              field === "date_on_sale_from"
-                ? "Начало акции (ISO UTC)"
-                : "Конец акции (ISO UTC)"
+            >{{ field === "date_on_sale_from" ? "Начало акции" : "Конец акции"
             }}<input
-              :value="price[field] ?? ''"
-              placeholder="2026-10-11T00:00:00Z"
+              :value="localDate(price[field])"
+              type="datetime-local"
               class="w-full rounded border bg-background p-2"
-              @input="
-                price[field] = ($event.target as HTMLInputElement).value || null
-              "
+              @input="saleDate(field, $event)"
           /></label>
         </div>
         <p class="text-sm text-muted-foreground">
@@ -306,7 +361,7 @@ function submit() {
         </p></template
       >
       <template v-else-if="section === 'stock'">
-        <label class="flex gap-2"
+        <label class="flex flex-wrap gap-2"
           ><input
             :checked="stock.manage_stock"
             type="checkbox"
@@ -353,7 +408,7 @@ function submit() {
           Иначе действует собственный статус.
         </p>
         <p class="text-sm text-muted-foreground">
-          Эффективное наличие:
+          Текущее наличие:
           {{ stockStatusLabels[item.stockStatus ?? ""] ?? "Неизвестно" }} ·
           Источник:
           {{
@@ -377,7 +432,7 @@ function submit() {
         </p>
       </template>
       <template v-else-if="section === 'measurements'">
-        <div class="grid gap-4 sm:grid-cols-2">
+        <div class="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
           <CatalogMeasurementField
             v-model="weight"
             label="Вес"
@@ -414,7 +469,7 @@ function submit() {
         ><div
           v-for="(entry, index) in metadata"
           :key="index"
-          class="grid gap-2 rounded border p-3 sm:grid-cols-2"
+          class="grid min-w-0 grid-cols-1 gap-2 rounded border p-3 sm:grid-cols-2"
         >
           <input
             v-model="entry.key"
@@ -473,7 +528,7 @@ function submit() {
           >Добавить поле</Button
         >
         <p class="text-sm text-muted-foreground">
-          Эффективные поля:
+          Текущие значения:
           {{
             item.effective.metadata
               .map((v) => `${v.key}: ${v.value}`)
@@ -485,7 +540,7 @@ function submit() {
         ><div
           v-for="(assignment, index) in assignments"
           :key="assignment.attribute_id"
-          class="space-y-2 rounded border p-3"
+          class="flex flex-col gap-2 rounded border p-3"
         >
           <span>{{
             attributes.find((a) => a.id === assignment.attribute_id)?.label ??
@@ -528,12 +583,36 @@ function submit() {
             >Убрать назначение</Button
           >
         </div>
-        <Button type="button" variant="outline" @click="addAttribute"
+        <label class="flex flex-col gap-2 text-sm"
+          >Добавить общую характеристику<select
+            v-model="selectedAttribute"
+            class="w-full rounded-md border bg-background p-2"
+          >
+            <option value="">Выберите характеристику</option>
+            <option
+              v-for="attribute in availableAttributes"
+              :key="attribute.id"
+              :value="attribute.id"
+            >
+              {{ attribute.label ?? attribute.code }}
+            </option>
+          </select></label
+        >
+        <Button
+          type="button"
+          variant="outline"
+          :disabled="
+            !selectedAttribute ||
+            !availableAttributes.some((a) => a.id === selectedAttribute)
+          "
+          @click="addAttribute"
           >Добавить характеристику</Button
         ></template
       >
-      <div class="flex gap-2">
-        <Button type="submit">Сохранить</Button
+      <div class="flex flex-wrap gap-2">
+        <Button type="submit" :disabled="!dirty">{{
+          saveLabels[section] ?? "Сохранить раздел"
+        }}</Button
         ><Button type="button" variant="outline" @click="resetFields"
           >Отмена</Button
         ><span v-if="dirty" class="self-center text-sm text-muted-foreground"

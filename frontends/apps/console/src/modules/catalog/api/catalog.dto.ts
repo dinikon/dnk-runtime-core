@@ -297,7 +297,7 @@ export interface CreateItemResponse {
 export interface MutationResponse {
   item_id: string;
   root_id: string;
-  revision: number;
+  item_revision: number;
   root_revision: number;
   child_ids?: string[];
 }

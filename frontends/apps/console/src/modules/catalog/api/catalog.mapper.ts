@@ -65,6 +65,7 @@ export function itemFromDto(value: ReadItemDTO): CatalogItem {
     own: value.own,
     effective: value.effective,
     stockStatus: value.stock_status,
+    priceCurrency: value.price_currency,
     priceMin: value.price_min,
     priceMax: value.price_max,
     priceIncomplete: value.price_incomplete,

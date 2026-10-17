@@ -65,7 +65,10 @@ export function useCatalogContext(
   }
   onBeforeRouteLeave(canLeave);
   onBeforeRouteUpdate(
-    (to, from) => to.fullPath === from.fullPath || canLeave(),
+    (to, from) =>
+      to.fullPath === from.fullPath ||
+      (to.path === from.path && to.query.locale === from.query.locale) ||
+      canLeave(),
   );
   let mounted = true;
   function captureSession() {

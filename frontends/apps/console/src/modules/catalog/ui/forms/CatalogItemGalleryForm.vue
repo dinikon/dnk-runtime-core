@@ -2,22 +2,22 @@
 import { ref, watch } from "vue";
 import { Button } from "@/components/ui/button";
 import { clone } from "../../model/clone";
-import type { GalleryDTO } from "../../api/catalog.dto";
+import type { ProductGallery } from "../../model/product.types";
 const props = defineProps<{
-  own: GalleryDTO | null;
-  effective: GalleryDTO | null;
+  own: ProductGallery | null;
+  effective: ProductGallery | null;
   pending: boolean;
   reset: number;
   variant: boolean;
   imageUrl: (id: string) => string;
 }>();
 const emit = defineEmits<{
-  save: [gallery: GalleryDTO];
+  save: [gallery: ProductGallery];
   inherit: [];
   upload: [file: File, main: boolean];
   dirty: [value: boolean];
 }>();
-const gallery = ref<GalleryDTO>({ images: [], primary_image_id: null }),
+const gallery = ref<ProductGallery>({ images: [], primary_image_id: null }),
   dirty = ref(false);
 function mark() {
   dirty.value = true;
@@ -70,12 +70,16 @@ function upload(event: Event) {
 }
 </script>
 <template>
-  <div class="space-y-4">
+  <div class="flex flex-col gap-4">
     <p v-if="variant && !own" class="break-words text-sm text-muted-foreground">
       Галерея наследуется от родителя в выбранном языке.
     </p>
     <div v-if="variant && !own" class="flex flex-wrap gap-3">
-      <figure v-for="image in gallery.images" :key="image.id" class="space-y-1">
+      <figure
+        v-for="image in gallery.images"
+        :key="image.id"
+        class="flex flex-col gap-1"
+      >
         <img
           :src="imageUrl(image.id)"
           :alt="image.alt"
@@ -100,7 +104,7 @@ function upload(event: Event) {
     </div>
     <form
       v-else
-      class="space-y-4"
+      class="flex flex-col gap-4"
       @submit.prevent="
         emit('save', {
           ...gallery,
@@ -108,7 +112,7 @@ function upload(event: Event) {
         })
       "
     >
-      <fieldset :disabled="pending" class="space-y-3">
+      <fieldset :disabled="pending" class="flex flex-col gap-3">
         <div
           v-for="(image, index) in gallery.images"
           :key="image.id"
@@ -119,7 +123,7 @@ function upload(event: Event) {
             :alt="image.alt"
             class="h-24 w-24 rounded object-cover"
           />
-          <div class="min-w-0 flex-1 space-y-2">
+          <div class="min-w-0 flex-1 flex flex-col gap-2">
             <label
               ><input
                 v-model="gallery.primary_image_id"

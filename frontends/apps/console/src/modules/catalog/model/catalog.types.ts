@@ -53,6 +53,7 @@ export interface CatalogItem {
   effective: import("../api/catalog.dto").ReadItemDTO["effective"];
   stockStatus: string | null;
   availableForSale: boolean;
+  priceCurrency: string | null;
   priceMin: string | null;
   priceMax: string | null;
   priceIncomplete: boolean;

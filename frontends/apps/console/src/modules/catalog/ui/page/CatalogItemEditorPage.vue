@@ -1,480 +1,657 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { Button } from "@/components/ui/button";
-import { getApiErrorMessage, getApiErrorStatus } from "@/app/providers/http";
-import { catalogApi } from "../../api/catalog.api";
-import { itemFromDto } from "../../api/catalog.mapper";
-import { useCatalogContext } from "../../model/use-catalog-context";
 import {
-  loadAttributes,
-  loadCategories,
-  loadTags,
-} from "../../model/catalog-options";
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { getApiErrorMessage } from "@/app/providers/http";
+import { useProductPage } from "../../model/use-product-page";
+import {
+  kindLabels,
+  productTabs,
+  selectionLabel,
+  statusLabels,
+  variantRow,
+} from "../../model/product-presentation";
 import type {
-  ItemSection,
-  StructureDTO,
-  ReadItemDTO,
-} from "../../api/catalog.dto";
-import CatalogToolbar from "../CatalogToolbar.vue";
-import CatalogItemFieldsForm from "../forms/CatalogItemFieldsForm.vue";
-import CatalogItemGalleryForm from "../forms/CatalogItemGalleryForm.vue";
+  ProductSection,
+  ProductStructure,
+} from "../../model/product.types";
+import ProductHeader from "../product/ProductHeader.vue";
+import ProductFieldsBlock from "../product/ProductFieldsBlock.vue";
+import ProductVariantRow from "../product/ProductVariantRow.vue";
+import ProductVariantEditor from "../product/ProductVariantEditor.vue";
+import ProductEditorSidebar from "../product/ProductEditorSidebar.vue";
 import CatalogItemStructureForm from "../forms/CatalogItemStructureForm.vue";
-import ProductCategoriesForm from "../forms/ProductCategoriesForm.vue";
-import ProductTagsForm from "../forms/ProductTagsForm.vue";
-const dirty = ref<Record<string, boolean>>({}),
-  reset = ref<Record<string, number>>({}),
-  pending = ref(false),
-  error = ref(""),
-  conflict = ref(false),
-  cache = useQueryClient();
-const ctx = useCatalogContext(
-  () => Object.values(dirty.value).some(Boolean),
-  () => pending.value,
-  () => {
-    dirty.value = {};
-    error.value = "";
-  },
-);
-const id = computed(() => String(ctx.route.params.itemId));
-const item = useQuery({
-  queryKey: computed(() => ctx.key("get-item", id.value)),
-  enabled: computed(() => !!ctx.locale.value && !!ctx.tenantId.value),
-  refetchOnWindowFocus: false,
-  queryFn: async ({ signal }) =>
-    itemFromDto(
-      (await catalogApi.getItem(id.value, ctx.locale.value, signal)).item,
-    ),
-});
-const attributes = useQuery({
-  queryKey: computed(() => ctx.key("attribute-options")),
-  enabled: computed(() => !!ctx.locale.value && !!ctx.tenantId.value),
-  queryFn: ({ signal }) => loadAttributes(ctx.locale.value, signal),
-});
-const categories = useQuery({
-  queryKey: computed(() => ctx.key("category-options")),
-  enabled: computed(
-    () => item.data.value?.kind === "simple" && !!ctx.locale.value,
-  ),
-  queryFn: ({ signal }) => loadCategories(ctx.locale.value, signal),
-});
-const tags = useQuery({
-  queryKey: computed(() => ctx.key("tag-options")),
-  enabled: computed(
-    () => item.data.value?.kind === "simple" && !!ctx.locale.value,
-  ),
-  queryFn: ({ signal }) => loadTags(ctx.locale.value, signal),
-});
-const variants = useQuery({
-  queryKey: computed(() => ctx.key("family-variants", id.value)),
-  enabled: computed(() => item.data.value?.kind === "variable"),
-  refetchOnWindowFocus: false,
-  queryFn: async ({ signal }) => {
-    const rows: ReadItemDTO[] = [];
-    for (let offset = 0; ; offset += 100) {
-      const page = await catalogApi.listVariants(
-        id.value,
-        ctx.locale.value,
-        offset,
-        100,
-        signal,
-      );
-      rows.push(...page.items);
-      if (rows.length >= page.total) return rows;
-    }
-  },
-});
-const structure = computed<StructureDTO | null>(() => {
-  const value = item.data.value;
-  if (!value || value.kind !== "variable" || !variants.data.value) return null;
-  return {
-    axes: value.own.axes,
-    default_selection:
-      value.own.default_selection?.values.map(([attribute_id, option_id]) => ({
-        attribute_id,
-        option_id,
-      })) ?? null,
-    variants: variants.data.value.map((v) => ({
-      item_id: v.own.id,
-      selection: v.own.selection.values.map(([attribute_id, option_id]) => ({
-        attribute_id,
-        option_id,
-      })),
-    })),
-  };
-});
-const revision = ref(0);
+const {
+  ctx,
+  id,
+  item,
+  attributes,
+  categories,
+  tags,
+  schema,
+  variants,
+  offset,
+  variant,
+  variantId,
+  visited,
+  allVariants,
+  structure,
+  structureRequested,
+  tab,
+  selectTab,
+  selectVariant,
+  draft,
+  pending,
+  error,
+  conflict,
+  blocked,
+  isDirty,
+  resetFor,
+  mark,
+  save,
+  inherit,
+  upload,
+  reload,
+  replaceStructure,
+  imageUrl,
+} = useProductPage(true);
 watch(
   () => item.data.value,
-  (value) => {
-    if (value && !Object.values(dirty.value).some(Boolean))
-      revision.value = value.rootRevision;
+  (v) => {
+    if (v?.kind === "variant")
+      void ctx.router.replace({
+        path: `/catalog/items/${v.rootId}/edit`,
+        query: { ...ctx.route.query, tab: "variants", variant: v.id },
+      });
   },
+  { immediate: true },
 );
-watch(
-  () => [id.value, ctx.locale.value],
-  () => {
-    dirty.value = {};
-    reset.value = {};
-    error.value = "";
-    conflict.value = false;
-    revision.value = item.data.value?.rootRevision ?? 0;
-  },
+const schemaVersion = computed(
+  () => schema.data.value?.schema.schema_version ?? 0,
 );
-const sections = computed<ItemSection[]>(() => [
+const rootGroups = [
+  { tab: "general", sections: ["price", "virtual"] },
+  { tab: "inventory", sections: ["sku", "stock"] },
+  { tab: "shipping", sections: ["measurements"] },
+  { tab: "attributes", sections: ["attributes"] },
+  { tab: "additional", sections: ["metadata"] },
+] as const;
+const tabs = computed(() =>
+  productTabs.filter((t) =>
+    item.data.value?.kind === "variable"
+      ? t.id !== "general"
+      : t.id !== "variants",
+  ),
+);
+const rows = computed(
+  () =>
+    variants.data.value?.items.map((v) =>
+      variantRow(v, attributes.data.value ?? [], imageUrl),
+    ) ?? [],
+);
+function dirtyTab(value: string) {
+  if (
+    (value === "attributes" || value === "variants") &&
+    isDirty(id.value, "structure")
+  )
+    return true;
+  if (value === "variants")
+    return Object.entries(draft.dirty).some(
+      ([key, dirty]) => !key.startsWith(`${id.value}:`) && dirty,
+    );
+  return (
+    rootGroups
+      .find((g) => g.tab === value)
+      ?.sections.some((s) => isDirty(id.value, s)) ?? false
+  );
+}
+const sidebarSections: ProductSection[] = [
+  "status",
+  "galleries",
+  "categories",
+  "tags",
+];
+const variantSections: ProductSection[] = [
   "content",
   "status",
-  ...(item.data.value?.kind === "variable" ? [] : ["sku" as const]),
-  ...(item.data.value?.kind === "variable"
-    ? []
-    : ["virtual" as const, "price" as const]),
+  "sku",
+  "price",
+  "virtual",
   "stock",
   "measurements",
-  "metadata",
   "attributes",
-]);
-const titles: Partial<Record<ItemSection, string>> = {
-  content: "Контент",
-  status: "Статус",
-  sku: "SKU",
-  virtual: "Виртуальный товар",
-  price: "Цена",
-  stock: "Наличие",
-  measurements: "Вес и размеры",
-  metadata: "Дополнительные поля",
-  attributes: "Характеристики",
-};
-async function mutate(section: ItemSection, action: () => Promise<unknown>) {
-  pending.value = true;
-  error.value = "";
-  conflict.value = false;
-  const current = ctx.captureSession();
-  try {
-    await action();
-    if (!current()) return;
-    dirty.value[section] = false;
-    await cache.invalidateQueries({
-      queryKey: ["catalog", ctx.tenantId.value],
-      refetchType: "none",
-    });
-    const fresh = await item.refetch();
-    revision.value = fresh.data?.rootRevision ?? revision.value;
-    reset.value[section] = (reset.value[section] ?? 0) + 1;
-    if (section === "structure" || section === "kind") await variants.refetch();
-  } catch (e) {
-    if (current()) {
-      error.value = getApiErrorMessage(e, "Не удалось выполнить операцию");
-      conflict.value = getApiErrorStatus(e) === 409;
-    }
-  } finally {
-    if (current()) pending.value = false;
-  }
-}
-function save(section: ItemSection, value: Record<string, unknown>) {
-  return mutate(section, () =>
-    catalogApi.saveItem(
-      id.value,
-      section,
-      revision.value,
-      value,
-      ctx.locale.value,
-    ),
-  );
-}
-function inherit(section: "content" | "galleries") {
-  return mutate(section, () =>
-    catalogApi.inheritSection(
-      id.value,
-      section,
-      ctx.locale.value,
-      revision.value,
-    ),
-  );
-}
-function replaceStructure(value: StructureDTO) {
-  const ids = new Set(value.variants.map((v) => v.item_id));
-  const removed =
-    variants.data.value
-      ?.filter((v) => !ids.has(v.own.id))
-      .map((v) => v.own.id) ?? [];
-  if (
-    removed.length &&
-    !window.confirm(`Будут удалены ${removed.length} вариантов. Продолжить?`)
-  )
-    return;
-  void save("structure", { structure: value, removed_ids: removed });
-}
-async function reload() {
-  if (
-    Object.values(dirty.value).some(Boolean) &&
-    !window.confirm("Отказаться от ввода и загрузить актуальную карточку?")
-  )
-    return;
-  dirty.value = {};
-  error.value = "";
-  conflict.value = false;
-  const fresh = await item.refetch();
-  revision.value = fresh.data?.rootRevision ?? 0;
-  for (const section of [
-    ...sections.value,
-    "galleries",
-    "categories",
-    "tags",
-    "structure",
-  ])
-    reset.value[section] = (reset.value[section] ?? 0) + 1;
-}
+  "metadata",
+  "galleries",
+];
+const dirtySections = (childId: string) =>
+  variantSections.filter((s) => isDirty(childId, s));
+const resets = (childId: string) =>
+  Object.fromEntries(variantSections.map((s) => [s, resetFor(childId, s)]));
 const transition = ref(false),
-  selectedChild = ref(""),
-  carry = ref(0);
-function toVariable(value: StructureDTO) {
-  void save("kind", {
-    kind: "variable",
-    structure: value,
-    carry_to_index: carry.value,
-  });
-  transition.value = false;
+  selectedChild = ref("");
+function openTransition() {
+  structureRequested.value = true;
+  transition.value = true;
 }
-function toSimple() {
+async function toVariable(value: ProductStructure, carryIndex: number) {
   if (
-    !selectedChild.value ||
     !window.confirm(
-      "Выбранный вариант станет простым товаром. Все ID вариантов будут удалены. Продолжить?",
+      "Коммерческие значения будут перенесены выбранному варианту. Продолжить?",
     )
   )
     return;
-  void save("kind", {
+  await save(id.value, "kind", {
+    kind: "variable",
+    structure: value,
+    carry_to_index: carryIndex,
+  });
+  if (!error.value) {
+    mark(id.value, "kind", false);
+    transition.value = false;
+    selectTab("variants");
+  }
+}
+async function toSimple() {
+  if (
+    !selectedChild.value ||
+    !allVariants.data.value ||
+    !window.confirm(
+      "Выбранный вариант станет простым товаром. Все варианты и их собственные данные будут удалены. Продолжить?",
+    )
+  )
+    return;
+  await save(id.value, "kind", {
     kind: "simple",
     selected_item_id: selectedChild.value,
-    discarded_ids: variants.data.value?.map((v) => v.own.id) ?? [],
+    discarded_ids: allVariants.data.value.map((v) => v.id),
   });
+  if (!error.value) {
+    transition.value = false;
+    void ctx.router.replace({
+      query: { ...ctx.route.query, tab: "general", variant: undefined },
+    });
+  }
+}
+const structureAttributes = computed(() =>
+  (attributes.data.value ?? []).filter(
+    (a) =>
+      !item.data.value?.own.attributes.some((v) => v.attribute_id === a.id),
+  ),
+);
+function closeTransition(value: boolean) {
+  if (
+    !value &&
+    isDirty(id.value, "kind") &&
+    !window.confirm("Отказаться от несохранённой структуры нового вида?")
+  )
+    return;
+  transition.value = value;
+  if (!value) mark(id.value, "kind", false);
 }
 </script>
 <template>
-  <div
-    class="mx-auto min-h-0 w-full min-w-0 max-w-5xl flex-1 space-y-5 overflow-y-auto p-6"
-  >
-    <div class="flex flex-wrap justify-between gap-3">
-      <div class="min-w-0">
-        <h1 class="break-words text-2xl font-semibold">
-          {{ item.data.value?.title ?? "Карточка товара" }}
-        </h1>
-        <p class="text-sm text-muted-foreground">
-          {{ item.data.value?.kind }} · Ревизия семьи {{ revision }} · Default
-        </p>
-      </div>
-      <Button variant="outline" :disabled="pending" @click="reload"
-        >Загрузить актуальные данные</Button
-      >
-    </div>
-    <CatalogToolbar
-      :locale="ctx.locale.value"
-      :options="ctx.options.value"
-      @locale="ctx.selectLocale"
-    />
-    <p
-      v-if="error || item.isError.value"
-      role="alert"
-      class="rounded border p-4"
-    >
-      {{
-        error ||
-        getApiErrorMessage(item.error.value, "Не удалось выполнить операцию")
-      }}<span v-if="conflict" class="block mt-2"
-        >Ввод сохранён. Загрузите актуальную версию явно, затем повторите
-        изменение.</span
-      >
-    </p>
-    <p v-if="item.isPending.value">Загрузка…</p>
-    <template v-if="item.data.value"
-      ><Button
-        v-if="item.data.value.kind === 'variant'"
-        variant="outline"
-        @click="
+  <div class="min-h-0 flex-1 overflow-y-auto">
+    <div class="mx-auto flex w-full max-w-[1440px] flex-col gap-8 p-5 md:p-8">
+      <ProductHeader
+        :title="item.data.value?.title ?? 'Товар без названия'"
+        :kind="item.data.value ? kindLabels[item.data.value.kind] : undefined"
+        :status="
+          item.data.value ? statusLabels[item.data.value.own.status] : undefined
+        "
+        :sku="item.data.value?.own.sku"
+        editing
+        :locale="ctx.locale.value"
+        :options="ctx.options.value"
+        @back="ctx.router.push('/catalog/items')"
+        @locale="ctx.selectLocale"
+        @mode="
           ctx.router.push({
-            path: `/catalog/items/${item.data.value.rootId}`,
+            path: `/catalog/items/${id}`,
             query: { locale: ctx.locale.value },
           })
         "
-        >Открыть родителя</Button
-      >
-      <section
-        v-for="section in sections"
-        :key="`${id}:${ctx.locale.value}:${section}`"
-        class="space-y-4 rounded-lg border p-5"
-      >
-        <h2 class="text-lg font-medium">{{ titles[section] }}</h2>
-        <CatalogItemFieldsForm
-          :item="item.data.value"
-          :section="section"
-          :locale="ctx.locale.value"
-          :pending="pending || !ctx.active.value || conflict"
-          :reset="reset[section] ?? 0"
-          :attributes="attributes.data.value ?? []"
-          @dirty="(value) => (dirty[section] = value)"
-          @save="(value) => save(section, value)"
-          @inherit="inherit('content')"
-        />
-      </section>
-      <section class="space-y-4 rounded-lg border p-5">
-        <h2 class="text-lg font-medium">
-          Изображения · {{ ctx.locale.value }}
-        </h2>
-        <CatalogItemGalleryForm
-          :key="`${id}:${ctx.locale.value}`"
-          :own="item.data.value.own.galleries[ctx.locale.value] ?? null"
-          :effective="item.data.value.effective.gallery"
-          :variant="item.data.value.kind === 'variant'"
-          :pending="pending || !ctx.active.value || conflict"
-          :reset="reset.galleries ?? 0"
-          :image-url="
-            (imageId) => catalogApi.imageUrl(id, ctx.locale.value, imageId)
-          "
-          @dirty="(value) => (dirty.galleries = value)"
-          @save="(gallery) => save('galleries', { gallery })"
-          @inherit="inherit('galleries')"
-          @upload="
-            (file, main) =>
-              mutate('galleries', () =>
-                catalogApi.uploadImage(
-                  id,
-                  ctx.locale.value,
-                  revision,
-                  file,
-                  main,
-                ),
-              )
-          "
-        />
-      </section>
-      <template v-if="item.data.value.kind === 'simple'"
-        ><section class="rounded-lg border p-5 space-y-4">
-          <h2 class="text-lg font-medium">Категории</h2>
-          <ProductCategoriesForm
-            :ids="item.data.value.own.category_ids"
-            :primary-id="item.data.value.own.primary_category_id"
-            :categories="categories.data.value ?? []"
-            :pending="pending"
-            :disabled="!ctx.active.value || conflict"
-            :reset="reset.categories ?? 0"
-            @dirty="(value) => (dirty.categories = value)"
-            @submit="
-              (category_ids, primary_category_id) =>
-                save('categories', { category_ids, primary_category_id })
-            "
-          />
-        </section>
-        <section class="rounded-lg border p-5 space-y-4">
-          <h2 class="text-lg font-medium">Метки</h2>
-          <ProductTagsForm
-            :ids="item.data.value.own.tag_ids"
-            :tags="tags.data.value ?? []"
-            :pending="pending"
-            :disabled="!ctx.active.value || conflict"
-            :reset="reset.tags ?? 0"
-            @dirty="(value) => (dirty.tags = value)"
-            @submit="(tag_ids) => save('tags', { tag_ids })"
-          /></section
-      ></template>
-      <section
-        v-if="item.data.value.kind === 'variable'"
-        class="space-y-4 rounded-lg border p-5"
-      >
-        <h2 class="text-lg font-medium">Варианты</h2>
-        <p v-if="variants.isError.value" role="alert">
-          {{
+      />
+      <Alert
+        v-if="
+          error ||
+          item.isError.value ||
+          schema.isError.value ||
+          attributes.isError.value ||
+          categories.isError.value ||
+          tags.isError.value
+        "
+        variant="destructive"
+        ><AlertTitle>{{
+          conflict
+            ? "Товар изменился в другом окне"
+            : "Не удалось выполнить операцию"
+        }}</AlertTitle
+        ><AlertDescription
+          >{{
+            error ||
             getApiErrorMessage(
-              variants.error.value,
-              "Не удалось выполнить операцию",
+              item.error.value ||
+                schema.error.value ||
+                attributes.error.value ||
+                categories.error.value ||
+                tags.error.value,
+              "Повторите загрузку.",
             )
           }}
-        </p>
-        <div class="flex flex-wrap gap-2">
-          <Button
-            v-for="v in variants.data.value ?? []"
-            :key="v.own.id"
-            variant="outline"
-            @click="
-              ctx.router.push({
-                path: `/catalog/items/${id}/variants/${v.own.id}`,
-                query: { locale: ctx.locale.value },
-              })
-            "
-            >{{
-              v.effective.content?.name ??
-              v.own.selection.values
-                .map(
-                  ([a, o]) =>
-                    attributes.data.value
-                      ?.find((x) => x.id === a)
-                      ?.options.find((x) => x.id === o)?.label ?? o,
-                )
-                .join(" / ")
-            }}</Button
-          >
-        </div>
-        <CatalogItemStructureForm
-          v-if="structure"
-          :initial="structure"
-          :attributes="attributes.data.value ?? []"
-          :pending="pending || conflict"
-          :reset="reset.structure ?? 0"
-          @dirty="(value) => (dirty.structure = value)"
-          @submit="replaceStructure"
-        /><label class="block"
-          >Преобразовать в простой товар<select
-            v-model="selectedChild"
-            class="w-full rounded border bg-background p-2"
-          >
-            <option value="">Выберите сохраняемый вариант</option>
-            <option
-              v-for="v in variants.data.value ?? []"
-              :key="v.own.id"
-              :value="v.own.id"
-            >
-              {{ v.effective.content?.name ?? v.own.id }}
-            </option>
-          </select></label
-        ><Button
-          variant="outline"
-          :disabled="pending || conflict || !selectedChild"
-          @click="toSimple"
-          >Преобразовать в простой</Button
-        >
-      </section>
-      <section
-        v-if="item.data.value.kind === 'simple'"
-        class="space-y-4 rounded-lg border p-5"
+          <p v-if="conflict">
+            Ваш ввод сохранён. Загрузите актуальные данные, чтобы продолжить.
+          </p>
+          <Button variant="outline" :disabled="pending" @click="reload"
+            >Загрузить актуальные данные</Button
+          ></AlertDescription
+        ></Alert
       >
-        <Button
-          variant="outline"
-          :disabled="
-            pending ||
-            conflict ||
-            !!item.data.value.own.category_ids.length ||
-            !!item.data.value.own.tag_ids.length
-          "
-          @click="transition = !transition"
-          >Преобразовать в товар с вариантами</Button
-        >
-        <p class="text-sm text-muted-foreground">
-          Перед преобразованием снимите категории и метки.
-        </p>
-        <template v-if="transition"
-          ><label class="block"
-            >Номер варианта для переноса SKU, цены и наличия (с нуля)<input
-              v-model.number="carry"
-              type="number"
-              min="0"
-              class="w-full rounded border bg-background p-2" /></label
-          ><CatalogItemStructureForm
+      <Skeleton v-if="item.isPending.value" class="h-96 w-full" />
+      <template v-if="item.data.value && item.data.value.kind !== 'variant'">
+        <div class="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div class="flex min-w-0 flex-col gap-6">
+            <ProductFieldsBlock
+              :key="`${id}:${ctx.locale.value}:content`"
+              :item="item.data.value"
+              section="content"
+              :locale="ctx.locale.value"
+              :pending="blocked || !schemaVersion"
+              :reset="resetFor(id, 'content')"
+              :attributes="attributes.data.value ?? []"
+              :schema-version="schemaVersion"
+              :dirty="isDirty(id, 'content')"
+              @dirty="mark(id, 'content', $event)"
+              @save="save(id, 'content', $event)"
+            />
+            <Card class="min-w-0 shadow-none"
+              ><CardHeader
+                ><CardTitle>Данные товара</CardTitle
+                ><CardDescription
+                  >Настройки сгруппированы по разделам. Каждый блок сохраняется
+                  отдельно.</CardDescription
+                ></CardHeader
+              ><CardContent class="min-w-0">
+                <Tabs
+                  :model-value="tab"
+                  orientation="vertical"
+                  class="flex flex-col gap-5 md:flex-row"
+                  @update:model-value="selectTab(String($event))"
+                >
+                  <TabsList
+                    class="hidden h-auto w-44 shrink-0 self-start flex-col items-stretch justify-start gap-1 bg-transparent p-0 md:sticky md:top-4 md:flex"
+                    aria-label="Данные товара"
+                    ><TabsTrigger
+                      v-for="t in tabs"
+                      :key="t.id"
+                      :value="t.id"
+                      :aria-label="t.label"
+                      class="h-auto min-h-10 w-full flex-none justify-start px-3 py-2.5"
+                      >{{ t.label
+                      }}<span
+                        v-if="dirtyTab(t.id)"
+                        class="ml-auto"
+                        aria-hidden="true"
+                        >•</span
+                      ></TabsTrigger
+                    ></TabsList
+                  >
+                  <label class="flex flex-col gap-2 text-sm md:hidden"
+                    >Раздел данных товара<select
+                      :value="tab"
+                      aria-label="Раздел данных товара"
+                      class="w-full rounded-md border bg-background p-2"
+                      @change="
+                        selectTab(($event.target as HTMLSelectElement).value)
+                      "
+                    >
+                      <option v-for="t in tabs" :key="t.id" :value="t.id">
+                        {{ t.label }}{{ dirtyTab(t.id) ? " •" : "" }}
+                      </option>
+                    </select></label
+                  >
+                  <div class="flex min-w-0 flex-1 flex-col gap-5">
+                    <template v-for="group in rootGroups" :key="group.tab"
+                      ><TabsContent
+                        :value="group.tab"
+                        force-mount
+                        v-show="tab === group.tab"
+                        class="flex flex-col gap-5"
+                        :aria-label="
+                          productTabs.find((t) => t.id === group.tab)?.label
+                        "
+                      >
+                        <template
+                          v-for="section in group.sections"
+                          :key="section"
+                          ><ProductFieldsBlock
+                            v-if="
+                              !(
+                                item.data.value.kind === 'variable' &&
+                                (section === 'price' ||
+                                  section === 'virtual' ||
+                                  section === 'sku')
+                              )
+                            "
+                            :key="`${id}:${ctx.locale.value}:${section}`"
+                            :item="item.data.value"
+                            :section="section"
+                            :locale="ctx.locale.value"
+                            :pending="
+                              blocked ||
+                              (section === 'attributes' &&
+                                isDirty(id, 'structure'))
+                            "
+                            :reset="resetFor(id, section)"
+                            :attributes="attributes.data.value ?? []"
+                            :schema-version="schemaVersion"
+                            :dirty="isDirty(id, section)"
+                            @dirty="mark(id, section, $event)"
+                            @save="
+                              save(id, section, $event)
+                            " /></template></TabsContent
+                    ></template>
+                    <div
+                      v-show="tab === 'additional'"
+                      class="flex flex-col gap-3 border-t pt-5"
+                    >
+                      <h3 class="font-medium">Изменение вида товара</h3>
+                      <p class="text-sm text-muted-foreground">
+                        Преобразование меняет структуру семьи. Сначала сохраните
+                        или отмените остальные изменения.
+                      </p>
+                      <Button
+                        variant="outline"
+                        :disabled="
+                          blocked ||
+                          Object.values(draft.dirty).some(Boolean) ||
+                          !!item.data.value.own.category_ids.length ||
+                          !!item.data.value.own.tag_ids.length
+                        "
+                        @click="openTransition"
+                        >{{
+                          item.data.value.kind === "simple"
+                            ? "Преобразовать в товар с вариантами"
+                            : "Преобразовать в простой товар"
+                        }}</Button
+                      >
+                      <p
+                        v-if="
+                          item.data.value.kind === 'simple' &&
+                          (item.data.value.own.category_ids.length ||
+                            item.data.value.own.tag_ids.length)
+                        "
+                        class="text-sm text-muted-foreground"
+                      >
+                        Перед преобразованием снимите категории и метки.
+                      </p>
+                    </div>
+                    <template v-if="item.data.value.kind === 'variable'">
+                      <div
+                        v-show="tab === 'attributes' || tab === 'variants'"
+                        class="flex flex-col gap-4"
+                      >
+                        <div
+                          class="flex flex-wrap items-center justify-between gap-3"
+                        >
+                          <h3 class="font-medium">Структура вариантов</h3>
+                          <Button
+                            v-if="!structureRequested"
+                            variant="outline"
+                            :disabled="blocked || isDirty(id, 'attributes')"
+                            @click="structureRequested = true"
+                            >Изменить структуру</Button
+                          >
+                        </div>
+                        <p class="text-sm text-muted-foreground">
+                          Характеристики вариантов и комбинации сохраняются
+                          вместе. Для использования общей характеристики в
+                          вариантах сначала уберите её обычное назначение.
+                        </p>
+                        <Alert
+                          v-if="allVariants.isError.value"
+                          variant="destructive"
+                          ><AlertTitle
+                            >Не удалось загрузить структуру</AlertTitle
+                          ><AlertDescription
+                            ><Button
+                              variant="outline"
+                              @click="allVariants.refetch()"
+                              >Повторить</Button
+                            ></AlertDescription
+                          ></Alert
+                        >
+                        <Skeleton
+                          v-if="
+                            structureRequested && allVariants.isPending.value
+                          "
+                          class="h-32 w-full"
+                        />
+                        <CatalogItemStructureForm
+                          v-if="structure"
+                          :key="`${id}:${ctx.locale.value}:structure`"
+                          :initial="structure"
+                          :attributes="structureAttributes"
+                          :pending="
+                            blocked ||
+                            isDirty(id, 'attributes') ||
+                            Object.entries(draft.dirty).some(
+                              ([key, value]) =>
+                                !key.startsWith(`${id}:`) && value,
+                            )
+                          "
+                          :reset="resetFor(id, 'structure')"
+                          :part="tab === 'attributes' ? 'axes' : 'combinations'"
+                          @dirty="mark(id, 'structure', $event)"
+                          @submit="replaceStructure"
+                        />
+                      </div>
+                      <TabsContent
+                        value="variants"
+                        force-mount
+                        v-show="tab === 'variants'"
+                        class="flex min-w-0 flex-col gap-5"
+                      >
+                        <Alert
+                          v-if="variants.isError.value"
+                          variant="destructive"
+                          ><AlertTitle>Не удалось загрузить варианты</AlertTitle
+                          ><AlertDescription
+                            ><Button
+                              variant="outline"
+                              @click="variants.refetch()"
+                              >Повторить</Button
+                            ></AlertDescription
+                          ></Alert
+                        >
+                        <div>
+                          <div v-for="row in rows" :key="row.item.id">
+                            <ProductVariantRow
+                              :row="row"
+                              :selected="variantId === row.item.id"
+                              editing
+                              :dirty="!!dirtySections(row.item.id).length"
+                              @select="
+                                selectVariant(
+                                  variantId === row.item.id ? '' : row.item.id,
+                                )
+                              "
+                            />
+                            <div :id="`variant-editor-${row.item.id}`" />
+                          </div>
+                        </div>
+                        <div
+                          class="flex flex-wrap items-center justify-end gap-2"
+                        >
+                          <span class="text-xs text-muted-foreground"
+                            >{{ offset + 1 }}–{{ offset + rows.length }} из
+                            {{ variants.data.value?.total ?? 0 }}</span
+                          ><Button
+                            variant="outline"
+                            size="sm"
+                            :disabled="!offset || variants.isFetching.value"
+                            @click="offset -= 20"
+                            >Назад</Button
+                          ><Button
+                            variant="outline"
+                            size="sm"
+                            :disabled="
+                              offset + 20 >=
+                                (variants.data.value?.total ?? 0) ||
+                              variants.isFetching.value
+                            "
+                            @click="offset += 20"
+                            >Далее</Button
+                          >
+                        </div>
+                        <Alert
+                          v-if="variantId && variant.isError.value"
+                          variant="destructive"
+                          ><AlertTitle>Вариант недоступен</AlertTitle
+                          ><AlertDescription
+                            >Вариант удалён или принадлежит другому
+                            товару.<Button
+                              variant="outline"
+                              @click="selectVariant('')"
+                              >Вернуться к родителю</Button
+                            ></AlertDescription
+                          ></Alert
+                        >
+                        <Skeleton
+                          v-if="variantId && variant.isPending.value"
+                          class="h-32 w-full"
+                        />
+                        <div id="direct-variant-editor" />
+                        <Teleport
+                          v-for="child in Object.values(visited)"
+                          :key="`${child.id}:${ctx.locale.value}`"
+                          defer
+                          :to="
+                            rows.some((row) => row.item.id === child.id)
+                              ? `#variant-editor-${child.id}`
+                              : '#direct-variant-editor'
+                          "
+                        >
+                          <ProductVariantEditor
+                            v-show="variantId === child.id"
+                            :item="child"
+                            :label="
+                              selectionLabel(child, attributes.data.value ?? [])
+                            "
+                            :locale="ctx.locale.value"
+                            :pending="blocked || !schemaVersion"
+                            :structure-dirty="isDirty(id, 'structure')"
+                            :schema-version="schemaVersion"
+                            :attributes="attributes.data.value ?? []"
+                            :dirty-sections="dirtySections(child.id)"
+                            :resets="resets(child.id)"
+                            :image-url="
+                              (imageId) => imageUrl(child.id, imageId)
+                            "
+                            @dirty="
+                              (section, value) => mark(child.id, section, value)
+                            "
+                            @save="
+                              (section, value) => save(child.id, section, value)
+                            "
+                            @inherit="inherit(child.id, $event)"
+                            @upload="
+                              (file, main) => upload(child.id, file, main)
+                            "
+                        /></Teleport>
+                      </TabsContent>
+                    </template>
+                  </div>
+                </Tabs> </CardContent
+            ></Card>
+          </div>
+          <ProductEditorSidebar
+            :item="item.data.value"
+            :locale="ctx.locale.value"
+            :pending="pending"
+            :blocked="blocked"
+            :schema-version="schemaVersion"
+            :categories="categories.data.value ?? []"
+            :tags="tags.data.value ?? []"
+            :dirty-sections="
+              sidebarSections.filter((section) => isDirty(id, section))
+            "
+            :resets="
+              Object.fromEntries(
+                sidebarSections.map((section) => [
+                  section,
+                  resetFor(id, section),
+                ]),
+              )
+            "
+            :image-url="(imageId) => imageUrl(id, imageId)"
+            @dirty="(section, value) => mark(id, section, value)"
+            @save="(section, value) => save(id, section, value)"
+            @upload="(file, main) => upload(id, file, main)"
+            @reload="reload"
+          />
+        </div>
+      </template>
+      <Dialog :open="transition" @update:open="closeTransition"
+        ><DialogContent class="max-h-[85vh] overflow-y-auto sm:max-w-2xl"
+          ><DialogHeader
+            ><DialogTitle>Изменить вид товара</DialogTitle
+            ><DialogDescription
+              >Проверьте комбинации и выберите вариант, значения которого нужно
+              сохранить.</DialogDescription
+            ></DialogHeader
+          >
+          <Alert v-if="error" variant="destructive"
+            ><AlertTitle>Не удалось изменить вид товара</AlertTitle
+            ><AlertDescription>{{ error }}</AlertDescription></Alert
+          >
+          <CatalogItemStructureForm
+            v-if="item.data.value?.kind === 'simple'"
             :initial="null"
-            :attributes="attributes.data.value ?? []"
-            :pending="pending || conflict"
-            :reset="reset.kind ?? 0"
-            @dirty="(value) => (dirty.kind = value)"
+            :attributes="structureAttributes"
+            :pending="blocked"
+            :reset="0"
+            carry
+            submit-label="Преобразовать в товар с вариантами"
+            @dirty="mark(id, 'kind', $event)"
             @submit="toVariable"
-        /></template></section
-    ></template>
+          />
+          <template v-else
+            ><label class="flex flex-col gap-2 text-sm"
+              >Сохраняемый вариант<select
+                v-model="selectedChild"
+                class="w-full rounded-md border bg-background p-2"
+              >
+                <option value="">Выберите вариант</option>
+                <option
+                  v-for="child in allVariants.data.value ?? []"
+                  :key="child.id"
+                  :value="child.id"
+                >
+                  {{ selectionLabel(child, attributes.data.value ?? []) }}
+                </option>
+              </select></label
+            ><Button :disabled="blocked || !selectedChild" @click="toSimple"
+              >Преобразовать в простой товар</Button
+            ></template
+          >
+        </DialogContent></Dialog
+      >
+    </div>
   </div>
 </template>
