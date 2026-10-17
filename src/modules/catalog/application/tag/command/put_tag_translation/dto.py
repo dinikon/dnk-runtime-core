@@ -7,4 +7,3 @@ class PutTagTranslationResultDTO:
     """Подтверждённый результат конкретного сценария put_tag_translation."""
 
     id: UUID
-    revision: int

@@ -59,9 +59,8 @@ async function remove(item: CollectionItem) {
   pending.value = true;
   error.value = "";
   try {
-    if (props.kind === "attributes")
-      await catalogApi.deleteAttribute(item.id, item.revision);
-    else await catalogApi.deleteTag(item.id, item.revision);
+    if (props.kind === "attributes") await catalogApi.deleteAttribute(item.id);
+    else await catalogApi.deleteTag(item.id);
     await cache.invalidateQueries({
       queryKey: ["catalog", ctx.tenantId.value],
     });

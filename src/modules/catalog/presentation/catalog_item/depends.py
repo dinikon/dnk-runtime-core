@@ -132,25 +132,25 @@ def get_mutations(
 MutationsDep = Annotated[CatalogItemMutationService, Depends(get_mutations)]
 
 
-from src.modules.catalog.application.catalog_item.command.create_simple_catalog_item.handler import (
-    CreateSimpleCatalogItemHandler,
+from src.modules.catalog.application.catalog_item.command.create_catalog_item.handler import (
+    CreateCatalogItemHandler,
 )
 
 
-def get_create_simple_catalog_item_handler(
+def get_create_catalog_item_handler(
     repository: ItemRepositoryDep,
     lock: MutationLockDep,
     clock: ClockDep,
     uuid: UuidDep,
-) -> CreateSimpleCatalogItemHandler:
-    """Собирает отдельный handler сценария create_simple_catalog_item."""
-    return CreateSimpleCatalogItemHandler(
+) -> CreateCatalogItemHandler:
+    """Собирает отдельный handler сценария create_catalog_item."""
+    return CreateCatalogItemHandler(
         repository=repository, lock=lock, clock=clock, uuid=uuid
     )
 
 
-CreateSimpleCatalogItemHandlerDep = Annotated[
-    CreateSimpleCatalogItemHandler, Depends(get_create_simple_catalog_item_handler)
+CreateCatalogItemHandlerDep = Annotated[
+    CreateCatalogItemHandler, Depends(get_create_catalog_item_handler)
 ]
 
 
@@ -170,271 +170,6 @@ def get_delete_catalog_item_handler(
 
 DeleteCatalogItemHandlerDep = Annotated[
     DeleteCatalogItemHandler, Depends(get_delete_catalog_item_handler)
-]
-
-from src.modules.catalog.application.catalog_item.command.delete_catalog_item_content.handler import (
-    DeleteCatalogItemContentHandler,
-)
-
-
-def get_delete_catalog_item_content_handler(
-    mutations: MutationsDep, clock: ClockDep
-) -> DeleteCatalogItemContentHandler:
-    """Собирает отдельный handler сценария delete_catalog_item_content."""
-    return DeleteCatalogItemContentHandler(mutations=mutations, clock=clock)
-
-
-DeleteCatalogItemContentHandlerDep = Annotated[
-    DeleteCatalogItemContentHandler, Depends(get_delete_catalog_item_content_handler)
-]
-
-from src.modules.catalog.application.catalog_item.command.delete_catalog_item_gallery.handler import (
-    DeleteCatalogItemGalleryHandler,
-)
-
-
-def get_delete_catalog_item_gallery_handler(
-    mutations: MutationsDep, clock: ClockDep
-) -> DeleteCatalogItemGalleryHandler:
-    """Собирает отдельный handler сценария delete_catalog_item_gallery."""
-    return DeleteCatalogItemGalleryHandler(mutations=mutations, clock=clock)
-
-
-DeleteCatalogItemGalleryHandlerDep = Annotated[
-    DeleteCatalogItemGalleryHandler, Depends(get_delete_catalog_item_gallery_handler)
-]
-
-from src.modules.catalog.application.catalog_item.command.put_catalog_item_content.handler import (
-    PutCatalogItemContentHandler,
-)
-
-
-def get_put_catalog_item_content_handler(
-    mutations: MutationsDep,
-    clock: ClockDep,
-    locales: LocalesDep,
-    schemas: SchemasDep,
-    sanitizer: SanitizerDep,
-) -> PutCatalogItemContentHandler:
-    """Собирает отдельный handler сценария put_catalog_item_content."""
-    return PutCatalogItemContentHandler(
-        mutations=mutations,
-        clock=clock,
-        locales=locales,
-        schemas=schemas,
-        sanitizer=sanitizer,
-    )
-
-
-PutCatalogItemContentHandlerDep = Annotated[
-    PutCatalogItemContentHandler, Depends(get_put_catalog_item_content_handler)
-]
-
-from src.modules.catalog.application.catalog_item.command.replace_catalog_item_gallery.handler import (
-    ReplaceCatalogItemGalleryHandler,
-)
-
-
-def get_replace_catalog_item_gallery_handler(
-    mutations: MutationsDep, clock: ClockDep, locales: LocalesDep, files: FilesDep
-) -> ReplaceCatalogItemGalleryHandler:
-    """Собирает отдельный handler сценария replace_catalog_item_gallery."""
-    return ReplaceCatalogItemGalleryHandler(
-        mutations=mutations, clock=clock, locales=locales, files=files
-    )
-
-
-ReplaceCatalogItemGalleryHandlerDep = Annotated[
-    ReplaceCatalogItemGalleryHandler, Depends(get_replace_catalog_item_gallery_handler)
-]
-
-
-from src.modules.catalog.application.catalog_item.command.set_catalog_item_attributes.handler import (
-    SetCatalogItemAttributesHandler,
-)
-
-
-def get_set_catalog_item_attributes_handler(
-    mutations: MutationsDep, clock: ClockDep, definitions: DefinitionsDep
-) -> SetCatalogItemAttributesHandler:
-    """Собирает отдельный handler сценария set_catalog_item_attributes."""
-    return SetCatalogItemAttributesHandler(
-        mutations=mutations, clock=clock, definitions=definitions
-    )
-
-
-SetCatalogItemAttributesHandlerDep = Annotated[
-    SetCatalogItemAttributesHandler, Depends(get_set_catalog_item_attributes_handler)
-]
-
-from src.modules.catalog.application.catalog_item.command.set_catalog_item_categories.handler import (
-    SetCatalogItemCategoriesHandler,
-)
-
-
-def get_set_catalog_item_categories_handler(
-    mutations: MutationsDep, clock: ClockDep, references: ReferencesDep
-) -> SetCatalogItemCategoriesHandler:
-    """Собирает отдельный handler сценария set_catalog_item_categories."""
-    return SetCatalogItemCategoriesHandler(
-        mutations=mutations, clock=clock, references=references
-    )
-
-
-SetCatalogItemCategoriesHandlerDep = Annotated[
-    SetCatalogItemCategoriesHandler, Depends(get_set_catalog_item_categories_handler)
-]
-
-from src.modules.catalog.application.catalog_item.command.set_catalog_item_measurements.handler import (
-    SetCatalogItemMeasurementsHandler,
-)
-
-
-def get_set_catalog_item_measurements_handler(
-    mutations: MutationsDep, clock: ClockDep
-) -> SetCatalogItemMeasurementsHandler:
-    """Собирает отдельный handler сценария set_catalog_item_measurements."""
-    return SetCatalogItemMeasurementsHandler(mutations=mutations, clock=clock)
-
-
-SetCatalogItemMeasurementsHandlerDep = Annotated[
-    SetCatalogItemMeasurementsHandler,
-    Depends(get_set_catalog_item_measurements_handler),
-]
-
-from src.modules.catalog.application.catalog_item.command.set_catalog_item_metadata.handler import (
-    SetCatalogItemMetadataHandler,
-)
-
-
-def get_set_catalog_item_metadata_handler(
-    mutations: MutationsDep, clock: ClockDep
-) -> SetCatalogItemMetadataHandler:
-    """Собирает отдельный handler сценария set_catalog_item_metadata."""
-    return SetCatalogItemMetadataHandler(mutations=mutations, clock=clock)
-
-
-SetCatalogItemMetadataHandlerDep = Annotated[
-    SetCatalogItemMetadataHandler, Depends(get_set_catalog_item_metadata_handler)
-]
-
-from src.modules.catalog.application.catalog_item.command.set_catalog_item_price.handler import (
-    SetCatalogItemPriceHandler,
-)
-
-
-def get_set_catalog_item_price_handler(
-    mutations: MutationsDep, clock: ClockDep, currencies: CurrenciesDep
-) -> SetCatalogItemPriceHandler:
-    """Собирает отдельный handler сценария set_catalog_item_price."""
-    return SetCatalogItemPriceHandler(
-        mutations=mutations, clock=clock, currencies=currencies
-    )
-
-
-SetCatalogItemPriceHandlerDep = Annotated[
-    SetCatalogItemPriceHandler, Depends(get_set_catalog_item_price_handler)
-]
-
-from src.modules.catalog.application.catalog_item.command.set_catalog_item_primary_image.handler import (
-    SetCatalogItemPrimaryImageHandler,
-)
-
-
-def get_set_catalog_item_primary_image_handler(
-    mutations: MutationsDep, clock: ClockDep, locales: LocalesDep
-) -> SetCatalogItemPrimaryImageHandler:
-    """Собирает отдельный handler сценария set_catalog_item_primary_image."""
-    return SetCatalogItemPrimaryImageHandler(
-        mutations=mutations, clock=clock, locales=locales
-    )
-
-
-SetCatalogItemPrimaryImageHandlerDep = Annotated[
-    SetCatalogItemPrimaryImageHandler,
-    Depends(get_set_catalog_item_primary_image_handler),
-]
-
-from src.modules.catalog.application.catalog_item.command.set_catalog_item_sku.handler import (
-    SetCatalogItemSkuHandler,
-)
-
-
-def get_set_catalog_item_sku_handler(
-    mutations: MutationsDep, clock: ClockDep
-) -> SetCatalogItemSkuHandler:
-    """Собирает отдельный handler сценария set_catalog_item_sku."""
-    return SetCatalogItemSkuHandler(mutations=mutations, clock=clock)
-
-
-SetCatalogItemSkuHandlerDep = Annotated[
-    SetCatalogItemSkuHandler, Depends(get_set_catalog_item_sku_handler)
-]
-
-from src.modules.catalog.application.catalog_item.command.set_catalog_item_status.handler import (
-    SetCatalogItemStatusHandler,
-)
-
-
-def get_set_catalog_item_status_handler(
-    mutations: MutationsDep, clock: ClockDep
-) -> SetCatalogItemStatusHandler:
-    """Собирает отдельный handler сценария set_catalog_item_status."""
-    return SetCatalogItemStatusHandler(mutations=mutations, clock=clock)
-
-
-SetCatalogItemStatusHandlerDep = Annotated[
-    SetCatalogItemStatusHandler, Depends(get_set_catalog_item_status_handler)
-]
-
-from src.modules.catalog.application.catalog_item.command.set_catalog_item_stock.handler import (
-    SetCatalogItemStockHandler,
-)
-
-
-def get_set_catalog_item_stock_handler(
-    mutations: MutationsDep, clock: ClockDep
-) -> SetCatalogItemStockHandler:
-    """Собирает отдельный handler сценария set_catalog_item_stock."""
-    return SetCatalogItemStockHandler(mutations=mutations, clock=clock)
-
-
-SetCatalogItemStockHandlerDep = Annotated[
-    SetCatalogItemStockHandler, Depends(get_set_catalog_item_stock_handler)
-]
-
-from src.modules.catalog.application.catalog_item.command.set_catalog_item_tags.handler import (
-    SetCatalogItemTagsHandler,
-)
-
-
-def get_set_catalog_item_tags_handler(
-    mutations: MutationsDep, clock: ClockDep, references: ReferencesDep
-) -> SetCatalogItemTagsHandler:
-    """Собирает отдельный handler сценария set_catalog_item_tags."""
-    return SetCatalogItemTagsHandler(
-        mutations=mutations, clock=clock, references=references
-    )
-
-
-SetCatalogItemTagsHandlerDep = Annotated[
-    SetCatalogItemTagsHandler, Depends(get_set_catalog_item_tags_handler)
-]
-
-from src.modules.catalog.application.catalog_item.command.set_catalog_item_virtual.handler import (
-    SetCatalogItemVirtualHandler,
-)
-
-
-def get_set_catalog_item_virtual_handler(
-    mutations: MutationsDep, clock: ClockDep
-) -> SetCatalogItemVirtualHandler:
-    """Собирает отдельный handler сценария set_catalog_item_virtual."""
-    return SetCatalogItemVirtualHandler(mutations=mutations, clock=clock)
-
-
-SetCatalogItemVirtualHandlerDep = Annotated[
-    SetCatalogItemVirtualHandler, Depends(get_set_catalog_item_virtual_handler)
 ]
 
 from src.modules.catalog.application.catalog_item.command.upload_catalog_item_image.handler import (
@@ -526,4 +261,39 @@ def get_list_catalog_items_handler(
 
 ListCatalogItemsHandlerDep = Annotated[
     ListCatalogItemsHandler, Depends(get_list_catalog_items_handler)
+]
+
+
+from src.modules.catalog.application.catalog_item.command.update_catalog_item.handler import (
+    UpdateCatalogItemHandler,
+)
+
+
+def get_update_catalog_item_handler(
+    mutations: MutationsDep,
+    clock: ClockDep,
+    locales: LocalesDep,
+    schemas: SchemasDep,
+    sanitizer: SanitizerDep,
+    currencies: CurrenciesDep,
+    definitions: DefinitionsDep,
+    references: ReferencesDep,
+    files: FilesDep,
+) -> UpdateCatalogItemHandler:
+    """Собирает единый сценарий изменения на портах общего UoW."""
+    return UpdateCatalogItemHandler(
+        mutations,
+        clock,
+        locales,
+        schemas,
+        sanitizer,
+        currencies,
+        definitions,
+        references,
+        files,
+    )
+
+
+UpdateCatalogItemHandlerDep = Annotated[
+    UpdateCatalogItemHandler, Depends(get_update_catalog_item_handler)
 ]

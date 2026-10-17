@@ -27,7 +27,7 @@ class CatalogClassificationDomainTests(unittest.TestCase):
         for parent, path in [(a, frozenset({a})), (b, frozenset({a, b}))]:
             with self.assertRaises(InvalidCatalogValueError):
                 category.move(parent, path, self.actor, self.now)
-        self.assertEqual(category.revision, 1)
+        self.assertFalse(hasattr(category, "revision"))
         with self.assertRaises(CatalogConflictError):
             category.ensure_deletable(True)
         category.move(b, frozenset({b}), self.actor, self.now)
@@ -35,14 +35,13 @@ class CatalogClassificationDomainTests(unittest.TestCase):
         category.put_translation(LocaleVO("ru"), "Категория", self.actor, self.now)
         self.assertEqual(category.translations["en"], "Root")
 
-    def test_tag_locales_and_revision(self) -> None:
+    def test_tag_locales_without_revision(self) -> None:
         """Tag имеет стабильный UUID и отдельные подписи каждой locale."""
         tag = Tag.create(TagIdVO(uuid4()), LocaleVO("en"), "Sale", self.actor, self.now)
         identifier = tag.id
         tag.put_translation(LocaleVO("ru"), "Акция", self.actor, self.now)
         self.assertEqual(tag.translations, {"en": "Sale", "ru": "Акция"})
         self.assertEqual(tag.id, identifier)
-        with self.assertRaises(CatalogConflictError):
-            tag.ensure_revision(1)
+        self.assertFalse(hasattr(tag, "revision"))
         with self.assertRaises(CatalogConflictError):
             tag.ensure_deletable(True)

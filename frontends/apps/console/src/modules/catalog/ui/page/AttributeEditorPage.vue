@@ -98,7 +98,6 @@ async function label(code: string, value: string) {
     if (a)
       await act("label", () =>
         catalogApi.putAttributeTranslation(a.id, ctx.locale.value, {
-          expected_revision: a.revision,
           label: value,
         }),
       );
@@ -140,7 +139,6 @@ function options(values: AttributeOptionDraft[]) {
   if (a)
     void act("options", () =>
       catalogApi.replaceAttributeOptions(a.id, ctx.locale.value, {
-        expected_revision: a.revision,
         options: values.map((o) => ({
           option_id: o.id,
           code: o.code,
@@ -181,7 +179,7 @@ async function remove() {
   const current = ctx.captureSession();
   pending.value = true;
   try {
-    await catalogApi.deleteAttribute(a.id, a.revision);
+    await catalogApi.deleteAttribute(a.id);
     if (!current()) return;
     dirty.value = {};
     pending.value = false;
@@ -203,7 +201,7 @@ async function remove() {
   >
     <CatalogHeader
       :title="id ? 'Enum-характеристика' : 'Новая enum-характеристика'"
-      description="Устойчивые определения и значения для осей VARIABLE."
+      description="Общие характеристики и доступные значения товаров."
     />
     <CatalogToolbar
       :locale="ctx.locale.value"

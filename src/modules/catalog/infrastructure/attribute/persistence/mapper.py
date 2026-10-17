@@ -29,7 +29,6 @@ class AttributeMapper:
                 )
                 for o in options
             ),
-            revision=row["revision"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             created_by=EntityIdVO(row["created_by"]),
@@ -41,6 +40,7 @@ class AttributeMapper:
         """Извлекает первоначальные поля без выполнения SQL."""
         return {
             "id": entity.id.uuid,
+            "revision": 1,
             "code": entity.code.value,
             "created_at": entity.created_at,
             "created_by": entity.created_by.uuid,
@@ -51,7 +51,6 @@ class AttributeMapper:
     def to_update_values(entity: AttributeDefinition) -> dict[str, Any]:
         """Извлекает изменяемое доменное состояние для хранения."""
         return {
-            "revision": entity.revision,
             "updated_at": entity.updated_at,
             "updated_by": entity.updated_by.uuid,
         }

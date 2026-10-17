@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { ref, watch, nextTick } from "vue";
 import { Button } from "@/components/ui/button";
 import type { CatalogCategory } from "../../model/catalog.types";
 const props = defineProps<{
@@ -9,6 +9,7 @@ const props = defineProps<{
   pending: boolean;
   disabled: boolean;
   reset: number;
+  validationError?: string;
 }>();
 const emit = defineEmits<{
   submit: [ids: string[], primaryId: string | null];
@@ -21,6 +22,7 @@ function mark() {
   if (!ids.value.includes(primary.value)) primary.value = "";
   dirty.value = true;
   emit("dirty", true);
+  void nextTick(() => emit("submit", ids.value, primary.value || null));
 }
 function resetFields() {
   ids.value = [...props.ids];
@@ -84,10 +86,7 @@ function path(category: CatalogCategory): string {
         required
         :disabled="pending || disabled"
         class="w-full rounded-md border bg-background p-2"
-        @change="
-          dirty = true;
-          emit('dirty', true);
-        "
+        @change="mark()"
       >
         <option value="" disabled>Выберите основную</option>
         <option
@@ -100,9 +99,7 @@ function path(category: CatalogCategory): string {
       </select></label
     >
     <div class="flex flex-wrap gap-2">
-      <Button :disabled="pending || disabled || (!!ids.length && !primary)"
-        >Сохранить категории</Button
-      ><Button
+      <Button
         type="button"
         variant="outline"
         :disabled="pending || disabled"
@@ -112,13 +109,10 @@ function path(category: CatalogCategory): string {
           mark();
         "
         >Очистить набор</Button
-      ><Button
-        type="button"
-        variant="outline"
-        :disabled="pending"
-        @click="resetFields"
-        >Отменить</Button
       >
     </div>
+    <p v-if="validationError" role="alert" class="text-sm text-destructive">
+      {{ validationError }}
+    </p>
   </form>
 </template>

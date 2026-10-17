@@ -21,7 +21,6 @@ async def delete_attribute(
     context: AuthenticatedRequestContextDep,
     handler: DeleteAttributeHandlerDep,
     attribute_id: UUID,
-    expected_revision: int = Query(ge=1),
 ) -> None:
     """Преобразует явный HTTP-контракт delete_attribute и доверенный Identity context."""
     principal = context.principal
@@ -33,7 +32,6 @@ async def delete_attribute(
                 tenant_id=EntityIdVO.from_value(principal.tenant_id),
                 actor_id=EntityIdVO.from_value(principal.user_id),
                 attribute_id=AttributeIdVO.from_value(attribute_id),
-                expected_revision=expected_revision,
             )
         )
     except CatalogNotFoundError as exc:

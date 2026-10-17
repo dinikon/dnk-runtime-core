@@ -6,7 +6,7 @@ from src.modules.catalog.domain.catalog_item.value_object.identifier import (
 
 
 class CatalogMutationLockPort(Protocol):
-    """Согласованный порядок справочного guard и независимых family locks."""
+    """Согласованный порядок справочного guard и блокировок независимых товаров."""
 
     async def acquire(self, tenant_id: EntityIdVO) -> None:
         """Получает exclusive reference guard для мутации справочников."""

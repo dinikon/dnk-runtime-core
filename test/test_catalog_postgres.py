@@ -42,7 +42,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.engine = create_async_engine(URL, poolclass=NullPool)
         self.sessions = async_sessionmaker(self.engine, expire_on_commit=False)
         self.naming = TenantSchemaNaming(dnk_config.SCHEMA_PREFIX)
-        self.tenant, self.other = EntityIdVO(uuid4()), EntityIdVO(uuid4())
+        self.tenant, self.other = (EntityIdVO(uuid4()), EntityIdVO(uuid4()))
         self.actor = EntityIdVO(uuid4())
         self.schemas = [self.naming.schema_name(t) for t in (self.tenant, self.other)]
         async with self.engine.begin() as connection:
@@ -122,8 +122,33 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, status, response.text)
         return response.json() if status != 204 and status < 500 else {}
 
+    async def patch_section(
+        self, item_id: str, section: str, body: dict | None = None, status: int = 200
+    ) -> dict:
+        """Строит PATCH из полного значения раздела для общей регрессии карточки."""
+        body = dict(body or {})
+        name, _, locale = section.partition("/")
+        if name == "content":
+            patch = {"content": body if body else None}
+        elif name == "gallery":
+            patch = body if body else {"gallery": None}
+        elif name == "price":
+            patch = (
+                {"price_specification": body["price"]}
+                if set(body) == {"price"}
+                else body
+            )
+        else:
+            patch = body
+        return await self.request(
+            "PATCH",
+            f"/items/{item_id}" + (f"?locale={locale}" if locale else ""),
+            patch,
+            200 if status == 204 else status,
+        )
+
     async def create_item(self) -> dict:
-        return await self.request("POST", "/items/simple", {}, 201)
+        return await self.request("POST", "/items", {}, 201)
 
     async def test_fixed_default_schema_localized_labels(self) -> None:
         """Default и три блока имеют фиксированные подписи, без редактора схемы."""
@@ -140,7 +165,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         )
         missing = await self.request("GET", "/product-type/default?locale=fr")
         self.assertIsNone(missing["schema"]["label"])
-        self.assertTrue(all(b["label"] is None for b in missing["schema"]["blocks"]))
+        self.assertTrue(all((b["label"] is None for b in missing["schema"]["blocks"])))
         await self.request("GET", "/product-type/default", status=422)
         await self.request("GET", "/product-type/default?locale=bad_locale", status=422)
 
@@ -165,14 +190,13 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         await self.request("GET", f"/items/{created['id']}?locale=en")
         self.assertEqual(isolation, ["repeatable read"])
 
-    async def test_content_revisions_locale_and_sanitization(self) -> None:
+    async def test_content_locale_and_sanitization(self) -> None:
         item = await self.create_item()
         ident = item["id"]
-        changed = await self.request(
-            "PUT",
-            f"/items/{ident}/content/en",
+        changed = await self.patch_section(
+            ident,
+            f"content/en",
             {
-                "expected_revision": 1,
                 "expected_schema_version": 1,
                 "values": {
                     "name": "Title",
@@ -180,19 +204,12 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
                 },
             },
         )
-        self.assertEqual(changed["revision"], 2)
         read = await self.request("GET", f"/items/{ident}?locale=en")
         self.assertEqual(read["item"]["content"]["name"], "Title")
         self.assertNotIn("<script", read["item"]["content"]["desc"])
         missing = await self.request("GET", f"/items/{ident}?locale=ru")
         self.assertIsNone(missing["item"]["content"])
-        await self.request(
-            "PUT",
-            f"/items/{ident}/status",
-            {"expected_revision": 1, "status": "active"},
-            409,
-        )
-        # A parallel tenant cannot resolve the item identity.
+        await self.patch_section(ident, f"status", {"status": "active"}, 200)
         self.app.state.test_context = replace(
             self.context,
             principal=replace(self.context.principal, tenant_id=str(self.other)),
@@ -204,7 +221,6 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         created = await self.create_item()
         ident = created["id"]
         body = {
-            "expected_revision": 1,
             "weight": {"value": "0.000000001", "unit": "kg"},
             "dimensions": {
                 "length": {"value": "12.5", "unit": "cm"},
@@ -212,7 +228,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
                 "height": None,
             },
         }
-        await self.request("PUT", f"/items/{ident}/measurements", body)
+        await self.patch_section(ident, f"measurements", body)
         item = (await self.request("GET", f"/items/{ident}?locale=en"))["item"]
         self.assertEqual(item["weight"]["unit"], "kg")
         self.assertEqual(item["dimensions"]["length"], {"value": "12.5", "unit": "cm"})
@@ -225,20 +241,13 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             {"value": "0.0000000001", "unit": "kg"},
             {"mode": "set", "value": "1"},
         ]:
-            await self.request(
-                "PUT",
-                f"/items/{ident}/measurements",
-                {**body, "expected_revision": 2, "weight": weight},
-                422,
+            await self.patch_section(
+                ident, f"measurements", {**body, "weight": weight}, 422
             )
-        await self.request(
-            "PUT",
-            f"/items/{ident}/measurements",
-            {
-                "expected_revision": 2,
-                "weight": None,
-                "dimensions": {"length": None},
-            },
+        await self.patch_section(
+            ident,
+            f"measurements",
+            {"weight": None, "dimensions": {"length": None}},
             422,
         )
         for section, payload in [
@@ -258,45 +267,36 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
                 },
             ),
         ]:
-            await self.request(
-                "PUT",
-                f"/items/{ident}/{section}",
-                {"expected_revision": 2, **payload},
-                422,
-            )
-        await self.request(
-            "PUT",
-            f"/items/{ident}/stock",
+            await self.patch_section(ident, f"{section}", {**payload}, 422)
+        await self.patch_section(
+            ident,
+            f"stock",
             {
-                "expected_revision": 2,
                 "stock": {
                     "manage_stock": True,
                     "stock_quantity": -2,
                     "stock_status": None,
                     "backorders": "yes",
-                },
+                }
             },
         )
-        await self.request(
-            "PUT",
-            f"/items/{ident}/stock",
+        await self.patch_section(
+            ident,
+            f"stock",
             {
-                "expected_revision": 3,
                 "stock": {
                     "manage_stock": False,
                     "stock_quantity": None,
                     "stock_status": "on_backorder",
                     "backorders": "no",
-                },
+                }
             },
         )
         read = (await self.request("GET", f"/items/{ident}?locale=en"))["item"]
         self.assertEqual(read["stock_status"], "on_backorder")
         self.assertIsNone(read["stock"]["stock_quantity"])
-        await self.request(
-            "PUT",
-            f"/items/{ident}/measurements",
-            {"expected_revision": 4, "weight": None, "dimensions": None},
+        await self.patch_section(
+            ident, f"measurements", {"weight": None, "dimensions": None}
         )
         read = (await self.request("GET", f"/items/{ident}?locale=en"))["item"]
         self.assertIsNone(read["weight"])
@@ -311,40 +311,19 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             {"locale": "en", "label": "Category", "parent_id": None},
             201,
         )
-        await self.request(
-            "PUT",
-            f"/items/{ident}/categories",
-            {
-                "expected_revision": 1,
-                "category_ids": [category["id"]],
-                "primary_category_id": category["id"],
-            },
+        await self.patch_section(
+            ident,
+            f"categories",
+            {"category_ids": [category["id"]], "primary_category_id": category["id"]},
         )
-        await self.request(
-            "DELETE", f"/categories/{category['id']}?expected_revision=1", status=409
+        await self.request("DELETE", f"/categories/{category['id']}", status=409)
+        await self.patch_section(
+            ident, f"gallery/en", {"gallery": {"images": [], "primary_image_id": None}}
         )
-        await self.request(
-            "PUT",
-            f"/items/{ident}/gallery/en",
-            {
-                "expected_revision": 2,
-                "gallery": {"images": [], "primary_image_id": None},
-            },
-        )
-        await self.request(
-            "PUT",
-            f"/items/{ident}/sku",
-            {"expected_revision": 3, "sku": " SKU-1 "},
-        )
+        await self.patch_section(ident, f"sku", {"sku": " SKU-1 "})
         another = await self.create_item()
-        await self.request(
-            "PUT",
-            f"/items/{another['id']}/sku",
-            {"expected_revision": 1, "sku": "SKU-1"},
-            409,
-        )
+        await self.patch_section(another["id"], f"sku", {"sku": "SKU-1"}, 409)
         read = await self.request("GET", f"/items/{another['id']}?locale=en")
-        self.assertEqual(read["item"]["revision"], 1)
         listed = await self.request(
             "GET", f"/items?locale=en&category_id={category['id']}"
         )
@@ -355,16 +334,16 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         ident = created["id"]
 
         async def change(status: str) -> int:
-            response = await self.client.put(
-                self.base + f"/items/{ident}/status",
+            response = await self.client.patch(
+                self.base + f"/items/{ident}",
                 headers=self.headers,
-                json={"expected_revision": 1, "status": status},
+                json={"status": status},
             )
             return response.status_code
 
         statuses = await asyncio.gather(change("active"), change("archived"))
-        self.assertEqual(sorted(statuses), [200, 409])
-        denied = await self.client.post(self.base + "/items/simple", json={})
+        self.assertEqual(sorted(statuses), [200, 200])
+        denied = await self.client.post(self.base + "/items", json={})
         self.assertEqual(denied.status_code, 403)
 
     async def test_fresh_baseline_downgrade_upgrade_and_drift(self) -> None:
@@ -419,14 +398,10 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
 
         created = await self.create_item()
         ident = created["id"]
-        await self.request(
-            "PUT",
-            f"/items/{ident}/content/en",
-            {
-                "expected_revision": 1,
-                "expected_schema_version": 1,
-                "values": {"name": "Kept"},
-            },
+        await self.patch_section(
+            ident,
+            f"content/en",
+            {"expected_schema_version": 1, "values": {"name": "Kept"}},
         )
         async with self.engine.begin() as connection:
             await connection.execute(
@@ -434,14 +409,10 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
         result = await self.request("GET", f"/items/{ident}?locale=en")
         self.assertEqual(result["item"]["content"]["name"], "Kept")
-        await self.request(
-            "PUT",
-            f"/items/{ident}/content/en",
-            {
-                "expected_revision": 2,
-                "expected_schema_version": 1,
-                "values": {"name": "Denied"},
-            },
+        await self.patch_section(
+            ident,
+            f"content/en",
+            {"expected_schema_version": 1, "values": {"name": "Denied"}},
             422,
         )
         schema = self.schemas[0]
@@ -507,11 +478,13 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         from src.modules.catalog.domain.error import CatalogNotFoundError
 
         class Stream:
+
             def __init__(self, data: bytes) -> None:
                 self.data = data
                 self.closed = False
 
             def __aiter__(self) -> AsyncIterator[bytes]:
+
                 async def chunks() -> AsyncIterator[bytes]:
                     yield self.data
 
@@ -521,6 +494,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
                 self.closed = True
 
         class Files:
+
             def __init__(self) -> None:
                 self.data: dict[UUID, bytes] = {}
                 self.streams: list[Stream] = []
@@ -542,7 +516,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             async def ensure_images(
                 self, tenant_id: UUID, file_ids: tuple[UUID, ...]
             ) -> None:
-                if any(i not in self.data for i in file_ids):
+                if any((i not in self.data for i in file_ids)):
                     raise CatalogNotFoundError("Missing image")
 
             async def content(
@@ -569,30 +543,26 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
                 self.base + f"/items/{ident}/images/en/upload",
                 headers=self.headers,
                 files={"image": ("image.png", data, "image/png")},
-                data={"expected_revision": str(revision), "main": "false"},
+                data={"main": "false"},
             )
             self.assertEqual(uploaded.status_code, 201, uploaded.text)
-            self.assertEqual(uploaded.json()["revision"], revision + 1)
             images.append(uploaded.json()["image_id"])
         read = await self.request("GET", f"/items/{ident}?locale=en")
         gallery = read["item"]["gallery"]
         self.assertEqual(gallery["primary_image_id"], images[0])
+        gallery = (await self.request("GET", f"/items/{ident}?locale=en"))["item"][
+            "gallery"
+        ]
+        gallery["primary_image_id"] = images[1]
         primary = await self.request(
-            "PUT",
-            f"/items/{ident}/gallery/en/primary",
-            {"expected_revision": 3, "image_id": images[1]},
+            "PATCH", f"/items/{ident}?locale=en", {"gallery": gallery}
         )
-        self.assertEqual(primary, {"id": ident, "revision": 4})
-
+        self.assertEqual(primary, {"id": ident})
         gallery["images"] = list(reversed(gallery["images"]))
         for position, image in enumerate(gallery["images"]):
             image["position"] = position
         gallery["primary_image_id"] = images[1]
-        await self.request(
-            "PUT",
-            f"/items/{ident}/gallery/en",
-            {"expected_revision": 4, "gallery": gallery},
-        )
+        await self.patch_section(ident, f"gallery/en", {"gallery": gallery})
         image = await self.client.get(
             self.base + f"/items/{ident}/images/en/{images[1]}/content"
         )
@@ -603,7 +573,6 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             "GET", f"/items/{ident}/images/en/{uuid4()}/content", status=404
         )
 
-        # UoW failure before streaming still closes the opened Files resource.
         async def fail_commit(uow: UnitOfWork) -> None:
             raise RuntimeError("Test commit failure")
 
@@ -617,23 +586,17 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             self.base + f"/items/{ident}/images/en/upload",
             headers=self.headers,
             files={"image": ("image.png", data, "image/png")},
-            data={"expected_revision": "5", "alt": "x" * 1001},
+            data={"alt": "x" * 1001},
         )
         self.assertEqual(rejected.status_code, 422)
         self.assertEqual(len(files.data), 2)
-        # Removing a reference retains the Files object.
-        await self.request(
-            "PUT",
-            f"/items/{ident}/gallery/en",
-            {
-                "expected_revision": 5,
-                "gallery": {"images": [], "primary_image_id": None},
-            },
+        await self.patch_section(
+            ident, f"gallery/en", {"gallery": {"images": [], "primary_image_id": None}}
         )
         self.assertEqual(len(files.data), 2)
 
     async def test_simple_sections_snapshot_and_removal(self) -> None:
-        """Все сохранённые разделы используют одну ревизию, полные наборы и простой snapshot."""
+        """Все разделы используют единый PATCH, полные наборы и простой snapshot."""
         from datetime import UTC, datetime
         from uuid import UUID
         from src.modules.catalog.application.catalog_item.query.get_catalog_items_publication_snapshot.query import (
@@ -648,8 +611,8 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         from src.modules.catalog.domain.error import CatalogConflictError
 
         created = await self.create_item()
-        self.assertEqual(set(created), {"id", "revision"})
-        ident, revision = created["id"], created["revision"]
+        self.assertEqual(set(created), {"id"})
+        ident = created["id"]
         attribute = await self.request(
             "POST",
             "/attributes",
@@ -716,13 +679,8 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             ("gallery/en", {"gallery": {"images": [], "primary_image_id": None}}),
         ]
         for section, body in sections:
-            result = await self.request(
-                "PUT",
-                f"/items/{ident}/{section}",
-                {"expected_revision": revision, **body},
-            )
-            revision += 1
-            self.assertEqual(result, {"id": ident, "revision": revision})
+            result = await self.patch_section(ident, f"{section}", {**body})
+            self.assertEqual(result, {"id": ident})
         item = (await self.request("GET", f"/items/{ident}?locale=en"))["item"]
         self.assertEqual(item["price"], "0")
         self.assertTrue(item["available_for_sale"])
@@ -755,19 +713,10 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             async with async_sessionmaker(connection)() as session:
                 repository = SqlAlchemyCatalogItemQueryRepository(session)
                 query = GetCatalogItemsPublicationSnapshotQuery(
-                    self.tenant,
-                    (CatalogItemIdVO(UUID(ident)),),
-                    "en",
-                    expected_revisions={UUID(ident): revision},
+                    self.tenant, (CatalogItemIdVO(UUID(ident)),), "en"
                 )
                 snapshot = await repository.snapshot(query, datetime.now(UTC))
-                self.assertEqual(snapshot.items[0].revision, revision)
                 self.assertEqual(snapshot.items[0].content, item["content"])
-                with self.assertRaises(CatalogConflictError):
-                    await repository.snapshot(
-                        replace(query, expected_revisions={UUID(ident): 1}),
-                        datetime.now(UTC),
-                    )
         async with self.engine.begin() as connection:
             await connection.execute(
                 text(
@@ -782,27 +731,15 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             ("tags", {"tag_ids": []}),
             ("metadata", {"metadata": []}),
         ]:
-            await self.request(
-                "PUT",
-                f"/items/{ident}/{section}",
-                {"expected_revision": revision, **body},
-            )
-            revision += 1
+            await self.patch_section(ident, f"{section}", {**body})
         for section in ("content/en", "gallery/en"):
-            await self.request(
-                "DELETE",
-                f"/items/{ident}/{section}?expected_revision={revision}",
-                status=204,
-            )
-            revision += 1
+            await self.patch_section(ident, f"{section}", status=204)
         item = (await self.request("GET", f"/items/{ident}?locale=en"))["item"]
         self.assertIsNone(item["content"])
         self.assertIsNone(item["gallery"])
         self.assertEqual(item["attributes"], [])
         self.assertEqual(item["metadata"], [])
-        await self.request(
-            "DELETE", f"/items/{ident}?expected_revision={revision}", status=204
-        )
+        await self.request("DELETE", f"/items/{ident}", status=204)
         await self.request("GET", f"/items/{ident}?locale=en", status=404)
 
     async def test_sql_variable_storage_is_preserved_and_inaccessible(self) -> None:
@@ -860,10 +797,10 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             "GET", f"/attributes/{attribute['id']}?locale=en"
         )
         attribute_id = UUID(attribute["id"])
-        options = tuple(UUID(o["id"]) for o in definition["options"])
-        parent_id, first_id, second_id = uuid4(), uuid4(), uuid4()
+        options = tuple((UUID(o["id"]) for o in definition["options"]))
+        parent_id, first_id, second_id = (uuid4(), uuid4(), uuid4())
         template = CatalogItemMapper.to_insert_values(
-            CatalogItem.create_simple(
+            CatalogItem.create(
                 CatalogItemIdVO(parent_id), self.actor, datetime.now(UTC)
             )
         )
@@ -935,15 +872,8 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
         for identifier in (parent_id, first_id):
             await self.request("GET", f"/items/{identifier}?locale=en", status=404)
-            await self.request(
-                "PUT",
-                f"/items/{identifier}/status",
-                {"expected_revision": 1, "status": "active"},
-                404,
-            )
-            await self.request(
-                "DELETE", f"/items/{identifier}?expected_revision=1", status=404
-            )
+            await self.patch_section(identifier, f"status", {"status": "active"}, 404)
+            await self.request("DELETE", f"/items/{identifier}", status=404)
             await self.request(
                 "GET", f"/items/{identifier}/images/en/{uuid4()}/content", status=404
             )
@@ -979,7 +909,6 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
                     ),
                     2,
                 )
-        # Deferred FK enforces the parent's role and membership of selected options.
         for statement, params in [
             (
                 f'UPDATE "{self.schemas[0]}".catalog_item SET parent_id=:parent WHERE id=:child',
@@ -1000,7 +929,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         paths = schema["paths"]
         self.assertNotIn(self.base + "/items/variable", paths)
         self.assertFalse(
-            any(path.endswith(("/variants", "/structure", "/kind")) for path in paths)
+            any((path.endswith(("/variants", "/structure", "/kind")) for path in paths))
         )
         parameters = paths[self.base + "/items"]["get"].get("parameters", [])
         self.assertFalse(
@@ -1023,7 +952,6 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             (
                 "content/en",
                 {
-                    "expected_revision": 1,
                     "expected_schema_version": 1,
                     "values": {"name": {"mode": "set", "value": "Name"}},
                 },
@@ -1031,7 +959,6 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             (
                 "attributes",
                 {
-                    "expected_revision": 1,
                     "attributes": [
                         {
                             "attribute_id": str(uuid4()),
@@ -1039,13 +966,12 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
                             "position": 0,
                             "mode": "clear",
                         }
-                    ],
+                    ]
                 },
             ),
             (
                 "metadata",
                 {
-                    "expected_revision": 1,
                     "metadata": [
                         {
                             "key": "a",
@@ -1054,11 +980,11 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
                             "position": 0,
                             "mode": "set",
                         }
-                    ],
+                    ]
                 },
             ),
         ]:
-            await self.request("PUT", f"/items/{ident}/{section}", payload, 422)
+            await self.patch_section(ident, f"{section}", payload, 422)
 
     async def test_legacy_clear_only_metadata_is_deleted_on_save(self) -> None:
         """Пустой новый набор удаляет старую clear-запись даже без собственных значений."""
@@ -1075,9 +1001,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
         item = (await self.request("GET", f"/items/{ident}?locale=en"))["item"]
         self.assertEqual(item["metadata"], [])
-        await self.request(
-            "PUT", f"/items/{ident}/metadata", {"expected_revision": 1, "metadata": []}
-        )
+        await self.patch_section(ident, f"metadata", {"metadata": []})
         async with self.engine.connect() as connection:
             count = await connection.scalar(
                 text(
@@ -1086,3 +1010,147 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
                 {"id": UUID(ident)},
             )
         self.assertEqual(count, 0)
+
+    async def test_atomic_patch_fields_and_passive_sql_revision(self) -> None:
+        """PATCH откатывает весь кандидат, различает null и пропуск, SQL revision пассивен."""
+        from uuid import UUID
+
+        item = await self.create_item()
+        ident = item["id"]
+        self.assertEqual(set(item), {"id"})
+        await self.request("PATCH", f"/items/{ident}", {}, 422)
+        await self.request(
+            "PATCH", f"/items/{ident}", {"expected_revision": 1, "sku": "old"}, 422
+        )
+        for field in (
+            "status",
+            "virtual",
+            "stock",
+            "attributes",
+            "metadata",
+            "category_ids",
+            "tag_ids",
+        ):
+            await self.request("PATCH", f"/items/{ident}", {field: None}, 422)
+        failed = await self.client.patch(
+            self.base + f"/items/{ident}?locale=en",
+            headers=self.headers,
+            json={
+                "sku": "candidate",
+                "virtual": True,
+                "content": {"expected_schema_version": 1, "values": {"name": ""}},
+            },
+        )
+        self.assertEqual(failed.status_code, 422)
+        self.assertEqual(failed.json()["detail"]["errors"][0]["field"], "content")
+        before = (await self.request("GET", f"/items/{ident}?locale=en"))["item"]
+        self.assertIsNone(before["sku"])
+        self.assertFalse(before["virtual"])
+        await self.request("PATCH", f"/items/{ident}", {"content": None}, 422)
+        await self.request(
+            "PATCH",
+            f"/items/{ident}?locale=en",
+            {
+                "sku": "atomic",
+                "virtual": True,
+                "price_specification": {"regular_price": "0", "currency": "UAH"},
+                "content": {
+                    "expected_schema_version": 1,
+                    "values": {"name": "Saved", "desc": ""},
+                },
+            },
+        )
+        saved = (await self.request("GET", f"/items/{ident}?locale=en"))["item"]
+        self.assertNotIn("revision", saved)
+        await self.request(
+            "PATCH", f"/items/{ident}", {"sku": "atomic", "virtual": True}
+        )
+        noop = (await self.request("GET", f"/items/{ident}?locale=en"))["item"]
+        self.assertEqual(noop["updated_at"], saved["updated_at"])
+        async with self.engine.begin() as connection:
+            await connection.execute(
+                text(
+                    f'UPDATE "{self.schemas[0]}".catalog_item SET revision=17 WHERE id=:id'
+                ),
+                {"id": UUID(ident)},
+            )
+        await self.request("PATCH", f"/items/{ident}", {"sku": None})
+        cleared = (await self.request("GET", f"/items/{ident}?locale=en"))["item"]
+        self.assertIsNone(cleared["sku"])
+        self.assertEqual(cleared["content"], saved["content"])
+        async with self.engine.connect() as connection:
+            revision = await connection.scalar(
+                text(
+                    f'SELECT revision FROM "{self.schemas[0]}".catalog_item WHERE id=:id'
+                ),
+                {"id": UUID(ident)},
+            )
+        self.assertEqual(revision, 17)
+        await self.request(
+            "PATCH", f"/items/{ident}?locale=en", {"content": None, "gallery": None}
+        )
+        await self.request("DELETE", f"/items/{ident}", status=204)
+
+    async def test_parallel_patch_preserves_distinct_fields_and_sku_error_path(
+        self,
+    ) -> None:
+        """Записи разных полей объединяются, занятый SKU возвращает привязанную ошибку."""
+        item = await self.create_item()
+        url = self.base + f'/items/{item["id"]}'
+        responses = await asyncio.gather(
+            self.client.patch(url, headers=self.headers, json={"sku": "parallel"}),
+            self.client.patch(url, headers=self.headers, json={"virtual": True}),
+        )
+        self.assertEqual([r.status_code for r in responses], [200, 200])
+        read = (await self.request("GET", f'/items/{item["id"]}?locale=en'))["item"]
+        self.assertEqual(read["sku"], "parallel")
+        self.assertTrue(read["virtual"])
+        other = await self.create_item()
+        failed = await self.client.patch(
+            self.base + f'/items/{other["id"]}',
+            headers=self.headers,
+            json={"sku": "parallel", "virtual": True},
+        )
+        self.assertEqual(failed.status_code, 409)
+        self.assertEqual(failed.json()["detail"]["errors"][0]["field"], "sku")
+        other_read = (await self.request("GET", f'/items/{other["id"]}?locale=en'))[
+            "item"
+        ]
+        self.assertFalse(other_read["virtual"])
+
+    async def test_removed_section_routes_and_dictionary_revision_contracts(
+        self,
+    ) -> None:
+        """OpenAPI не содержит старых записей и ревизий, справочники работают без них."""
+        paths = self.app.openapi()["paths"]
+        self.assertNotIn(self.base + "/items/simple", paths)
+        for suffix in (
+            "sku",
+            "status",
+            "virtual",
+            "price",
+            "stock",
+            "measurements",
+            "attributes",
+            "categories",
+            "tags",
+            "metadata",
+            "content/{locale}",
+            "gallery/{locale}",
+        ):
+            self.assertNotIn(self.base + "/items/{item_id}/" + suffix, paths)
+        for schema in self.app.openapi()["components"]["schemas"].values():
+            self.assertFalse(
+                {"revision", "expected_revision"} & schema.get("properties", {}).keys()
+            )
+        tag = await self.request(
+            "POST", "/tags", {"locale": "en", "label": "Before"}, 201
+        )
+        self.assertEqual(set(tag), {"id"})
+        changed = await self.request(
+            "PUT", f'/tags/{tag["id"]}/translations/en', {"label": "After"}
+        )
+        self.assertEqual(set(changed), {"id"})
+        read = await self.request("GET", f'/tags/{tag["id"]}?locale=en')
+        self.assertEqual(read["label"], "After")
+        self.assertNotIn("revision", read)

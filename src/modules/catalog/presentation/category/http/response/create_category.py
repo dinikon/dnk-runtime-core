@@ -6,4 +6,3 @@ class CreateCategoryResponse(BaseModel):
     """Подтверждённый результат конкретного сценария create_category."""
 
     id: UUID
-    revision: int

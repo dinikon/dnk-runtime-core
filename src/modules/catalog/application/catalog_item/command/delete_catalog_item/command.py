@@ -7,9 +7,8 @@ from src.modules.catalog.domain.catalog_item.value_object.identifier import (
 
 @dataclass(frozen=True, slots=True)
 class DeleteCatalogItemCommand:
-    """Удаление корня с проверкой его ревизии."""
+    """Явное удаление самостоятельного товара."""
 
     tenant_id: EntityIdVO
     actor_id: EntityIdVO
     item_id: CatalogItemIdVO
-    expected_revision: int

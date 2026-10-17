@@ -21,6 +21,6 @@ class GetAttributeDetailsDTO:
     code: str
     value_type: str
     label: str | None
-    revision: int
+
     locales: tuple[str, ...]
     options: tuple[AttributeOptionDetailsDTO, ...]

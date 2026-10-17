@@ -50,4 +50,4 @@ class CreateCategoryHandler:
             self._clock.now(),
         )
         await self._repository.add(entity)
-        return CreateCategoryResultDTO(entity.id.uuid, entity.revision)
+        return CreateCategoryResultDTO(entity.id.uuid)

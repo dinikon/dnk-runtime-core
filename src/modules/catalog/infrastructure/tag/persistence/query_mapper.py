@@ -13,10 +13,10 @@ class TagQueryMapper:
     ) -> GetTagDetailsDTO:
         """Создаёт детали выбранной locale без fallback."""
         return GetTagDetailsDTO(
-            row["id"], translations.get(locale), row["revision"], tuple(translations)
+            row["id"], translations.get(locale), tuple(translations)
         )
 
     @staticmethod
     def to_list_item(row: Mapping[str, Any]) -> TagListItemDTO:
         """Создаёт строку конкретного списка справочника."""
-        return TagListItemDTO(row["id"], row["label"], row["revision"])
+        return TagListItemDTO(row["id"], row["label"])

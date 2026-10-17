@@ -7,4 +7,3 @@ class CreateAttributeResultDTO:
     """Подтверждённый результат конкретного сценария create_attribute."""
 
     id: UUID
-    revision: int

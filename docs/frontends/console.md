@@ -248,25 +248,40 @@ gallery, measurements, enum characteristics, classification, current price and
 availability. The editor has general, inventory, shipping, attributes and additional
 sections, plus localized texts, status, gallery, categories and tags.
 
-`use-product-page` owns queries, serialized item writes and one revision.
-Transport DTOs and form models are separate. `expected_revision` is sent on every
-mutation; results contain id/revision. Direct item fields replace own/effective
-and family projections. The price specification is separate from current price;
-stock settings are separate from computed status. Query keys include tenant,
-item, locale and query parameters. There are no inherited values or shared stock.
+`use-product-page` owns queries and the shared product draft. `ProductAutosave`
+serializes PATCH writes after an 800 ms debounce. Only changed, valid sections are
+sent; acknowledgement clears the submitted snapshot, never newer input. Refetches
+update clean sections and retain unsaved edits. Catalog DTOs and form models have
+no revisions. The other Catalog editors keep their explicit save buttons.
 
-Forms preserve unsaved values across tabs; only the saved section resets.
-A 409 retains input and blocks further writes until explicit reload with discard
-confirmation. Leaving the editor or changing locale/product prompts for unsaved
-changes. Tenant/session changes clear catalog cache and drafts.
+The editor has no section save/cancel buttons. One aria-live indicator reports
+pending changes, saving, saved, field errors, or a paused queue. Invalid sections
+remain editable while valid sections save. A server field error rolls back that
+PATCH; the queue excludes the invalid section and resubmits the rest. Network/5xx
+errors retain input and pause until the single Retry action is used. A 409 represents
+a business conflict such as duplicate SKU, with a field error where available.
 
-Texts save a full name/desc/short_desc dictionary with schema version. Name is
-required. Optional descriptions can be omitted or contain an explicit empty string.
-Tiptap edits HTML, the backend sanitizes it and DOMPurify additionally cleans the
-overview. Characteristics and metadata are full sets without override modes.
-Removing an entry deletes it. Decimal strings and units retain exact quantities
-when changing units. Gallery upload is immediate and blocked while local changes
-to its order or captions remain unsaved. Removing image links retains Files objects.
+Navigation and locale changes flush the queue, then ask before discarding remaining
+invalid or failed edits. Tabs retain the draft. Tenant/session changes clear drafts
+and timers and ignore responses from the previous context. Closing a dirty or busy
+tab triggers the browser's standard warning. Reload explicitly discards drafts.
+
+Texts replace the full name/desc/short_desc dictionary with schema version. Name is
+required; omitted optional blocks are deleted, explicit empty strings are retained.
+Tiptap edits HTML, the backend sanitizes it and DOMPurify cleans the overview.
+Characteristics/metadata are full sets; false/zero values and precise Decimal strings
+are preserved. Units convert exact quantities. Gallery changes save automatically;
+upload waits for them and uses the same write queue. Gallery controls pause during
+upload; other fields remain editable. An ambiguous upload is not automatically
+retried. Removing links retains Files objects.
+
+`POST /items` creates a draft, `PATCH /items/{id}` edits it; old section endpoints
+and `/items/simple` are absent. Omitted PATCH fields stay unchanged; nullable values
+can be cleared explicitly. Concurrent edits to the same field or set use the last
+successful write. Query keys retain tenant/item/locale/filter isolation.
+
+Run `test:catalog` with Node 24 to check the autosave queue using the built-in test
+runner; browser regression covers the rendered editor and real HTTP persistence.
 
 Backend and Console must be released together because API contracts changed.
 SQL models/migrations remain unchanged and future variable-product behavior is

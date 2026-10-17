@@ -10,6 +10,6 @@ class PutAttributeTranslationCommand:
     tenant_id: EntityIdVO
     actor_id: EntityIdVO
     attribute_id: AttributeIdVO
-    expected_revision: int
+
     locale: str
     label: str

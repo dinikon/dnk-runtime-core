@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
-import { Button } from "@/components/ui/button";
+import { ref, watch, nextTick } from "vue";
 import type { CatalogTag } from "../../model/catalog.types";
 const props = defineProps<{
   ids: string[];
@@ -8,6 +7,7 @@ const props = defineProps<{
   pending: boolean;
   disabled: boolean;
   reset: number;
+  validationError?: string;
 }>();
 const emit = defineEmits<{
   submit: [ids: string[]];
@@ -42,19 +42,13 @@ watch(
           @change="
             dirty = true;
             emit('dirty', true);
+            nextTick(() => emit('submit', ids));
           "
         />{{ t.label ?? t.id }}</label
       >
     </fieldset>
-    <div class="flex flex-wrap gap-2">
-      <Button :disabled="pending || disabled">Сохранить метки</Button
-      ><Button
-        type="button"
-        variant="outline"
-        :disabled="pending"
-        @click="resetFields"
-        >Отменить</Button
-      >
-    </div>
+    <p v-if="validationError" role="alert" class="text-sm text-destructive">
+      {{ validationError }}
+    </p>
   </form>
 </template>

@@ -7,7 +7,6 @@ class TagListItemResponse(BaseModel):
 
     id: UUID
     label: str | None
-    revision: int
 
 
 class ListTagsResponse(BaseModel):

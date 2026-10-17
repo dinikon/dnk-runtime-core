@@ -40,9 +40,7 @@ class UploadCatalogItemImageHandler:
         self, command: UploadCatalogItemImageCommand
     ) -> UploadCatalogItemImageResultDTO:
         """Проверяет галерею до внешней загрузки и сохраняет новое назначение."""
-        item = await self._mutations.load(
-            command.tenant_id, command.item_id, command.expected_revision
-        )
+        item = await self._mutations.load(command.tenant_id, command.item_id)
         await self._locales.ensure_active(command.locale)
         identifier = self._uuid.new()
         now = self._clock.now()
@@ -82,5 +80,5 @@ class UploadCatalogItemImageHandler:
         )
         await self._mutations.save(item)
         return UploadCatalogItemImageResultDTO(
-            item.id.uuid, item.revision, identifier, uploaded.file_id
+            item.id.uuid, identifier, uploaded.file_id
         )

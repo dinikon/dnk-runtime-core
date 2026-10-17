@@ -208,7 +208,6 @@ class CatalogItemMapper:
                     (TagIdVO(r["tag_id"]) for r in rows("catalog_item_tags")), key=str
                 )
             ),
-            revision=row["revision"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             created_by=EntityIdVO(row["created_by"]),
@@ -228,7 +227,6 @@ class CatalogItemMapper:
             weight=value.weight,
             dimensions=value.dimensions,
             stock=value.stock,
-            revision=value.revision,
             created_at=value.created_at,
             updated_at=value.updated_at,
             created_by=EntityIdVO.from_value(value.created_by),
@@ -251,11 +249,11 @@ class CatalogItemMapper:
         return dict(
             id=item.id.uuid,
             kind="simple",
+            revision=1,
             parent_id=None,
             product_type_id=item.product_type_id.uuid if item.product_type_id else None,
             status=item.status.value,
             sku=item.sku.value if item.sku else None,
-            revision=item.revision,
             created_at=item.created_at,
             updated_at=item.updated_at,
             created_by=item.created_by.uuid,

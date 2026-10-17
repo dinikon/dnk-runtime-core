@@ -121,11 +121,9 @@ async function saveLabel(label: string) {
     await act("label", () =>
       props.category
         ? catalogApi.putCategoryContent(d.id, ctx.locale.value, {
-            expected_revision: d.revision,
             label,
           })
         : catalogApi.putTagTranslation(d.id, ctx.locale.value, {
-            expected_revision: d.revision,
             label,
           }),
     );
@@ -166,7 +164,6 @@ function move(parent: string | null) {
   if (d)
     void act("parent", () =>
       catalogApi.moveCategory(d.id, {
-        expected_revision: d.revision,
         parent_id: parent,
       }),
     );
@@ -204,8 +201,8 @@ async function remove() {
   pending.value = true;
   error.value = "";
   try {
-    if (props.category) await catalogApi.deleteCategory(d.id, d.revision);
-    else await catalogApi.deleteTag(d.id, d.revision);
+    if (props.category) await catalogApi.deleteCategory(d.id);
+    else await catalogApi.deleteTag(d.id);
     if (!current()) return;
     await cache.invalidateQueries({
       queryKey: ["catalog", ctx.tenantId.value],
@@ -241,7 +238,7 @@ async function remove() {
       "
       :description="
         details.data.value
-          ? `Ревизия ${details.data.value.revision}`
+          ? 'Редактирование'
           : 'Независимые локализованные подписи'
       "
     />

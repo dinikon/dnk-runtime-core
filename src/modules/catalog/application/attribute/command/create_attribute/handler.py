@@ -62,4 +62,4 @@ class CreateAttributeHandler:
             self._clock.now(),
         )
         await self._repository.add(entity)
-        return CreateAttributeResultDTO(entity.id.uuid, entity.revision)
+        return CreateAttributeResultDTO(entity.id.uuid)

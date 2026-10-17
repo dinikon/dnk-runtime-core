@@ -15,5 +15,5 @@ class ReplaceAttributeOptionsRequest(BaseModel):
     """Отдельное тело HTTP-сценария replace_attribute_options."""
 
     model_config = ConfigDict(extra="forbid")
-    expected_revision: int = Field(ge=1)
+
     options: tuple[ReplaceAttributeOptionsOptionRequest, ...]

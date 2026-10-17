@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { ref, watch, nextTick } from "vue";
 import { Button } from "@/components/ui/button";
 import { clone } from "../../model/clone";
 import type { ProductGallery } from "../../model/product.types";
@@ -7,6 +7,7 @@ const props = defineProps<{
   value: ProductGallery | null;
   pending: boolean;
   reset: number;
+  validationError?: string;
   imageUrl: (id: string) => string;
 }>();
 const emit = defineEmits<{
@@ -19,6 +20,15 @@ const gallery = ref<ProductGallery>({ images: [], primary_image_id: null }),
 function mark() {
   dirty.value = true;
   emit("dirty", true);
+  void nextTick(() =>
+    emit("save", {
+      ...gallery.value,
+      images: gallery.value.images.map((image, position) => ({
+        ...image,
+        position,
+      })),
+    }),
+  );
 }
 function resetFields() {
   gallery.value = clone(props.value ?? { images: [], primary_image_id: null });
@@ -118,18 +128,13 @@ function upload(event: Event) {
           >Загрузить изображение<input
             type="file"
             accept="image/png,image/jpeg,image/webp"
-            :disabled="dirty"
             class="block mt-2 w-full min-w-0"
             @change="upload"
         /></label>
-        <p v-if="dirty" class="text-sm">Сохраните порядок перед загрузкой.</p>
-        <div class="flex flex-wrap gap-2">
-          <Button type="submit">Сохранить галерею</Button
-          ><Button type="button" variant="outline" @click="resetFields"
-            >Отмена</Button
-          >
-        </div>
       </fieldset>
+      <p v-if="validationError" role="alert" class="text-sm text-destructive">
+        {{ validationError }}
+      </p>
     </form>
   </div>
 </template>

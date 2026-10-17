@@ -212,7 +212,7 @@ class ListItemResponse(BaseModel):
     """Краткие поля списка товаров без собственного контента и внутренних связей."""
 
     id: UUID
-    revision: int
+
     status: Literal["draft", "active", "archived"]
     sku: str | None
     title: str | None

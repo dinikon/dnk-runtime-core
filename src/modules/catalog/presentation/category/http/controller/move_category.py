@@ -42,7 +42,6 @@ async def move_category(
                 tenant_id=EntityIdVO.from_value(principal.tenant_id),
                 actor_id=EntityIdVO.from_value(principal.user_id),
                 category_id=CategoryIdVO.from_value(category_id),
-                expected_revision=payload.expected_revision,
                 parent_id=(
                     None
                     if payload.parent_id is None

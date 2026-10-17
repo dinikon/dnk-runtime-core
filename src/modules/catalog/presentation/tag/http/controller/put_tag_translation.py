@@ -43,7 +43,6 @@ async def put_tag_translation(
                 tenant_id=EntityIdVO.from_value(principal.tenant_id),
                 actor_id=EntityIdVO.from_value(principal.user_id),
                 tag_id=TagIdVO.from_value(tag_id),
-                expected_revision=payload.expected_revision,
                 locale=locale,
                 label=payload.label,
             )

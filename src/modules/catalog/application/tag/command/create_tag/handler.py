@@ -45,4 +45,4 @@ class CreateTagHandler:
             self._clock.now(),
         )
         await self._repository.add(entity)
-        return CreateTagResultDTO(entity.id.uuid, entity.revision)
+        return CreateTagResultDTO(entity.id.uuid)

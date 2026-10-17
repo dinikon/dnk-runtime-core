@@ -16,6 +16,8 @@ defineProps<{
   locale: string;
   pending: boolean;
   blocked: boolean;
+  uploading: boolean;
+  errors: Partial<Record<ProductSection, string>>;
   schemaVersion: number;
   categories: CatalogCategory[];
   tags: CatalogTag[];
@@ -34,6 +36,7 @@ const emit = defineEmits<{
   <aside class="flex min-w-0 flex-col gap-6">
     <ProductFieldsBlock
       :key="`${item.id}:${locale}:status`"
+      :validation-error="errors.status"
       :item="item"
       section="status"
       :locale="locale"
@@ -57,7 +60,8 @@ const emit = defineEmits<{
         ><CatalogItemGalleryForm
           :key="`${item.id}:${locale}:gallery`"
           :value="item.gallery"
-          :pending="blocked"
+          :pending="blocked || uploading"
+          :validation-error="errors.galleries"
           :reset="resets.galleries ?? 0"
           :image-url="imageUrl"
           @dirty="emit('dirty', 'galleries', $event)"
@@ -74,10 +78,11 @@ const emit = defineEmits<{
       ><CardContent
         ><ProductCategoriesForm
           :key="`${item.id}:${locale}:categories`"
+          :validation-error="errors.categories"
           :ids="item.category_ids"
           :primary-id="item.primary_category_id"
           :categories="categories"
-          :pending="pending"
+          :pending="false"
           :disabled="blocked"
           :reset="resets.categories ?? 0"
           @dirty="emit('dirty', 'categories', $event)"
@@ -97,9 +102,10 @@ const emit = defineEmits<{
       ><CardContent
         ><ProductTagsForm
           :key="`${item.id}:${locale}:tags`"
+          :validation-error="errors.tags"
           :ids="item.tag_ids"
           :tags="tags"
-          :pending="pending"
+          :pending="false"
           :disabled="blocked"
           :reset="resets.tags ?? 0"
           @dirty="emit('dirty', 'tags', $event)"

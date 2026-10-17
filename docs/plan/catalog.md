@@ -4,75 +4,60 @@
 
 ## Текущая граница MVP v1
 
-В первой версии приложение работает только с простыми самостоятельными товарами.
-Вариативность удалена из Domain, Application, HTTP и Console. Feature flag,
-скрытые вариативные сценарии и совместимые aliases не сохраняются. SQL-модели,
-миграции, регистрация моделей, таблицы, ограничения и индексы остаются прежними:
-они готовы хранить variable/variant после возвращения функционала следующим этапом.
-Существующее чтение внешних публикаций Channels не сокращается.
+Доступны самостоятельные простые товары. CatalogItem, AttributeDefinition,
+Category и Tag остаются отдельными Aggregate Roots; Default — фиксированная
+схема контента только для чтения. Вариативных сценариев в активных слоях нет.
+Полная спецификация следующего этапа сохранена ниже.
 
-CatalogItem — самостоятельный Aggregate Root. AttributeDefinition, Category и Tag
-сохраняют собственные границы; options принадлежат AttributeDefinition. Default —
-фиксированная read-only схема. У товара сохраняются SKU, статус, virtual,
-спецификация цены и скидок, наличие, измерения, локализованные тексты и галерея,
-enum-характеристики, категории, основная категория, теги и типизированная metadata.
+### CRUD товара и транзакции
 
-### Контракты и реализация v1
+- CreateCatalogItem: POST /items -> собственный DTO с id. GetCatalogItem и
+  ListCatalogItems возвращают отдельные проекции. DeleteCatalogItem -> None/204.
+- UpdateCatalogItem: PATCH /items/{id} -> собственный DTO с id. Один доменный
+  update проверяет итоговый кандидат и атомарно принимает изменения. Повтор
+  сохранённых значений не меняет audit. Фабрики create/restore явные.
+- PATCH содержит только изменённые поля. Отсутствие сохраняет значение, null
+  очищает допустимое nullable-значение. Переданные спецификации/наборы заменяются
+  полностью. Content/gallery используют query locale; content содержит
+  expected_schema_version и values. Пустой PATCH/неизвестные поля дают 422.
+- Старый POST /items/simple и отдельные операции записи разделов удалены.
+  Upload и image stream — самостоятельные сценарии Files integration.
+- Ревизии и expected_revision(s) удалены из всех активных объектов и контрактов
+  Catalog, включая справочники и публикационный snapshot. Shared reference guard
+  и item lock защищают запись товара; exclusive guard защищает справочники.
+  Актуальное состояние загружается под блокировкой. Для одного поля/набора
+  побеждает последняя успешная запись, PATCH разных полей сохраняет обе правки.
+- Внешний UoW владеет транзакцией; выборочная запись связей, чистые вычисления
+  price/stock на as_of, согласованное batch-чтение и tenant isolation сохранены.
 
-- У товара один ID и revision; изменения принимают `expected_revision`.
-  Результаты команд содержат `id`/`revision`; upload также `image_id`/`file_id`.
-- Создание остаётся `POST /api/console/catalog/items/simple`. Удалены create variable,
-  structure, kind и list variants вместе с их Command/Query/Handler/DTO/HTTP/Depends.
-- Детали сохраняют `item` и `as_of`; внутри прямые поля без kind, parent/root,
-  children, axes/selection/default, own/effective/origins и семейных диапазонов.
-  `price_specification` хранится, `price` вычисляется на `as_of`.
-- Контент принимает `values: dict[str, str]`: полный перевод требует name;
-  отсутствие optional блока удаляет его, пустой текст сохраняется. Переводы
-  независимы по locale, межъязыкового fallback нет. HTML очищается через порт.
-- Характеристики и metadata принимают полный набор без override modes.
-  Исключение записи из набора удаляет её. Enum-options остаются множественными.
-- Галерея принадлежит товару и locale; replace заменяет набор, empty очищает,
-  DELETE удаляет локализованную галерею. Снятие связи не удаляет Files объект.
-- Наличие, текущая цена и доступность вычисляются чистой Domain policy. Нет
-  наследования, общего запаса семьи, диапазона цен или родительских источников.
-- Mutation service берёт reference guard, item lock и проверяет ревизию.
-  Общий внешний UoW сохраняет tenant isolation и атомарность; repositories
-  не выполняют commit/rollback. Query side не восстанавливает агрегаты.
-- Read/write adapters выбирают только `kind='simple' AND parent_id IS NULL`.
-  Неподдерживаемый ID отсутствует для MVP, включая image content и batch snapshot.
-  SQL mapper записывает simple/NULL, `is_variation=false`, mode=set. Старый clear
-  простого товара читается как отсутствие значения. Selections/defaults не читаются
-  и не записываются активными adapters, но их SQL-модели зарегистрированы.
-- Get/list/publication snapshot используют собственные DTO соответствующих сценариев.
-  Snapshot принимает `expected_revisions` по item ID. Usage port остаётся для удаления;
-  до появления Catalog bindings его адаптер отражает их отсутствие.
-- Сохраняются сценарии status, sku, virtual, price, stock, measurements, content,
-  attributes, categories, tags, metadata, gallery, primary image, upload, delete,
-  get/list и publication snapshot. Каждому принадлежат Command/Query, Handler,
-  DTO при результате, отдельные HTTP-контракты и Depends. Delete -> None/204;
-  image content -> управляемый поток, без фиктивной JSON-схемы.
+### Console
 
-### Console v1
+Карточка товара автоматически сохраняет корректные изменённые разделы через
+800 мс после последней правки. Одна очередь PATCH/upload сохраняет новый ввод
+во время запроса. Ошибочные разделы остаются в черновике, остальные сохраняются.
+Полевая ошибка откатывает PATCH и исключает ошибочный раздел из следующей попытки;
+неопределённая ошибка/сеть/5xx приостанавливает очередь с общей кнопкой «Повторить».
+Статус сохранения доступен через aria-live. Upload не повторяется автоматически.
+Уход/смена locale сначала сохраняют очередь; остаток требует подтверждения отказа.
+Смена tenant/session отменяет таймеры и исключает применение старых ответов.
+Редакторы справочников сохраняют кнопки, создание/удаление остаются явными.
+Точные Decimal, единицы, HTML sanitation, false/0 и Files links сохранены.
 
-Создание, список, обзор и редактор работают с одним товаром. Выбора/фильтра вида,
-вкладки вариантов, дочерних маршрутов, изменения структуры и вида, выбора источника
-или наследования нет. Старые kind/variant query-параметры очищаются, tab=variants
-заменяется general. Сохраняются независимые сохранения разделов, Decimal и единицы,
-локали, dirty/pending/error, сохранение ввода при 409 и явная перезагрузка.
+### SQL, проверки и выпуск
 
-### Приёмка и выпуск v1
+SQL-модели, регистрация, миграции, ограничения и индексы неизменны. Колонки
+revision пассивны: INSERT=1, UPDATE сохраняет старое значение. Сохранена готовность
+SQL хранить variable/variant, оси и selections/defaults. Активные репозитории
+принимают только kind=simple AND parent_id IS NULL. Старые clear читаются как
+отсутствие, запись выполняется с mode=set. Channels external publications read
+сохраняется. Publication snapshot содержит locale/as_of и значения без ревизий.
 
-Unit/HTTP/PostgreSQL/browser regression покрывает все простые разделы, concurrency,
-tenant/CSRF, локали, цену 0, скидки, stock policies, измерения, media lifecycle,
-удаление и запрет вариативного API. Отдельные SQL-fixtures сохраняют проверку
-хранения VARIABLE/VARIANT, осей, selections/defaults и FK/CHECK. Выполняются
-architecture checks, Black, frontend lint/typecheck/build, upgrade/downgrade/upgrade
-и autogenerate drift. Изменений SQL-моделей, миграций и регистрации быть не должно.
-
-Backend и Console выпускаются совместно из-за изменения API. Вариативных данных
-в используемых базах нет; data migration и пересоздание БД для этого сокращения
-не нужны. Перед выпуском подтвердить отсутствие таких записей; при обнаружении
-остановить выпуск до отдельного решения о данных. Не выполнять автоматический drop.
+Обязательны unit/HTTP/PostgreSQL, конкурентные записи и два tenant, архитектурный
+checklist, Black, frontend lint/typecheck/build, тесты очереди и браузерные сценарии
+desktop/mobile. Upgrade/downgrade/upgrade и autogenerate drift выполняются на
+одноразовой БД. Документация отражает MVP. Backend и Console выпускаются совместно,
+без миграций и пересоздания БД; наличие вариативных данных требует отдельного решения
+до выпуска. Известные исходные ограничения проверок фиксируются отдельно.
 
 ## Следующий этап v2: сохранённая полная спецификация
 

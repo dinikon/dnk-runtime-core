@@ -12,12 +12,14 @@ CatalogItem — Aggregate Root одной продаваемой позиции.
 имеют самостоятельные корни; options принадлежат определению атрибута.
 ProductType Default — фиксированная read-only схема migration seed.
 
-Сохранение проходит через create_simple/restore и доменные методы. Команды
-принимают expected_revision; после shared guard справочных ссылок берётся
-блокировка одного item. Изменения справочников берут exclusive guard.
-Write repository проверяет optimistic revision и сохраняет только изменённые
-группы связей. UoW владеет транзакцией. Query repositories не восстанавливают
-агрегат; batch-чтение связей не зависит по числу запросов от размера страницы.
+Сохранение проходит через create/restore и один CatalogItem.update. Обработчик
+берёт shared guard справочных ссылок, затем блокировку одного товара и загружает
+актуальное состояние. Изменения справочников берут exclusive guard. Ревизий
+в активных Domain, Application, HTTP и Console контрактах Catalog нет.
+При конкурентной правке одного поля или набора побеждает последняя успешная запись;
+PATCH разных полей применяется к актуальному состоянию без потери остальных полей.
+Write repository сохраняет только изменённые группы связей. Транзакцией владеет
+внешний UoW. Query repositories читают согласованные batch-проекции без N+1.
 
 ## Поля товара
 
@@ -50,8 +52,8 @@ backorders_allowed/backordered — вычисляемые поля. Domain polic
 
 Default version 1 содержит name (обязательный непустой текст при сохранении
 перевода), desc и short_desc (optional rich_text). CRUD типов/блоков отсутствует.
-PUT values передаёт полный dict[str,str] выбранной locale; отсутствие optional
-блока удаляет его, пустая строка сохраняется. DELETE удаляет перевод.
+PATCH content.values передаёт полный dict[str,str] выбранной locale; отсутствие optional
+блока удаляет его, пустая строка сохраняется. content=null удаляет перевод.
 HTML очищается NH3 через порт и DOMPurify перед показом в Console.
 
 Locale передаётся явно; запись разрешена для активной locale Reference Data.
@@ -70,7 +72,7 @@ Metadata — полный упорядоченный набор keys с типа
 
 Галерея принадлежит item+locale: Files links, порядок, alt/caption и одно главное
 изображение в непустом наборе. Replace заменяет полный набор, empty очищает,
-DELETE удаляет локализованную галерею. До 100 изображений; upload PNG/JPEG/WebP
+gallery=null удаляет локализованную галерею. До 100 изображений; upload PNG/JPEG/WebP
 до 10 MiB с проверкой MIME/сигнатуры. Files adapter использует публичные handlers
 на общем UoW, без Files ORM/FK. HTTP отдаёт закрываемый поток только для
 изображения галереи этого товара и tenant. Снятие связи не удаляет Files объект.
@@ -78,16 +80,22 @@ DELETE удаляет локализованную галерею. До 100 из
 
 ## API и Console
 
-Префикс /api/console/catalog: /items, /items/simple, /items/{id},
-/product-type/default, /attributes, /categories, /tags.
-Разделы записи: status, sku, virtual, price, stock, measurements,
-content/{locale}, attributes, categories, tags, metadata, gallery/{locale},
-gallery/{locale}/primary; upload /items/{id}/images/{locale}/upload.
-Create variable, variants, structure и kind endpoints отсутствуют.
+Префикс /api/console/catalog: POST/GET /items, GET/PATCH/DELETE /items/{id},
+/product-type/default, /attributes, /categories, /tags. Создание возвращает id,
+PATCH возвращает id, delete -> None/204. Сценарии имеют собственные Command/Query,
+Handler, DTO и HTTP-контракты. Старый /items/simple и endpoints изменения отдельных
+полей удалены без aliases. Upload /items/{id}/images/{locale}/upload возвращает
+id/image_id/file_id; получение содержимого изображения отдаёт закрываемый поток.
 
-Мутации получают expected_revision и возвращают id/revision; upload также
-image_id/file_id. Delete -> None/204, image content -> управляемый stream.
-Каждому сценарию принадлежат отдельные Command/Query, Handler, DTO и HTTP-контракты.
+PATCH принимает status, sku, virtual, price_specification, stock, weight, dimensions,
+content, gallery, attributes, metadata, category_ids, primary_category_id, tag_ids.
+Отсутствие поля сохраняет значение, null очищает только nullable-значения. Явный
+null запрещён для status, virtual, stock и наборов attributes/metadata/category_ids/tag_ids.
+Вложенные спецификации и наборы заменяются полностью. Пустой PATCH и неизвестные
+поля отклоняются с 422. Изменение content/gallery требует query locale; content
+принимает expected_schema_version и values. Версия фиксированной схемы сохраняется.
+Все изменения одного запроса атомарны; ошибки разделов содержат field/message.
+409 обозначает бизнес-конфликт, например занятый SKU или используемую связь.
 
 List — компактные строки, locale/search/status/category/tag и offset/limit (до 100).
 Detail сохраняет item/as_of с прямыми полями; price_specification отличается от
@@ -95,11 +103,16 @@ Detail сохраняет item/as_of с прямыми полями; price_speci
 origins, осей или диапазона цен. Чтение использует REPEATABLE READ на общей session
 до SQL Identity. Unsupported SQL kinds не читаются и не меняются через MVP.
 
-Console /catalog/items: список, создание черновика, обзор и отдельный редактор.
-Есть сохранение разделов, локали, галерея, классификация, цены/наличие/измерения.
-Выбора вида, вариантов, структуры и наследования нет. Query keys включают tenant,
-сценарий, item ID, locale и filters/pagination. 409 сохраняет ввод; перезагрузка
-актуального состояния выполняется явно с подтверждением потери изменений.
+Console /catalog/items: список, явное создание черновика, обзор и редактор.
+Все разделы товара автоматически сохраняются через 800 мс после последней правки.
+Одна очередь отправляет только корректные изменённые разделы; во время запроса
+ввод доступен, более новые значения сохраняются следующим PATCH. Ошибочный раздел
+остаётся в черновике, остальные продолжают сохраняться. Сеть/5xx приостанавливают
+очередь с общей кнопкой «Повторить». Статус доступен через aria-live. Upload следует
+после сохранения галереи в той же очереди; его неоднозначный результат не повторяется.
+Уход со страницы и смена locale сначала сохраняют изменения; при оставшемся вводе
+требуется подтверждение отказа. Смена tenant/session отменяет отложенные записи.
+Редакторы характеристик, категорий и тегов сохраняют текущие кнопки без ревизий.
 
 ## SQL и Channels
 
@@ -110,9 +123,11 @@ MVP mapper записывает simple, parent_id=NULL, is_variation=false и mo
 загружают детей и не читают/записывают selections/defaults. Новых миграций нет.
 Сохраняются baseline 0023_catalog_item и следующая 0024_currency_exchange_rates.
 Для сокращения уже развёрнутого Catalog пересоздание БД не требуется.
+SQL-колонки revision пассивны: при INSERT adapter записывает 1, UPDATE сохраняет
+прежнее значение. Domain и проекции их не используют; проверок сравнения нет.
 
 GetCatalogItemsPublicationSnapshot — публичный batch Application-контракт простых
-товаров: locale/as_of, expected_revisions по item ID, fixed schema и собственные
+товаров: locale/as_of, fixed schema и собственные
 значения с вычислениями. Он имеет собственные вложенные DTO. Потребитель открывает
 краткий согласованный read UoW. Usage port проверяет внешние зависимости удаления;
 пока Catalog bindings отсутствуют, адаптер возвращает пустой набор. При появлении

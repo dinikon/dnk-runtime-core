@@ -43,7 +43,6 @@ async def put_category_content(
                 tenant_id=EntityIdVO.from_value(principal.tenant_id),
                 actor_id=EntityIdVO.from_value(principal.user_id),
                 category_id=CategoryIdVO.from_value(category_id),
-                expected_revision=payload.expected_revision,
                 locale=locale,
                 label=payload.label,
             )

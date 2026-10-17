@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref, watch, nextTick } from "vue";
 import CatalogMeasurementField from "./CatalogMeasurementField.vue";
 import ProductRichText from "../product/ProductRichText.vue";
-import { saveLabels } from "../../model/product-presentation";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -25,6 +24,7 @@ const props = defineProps<{
   reset: number;
   attributes: CatalogAttribute[];
   schemaVersion: number;
+  validationError?: string;
 }>();
 const emit = defineEmits<{
   save: [value: Record<string, unknown>];
@@ -63,6 +63,7 @@ const dirty = ref(false),
 function mark() {
   dirty.value = true;
   emit("dirty", true);
+  void nextTick(submit);
 }
 function resetFields() {
   const own = props.item;
@@ -195,6 +196,7 @@ function submit() {
 <template>
   <form class="flex flex-col gap-4" @submit.prevent="submit">
     <fieldset
+      :aria-invalid="!!validationError || undefined"
       :disabled="pending"
       class="flex flex-col gap-4"
       @input="section !== 'content' && mark()"
@@ -513,16 +515,9 @@ function submit() {
           >Добавить характеристику</Button
         ></template
       >
-      <div class="flex flex-wrap gap-2">
-        <Button type="submit" :disabled="!dirty">{{
-          saveLabels[section] ?? "Сохранить раздел"
-        }}</Button
-        ><Button type="button" variant="outline" @click="resetFields"
-          >Отмена</Button
-        ><span v-if="dirty" class="self-center text-sm text-muted-foreground"
-          >Есть изменения</span
-        >
-      </div>
     </fieldset>
+    <p v-if="validationError" role="alert" class="text-sm text-destructive">
+      {{ validationError }}
+    </p>
   </form>
 </template>

@@ -25,7 +25,6 @@ class AttributeQueryMapper:
             row["code"],
             "enum",
             translations.get(locale),
-            row["revision"],
             tuple(translations),
             tuple(
                 AttributeOptionDetailsDTO(
@@ -43,5 +42,5 @@ class AttributeQueryMapper:
     def to_list_item(row: Mapping[str, Any]) -> AttributeListItemDTO:
         """Создаёт собственную строку списка определений."""
         return AttributeListItemDTO(
-            row["id"], row["code"], row["label"], row["revision"], row["option_count"]
+            row["id"], row["code"], row["label"], row["option_count"]
         )

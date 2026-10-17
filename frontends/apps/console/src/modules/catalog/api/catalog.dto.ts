@@ -9,30 +9,25 @@ export interface CreateAttributeRequest {
 }
 export interface CreateAttributeResponse {
   id: string;
-  revision: number;
 }
 export interface PutAttributeTranslationRequest {
-  expected_revision: number;
   label: string;
 }
 export interface PutAttributeTranslationResponse {
   id: string;
-  revision: number;
 }
 export interface ReplaceAttributeOptionsRequest {
-  expected_revision: number;
   options: { option_id: string | null; code: string; label: string }[];
 }
 export interface ReplaceAttributeOptionsResponse {
   id: string;
-  revision: number;
 }
 export interface GetAttributeResponse {
   id: string;
   code: string;
   value_type: "enum";
   label: string | null;
-  revision: number;
+
   locales: string[];
   options: {
     id: string;
@@ -46,7 +41,7 @@ export interface ListAttributeItemDTO {
   id: string;
   code: string;
   label: string | null;
-  revision: number;
+
   option_count: number;
 }
 export interface ListAttributesResponse {
@@ -58,7 +53,7 @@ export interface ListAttributesResponse {
 export interface GetCategoryResponse {
   id: string;
   label: string | null;
-  revision: number;
+
   locales: string[];
   parent_id: string | null;
   child_count: number;
@@ -66,7 +61,7 @@ export interface GetCategoryResponse {
 export interface ListCategoryItemDTO {
   id: string;
   label: string | null;
-  revision: number;
+
   parent_id: string | null;
   child_count: number;
 }
@@ -83,26 +78,22 @@ export interface CreateCategoryRequest {
 }
 export interface CreateCategoryResponse {
   id: string;
-  revision: number;
 }
 export interface PutCategoryContentRequest {
-  expected_revision: number;
   label: string;
 }
 export interface PutCategoryContentResponse {
   id: string;
-  revision: number;
 }
 export interface GetTagResponse {
   id: string;
   label: string | null;
-  revision: number;
+
   locales: string[];
 }
 export interface ListTagItemDTO {
   id: string;
   label: string | null;
-  revision: number;
 }
 export interface ListTagsResponse {
   items: ListTagItemDTO[];
@@ -116,38 +107,20 @@ export interface CreateTagRequest {
 }
 export interface CreateTagResponse {
   id: string;
-  revision: number;
 }
 export interface PutTagTranslationRequest {
-  expected_revision: number;
   label: string;
 }
 export interface PutTagTranslationResponse {
   id: string;
-  revision: number;
 }
 export interface MoveCategoryRequest {
-  expected_revision: number;
   parent_id: string | null;
 }
 export interface MoveCategoryResponse {
   id: string;
-  revision: number;
 }
 export type ItemStatus = "draft" | "active" | "archived";
-export type ItemSection =
-  | "content"
-  | "status"
-  | "sku"
-  | "virtual"
-  | "price"
-  | "stock"
-  | "measurements"
-  | "metadata"
-  | "attributes"
-  | "categories"
-  | "tags"
-  | "galleries";
 export interface PriceDTO {
   regular_price: string;
   currency: string;
@@ -199,7 +172,7 @@ export interface GalleryDTO {
 }
 export interface ReadItemDTO {
   id: string;
-  revision: number;
+
   product_type_id: string;
   status: ItemStatus;
   sku: string | null;
@@ -239,15 +212,13 @@ export interface ListItemsResponse {
 }
 export interface CreateItemResponse {
   id: string;
-  revision: number;
 }
-export interface MutationResponse {
+export interface UpdateItemResponse {
   id: string;
-  revision: number;
 }
 export interface UploadImageResponse {
   id: string;
-  revision: number;
+
   image_id: string;
   file_id: string;
 }
@@ -271,7 +242,7 @@ export interface DefaultSchemaResponse {
 
 export interface ListItemDTO {
   id: string;
-  revision: number;
+
   status: ItemStatus;
   sku: string | null;
   title: string | null;
@@ -282,4 +253,24 @@ export interface ListItemDTO {
   weight: WeightDTO | null;
   dimensions: DimensionsDTO | null;
   available_for_sale: boolean;
+}
+
+export interface UpdateItemRequest {
+  status?: ItemStatus;
+  sku?: string | null;
+  virtual?: boolean;
+  price_specification?: PriceDTO | null;
+  stock?: StockDTO;
+  weight?: WeightDTO | null;
+  dimensions?: DimensionsDTO | null;
+  content?: {
+    expected_schema_version: number;
+    values: Record<string, string>;
+  } | null;
+  gallery?: GalleryDTO | null;
+  attributes?: AttributeDTO[];
+  metadata?: MetadataDTO[];
+  category_ids?: string[];
+  primary_category_id?: string | null;
+  tag_ids?: string[];
 }

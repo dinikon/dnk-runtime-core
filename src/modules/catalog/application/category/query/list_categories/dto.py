@@ -8,7 +8,7 @@ class CategoryListItemDTO:
 
     id: UUID
     label: str | None
-    revision: int
+
     parent_id: UUID | None
     child_count: int
 

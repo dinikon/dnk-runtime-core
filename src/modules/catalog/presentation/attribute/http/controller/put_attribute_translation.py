@@ -43,7 +43,6 @@ async def put_attribute_translation(
                 tenant_id=EntityIdVO.from_value(principal.tenant_id),
                 actor_id=EntityIdVO.from_value(principal.user_id),
                 attribute_id=AttributeIdVO.from_value(attribute_id),
-                expected_revision=payload.expected_revision,
                 locale=locale,
                 label=payload.label,
             )

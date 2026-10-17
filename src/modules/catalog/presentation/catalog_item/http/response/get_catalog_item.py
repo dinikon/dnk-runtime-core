@@ -18,7 +18,7 @@ class CatalogItemDetailsResponse(BaseModel):
     """Поля и вычисляемые значения самостоятельного товара выбранной locale."""
 
     id: UUID
-    revision: int
+
     product_type_id: UUID
     status: Literal["draft", "active", "archived"]
     sku: str | None

@@ -208,10 +208,6 @@ class SqlAlchemyCatalogItemQueryRepository:
             CatalogItemQueryMapper.publication(value, query.locale, as_of)
             for value in values
         )
-        for item in items:
-            expected = (query.expected_revisions or {}).get(item.id)
-            if expected is not None and expected != item.revision:
-                raise CatalogConflictError("Source revision изменена.")
         schema = await SqlAlchemyDefaultContentSchema(self._session).get_default()
         return GetCatalogItemsPublicationSnapshotResultDTO(
             items, schema, query.locale, as_of

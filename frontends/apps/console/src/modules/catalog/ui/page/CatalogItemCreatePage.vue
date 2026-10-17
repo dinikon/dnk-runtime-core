@@ -28,7 +28,7 @@ async function create() {
   error.value = "";
   const current = ctx.captureSession();
   try {
-    const result = await catalogApi.createSimple(virtual.value);
+    const result = await catalogApi.createItem(virtual.value);
     if (!current()) return;
     dirty.value = false;
     await cache.invalidateQueries({

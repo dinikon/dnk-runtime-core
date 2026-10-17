@@ -17,7 +17,6 @@ class CategoryMapper:
                 None if row["parent_id"] is None else CategoryIdVO(row["parent_id"])
             ),
             translations=translations,
-            revision=row["revision"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             created_by=EntityIdVO(row["created_by"]),
@@ -29,6 +28,7 @@ class CategoryMapper:
         """Извлекает поля нового корня без I/O."""
         return {
             "id": entity.id.uuid,
+            "revision": 1,
             "created_at": entity.created_at,
             "created_by": entity.created_by.uuid,
             **CategoryMapper.to_update_values(entity),
@@ -39,7 +39,6 @@ class CategoryMapper:
         """Извлекает проверенное состояние для UPDATE."""
         return {
             "parent_id": None if entity.parent_id is None else entity.parent_id.uuid,
-            "revision": entity.revision,
             "updated_at": entity.updated_at,
             "updated_by": entity.updated_by.uuid,
         }

@@ -7,7 +7,7 @@ class GetCategoryResponse(BaseModel):
 
     id: UUID
     label: str | None
-    revision: int
+
     locales: tuple[str, ...]
     parent_id: UUID | None
     child_count: int

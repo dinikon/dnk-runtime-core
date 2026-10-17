@@ -6,7 +6,7 @@ from src.modules.catalog.domain.catalog_item.entity.image import CatalogItemImag
 
 @dataclass(frozen=True, slots=True)
 class CatalogItemGallery:
-    """Собственный локализованный набор; пустой набор блокирует наследование."""
+    """Собственный локализованный набор с явным пустым состоянием."""
 
     images: tuple[CatalogItemImage, ...]
     primary_image_id: EntityIdVO | None

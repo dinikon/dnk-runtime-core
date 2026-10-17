@@ -7,5 +7,5 @@ class GetTagResponse(BaseModel):
 
     id: UUID
     label: str | None
-    revision: int
+
     locales: tuple[str, ...]

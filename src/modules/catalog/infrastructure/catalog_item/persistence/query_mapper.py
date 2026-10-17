@@ -37,7 +37,6 @@ class CatalogItemQueryMapper:
         gallery = item.galleries.get(locale)
         return CatalogItemDetailsDTO(
             id=item.id.uuid,
-            revision=item.revision,
             product_type_id=item.product_type_id.uuid,
             status=item.status,
             sku=item.sku,
@@ -101,7 +100,6 @@ class CatalogItemQueryMapper:
         gallery = item.galleries.get(locale)
         return CatalogItemPublicationDTO(
             id=item.id.uuid,
-            revision=item.revision,
             product_type_id=item.product_type_id.uuid,
             status=item.status,
             sku=item.sku,
@@ -172,7 +170,6 @@ class CatalogItemQueryMapper:
         )
         return CatalogItemListRowDTO(
             id=item.id.uuid,
-            revision=item.revision,
             status=item.status,
             sku=item.sku,
             title=item.translations.get(locale, {}).get("name"),

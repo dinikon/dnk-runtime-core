@@ -5,10 +5,10 @@ from src.modules.catalog.domain.category.value_object.identifier import Category
 
 @dataclass(frozen=True, slots=True)
 class MoveCategoryCommand:
-    """Явное перемещение категории в актуальной ревизии."""
+    """Явное перемещение категории в актуальном дереве."""
 
     tenant_id: EntityIdVO
     actor_id: EntityIdVO
     category_id: CategoryIdVO
-    expected_revision: int
+
     parent_id: CategoryIdVO | None

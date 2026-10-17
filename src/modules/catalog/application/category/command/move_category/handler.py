@@ -30,7 +30,7 @@ class MoveCategoryHandler:
         """Передаёт снимок предков домену и сохраняет проверенное состояние."""
         await self._lock.acquire(command.tenant_id)
         entity = await self._repository.get(command.category_id)
-        entity.ensure_revision(command.expected_revision)
+
         entity.move(
             command.parent_id,
             await self._tree.ancestors(command.parent_id),
@@ -38,4 +38,4 @@ class MoveCategoryHandler:
             self._clock.now(),
         )
         await self._repository.save(entity)
-        return MoveCategoryResultDTO(entity.id.uuid, entity.revision)
+        return MoveCategoryResultDTO(entity.id.uuid)

@@ -21,6 +21,6 @@ class DeleteAttributeHandler:
         """Выполняет сценарий; доменные решения и commit остаются у владельцев."""
         await self._lock.acquire(command.tenant_id)
         entity = await self._repository.get(command.attribute_id)
-        entity.ensure_revision(command.expected_revision)
+
         entity.ensure_deletable(await self._repository.is_used(entity.id))
         await self._repository.delete(entity)

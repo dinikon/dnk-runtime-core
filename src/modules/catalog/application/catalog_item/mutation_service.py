@@ -25,20 +25,19 @@ class CatalogItemMutationService:
         self._lock = lock
 
     async def load(
-        self, tenant_id: EntityIdVO, item_id: CatalogItemIdVO, expected_revision: int
+        self, tenant_id: EntityIdVO, item_id: CatalogItemIdVO
     ) -> CatalogItem:
-        """Блокирует справочные ссылки и товар, затем проверяет доменную ревизию."""
+        """Блокирует справочные ссылки и загружает актуальный товар под item lock."""
         await self._lock.acquire_reference(tenant_id)
         await self._lock.acquire_item(tenant_id, item_id)
         item = await self._repository.get(item_id)
-        item.ensure_revision(expected_revision)
+
         logger.debug(
             "Catalog item loaded for mutation",
             extra={
                 "event": "catalog.mutation.loaded",
                 "tenant_id": str(tenant_id.uuid),
                 "item_id": str(item.id.uuid),
-                "revision": item.revision,
             },
         )
         return item
@@ -51,6 +50,5 @@ class CatalogItemMutationService:
             extra={
                 "event": "catalog.mutation.prepared",
                 "item_id": str(item.id.uuid),
-                "revision": item.revision,
             },
         )

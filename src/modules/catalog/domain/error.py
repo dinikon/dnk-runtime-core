@@ -2,7 +2,12 @@ from src.modules.shared.domain.domain_error import DomainError
 
 
 class CatalogError(DomainError):
-    """Базовая предметная ошибка Catalog."""
+    """Предметная ошибка с необязательными именами некорректных разделов."""
+
+    def __init__(self, message: str, fields: tuple[str, ...] = ()) -> None:
+        """Сохраняет безопасное сообщение и предметные поля для внешнего контракта."""
+        super().__init__(message)
+        self.fields = fields
 
 
 class CatalogNotFoundError(CatalogError):
@@ -10,7 +15,7 @@ class CatalogNotFoundError(CatalogError):
 
 
 class CatalogConflictError(CatalogError):
-    """Ревизия устарела либо изменение нарушает существующие связи."""
+    """Изменение нарушает уникальность или существующие связи."""
 
 
 class InvalidCatalogValueError(CatalogError):

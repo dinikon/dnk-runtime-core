@@ -14,6 +14,7 @@ export function useCatalogContext(
   dirty: () => boolean = () => false,
   pending: () => boolean = () => false,
   clear: () => void = () => {},
+  flush?: () => Promise<boolean>,
 ) {
   const route = useRoute(),
     router = useRouter(),
@@ -74,8 +75,10 @@ export function useCatalogContext(
   const active = computed(
     () => locales.data.value?.some((i) => i.code === locale.value) ?? false,
   );
-  function canLeave() {
-    if (pending()) return false;
+  async function canLeave() {
+    if (flush) {
+      if (await flush()) return true;
+    } else if (pending()) return false;
     return (
       !dirty() ||
       window.confirm("Есть несохранённые изменения. Отказаться от них?")

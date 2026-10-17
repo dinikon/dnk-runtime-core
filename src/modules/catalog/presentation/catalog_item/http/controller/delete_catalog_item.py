@@ -25,7 +25,6 @@ async def delete_catalog_item(
     context: AuthenticatedRequestContextDep,
     handler: DeleteCatalogItemHandlerDep,
     item_id: UUID,
-    expected_revision: int = Query(ge=1),
 ) -> Response:
     """Преобразует HTTP вход delete_catalog_item в отдельный Application сценарий."""
     principal = context.principal
@@ -37,7 +36,6 @@ async def delete_catalog_item(
                 tenant_id=EntityIdVO.from_value(principal.tenant_id),
                 actor_id=EntityIdVO.from_value(principal.user_id),
                 item_id=CatalogItemIdVO(item_id),
-                expected_revision=expected_revision,
             )
         )
     except CatalogNotFoundError as exc:

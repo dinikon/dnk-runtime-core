@@ -11,6 +11,6 @@ class ReplaceAttributeOptionsCommand:
     tenant_id: EntityIdVO
     actor_id: EntityIdVO
     attribute_id: AttributeIdVO
-    expected_revision: int
+
     locale: str
     options: tuple[AttributeOptionInput, ...]

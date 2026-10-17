@@ -21,7 +21,6 @@ async def delete_category(
     context: AuthenticatedRequestContextDep,
     handler: DeleteCategoryHandlerDep,
     category_id: UUID,
-    expected_revision: int = Query(ge=1),
 ) -> None:
     """Преобразует явный HTTP-контракт delete_category и доверенный Identity context."""
     principal = context.principal
@@ -33,7 +32,6 @@ async def delete_category(
                 tenant_id=EntityIdVO.from_value(principal.tenant_id),
                 actor_id=EntityIdVO.from_value(principal.user_id),
                 category_id=CategoryIdVO.from_value(category_id),
-                expected_revision=expected_revision,
             )
         )
     except CatalogNotFoundError as exc:

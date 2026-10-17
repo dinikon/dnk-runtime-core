@@ -10,4 +10,3 @@ class DeleteCategoryCommand:
     tenant_id: EntityIdVO
     actor_id: EntityIdVO
     category_id: CategoryIdVO
-    expected_revision: int

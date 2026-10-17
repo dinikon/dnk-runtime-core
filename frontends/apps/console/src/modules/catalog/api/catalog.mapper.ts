@@ -13,7 +13,7 @@ export function attributeFromDto(d: GetAttributeResponse): CatalogAttribute {
     id: d.id,
     code: d.code,
     label: d.label,
-    revision: d.revision,
+
     locales: d.locales,
     options: d.options,
   };
@@ -23,7 +23,7 @@ export function attributeItem(d: ListAttributeItemDTO): CollectionItem {
     id: d.id,
     label: d.label ?? d.code,
     description: `${d.code} · enum · Значений: ${d.option_count}`,
-    revision: d.revision,
+
     system: false,
   };
 }
@@ -33,7 +33,7 @@ export function categoryFromDto(
   return {
     id: d.id,
     label: d.label,
-    revision: d.revision,
+
     parentId: d.parent_id,
     childCount: d.child_count,
   };
@@ -41,7 +41,7 @@ export function categoryFromDto(
 export function tagFromDto(
   d: import("./catalog.dto").ListTagItemDTO,
 ): import("../model/catalog.types").CatalogTag {
-  return { id: d.id, label: d.label, revision: d.revision };
+  return { id: d.id, label: d.label };
 }
 export function tagItem(
   d: import("./catalog.dto").ListTagItemDTO,
@@ -50,7 +50,7 @@ export function tagItem(
     id: d.id,
     label: d.label ?? `Метка ${d.id}`,
     description: "Метка",
-    revision: d.revision,
+
     system: false,
   };
 }
@@ -62,7 +62,7 @@ export function itemFromDto(value: ReadItemDTO): CatalogItem {
 export function listItemFromDto(value: import("./catalog.dto").ListItemDTO) {
   return {
     id: value.id,
-    revision: value.revision,
+
     status: value.status,
     sku: value.sku,
     title: value.title,

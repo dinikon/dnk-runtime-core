@@ -13,7 +13,7 @@ class UploadCatalogItemImageCommand:
     tenant_id: EntityIdVO
     actor_id: EntityIdVO
     item_id: CatalogItemIdVO
-    expected_revision: int
+
     locale: str
     source: BinaryIO
     size_bytes: int

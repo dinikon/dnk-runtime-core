@@ -14,6 +14,7 @@ defineProps<{
   attributes: CatalogAttribute[];
   schemaVersion: number;
   dirty?: boolean;
+  validationError?: string;
 }>();
 defineEmits<{
   save: [value: Record<string, unknown>];
@@ -31,6 +32,7 @@ defineEmits<{
       ></CardHeader
     ><CardContent
       ><CatalogItemFieldsForm
+        :validation-error="validationError"
         :item="item"
         :section="section"
         :locale="locale"

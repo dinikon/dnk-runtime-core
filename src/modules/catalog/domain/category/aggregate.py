@@ -18,7 +18,7 @@ class Category:
     id: CategoryIdVO
     parent_id: CategoryIdVO | None
     translations: dict[str, str]
-    revision: int
+
     created_at: datetime
     updated_at: datetime
     created_by: EntityIdVO
@@ -41,7 +41,6 @@ class Category:
             identifier=identifier,
             parent_id=parent_id,
             translations={locale.value: label},
-            revision=1,
             created_at=now,
             updated_at=now,
             created_by=actor,
@@ -55,15 +54,12 @@ class Category:
         identifier: CategoryIdVO,
         parent_id: CategoryIdVO | None,
         translations: dict[str, str],
-        revision: int,
         created_at: datetime,
         updated_at: datetime,
         created_by: EntityIdVO,
         updated_by: EntityIdVO,
     ) -> Self:
         """Восстанавливает корень без скрытого исправления состояния."""
-        if isinstance(revision, bool) or not isinstance(revision, int) or revision < 1:
-            raise InvalidCatalogValueError("Некорректная ревизия.")
         cls._validate_parent(identifier, parent_id, frozenset())
         labels = {
             LocaleVO(k).value: CatalogLabelVO(v).value for k, v in translations.items()
@@ -72,7 +68,6 @@ class Category:
             identifier,
             parent_id,
             labels,
-            revision,
             created_at,
             updated_at,
             created_by,
@@ -87,13 +82,6 @@ class Category:
         self.translations[locale.value] = value
         self._touch(actor, now)
 
-    def ensure_revision(self, expected: int) -> None:
-        """Отклоняет изменение из устаревшего редактора."""
-        if expected != self.revision:
-            raise CatalogConflictError(
-                "Ревизия изменилась. Загрузите актуальное состояние."
-            )
-
     def ensure_deletable(self, used: bool) -> None:
         """Защищает используемый справочник и дочерние категории от удаления."""
         if used:
@@ -102,8 +90,8 @@ class Category:
             )
 
     def _touch(self, actor: EntityIdVO, now: datetime) -> None:
-        """Фиксирует автора и новую ревизию изменения."""
-        self.revision += 1
+        """Фиксирует автора и время изменения."""
+
         self.updated_by = actor
         self.updated_at = now
 

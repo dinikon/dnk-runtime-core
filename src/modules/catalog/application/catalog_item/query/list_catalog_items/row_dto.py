@@ -26,7 +26,7 @@ class CatalogItemListRowDTO:
     """Компактная строка списка без полных данных редактора."""
 
     id: UUID
-    revision: int
+
     status: CatalogItemStatus
     sku: str | None
     title: str | None

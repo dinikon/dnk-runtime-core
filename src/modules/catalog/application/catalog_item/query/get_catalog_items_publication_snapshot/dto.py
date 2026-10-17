@@ -61,7 +61,7 @@ class CatalogItemPublicationDTO:
     """Проекция самостоятельного товара для сценария get_catalog_items_publication_snapshot."""
 
     id: UUID
-    revision: int
+
     product_type_id: UUID
     status: CatalogItemStatus
     sku: str | None

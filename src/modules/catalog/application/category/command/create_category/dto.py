@@ -7,4 +7,3 @@ class CreateCategoryResultDTO:
     """Подтверждённый результат конкретного сценария create_category."""
 
     id: UUID
-    revision: int

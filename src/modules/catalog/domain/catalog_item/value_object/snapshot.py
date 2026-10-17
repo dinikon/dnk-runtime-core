@@ -37,7 +37,7 @@ class CatalogItemValuesSnapshot:
     weight: WeightVO | None
     dimensions: DimensionsVO | None
     stock: StockSpecificationVO
-    revision: int
+
     created_at: datetime
     updated_at: datetime
     created_by: EntityIdVO

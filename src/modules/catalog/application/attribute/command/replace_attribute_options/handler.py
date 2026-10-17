@@ -40,7 +40,7 @@ class ReplaceAttributeOptionsHandler:
         """Выполняет сценарий; доменные решения и commit остаются у владельцев."""
         await self._lock.acquire(command.tenant_id)
         entity = await self._repository.get(command.attribute_id)
-        entity.ensure_revision(command.expected_revision)
+
         locale = LocaleVO(command.locale)
         await self._locales.ensure_active(locale.value)
         options = []
@@ -65,4 +65,4 @@ class ReplaceAttributeOptionsHandler:
             tuple(options), used, command.actor_id, self._clock.now()
         )
         await self._repository.save(entity)
-        return ReplaceAttributeOptionsResultDTO(entity.id.uuid, entity.revision)
+        return ReplaceAttributeOptionsResultDTO(entity.id.uuid)

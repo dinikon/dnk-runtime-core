@@ -25,9 +25,7 @@ class DeleteCatalogItemHandler:
         self._usage = usage
 
     async def execute(self, command: DeleteCatalogItemCommand) -> None:
-        """Проверяет ревизию, принадлежность корню и использование всех source ID."""
-        item = await self._mutations.load(
-            command.tenant_id, command.item_id, command.expected_revision
-        )
+        """Загружает товар под блокировкой и проверяет его внешнее использование."""
+        item = await self._mutations.load(command.tenant_id, command.item_id)
         item.ensure_deletable(bool(await self._usage.used_ids((item.id,))))
         await self._repository.delete(item)

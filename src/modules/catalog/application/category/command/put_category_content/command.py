@@ -10,6 +10,6 @@ class PutCategoryContentCommand:
     tenant_id: EntityIdVO
     actor_id: EntityIdVO
     category_id: CategoryIdVO
-    expected_revision: int
+
     locale: str
     label: str

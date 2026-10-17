@@ -10,14 +10,13 @@ import type {
 export interface CatalogCategory {
   id: string;
   label: string | null;
-  revision: number;
+
   parentId: string | null;
   childCount: number;
 }
 export interface CatalogTag {
   id: string;
   label: string | null;
-  revision: number;
 }
 export interface CatalogAttributeOption {
   id: string;
@@ -30,7 +29,7 @@ export interface CatalogAttribute {
   id: string;
   code: string;
   label: string | null;
-  revision: number;
+
   locales: string[];
   options: CatalogAttributeOption[];
 }
@@ -43,7 +42,7 @@ export interface CollectionItem {
   id: string;
   label: string;
   description: string;
-  revision: number;
+
   system: boolean;
 }
 export interface LocaleOption {
@@ -55,7 +54,7 @@ export type CollectionKind = "attributes" | "tags";
 export interface CatalogItem {
   id: string;
   title: string | null;
-  revision: number;
+
   product_type_id: string;
   status: "draft" | "active" | "archived";
   sku: string | null;

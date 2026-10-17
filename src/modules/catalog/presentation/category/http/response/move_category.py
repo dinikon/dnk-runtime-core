@@ -6,4 +6,3 @@ class MoveCategoryResponse(BaseModel):
     """Подтверждённый результат конкретного сценария move_category."""
 
     id: UUID
-    revision: int

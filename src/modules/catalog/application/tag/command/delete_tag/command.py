@@ -10,4 +10,3 @@ class DeleteTagCommand:
     tenant_id: EntityIdVO
     actor_id: EntityIdVO
     tag_id: TagIdVO
-    expected_revision: int

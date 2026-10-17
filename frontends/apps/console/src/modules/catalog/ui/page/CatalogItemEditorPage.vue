@@ -30,15 +30,17 @@ const {
   selectTab,
   pending,
   error,
-  conflict,
   blocked,
   isDirty,
   resetFor,
-  mark,
   save,
   upload,
   reload,
   imageUrl,
+  fieldError,
+  saveStatus,
+  retry,
+  uploading,
 } = useProductPage(true);
 const schemaVersion = computed(
   () => schema.data.value?.schema.schema_version ?? 0,
@@ -82,6 +84,14 @@ const dirtyTab = (value: string) =>
           })
         "
       />
+      <p
+        role="status"
+        aria-live="polite"
+        class="text-sm text-muted-foreground"
+        data-testid="autosave-status"
+      >
+        {{ saveStatus }}
+      </p>
       <Alert
         v-if="
           error ||
@@ -93,11 +103,7 @@ const dirtyTab = (value: string) =>
         "
         variant="destructive"
       >
-        <AlertTitle>{{
-          conflict
-            ? "Товар изменился в другом окне"
-            : "Не удалось выполнить операцию"
-        }}</AlertTitle>
+        <AlertTitle>{{ "Не удалось выполнить операцию" }}</AlertTitle>
         <AlertDescription>
           {{
             error ||
@@ -110,9 +116,13 @@ const dirtyTab = (value: string) =>
               "Повторите загрузку.",
             )
           }}
-          <p v-if="conflict">
-            Ваш ввод сохранён. Загрузите актуальные данные, чтобы продолжить.
-          </p>
+          <Button
+            v-if="error"
+            variant="outline"
+            :disabled="pending"
+            @click="retry"
+            >Повторить</Button
+          >
           <Button variant="outline" :disabled="pending" @click="reload"
             >Загрузить актуальные данные</Button
           >
@@ -125,7 +135,7 @@ const dirtyTab = (value: string) =>
       >
         <div class="flex min-w-0 flex-col gap-6">
           <ProductFieldsBlock
-            :key="`${id}:${ctx.locale.value}:content`"
+            :key="`${ctx.sessionKey.value}:${id}:${ctx.locale.value}:content`"
             :item="item.data.value"
             section="content"
             :locale="ctx.locale.value"
@@ -134,15 +144,15 @@ const dirtyTab = (value: string) =>
             :attributes="attributes.data.value ?? []"
             :schema-version="schemaVersion"
             :dirty="isDirty('content')"
-            @dirty="mark('content', $event)"
+            :validation-error="fieldError('content')"
             @save="save('content', $event)"
           />
           <Card class="min-w-0 shadow-none">
             <CardHeader
               ><CardTitle>Данные товара</CardTitle
               ><CardDescription
-                >Настройки сгруппированы по разделам. Каждый блок сохраняется
-                отдельно.</CardDescription
+                >Изменения сохраняются автоматически после короткой
+                паузы.</CardDescription
               ></CardHeader
             >
             <CardContent class="min-w-0">
@@ -203,7 +213,7 @@ const dirtyTab = (value: string) =>
                   >
                     <ProductFieldsBlock
                       v-for="section in group.sections"
-                      :key="`${id}:${ctx.locale.value}:${section}`"
+                      :key="`${ctx.sessionKey.value}:${id}:${ctx.locale.value}:${section}`"
                       :item="item.data.value"
                       :section="section"
                       :locale="ctx.locale.value"
@@ -215,7 +225,7 @@ const dirtyTab = (value: string) =>
                       :attributes="attributes.data.value ?? []"
                       :schema-version="schemaVersion"
                       :dirty="isDirty(section)"
-                      @dirty="mark(section, $event)"
+                      :validation-error="fieldError(section)"
                       @save="save(section, $event)"
                     />
                   </TabsContent>
@@ -225,10 +235,16 @@ const dirtyTab = (value: string) =>
           </Card>
         </div>
         <ProductEditorSidebar
-          :key="`${id}:${ctx.locale.value}:sidebar`"
+          :key="`${ctx.sessionKey.value}:${id}:${ctx.locale.value}:sidebar`"
           :item="item.data.value"
           :locale="ctx.locale.value"
           :pending="pending"
+          :uploading="uploading"
+          :errors="
+            Object.fromEntries(
+              sidebarSections.map((section) => [section, fieldError(section)]),
+            )
+          "
           :blocked="blocked || categories.isError.value || tags.isError.value"
           :schema-version="schemaVersion"
           :categories="categories.data.value ?? []"
@@ -243,7 +259,6 @@ const dirtyTab = (value: string) =>
           "
           :image-url="imageUrl"
           @save="save"
-          @dirty="mark"
           @upload="upload"
           @reload="reload"
         />

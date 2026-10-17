@@ -24,7 +24,7 @@ class AttributeDefinition:
     code: CatalogCodeVO
     translations: dict[str, str]
     options: tuple[AttributeOption, ...]
-    revision: int
+
     created_at: datetime
     updated_at: datetime
     created_by: EntityIdVO
@@ -47,7 +47,6 @@ class AttributeDefinition:
             code=code,
             translations={locale.value: label},
             options=options,
-            revision=1,
             created_at=now,
             updated_at=now,
             created_by=actor,
@@ -62,15 +61,12 @@ class AttributeDefinition:
         code: str,
         translations: dict[str, str],
         options: tuple[AttributeOption, ...],
-        revision: int,
         created_at: datetime,
         updated_at: datetime,
         created_by: EntityIdVO,
         updated_by: EntityIdVO,
     ) -> Self:
         """Восстанавливает полный агрегат, отклоняя некорректное состояние."""
-        if revision < 1:
-            raise InvalidCatalogValueError("Некорректная ревизия.")
         cls._validate_options(options)
         values = {
             LocaleVO(k).value: CatalogLabelVO(v).value for k, v in translations.items()
@@ -80,7 +76,6 @@ class AttributeDefinition:
             CatalogCodeVO(code),
             values,
             options,
-            revision,
             created_at,
             updated_at,
             created_by,
@@ -131,20 +126,13 @@ class AttributeDefinition:
         self.options = options
         self._touch(actor, now)
 
-    def ensure_revision(self, expected: int) -> None:
-        """Защищает агрегат от записи устаревшей формы."""
-        if expected != self.revision:
-            raise CatalogConflictError(
-                "Ревизия изменилась. Загрузите актуальное состояние."
-            )
-
     def ensure_deletable(self, used: bool) -> None:
         """Запрещает удаление определения, используемого товарами."""
         if used:
             raise CatalogConflictError("Характеристика используется товарами.")
 
     def _touch(self, actor: EntityIdVO, now: datetime) -> None:
-        """Фиксирует автора и новую ревизию изменения."""
-        self.revision += 1
+        """Фиксирует автора и время изменения."""
+
         self.updated_by = actor
         self.updated_at = now

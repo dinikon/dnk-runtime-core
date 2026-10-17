@@ -96,14 +96,16 @@ class SqlAlchemyCatalogItemRepository:
         await self.save(entity)
 
     async def save(self, entity: CatalogItem) -> None:
-        """Сохраняет изменённые поля и группы связей с проверкой ревизии."""
+        """Сохраняет изменённые поля и группы связей под блокировкой товара."""
         values = CatalogItemMapper.to_insert_values(entity)
         before = self._original.get(entity.id.uuid)
         if before is None:
             await self._session.execute(insert(CatalogItemModel).values(**values))
         else:
             changes = {
-                key: value for key, value in values.items() if value != before[0][key]
+                key: value
+                for key, value in values.items()
+                if key != "revision" and value != before[0][key]
             }
             if changes:
                 result = await self._session.execute(
@@ -112,7 +114,6 @@ class SqlAlchemyCatalogItemRepository:
                         CatalogItemModel.id == entity.id.uuid,
                         CatalogItemModel.kind == "simple",
                         CatalogItemModel.parent_id.is_(None),
-                        CatalogItemModel.revision == before[0]["revision"],
                     )
                     .values(**changes)
                 )
@@ -159,7 +160,6 @@ class SqlAlchemyCatalogItemRepository:
                 CatalogItemModel.id == entity.id.uuid,
                 CatalogItemModel.kind == "simple",
                 CatalogItemModel.parent_id.is_(None),
-                CatalogItemModel.revision == entity.revision,
             )
         )
         if result.rowcount != 1:

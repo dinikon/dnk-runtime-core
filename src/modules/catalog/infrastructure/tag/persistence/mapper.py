@@ -14,7 +14,6 @@ class TagMapper:
         return Tag.restore(
             identifier=TagIdVO(row["id"]),
             translations=translations,
-            revision=row["revision"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             created_by=EntityIdVO(row["created_by"]),
@@ -26,6 +25,7 @@ class TagMapper:
         """Извлекает поля нового корня без I/O."""
         return {
             "id": entity.id.uuid,
+            "revision": 1,
             "created_at": entity.created_at,
             "created_by": entity.created_by.uuid,
             **TagMapper.to_update_values(entity),
@@ -35,7 +35,6 @@ class TagMapper:
     def to_update_values(entity: Tag) -> dict[str, Any]:
         """Извлекает проверенное состояние для UPDATE."""
         return {
-            "revision": entity.revision,
             "updated_at": entity.updated_at,
             "updated_by": entity.updated_by.uuid,
         }

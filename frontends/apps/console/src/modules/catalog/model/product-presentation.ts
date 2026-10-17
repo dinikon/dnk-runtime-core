@@ -27,17 +27,6 @@ export const sectionTitles: Record<string, string> = {
   metadata: "Дополнительные поля",
   attributes: "Общие характеристики",
 };
-export const saveLabels: Record<string, string> = {
-  content: "Сохранить тексты",
-  status: "Сохранить статус",
-  sku: "Сохранить артикул",
-  virtual: "Сохранить виртуальность",
-  price: "Сохранить цену",
-  stock: "Сохранить наличие",
-  measurements: "Сохранить измерения",
-  metadata: "Сохранить дополнительные поля",
-  attributes: "Сохранить характеристики",
-};
 export const productTabs = [
   { id: "general", label: "Основные" },
   { id: "inventory", label: "Наличие" },

@@ -45,12 +45,12 @@ const items = useQuery({
 function filter(values: Record<string, string | number | undefined>) {
   void ctx.router.replace({ query: { ...ctx.route.query, ...values } });
 }
-async function remove(id: string, revision: number) {
+async function remove(id: string) {
   if (!window.confirm("Удалить товар?")) return;
   pending.value = true;
   error.value = "";
   try {
-    await catalogApi.deleteItem(id, revision);
+    await catalogApi.deleteItem(id);
     await cache.invalidateQueries({
       queryKey: ["catalog", ctx.tenantId.value],
     });
@@ -127,10 +127,7 @@ async function remove(id: string, revision: number) {
             {{ item.status }} · {{ item.sku ?? "Без SKU" }} ·
             {{ item.price ?? "Цена не задана" }} {{ item.currency }}
           </p></button
-        ><Button
-          variant="ghost"
-          :disabled="pending"
-          @click="remove(item.id, item.revision)"
+        ><Button variant="ghost" :disabled="pending" @click="remove(item.id)"
           >Удалить</Button
         >
       </div>

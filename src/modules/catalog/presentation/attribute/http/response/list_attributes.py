@@ -8,7 +8,7 @@ class ListAttributeItemResponse(BaseModel):
     id: UUID
     code: str
     label: str | None
-    revision: int
+
     option_count: int
 
 

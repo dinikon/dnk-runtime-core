@@ -61,10 +61,6 @@ export interface ProductGallery {
 }
 export type ProductTab =
   "general" | "inventory" | "shipping" | "attributes" | "additional";
-export interface ProductEditorDraft {
-  dirty: Record<string, boolean>;
-  resets: Record<string, number>;
-}
 export interface ProductOverviewModel {
   title: string;
   status: string;

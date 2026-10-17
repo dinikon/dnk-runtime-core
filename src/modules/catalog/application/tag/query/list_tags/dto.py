@@ -8,7 +8,6 @@ class TagListItemDTO:
 
     id: UUID
     label: str | None
-    revision: int
 
 
 @dataclass(frozen=True, slots=True)

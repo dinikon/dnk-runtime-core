@@ -19,7 +19,6 @@ class CategoryQueryMapper:
         return GetCategoryDetailsDTO(
             row["id"],
             translations.get(locale),
-            row["revision"],
             tuple(translations),
             row["parent_id"],
             row["child_count"],
@@ -31,7 +30,6 @@ class CategoryQueryMapper:
         return CategoryListItemDTO(
             row["id"],
             row["label"],
-            row["revision"],
             row["parent_id"],
             row["child_count"],
         )
