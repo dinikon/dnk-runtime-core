@@ -25,22 +25,42 @@ def iter_imports(path: Path) -> list[str]:
 
 
 class ArchitectureBoundariesTests(unittest.TestCase):
-    def test_removed_dynamic_modules_have_no_imports(self) -> None:
+    def test_removed_modules_have_no_imports(self) -> None:
         for root in ("src", "test"):
             for path in iter_python_files(root):
                 for module_name in iter_imports(path):
                     self.assertFalse(
                         module_name.startswith(
-                            ("src.modules.schema_registry", "src.modules.runtime_data")
+                            (
+                                "src.modules.schema_registry",
+                                "src.modules.runtime_data",
+                                "src.modules.inventory",
+                            )
                         ),
                         msg=f"{path} imports removed module {module_name}",
                     )
 
     def test_crm_entry_modules_import_without_order_dependencies(self):
         for name in (
-            "src.modules.crm.application.links.company_contacts",
-            "src.modules.crm.domain.links",
-            "src.modules.crm.infrastructure.persistence.contact_query_repository",
+            "src.modules.crm.infrastructure.persistence.models.company",
+            "src.modules.crm.infrastructure.persistence.models.contact",
+            "src.modules.crm.infrastructure.persistence.models.contact_company",
+            "src.modules.crm.domain.contact.aggregate",
+            "src.modules.crm.application.contact.command.create_contact.handler",
+            "src.modules.crm.application.contact.query.get_contact.handler",
+            "src.modules.crm.infrastructure.contact.persistence.query_repository",
+            "src.modules.crm.presentation.contact.router",
+            "src.modules.crm.domain.company.aggregate",
+            "src.modules.crm.application.company.command.create_company.handler",
+            "src.modules.crm.application.company.query.get_company.handler",
+            "src.modules.crm.infrastructure.company.persistence.query_repository",
+            "src.modules.crm.presentation.company.router",
+            "src.modules.crm.domain.contact.value_object.company_link",
+            "src.modules.crm.application.contact.command.link_company.handler",
+            "src.modules.crm.application.company.query.list_contacts.handler",
+            "src.modules.crm.infrastructure.contact.persistence.company_link_repository",
+            "src.modules.crm.infrastructure.company.persistence.contact_link_query_repository",
+            "src.modules.tenant_persistence",
         ):
             with self.subTest(module=name):
                 result = subprocess.run(
@@ -56,39 +76,47 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                 )
                 self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_crm_dependencies_point_inward(self):
+    def test_crm_dependencies_point_inward_and_transactions_stay_external(self):
+        forbidden = (
+            "sqlalchemy",
+            "fastapi",
+            "pydantic",
+            "src.config",
+            "src.modules.crm.infrastructure",
+            "src.modules.crm.presentation",
+            "src.modules.shared.infrastructure",
+            "src.modules.shared.presentation",
+        )
         for layer in ("domain", "application"):
-            forbidden = (
-                "sqlalchemy",
-                "fastapi",
-                "pydantic",
-                "src.modules.crm.infrastructure",
-                "src.modules.crm.presentation",
-                "src.modules.shared.infrastructure",
-                "src.modules.shared.presentation",
-            )
+            prefixes = forbidden
             if layer == "domain":
-                forbidden += (
+                prefixes += (
                     "src.modules.crm.application",
                     "src.modules.shared.application",
                 )
             for path in iter_python_files("src/modules/crm/" + layer):
                 for name in iter_imports(path):
-                    self.assertFalse(
-                        name.startswith(forbidden), f"{path} imports {name}"
-                    )
-                tree = ast.parse(path.read_text())
-                for node in ast.walk(tree):
+                    self.assertFalse(name.startswith(prefixes), f"{path}: {name}")
+        for root in (
+            "application",
+            "infrastructure/contact/persistence",
+            "infrastructure/company/persistence",
+        ):
+            for path in iter_python_files("src/modules/crm/" + root):
+                for node in ast.walk(ast.parse(path.read_text())):
                     if isinstance(node, ast.Call) and isinstance(
                         node.func, ast.Attribute
                     ):
                         self.assertNotIn(
                             node.func.attr, ("commit", "rollback"), str(path)
                         )
-        for path in iter_python_files("src/modules/crm/infrastructure/persistence"):
-            for node in ast.walk(ast.parse(path.read_text())):
-                if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-                    self.assertNotIn(node.func.attr, ("commit", "rollback"), str(path))
+        for path in iter_python_files("src/modules/crm"):
+            for name in iter_imports(path):
+                if name.startswith("src.modules"):
+                    self.assertTrue(
+                        (PROJECT_ROOT / (name.replace(".", "/") + ".py")).is_file(),
+                        f"{path}: indirect import {name}",
+                    )
 
     def test_price_lists_dependencies_point_inward(self):
         forbidden = {
@@ -121,23 +149,6 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                     self.assertFalse(
                         name.startswith(prefixes), f"{path} imports {name}"
                     )
-
-    def test_inventory_domain_dependencies_point_inward(self) -> None:
-        forbidden = (
-            "sqlalchemy",
-            "alembic",
-            "fastapi",
-            "pydantic",
-            "src.modules.inventory.infrastructure",
-            "src.modules.inventory.presentation",
-            "src.modules.inventory.application",
-            "src.modules.shared.infrastructure",
-            "src.modules.shared.presentation",
-            "src.modules.shared.application",
-        )
-        for path in iter_python_files("src/modules/inventory/domain"):
-            for name in iter_imports(path):
-                self.assertFalse(name.startswith(forbidden), f"{path} imports {name}")
 
     def test_no_modules_namespace_imports_are_used(self) -> None:
         forbidden_prefix = "modules."
@@ -224,11 +235,10 @@ class ArchitectureBoundariesTests(unittest.TestCase):
         self,
     ) -> None:
         paths = [
-            PROJECT_ROOT / "src/modules/shared/presentation/email/depends.py",
+            PROJECT_ROOT / "src/modules/identity/presentation/email/depends.py",
+            PROJECT_ROOT / "src/modules/identity/presentation/auth/providers.py",
             PROJECT_ROOT
-            / "src/modules/identity/presentation/depends/infrastructure.py",
-            PROJECT_ROOT
-            / "src/modules/identity/application/auth/use_case/request_email_otp.py",
+            / "src/modules/identity/application/auth/command/request_email_otp/handler.py",
         ]
         forbidden_patterns = (
             "request.app.state",

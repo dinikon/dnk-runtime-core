@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from src.modules.tenancy.domain.tenant import Tenant, TenantStatus
-from src.modules.tenancy.domain.tenant.value_object import TenantIdVO
+from src.modules.tenancy.domain.tenant.entity import Tenant
+from src.modules.tenancy.domain.tenant.value_object.tenant_status import TenantStatus
+from src.modules.tenancy.domain.tenant.value_object.tenant_id import TenantIdVO
 from src.modules.tenancy.infrastructure.persistence.tenant import TenantModel
 
 
@@ -21,8 +22,8 @@ def tenant_to_model(tenant: Tenant) -> TenantModel:
 
 def tenant_model_to_entity(model: TenantModel) -> Tenant:
     """Мапит SQLAlchemy TenantModel в доменную Tenant entity."""
-    return Tenant(
-        id=TenantIdVO.from_value(model.id),
+    return Tenant.restore(
+        tenant_id=TenantIdVO.from_value(model.id),
         name=model.name,
         external_id=model.external_id,
         status=TenantStatus(model.status),

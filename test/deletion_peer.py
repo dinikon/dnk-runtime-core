@@ -33,7 +33,9 @@ from src.modules.shared.infrastructure.persistence.global_migrations import (
 from src.modules.shared.infrastructure.tokens.redis_token_repository import (
     RedisTokenRepository,
 )
-from src.modules.shared.presentation.http.tenant_gate import TenantAdmissionMiddleware
+from src.modules.tenancy.presentation.tenant.http.tenant_gate import (
+    TenantAdmissionMiddleware,
+)
 
 
 async def main():

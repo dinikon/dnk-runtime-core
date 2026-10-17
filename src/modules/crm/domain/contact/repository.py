@@ -1,34 +1,24 @@
 from typing import Protocol
 
-from src.modules.crm.domain.contact.entity import Contact
-from src.modules.crm.domain.contact.value_object import ContactIdVO
-from src.modules.shared.domain.value_object.entity_id import EntityIdVO
+from src.modules.crm.domain.contact.aggregate import ContactEntity
+from src.modules.crm.domain.contact.value_object.identifier import ContactIdVO
 
 
 class ContactRepositoryProtocol(Protocol):
-    """Порт командного хранения контактов."""
+    """Контракт сохранения нового контакта в текущей транзакции tenant."""
 
-    async def get(
-        self,
-        tenant_id: EntityIdVO,
-        contact_id: ContactIdVO,
-        *,
-        for_update: bool = False,
-    ) -> Contact: ...
+    async def add(self, contact: ContactEntity) -> None:
+        """Добавляет контакт без самостоятельного завершения транзакции."""
+        ...
 
-    async def get_many(
-        self,
-        tenant_id: EntityIdVO,
-        contact_ids: tuple[ContactIdVO, ...],
-        *,
-        for_update: bool = False,
-    ) -> tuple[Contact, ...]: ...
+    async def get_for_update(self, contact_id: ContactIdVO) -> ContactEntity | None:
+        """Загружает агрегат с блокировкой в текущей транзакции."""
+        ...
 
-    async def add(self, tenant_id: EntityIdVO, contact: Contact) -> None: ...
+    async def save(self, contact: ContactEntity) -> None:
+        """Сохраняет изменённое ФИО и аудит."""
+        ...
 
-    async def save(self, tenant_id: EntityIdVO, contact: Contact) -> None: ...
-
-    async def delete(self, tenant_id: EntityIdVO, contact_id: ContactIdVO) -> None: ...
-
-
-__all__ = ["ContactRepositoryProtocol"]
+    async def delete(self, contact: ContactEntity) -> None:
+        """Удаляет контакт из текущей tenant-схемы."""
+        ...

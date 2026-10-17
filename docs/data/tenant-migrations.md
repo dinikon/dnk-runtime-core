@@ -1,8 +1,15 @@
 # Tenant migrations
 
+> The revision history below describes the current code. The
+> [CatalogItem rewrite plan](../plan/catalog.md) replaces all Catalog revisions
+> for a fresh database and rewires the remaining tenant chain. Those migration
+> changes have not been implemented by the documentation update.
+
 ## Ownership
 
 Alembic owns both global and static tenant tables. Global revisions live in `migrations/global/`; run `dnk-manage database upgrade` before starting API and workers. Startup only checks their version. The fresh global baseline refuses an existing unversioned database rather than adopting or deleting its tables. No dynamic object subsystem is active.
+
+Global revision `0006_reference_data` adds the four public reference catalogs, country/time-zone links and synchronization state. It also permits `scheduled_jobs.tenant_id=NULL` for global jobs. After upgrading and before exposing the reference-data GET routes, run `dnk-manage reference-data sync --dataset all`; subsequent refreshes are registered by the shared jobs worker every seven days. The catalogs do not require tenant migrations.
 
 Tenant models use `TenantBase` with logical schema `tenant`. `src/modules/tenant_persistence.py` registers model imports and historical table names. Retain historical names after removing a model so autogenerate can detect its removal. Unregistered legacy tables are excluded from reflection candidates; they are never adopted or deleted automatically.
 
@@ -12,7 +19,7 @@ Tenant models use `TenantBase` with logical schema `tenant`. `src/modules/tenant
 
 ## New tenants
 
-`CreateTenantUseCase` creates the tenant and primary domain, invokes the tenancy-owned bootstrap port, then provisions the administrator and email in the migrated schema. `AlembicTenantSchemaBootstrapAdapter` uses the same UoW session to acquire a schema lock, reject an existing schema, create it and upgrade to `head`.
+`CreateTenantHandler` validates the requested base currency against active Reference Data before creating resources, creates the tenant and primary domain, invokes the tenancy-owned bootstrap port, initializes `tenant_currency_settings` in that schema, then provisions the administrator and email. The currency-settings migration seeds existing schemas with UAH; new onboarding replaces that initial value with the validated selection in the same transaction. `AlembicTenantSchemaBootstrapAdapter` uses the same UoW session to acquire a schema lock, reject an existing schema, create it and upgrade to `head`.
 
 The adapter and migrator never commit. PostgreSQL DDL, Alembic version writes, tenant, domain, owner identity and cloud connection writes commit together. Any failure rolls everything back. The Control Plane installer records accepted-command errors in its durable attempt state and reconciles actual resources before declaring absence.
 
@@ -26,11 +33,37 @@ uniqueness. Revisions `0004` through `0006` add partner price-list ingestion and
 indexes. Revision `0008_contact_points` creates the tenant-local directory, bindings and labels with same-schema
 foreign keys. It seeds six labels with fixed identifiers and timestamps; seed actors are null. Upgrade existing
 tenants before running code that reads the new CRM arrays. Existing CRM rows are preserved with empty arrays.
-Revisions contain no fixed tenant names and do not import current ORM models.
+Revision `0011_inventory_skus`, after `0010_crm_company_legal_name`, adds the tenant-local
+Inventory `skus` directory with unique codes and audit fields; this revision remains
+in the migration history after removal of the module.
+Catalog now uses a fresh `0023_catalog_item` baseline after
+`0022_tenant_currency_settings`. It creates `catalog_item` for simple, variable
+and variant nodes, normalized content/media/enum/classification links and the
+fixed Default schema. The 2026-10-15 rebuild removes scalar override modes,
+uses boolean stock management and stores each measurement as a nullable value/unit
+pair (g/kg for weight, cm/m for each dimension). Revision identity remains
+0023_catalog_item; 0024_currency_exchange_rates still depends on it. It does not
+migrate old Product/Variant rows or existing CatalogItem data.
 
-The migration environment uses transaction-local `search_path` (through PostgreSQL `set_config(..., true)`) and explicitly sets `version_table_schema`. Successful execution restores the previous path. Failed transactions are rolled back by the owner. Migration files must preserve transactional execution: no internal commit, autocommit block or nontransactional DDL in onboarding revisions.
+The five Catalog revisions 0012/0015/0017/0018/0019 are removed. Only chain links
+in preserved migrations change: 0013 -> 0011, 0016 -> 0014, 0020 -> 0016. Files
+0020/0021 and currency settings 0022 remain intact. There is one tenant head.
+Downgrade from 0023 to 0022 removes only the new Catalog; upgrading recreates its empty
+schema and Default seed. The historical baseline rebuild required fresh database
+recreation; subsequent incremental migrations do not require it. No command here
+automatically drops the application database.
 
-An in-process lock protects Alembic's global context proxies; a schema-specific advisory transaction lock serializes separate workers/processes. The database lock is acquired before the process lock to avoid holding the latter while waiting for another transaction's commit.
+Revision `0026_catalog_attribute_ids`, after `0025_user_display_currency`, removes
+only the `code` columns and their uniqueness constraints from `catalog_attributes`
+and `catalog_attribute_options`. IDs, translations, positions, assignments and
+foreign keys remain intact, including future variation storage. Apply it together
+with the new backend and Console: the previous backend requires those columns.
+Downgrade recreates unique technical codes from UUIDs (`a_` / `o_` prefixes),
+not the original code values; recovering those values requires a backup.
+
+Revision `0016_remove_inventory`, after `0014_channel_publications`, retires
+the Inventory schema; its own upgrade/downgrade behavior is preserved.
+Catalog no longer references Inventory SKUs or warehouses.
 
 ## Transition from shared identity tables
 
@@ -69,8 +102,7 @@ Control Plane v1 targets a fresh database. Migration or adoption of existing ins
 
 ## Related
 
-- [Inventory](../modules/inventory.md)
-- [CRM](../modules/crm.md)
+- [Files](../modules/files.md): `0020_files` creates tenant registry tables;
+  `dnk-manage files prepare --all` prepares private buckets after SQL migrations.
 - [Tenancy](../modules/tenancy.md)
-- [Persistence and UoW](../architecture/persistence-and-uow.md)
-- [Historical dynamic schema](../history/data/runtime-schema.md)
+- [Persistence and UoW rules](../architecture/AGENTS.md#unit-of-work)

@@ -22,7 +22,12 @@ const pageTitle = computed(
   () =>
     adminNavigation
       .flatMap((group) => group.items)
-      .find((item) => item.url === route.path)?.title ?? "Настройки",
+      .find(
+        (item) =>
+          item.url === route.path ||
+          (item.url === "/admin/files" &&
+            route.path.startsWith("/admin/files/")),
+      )?.title ?? "Настройки",
 );
 </script>
 

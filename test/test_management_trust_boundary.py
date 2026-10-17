@@ -13,10 +13,10 @@ from starlette.requests import Request
 
 from src.modules.shared.presentation.http.host import extract_request_host
 
-from src.modules.shared.presentation.http.trust_boundary import (
+from src.modules.control_plane.presentation.http.trust_boundary import (
     ManagementTrustBoundary,
-    RedactAccessQuery,
 )
+from src.modules.shared.presentation.http.access_log import RedactAccessQuery
 
 
 class HostAuthorityTests(unittest.TestCase):

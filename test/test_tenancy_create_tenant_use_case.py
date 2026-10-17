@@ -1,21 +1,24 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 from src.modules.tenancy.application.ports.schema_bootstrap import (
     TenantSchemaBootstrapContextFactory,
 )
-from src.modules.tenancy.application.tenant import (
+from src.modules.tenancy.application.tenant.command.create_tenant.command import (
     CreateTenantCommand,
-    CreateTenantUseCase,
 )
-from src.modules.tenancy.domain.service import TenantOnboardingDraft
-from src.modules.tenancy.domain.tenant import Tenant
-from src.modules.tenancy.domain.tenant_domain import TenantDomain
+from src.modules.tenancy.application.tenant.command.create_tenant.handler import (
+    CreateTenantHandler,
+)
+from src.modules.tenancy.application.tenant.onboarding import TenantOnboardingDraft
+from src.modules.tenancy.domain.tenant.entity import Tenant
+from src.modules.tenancy.domain.tenant_domain.entity import TenantDomain
 
 
-class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):
+class CreateTenantHandlerTests(unittest.IsolatedAsyncioTestCase):
     async def test_bootstraps_schema_with_hex_schema_name(self) -> None:
         tenant = Tenant.create(name="Tenant", external_id="tenant-1")
         tenant_domain = TenantDomain.create_primary_console_domain(
@@ -56,13 +59,20 @@ class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):
                 recorded_context = context
                 steps.append("schema")
 
-        use_case = CreateTenantUseCase(
+        class TenantStorageStub:
+            async def register(self, tenant_id):
+                steps.append("files")
+
+        use_case = CreateTenantHandler(
+            currency_validator=AsyncMock(),
+            currency_settings_writer=AsyncMock(),
             tenant_onboarding_service=TenantOnboardingServiceStub(),
             identity_provisioning_service=IdentityProvisioningServiceStub(),
             tenant_schema_bootstrap_context_factory=TenantSchemaBootstrapContextFactory(
                 schema_prefix="dnk_",
             ),
             tenant_schema_bootstrap_port=TenantSchemaBootstrapPortStub(),
+            tenant_storage=TenantStorageStub(),
         )
 
         result = await use_case.execute(
@@ -76,7 +86,7 @@ class CreateTenantUseCaseTests(unittest.IsolatedAsyncioTestCase):
             )
         )
 
-        self.assertEqual(steps, ["tenant", "schema", "admin"])
+        self.assertEqual(steps, ["tenant", "schema", "files", "admin"])
         self.assertIsNotNone(recorded_context)
         self.assertEqual(
             recorded_context.schema_name,

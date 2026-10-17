@@ -1,12 +1,13 @@
 from src.modules.shared.domain.domain_error import DomainError
 
 
-class ContactNotFoundError(DomainError):
-    """Контакт не найден в текущем tenant."""
-
-
 class InvalidContactNameError(DomainError):
-    """ФИО контакта не соответствует доменным ограничениям."""
+    """Имя контакта нарушает правила полноты, типа или длины."""
 
 
-__all__ = ["ContactNotFoundError", "InvalidContactNameError"]
+class ContactNotFoundError(DomainError):
+    """Контакт отсутствует в текущем tenant."""
+
+
+class InvalidContactCompanyLinkError(DomainError):
+    """Пара идентификаторов связи Contact–Company имеет неверные типы."""

@@ -1,8 +1,11 @@
 """Monotonic deletion state, transactional role checks and resumable erasure."""
 
+from collections.abc import Callable, Awaitable
+from src.config.deploy.control_plane import ControlPlaneSettings
 import asyncio
 import hashlib
 import json
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from uuid import UUID
 
 from sqlalchemy import delete, select, update
@@ -26,23 +29,23 @@ from src.modules.control_plane.infrastructure.services import (
     serialize,
     AccessProjectionWriter,
 )
-from src.modules.identity.infrastructure.persistence.user import UserModel
-from src.modules.identity.infrastructure.repository.access_repository import (
+from src.modules.identity.infrastructure.persistence.models.user import UserModel
+from src.modules.identity.infrastructure.access.persistence.repository import (
     AccessRepository,
 )
 from src.modules.shared import EntityIdVO
-from src.modules.shared.application.persistence.tenant_schema_naming import (
+from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
-from src.modules.shared.infrastructure.persistence.tenant_gate import (
-    TenantGate,
-    TenantUnavailable,
-)
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_gate import TenantGate
+from src.modules.tenancy.application.tenant.tenant_admission import TenantUnavailable
 from src.modules.shared.infrastructure.persistence.tenant_cleanup import (
     delete_shared_tenant_records,
 )
-from src.modules.shared.infrastructure.persistence.tenant_migrations import (
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
     lock_tenant_schema,
+)
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
     schema_exists,
 )
 from src.modules.tenancy.infrastructure.persistence.tenant import TenantModel
@@ -307,12 +310,22 @@ async def erase_tokens(runtime_id, hosts):
 
 
 class DeletionWorker:
-    def __init__(self, sessions, settings, schema_prefix, token_eraser=erase_tokens):
+    """Последовательно блокирует и очищает ресурсы tenant под exclusive admission."""
+
+    def __init__(
+        self,
+        sessions: async_sessionmaker[AsyncSession],
+        settings: ControlPlaneSettings,
+        schema_prefix: str,
+        token_eraser: Callable[[UUID | None, set[str]], Awaitable[None]] = erase_tokens,
+    ) -> None:
+        """Принимает сессии и внешнее удаление auth-токенов."""
         self.sessions, self.settings = sessions, settings
         self.naming = TenantSchemaNaming(schema_prefix)
         self.token_eraser = token_eraser
 
-    async def due(self):
+    async def due(self) -> list[UUID]:
+        """Читает незавершённые операции, ожидающие блокировки или очистки."""
         async with self.sessions() as session, session.begin():
             ids = list(
                 await session.scalars(
@@ -334,7 +347,8 @@ class DeletionWorker:
         for operation_id in ids:
             await self.run(operation_id)
 
-    async def run(self, operation_id):
+    async def run(self, operation_id: UUID) -> None:
+        """Продолжает один этап удаления; ошибка оставляет durable состояние."""
         try:
             async with asyncio.timeout(self.settings.step_timeout_seconds):
                 async with self.sessions() as session:
@@ -386,7 +400,8 @@ class DeletionWorker:
                     .values(error_code="deletion_step_failed", updated_at=now())
                 )
 
-    async def purge(self, session, row):
+    async def purge(self, session: AsyncSession, row: DeletionModel) -> None:
+        """Удаляет физическое хранилище до схемы и общих записей tenant."""
         runtime_id = row.runtime_tenant_id
         hosts = (
             list(
@@ -406,6 +421,11 @@ class DeletionWorker:
             schema = self.naming.schema_name(EntityIdVO.from_value(runtime_id))
             connection = await session.connection()
             await lock_tenant_schema(connection, schema)
+            from src.modules.tenancy.infrastructure.adapter.files import (
+                FilesTenantStorageAdapter,
+            )
+
+            await FilesTenantStorageAdapter(session, self.naming).purge(runtime_id)
             await connection.execute(DropSchema(schema, cascade=True, if_exists=True))
             await delete_shared_tenant_records(session, runtime_id)
             await session.execute(

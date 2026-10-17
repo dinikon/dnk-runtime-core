@@ -1,39 +1,15 @@
-from __future__ import annotations
-
-from typing import Annotated
-
-from fastapi import Depends
-
-from src.config import dnk_config
 from src.config.infrastructure.email_config import EmailProvider, EmailSettings
-from src.modules.shared.application.email import EmailServicePort
-from src.modules.shared.infrastructure.email import (
+from src.modules.shared.application.email.email_transport_port import EmailTransportPort
+from src.modules.shared.infrastructure.email.resend_email_transport import (
     ResendEmailTransport,
+)
+from src.modules.shared.infrastructure.email.smtp_email_transport import (
     SmtpEmailTransport,
-    SystemEmailService,
 )
 
 
-def build_email_service(settings: EmailSettings) -> EmailServicePort:
-    """Создает email service по активному transport provider."""
+def build_email_transport(settings: EmailSettings) -> EmailTransportPort:
+    """Собирает транспорт доставки без знания видов и шаблонов писем."""
     if settings.provider == EmailProvider.RESEND:
-        return SystemEmailService(ResendEmailTransport())
-    return SystemEmailService(SmtpEmailTransport.from_settings(settings))
-
-
-default_email_service = build_email_service(dnk_config.EMAIL)
-
-
-def get_email_service() -> EmailServicePort:
-    """Возвращает singleton email service из конфигурации приложения."""
-    return default_email_service
-
-
-EmailServiceDep = Annotated[EmailServicePort, Depends(get_email_service)]
-
-__all__ = [
-    "EmailServiceDep",
-    "build_email_service",
-    "default_email_service",
-    "get_email_service",
-]
+        return ResendEmailTransport()
+    return SmtpEmailTransport.from_settings(settings)

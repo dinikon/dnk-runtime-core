@@ -10,7 +10,7 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from src.modules.shared.infrastructure.persistence.tenant_migrations import (
+from src.modules.shared.infrastructure.persistence.alembic_lock import (
     serialized_alembic,
 )
 

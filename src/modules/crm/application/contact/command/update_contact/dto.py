@@ -1,0 +1,17 @@
+from dataclasses import dataclass
+from datetime import datetime
+from uuid import UUID
+
+
+@dataclass(frozen=True, slots=True)
+class UpdateContactResultDTO:
+    """Актуальное ФИО и аудит после изменения контакта."""
+
+    id: UUID
+    first_name: str
+    last_name: str | None
+    middle_name: str | None
+    created_at: datetime
+    updated_at: datetime
+    created_by: UUID
+    updated_by: UUID

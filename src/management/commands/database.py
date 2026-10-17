@@ -6,13 +6,13 @@ from src.modules.shared.infrastructure.persistence.database_helper import db_hel
 from src.modules.shared.infrastructure.persistence.global_migrations import (
     GlobalMigrator,
 )
-from src.modules.shared.infrastructure.persistence.tenant_migrations import (
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
     TenantMigrator,
 )
-from src.modules.shared.application.persistence.tenant_schema_naming import (
+from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
-from src.modules.tenancy.domain.tenant.value_object import TenantIdVO
+from src.modules.tenancy.domain.tenant.value_object.tenant_id import TenantIdVO
 from src.modules.tenancy.infrastructure.persistence.tenant import TenantModel
 from src.config import dnk_config
 from sqlalchemy import select

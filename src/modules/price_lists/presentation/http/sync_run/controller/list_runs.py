@@ -1,6 +1,6 @@
 from uuid import UUID
 from fastapi import APIRouter
-from src.modules.shared.presentation.identity_context.depends import (
+from src.modules.identity.presentation.auth.depends import (
     AuthenticatedRequestContextDep,
 )
 from src.modules.price_lists.presentation.depends.application import ListRunsUseCaseDep

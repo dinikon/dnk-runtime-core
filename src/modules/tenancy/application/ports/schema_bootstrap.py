@@ -5,7 +5,7 @@ from typing import Protocol
 from uuid import UUID
 
 from src.modules.shared import EntityIdVO
-from src.modules.shared.application.persistence.tenant_schema_naming import (
+from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
 

@@ -1,40 +1,70 @@
 from __future__ import annotations
+from src.modules.identity.domain.user.value_object.user_id import UserIdVO
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+from src.modules.shared.domain.value_object.currency import CurrencyVO
 
 import unittest
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from src.modules.identity.application import SessionRecord, TenantRequestContext
-from src.modules.identity.application.auth import (
-    AuthenticateBySessionCommand,
-    AuthenticateBySessionUseCase,
-    ConfirmEmailOtpCommandDTO,
-    ConfirmEmailOtpUseCase,
-    GetCurrentUserCommandDTO,
-    GetCurrentUserUseCase,
-    LogoutCurrentSessionCommandDTO,
-    LogoutCurrentSessionUseCase,
-    OtpService,
-    RequestEmailOtpCommandDTO,
-    RequestEmailOtpUseCase,
-    SessionService,
-    UpdateCurrentUserProfileCommandDTO,
-    UpdateCurrentUserProfileUseCase,
+from src.modules.identity.application.auth.port.session_store import SessionRecord
+from src.modules.identity.application.auth.port.tenant_context_reader import (
+    TenantRequestContext,
 )
-from src.modules.identity.application.user import UserService
-from src.modules.identity.domain import (
-    InvalidOtpChallengeError,
-    InvalidOtpCodeError,
-    InvalidSessionError,
-    UserEmailAlreadyExistsError,
-    User,
+from src.modules.identity.application.auth.query.authenticate_by_session.query import (
+    AuthenticateBySessionQuery,
 )
+from src.modules.identity.application.auth.query.authenticate_by_session.handler import (
+    AuthenticateBySessionHandler,
+)
+from src.modules.identity.application.auth.command.confirm_email_otp.command import (
+    ConfirmEmailOtpCommand,
+)
+from src.modules.identity.application.auth.command.confirm_email_otp.handler import (
+    ConfirmEmailOtpHandler,
+)
+from src.modules.identity.application.user.query.get_current_user.query import (
+    GetCurrentUserQuery,
+)
+from src.modules.identity.application.user.query.get_current_user.handler import (
+    GetCurrentUserHandler,
+)
+from src.modules.identity.application.auth.command.logout_current_session.command import (
+    LogoutCurrentSessionCommand,
+)
+from src.modules.identity.application.auth.command.logout_current_session.handler import (
+    LogoutCurrentSessionHandler,
+)
+from src.modules.identity.application.auth.service.otp_service import OtpService
+from src.modules.identity.application.auth.command.request_email_otp.command import (
+    RequestEmailOtpCommand,
+)
+from src.modules.identity.application.auth.command.request_email_otp.handler import (
+    RequestEmailOtpHandler,
+)
+from src.modules.identity.application.auth.service.session_service import SessionService
+from src.modules.identity.application.user.command.update_current_user_profile.command import (
+    UpdateCurrentUserProfileCommand,
+)
+from src.modules.identity.application.user.command.update_current_user_profile.handler import (
+    UpdateCurrentUserProfileHandler,
+)
+from src.modules.identity.application.user.command.create_tenant_admin.handler import (
+    CreateTenantAdminHandler,
+)
+from src.modules.identity.application.user.command.create_tenant_admin.command import (
+    CreateTenantAdminCommand,
+)
+from src.modules.identity.domain.auth.error import InvalidOtpChallengeError
+from src.modules.identity.domain.auth.error import InvalidOtpCodeError
+from src.modules.identity.domain.auth.error import InvalidSessionError
+from src.modules.identity.domain.user.error import UserEmailAlreadyExistsError
+from src.modules.identity.domain.user.aggregate import User
 from src.modules.shared import EntityIdVO
 from src.modules.shared import DomainError
-from src.modules.shared.domain.email import (
-    EmailDeliveryError,
-    SystemEmailKind,
-)
+from src.modules.shared.domain.email import EmailDeliveryError
+from src.modules.identity.application.email.system_email_kind import SystemEmailKind
 
 
 class _TenantContextReaderStub:
@@ -117,7 +147,9 @@ class _UserRepositoryStub:
         self.tenant_calls.append(tenant_id)
         self.added_users.append(user)
 
-    async def get_by_id(self, user_id, *, tenant_id: EntityIdVO):
+    async def get_by_id(
+        self, user_id, *, tenant_id: EntityIdVO, for_update: bool = False
+    ):
         self.tenant_calls.append(tenant_id)
         if self.user is not None and self.user.id == user_id:
             return self.user
@@ -169,7 +201,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         challenge_store = _OtpChallengeStoreStub()
         email_service = _EmailServiceStub()
 
-        use_case = RequestEmailOtpUseCase(
+        use_case = RequestEmailOtpHandler(
             tenant_context_reader=_TenantContextReaderStub(self.context),
             users_repository=users_repository,
             otp_challenge_store=challenge_store,
@@ -178,8 +210,8 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
             otp_ttl_seconds=300,
         )
 
-        result = await use_case(
-            RequestEmailOtpCommandDTO(
+        result = await use_case.execute(
+            RequestEmailOtpCommand(
                 host=self.context.host,
                 email="john@example.com",
             )
@@ -205,7 +237,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         user.add_email("john@example.com", is_primary=True)
         challenge_store = _OtpChallengeStoreStub()
 
-        use_case = RequestEmailOtpUseCase(
+        use_case = RequestEmailOtpHandler(
             tenant_context_reader=_TenantContextReaderStub(self.context),
             users_repository=_UserRepositoryStub(user),
             otp_challenge_store=challenge_store,
@@ -214,8 +246,8 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
             otp_ttl_seconds=300,
         )
 
-        result = await use_case(
-            RequestEmailOtpCommandDTO(
+        result = await use_case.execute(
+            RequestEmailOtpCommand(
                 host=self.context.host,
                 email="john@example.com",
             )
@@ -253,7 +285,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         session_store = _SessionStoreStub()
         uow = _UnitOfWorkStub()
 
-        use_case = ConfirmEmailOtpUseCase(
+        use_case = ConfirmEmailOtpHandler(
             uow=uow,
             tenant_context_reader=_TenantContextReaderStub(self.context),
             users_repository=users_repository,
@@ -264,8 +296,8 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
             session_ttl_seconds=600,
         )
 
-        result = await use_case(
-            ConfirmEmailOtpCommandDTO(
+        result = await use_case.execute(
+            ConfirmEmailOtpCommand(
                 host=self.context.host,
                 email="john@example.com",
                 token=generated.token,
@@ -309,7 +341,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
             },
         )()
 
-        use_case = ConfirmEmailOtpUseCase(
+        use_case = ConfirmEmailOtpHandler(
             uow=_UnitOfWorkStub(),
             tenant_context_reader=_TenantContextReaderStub(self.context),
             users_repository=_UserRepositoryStub(user),
@@ -321,8 +353,8 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with self.assertRaises(InvalidOtpCodeError):
-            await use_case(
-                ConfirmEmailOtpCommandDTO(
+            await use_case.execute(
+                ConfirmEmailOtpCommand(
                     host=self.context.host,
                     email="john@example.com",
                     token=generated.token,
@@ -338,7 +370,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         )
         user.add_email("john@example.com", is_primary=True)
 
-        use_case = ConfirmEmailOtpUseCase(
+        use_case = ConfirmEmailOtpHandler(
             uow=_UnitOfWorkStub(),
             tenant_context_reader=_TenantContextReaderStub(self.context),
             users_repository=_UserRepositoryStub(user),
@@ -350,8 +382,8 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with self.assertRaises(InvalidOtpChallengeError):
-            await use_case(
-                ConfirmEmailOtpCommandDTO(
+            await use_case.execute(
+                ConfirmEmailOtpCommand(
                     host=self.context.host,
                     email="john@example.com",
                     token="missing-token",
@@ -380,18 +412,16 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         )
 
         users_repository = _UserRepositoryStub(user)
-        use_case = AuthenticateBySessionUseCase(
+        use_case = AuthenticateBySessionHandler(
             tenant_context_reader=_TenantContextReaderStub(self.context),
             users_repository=users_repository,
             session_store=session_store,
         )
 
-        result = await use_case(
-            AuthenticateBySessionCommand(
+        result = await use_case.execute(
+            AuthenticateBySessionQuery(
                 host=self.context.host,
                 session_token="sess-token",
-                ip="127.0.0.1",
-                user_agent="pytest",
             )
         )
 
@@ -402,20 +432,20 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(users_repository.tenant_calls, [self.tenant_id_vo])
 
-    async def test_get_current_user_raises_for_missing_session_token(self) -> None:
-        use_case = GetCurrentUserUseCase(
-            tenant_context_reader=_TenantContextReaderStub(self.context),
-            users_repository=_UserRepositoryStub(),
-            session_store=_SessionStoreStub(),
-        )
+    async def test_get_current_user_raises_for_missing_profile(self) -> None:
+        from unittest.mock import AsyncMock
 
+        repository = AsyncMock()
+        repository.get_current_user.return_value = None
+        settings = AsyncMock()
+        use_case = GetCurrentUserHandler(repository, settings)
         with self.assertRaises(InvalidSessionError):
-            await use_case(
-                GetCurrentUserCommandDTO(
-                    host=self.context.host,
-                    session_token=None,
+            await use_case.execute(
+                GetCurrentUserQuery(
+                    tenant_id=self.tenant_id_vo, user_id=UserIdVO.from_value(uuid4())
                 )
             )
+        settings.get_base_currency.assert_not_awaited()
 
     async def test_update_current_user_profile_persists_changes(self) -> None:
         user = User.create_tenant_admin(
@@ -439,17 +469,18 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         )
         uow = _UnitOfWorkStub()
 
-        use_case = UpdateCurrentUserProfileUseCase(
-            uow=uow,
-            tenant_context_reader=_TenantContextReaderStub(self.context),
+        use_case = UpdateCurrentUserProfileHandler(
             users_repository=users_repository,
-            session_store=session_store,
+            currency_validator=AsyncMock(),
+            settings=SimpleNamespace(
+                get_base_currency=AsyncMock(return_value=CurrencyVO("UAH"))
+            ),
         )
 
-        result = await use_case(
-            UpdateCurrentUserProfileCommandDTO(
-                host=self.context.host,
-                session_token="sess-token",
+        result = await use_case.execute(
+            UpdateCurrentUserProfileCommand(
+                tenant_id=self.tenant_id_vo,
+                user_id=user.id,
                 last_name="Smith",
                 first_name="Jane",
                 middle_name="A",
@@ -459,7 +490,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
             )
         )
 
-        self.assertTrue(uow.committed)
+        self.assertFalse(uow.committed)
         self.assertEqual(result.last_name, "Smith")
         self.assertEqual(result.first_name, "Jane")
         self.assertEqual(result.interface_language, "en")
@@ -493,18 +524,19 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         )
         uow = _UnitOfWorkStub()
 
-        use_case = UpdateCurrentUserProfileUseCase(
-            uow=uow,
-            tenant_context_reader=_TenantContextReaderStub(self.context),
+        use_case = UpdateCurrentUserProfileHandler(
             users_repository=users_repository,
-            session_store=session_store,
+            currency_validator=AsyncMock(),
+            settings=SimpleNamespace(
+                get_base_currency=AsyncMock(return_value=CurrencyVO("UAH"))
+            ),
         )
 
         with self.assertRaises(DomainError):
-            await use_case(
-                UpdateCurrentUserProfileCommandDTO(
-                    host=self.context.host,
-                    session_token="sess-token",
+            await use_case.execute(
+                UpdateCurrentUserProfileCommand(
+                    tenant_id=self.tenant_id_vo,
+                    user_id=user.id,
                     last_name="Smith",
                     first_name="Jane",
                     middle_name="A",
@@ -530,13 +562,13 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
             issued_at=now,
             expires_at=now + timedelta(hours=1),
         )
-        use_case = LogoutCurrentSessionUseCase(
+        use_case = LogoutCurrentSessionHandler(
             tenant_context_reader=_TenantContextReaderStub(self.context),
             session_store=session_store,
         )
 
-        result = await use_case(
-            LogoutCurrentSessionCommandDTO(
+        result = await use_case.execute(
+            LogoutCurrentSessionCommand(
                 host=self.context.host,
                 session_token="sess-token",
             )
@@ -547,13 +579,15 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_user_service_creates_tenant_admin(self) -> None:
         users_repository = _UserRepositoryStub()
-        service = UserService(users_repository)
+        service = CreateTenantAdminHandler(users_repository)
 
-        result = await service.create_tenant_admin(
-            tenant_id=self.tenant_id_vo,
-            first_name="John",
-            last_name="Doe",
-            email="john@example.com",
+        result = await service.execute(
+            CreateTenantAdminCommand(
+                tenant_id=self.tenant_id_vo,
+                first_name="John",
+                last_name="Doe",
+                email="john@example.com",
+            )
         )
 
         self.assertEqual(len(users_repository.added_users), 1)
@@ -570,14 +604,16 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
     async def test_user_service_rejects_duplicate_email(self) -> None:
         users_repository = _UserRepositoryStub()
         users_repository.exists = True
-        service = UserService(users_repository)
+        service = CreateTenantAdminHandler(users_repository)
 
         with self.assertRaises(UserEmailAlreadyExistsError):
-            await service.create_tenant_admin(
-                tenant_id=self.tenant_id_vo,
-                first_name="John",
-                last_name="Doe",
-                email="john@example.com",
+            await service.execute(
+                CreateTenantAdminCommand(
+                    tenant_id=self.tenant_id_vo,
+                    first_name="John",
+                    last_name="Doe",
+                    email="john@example.com",
+                )
             )
 
 

@@ -1,193 +1,235 @@
-"""Business membership rules and orchestration, without a database."""
+"""Связь Contact–Company без отдельного агрегата и SQL-схемы на запросе."""
 
+from dataclasses import FrozenInstanceError
+from datetime import UTC, datetime
+from typing import cast
 import unittest
-from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
-from src.modules.crm.domain.contact import Contact, ContactIdVO, ContactNotFoundError
-from src.modules.crm.domain.company import CompanyIdVO
-from src.modules.crm.domain.links import (
-    CompanyContactLinksPolicy,
-    CrmLinksChangedError,
-    DuplicateCrmLinkError,
-    InvalidCrmLinksError,
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.engine import RowMapping
+
+from src.modules.crm.application.company.query.list_contacts.handler import (
+    ListCompanyContactsHandler,
 )
-from src.modules.crm.application.links.company_contacts import CompanyContactsService
-from src.modules.crm.application.contact.command import UpdateContactCommand
-from src.modules.crm.application.contact.use_case import UpdateContactUseCase
-from src.modules.shared.domain.domain_error import EntityIdTypeError
-from src.modules.shared.domain.value_object.entity_id import EntityIdVO
+from src.modules.crm.application.company.query.list_contacts.query import (
+    ListCompanyContactsQuery,
+)
+from src.modules.crm.application.contact.command.link_company.command import (
+    LinkCompanyCommand,
+)
+from src.modules.crm.application.contact.command.link_company.handler import (
+    LinkCompanyHandler,
+)
+from src.modules.crm.application.contact.command.unlink_company.command import (
+    UnlinkCompanyCommand,
+)
+from src.modules.crm.application.contact.command.unlink_company.handler import (
+    UnlinkCompanyHandler,
+)
+from src.modules.crm.application.contact.query.list_companies.handler import (
+    ListContactCompaniesHandler,
+)
+from src.modules.crm.application.contact.query.list_companies.query import (
+    ListContactCompaniesQuery,
+)
+from src.modules.crm.domain.company.error import CompanyNotFoundError
+from src.modules.crm.domain.company.value_object.identifier import CompanyIdVO
+from src.modules.crm.domain.contact.error import (
+    ContactNotFoundError,
+    InvalidContactCompanyLinkError,
+)
+from src.modules.crm.domain.contact.value_object.company_link import (
+    ContactCompanyLinkVO,
+)
+from src.modules.crm.domain.contact.value_object.identifier import ContactIdVO
+from src.modules.crm.infrastructure.company.persistence.contact_link_query_repository import (
+    SqlAlchemyCompanyContactQueryRepository,
+)
+from src.modules.crm.infrastructure.contact.persistence.company_link_query_repository import (
+    SqlAlchemyContactCompanyQueryRepository,
+)
+from src.modules.crm.infrastructure.contact.persistence.company_link_repository import (
+    SqlAlchemyCompanyLinkRepository,
+)
 
 
-class ContactLinksDomainTests(unittest.TestCase):
-    def setUp(self):
-        self.now = datetime(2026, 9, 27, tzinfo=UTC)
-        self.actor = EntityIdVO.from_value(uuid4())
-        self.contact = Contact.create(
-            contact_id=ContactIdVO.from_value(uuid4()),
-            actor_id=self.actor,
-            now=self.now,
-            first_name="Ada",
-        )
-        self.a, self.b = (CompanyIdVO.from_value(uuid4()) for _ in range(2))
-        self.later = self.now + timedelta(hours=1)
-
-    def test_membership_is_immutable_unique_and_audited(self):
-        self.assertTrue(
-            self.contact.link_company(self.a, actor_id=self.actor, now=self.later)
-        )
-        self.assertEqual(self.contact.company_ids, frozenset({self.a}))
-        self.assertEqual(self.contact.updated_at, self.later)
-        with self.assertRaises(AttributeError):
-            self.contact.company_ids.add(self.b)
-        with self.assertRaises(AttributeError):
-            self.contact.company_ids = frozenset()
-        self.assertFalse(
-            self.contact.link_company(
-                self.a, actor_id=self.actor, now=self.later + timedelta(hours=1)
-            )
-        )
-        self.assertEqual(self.contact.updated_at, self.later)
-        self.assertTrue(
-            self.contact.unlink_company(self.a, actor_id=self.actor, now=self.later)
-        )
-        self.assertFalse(
-            self.contact.unlink_company(self.a, actor_id=self.actor, now=self.later)
-        )
-
-    def test_duplicate_wrong_type_missing_snapshot_and_conflict_do_not_mutate(self):
-        self.contact.link_company(self.a, actor_id=self.actor, now=self.now)
-        for requested, expected, error in [
-            ((self.a, self.a), (self.a,), DuplicateCrmLinkError),
-            ((ContactIdVO.from_value(self.a.uuid),), (self.a,), EntityIdTypeError),
-            ((self.b,), (), CrmLinksChangedError),
-            ((self.b,), None, InvalidCrmLinksError),
-        ]:
-            with self.subTest(error=error), self.assertRaises(error):
-                self.contact.replace_companies(
-                    requested=requested,
-                    expected=expected,
-                    actor_id=self.actor,
-                    now=self.later,
-                )
-            self.assertEqual(self.contact.company_ids, frozenset({self.a}))
-            self.assertEqual(self.contact.updated_at, self.now)
-
-    def test_replacement_is_a_set_and_preserves_noop_audit(self):
-        self.contact.replace_companies(
-            requested=(self.a, self.b), expected=(), actor_id=self.actor, now=self.now
-        )
-        self.assertFalse(
-            self.contact.replace_companies(
-                requested=(self.b, self.a),
-                expected=(self.a, self.b),
-                actor_id=self.actor,
-                now=self.later,
-            )
-        )
-        self.assertEqual(self.contact.updated_at, self.now)
-        self.assertTrue(
-            self.contact.replace_companies(
-                requested=(),
-                expected=(self.a, self.b),
-                actor_id=self.actor,
-                now=self.later,
-            )
-        )
-
-    def test_reverse_policy_checks_snapshot_uniqueness_and_availability(self):
-        a, b = (ContactIdVO.from_value(uuid4()) for _ in range(2))
-        self.assertEqual(
-            CompanyContactLinksPolicy.changes(
-                current=(a,), expected=(a,), requested=(b,)
-            ),
-            (frozenset({b}), frozenset({a})),
-        )
-        with self.assertRaises(DuplicateCrmLinkError):
-            CompanyContactLinksPolicy.changes(current=(), expected=(), requested=(a, a))
-        with self.assertRaises(CrmLinksChangedError):
-            CompanyContactLinksPolicy.changes(current=(a,), expected=(), requested=(b,))
-        with self.assertRaises(CrmLinksChangedError):
-            CompanyContactLinksPolicy.ensure_available(
-                available=(), expected=(a,), requested=()
-            )
-        with self.assertRaises(ContactNotFoundError):
-            CompanyContactLinksPolicy.ensure_available(
-                available=(), expected=(), requested=(a,)
-            )
+class ContactCompanyDomainTests(unittest.TestCase):
+    def test_link_pair_is_typed_and_immutable(self):
+        link = ContactCompanyLinkVO(ContactIdVO(uuid4()), CompanyIdVO(uuid4()))
+        with self.assertRaises(FrozenInstanceError):
+            link.contact_id = ContactIdVO(uuid4())
+        for first, second in (
+            (CompanyIdVO(uuid4()), CompanyIdVO(uuid4())),
+            (ContactIdVO(uuid4()), ContactIdVO(uuid4())),
+        ):
+            with self.subTest(first=first, second=second):
+                with self.assertRaises(InvalidContactCompanyLinkError):
+                    ContactCompanyLinkVO(first, second)
 
 
-class CompanyLinksApplicationTests(unittest.IsolatedAsyncioTestCase):
+class ContactCompanyHandlerTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.tenant = EntityIdVO.from_value(uuid4())
-        self.actor = EntityIdVO.from_value(uuid4())
-        self.now = datetime(2026, 9, 27, tzinfo=UTC)
-        self.clock = SimpleNamespace(now=lambda: self.now)
-        self.a, self.b = [
-            Contact.create(
-                contact_id=ContactIdVO.from_value(uuid4()),
-                actor_id=self.actor,
-                now=self.now,
-                first_name=name,
+        self.contact_id, self.company_id = ContactIdVO(uuid4()), CompanyIdVO(uuid4())
+        self.repository = Mock(
+            lock_contact=AsyncMock(return_value=True),
+            lock_company=AsyncMock(return_value=True),
+            link=AsyncMock(),
+            unlink=AsyncMock(),
+        )
+
+    async def test_link_and_unlink_use_contact_first_for_both_directions(self):
+        order = []
+
+        async def contact(_):
+            order.append("contact")
+            return True
+
+        async def company(_):
+            order.append("company")
+            return True
+
+        self.repository.lock_contact.side_effect = contact
+        self.repository.lock_company.side_effect = company
+        await LinkCompanyHandler(self.repository).execute(
+            LinkCompanyCommand(self.contact_id, self.company_id)
+        )
+        await UnlinkCompanyHandler(self.repository).execute(
+            UnlinkCompanyCommand(self.contact_id, self.company_id)
+        )
+        self.assertEqual(order, ["contact", "company", "contact", "company"])
+        pair = ContactCompanyLinkVO(self.contact_id, self.company_id)
+        self.repository.link.assert_awaited_once_with(pair)
+        self.repository.unlink.assert_awaited_once_with(pair)
+
+    async def test_absent_contact_stops_before_company_or_write(self):
+        self.repository.lock_contact.return_value = False
+        with self.assertRaises(ContactNotFoundError):
+            await LinkCompanyHandler(self.repository).execute(
+                LinkCompanyCommand(self.contact_id, self.company_id)
             )
-            for name in ("A", "B")
-        ]
-        self.company, self.other = (CompanyIdVO.from_value(uuid4()) for _ in range(2))
-        self.a.link_company(self.company, actor_id=self.actor, now=self.now)
-        self.a.link_company(self.other, actor_id=self.actor, now=self.now)
-        self.contacts = SimpleNamespace(
-            get_many=AsyncMock(return_value=(self.a, self.b)), save=AsyncMock()
-        )
-        self.queries = SimpleNamespace(
-            linked_contact_ids=AsyncMock(return_value=(self.a.id,))
-        )
-        self.service = CompanyContactsService(self.contacts, self.queries, self.clock)
+        self.repository.lock_company.assert_not_awaited()
+        self.repository.link.assert_not_awaited()
 
-    async def test_reverse_edit_calls_roots_and_preserves_other_memberships(self):
-        locked = await self.service.lock_contacts(
-            self.tenant, requested=(self.b.id,), expected=(self.a.id,)
-        )
-        self.assertTrue(self.contacts.get_many.await_args.kwargs["for_update"])
-        await self.service.apply(
-            self.tenant,
-            self.company,
-            self.actor,
-            requested=(self.b.id,),
-            expected=(self.a.id,),
-            contacts=locked,
-        )
-        self.assertEqual(self.a.company_ids, frozenset({self.other}))
-        self.assertEqual(self.b.company_ids, frozenset({self.company}))
-        self.assertEqual(self.contacts.save.await_count, 2)
-        for call in self.contacts.save.await_args_list:
-            self.assertEqual(call.args[0], self.tenant)
-
-    async def test_conflict_writes_nothing(self):
-        with self.assertRaises(CrmLinksChangedError):
-            await self.service.apply(
-                self.tenant,
-                self.company,
-                self.actor,
-                requested=(self.b.id,),
-                expected=(),
-                contacts={self.b.id: self.b},
+    async def test_absent_company_stops_before_write(self):
+        self.repository.lock_company.return_value = False
+        with self.assertRaises(CompanyNotFoundError):
+            await UnlinkCompanyHandler(self.repository).execute(
+                UnlinkCompanyCommand(self.contact_id, self.company_id)
             )
-        self.contacts.save.assert_not_awaited()
-        self.assertEqual(self.b.company_ids, frozenset())
+        self.repository.unlink.assert_not_awaited()
 
-    async def test_omitted_links_do_not_lock_companies_or_touch_membership(self):
-        repository = SimpleNamespace(
-            get=AsyncMock(return_value=self.a), save=AsyncMock()
+    async def test_list_handlers_distinguish_missing_owner_and_empty_links(self):
+        contact_repo = Mock(list_companies=AsyncMock(return_value=[]))
+        company_repo = Mock(list_contacts=AsyncMock(return_value=[]))
+        contact_handler = ListContactCompaniesHandler(contact_repo)
+        company_handler = ListCompanyContactsHandler(company_repo)
+        self.assertEqual(
+            (
+                await contact_handler.execute(
+                    ListContactCompaniesQuery(self.contact_id)
+                )
+            ).companies,
+            (),
         )
-        companies = SimpleNamespace(get=AsyncMock())
-        points = SimpleNamespace(sync=AsyncMock())
-        read = AsyncMock(return_value="details")
-        result = await UpdateContactUseCase(
-            repository, self.clock, points, read, companies
-        )(UpdateContactCommand(self.tenant, self.actor, self.a.id, "Renamed"))
-        self.assertEqual(result, "details")
-        companies.get.assert_not_awaited()
-        self.assertEqual(self.a.company_ids, frozenset({self.company, self.other}))
-        repository.save.assert_awaited_once_with(self.tenant, self.a)
+        self.assertEqual(
+            (
+                await company_handler.execute(ListCompanyContactsQuery(self.company_id))
+            ).contacts,
+            (),
+        )
+        contact_repo.list_companies.return_value = None
+        company_repo.list_contacts.return_value = None
+        with self.assertRaises(ContactNotFoundError):
+            await contact_handler.execute(ListContactCompaniesQuery(self.contact_id))
+        with self.assertRaises(CompanyNotFoundError):
+            await company_handler.execute(ListCompanyContactsQuery(self.company_id))
+
+
+class ContactCompanyPersistenceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_writes_use_locks_and_idempotent_insert(self):
+        result = Mock(scalar_one_or_none=Mock(return_value=uuid4()))
+        session = Mock(execute=AsyncMock(return_value=result))
+        repository = SqlAlchemyCompanyLinkRepository(session)
+        contact_id, company_id = ContactIdVO(uuid4()), CompanyIdVO(uuid4())
+        self.assertTrue(await repository.lock_contact(contact_id))
+        self.assertTrue(await repository.lock_company(company_id))
+        for call in session.execute.await_args_list:
+            statement = call.args[0]
+            self.assertIn(
+                "FOR KEY SHARE", str(statement.compile(dialect=postgresql.dialect()))
+            )
+            self.assertNotIn("schema_translate_map", statement.get_execution_options())
+        link = ContactCompanyLinkVO(contact_id, company_id)
+        await repository.link(link)
+        insert = session.execute.await_args.args[0]
+        self.assertIn(
+            "ON CONFLICT (contact_id, company_id) DO NOTHING",
+            str(insert.compile(dialect=postgresql.dialect())),
+        )
+        await repository.unlink(link)
+        delete = session.execute.await_args.args[0]
+        self.assertTrue(str(delete.compile()).startswith("DELETE FROM "))
+        self.assertNotIn("schema_translate_map", delete.get_execution_options())
+
+    async def test_each_list_is_one_outer_join_and_distinguishes_absence(self):
+        now, actor = datetime(2026, 10, 4, tzinfo=UTC), uuid4()
+        contact_id, company_id = ContactIdVO(uuid4()), CompanyIdVO(uuid4())
+        company_row = dict(
+            owner_id=contact_id.uuid,
+            id=company_id.uuid,
+            legal_name="ACME",
+            created_at=now,
+            updated_at=now,
+            created_by=actor,
+            updated_by=actor,
+        )
+        contact_row = dict(
+            owner_id=company_id.uuid,
+            id=contact_id.uuid,
+            first_name="A",
+            last_name=None,
+            middle_name=None,
+            created_at=now,
+            updated_at=now,
+            created_by=actor,
+            updated_by=actor,
+        )
+        for repository_type, method_name, identifier, row, expected in (
+            (
+                SqlAlchemyContactCompanyQueryRepository,
+                "list_companies",
+                contact_id,
+                company_row,
+                "legal_name",
+            ),
+            (
+                SqlAlchemyCompanyContactQueryRepository,
+                "list_contacts",
+                company_id,
+                contact_row,
+                "first_name",
+            ),
+        ):
+            with self.subTest(repository=repository_type):
+                result = Mock()
+                result.mappings.return_value.all.return_value = [cast(RowMapping, row)]
+                session = Mock(execute=AsyncMock(return_value=result))
+                repository = repository_type(session)
+                items = await getattr(repository, method_name)(identifier)
+                self.assertEqual(getattr(items[0], expected), row[expected])
+                statement = session.execute.await_args.args[0]
+                sql = str(statement.compile())
+                self.assertIn("LEFT OUTER JOIN", sql)
+                self.assertIn("ORDER BY", sql)
+                self.assertNotIn(
+                    "schema_translate_map", statement.get_execution_options()
+                )
+                session.execute.assert_awaited_once()
+                result.mappings.return_value.all.return_value = [
+                    cast(RowMapping, {**row, "id": None})
+                ]
+                self.assertEqual(await getattr(repository, method_name)(identifier), [])
+                result.mappings.return_value.all.return_value = []
+                self.assertIsNone(await getattr(repository, method_name)(identifier))

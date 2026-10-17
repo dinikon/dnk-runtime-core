@@ -1,0 +1,43 @@
+{
+  "list_item": {
+    "item_id": 131415,
+    "rz_item_id": null,
+    "sync_source_id": 199,
+    "price_offer_id": "123123AF",
+    "article": "ERTY23423dg4",
+    "name": "Телефон",
+    "price": 999,
+    "price_old": 1200,
+    "price_promo": 777,
+    "available": 1,
+    "stock_quantity": 0,
+    "upload_status": 0,
+    "upload_status_title": "Новий",
+    "unknown_native_field": {"preserve": true}
+  },
+  "detail_item": {
+    "item_id": 131415,
+    "rz_item_id": null,
+    "price_offer_id": "123123AF",
+    "sync_source_id": 199,
+    "sync_source": {"id": 199, "new_flow_old_price": 1},
+    "rz_group_id": 77,
+    "name": "Телефон",
+    "name_ua": "Телефон тестового магазину",
+    "description_ua": "<p>Опис товару</p><script>bad()</script>",
+    "docket_ua": "<p>Короткий опис</p>",
+    "url": "https://rozetka.com.ua/p123/",
+    "photo": ["https://content.example/phone.jpg"],
+    "photo_preview": ["https://content.example/phone-small.jpg"],
+    "rz_category": {"id": 80007, "title": "Телефоны", "title_ua": "Телефони"},
+    "price_category": {"id": "80007", "title": "Телефоны", "title_ua": "Телефони"},
+    "rz_status": 3,
+    "rz_sell_status": 4,
+    "params": [
+      {"title": "Розмір", "type": "ListValues", "value": [{"id": 1, "value": "XS"}, {"id": 2, "value": "XL"}]},
+      {"title": "Підтримка", "type": "CheckBox", "value": false, "seller_value": true},
+      {"title": "Вага", "type": "Decimal", "value": 0, "unit": "кг"},
+      {"title": "Додатково", "type": "Text", "value": "значение", "value_ua": "значення"}
+    ]
+  }
+}

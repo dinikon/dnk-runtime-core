@@ -5,37 +5,41 @@ from unittest import TestCase, IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
-from src.modules.contact_points.infrastructure.persistence.mappers import (
+from src.modules.contact_points.infrastructure.persistence.contact_point_mapper import (
     ContactPointMapper,
+)
+from src.modules.contact_points.infrastructure.persistence.binding_mapper import (
     ContactPointBindingMapper,
+)
+from src.modules.contact_points.infrastructure.persistence.label_mapper import (
     ContactPointLabelMapper,
 )
-from src.modules.contact_points.infrastructure.persistence.base import (
+from src.modules.contact_points.application.error import (
     ContactPointPersistenceMappingError,
 )
-from src.modules.contact_points.domain.contact_point.value_object.identifier import (
+from src.modules.contact_points.domain.value_object.contact_point_identifier import (
     ContactPointIdVO,
 )
-from src.modules.contact_points.domain.binding.value_object.identifier import (
+from src.modules.contact_points.domain.value_object.binding_identifier import (
     ContactPointBindingIdVO,
 )
-from src.modules.contact_points.domain.label.value_object.identifier import (
+from src.modules.contact_points.domain.value_object.label_identifier import (
     ContactPointLabelIdVO,
 )
-from src.modules.contact_points.domain.contact_point.value_object.value import (
+from src.modules.contact_points.domain.value_object.value import (
     ContactPointType,
     ContactPointValueVO,
 )
-from src.modules.contact_points.domain.label.value_object.name import (
+from src.modules.contact_points.domain.value_object.label_name import (
     ContactPointLabelNameVO,
 )
-from src.modules.contact_points.domain.binding.value_object.target import (
+from src.modules.contact_points.domain.value_object.target import (
     ContactPointTargetVO,
 )
-from src.modules.contact_points.application.label.use_case.list_labels import (
-    ListContactPointLabelsUseCase,
+from src.modules.contact_points.application.query.list_labels.handler import (
+    ListContactPointLabelsHandler,
 )
-from src.modules.contact_points.application.label.query.list_labels_query import (
+from src.modules.contact_points.application.query.list_labels.query import (
     ListContactPointLabelsQuery,
 )
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
@@ -298,7 +302,7 @@ class LabelOrderingTests(IsolatedAsyncioTestCase):
         repository = AsyncMock()
         repository.list.return_value = labels
         query = ListContactPointLabelsQuery(EntityIdVO(uuid4()))
-        result = await ListContactPointLabelsUseCase(repository)(query)
+        result = await ListContactPointLabelsHandler(repository).execute(query)
         tied = sorted((labels[0].id, labels[2].id), key=str)
         self.assertEqual(
             [item.id for item in result], [labels[1].id, labels[3].id, *tied]

@@ -1,0 +1,20 @@
+from pydantic import BaseModel
+from uuid import UUID
+
+
+class ListAttributeItemResponse(BaseModel):
+    """Одна строка конкретного списка определений."""
+
+    id: UUID
+    label: str | None
+
+    option_count: int
+
+
+class ListAttributesResponse(BaseModel):
+    """Страница результата list_attributes."""
+
+    items: tuple[ListAttributeItemResponse, ...]
+    total: int
+    page: int
+    page_size: int

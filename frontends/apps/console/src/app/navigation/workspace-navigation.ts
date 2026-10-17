@@ -1,5 +1,8 @@
 import {
   Building2,
+  FolderTree,
+  Tags,
+  Plug,
   FileSpreadsheet,
   LifeBuoy,
   ShoppingBasket,
@@ -10,6 +13,23 @@ import type { WorkspaceNavigation } from "./workspace-navigation.types";
 
 export const workspaceNavigation: WorkspaceNavigation = {
   navGroups: [
+    {
+      title: "Каталог",
+      items: [
+        { title: "Товары", url: "/catalog/items", icon: ShoppingBasket },
+        { title: "Категории", url: "/catalog/categories", icon: FolderTree },
+        { title: "Метки", url: "/catalog/tags", icon: Tags },
+        {
+          title: "Характеристики",
+          url: "/catalog/attributes",
+          icon: FileSpreadsheet,
+        },
+      ],
+    },
+    {
+      title: "Интеграции",
+      items: [{ title: "Каналы", url: "/channels", icon: Plug }],
+    },
     {
       title: "CRM",
       items: [

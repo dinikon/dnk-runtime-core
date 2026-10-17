@@ -22,7 +22,20 @@
 {{- end -}}
 
 {{- define "dnk.ingress.annotations" -}}
-{{- with .Values.ingress.annotations }}
+{{- $annotations := deepCopy .Values.ingress.annotations | default dict -}}
+{{- if eq .Values.ingress.className "nginx" -}}
+{{- $defaults := dict
+    "nginx.ingress.kubernetes.io/proxy-body-size" (printf "%d" (add .Values.application.files.consoleMaxUploadBytes 65536))
+    "nginx.ingress.kubernetes.io/proxy-request-buffering" "off"
+    "nginx.ingress.kubernetes.io/proxy-read-timeout" (printf "%d" (int (ceil .Values.application.files.operationTimeoutSeconds)))
+    "nginx.ingress.kubernetes.io/proxy-send-timeout" (printf "%d" (int (ceil .Values.application.files.operationTimeoutSeconds))) -}}
+{{- range $key, $value := $defaults -}}
+{{- if not (hasKey $annotations $key) -}}
+{{- $_ := set $annotations $key $value -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- with $annotations }}
 {{ toYaml . }}
 {{- end }}
 argocd.argoproj.io/sync-wave: "0"

@@ -14,11 +14,13 @@ from pydantic_settings import (
 from src.libs.file_utils import search_file_upwards
 from src.config.feature.identity.auth_config import IdentityAuthConfig
 from src.config.feature.price_lists_config import PriceListsConfig
+from src.config.feature.channels_config import ChannelsConfig
 from src.config.deploy.control_plane import ControlPlaneConfig
 from src.config.deploy import DeploymentConfig
 from src.config.feature import FeatureConfig
 from src.config.infrastructure import DatabaseConfig
 from src.config.infrastructure.email_config import EmailConfig
+from src.config.infrastructure.files_config import FilesConfig
 from src.config.infrastructure.event_bus_config import EventBusConfig
 from src.config.infrastructure.rabbitmq_config import RabbitMQConfig
 from src.config.infrastructure.redis_config import RedisConfig
@@ -100,11 +102,13 @@ class DnkConfig(
     EventBusConfig,
     ScheduledJobsConfig,
     EmailConfig,
+    FilesConfig,
     # Redis config
     RedisConfig,
     # Auth config
     IdentityAuthConfig,
     PriceListsConfig,
+    ChannelsConfig,
     # Control Plane config
     ControlPlaneConfig,
     # Packaging info

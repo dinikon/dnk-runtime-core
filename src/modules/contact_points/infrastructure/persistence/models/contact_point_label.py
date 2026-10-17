@@ -3,11 +3,9 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.modules.shared.infrastructure.persistence import (
-    AudienceMixin,
-    StringUUID,
-    TenantBase,
-)
+from src.modules.shared.infrastructure.persistence import AudienceMixin
+from src.modules.shared.infrastructure.persistence import StringUUID
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_base import TenantBase
 
 
 class ContactPointLabelModel(AudienceMixin, TenantBase):

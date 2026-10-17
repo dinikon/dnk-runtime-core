@@ -6,8 +6,10 @@ from uuid import uuid4
 
 from src.management.cli import build_parser
 from src.management.commands.tenant_migrations import handle
-from src.modules.shared.infrastructure.persistence.tenant_migrations import (
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
     TenantMigrationError,
+)
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
     validate_schema_name,
 )
 from src.modules.tenancy.presentation.depends.management import TenantMigrationStatus

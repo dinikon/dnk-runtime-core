@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { toast } from "vue-sonner";
 import { getApiErrorMessage } from "@/app/providers/http";
 import { crmCompaniesApi } from "../api/crm.api";
+import { crmKeys } from "./crm.query-keys";
 import type { CompanyInput } from "./crm.types";
 
 export function useCreateCompany() {
@@ -10,24 +11,10 @@ export function useCreateCompany() {
     mutationFn: (input: CompanyInput) => crmCompaniesApi.create(input),
     onSuccess: async () => {
       toast.success("Компания создана");
-      await queryClient.invalidateQueries({ queryKey: ["crm"] });
+      await queryClient.invalidateQueries({ queryKey: crmKeys.all });
     },
     onError: (cause) =>
       toast.error(getApiErrorMessage(cause, "Не удалось создать компанию.")),
-  });
-}
-
-export function useUpdateCompany() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: CompanyInput }) =>
-      crmCompaniesApi.update(id, input),
-    onSuccess: async () => {
-      toast.success("Компания обновлена");
-      await queryClient.invalidateQueries({ queryKey: ["crm"] });
-    },
-    onError: (cause) =>
-      toast.error(getApiErrorMessage(cause, "Не удалось обновить компанию.")),
   });
 }
 
@@ -37,7 +24,10 @@ export function useDeleteCompany() {
     mutationFn: (id: string) => crmCompaniesApi.delete(id),
     onSuccess: async () => {
       toast.success("Компания удалена");
-      await queryClient.invalidateQueries({ queryKey: ["crm"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: crmKeys.list("companies") }),
+        queryClient.invalidateQueries({ queryKey: ["crm", "contacts"] }),
+      ]);
     },
     onError: (cause) =>
       toast.error(getApiErrorMessage(cause, "Не удалось удалить компанию.")),

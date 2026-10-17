@@ -5,7 +5,13 @@ x-backend-common: &backend-common
   image: dnk-runtime-core:local
   env_file:
     - .env
+  networks: [default, file-storage]
   environment: &backend-environment
+    FILES__ENDPOINT: minio:9000
+    FILES__ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+    FILES__SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    FILES__SECURE: "false"
+    FILES__CONSOLE_MAX_UPLOAD_BYTES: ${FILES__CONSOLE_MAX_UPLOAD_BYTES:-1073741824}
     DB_HOST: postgres
     DB_PORT: 5432
     DB_USERNAME: ${DB_USERNAME:-postgres}
@@ -57,7 +63,7 @@ services:
       - "8000"
       - --no-proxy-headers
     ports:
-      - "${API_PORT:-8000}:8000"
+      - "127.0.0.1:${API_PORT:-8000}:8000"
     depends_on:
       migrations:
         condition: service_completed_successfully
@@ -148,7 +154,7 @@ services:
       POSTGRES_USER: ${DB_USERNAME:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -176,7 +182,7 @@ services:
         fi
       '
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -198,8 +204,8 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-rabbitmq}
       RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/}
     ports:
-      - "${RABBITMQ_PORT:-5672}:5672"
-      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+      - "127.0.0.1:${RABBITMQ_PORT:-5672}:5672"
+      - "127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -209,7 +215,7 @@ services:
       retries: 5
 
   minio:
-    image: quay.io/minio/minio:latest
+    image: quay.io/thanos/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: dnk-minio
     restart: unless-stopped
     command:
@@ -220,9 +226,12 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    # Docker does not publish host ports for a container on internal networks only.
+    # The local bridge enables loopback access for scripts run outside Docker.
+    networks: [file-storage, file-storage-local]
     ports:
-      - "${MINIO_API_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+      - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - minio_data:/data
     healthcheck:
@@ -242,3 +251,9 @@ volumes:
   redis_data:
   rabbitmq_data:
   minio_data:
+
+networks:
+  file-storage:
+    internal: true
+  file-storage-local:
+    driver: bridge

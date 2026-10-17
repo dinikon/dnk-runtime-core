@@ -17,12 +17,12 @@ existing local stack.
 
 ## Modules
 
-- `tenancy`: tenant lifecycle, domains, and transactional schema bootstrap.
-- `identity`: email OTP, sessions, and tenant administrator provisioning.
+- `tenancy`: tenant schemas, migrations and admission; tenant lifecycle, domains, and transactional schema bootstrap.
+- `identity`: request context, authentication/authorization dependencies, email OTP, sessions, and tenant administrator provisioning. Scenarios use dedicated command/query handlers grouped by responsibility; see [Identity structure and dependency diagram](docs/modules/identity.md).
 - `control_plane`: Runtime v1 provisioning, mTLS integration, readiness and access projection delivery.
-- `inventory`: Warehouse domain model and tenant-scoped persistence model; no HTTP API yet.
-- `crm`: tenant-scoped Contact and Company aggregates, CRUD/search HTTP API, and Console screens.
-- `shared`: database/UoW, tenant migrations, identifiers, audit fields, messaging, and jobs.
+- `crm`: Contact aggregate with tenant-scoped creation and get-by-ID APIs, name normalization and audit; company/link SQL models retained. Console adaptation is pending.
+- `reference_data`: read-only global country, currency, locale and IANA time-zone catalogs in `public`, refreshed by scheduled jobs.
+- `shared`: database/UoW, identifiers, audit fields, generic email transport, messaging, and jobs.
 
 Dynamic object modules are removed. Their earlier documentation is in [history](docs/history/index.md).
 
@@ -67,7 +67,7 @@ See [requirements and retries](docs/operations/ci-cd.md#образы-из-featur
 - [Container images: build and publish to GitHub Packages](docs/container-images.md)
 - [Documentation index](docs/index.md)
 - [Architecture](docs/architecture/overview.md)
-- [Inventory](docs/modules/inventory.md)
+- [Reference Data](docs/modules/reference-data.md)
 - [CRM](docs/modules/crm.md)
 - [Tenant migrations](docs/data/tenant-migrations.md)
 - [HTTP API](docs/interfaces/http-api.md)

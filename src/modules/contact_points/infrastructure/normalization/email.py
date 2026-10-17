@@ -1,8 +1,8 @@
 from email_validator import validate_email, EmailNotValidError
-from src.modules.contact_points.domain.contact_point.error import (
+from src.modules.contact_points.domain.contact_point_error import (
     InvalidContactPointError,
 )
-from src.modules.contact_points.domain.contact_point.value_object.value import (
+from src.modules.contact_points.domain.value_object.value import (
     ContactPointValueVO,
     NormalizedContactPoint,
     NormalizationContext,

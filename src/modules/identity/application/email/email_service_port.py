@@ -1,0 +1,43 @@
+from __future__ import annotations
+
+from typing import Literal, Protocol, overload
+
+from src.modules.identity.application.email.send_invitation_variables import (
+    SendInvitationVariables,
+)
+from src.modules.identity.application.email.send_otp_code_variables import (
+    SendOtpCodeVariables,
+)
+from src.modules.identity.application.email.system_email_kind import SystemEmailKind
+
+
+class EmailServicePort(Protocol):
+    """Порт отправки системных email-писем по typed kind/payload."""
+
+    @overload
+    async def send(
+        self,
+        kind: Literal[SystemEmailKind.SEND_INVITATION],
+        recipient_email: str,
+        variables: SendInvitationVariables,
+    ) -> None: ...
+
+    @overload
+    async def send(
+        self,
+        kind: Literal[SystemEmailKind.SEND_OTP_CODE],
+        recipient_email: str,
+        variables: SendOtpCodeVariables,
+    ) -> None: ...
+
+    async def send(
+        self,
+        kind: SystemEmailKind,
+        recipient_email: str,
+        variables: object,
+    ) -> None:
+        """Отправляет системное письмо пользователю."""
+        ...
+
+
+__all__ = ["EmailServicePort"]

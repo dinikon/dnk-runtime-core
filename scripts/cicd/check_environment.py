@@ -70,14 +70,26 @@ def postgres():
 
 @contextmanager
 def integration_stores():
-    """Exercise Redis atomic consumption and real RabbitMQ delivery in CI."""
+    """Exercise Redis, RabbitMQ and private MinIO with disposable CI services."""
     tag = uuid.uuid4().hex[:12]
     redis_name, rabbit_name = f"dnk-check-redis-{tag}", f"dnk-check-rabbit-{tag}"
+    minio_name = f"dnk-check-minio-{tag}"
     password = uuid.uuid4().hex
     names = []
     try:
         for name, port, image, extra in (
             (redis_name, 6379, "redis:7-alpine", ()),
+            (
+                minio_name,
+                9000,
+                "quay.io/minio/minio:latest",
+                (
+                    "-e",
+                    "MINIO_ROOT_USER=runtime_test",
+                    "-e",
+                    "MINIO_ROOT_PASSWORD=" + password,
+                ),
+            ),
             (
                 rabbit_name,
                 5672,
@@ -103,10 +115,16 @@ def integration_stores():
                 f"127.0.0.1::{port}",
                 *extra,
                 image,
+                *(("server", "/data") if name == minio_name else ()),
             )
         deadline = time.monotonic() + 90
         for name, exec_options, command in (
             (redis_name, (), ("redis-cli", "ping")),
+            (
+                minio_name,
+                (),
+                ("curl", "-fsS", "http://localhost:9000/minio/health/live"),
+            ),
             (
                 rabbit_name,
                 ("--user", "rabbitmq"),
@@ -134,8 +152,19 @@ def integration_stores():
             .stdout.strip()
             .rsplit(":", 1)[1]
         )
+        minio_port = (
+            run("docker", "port", minio_name, "9000/tcp")
+            .stdout.strip()
+            .rsplit(":", 1)[1]
+        )
         yield {
+            "TEST_MINIO_ENDPOINT": f"127.0.0.1:{minio_port}",
+            "FILES__ENDPOINT": f"127.0.0.1:{minio_port}",
+            "FILES__ACCESS_KEY": "runtime_test",
+            "FILES__SECRET_KEY": password,
+            "FILES__SECURE": "false",
             "TEST_REDIS_URL": f"redis://127.0.0.1:{redis_port}/0",
+            "TEST_DELETION_REDIS_URL": f"redis://127.0.0.1:{redis_port}/0",
             "TEST_CP_RABBITMQ_URL": f"amqp://runtime_test:{password}@127.0.0.1:{rabbit_port}/runtime-control-plane-test",
         }
     finally:

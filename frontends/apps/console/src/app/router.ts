@@ -5,6 +5,9 @@ import { useUserStore } from "@/app/stores/user";
 import { AdminLayout, AppLayout } from "@/layouts";
 import { accessRoutes } from "@/modules/access/routes";
 import { authRoutes } from "@/modules/auth/routes";
+import { catalogRoutes } from "@/modules/catalog/routes";
+import { filesRoutes } from "@/modules/files/routes";
+import { channelRoutes } from "@/modules/channels";
 import { crmRoutes } from "@/modules/crm";
 import { dashboardRoutes } from "@/modules/dashboard";
 import { priceListRoutes } from "@/modules/price-lists";
@@ -13,6 +16,10 @@ export const router = createRouter({
   history: createWebHistory(),
   routes: [
     ...authRoutes,
+    {
+      path: "/files",
+      redirect: (to) => ({ name: "admin-files", query: to.query }),
+    },
     {
       path: "/accept-invitation",
       name: "accept-invitation",
@@ -30,6 +37,8 @@ export const router = createRouter({
           redirect: { name: "dashboard" },
         },
         ...dashboardRoutes,
+        ...channelRoutes,
+        ...catalogRoutes,
         ...crmRoutes,
         ...priceListRoutes,
         {
@@ -53,6 +62,7 @@ export const router = createRouter({
           redirect: { name: "admin-users" },
         },
         ...accessRoutes,
+        ...filesRoutes,
         {
           path: "contact-points",
           name: "admin-contact-points",
