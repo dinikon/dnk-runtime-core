@@ -92,7 +92,7 @@ async function act(key: "label" | "options", fn: () => Promise<unknown>) {
     if (current()) pending.value = false;
   }
 }
-async function label(code: string, value: string) {
+async function label(value: string) {
   if (id.value) {
     const a = attribute.data.value;
     if (a)
@@ -109,7 +109,6 @@ async function label(code: string, value: string) {
   error.value = "";
   try {
     const result = await catalogApi.createAttribute({
-      code,
       locale: ctx.locale.value,
       label: value,
     });
@@ -141,7 +140,6 @@ function options(values: AttributeOptionDraft[]) {
       catalogApi.replaceAttributeOptions(a.id, ctx.locale.value, {
         options: values.map((o) => ({
           option_id: o.id,
-          code: o.code,
           label: o.label,
         })),
       }),
@@ -172,7 +170,7 @@ async function remove() {
     pending.value ||
     conflict.value ||
     !window.confirm(
-      `Удалить характеристику «${a.label ?? a.code}» и её значения?`,
+      `Удалить характеристику «${a.label ?? "Нет перевода"}» и её значения?`,
     )
   )
     return;
@@ -245,7 +243,6 @@ async function remove() {
       <AttributeLabelForm
         v-if="section === 'label'"
         :key="id + ctx.locale.value + ctx.sessionKey.value"
-        :code="attribute.data.value?.code ?? ''"
         :label="attribute.data.value?.label ?? null"
         :existing="!!id"
         :pending="pending"

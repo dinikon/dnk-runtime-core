@@ -8,6 +8,5 @@ from src.modules.catalog.domain.attribute.value_object.option_id import (
 class AttributeOptionInput:
     """Явное намерение добавить или сохранить option при замене списка."""
 
-    code: str
-    label: str
+    label: str | None
     option_id: AttributeOptionIdVO | None = None

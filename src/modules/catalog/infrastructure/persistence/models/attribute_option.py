@@ -6,12 +6,11 @@ from src.modules.tenancy.infrastructure.tenant.persistence.tenant_base import Te
 
 
 class AttributeOptionModel(TenantBase):
-    """Внутренний option определения с устойчивым ID и кодом."""
+    """Внутренний option определения с устойчивым ID и отдельными переводами."""
 
     __tablename__ = "catalog_attribute_options"
     __table_args__ = (
         sa.UniqueConstraint("attribute_id", "id", name="uq_catalog_option_owner"),
-        sa.UniqueConstraint("attribute_id", "code", name="uq_catalog_option_code"),
         sa.UniqueConstraint(
             "attribute_id",
             "position",
@@ -27,5 +26,4 @@ class AttributeOptionModel(TenantBase):
         sa.ForeignKey("tenant.catalog_attributes.id", ondelete="CASCADE"),
         nullable=False,
     )
-    code: Mapped[str] = mapped_column(sa.String(64), nullable=False)
     position: Mapped[int] = mapped_column(sa.Integer, nullable=False)

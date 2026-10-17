@@ -459,7 +459,7 @@ function submit() {
         >
           <span>{{
             attributes.find((a) => a.id === assignment.attribute_id)?.label ??
-            attributes.find((a) => a.id === assignment.attribute_id)?.code
+            "Нет перевода"
           }}</span
           ><label class="ml-2"
             ><input v-model="assignment.visible" type="checkbox" />
@@ -476,7 +476,7 @@ function submit() {
                 type="checkbox"
                 :value="o.id"
               />
-              {{ o.label ?? o.code }}</label
+              {{ o.label ?? "Нет перевода" }}</label
             >
           </div>
           <Button
@@ -500,7 +500,7 @@ function submit() {
               :key="attribute.id"
               :value="attribute.id"
             >
-              {{ attribute.label ?? attribute.code }}
+              {{ attribute.label ?? "Нет перевода" }}
             </option>
           </select></label
         >

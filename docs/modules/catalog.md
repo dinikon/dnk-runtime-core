@@ -61,6 +61,16 @@ Locale передаётся явно; запись разрешена для а�
 Default labels en/ru/uk читаются по выбранной locale, без угадывания языка.
 
 Глобальные атрибуты — enum с устойчивыми ID definitions/options и переводами.
+Коды отсутствуют в Domain, Application, HTTP, Console и текущем SQL. Название
+атрибута и значение option — независимый label для каждой locale; переименование
+и сортировка не меняют ID. Совпадающие labels не объединяют разные ID.
+POST /attributes принимает locale/label и необязательные options(label).
+PUT /attributes/{id}/options/{locale} заменяет упорядоченный набор: option_id
+сохраняется для существующей опции, для новой UUID создаёт сервер. У существующей
+опции пропущенный/null label сохраняет переводы и допускает сортировку при
+отсутствующем переводе; у новой label обязателен. Пустой label отклоняется.
+Чтение возвращает null без перевода, Console показывает «Нет перевода».
+Поиск характеристик выполняется по label выбранной locale и UUID.
 Назначение содержит несколько option IDs, position и visible; вариантов это
 не создаёт. Options должны принадлежать определению. Категории образуют дерево
 с защитой циклов. Непустое назначение требует ровно одну primary; назначаются
@@ -116,12 +126,17 @@ Console /catalog/items: список, явное создание чернови
 
 ## SQL и Channels
 
-SQL-модели и регистрация полностью сохранены: catalog_item поддерживает
+SQL товара и регистрация сохраняются: catalog_item поддерживает
 simple/variable/variant, parent role FK, оси и таблицы selections/defaults.
 MVP mapper записывает simple, parent_id=NULL, is_variation=false и mode=set;
 старый clear простого товара читается как отсутствие. Активные adapters не
-загружают детей и не читают/записывают selections/defaults. Новых миграций нет.
-Сохраняются baseline 0023_catalog_item и следующая 0024_currency_exchange_rates.
+загружают детей и не читают/записывают selections/defaults.
+История миграций, включая baseline 0023_catalog_item, сохраняется. Новая tenant-
+миграция 0026_catalog_attribute_ids удаляет code и UNIQUE по коду только у
+catalog_attributes/catalog_attribute_options. UUID, переводы, позиции и FK
+назначений/осей не изменяются. Downgrade заполняет коды из UUID с префиксами a_/o_;
+исходные коды можно вернуть только из резервной копии. Backend, Console и миграция
+выпускаются согласованно: старый backend несовместим с удалёнными колонками.
 Для сокращения уже развёрнутого Catalog пересоздание БД не требуется.
 SQL-колонки revision пассивны: при INSERT adapter записывает 1, UPDATE сохраняет
 прежнее значение. Domain и проекции их не используют; проверок сравнения нет.

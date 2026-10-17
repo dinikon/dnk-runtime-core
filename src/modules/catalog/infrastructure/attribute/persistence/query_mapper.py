@@ -22,14 +22,12 @@ class AttributeQueryMapper:
         """Преобразует определение и options с явной locale без fallback."""
         return GetAttributeDetailsDTO(
             row["id"],
-            row["code"],
             "enum",
             translations.get(locale),
             tuple(translations),
             tuple(
                 AttributeOptionDetailsDTO(
                     o["id"],
-                    o["code"],
                     o["translations"].get(locale),
                     o["position"],
                     tuple(o["translations"]),
@@ -41,6 +39,4 @@ class AttributeQueryMapper:
     @staticmethod
     def to_list_item(row: Mapping[str, Any]) -> AttributeListItemDTO:
         """Создаёт собственную строку списка определений."""
-        return AttributeListItemDTO(
-            row["id"], row["code"], row["label"], row["option_count"]
-        )
+        return AttributeListItemDTO(row["id"], row["label"], row["option_count"])

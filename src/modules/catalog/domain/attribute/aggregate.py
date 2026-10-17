@@ -7,7 +7,6 @@ from src.modules.catalog.domain.attribute.value_object.option_id import (
     AttributeOptionIdVO,
 )
 from src.modules.catalog.domain.attribute.entity.option import AttributeOption
-from src.modules.catalog.domain.value_object.code import CatalogCodeVO
 from src.modules.catalog.domain.value_object.label import CatalogLabelVO
 from src.modules.catalog.domain.value_object.locale import LocaleVO
 from src.modules.catalog.domain.error import (
@@ -21,7 +20,6 @@ class AttributeDefinition:
     """Самостоятельное enum-определение; владеет options и их переводами."""
 
     id: AttributeIdVO
-    code: CatalogCodeVO
     translations: dict[str, str]
     options: tuple[AttributeOption, ...]
 
@@ -34,17 +32,15 @@ class AttributeDefinition:
     def create(
         cls,
         identifier: AttributeIdVO,
-        code: str,
         locale: LocaleVO,
         label: str,
         options: tuple[AttributeOption, ...],
         actor: EntityIdVO,
         now: datetime,
     ) -> Self:
-        """Создаёт определение с уникальными кодами и ID options."""
+        """Создаёт определение с переводом и уникальными ID options."""
         return cls.restore(
             identifier=identifier,
-            code=code,
             translations={locale.value: label},
             options=options,
             created_at=now,
@@ -58,7 +54,6 @@ class AttributeDefinition:
         cls,
         *,
         identifier: AttributeIdVO,
-        code: str,
         translations: dict[str, str],
         options: tuple[AttributeOption, ...],
         created_at: datetime,
@@ -73,7 +68,6 @@ class AttributeDefinition:
         }
         return cls(
             identifier,
-            CatalogCodeVO(code),
             values,
             options,
             created_at,
@@ -87,10 +81,8 @@ class AttributeDefinition:
         """Проверяет принадлежность сущностей и уникальность внутри определения."""
         if any(not isinstance(o, AttributeOption) for o in options):
             raise InvalidCatalogValueError("Ожидаются значения AttributeOption.")
-        if len({o.id for o in options}) != len(options) or len(
-            {o.code for o in options}
-        ) != len(options):
-            raise InvalidCatalogValueError("ID и коды options должны быть уникальны.")
+        if len({o.id for o in options}) != len(options):
+            raise InvalidCatalogValueError("ID options должны быть уникальны.")
 
     def get_option(self, identifier: AttributeOptionIdVO) -> AttributeOption:
         """Проверяет принадлежность option этому определению."""
@@ -120,9 +112,6 @@ class AttributeDefinition:
         after = {o.id: o for o in options}
         if (set(before) - set(after)) & used_options:
             raise CatalogConflictError("Удаляемое значение используется товарами.")
-        for identifier, option in after.items():
-            if identifier in before and option.code != before[identifier].code:
-                raise CatalogConflictError("Код существующего option изменить нельзя.")
         self.options = options
         self._touch(actor, now)
 

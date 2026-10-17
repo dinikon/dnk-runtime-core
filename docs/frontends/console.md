@@ -254,6 +254,13 @@ sent; acknowledgement clears the submitted snapshot, never newer input. Refetche
 update clean sections and retain unsaved edits. Catalog DTOs and form models have
 no revisions. The other Catalog editors keep their explicit save buttons.
 
+Attributes and options use stable IDs only. Lists, forms, product assignments and
+overviews have no code field or code fallback. A label belongs to the explicitly
+selected locale; missing translations show “Нет перевода”. Renaming, translating
+and reordering preserve IDs and other translations. Existing options may be
+reordered without filling a missing translation; new options require a label.
+Attribute search uses the selected locale's label or the stable ID.
+
 The editor has no section save/cancel buttons. One aria-live indicator reports
 pending changes, saving, saved, field errors, or a paused queue. Invalid sections
 remain editable while valid sections save. A server field error rolls back that
@@ -284,8 +291,11 @@ Run `test:catalog` with Node 24 to check the autosave queue using the built-in t
 runner; browser regression covers the rendered editor and real HTTP persistence.
 
 Backend and Console must be released together because API contracts changed.
-SQL models/migrations remain unchanged and future variable-product behavior is
-preserved in the [Catalog plan](../plan/catalog.md). External Channels publications
+The new tenant migration `0026_catalog_attribute_ids` removes attribute and option
+codes and their uniqueness constraints, preserving IDs, translations and product
+assignments. Product SQL and future variable-product behavior are preserved in
+the [Catalog plan](../plan/catalog.md). Release the migration with the new backend;
+the previous backend still requires those columns. External Channels publications
 continue to support their existing read capabilities.
 
 ## File Storage

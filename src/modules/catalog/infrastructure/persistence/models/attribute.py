@@ -16,4 +16,3 @@ class AttributeModel(EntityAuditMixin, AudienceMixin, TenantBase):
         sa.CheckConstraint("revision>0", name="ck_catalog_attribute_revision"),
     )
     revision: Mapped[int] = mapped_column(sa.Integer, nullable=False)
-    code: Mapped[str] = mapped_column(sa.String(64), nullable=False, unique=True)

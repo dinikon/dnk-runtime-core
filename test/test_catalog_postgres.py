@@ -617,12 +617,11 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             "POST",
             "/attributes",
             {
-                "code": "color",
                 "locale": "en",
                 "label": "Color",
                 "options": [
-                    {"code": "red", "label": "Red"},
-                    {"code": "blue", "label": "Blue"},
+                    {"label": "Red"},
+                    {"label": "Blue"},
                 ],
             },
             201,
@@ -786,10 +785,9 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             "POST",
             "/attributes",
             {
-                "code": "axis",
                 "locale": "en",
                 "label": "Axis",
-                "options": [{"code": "a", "label": "A"}, {"code": "b", "label": "B"}],
+                "options": [{"label": "A"}, {"label": "B"}],
             },
             201,
         )
@@ -1154,3 +1152,221 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         read = await self.request("GET", f'/tags/{tag["id"]}?locale=en')
         self.assertEqual(read["label"], "After")
         self.assertNotIn("revision", read)
+
+    async def test_attribute_ids_translations_and_replacement_without_codes(
+        self,
+    ) -> None:
+        """HTTP сохраняет UUID и локали, защищает связи и отклоняет старые коды."""
+        created = await self.request(
+            "POST",
+            "/attributes",
+            {
+                "locale": "en",
+                "label": "Color",
+                "options": [{"label": "Red"}, {"label": "Blue"}],
+            },
+            201,
+        )
+        attribute_id = created["id"]
+        path = f"/attributes/{attribute_id}"
+        english = await self.request("GET", path + "?locale=en")
+        red, blue = english["options"]
+        self.assertNotIn("code", english)
+        self.assertTrue(all("code" not in option for option in english["options"]))
+        await self.request(
+            "POST", "/attributes", {"code": "old", "locale": "en", "label": "Old"}, 422
+        )
+        await self.request(
+            "POST",
+            "/attributes",
+            {
+                "locale": "en",
+                "label": "Old",
+                "options": [{"code": "old", "label": "Old"}],
+            },
+            422,
+        )
+        missing = await self.request("GET", path + "?locale=ru")
+        self.assertIsNone(missing["label"])
+        self.assertTrue(all(option["label"] is None for option in missing["options"]))
+        await self.request("PUT", path + "/translations/ru", {"label": "Цвет"})
+        await self.request(
+            "PUT",
+            path + "/options/ru",
+            {
+                "options": [
+                    {"option_id": blue["id"]},
+                    {"option_id": red["id"], "label": "Красный"},
+                ]
+            },
+        )
+        russian = await self.request("GET", path + "?locale=ru")
+        self.assertEqual(
+            [(o["id"], o["label"]) for o in russian["options"]],
+            [(blue["id"], None), (red["id"], "Красный")],
+        )
+        english = await self.request("GET", path + "?locale=en")
+        self.assertEqual([o["label"] for o in english["options"]], ["Blue", "Red"])
+        await self.request(
+            "PUT",
+            path + "/options/ru",
+            {
+                "options": [
+                    {"option_id": blue["id"], "label": "Синий"},
+                    {"option_id": red["id"], "label": None},
+                ]
+            },
+        )
+        listing = await self.request("GET", "/attributes?locale=ru&search=Цвет")
+        self.assertEqual([a["id"] for a in listing["items"]], [attribute_id])
+        self.assertNotIn("code", listing["items"][0])
+        self.assertEqual(
+            (await self.request("GET", f"/attributes?locale=en&search={attribute_id}"))[
+                "total"
+            ],
+            1,
+        )
+        self.assertEqual(
+            (await self.request("GET", "/attributes?locale=en&search=Цвет"))["total"], 0
+        )
+        before = await self.request("GET", path + "?locale=ru")
+        for invalid in (
+            [{"option_id": red["id"]}, {"option_id": red["id"]}],
+            [{"option_id": str(uuid4()), "label": "Foreign"}],
+            [{"label": None}],
+            [{"label": ""}],
+            [{"option_id": red["id"], "code": "old", "label": "Old"}],
+        ):
+            await self.request("PUT", path + "/options/ru", {"options": invalid}, 422)
+            self.assertEqual(await self.request("GET", path + "?locale=ru"), before)
+        item = await self.create_item()
+        await self.request(
+            "PATCH",
+            f'/items/{item["id"]}',
+            {
+                "attributes": [
+                    {
+                        "attribute_id": attribute_id,
+                        "option_ids": [red["id"]],
+                        "visible": True,
+                        "position": 0,
+                    }
+                ]
+            },
+        )
+        await self.request(
+            "PUT",
+            path + "/options/ru",
+            {"options": [{"option_id": blue["id"], "label": "Синий"}]},
+            409,
+        )
+        await self.request("DELETE", path, status=409)
+        for name, schema in self.app.openapi()["components"]["schemas"].items():
+            if "Attribute" in name:
+                self.assertNotIn("code", schema.get("properties", {}), name)
+        denied = await self.client.put(
+            self.base + path + "/translations/en", json={"label": "Denied"}
+        )
+        self.assertEqual(denied.status_code, 403)
+        self.app.state.test_context = replace(
+            self.context,
+            principal=replace(self.context.principal, tenant_id=str(self.other)),
+        )
+        await self.request("GET", path + "?locale=en", status=404)
+        await self.request(
+            "PUT", path + "/translations/en", {"label": "Foreign tenant"}, 404
+        )
+
+    async def test_attribute_code_migration_preserves_data_and_tenant_isolation(
+        self,
+    ) -> None:
+        """Upgrade/downgrade/upgrade не меняет UUID, переводы, порядок и назначения."""
+        from sqlalchemy import inspect
+
+        attribute = await self.request(
+            "POST",
+            "/attributes",
+            {
+                "locale": "en",
+                "label": "Color",
+                "options": [{"label": "Red"}, {"label": "Blue"}],
+            },
+            201,
+        )
+        path = f'/attributes/{attribute["id"]}'
+        await self.request("PUT", path + "/translations/ru", {"label": "Цвет"})
+        definition = await self.request("GET", path + "?locale=en")
+        option = definition["options"][0]["id"]
+        await self.request(
+            "PUT",
+            path + "/options/ru",
+            {
+                "options": [
+                    {
+                        "option_id": o["id"],
+                        "label": "Красный" if o["id"] == option else "Синий",
+                    }
+                    for o in definition["options"]
+                ]
+            },
+        )
+        item = await self.create_item()
+        await self.request(
+            "PATCH",
+            f'/items/{item["id"]}',
+            {
+                "attributes": [
+                    {
+                        "attribute_id": attribute["id"],
+                        "option_ids": [option],
+                        "visible": False,
+                        "position": 0,
+                    }
+                ]
+            },
+        )
+        before = await self.request("GET", path + "?locale=ru")
+        item_before = await self.request("GET", f'/items/{item["id"]}?locale=en')
+        schema, other = self.schemas
+        migrator = TenantMigrator()
+        async with self.engine.begin() as connection:
+            await migrator.downgrade(connection, schema, "0025_user_display_currency")
+            await connection.execute(
+                text(f"UPDATE \"{schema}\".catalog_attributes SET code='legacy_color'")
+            )
+            await migrator.upgrade(connection, schema)
+            for table in ("catalog_attributes", "catalog_attribute_options"):
+                for tenant_schema in (schema, other):
+                    columns = await connection.run_sync(
+                        lambda sync, s=tenant_schema, t=table: {
+                            c["name"] for c in inspect(sync).get_columns(t, schema=s)
+                        }
+                    )
+                    self.assertNotIn("code", columns)
+            await migrator.downgrade(connection, schema, "0025_user_display_currency")
+            restored = (
+                await connection.execute(
+                    text(f'SELECT id, code FROM "{schema}".catalog_attributes')
+                )
+            ).one()
+            self.assertEqual(restored.code, "a_" + attribute["id"].replace("-", ""))
+            codes = (
+                (
+                    await connection.execute(
+                        text(f'SELECT code FROM "{schema}".catalog_attribute_options')
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            self.assertEqual(len(set(codes)), 2)
+            self.assertTrue(all(code.startswith("o_") for code in codes))
+            await migrator.upgrade(connection, schema)
+        self.assertEqual(await self.request("GET", path + "?locale=ru"), before)
+        item_after = await self.request("GET", f'/items/{item["id"]}?locale=en')
+        self.assertEqual(item_after["item"], item_before["item"])
+        english_after = await self.request("GET", path + "?locale=en")
+        self.assertEqual(
+            [(o["id"], o["label"], o["position"]) for o in english_after["options"]],
+            [(o["id"], o["label"], o["position"]) for o in definition["options"]],
+        )

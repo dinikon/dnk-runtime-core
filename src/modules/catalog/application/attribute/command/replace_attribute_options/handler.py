@@ -48,17 +48,12 @@ class ReplaceAttributeOptionsHandler:
             if value.option_id is None:
                 option = AttributeOption.create(
                     AttributeOptionIdVO(self._uuid.new()),
-                    value.code,
                     locale,
                     value.label,
                 )
             else:
                 original = entity.get_option(value.option_id)
-                option = AttributeOption.restore(
-                    original.id,
-                    value.code,
-                    {**original.translations, locale.value: value.label},
-                )
+                option = original.translated(locale, value.label)
             options.append(option)
         used = await self._repository.used_options(entity.id)
         entity.replace_options(

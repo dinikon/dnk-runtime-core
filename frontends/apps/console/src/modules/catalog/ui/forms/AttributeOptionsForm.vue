@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import type {
   AttributeOptionDraft,
   CatalogAttributeOption,
@@ -21,8 +28,7 @@ function resetFields() {
   rows.value = props.options.map((o) => ({
     key: o.id,
     id: o.id,
-    code: o.code,
-    label: o.label ?? "",
+    label: o.label,
   }));
   dirty.value = false;
   emit("dirty", false);
@@ -40,7 +46,7 @@ function mark() {
   emit("dirty", true);
 }
 function add() {
-  rows.value.push({ key: crypto.randomUUID(), id: null, code: "", label: "" });
+  rows.value.push({ key: crypto.randomUUID(), id: null, label: "" });
   mark();
 }
 function remove(index: number) {
@@ -57,56 +63,58 @@ function move(index: number, delta: number) {
 </script>
 <template>
   <form
-    class="space-y-4"
+    class="flex flex-col gap-4"
     @submit.prevent="
       $emit(
         'submit',
-        rows.map((r) => ({ id: r.id, code: r.code, label: r.label })),
+        rows.map((r) => ({ id: r.id, label: r.label })),
       )
     "
   >
-    <fieldset :disabled="pending || disabled" class="space-y-4">
+    <fieldset :disabled="pending || disabled" class="flex flex-col gap-4">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <h2 class="font-medium">Значения enum</h2>
+        <h2 class="font-medium">Значения характеристики</h2>
         <Button type="button" variant="outline" @click="add"
           >Добавить значение</Button
         >
       </div>
       <p class="text-sm text-muted-foreground">
-        Порядок и подписи сохраняются одним действием. Используемое в осях
-        значение удалить нельзя. Другие locale сохраняются.
+        Порядок и названия сохраняются одним действием. Используемое товарами
+        значение удалить нельзя. Переводы на другие языки сохраняются.
       </p>
-      <p v-if="!rows.length" class="rounded-md bg-muted p-3 text-sm">
+      <p v-if="!rows.length" class="text-sm text-muted-foreground">
         Значений пока нет.
       </p>
       <div
         v-for="(row, index) in rows"
         :key="row.key"
-        class="space-y-3 rounded-md border p-3"
+        class="flex flex-col gap-3 rounded-md border p-3"
       >
-        <div class="grid gap-3 sm:grid-cols-2">
-          <label class="space-y-1"
-            ><span class="text-sm">Код значения</span
-            ><input
-              v-model="row.code"
-              :aria-label="`Код значения ${index + 1}`"
-              pattern="[a-z][a-z0-9_]*"
-              required
-              maxlength="64"
-              :readonly="!!row.id"
-              class="w-full rounded-md border bg-background p-2"
-              @input="mark" /></label
-          ><label class="space-y-1"
-            ><span class="text-sm">Название значения</span
-            ><input
-              v-model="row.label"
+        <FieldGroup>
+          <Field :data-disabled="pending || disabled">
+            <FieldLabel :for="`option-label-${row.key}`"
+              >Название значения</FieldLabel
+            >
+            <Input
+              :id="`option-label-${row.key}`"
+              :model-value="row.label ?? ''"
               :aria-label="`Название значения ${index + 1}`"
-              required
+              :placeholder="
+                row.id && row.label === null ? 'Нет перевода' : undefined
+              "
+              :required="!row.id || row.label !== null"
               maxlength="255"
-              class="w-full rounded-md border bg-background p-2"
-              @input="mark"
-          /></label>
-        </div>
+              @update:model-value="
+                row.label = String($event);
+                mark();
+              "
+            />
+            <FieldDescription v-if="row.id && row.label === null">
+              Нет перевода. Можно изменить порядок или добавить название для
+              выбранного языка.
+            </FieldDescription>
+          </Field>
+        </FieldGroup>
         <div class="flex flex-wrap gap-2">
           <Button
             type="button"
@@ -114,20 +122,22 @@ function move(index: number, delta: number) {
             :disabled="index === 0"
             @click="move(index, -1)"
             >Выше</Button
-          ><Button
+          >
+          <Button
             type="button"
             variant="outline"
             :disabled="index === rows.length - 1"
             @click="move(index, 1)"
             >Ниже</Button
-          ><Button type="button" variant="ghost" @click="remove(index)"
+          >
+          <Button type="button" variant="ghost" @click="remove(index)"
             >Убрать значение</Button
           >
         </div>
       </div>
       <div class="flex flex-wrap gap-2">
-        <Button type="submit">Сохранить значения</Button
-        ><Button type="button" variant="outline" @click="resetFields"
+        <Button type="submit">Сохранить значения</Button>
+        <Button type="button" variant="outline" @click="resetFields"
           >Отменить</Button
         >
       </div>

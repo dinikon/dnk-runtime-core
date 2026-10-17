@@ -48,7 +48,7 @@ async def get_attribute(
     except IntegrityError as exc:
         if getattr(exc.orig, "sqlstate", None) in {"23505", "23503"}:
             raise HTTPException(
-                409, "Код уже существует или объект используется."
+                409, "Объект используется или конфликтует с текущим состоянием."
             ) from exc
         raise
     return GetAttributeResponse(**asdict(result))

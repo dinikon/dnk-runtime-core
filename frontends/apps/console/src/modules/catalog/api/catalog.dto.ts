@@ -3,9 +3,9 @@ export interface LocaleDTO {
   name: string;
 }
 export interface CreateAttributeRequest {
-  code: string;
   locale: string;
   label: string;
+  options?: { label: string }[];
 }
 export interface CreateAttributeResponse {
   id: string;
@@ -17,21 +17,19 @@ export interface PutAttributeTranslationResponse {
   id: string;
 }
 export interface ReplaceAttributeOptionsRequest {
-  options: { option_id: string | null; code: string; label: string }[];
+  options: { option_id: string | null; label: string | null }[];
 }
 export interface ReplaceAttributeOptionsResponse {
   id: string;
 }
 export interface GetAttributeResponse {
   id: string;
-  code: string;
   value_type: "enum";
   label: string | null;
 
   locales: string[];
   options: {
     id: string;
-    code: string;
     label: string | null;
     position: number;
     locales: string[];
@@ -39,7 +37,6 @@ export interface GetAttributeResponse {
 }
 export interface ListAttributeItemDTO {
   id: string;
-  code: string;
   label: string | null;
 
   option_count: number;

@@ -20,14 +20,12 @@ export interface CatalogTag {
 }
 export interface CatalogAttributeOption {
   id: string;
-  code: string;
   label: string | null;
   position: number;
   locales: string[];
 }
 export interface CatalogAttribute {
   id: string;
-  code: string;
   label: string | null;
 
   locales: string[];
@@ -35,8 +33,7 @@ export interface CatalogAttribute {
 }
 export interface AttributeOptionDraft {
   id: string | null;
-  code: string;
-  label: string;
+  label: string | null;
 }
 export interface CollectionItem {
   id: string;

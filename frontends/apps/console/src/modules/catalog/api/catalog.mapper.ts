@@ -11,7 +11,6 @@ import type {
 export function attributeFromDto(d: GetAttributeResponse): CatalogAttribute {
   return {
     id: d.id,
-    code: d.code,
     label: d.label,
 
     locales: d.locales,
@@ -21,8 +20,8 @@ export function attributeFromDto(d: GetAttributeResponse): CatalogAttribute {
 export function attributeItem(d: ListAttributeItemDTO): CollectionItem {
   return {
     id: d.id,
-    label: d.label ?? d.code,
-    description: `${d.code} · enum · Значений: ${d.option_count}`,
+    label: d.label ?? "Нет перевода",
+    description: `enum · Значений: ${d.option_count}`,
 
     system: false,
   };

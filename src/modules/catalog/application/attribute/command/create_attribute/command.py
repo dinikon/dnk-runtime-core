@@ -9,7 +9,6 @@ class CreateAttributeCommand:
 
     tenant_id: EntityIdVO
     actor_id: EntityIdVO
-    code: str
     locale: str
     label: str
     options: tuple[AttributeOptionInput, ...] = ()

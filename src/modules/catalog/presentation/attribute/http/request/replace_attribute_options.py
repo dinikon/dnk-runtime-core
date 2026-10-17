@@ -6,8 +6,7 @@ class ReplaceAttributeOptionsOptionRequest(BaseModel):
     """Значение enum в конкретном HTTP-сценарии replace_attribute_options."""
 
     model_config = ConfigDict(extra="forbid")
-    code: str = Field(min_length=1, max_length=64)
-    label: str = Field(min_length=1, max_length=255)
+    label: str | None = Field(default=None, min_length=1, max_length=255)
     option_id: UUID | None = None
 
 

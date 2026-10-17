@@ -78,7 +78,6 @@ class SqlAlchemyAttributeQueryRepository:
             )
             statement = statement.where(
                 or_(
-                    AttributeModel.code.ilike("%" + escaped + "%", escape="\\"),
                     AttributeTranslationModel.label.ilike(
                         "%" + escaped + "%", escape="\\"
                     ),

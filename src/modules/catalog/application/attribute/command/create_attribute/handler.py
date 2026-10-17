@@ -48,13 +48,12 @@ class CreateAttributeHandler:
             raise InvalidCatalogValueError("ID новых options создаёт сервер.")
         options = tuple(
             AttributeOption.create(
-                AttributeOptionIdVO(self._uuid.new()), o.code, locale, o.label
+                AttributeOptionIdVO(self._uuid.new()), locale, o.label
             )
             for o in command.options
         )
         entity = AttributeDefinition.create(
             AttributeIdVO(self._uuid.new()),
-            command.code,
             locale,
             command.label,
             options,

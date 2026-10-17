@@ -21,12 +21,9 @@ class AttributeMapper:
         """Восстанавливает агрегат через явные фабрики без исправления инвариантов."""
         return AttributeDefinition.restore(
             identifier=AttributeIdVO(row["id"]),
-            code=row["code"],
             translations=translations,
             options=tuple(
-                AttributeOption.restore(
-                    AttributeOptionIdVO(o["id"]), o["code"], o["translations"]
-                )
+                AttributeOption.restore(AttributeOptionIdVO(o["id"]), o["translations"])
                 for o in options
             ),
             created_at=row["created_at"],
@@ -41,7 +38,6 @@ class AttributeMapper:
         return {
             "id": entity.id.uuid,
             "revision": 1,
-            "code": entity.code.value,
             "created_at": entity.created_at,
             "created_by": entity.created_by.uuid,
             **AttributeMapper.to_update_values(entity),

@@ -109,7 +109,6 @@ class SqlAlchemyAttributeRepository:
         for position, option in enumerate(entity.options):
             values = {
                 "attribute_id": entity.id.uuid,
-                "code": option.code.value,
                 "position": position,
             }
             if option.id.uuid in existing:

@@ -7,7 +7,6 @@ class AttributeListItemDTO:
     """Одна строка конкретного списка определений."""
 
     id: UUID
-    code: str
     label: str | None
 
     option_count: int

@@ -253,7 +253,7 @@ class CurrencyProfilePostgresTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(
                 await TenantMigrator().current(connection, self.schema),
-                ("0025_user_display_currency",),
+                (TenantMigrator().head(),),
             )
 
     async def test_normalization_roundtrip_omission_reset_and_identical_ids_are_isolated(

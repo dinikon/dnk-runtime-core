@@ -107,14 +107,12 @@ export function overviewModel(
     attributes: item.attributes.map((v) => {
       const a = attributes.find((a) => a.id === v.attribute_id);
       return {
-        label: a?.label ?? a?.code ?? "Характеристика",
+        label: a?.label ?? "Нет перевода",
         value:
           v.option_ids
             .map(
               (o) =>
-                a?.options.find((v) => v.id === o)?.label ??
-                a?.options.find((v) => v.id === o)?.code ??
-                "Не задано",
+                a?.options.find((v) => v.id === o)?.label ?? "Нет перевода",
             )
             .join(", ") || "Не задано",
       };

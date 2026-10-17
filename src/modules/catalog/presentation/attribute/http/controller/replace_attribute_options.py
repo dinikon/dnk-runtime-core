@@ -50,7 +50,6 @@ async def replace_attribute_options(
                 locale=locale,
                 options=tuple(
                     AttributeOptionInput(
-                        o.code,
                         o.label,
                         (
                             None
@@ -71,7 +70,7 @@ async def replace_attribute_options(
     except IntegrityError as exc:
         if getattr(exc.orig, "sqlstate", None) in {"23505", "23503"}:
             raise HTTPException(
-                409, "Код уже существует или объект используется."
+                409, "Объект используется или конфликтует с текущим состоянием."
             ) from exc
         raise
     return ReplaceAttributeOptionsResponse(**asdict(result))

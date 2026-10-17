@@ -30,6 +30,42 @@ Category и Tag остаются отдельными Aggregate Roots; Default �
 - Внешний UoW владеет транзакцией; выборочная запись связей, чистые вычисления
   price/stock на as_of, согласованное batch-чтение и tenant isolation сохранены.
 
+### Атрибуты и опции: идентичность только по ID
+
+AttributeDefinition остаётся самостоятельным Aggregate Root; AttributeOption —
+его внутренняя Entity без отдельного репозитория. У обоих отсутствует code:
+устойчивый UUID не меняется при переименовании, переводе и сортировке. Переводы
+хранят label для каждой явной locale, без межъязыкового fallback. Совпадающие
+подписи допустимы и не объединяют разные идентичности.
+
+| Сценарий | Вход | Результат |
+| --- | --- | --- |
+| create_attribute | locale, label, options(label); ID создаёт сервер | CreateAttributeResultDTO |
+| put_attribute_translation | attribute ID, locale, label | PutAttributeTranslationResultDTO |
+| replace_attribute_options | attribute ID, locale, ordered options(option_id?, label?) | ReplaceAttributeOptionsResultDTO |
+| get_attribute | attribute ID, locale | GetAttributeDetailsDTO |
+| list_attributes | locale, search по label/ID, page/page_size | ListAttributesPageDTO |
+| delete_attribute | attribute ID | None, HTTP 204 |
+
+У существующей опции отсутствующий/null label сохраняет переводы и допускает
+сортировку без заполнения отсутствующей локали. Новой опции нужен непустой label.
+Пустая строка не удаляет перевод и отклоняется. Список options заменяется целиком;
+непереданные используемые опции удалять нельзя. Принадлежность и уникальность
+ID проверяет Domain. Мутации используют exclusive reference guard и внешний UoW.
+
+Для каждого сценария сохраняются собственные command/query, handler, dto при
+результате, отдельные HTTP controller/request/response и именованный Depends.
+Порты и adapters обновляются без нарушения направлений импортов. Все методы
+аннотированы и документированы, create/restore явные; __post_init__ только в VO.
+Новых сценариев редактирования отдельных полей не создаётся.
+
+SQL-колонки catalog_attributes.code и catalog_attribute_options.code и их UNIQUE
+ограничения удаляются новой tenant-миграцией. Старые миграции не переписываются;
+ID, переводы, позиции, назначения, FK и готовность к будущим осям сохраняются.
+Downgrade создаёт технические коды из UUID; исходные коды требуют резервной копии.
+Console не показывает и не запрашивает коды; отсутствие перевода обозначается
+«Нет перевода». Сопоставления Channels используют attribute_id/option_id.
+
 ### Console
 
 Карточка товара автоматически сохраняет корректные изменённые разделы через
@@ -45,7 +81,8 @@ Category и Tag остаются отдельными Aggregate Roots; Default �
 
 ### SQL, проверки и выпуск
 
-SQL-модели, регистрация, миграции, ограничения и индексы неизменны. Колонки
+SQL товара, регистрация и история миграций сохраняются. Единственное изменение
+справочников — новая миграция удаления кодов атрибутов и опций выше. Колонки
 revision пассивны: INSERT=1, UPDATE сохраняет старое значение. Сохранена готовность
 SQL хранить variable/variant, оси и selections/defaults. Активные репозитории
 принимают только kind=simple AND parent_id IS NULL. Старые clear читаются как
@@ -56,8 +93,9 @@ SQL хранить variable/variant, оси и selections/defaults. Активн
 checklist, Black, frontend lint/typecheck/build, тесты очереди и браузерные сценарии
 desktop/mobile. Upgrade/downgrade/upgrade и autogenerate drift выполняются на
 одноразовой БД. Документация отражает MVP. Backend и Console выпускаются совместно,
-без миграций и пересоздания БД; наличие вариативных данных требует отдельного решения
-до выпуска. Известные исходные ограничения проверок фиксируются отдельно.
+с новой миграцией справочников, без пересоздания БД; наличие вариативных данных
+требует отдельного решения до выпуска. Известные исходные ограничения проверок
+фиксируются отдельно.
 
 ## Следующий этап v2: сохранённая полная спецификация
 
@@ -69,7 +107,7 @@ representations относятся к этапу v2, а не к текущему
 
 Описания замены старого Product/Variant, переписывания baseline и ранее выполненных
 этапов — исторический контекст. Эти инструкции не повторяются при сокращении MVP
-и не требуют изменения SQL в текущей задаче. Слова «MVP» в сохранённом исходном
+и не требуют переписывания baseline. Слова «MVP» в сохранённом исходном
 тексте обозначают прежний полный объём, теперь отложенный до v2.
 
 ---
@@ -414,10 +452,11 @@ credentials, storage key и URL со случайным сроком жизни.
 
 ## 7. Глобальные enum-атрибуты и варианты
 
-AttributeDefinition — глобальный внутри tenant справочник: UUID, стабильный
-code, тип enum, переводы label и упорядоченные AttributeOption с собственными
-UUID/code/переводами. Option принадлежит своему определению. Подпись перевода
-не устанавливает идентичность. Используемые определения/options не удаляются.
+AttributeDefinition — глобальный внутри tenant справочник: UUID, тип enum,
+переводы label и упорядоченные AttributeOption с собственными UUID и переводами.
+Кодов у определения и options нет; будущие оси и mappings используют только ID.
+Option принадлежит своему определению. Подпись перевода не устанавливает
+идентичность. Используемые определения/options не удаляются.
 
 На CatalogItem назначаются attribute ID, упорядоченные option IDs, visible
 и position. Несколько enum-options допустимы как множество значений;
@@ -547,9 +586,9 @@ kind/parent фильтром. Counts считаются по центральн�
 | Корень / сценарий | Бизнес-вход | execute → | HTTP после префикса |
 | --- | --- | --- | --- |
 | product_type/get_default_product_type | locale для подписей | GetDefaultProductTypeDTO | GET /product-type/default |
-| attribute/create_attribute | code, locale, label, options(code/label) | CreateAttributeResultDTO | POST /attributes |
+| attribute/create_attribute | locale, label, options(label) | CreateAttributeResultDTO | POST /attributes |
 | attribute/put_attribute_translation | ID, locale, label | PutAttributeTranslationResultDTO | PUT /attributes/{id}/translations/{locale} |
-| attribute/replace_attribute_options | ID, ordered options с сохранением ID/code и переводом locale | ReplaceAttributeOptionsResultDTO | PUT /attributes/{id}/options/{locale} |
+| attribute/replace_attribute_options | ID, ordered options с сохранением ID и переводом locale | ReplaceAttributeOptionsResultDTO | PUT /attributes/{id}/options/{locale} |
 | attribute/delete_attribute | ID | None | DELETE /attributes/{id} |
 | attribute/get_attribute | ID, locale | GetAttributeDetailsDTO | GET /attributes/{id} |
 | attribute/list_attributes | locale, search, page/page_size | ListAttributesPageDTO | GET /attributes |

@@ -49,8 +49,17 @@ The five Catalog revisions 0012/0015/0017/0018/0019 are removed. Only chain link
 in preserved migrations change: 0013 -> 0011, 0016 -> 0014, 0020 -> 0016. Files
 0020/0021 and currency settings 0022 remain intact. There is one tenant head.
 Downgrade from 0023 to 0022 removes only the new Catalog; upgrading recreates its empty
-schema and Default seed. Fresh database recreation is required for rollout;
-no command here automatically drops the application database.
+schema and Default seed. The historical baseline rebuild required fresh database
+recreation; subsequent incremental migrations do not require it. No command here
+automatically drops the application database.
+
+Revision `0026_catalog_attribute_ids`, after `0025_user_display_currency`, removes
+only the `code` columns and their uniqueness constraints from `catalog_attributes`
+and `catalog_attribute_options`. IDs, translations, positions, assignments and
+foreign keys remain intact, including future variation storage. Apply it together
+with the new backend and Console: the previous backend requires those columns.
+Downgrade recreates unique technical codes from UUIDs (`a_` / `o_` prefixes),
+not the original code values; recovering those values requires a backup.
 
 Revision `0016_remove_inventory`, after `0014_channel_publications`, retires
 the Inventory schema; its own upgrade/downgrade behavior is preserved.
