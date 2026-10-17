@@ -1,4 +1,3 @@
-import type { CatalogItem } from "./catalog.types";
 // Самостоятельные модели форм; транспортные DTO остаются на границе API.
 export type ProductSection =
   | "content"
@@ -12,9 +11,7 @@ export type ProductSection =
   | "attributes"
   | "categories"
   | "tags"
-  | "galleries"
-  | "structure"
-  | "kind";
+  | "galleries";
 export type WeightUnit = "g" | "kg";
 export type LengthUnit = "cm" | "m";
 export interface ProductMeasurement<U extends WeightUnit | LengthUnit> {
@@ -42,21 +39,15 @@ export interface ProductStock {
 }
 export interface ProductMetadata {
   key: string;
-  value_type: "text" | "decimal" | "boolean" | null;
-  value: string | boolean | null;
+  value_type: "text" | "decimal" | "boolean";
+  value: string | boolean;
   position: number;
-  mode: "set" | "clear";
 }
 export interface ProductAttribute {
   attribute_id: string;
   option_ids: string[];
   visible: boolean;
   position: number;
-  mode: "set" | "clear";
-}
-export interface ProductOverride<T> {
-  mode: "inherit" | "set" | "clear";
-  value: T | null;
 }
 export interface ProductGallery {
   images: {
@@ -68,42 +59,14 @@ export interface ProductGallery {
   }[];
   primary_image_id: string | null;
 }
-export interface ProductSelection {
-  attribute_id: string;
-  option_id: string;
-}
-export interface ProductStructure {
-  axes: {
-    attribute_id: string;
-    option_ids: string[];
-    position: number;
-    visible: boolean;
-  }[];
-  variants: { item_id: string | null; selection: ProductSelection[] }[];
-  default_selection: ProductSelection[] | null;
-}
 export type ProductTab =
-  | "general"
-  | "inventory"
-  | "shipping"
-  | "attributes"
-  | "variants"
-  | "additional";
+  "general" | "inventory" | "shipping" | "attributes" | "additional";
 export interface ProductEditorDraft {
   dirty: Record<string, boolean>;
   resets: Record<string, number>;
 }
-export interface VariantRowModel {
-  item: CatalogItem;
-  label: string;
-  image: string | null;
-  price: string;
-  stock: string;
-  status: string;
-}
 export interface ProductOverviewModel {
   title: string;
-  kind: string;
   status: string;
   sku: string | null;
   price: string;
@@ -116,7 +79,5 @@ export interface ProductOverviewModel {
   attributes: { label: string; value: string }[];
   categories: string[];
   tags: string[];
-  sharedQuantity: number | null;
-  sharedSource: boolean;
-  priceIncomplete: boolean;
+  quantity: number | null;
 }

@@ -13,5 +13,5 @@ class SetCatalogItemSkuCommand:
     tenant_id: EntityIdVO
     actor_id: EntityIdVO
     item_id: CatalogItemIdVO
-    expected_root_revision: int
+    expected_revision: int
     sku: SkuCodeVO | None

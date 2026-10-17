@@ -48,7 +48,7 @@ async def set_catalog_item_categories(
                 item_id=CatalogItemIdVO(item_id),
                 category_ids=payload.category_ids,
                 primary_category_id=payload.primary_category_id,
-                expected_root_revision=payload.expected_root_revision,
+                expected_revision=payload.expected_revision,
             )
         )
     except CatalogNotFoundError as exc:

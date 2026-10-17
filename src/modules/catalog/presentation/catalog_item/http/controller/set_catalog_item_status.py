@@ -13,7 +13,9 @@ from src.modules.catalog.domain.error import (
 from src.modules.catalog.domain.catalog_item.value_object.identifier import (
     CatalogItemIdVO,
 )
-from src.modules.catalog.domain.catalog_item.value_object.kind import CatalogItemStatus
+from src.modules.catalog.domain.catalog_item.value_object.status import (
+    CatalogItemStatus,
+)
 from src.modules.catalog.presentation.catalog_item.http.serialization import (
     transport_value,
 )
@@ -48,7 +50,7 @@ async def set_catalog_item_status(
                 actor_id=EntityIdVO.from_value(principal.user_id),
                 item_id=CatalogItemIdVO(item_id),
                 status=CatalogItemStatus(payload.status),
-                expected_root_revision=payload.expected_root_revision,
+                expected_revision=payload.expected_revision,
             )
         )
     except CatalogNotFoundError as exc:

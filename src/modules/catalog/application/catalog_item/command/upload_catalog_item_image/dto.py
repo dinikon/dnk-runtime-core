@@ -4,11 +4,9 @@ from uuid import UUID
 
 @dataclass(frozen=True, slots=True)
 class UploadCatalogItemImageResultDTO:
-    """Назначенное изображение и подтверждённые ревизии семьи."""
+    """Результат сценария upload_catalog_item_image: идентичность и новая ревизия товара."""
 
-    item_id: UUID
-    root_id: UUID
+    id: UUID
+    revision: int
     image_id: UUID
     file_id: UUID
-    revision: int
-    root_revision: int

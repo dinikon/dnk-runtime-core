@@ -38,24 +38,7 @@ router.add_api_route(
         Depends(require_csrf),
     ],
 )
-from src.modules.catalog.presentation.catalog_item.http.controller.create_variable_catalog_item import (
-    create_variable_catalog_item,
-)
-from src.modules.catalog.presentation.catalog_item.http.response.create_variable_catalog_item import (
-    CreateVariableCatalogItemResponse,
-)
 
-router.add_api_route(
-    "/variable",
-    create_variable_catalog_item,
-    methods=["POST"],
-    status_code=201,
-    response_model=CreateVariableCatalogItemResponse,
-    dependencies=[
-        Depends(require_authenticated_request_context),
-        Depends(require_csrf),
-    ],
-)
 from src.modules.catalog.presentation.catalog_item.http.controller.delete_catalog_item import (
     delete_catalog_item,
 )
@@ -103,24 +86,7 @@ router.add_api_route(
         Depends(require_csrf),
     ],
 )
-from src.modules.catalog.presentation.catalog_item.http.controller.change_catalog_item_kind import (
-    change_catalog_item_kind,
-)
-from src.modules.catalog.presentation.catalog_item.http.response.change_catalog_item_kind import (
-    ChangeCatalogItemKindResponse,
-)
 
-router.add_api_route(
-    "/{item_id}/kind",
-    change_catalog_item_kind,
-    methods=["PUT"],
-    status_code=200,
-    response_model=ChangeCatalogItemKindResponse,
-    dependencies=[
-        Depends(require_authenticated_request_context),
-        Depends(require_csrf),
-    ],
-)
 from src.modules.catalog.presentation.catalog_item.http.controller.set_catalog_item_tags import (
     set_catalog_item_tags,
 )
@@ -229,39 +195,8 @@ router.add_api_route(
         Depends(require_csrf),
     ],
 )
-from src.modules.catalog.presentation.catalog_item.http.controller.list_catalog_item_variants import (
-    list_catalog_item_variants,
-)
-from src.modules.catalog.presentation.catalog_item.http.response.list_catalog_item_variants import (
-    ListCatalogItemVariantsResponse,
-)
 
-router.add_api_route(
-    "/{root_id}/variants",
-    list_catalog_item_variants,
-    methods=["GET"],
-    status_code=200,
-    response_model=ListCatalogItemVariantsResponse,
-    dependencies=[Depends(require_authenticated_request_context)],
-)
-from src.modules.catalog.presentation.catalog_item.http.controller.replace_catalog_item_structure import (
-    replace_catalog_item_structure,
-)
-from src.modules.catalog.presentation.catalog_item.http.response.replace_catalog_item_structure import (
-    ReplaceCatalogItemStructureResponse,
-)
 
-router.add_api_route(
-    "/{item_id}/structure",
-    replace_catalog_item_structure,
-    methods=["PUT"],
-    status_code=200,
-    response_model=ReplaceCatalogItemStructureResponse,
-    dependencies=[
-        Depends(require_authenticated_request_context),
-        Depends(require_csrf),
-    ],
-)
 from src.modules.catalog.presentation.catalog_item.http.controller.set_catalog_item_attributes import (
     set_catalog_item_attributes,
 )

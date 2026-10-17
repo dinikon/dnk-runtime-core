@@ -6,7 +6,7 @@ import { getApiErrorMessage } from "@/app/providers/http";
 import { catalogApi } from "../../api/catalog.api";
 import { listItemFromDto } from "../../api/catalog.mapper";
 import { useCatalogContext } from "../../model/use-catalog-context";
-import type { ItemKind, ItemStatus } from "../../api/catalog.dto";
+import type { ItemStatus } from "../../api/catalog.dto";
 import CatalogHeader from "../CatalogHeader.vue";
 import CatalogToolbar from "../CatalogToolbar.vue";
 import CatalogSearchBar from "../CatalogSearchBar.vue";
@@ -20,11 +20,6 @@ const ctx = useCatalogContext(
 );
 const search = computed(() => String(ctx.route.query.search ?? "")),
   page = computed(() => Math.max(1, Number(ctx.route.query.page) || 1)),
-  kind = computed(() =>
-    ["simple", "variable"].includes(String(ctx.route.query.kind))
-      ? (ctx.route.query.kind as ItemKind)
-      : undefined,
-  ),
   status = computed(() =>
     ["draft", "active", "archived"].includes(String(ctx.route.query.status))
       ? (ctx.route.query.status as ItemStatus)
@@ -32,7 +27,7 @@ const search = computed(() => String(ctx.route.query.search ?? "")),
   );
 const items = useQuery({
   queryKey: computed(() =>
-    ctx.key("list-items", search.value, page.value, kind.value, status.value),
+    ctx.key("list-items", search.value, page.value, status.value),
   ),
   enabled: computed(() => !!ctx.locale.value && !!ctx.tenantId.value),
   queryFn: async ({ signal }) => {
@@ -41,7 +36,6 @@ const items = useQuery({
       search.value,
       (page.value - 1) * 20,
       20,
-      kind.value,
       status.value,
       signal,
     );
@@ -51,25 +45,12 @@ const items = useQuery({
 function filter(values: Record<string, string | number | undefined>) {
   void ctx.router.replace({ query: { ...ctx.route.query, ...values } });
 }
-async function remove(id: string, revision: number, kind: ItemKind) {
-  if (!window.confirm("Удалить карточку со всеми её вариантами?")) return;
+async function remove(id: string, revision: number) {
+  if (!window.confirm("Удалить товар?")) return;
   pending.value = true;
   error.value = "";
   try {
-    const discarded: string[] = [];
-    if (kind === "variable") {
-      for (let offset = 0; ; offset += 100) {
-        const page = await catalogApi.listVariants(
-          id,
-          ctx.locale.value,
-          offset,
-          100,
-        );
-        discarded.push(...page.items.map((v) => v.own.id));
-        if (discarded.length >= page.total) break;
-      }
-    }
-    await catalogApi.deleteItem(id, revision, discarded);
+    await catalogApi.deleteItem(id, revision);
     await cache.invalidateQueries({
       queryKey: ["catalog", ctx.tenantId.value],
     });
@@ -84,7 +65,7 @@ async function remove(id: string, revision: number, kind: ItemKind) {
   <div class="min-h-0 min-w-0 flex-1 space-y-5 overflow-y-auto p-6">
     <CatalogHeader
       title="Товары"
-      description="Самостоятельные товары и семейства вариантов"
+      description="Товары, их цены и наличие"
       action="Создать товар"
       :disabled="!ctx.active.value || pending"
       @create="
@@ -103,20 +84,6 @@ async function remove(id: string, revision: number, kind: ItemKind) {
         :value="search"
         @search="(value) => filter({ search: value, page: undefined })"
       /><select
-        aria-label="Вид товара"
-        class="rounded border bg-background p-2"
-        :value="kind ?? ''"
-        @change="
-          filter({
-            kind: ($event.target as HTMLSelectElement).value || undefined,
-            page: undefined,
-          })
-        "
-      >
-        <option value="">Все виды</option>
-        <option value="simple">Простой</option>
-        <option value="variable">С вариантами</option></select
-      ><select
         aria-label="Статус"
         class="rounded border bg-background p-2"
         :value="status ?? ''"
@@ -157,19 +124,13 @@ async function remove(id: string, revision: number, kind: ItemKind) {
         >
           <span class="font-medium">{{ item.title ?? "Без перевода" }}</span>
           <p class="text-sm text-muted-foreground">
-            {{ item.kind === "simple" ? "Простой" : "С вариантами" }} ·
             {{ item.status }} · {{ item.sku ?? "Без SKU" }} ·
-            {{
-              item.price ??
-              (item.priceMin
-                ? `${item.priceMin}–${item.priceMax}`
-                : "Цена не задана")
-            }}
+            {{ item.price ?? "Цена не задана" }} {{ item.currency }}
           </p></button
         ><Button
           variant="ghost"
           :disabled="pending"
-          @click="remove(item.id, item.rootRevision, item.kind)"
+          @click="remove(item.id, item.revision)"
           >Удалить</Button
         >
       </div>

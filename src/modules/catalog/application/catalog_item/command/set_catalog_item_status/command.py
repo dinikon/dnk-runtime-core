@@ -3,7 +3,9 @@ from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.catalog.domain.catalog_item.value_object.identifier import (
     CatalogItemIdVO,
 )
-from src.modules.catalog.domain.catalog_item.value_object.kind import CatalogItemStatus
+from src.modules.catalog.domain.catalog_item.value_object.status import (
+    CatalogItemStatus,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -13,5 +15,5 @@ class SetCatalogItemStatusCommand:
     tenant_id: EntityIdVO
     actor_id: EntityIdVO
     item_id: CatalogItemIdVO
-    expected_root_revision: int
+    expected_revision: int
     status: CatalogItemStatus

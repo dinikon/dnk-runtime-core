@@ -28,16 +28,13 @@ class SetCatalogItemPriceHandler:
     async def execute(
         self, command: SetCatalogItemPriceCommand
     ) -> SetCatalogItemPriceResultDTO:
-        """Загружает семью, вызывает доменный метод и сохраняет изменение без commit."""
-        root = await self._mutations.load(
-            command.tenant_id, command.item_id, command.expected_root_revision
+        """Загружает товар, вызывает доменный метод и сохраняет изменение без commit."""
+        item = await self._mutations.load(
+            command.tenant_id, command.item_id, command.expected_revision
         )
         now = self._clock.now()
         if command.price is not None:
             await self._currencies.ensure_active(command.price.currency)
-        root.set_price(command.item_id, command.price, command.actor_id, now)
-        await self._mutations.save(root)
-        item = root.find_item(command.item_id)
-        return SetCatalogItemPriceResultDTO(
-            item.id.uuid, root.id.uuid, item.revision, root.revision
-        )
+        item.set_price(command.price, command.actor_id, now)
+        await self._mutations.save(item)
+        return SetCatalogItemPriceResultDTO(item.id.uuid, item.revision)

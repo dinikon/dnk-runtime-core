@@ -26,7 +26,7 @@ async def delete_catalog_item_content(
     handler: DeleteCatalogItemContentHandlerDep,
     item_id: UUID,
     locale: str,
-    expected_root_revision: int = Query(ge=1),
+    expected_revision: int = Query(ge=1),
 ) -> Response:
     """Преобразует HTTP вход delete_catalog_item_content в отдельный Application сценарий."""
     principal = context.principal
@@ -38,7 +38,7 @@ async def delete_catalog_item_content(
                 tenant_id=EntityIdVO.from_value(principal.tenant_id),
                 actor_id=EntityIdVO.from_value(principal.user_id),
                 item_id=CatalogItemIdVO(item_id),
-                expected_root_revision=expected_root_revision,
+                expected_revision=expected_revision,
                 locale=locale,
             )
         )

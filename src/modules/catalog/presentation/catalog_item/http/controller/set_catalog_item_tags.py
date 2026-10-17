@@ -47,7 +47,7 @@ async def set_catalog_item_tags(
                 actor_id=EntityIdVO.from_value(principal.user_id),
                 item_id=CatalogItemIdVO(item_id),
                 tag_ids=payload.tag_ids,
-                expected_root_revision=payload.expected_root_revision,
+                expected_revision=payload.expected_revision,
             )
         )
     except CatalogNotFoundError as exc:

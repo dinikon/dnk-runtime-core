@@ -34,9 +34,9 @@ class ReplaceCatalogItemGalleryHandler:
     async def execute(
         self, command: ReplaceCatalogItemGalleryCommand
     ) -> ReplaceCatalogItemGalleryResultDTO:
-        """Загружает семью, вызывает доменный метод и сохраняет изменение без commit."""
-        root = await self._mutations.load(
-            command.tenant_id, command.item_id, command.expected_root_revision
+        """Загружает товар, вызывает доменный метод и сохраняет изменение без commit."""
+        item = await self._mutations.load(
+            command.tenant_id, command.item_id, command.expected_revision
         )
         now = self._clock.now()
         await self._locales.ensure_active(command.locale)
@@ -44,15 +44,11 @@ class ReplaceCatalogItemGalleryHandler:
             command.tenant_id.uuid,
             tuple(i.file_id.uuid for i in command.gallery.images),
         )
-        root.replace_gallery(
-            command.item_id,
+        item.replace_gallery(
             LocaleVO(command.locale),
             command.gallery,
             command.actor_id,
             now,
         )
-        await self._mutations.save(root)
-        item = root.find_item(command.item_id)
-        return ReplaceCatalogItemGalleryResultDTO(
-            item.id.uuid, root.id.uuid, item.revision, root.revision
-        )
+        await self._mutations.save(item)
+        return ReplaceCatalogItemGalleryResultDTO(item.id.uuid, item.revision)

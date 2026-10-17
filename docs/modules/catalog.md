@@ -1,131 +1,123 @@
 # Catalog
 
-Catalog хранит канонические карточки, их контент и заявленные коммерческие
-значения. Реализация соответствует [плану](../plan/catalog.md) и
-[архитектурным требованиям](../architecture/AGENTS.md).
+Catalog MVP v1 хранит только простые самостоятельные товары, их контент и
+заявленные коммерческие значения. Полная спецификация вариативности сохранена
+в [плане следующего этапа](../plan/catalog.md); обязательны
+[архитектурные требования](../architecture/AGENTS.md).
 
 ## Модель и границы
 
-Единственная товарная модель — `CatalogItem`, SQL `CatalogItemModel`, таблица
-`catalog_item`. SIMPLE и VARIABLE являются Aggregate Roots. VARIABLE владеет
-VARIANT как внутренними узлами того же класса; у них `parent_id` корня. SIMPLE
-не имеет детей. Вложенность ровно один уровень, у VARIABLE минимум два варианта,
-непустые enum оси, полные уникальные комбинации и допустимый default. Репозитория
-варианта нет. ProductType Default — фиксированная read схема migration seed.
-Системные подписи читаются по явной locale (en/ru/uk, остальные без fallback).
-AttributeDefinition, Category и Tag имеют собственные корни.
+CatalogItem — Aggregate Root одной продаваемой позиции. У него нет родителя,
+детей, осей, selections или смены kind. AttributeDefinition, Category и Tag
+имеют самостоятельные корни; options принадлежат определению атрибута.
+ProductType Default — фиксированная read-only схема migration seed.
 
-Сохранение проходит через create/restore и доменные методы. Команды принимают
-expected_root_revision; блокировка семьи берётся после shared guard ссылок.
-Изменение определения/дерева берёт exclusive guard. Разные семьи изменяются
-параллельно. Write repo восстанавливает семью, проверяет optimistic revision
-при UPDATE и сохраняет только изменённые группы связей. UoW владеет транзакцией.
+Сохранение проходит через create_simple/restore и доменные методы. Команды
+принимают expected_revision; после shared guard справочных ссылок берётся
+блокировка одного item. Изменения справочников берут exclusive guard.
+Write repository проверяет optimistic revision и сохраняет только изменённые
+группы связей. UoW владеет транзакцией. Query repositories не восстанавливают
+агрегат; batch-чтение связей не зависит по числу запросов от размера страницы.
 
-## Контент и effective значения
+## Поля товара
 
-Default schema version 1: `name` (text, обязательное имя собственного перевода
-корня), `desc` и `short_desc` (optional rich_text). CRUD типов и блоков отсутствует.
-Контент хранится по item/locale/block. У VARIANT отсутствие ключа наследует блок
-той же locale; set переопределяет, clear убирает optional блок. Переводы разных
-языков не смешиваются. Запись проверяет активную locale Reference Data; сохранённый
-перевод неактивной locale можно читать. HTML очищается NH3 через порт.
+У товара собственные status (draft/active/archived), virtual, SKU, цена,
+наличие, измерения, тексты, галереи, характеристики, metadata и классификация.
+Наследование и own/effective/origins отсутствуют. SKU — trim-код, уникальный
+в tenant с сохранением регистра; nullable SKU не мешает созданию черновика.
 
-Цена и virtual принадлежат SIMPLE/VARIANT и не наследуются. VARIABLE всегда
-невиртуальный, без собственной спецификации цены: он возвращает диапазон цен
-активных детей и признак неполноты. Цена 0 допустима; отсутствие цены блокирует
-продажу. Скидки используют точный Decimal и интервал `[from,to)` в UTC;
-семья использует одну валюту Reference Data.
+Цена хранится как price_specification: regular/sale, currency и UTC-интервал
+[from,to). Текущая price вычисляется на as_of; 0 допустим, отсутствие цены
+блокирует продажу. Decimal точный, до шести дробных разрядов, без float.
+Валюта проверяется публичным контрактом Reference Data.
 
-Вес хранится парой `value/unit` (`g`/`kg`), каждый размер — собственной парой
-(`cm`/`m`). Длина, ширина и высота независимо необязательны. VARIANT наследует
-отсутствующее измерение вместе с единицей; 0 остаётся собственным значением.
-Domain точно переводит массу в граммы, размеры в миллиметры без float и
-округления. Проверяется до шести дробных разрядов канонической единицы с учётом
-незначащих нулей. Хранятся только исходные пары, без дублирования канонических чисел.
-Виртуальность не отменяет сохранённые измерения и не меняет наличие.
+Вес — nullable пара value/unit g/kg, размеры независимо nullable в cm/m.
+Ноль является значением. Точность проверяется в канонических g/mm, до шести
+дробных разрядов без округления; хранятся только исходные пары. Virtual не
+очищает измерения и не меняет наличие. Inventory, резервы и движения отсутствуют.
 
-SKU — собственный trim код SIMPLE/VARIANT, уникальный в tenant и чувствительный
-к регистру; у VARIABLE SKU отсутствует. Остальные правила контента, атрибутов,
-галерей и metadata сохраняют существующее наследование.
+Новые товары получают manage_stock=false, stock_quantity=null,
+stock_status=in_stock, backorders=no. Boolean строгий. При true обязательно
+целое количество, включая отрицательное; stock_status вычисляется по порогу 0
+и политике no/notify/yes. При false количества нет, backorders=no, действует
+ручной in_stock/out_of_stock/on_backorder. Общего запаса и stock source нет.
 
-`manage_stock` — строгий boolean. Новые узлы получают false, ручной `in_stock`,
-без количества и `backorders=no`. При true количество обязательно, целое и
-может быть отрицательным; статус вычисляется по порогу 0 и политике no/notify/yes.
-При false количество отсутствует, backorders=no; ручной on_backorder допустим.
-VARIANT с false использует общий запас родителя с true. Собственный true
-перекрывает общий запас. `stock_source_id` обозначает источник без копирования
-или суммирования общего количества по детям. VARIABLE показывает собственный
-общий запас отдельно от сводного статуса активных детей
-(in_stock > on_backorder > out_of_stock; без активных детей out_of_stock).
+available_for_sale требует active, собственную цену и наличие
+in_stock/on_backorder. available_for_publication проверяет active.
+backorders_allowed/backordered — вычисляемые поля. Domain policy не читает часы.
 
-`available_for_sale` вычисляется из active карточки/родителя, собственной цены
-и эффективного наличия (in_stock/on_backorder). У VARIABLE это наличие хотя бы
-одного продаваемого ребёнка. `available_for_publication` остаётся проверкой
-жизненного цикла. Inventory, его порты, fallback, движения и резервы не реализуются.
+## Контент, справочники и медиа
 
-Metadata — нормализованные text/decimal/boolean keys с порядком и set/clear,
-канонические ключи запрещены. Override сохраняет место parent key, новые ключи
-добавляются в собственном порядке. Own/effective/origins разрешает одна Domain
-policy для команд и query projections, без сохранения effective копий в SQL.
+Default version 1 содержит name (обязательный непустой текст при сохранении
+перевода), desc и short_desc (optional rich_text). CRUD типов/блоков отсутствует.
+PUT values передаёт полный dict[str,str] выбранной locale; отсутствие optional
+блока удаляет его, пустая строка сохраняется. DELETE удаляет перевод.
+HTML очищается NH3 через порт и DOMPurify перед показом в Console.
 
-## Справочники и медиа
+Locale передаётся явно; запись разрешена для активной locale Reference Data.
+Сохранённый перевод неактивной locale читается. Межъязыкового fallback нет.
+Default labels en/ru/uk читаются по выбранной locale, без угадывания языка.
 
-Глобальные атрибуты только enum. Definitions/options имеют устойчивые ID и
-переводы. Назначение содержит список options, position, visible и роль оси;
-visible независимо от is_variation. Axis options проверяются с владельцем,
-каждый variant выбирает по одному option каждой оси. Используемые options нельзя
-удалять. Categories — дерево с защитой циклов, назначаются только SIMPLE:
-много явных узлов, ровно одна primary при непустом наборе. Tags также только SIMPLE.
+Глобальные атрибуты — enum с устойчивыми ID definitions/options и переводами.
+Назначение содержит несколько option IDs, position и visible; вариантов это
+не создаёт. Options должны принадлежать определению. Категории образуют дерево
+с защитой циклов. Непустое назначение требует ровно одну primary; назначаются
+только явные узлы. Используемые справочники/options не удаляются.
 
-Галерея принадлежит item+locale: упорядоченные Files ссылки, alt/caption и одно
-главное изображение в непустом наборе. У ребёнка отсутствующий набор наследует
-parent locale, empty явно скрывает его; replace заменяет весь набор, delete
-возвращает наследование. В MVP до 100 изображений, upload PNG/JPEG/WebP до 10 MiB
-с проверкой MIME/сигнатуры. Files adapter использует публичные handlers на общем
-UoW, не импортирует Files ORM и не создаёт межмодульный FK. HTTP отдаёт закрываемый
-поток только для изображения effective галереи. Detach не удаляет Files объект.
-Файловое хранилище подготавливается сценариями Files до загрузки.
+Metadata — полный упорядоченный набор keys с типами text/decimal/boolean,
+без режимов override. Зарезервированные канонические ключи запрещены. Удаление
+характеристики или metadata выполняется исключением из полного набора.
+
+Галерея принадлежит item+locale: Files links, порядок, alt/caption и одно главное
+изображение в непустом наборе. Replace заменяет полный набор, empty очищает,
+DELETE удаляет локализованную галерею. До 100 изображений; upload PNG/JPEG/WebP
+до 10 MiB с проверкой MIME/сигнатуры. Files adapter использует публичные handlers
+на общем UoW, без Files ORM/FK. HTTP отдаёт закрываемый поток только для
+изображения галереи этого товара и tenant. Снятие связи не удаляет Files объект.
+Хранилище подготавливается сценариями Files до загрузки.
 
 ## API и Console
 
-Префикс `/api/console/catalog`: `/items`, `/items/simple`, `/items/variable`,
-`/items/{id}`, `/items/{root_id}/variants`, `/product-type/default`,
-`/attributes`, `/categories`, `/tags`. Каждый use case имеет отдельные
-command/query, handler, DTO и HTTP контракты; delete -> None/204, image content
--> закрываемый stream. Разделы записи: status, sku, virtual, price, stock,
-measurements, content/{locale}, attributes, categories, tags, metadata,
-structure, kind, gallery/{locale}; upload `/items/{id}/images/{locale}/upload`.
+Префикс /api/console/catalog: /items, /items/simple, /items/{id},
+/product-type/default, /attributes, /categories, /tags.
+Разделы записи: status, sku, virtual, price, stock, measurements,
+content/{locale}, attributes, categories, tags, metadata, gallery/{locale},
+gallery/{locale}/primary; upload /items/{id}/images/{locale}/upload.
+Create variable, variants, structure и kind endpoints отсутствуют.
 
-List — компактная проекция с title, SKU, ценой/диапазоном, статусом и главным
-изображением; filters locale/search/kind/status/category/tag/parent, offset/limit
-(до 100). Detail — own/effective/origins. Чтение использует REPEATABLE READ на одной
-session, настроенной router Depends до SQL Identity, и batch links: число SELECT не зависит от количества строк страницы.
-Get VARIANT не загружает соседей. Query repos не восстанавливают Aggregate.
+Мутации получают expected_revision и возвращают id/revision; upload также
+image_id/file_id. Delete -> None/204, image content -> управляемый stream.
+Каждому сценарию принадлежат отдельные Command/Query, Handler, DTO и HTTP-контракты.
 
-Console использует `/catalog/items` и одну карточку для всех kinds, отдельные
-сохранения разделов, locale/query keys и root revision. Ввод сохраняется при 409;
-актуальное состояние загружается явно. Есть галерея, структура с явными удалениями
-и переходы kind. SIMPLE -> VARIABLE требует снять классификацию и явно выбрать
-ребёнка для переноса SKU, цены, virtual и наличия; измерения корня остаются defaults.
-VARIABLE -> SIMPLE материализует выбранного ребёнка,
-сохраняет root ID и требует подтверждения всех удаляемых child IDs.
+List — компактные строки, locale/search/status/category/tag и offset/limit (до 100).
+Detail сохраняет item/as_of с прямыми полями; price_specification отличается от
+вычисляемой price, stock — от stock_status. Нет kind, root/parent, own/effective,
+origins, осей или диапазона цен. Чтение использует REPEATABLE READ на общей session
+до SQL Identity. Unsupported SQL kinds не читаются и не меняются через MVP.
 
-## Channels и миграции
+Console /catalog/items: список, создание черновика, обзор и отдельный редактор.
+Есть сохранение разделов, локали, галерея, классификация, цены/наличие/измерения.
+Выбора вида, вариантов, структуры и наследования нет. Query keys включают tenant,
+сценарий, item ID, locale и filters/pagination. 409 сохраняет ввод; перезагрузка
+актуального состояния выполняется явно с подтверждением потери изменений.
 
-GetCatalogItemsPublicationSnapshot — публичный batch Application контракт с
-locale/as_of, root revisions, fixed schema и effective данными. Сборка потребителя
-обеспечивает краткий согласованный read UoW. Топология внешнего канала остаётся
-независимой: несколько SIMPLE могут образовать synthetic внешнего parent,
-VARIANT могут публиковаться отдельными simple. Bindings/mappings/overrides/delivery
-принадлежат Channels; новые этапы исходящей доставки остаются в плане. Текущий
-usage adapter возвращает пустой набор: observed Channels пока не содержит Catalog
-source bindings. При появлении bindings требуется подключить проверку Channels
-и события Outbox; нельзя оставлять пустой adapter с реальными зависимостями.
+## SQL и Channels
 
-Fresh baseline `0023_catalog_item` следует за `0022_tenant_currency_settings`.
-Удалены 0012/0015/0017/0018/0019 Catalog, обновлены только связи 0013/0016/0020.
-Baseline пересобрана с boolean manage_stock и отдельными value/unit парами;
-зависимость 0024_currency_exchange_rates сохранена. Нужна пустая база;
-data migration, compatibility endpoints и автоматический
-DB drop отсутствуют. Downgrade baseline удаляет только Catalog, сохраняет Files
-и другие модули. Подробности — [tenant migrations](../data/tenant-migrations.md).
+SQL-модели и регистрация полностью сохранены: catalog_item поддерживает
+simple/variable/variant, parent role FK, оси и таблицы selections/defaults.
+MVP mapper записывает simple, parent_id=NULL, is_variation=false и mode=set;
+старый clear простого товара читается как отсутствие. Активные adapters не
+загружают детей и не читают/записывают selections/defaults. Новых миграций нет.
+Сохраняются baseline 0023_catalog_item и следующая 0024_currency_exchange_rates.
+Для сокращения уже развёрнутого Catalog пересоздание БД не требуется.
+
+GetCatalogItemsPublicationSnapshot — публичный batch Application-контракт простых
+товаров: locale/as_of, expected_revisions по item ID, fixed schema и собственные
+значения с вычислениями. Он имеет собственные вложенные DTO. Потребитель открывает
+краткий согласованный read UoW. Usage port проверяет внешние зависимости удаления;
+пока Catalog bindings отсутствуют, адаптер возвращает пустой набор. При появлении
+bindings обязательны проверка Channels и Outbox в общей транзакции.
+
+Существующие observed/read коннекторы и внешние варианты Channels сохраняются.
+Bindings, representations, mappings/overrides и исходящая доставка остаются
+в плане; завершение Catalog MVP их не реализует.

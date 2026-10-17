@@ -2,7 +2,7 @@
 import { computed, ref, watch } from "vue";
 import CatalogMeasurementField from "./CatalogMeasurementField.vue";
 import ProductRichText from "../product/ProductRichText.vue";
-import { safeProductHtml, saveLabels } from "../../model/product-presentation";
+import { saveLabels } from "../../model/product-presentation";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,6 @@ import { clone } from "../../model/clone";
 import type { CatalogItem, CatalogAttribute } from "../../model/catalog.types";
 import type {
   ProductSection,
-  ProductOverride,
   ProductPrice,
   ProductWeight,
   ProductStock,
@@ -30,7 +29,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   save: [value: Record<string, unknown>];
   dirty: [value: boolean];
-  inherit: [];
 }>();
 const stockStatusLabels: Record<string, string> = {
   in_stock: "В наличии",
@@ -43,7 +41,7 @@ const contentLabels: Record<string, string> = {
   short_desc: "Краткое описание",
 };
 const dirty = ref(false),
-  text = ref<Record<string, ProductOverride<string>>>({}),
+  text = ref<Record<string, string>>({}),
   status = ref("draft"),
   sku = ref(""),
   virtual = ref(false),
@@ -67,12 +65,12 @@ function mark() {
   emit("dirty", true);
 }
 function resetFields() {
-  const own = props.item.own;
-  text.value = clone(own.translations[props.locale] ?? {});
+  const own = props.item;
+  text.value = clone(own.content ?? {});
   status.value = own.status;
   sku.value = own.sku ?? "";
   virtual.value = clone(own.virtual);
-  price.value = clone(own.price);
+  price.value = clone(own.price_specification);
   stock.value = clone(own.stock);
   weight.value = clone(own.weight);
   dimensions.value = clone(
@@ -91,14 +89,9 @@ watch(
     if (!dirty.value) resetFields();
   },
 );
-function contentMode(code: string, mode: string) {
-  if (mode === "inherit") delete text.value[code];
-  else
-    text.value[code] = {
-      mode: mode as "set" | "clear",
-      value:
-        mode === "set" ? (props.item.effective.content?.[code] ?? "") : null,
-    };
+function contentEnabled(code: string, enabled: boolean) {
+  if (enabled) text.value[code] = props.item.content?.[code] ?? "";
+  else delete text.value[code];
   mark();
 }
 function priceMode(event: Event) {
@@ -134,10 +127,7 @@ function stockMode(event: Event) {
 const selectedAttribute = ref("");
 const availableAttributes = computed(() =>
   props.attributes.filter(
-    (a) =>
-      !assignments.value.some((v) => v.attribute_id === a.id) &&
-      !props.item.own.axes.some((v) => v.attribute_id === a.id) &&
-      !props.item.own.selection.values.some(([id]) => id === a.id),
+    (a) => !assignments.value.some((v) => v.attribute_id === a.id),
   ),
 );
 function addAttribute() {
@@ -150,7 +140,6 @@ function addAttribute() {
       option_ids: [],
       visible: true,
       position: assignments.value.length,
-      mode: "set",
     });
     mark();
   }
@@ -191,8 +180,6 @@ function submit() {
       metadata: metadata.value.map((v, position) => ({
         ...v,
         position,
-        value_type: v.mode === "clear" ? null : v.value_type,
-        value: v.mode === "clear" ? null : v.value,
       })),
     };
   if (section === "attributes")
@@ -200,7 +187,6 @@ function submit() {
       attributes: assignments.value.map((v, position) => ({
         ...v,
         position,
-        option_ids: v.mode === "clear" ? [] : v.option_ids,
       })),
     };
   emit("save", value);
@@ -220,76 +206,43 @@ function submit() {
             <FieldLabel :for="`${item.id}-content-${code}`">{{
               contentLabels[code]
             }}</FieldLabel>
-            <select
-              v-if="item.kind === 'variant' || code !== 'name'"
-              :aria-label="`Источник: ${contentLabels[code]}`"
-              class="w-full rounded-md border bg-background p-2 text-sm"
-              :value="
-                text[code]?.mode ??
-                (item.kind === 'variant' ? 'inherit' : 'set')
-              "
-              @change="
-                contentMode(code, ($event.target as HTMLSelectElement).value)
-              "
+            <label
+              v-if="code !== 'name'"
+              class="flex items-center gap-2 text-sm"
+              ><input
+                type="checkbox"
+                :checked="text[code] !== undefined"
+                @change="
+                  contentEnabled(
+                    code,
+                    ($event.target as HTMLInputElement).checked,
+                  )
+                "
+              />Добавить описание</label
             >
-              <option v-if="item.kind === 'variant'" value="inherit">
-                От родителя
-              </option>
-              <option value="set">Задать своё</option>
-              <option v-if="code !== 'name'" value="clear">Очистить</option>
-            </select>
             <Input
-              v-if="
-                code === 'name' &&
-                (item.kind !== 'variant' || text[code]?.mode === 'set')
-              "
+              v-if="code === 'name'"
               :id="`${item.id}-content-${code}`"
-              :model-value="text[code]?.value ?? ''"
+              :model-value="text[code] ?? ''"
               placeholder="Название товара"
+              required
               @update:model-value="
-                text[code] = { mode: 'set', value: String($event) };
+                text[code] = String($event);
                 mark();
               "
             />
             <ProductRichText
-              v-else-if="
-                code !== 'name' &&
-                (text[code]?.mode === 'set' ||
-                  (!text[code] && item.kind !== 'variant'))
-              "
-              :model-value="text[code]?.value ?? ''"
+              v-else-if="text[code] !== undefined"
+              :model-value="text[code] ?? ''"
               :label="contentLabels[code]!"
               :disabled="pending"
               @update:model-value="
-                text[code] = { mode: 'set', value: $event };
+                text[code] = $event;
                 mark();
               "
             />
-            <div
-              v-else-if="item.kind === 'variant' && !text[code]"
-              class="text-sm text-muted-foreground"
-            >
-              <span>От родителя</span>
-              <p v-if="code === 'name'">
-                {{ item.effective.content?.[code] ?? "Не задано" }}
-              </p>
-              <!-- HTML дополнительно очищен на границе представления. -->
-              <!-- eslint-disable-next-line vue/no-v-html -->
-              <div
-                v-else
-                class="product-prose mt-2"
-                v-html="safeProductHtml(item.effective.content?.[code])"
-              />
-            </div>
           </Field>
         </FieldGroup>
-        <Button
-          v-if="item.kind === 'variant'"
-          type="button"
-          variant="outline"
-          @click="emit('inherit')"
-          >Вернуть все тексты от родителя</Button
-        >
       </template>
       <label v-else-if="section === 'status'" class="block"
         >Статус<select
@@ -356,8 +309,8 @@ function submit() {
           /></label>
         </div>
         <p class="text-sm text-muted-foreground">
-          Текущая цена: {{ item.effective.price ?? "Не задана" }}
-          {{ item.effective.price_specification?.currency }}
+          Текущая цена: {{ item.price ?? "Не задана" }}
+          {{ item.price_specification?.currency }}
         </p></template
       >
       <template v-else-if="section === 'stock'">
@@ -380,7 +333,7 @@ function submit() {
           />
         </label>
         <select
-          v-if="!stock.manage_stock && item.kind !== 'variable'"
+          v-if="!stock.manage_stock"
           v-model="stock.stock_status"
           aria-label="Наличие"
           class="w-full rounded border bg-background p-2"
@@ -400,32 +353,13 @@ function submit() {
             <option value="yes">Разрешён</option>
           </select>
         </label>
-        <p
-          v-if="item.kind === 'variant' && !stock.manage_stock"
-          class="text-sm text-muted-foreground"
-        >
-          Если родитель учитывает количество, используется его общий остаток.
-          Иначе действует собственный статус.
-        </p>
         <p class="text-sm text-muted-foreground">
           Текущее наличие:
-          {{ stockStatusLabels[item.stockStatus ?? ""] ?? "Неизвестно" }} ·
-          Источник:
-          {{
-            item.effective.origins.stock?.source === "parent"
-              ? "Общий остаток родителя"
-              : "Собственное наличие"
-          }}
-        </p>
-        <p
-          v-if="item.kind === 'variable' && item.own.stock.manage_stock"
-          class="text-sm text-muted-foreground"
-        >
-          Общий запас семьи: {{ item.own.stock.stock_quantity }}
+          {{ stockStatusLabels[item.stock_status] ?? "Неизвестно" }}
         </p>
         <p class="text-sm text-muted-foreground">
           {{
-            item.effective.available_for_sale
+            item.available_for_sale
               ? "Доступен для продажи"
               : "Недоступен для продажи"
           }}
@@ -438,8 +372,7 @@ function submit() {
             label="Вес"
             :units="['g', 'kg'] as const"
             default-unit="g"
-            :effective="item.effective.weight"
-            :inherited="item.effective.origins.weight?.source === 'parent'"
+            :effective="item.weight"
           />
           <CatalogMeasurementField
             v-for="field in ['length', 'width', 'height'] as const"
@@ -454,16 +387,9 @@ function submit() {
             "
             :units="['cm', 'm'] as const"
             default-unit="cm"
-            :effective="item.effective.dimensions?.[field] ?? null"
-            :inherited="
-              item.effective.origins[`dimensions.${field}`]?.source === 'parent'
-            "
+            :effective="item.dimensions?.[field] ?? null"
           />
         </div>
-        <p v-if="item.kind === 'variant'" class="text-sm text-muted-foreground">
-          Пустое поле наследует значение и единицу родителя. Ноль сохраняется
-          как собственное значение.
-        </p>
       </template>
       <template v-else-if="section === 'metadata'"
         ><div
@@ -477,16 +403,6 @@ function submit() {
             placeholder="Ключ"
             class="rounded border bg-background p-2"
           /><select
-            v-model="entry.mode"
-            aria-label="Режим"
-            class="rounded border bg-background p-2"
-          >
-            <option value="set">Задать</option>
-            <option v-if="item.kind === 'variant'" value="clear">
-              Убрать наследуемое
-            </option></select
-          ><select
-            v-if="entry.mode === 'set'"
             v-model="entry.value_type"
             aria-label="Тип значения"
             class="rounded border bg-background p-2"
@@ -495,10 +411,10 @@ function submit() {
             <option value="text">Текст</option>
             <option value="decimal">Число</option>
             <option value="boolean">Да/Нет</option></select
-          ><label v-if="entry.mode === 'set' && entry.value_type === 'boolean'"
+          ><label v-if="entry.value_type === 'boolean'"
             ><input v-model="entry.value" type="checkbox" /> Да</label
           ><input
-            v-else-if="entry.mode === 'set'"
+            v-else
             v-model="entry.value"
             aria-label="Значение"
             class="rounded border bg-background p-2"
@@ -521,7 +437,6 @@ function submit() {
               value_type: 'text',
               value: '',
               position: metadata.length,
-              mode: 'set',
             });
             mark();
           "
@@ -530,9 +445,7 @@ function submit() {
         <p class="text-sm text-muted-foreground">
           Текущие значения:
           {{
-            item.effective.metadata
-              .map((v) => `${v.key}: ${v.value}`)
-              .join(", ") || "Нет"
+            item.metadata.map((v) => `${v.key}: ${v.value}`).join(", ") || "Нет"
           }}
         </p></template
       >
@@ -546,20 +459,11 @@ function submit() {
             attributes.find((a) => a.id === assignment.attribute_id)?.label ??
             attributes.find((a) => a.id === assignment.attribute_id)?.code
           }}</span
-          ><select
-            v-model="assignment.mode"
-            aria-label="Режим атрибута"
-            class="ml-2 rounded border bg-background p-2"
-          >
-            <option value="set">Задать</option>
-            <option v-if="item.kind === 'variant'" value="clear">
-              Очистить
-            </option></select
           ><label class="ml-2"
             ><input v-model="assignment.visible" type="checkbox" />
             Видимый</label
           >
-          <div v-if="assignment.mode === 'set'" class="flex flex-wrap gap-2">
+          <div class="flex flex-wrap gap-2">
             <label
               v-for="o in attributes.find(
                 (a) => a.id === assignment.attribute_id,

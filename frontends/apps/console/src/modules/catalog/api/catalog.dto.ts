@@ -134,7 +134,6 @@ export interface MoveCategoryResponse {
   id: string;
   revision: number;
 }
-export type ItemKind = "simple" | "variable" | "variant";
 export type ItemStatus = "draft" | "active" | "archived";
 export type ItemSection =
   | "content"
@@ -148,13 +147,7 @@ export type ItemSection =
   | "attributes"
   | "categories"
   | "tags"
-  | "galleries"
-  | "structure"
-  | "kind";
-export interface OverrideDTO<T> {
-  mode: "inherit" | "set" | "clear";
-  value: T | null;
-}
+  | "galleries";
 export interface PriceDTO {
   regular_price: string;
   currency: string;
@@ -186,14 +179,12 @@ export interface AttributeDTO {
   option_ids: string[];
   visible: boolean;
   position: number;
-  mode: "set" | "clear";
 }
 export interface MetadataDTO {
   key: string;
-  value_type: "text" | "decimal" | "boolean" | null;
-  value: string | boolean | null;
+  value_type: "text" | "decimal" | "boolean";
+  value: string | boolean;
   position: number;
-  mode: "set" | "clear";
 }
 export interface ImageDTO {
   id: string;
@@ -206,77 +197,34 @@ export interface GalleryDTO {
   images: ImageDTO[];
   primary_image_id: string | null;
 }
-export interface AxisDTO {
-  attribute_id: string;
-  option_ids: string[];
-  position: number;
-  visible: boolean;
-}
-export interface SelectionDTO {
-  attribute_id: string;
-  option_id: string;
-}
-export interface StructureDTO {
-  axes: AxisDTO[];
-  variants: { item_id: string | null; selection: SelectionDTO[] }[];
-  default_selection: SelectionDTO[] | null;
-}
-export interface OwnItemDTO {
+export interface ReadItemDTO {
   id: string;
-  kind: ItemKind;
-  parent_id: string | null;
-  product_type_id: string | null;
+  revision: number;
+  product_type_id: string;
   status: ItemStatus;
   sku: string | null;
   virtual: boolean;
-  price: PriceDTO | null;
+  price_specification: PriceDTO | null;
+  price: string | null;
   weight: WeightDTO | null;
   dimensions: DimensionsDTO | null;
   stock: StockDTO;
-  translations: Record<string, Record<string, OverrideDTO<string>>>;
-  galleries: Record<string, GalleryDTO>;
+  stock_status: "in_stock" | "out_of_stock" | "on_backorder";
+  backorders_allowed: boolean;
+  backordered: boolean;
+  available_for_sale: boolean;
+  available_for_publication: boolean;
+  content: Record<string, string> | null;
+  gallery: GalleryDTO | null;
   attributes: AttributeDTO[];
   metadata: MetadataDTO[];
-  selection: { values: [string, string][] };
-  axes: AxisDTO[];
-  default_selection: { values: [string, string][] } | null;
   category_ids: string[];
   primary_category_id: string | null;
   tag_ids: string[];
-  revision: number;
   created_at: string;
   updated_at: string;
-}
-export interface ReadItemDTO {
-  root_id: string;
-  root_revision: number;
-  own: OwnItemDTO;
-  effective: {
-    content: Record<string, string> | null;
-    virtual: boolean;
-    price_specification: PriceDTO | null;
-    price: string | null;
-    weight: WeightDTO | null;
-    dimensions: DimensionsDTO | null;
-    stock: StockDTO;
-    stock_source_id: string | null;
-    gallery: GalleryDTO | null;
-    attributes: AttributeDTO[];
-    metadata: MetadataDTO[];
-    available_for_sale: boolean;
-    available_for_publication: boolean;
-    origins: Record<
-      string,
-      { source: string; item_id: string | null; locale: string | null }
-    >;
-  };
-  stock_status: string | null;
-  backorders_allowed: boolean | null;
-  backordered: boolean | null;
-  price_min: string | null;
-  price_max: string | null;
-  price_incomplete: boolean;
-  price_currency: string | null;
+  created_by: string;
+  updated_by: string;
 }
 export interface GetItemResponse {
   item: ReadItemDTO;
@@ -291,15 +239,17 @@ export interface ListItemsResponse {
 }
 export interface CreateItemResponse {
   id: string;
-  root_revision: number;
-  child_ids: string[];
+  revision: number;
 }
 export interface MutationResponse {
-  item_id: string;
-  root_id: string;
-  item_revision: number;
-  root_revision: number;
-  child_ids?: string[];
+  id: string;
+  revision: number;
+}
+export interface UploadImageResponse {
+  id: string;
+  revision: number;
+  image_id: string;
+  file_id: string;
 }
 export interface DefaultSchemaResponse {
   locale: string;
@@ -321,28 +271,15 @@ export interface DefaultSchemaResponse {
 
 export interface ListItemDTO {
   id: string;
-  kind: ItemKind;
-  root_id: string;
-  root_revision: number;
   revision: number;
   status: ItemStatus;
   sku: string | null;
   title: string | null;
   price: string | null;
   currency: string | null;
-  price_min: string | null;
-  price_max: string | null;
-  price_incomplete: boolean;
   stock_status: string | null;
   primary_image: ImageDTO | null;
   weight: WeightDTO | null;
   dimensions: DimensionsDTO | null;
   available_for_sale: boolean;
-}
-export interface ListVariantsResponse {
-  items: ReadItemDTO[];
-  total: number;
-  offset: number;
-  limit: number;
-  as_of: string;
 }

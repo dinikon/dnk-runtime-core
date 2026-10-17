@@ -3,30 +3,28 @@ from src.modules.catalog.domain.attribute.value_object.identifier import Attribu
 from src.modules.catalog.domain.attribute.value_object.option_id import (
     AttributeOptionIdVO,
 )
-from src.modules.catalog.domain.catalog_item.value_object.override import OverrideMode
 from src.modules.catalog.domain.error import InvalidCatalogValueError
 
 
 @dataclass(frozen=True, slots=True)
 class EnumAttributeAssignmentVO:
-    """Собственный набор enum-options либо явная очистка характеристики."""
+    """Непустой набор enum-options характеристики товара."""
 
     attribute_id: AttributeIdVO
     option_ids: tuple[AttributeOptionIdVO, ...]
     visible: bool
     position: int
-    mode: OverrideMode = OverrideMode.SET
 
     def __post_init__(self) -> None:
-        """Проверяет собственные значения; оси и принадлежность проверяет агрегат."""
+        """Проверяет собственные значения; принадлежность проверяет агрегат."""
         if (
-            self.mode == OverrideMode.INHERIT
+            type(self.position) is not int
             or self.position < 0
             or type(self.visible) is not bool
             or len(set(self.option_ids)) != len(self.option_ids)
         ):
             raise InvalidCatalogValueError("Некорректное назначение атрибута.")
-        if (self.mode == OverrideMode.SET) != bool(self.option_ids):
+        if not self.option_ids:
             raise InvalidCatalogValueError(
-                "Set требует options, clear не содержит options."
+                "Характеристика требует непустой набор options."
             )

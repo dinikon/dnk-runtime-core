@@ -15,7 +15,7 @@ modules.
 - Authenticates console users through email OTP.
 - Loads and stores the current console user session.
 - Provides tenant-scoped Contact and Company management in CRM.
-- Provides SIMPLE/VARIABLE Catalog products with separate overview and section editor, nested variant editors, enum attributes, explicit kind transitions and independent locale editors.
+- Provides simple Catalog products with separate overview and section editor, enum attributes and independent locale editors.
 - Provides price-list and partner-offer workflows.
 - Provides profile and administrator-only workspace access-management screens.
 
@@ -235,50 +235,43 @@ code changes.
 
 ## Catalog
 
-Product routes:
+MVP v1 supports simple standalone products only. The product routes are
+`/catalog/items`, `/catalog/items/new`, `/catalog/items/:itemId` (overview),
+and `/catalog/items/:itemId/edit` (section editor). Creation explicitly creates
+a draft; there is no kind selector, variant filter, variant editor, structure
+form or kind transition. Legacy kind/variant query parameters are removed and
+`tab=variants` is normalized to `general`; nested variant routes are absent.
 
-- `/catalog/items` lists products; `/catalog/items/new` creates a draft explicitly.
-- `/catalog/items/:itemId` opens the read-only overview, with gallery, safe HTML,
-  measurements, attributes, classification and price/stock/sale summaries.
-- `/catalog/items/:itemId/edit` opens the editor. `tab`, `variant` and `locale`
-  are URL state. Legacy `/catalog/items/:rootId/variants/:itemId` redirects to the
-  parent editor. A direct VARIANT overview redirects to its parent overview.
-- Variant pages load 20 rows. Full combinations load only when editing structure
-  or selecting a variant for a kind transition. Direct-linked variants use GET.
+The product screens retain Console semantic tokens, existing shadcn-vue components,
+a 1440 px content limit and a 320 px desktop sidebar. Overview shows safe HTML,
+gallery, measurements, enum characteristics, classification, current price and
+availability. The editor has general, inventory, shipping, attributes and additional
+sections, plus localized texts, status, gallery, categories and tags.
 
-The product screens use Console semantic tokens and existing shadcn-vue primitives,
-with a 1440 px content limit and a 320 px sidebar above the 1280 px breakpoint.
-The existing application theme now observes the profile `interface_theme`; unknown
-or automatic values continue to follow the system preference. Color tokens and
-other modules' styling remain unchanged.
-The overview follows the supplied Shadcnblocks product-detail reference. Editing
-uses WooCommerce-style groups: general, inventory, shipping, attributes, variants
-and additional fields. VARIABLE has no own SKU, price or virtual control.
+`use-product-page` owns queries, serialized item writes and one revision.
+Transport DTOs and form models are separate. `expected_revision` is sent on every
+mutation; results contain id/revision. Direct item fields replace own/effective
+and family projections. The price specification is separate from current price;
+stock settings are separate from computed status. Query keys include tenant,
+item, locale and query parameters. There are no inherited values or shared stock.
 
-`use-product-page` owns queries, API calls, family write serialization and revision
-updates. `product-presentation` maps read data to `ProductOverviewModel` and
-`VariantRowModel`. Presentational product components only consume props and emit
-user actions. `ProductEditorDraft` tracks section changes/resets by item and locale
-(localized sections only). Mounted forms retain their values across tab/variant
-changes; only the saved section resets. A family write disables other writes.
-A 409 preserves input and requires explicit reload with discard confirmation.
-Leaving the editor or changing locale/product prompts for unsaved changes; internal
-navigation does not. Session changes remove cached tenant data and drafts.
+Forms preserve unsaved values across tabs; only the saved section resets.
+A 409 retains input and blocks further writes until explicit reload with discard
+confirmation. Leaving the editor or changing locale/product prompts for unsaved
+changes. Tenant/session changes clear catalog cache and drafts.
 
-Texts save as one section (name, description, short description), using the current
-schema version. Tiptap 3 provides the visual HTML editor. Unsupported sanitizer
-formats are disabled; initialization does not emit edits. Untouched HTML blocks
-are sent unchanged. DOMPurify additionally cleans HTML before overview rendering.
-Measurement fields retain exact Decimal strings and their units; changing a unit
-preserves the physical quantity, and an explicit zero remains own. Gallery upload
-is an immediate operation, blocked while local order/captions are unsaved.
+Texts save a full name/desc/short_desc dictionary with schema version. Name is
+required. Optional descriptions can be omitted or contain an explicit empty string.
+Tiptap edits HTML, the backend sanitizes it and DOMPurify additionally cleans the
+overview. Characteristics and metadata are full sets without override modes.
+Removing an entry deletes it. Decimal strings and units retain exact quantities
+when changing units. Gallery upload is immediate and blocked while local changes
+to its order or captions remain unsaved. Removing image links retains Files objects.
 
-Axes and combinations share one structure form and one save. Existing variant IDs
-are retained; deletions and kind transitions require confirmation. Ordinary
-attribute assignments must be removed explicitly before using an attribute as an
-axis. Kind transitions are under Additional and select the recipient by combination.
-No new backend contracts, migrations, warehouses, purchasing or bulk operations
-are introduced by this UI refactor. See [Catalog](../modules/catalog.md).
+Backend and Console must be released together because API contracts changed.
+SQL models/migrations remain unchanged and future variable-product behavior is
+preserved in the [Catalog plan](../plan/catalog.md). External Channels publications
+continue to support their existing read capabilities.
 
 ## File Storage
 

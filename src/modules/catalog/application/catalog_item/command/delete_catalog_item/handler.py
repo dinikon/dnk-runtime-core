@@ -8,7 +8,6 @@ from src.modules.catalog.application.catalog_item.port.usage import CatalogItemU
 from src.modules.catalog.domain.catalog_item.repository import (
     CatalogItemRepositoryProtocol,
 )
-from src.modules.catalog.domain.error import InvalidCatalogValueError
 
 
 class DeleteCatalogItemHandler:
@@ -20,22 +19,15 @@ class DeleteCatalogItemHandler:
         repository: CatalogItemRepositoryProtocol,
         usage: CatalogItemUsagePort,
     ) -> None:
-        """Принимает порты проверки и хранения одной семьи."""
+        """Принимает порты проверки и хранения одного товара."""
         self._mutations = mutations
         self._repository = repository
         self._usage = usage
 
     async def execute(self, command: DeleteCatalogItemCommand) -> None:
         """Проверяет ревизию, принадлежность корню и использование всех source ID."""
-        root = await self._mutations.load(
-            command.tenant_id, command.item_id, command.expected_root_revision
+        item = await self._mutations.load(
+            command.tenant_id, command.item_id, command.expected_revision
         )
-        if command.item_id != root.id:
-            raise InvalidCatalogValueError("Вариант удаляется явной заменой структуры.")
-        root.ensure_deletable(
-            bool(
-                await self._usage.used_ids(tuple(i.id for i in (root, *root.children)))
-            ),
-            command.discarded_ids,
-        )
-        await self._repository.delete(root)
+        item.ensure_deletable(bool(await self._usage.used_ids((item.id,))))
+        await self._repository.delete(item)

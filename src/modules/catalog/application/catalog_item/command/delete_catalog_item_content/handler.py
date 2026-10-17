@@ -17,12 +17,10 @@ class DeleteCatalogItemContentHandler:
         self._clock = clock
 
     async def execute(self, command: DeleteCatalogItemContentCommand) -> None:
-        """Загружает семью, вызывает доменный метод и сохраняет изменение без commit."""
-        root = await self._mutations.load(
-            command.tenant_id, command.item_id, command.expected_root_revision
+        """Загружает товар, вызывает доменный метод и сохраняет изменение без commit."""
+        item = await self._mutations.load(
+            command.tenant_id, command.item_id, command.expected_revision
         )
         now = self._clock.now()
-        root.delete_content(
-            command.item_id, LocaleVO(command.locale), command.actor_id, now
-        )
-        await self._mutations.save(root)
+        item.delete_content(LocaleVO(command.locale), command.actor_id, now)
+        await self._mutations.save(item)

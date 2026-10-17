@@ -23,12 +23,6 @@ from src.modules.catalog.application.catalog_item.port.query_repository import (
 from src.modules.catalog.application.catalog_item.mutation_service import (
     CatalogItemMutationService,
 )
-from src.modules.catalog.application.catalog_item.structure_service import (
-    CatalogItemStructureService,
-)
-from src.modules.catalog.infrastructure.catalog_item.owner_lookup import (
-    SqlAlchemyCatalogItemOwnerLookup,
-)
 from src.modules.catalog.application.catalog_item.port.attribute_definitions import (
     AttributeDefinitionsPort,
 )
@@ -129,43 +123,14 @@ QueriesDep = Annotated[CatalogItemQueryRepositoryProtocol, Depends(get_queries)]
 
 
 def get_mutations(
-    repository: ItemRepositoryDep, lock: MutationLockDep, uow: UoWDep
+    repository: ItemRepositoryDep, lock: MutationLockDep
 ) -> CatalogItemMutationService:
     """Собирает координатор mutations на портах общей session."""
-    return CatalogItemMutationService(
-        repository, SqlAlchemyCatalogItemOwnerLookup(uow.session), lock
-    )
+    return CatalogItemMutationService(repository, lock)
 
 
 MutationsDep = Annotated[CatalogItemMutationService, Depends(get_mutations)]
 
-
-def get_structures(
-    definitions: DefinitionsDep, uuid: UuidDep
-) -> CatalogItemStructureService:
-    """Собирает координатор structures на портах общей session."""
-    return CatalogItemStructureService(definitions, uuid)
-
-
-StructuresDep = Annotated[CatalogItemStructureService, Depends(get_structures)]
-
-from src.modules.catalog.application.catalog_item.command.change_catalog_item_kind.handler import (
-    ChangeCatalogItemKindHandler,
-)
-
-
-def get_change_catalog_item_kind_handler(
-    mutations: MutationsDep, clock: ClockDep, structures: StructuresDep, usage: UsageDep
-) -> ChangeCatalogItemKindHandler:
-    """Собирает отдельный handler сценария change_catalog_item_kind."""
-    return ChangeCatalogItemKindHandler(
-        mutations=mutations, clock=clock, structures=structures, usage=usage
-    )
-
-
-ChangeCatalogItemKindHandlerDep = Annotated[
-    ChangeCatalogItemKindHandler, Depends(get_change_catalog_item_kind_handler)
-]
 
 from src.modules.catalog.application.catalog_item.command.create_simple_catalog_item.handler import (
     CreateSimpleCatalogItemHandler,
@@ -188,27 +153,6 @@ CreateSimpleCatalogItemHandlerDep = Annotated[
     CreateSimpleCatalogItemHandler, Depends(get_create_simple_catalog_item_handler)
 ]
 
-from src.modules.catalog.application.catalog_item.command.create_variable_catalog_item.handler import (
-    CreateVariableCatalogItemHandler,
-)
-
-
-def get_create_variable_catalog_item_handler(
-    repository: ItemRepositoryDep,
-    lock: MutationLockDep,
-    clock: ClockDep,
-    uuid: UuidDep,
-    structures: StructuresDep,
-) -> CreateVariableCatalogItemHandler:
-    """Собирает отдельный handler сценария create_variable_catalog_item."""
-    return CreateVariableCatalogItemHandler(
-        repository=repository, lock=lock, clock=clock, uuid=uuid, structures=structures
-    )
-
-
-CreateVariableCatalogItemHandlerDep = Annotated[
-    CreateVariableCatalogItemHandler, Depends(get_create_variable_catalog_item_handler)
-]
 
 from src.modules.catalog.application.catalog_item.command.delete_catalog_item.handler import (
     DeleteCatalogItemHandler,
@@ -304,24 +248,6 @@ ReplaceCatalogItemGalleryHandlerDep = Annotated[
     ReplaceCatalogItemGalleryHandler, Depends(get_replace_catalog_item_gallery_handler)
 ]
 
-from src.modules.catalog.application.catalog_item.command.replace_catalog_item_structure.handler import (
-    ReplaceCatalogItemStructureHandler,
-)
-
-
-def get_replace_catalog_item_structure_handler(
-    mutations: MutationsDep, clock: ClockDep, structures: StructuresDep, usage: UsageDep
-) -> ReplaceCatalogItemStructureHandler:
-    """Собирает отдельный handler сценария replace_catalog_item_structure."""
-    return ReplaceCatalogItemStructureHandler(
-        mutations=mutations, clock=clock, structures=structures, usage=usage
-    )
-
-
-ReplaceCatalogItemStructureHandlerDep = Annotated[
-    ReplaceCatalogItemStructureHandler,
-    Depends(get_replace_catalog_item_structure_handler),
-]
 
 from src.modules.catalog.application.catalog_item.command.set_catalog_item_attributes.handler import (
     SetCatalogItemAttributesHandler,
@@ -585,21 +511,6 @@ GetCatalogItemsPublicationSnapshotHandlerDep = Annotated[
     Depends(get_get_catalog_items_publication_snapshot_handler),
 ]
 
-from src.modules.catalog.application.catalog_item.query.list_catalog_item_variants.handler import (
-    ListCatalogItemVariantsHandler,
-)
-
-
-def get_list_catalog_item_variants_handler(
-    repository: QueriesDep, clock: ClockDep
-) -> ListCatalogItemVariantsHandler:
-    """Собирает отдельный handler сценария list_catalog_item_variants."""
-    return ListCatalogItemVariantsHandler(repository=repository, clock=clock)
-
-
-ListCatalogItemVariantsHandlerDep = Annotated[
-    ListCatalogItemVariantsHandler, Depends(get_list_catalog_item_variants_handler)
-]
 
 from src.modules.catalog.application.catalog_item.query.list_catalog_items.handler import (
     ListCatalogItemsHandler,

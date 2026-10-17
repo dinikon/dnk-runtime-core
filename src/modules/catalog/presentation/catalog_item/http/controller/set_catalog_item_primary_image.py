@@ -48,7 +48,7 @@ async def set_catalog_item_primary_image(
                 actor_id=EntityIdVO.from_value(principal.user_id),
                 item_id=CatalogItemIdVO(item_id),
                 image_id=payload.image_id,
-                expected_root_revision=payload.expected_root_revision,
+                expected_revision=payload.expected_revision,
                 locale=locale,
             )
         )

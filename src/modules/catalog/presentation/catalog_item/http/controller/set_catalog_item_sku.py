@@ -48,7 +48,7 @@ async def set_catalog_item_sku(
                 actor_id=EntityIdVO.from_value(principal.user_id),
                 item_id=CatalogItemIdVO(item_id),
                 sku=SkuCodeVO(payload.sku) if payload.sku is not None else None,
-                expected_root_revision=payload.expected_root_revision,
+                expected_revision=payload.expected_revision,
             )
         )
     except CatalogNotFoundError as exc:

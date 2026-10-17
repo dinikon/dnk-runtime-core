@@ -48,7 +48,7 @@ async def replace_catalog_item_gallery(
                 actor_id=EntityIdVO.from_value(principal.user_id),
                 item_id=CatalogItemIdVO(item_id),
                 gallery=payload.gallery.to_entity(),
-                expected_root_revision=payload.expected_root_revision,
+                expected_revision=payload.expected_revision,
                 locale=locale,
             )
         )

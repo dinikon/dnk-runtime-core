@@ -204,13 +204,12 @@ export const catalogApi = {
     search = "",
     offset = 0,
     limit = 20,
-    kind?: DTO.ItemKind,
     status?: DTO.ItemStatus,
     signal?: AbortSignal,
   ): Promise<DTO.ListItemsResponse> {
     return (
       await httpClient.get<DTO.ListItemsResponse>(base + "/items", {
-        params: { locale, search, offset, limit, kind, status },
+        params: { locale, search, offset, limit, status },
         signal,
       })
     ).data;
@@ -227,20 +226,6 @@ export const catalogApi = {
       )
     ).data;
   },
-  async listVariants(
-    id: string,
-    locale: string,
-    offset = 0,
-    limit = 100,
-    signal?: AbortSignal,
-  ): Promise<DTO.ListVariantsResponse> {
-    return (
-      await httpClient.get<DTO.ListVariantsResponse>(
-        base + `/items/${encodeURIComponent(id)}/variants`,
-        { params: { locale, offset, limit }, signal },
-      )
-    ).data;
-  },
   async createSimple(virtual = false): Promise<DTO.CreateItemResponse> {
     return (
       await httpClient.post<DTO.CreateItemResponse>(base + "/items/simple", {
@@ -248,19 +233,10 @@ export const catalogApi = {
       })
     ).data;
   },
-  async createVariable(
-    structure: DTO.StructureDTO,
-  ): Promise<DTO.CreateItemResponse> {
-    return (
-      await httpClient.post<DTO.CreateItemResponse>(base + "/items/variable", {
-        structure,
-      })
-    ).data;
-  },
   async saveItem(
     id: string,
     section: DTO.ItemSection,
-    expectedRootRevision: number,
+    expectedRevision: number,
     value: Record<string, unknown>,
     locale: string,
   ): Promise<DTO.MutationResponse> {
@@ -270,21 +246,16 @@ export const catalogApi = {
         base +
           `/items/${encodeURIComponent(id)}/${section === "galleries" ? "gallery" : section}` +
           (localized ? `/${encodeURIComponent(locale)}` : ""),
-        { expected_root_revision: expectedRootRevision, ...value },
+        { expected_revision: expectedRevision, ...value },
       )
     ).data;
   },
-  async deleteItem(
-    id: string,
-    revision: number,
-    discardedIds: string[] = [],
-  ): Promise<void> {
+  async deleteItem(id: string, revision: number): Promise<void> {
     await httpClient.delete(base + `/items/${encodeURIComponent(id)}`, {
-      params: { expected_root_revision: revision, discarded_ids: discardedIds },
-      paramsSerializer: { indexes: null },
+      params: { expected_revision: revision },
     });
   },
-  async inheritSection(
+  async deleteSection(
     id: string,
     section: "content" | "galleries",
     locale: string,
@@ -293,7 +264,7 @@ export const catalogApi = {
     await httpClient.delete(
       base +
         `/items/${encodeURIComponent(id)}/${section === "galleries" ? "gallery" : section}/${encodeURIComponent(locale)}`,
-      { params: { expected_root_revision: revision } },
+      { params: { expected_revision: revision } },
     );
   },
   async uploadImage(
@@ -302,13 +273,13 @@ export const catalogApi = {
     revision: number,
     file: File,
     main: boolean,
-  ): Promise<DTO.MutationResponse> {
+  ): Promise<DTO.UploadImageResponse> {
     const body = new FormData();
     body.append("image", file);
-    body.append("expected_root_revision", String(revision));
+    body.append("expected_revision", String(revision));
     body.append("main", String(main));
     return (
-      await httpClient.post<DTO.MutationResponse>(
+      await httpClient.post<DTO.UploadImageResponse>(
         base +
           `/items/${encodeURIComponent(id)}/images/${encodeURIComponent(locale)}/upload`,
         body,

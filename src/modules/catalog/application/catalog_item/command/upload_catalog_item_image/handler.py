@@ -40,15 +40,14 @@ class UploadCatalogItemImageHandler:
         self, command: UploadCatalogItemImageCommand
     ) -> UploadCatalogItemImageResultDTO:
         """Проверяет галерею до внешней загрузки и сохраняет новое назначение."""
-        root = await self._mutations.load(
-            command.tenant_id, command.item_id, command.expected_root_revision
+        item = await self._mutations.load(
+            command.tenant_id, command.item_id, command.expected_revision
         )
         await self._locales.ensure_active(command.locale)
         identifier = self._uuid.new()
         now = self._clock.now()
         # Domain проверяет кандидат до записи внешнего файла.
-        root.ensure_can_add_image(
-            command.item_id,
+        item.ensure_can_add_image(
             LocaleVO(command.locale),
             CatalogItemImage.create(
                 EntityIdVO(identifier),
@@ -68,8 +67,7 @@ class UploadCatalogItemImageHandler:
             command.name,
             command.content_type,
         )
-        root.add_image(
-            command.item_id,
+        item.add_image(
             LocaleVO(command.locale),
             CatalogItemImage.create(
                 EntityIdVO(identifier),
@@ -82,13 +80,7 @@ class UploadCatalogItemImageHandler:
             command.actor_id,
             now,
         )
-        await self._mutations.save(root)
-        item = root.find_item(command.item_id)
+        await self._mutations.save(item)
         return UploadCatalogItemImageResultDTO(
-            item.id.uuid,
-            root.id.uuid,
-            identifier,
-            uploaded.file_id,
-            item.revision,
-            root.revision,
+            item.id.uuid, item.revision, identifier, uploaded.file_id
         )

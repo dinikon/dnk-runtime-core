@@ -7,17 +7,11 @@ import ProductMedia from "./ProductMedia.vue";
 import type { ProductOverviewModel } from "../../model/product.types";
 defineProps<{
   model: ProductOverviewModel;
-  variable: boolean;
-  selectedLabel?: string;
 }>();
 </script>
 <template>
   <div class="grid min-w-0 gap-8 xl:grid-cols-[minmax(0,1fr)_320px] xl:gap-10">
     <div class="flex min-w-0 flex-col gap-8">
-      <p v-if="selectedLabel" class="text-sm text-muted-foreground">
-        Выбранный вариант:
-        <span class="font-medium text-foreground">{{ selectedLabel }}</span>
-      </p>
       <ProductMedia :images="model.images" :primary="model.primaryImage" />
       <section class="flex flex-col gap-4">
         <h2 class="text-lg font-semibold">О товаре</h2>
@@ -67,7 +61,7 @@ defineProps<{
         </dl>
         <p v-else class="text-sm text-muted-foreground">Не задано</p>
       </section>
-      <section v-if="!variable" class="flex flex-col gap-4">
+      <section class="flex flex-col gap-4">
         <Separator />
         <h2 class="text-lg font-semibold">Категории и метки</h2>
         <div class="flex flex-wrap gap-2">
@@ -89,18 +83,12 @@ defineProps<{
     </div>
     <aside class="flex min-w-0 flex-col gap-5">
       <Card class="shadow-none"
-        ><CardHeader
-          ><CardTitle>{{
-            variable && !selectedLabel ? "Диапазон цен" : "Цена"
-          }}</CardTitle></CardHeader
+        ><CardHeader><CardTitle>Цена</CardTitle></CardHeader
         ><CardContent class="flex flex-col gap-3"
           ><p class="break-words text-3xl font-semibold tracking-tight">
             {{ model.price }}
           </p>
-          <p v-if="model.priceIncomplete" class="text-sm text-muted-foreground">
-            Не у всех активных вариантов задана цена.
-          </p></CardContent
-        ></Card
+        </CardContent></Card
       >
       <Card class="shadow-none"
         ><CardHeader><CardTitle>Наличие и продажа</CardTitle></CardHeader
@@ -116,23 +104,17 @@ defineProps<{
                 : "Недоступен для продажи"
             }}</span>
           </div>
-          <p v-if="model.sharedSource" class="text-sm text-muted-foreground">
-            Использует общий остаток родителя.
-          </p>
-          <template v-if="model.sharedQuantity !== null"
+          <template v-if="model.quantity !== null"
             ><Separator />
             <div>
               <p class="text-xs uppercase tracking-wider text-muted-foreground">
-                {{ variable ? "Общий запас семьи" : "Количество" }}
+                Количество
               </p>
               <p class="mt-2 text-3xl font-semibold">
-                {{ model.sharedQuantity }}
+                {{ model.quantity }}
               </p>
             </div>
-            <p v-if="variable" class="text-sm text-muted-foreground">
-              Для вариантов без собственного учёта количества.
-            </p></template
-          ></CardContent
+          </template></CardContent
         ></Card
       >
     </aside>

@@ -6,10 +6,10 @@ from src.modules.catalog.domain.catalog_item.value_object.identifier import (
 
 
 class CatalogItemRepositoryProtocol(Protocol):
-    """Хранит корни с принадлежащими дочерними CatalogItem, без независимого Variant CRUD."""
+    """Хранит самостоятельные товары в общей tenant-транзакции."""
 
     async def get(self, identifier: CatalogItemIdVO) -> CatalogItem:
-        """Загружает корень и его состав либо сообщает об отсутствии."""
+        """Загружает товар либо сообщает об отсутствии."""
         ...
 
     async def add(self, entity: CatalogItem) -> None:
@@ -21,5 +21,5 @@ class CatalogItemRepositoryProtocol(Protocol):
         ...
 
     async def delete(self, entity: CatalogItem) -> None:
-        """Удаляет корень после доменной проверки зависимостей."""
+        """Удаляет товар после доменной проверки зависимостей."""
         ...

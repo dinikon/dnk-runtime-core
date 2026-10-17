@@ -5,32 +5,35 @@ from src.modules.catalog.domain.catalog_item.value_object.measurements import (
 from dataclasses import dataclass
 from uuid import UUID
 from decimal import Decimal
-from src.modules.catalog.domain.catalog_item.value_object.kind import (
-    CatalogItemKind,
+from src.modules.catalog.domain.catalog_item.value_object.status import (
     CatalogItemStatus,
 )
-from src.modules.catalog.domain.catalog_item.entity.image import CatalogItemImage
+
+
+@dataclass(frozen=True, slots=True)
+class CatalogItemListImageDTO:
+    """Главное изображение компактной строки списка."""
+
+    id: UUID
+    file_id: UUID
+    position: int
+    alt: str
+    caption: str
 
 
 @dataclass(frozen=True, slots=True)
 class CatalogItemListRowDTO:
-    """Компактная строка списка без own частей редактора."""
+    """Компактная строка списка без полных данных редактора."""
 
     id: UUID
-    kind: CatalogItemKind
-    root_id: UUID
-    root_revision: int
     revision: int
     status: CatalogItemStatus
     sku: str | None
     title: str | None
     price: Decimal | None
     currency: str | None
-    price_min: Decimal | None
-    price_max: Decimal | None
-    price_incomplete: bool
     stock_status: str | None
-    primary_image: CatalogItemImage | None
+    primary_image: CatalogItemListImageDTO | None
     available_for_sale: bool
     weight: WeightVO | None
     dimensions: DimensionsVO | None

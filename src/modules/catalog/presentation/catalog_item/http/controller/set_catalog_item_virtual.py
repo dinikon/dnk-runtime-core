@@ -47,7 +47,7 @@ async def set_catalog_item_virtual(
                 actor_id=EntityIdVO.from_value(principal.user_id),
                 item_id=CatalogItemIdVO(item_id),
                 virtual=payload.virtual,
-                expected_root_revision=payload.expected_root_revision,
+                expected_revision=payload.expected_revision,
             )
         )
     except CatalogNotFoundError as exc:

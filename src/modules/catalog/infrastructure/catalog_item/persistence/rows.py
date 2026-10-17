@@ -16,12 +16,6 @@ from src.modules.catalog.infrastructure.persistence.models.catalog_item_attribut
 from src.modules.catalog.infrastructure.persistence.models.catalog_item_attribute_option import (
     CatalogItemAttributeOptionModel,
 )
-from src.modules.catalog.infrastructure.persistence.models.catalog_item_variant_selection import (
-    CatalogItemVariantSelectionModel,
-)
-from src.modules.catalog.infrastructure.persistence.models.catalog_item_default_selection import (
-    CatalogItemDefaultSelectionModel,
-)
 from src.modules.catalog.infrastructure.persistence.models.catalog_item_category import (
     CatalogItemCategoryModel,
 )
@@ -44,8 +38,6 @@ PART_MODELS = (
     CatalogItemImageModel,
     CatalogItemAttributeModel,
     CatalogItemAttributeOptionModel,
-    CatalogItemVariantSelectionModel,
-    CatalogItemDefaultSelectionModel,
     CatalogItemCategoryModel,
     CatalogItemTagModel,
     CatalogItemMetadataModel,

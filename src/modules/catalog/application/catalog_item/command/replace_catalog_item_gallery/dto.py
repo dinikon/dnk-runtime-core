@@ -4,9 +4,7 @@ from uuid import UUID
 
 @dataclass(frozen=True, slots=True)
 class ReplaceCatalogItemGalleryResultDTO:
-    """Результат только сценария replace_catalog_item_gallery после доменной проверки."""
+    """Результат сценария replace_catalog_item_gallery: идентичность и новая ревизия товара."""
 
-    item_id: UUID
-    root_id: UUID
-    item_revision: int
-    root_revision: int
+    id: UUID
+    revision: int

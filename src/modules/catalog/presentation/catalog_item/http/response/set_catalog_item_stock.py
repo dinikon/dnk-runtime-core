@@ -3,9 +3,7 @@ from uuid import UUID
 
 
 class SetCatalogItemStockResponse(BaseModel):
-    """HTTP результат отдельного сценария set_catalog_item_stock."""
+    """Отдельный HTTP-результат сценария set_catalog_item_stock."""
 
-    item_id: UUID
-    root_id: UUID
-    item_revision: int
-    root_revision: int
+    id: UUID
+    revision: int

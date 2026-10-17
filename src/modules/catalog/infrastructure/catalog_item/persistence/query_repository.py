@@ -1,4 +1,3 @@
-from dataclasses import replace
 from src.modules.catalog.infrastructure.catalog_item.persistence.query_mapper import (
     CatalogItemQueryMapper,
 )
@@ -26,21 +25,12 @@ from src.modules.catalog.infrastructure.catalog_item.persistence.rows import rea
 from src.modules.catalog.infrastructure.catalog_item.content_schema import (
     SqlAlchemyDefaultContentSchema,
 )
-from src.modules.catalog.domain.catalog_item.value_object.kind import CatalogItemKind
-from src.modules.catalog.domain.catalog_item.value_object.stock import (
-    BackorderPolicy,
-    StockStatus,
-)
-from src.modules.catalog.domain.catalog_item.policy.effective_values import (
-    CatalogItemEffectiveValuesPolicy,
-)
 from src.modules.catalog.domain.product_type.value_object.schema import BLOCK_IDS
 from src.modules.catalog.domain.error import (
     CatalogNotFoundError,
     CatalogConflictError,
     InvalidCatalogValueError,
 )
-from src.modules.catalog.application.catalog_item.read_dto import CatalogItemReadDTO
 from src.modules.catalog.application.catalog_item.query.get_catalog_item.query import (
     GetCatalogItemQuery,
 )
@@ -53,12 +43,6 @@ from src.modules.catalog.application.catalog_item.query.list_catalog_items.query
 from src.modules.catalog.application.catalog_item.query.list_catalog_items.dto import (
     ListCatalogItemsResultDTO,
 )
-from src.modules.catalog.application.catalog_item.query.list_catalog_item_variants.query import (
-    ListCatalogItemVariantsQuery,
-)
-from src.modules.catalog.application.catalog_item.query.list_catalog_item_variants.dto import (
-    ListCatalogItemVariantsResultDTO,
-)
 from src.modules.catalog.application.catalog_item.query.get_catalog_items_publication_snapshot.query import (
     GetCatalogItemsPublicationSnapshotQuery,
 )
@@ -67,114 +51,42 @@ from src.modules.catalog.application.catalog_item.query.get_catalog_items_public
 )
 
 
+from src.modules.catalog.domain.catalog_item.value_object.snapshot import (
+    CatalogItemValuesSnapshot,
+)
+
+
 class SqlAlchemyCatalogItemQueryRepository:
-    """Batch read проекции на REPEATABLE READ session внешней сборки."""
+    """Читает согласованные batch-проекции простых товаров на внешнем UoW."""
 
     def __init__(self, session: AsyncSession) -> None:
         """Не восстанавливает Domain Aggregate и не управляет UoW."""
         self._session = session
 
-    async def _project(
-        self, rows: Sequence[Mapping[str, Any]], locale: str, as_of: datetime
-    ) -> tuple[CatalogItemReadDTO, ...]:
-        """Читает связанные таблицы по набору ID, независимо от размера страницы."""
-        if not rows:
-            return ()
-        table = CatalogItemModel.__table__
-        selected = {r["id"]: r for r in rows}
-        parents = {
-            r["parent_id"] for r in rows if r["parent_id"] is not None
-        } - selected.keys()
-        all_rows = dict(selected)
-        if parents:
-            parent_rows = (
-                (
-                    await self._session.execute(
-                        select(table).where(table.c.id.in_(parents))
-                    )
-                )
-                .mappings()
-                .all()
-            )
-            all_rows.update({r["id"]: r for r in parent_rows})
-        parts = await read_parts(self._session, tuple(all_rows), locale)
-        values = {
-            identifier: CatalogItemMapper.to_values(row, parts)
-            for identifier, row in all_rows.items()
-        }
-        variables = tuple(r["id"] for r in rows if r["kind"] == "variable")
-        children = []
-        if variables:
-            children = (
-                (
-                    await self._session.execute(
-                        select(table).where(table.c.parent_id.in_(variables))
-                    )
-                )
-                .mappings()
-                .all()
-            )
-        result = []
-        for row in rows:
-            own = values[row["id"]]
-            effective = CatalogItemEffectiveValuesPolicy.resolve(
-                own,
-                values.get(own.parent_id.uuid if own.parent_id else None),
-                locale,
-                as_of,
-            )
-            price_currency = (
-                effective.price_specification.currency
-                if effective.price_specification
-                else None
-            )
-            summary = None
-            if own.kind == CatalogItemKind.VARIABLE:
-                child_values = tuple(
-                    CatalogItemEffectiveValuesPolicy.resolve(
-                        CatalogItemMapper.to_values(child, {}), own, locale, as_of
-                    )
-                    for child in children
-                    if child["parent_id"] == own.id.uuid
-                )
-                summary = CatalogItemEffectiveValuesPolicy.family_summary(
-                    own, child_values
-                )
-                effective = replace(
-                    effective, available_for_sale=summary.available_for_sale
-                )
-            stock = effective.stock
-            status = summary.stock_status if summary else stock.effective_status()
-            result.append(
-                CatalogItemReadDTO(
-                    (own.parent_id or own.id).uuid,
-                    (
-                        values[own.parent_id.uuid].revision
-                        if own.parent_id
-                        else own.revision
-                    ),
-                    own,
-                    effective,
-                    status.value if status else None,
-                    stock.backorders != BackorderPolicy.NO if stock else None,
-                    status == StockStatus.ON_BACKORDER if stock else None,
-                    summary.price_min if summary else None,
-                    summary.price_max if summary else None,
-                    summary.price_incomplete if summary else False,
-                    summary.price_currency if summary else price_currency,
-                )
-            )
-        return tuple(result)
+    async def _values(
+        self, rows: Sequence[Mapping[str, Any]], locale: str
+    ) -> tuple[CatalogItemValuesSnapshot, ...]:
+        """Читает собственные связи одним запросом на группу, без родительских данных."""
+        parts = (
+            await read_parts(self._session, tuple(r["id"] for r in rows), locale)
+            if rows
+            else {}
+        )
+        return tuple(CatalogItemMapper.to_values(row, parts) for row in rows)
 
     async def get(
         self, query: GetCatalogItemQuery, as_of: datetime
     ) -> GetCatalogItemResultDTO:
-        """Для VARIANT не читает соседние variants и их локализованный контент."""
+        """Читает детали самостоятельного простого товара выбранной locale."""
         table = CatalogItemModel.__table__
         row = (
             (
                 await self._session.execute(
-                    select(table).where(table.c.id == query.item_id.uuid)
+                    select(table).where(
+                        table.c.id == query.item_id.uuid,
+                        table.c.kind == "simple",
+                        table.c.parent_id.is_(None),
+                    )
                 )
             )
             .mappings()
@@ -183,7 +95,10 @@ class SqlAlchemyCatalogItemQueryRepository:
         if row is None:
             raise CatalogNotFoundError("CatalogItem отсутствует.")
         return GetCatalogItemResultDTO(
-            (await self._project((row,), query.locale, as_of))[0], as_of
+            CatalogItemQueryMapper.details(
+                (await self._values((row,), query.locale))[0], query.locale, as_of
+            ),
+            as_of,
         )
 
     @staticmethod
@@ -195,16 +110,10 @@ class SqlAlchemyCatalogItemQueryRepository:
     async def list(
         self, query: ListCatalogItemsQuery, as_of: datetime
     ) -> ListCatalogItemsResultDTO:
-        """Фильтрует до соединений, считает корни и загружает их страницу batch."""
+        """Фильтрует до соединений, считает товары и загружает их страницу batch."""
         self._pagination(query.offset, query.limit)
         table = CatalogItemModel.__table__
-        filters = []
-        if query.parent_id is not None:
-            filters.append(table.c.parent_id == query.parent_id)
-        elif not query.include_variants:
-            filters.append(table.c.parent_id.is_(None))
-        if query.kind is not None:
-            filters.append(table.c.kind == query.kind.value)
+        filters = [table.c.kind == "simple", table.c.parent_id.is_(None)]
         if query.status is not None:
             filters.append(table.c.status == query.status.value)
         if query.search:
@@ -255,49 +164,13 @@ class SqlAlchemyCatalogItemQueryRepository:
             .mappings()
             .all()
         )
-        projected = await self._project(rows, query.locale, as_of)
+        values = await self._values(rows, query.locale)
         return ListCatalogItemsResultDTO(
-            tuple(CatalogItemQueryMapper.list_row(item) for item in projected),
-            total,
-            query.offset,
-            query.limit,
-            as_of,
-        )
-
-    async def variants(
-        self, query: ListCatalogItemVariantsQuery, as_of: datetime
-    ) -> ListCatalogItemVariantsResultDTO:
-        """Возвращает страницу детей существующего VARIABLE в стабильном порядке ID."""
-        self._pagination(query.offset, query.limit)
-        table = CatalogItemModel.__table__
-        kind = await self._session.scalar(
-            select(table.c.kind).where(table.c.id == query.root_id.uuid)
-        )
-        if kind is None:
-            raise CatalogNotFoundError("Корень отсутствует.")
-        if kind != "variable":
-            raise InvalidCatalogValueError("Список вариантов принадлежит VARIABLE.")
-        total = await self._session.scalar(
-            select(func.count())
-            .select_from(table)
-            .where(table.c.parent_id == query.root_id.uuid)
-        )
-        rows = (
-            (
-                await self._session.execute(
-                    select(table)
-                    .where(table.c.parent_id == query.root_id.uuid)
-                    .order_by(table.c.id)
-                    .offset(query.offset)
-                    .limit(query.limit)
-                )
-            )
-            .mappings()
-            .all()
-        )
-        return ListCatalogItemVariantsResultDTO(
-            await self._project(rows, query.locale, as_of),
-            total,
+            tuple(
+                CatalogItemQueryMapper.list_row(item, query.locale, as_of)
+                for item in values
+            ),
+            int(total or 0),
             query.offset,
             query.limit,
             as_of,
@@ -316,7 +189,9 @@ class SqlAlchemyCatalogItemQueryRepository:
             (
                 await self._session.execute(
                     select(table).where(
-                        table.c.id.in_(tuple(i.uuid for i in query.item_ids))
+                        table.c.id.in_(tuple(i.uuid for i in query.item_ids)),
+                        table.c.kind == "simple",
+                        table.c.parent_id.is_(None),
                     )
                 )
             )
@@ -326,13 +201,17 @@ class SqlAlchemyCatalogItemQueryRepository:
         if len(rows) != len(query.item_ids):
             raise CatalogNotFoundError("Один из CatalogItem отсутствует.")
         by_id = {row["id"]: row for row in rows}
-        items = await self._project(
-            tuple(by_id[i.uuid] for i in query.item_ids), query.locale, as_of
+        values = await self._values(
+            tuple(by_id[i.uuid] for i in query.item_ids), query.locale
+        )
+        items = tuple(
+            CatalogItemQueryMapper.publication(value, query.locale, as_of)
+            for value in values
         )
         for item in items:
-            expected = (query.expected_root_revisions or {}).get(item.root_id)
-            if expected is not None and expected != item.root_revision:
-                raise CatalogConflictError("Source root revision изменена.")
+            expected = (query.expected_revisions or {}).get(item.id)
+            if expected is not None and expected != item.revision:
+                raise CatalogConflictError("Source revision изменена.")
         schema = await SqlAlchemyDefaultContentSchema(self._session).get_default()
         return GetCatalogItemsPublicationSnapshotResultDTO(
             items, schema, query.locale, as_of

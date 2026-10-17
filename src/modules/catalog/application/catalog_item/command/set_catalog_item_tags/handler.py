@@ -31,23 +31,19 @@ class SetCatalogItemTagsHandler:
     async def execute(
         self, command: SetCatalogItemTagsCommand
     ) -> SetCatalogItemTagsResultDTO:
-        """Загружает семью, вызывает доменный метод и сохраняет изменение без commit."""
-        root = await self._mutations.load(
-            command.tenant_id, command.item_id, command.expected_root_revision
+        """Загружает товар, вызывает доменный метод и сохраняет изменение без commit."""
+        item = await self._mutations.load(
+            command.tenant_id, command.item_id, command.expected_revision
         )
         now = self._clock.now()
         existing = await self._references.tags(
             tuple(TagIdVO(i) for i in command.tag_ids)
         )
-        root.set_tags(
-            command.item_id,
+        item.set_tags(
             tuple(TagIdVO(i) for i in command.tag_ids),
             existing,
             command.actor_id,
             now,
         )
-        await self._mutations.save(root)
-        item = root.find_item(command.item_id)
-        return SetCatalogItemTagsResultDTO(
-            item.id.uuid, root.id.uuid, item.revision, root.revision
-        )
+        await self._mutations.save(item)
+        return SetCatalogItemTagsResultDTO(item.id.uuid, item.revision)

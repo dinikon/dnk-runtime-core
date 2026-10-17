@@ -56,9 +56,7 @@ const emit = defineEmits<{
       ><CardContent
         ><CatalogItemGalleryForm
           :key="`${item.id}:${locale}:gallery`"
-          :own="item.own.galleries[locale] ?? null"
-          :effective="item.effective.gallery"
-          :variant="false"
+          :value="item.gallery"
           :pending="blocked"
           :reset="resets.galleries ?? 0"
           :image-url="imageUrl"
@@ -66,53 +64,49 @@ const emit = defineEmits<{
           @save="(gallery) => emit('save', 'galleries', { gallery })"
           @upload="(file, main) => emit('upload', file, main)" /></CardContent
     ></Card>
-    <template v-if="item.kind === 'simple'">
-      <Card class="shadow-none"
-        ><CardHeader
-          ><CardTitle
-            >Категории
-            <span v-if="dirtySections.includes('categories')"
-              >•</span
-            ></CardTitle
-          ></CardHeader
-        ><CardContent
-          ><ProductCategoriesForm
-            :key="`${item.id}:${locale}:categories`"
-            :ids="item.own.category_ids"
-            :primary-id="item.own.primary_category_id"
-            :categories="categories"
-            :pending="pending"
-            :disabled="blocked"
-            :reset="resets.categories ?? 0"
-            @dirty="emit('dirty', 'categories', $event)"
-            @submit="
-              (category_ids, primary_category_id) =>
-                emit('save', 'categories', {
-                  category_ids,
-                  primary_category_id,
-                })
-            " /></CardContent
-      ></Card>
-      <Card class="shadow-none"
-        ><CardHeader
-          ><CardTitle
-            >Метки
-            <span v-if="dirtySections.includes('tags')">•</span></CardTitle
-          ></CardHeader
-        ><CardContent
-          ><ProductTagsForm
-            :key="`${item.id}:${locale}:tags`"
-            :ids="item.own.tag_ids"
-            :tags="tags"
-            :pending="pending"
-            :disabled="blocked"
-            :reset="resets.tags ?? 0"
-            @dirty="emit('dirty', 'tags', $event)"
-            @submit="
-              (tag_ids) => emit('save', 'tags', { tag_ids })
-            " /></CardContent
-      ></Card>
-    </template>
+
+    <Card class="shadow-none"
+      ><CardHeader
+        ><CardTitle
+          >Категории
+          <span v-if="dirtySections.includes('categories')">•</span></CardTitle
+        ></CardHeader
+      ><CardContent
+        ><ProductCategoriesForm
+          :key="`${item.id}:${locale}:categories`"
+          :ids="item.category_ids"
+          :primary-id="item.primary_category_id"
+          :categories="categories"
+          :pending="pending"
+          :disabled="blocked"
+          :reset="resets.categories ?? 0"
+          @dirty="emit('dirty', 'categories', $event)"
+          @submit="
+            (category_ids, primary_category_id) =>
+              emit('save', 'categories', {
+                category_ids,
+                primary_category_id,
+              })
+          " /></CardContent
+    ></Card>
+    <Card class="shadow-none"
+      ><CardHeader
+        ><CardTitle
+          >Метки <span v-if="dirtySections.includes('tags')">•</span></CardTitle
+        ></CardHeader
+      ><CardContent
+        ><ProductTagsForm
+          :key="`${item.id}:${locale}:tags`"
+          :ids="item.tag_ids"
+          :tags="tags"
+          :pending="pending"
+          :disabled="blocked"
+          :reset="resets.tags ?? 0"
+          @dirty="emit('dirty', 'tags', $event)"
+          @submit="
+            (tag_ids) => emit('save', 'tags', { tag_ids })
+          " /></CardContent
+    ></Card>
     <Button variant="ghost" :disabled="pending" @click="emit('reload')"
       >Обновить данные товара</Button
     >

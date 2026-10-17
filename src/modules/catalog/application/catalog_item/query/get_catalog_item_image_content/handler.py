@@ -35,21 +35,21 @@ class GetCatalogItemImageContentHandler:
     async def execute(
         self, query: GetCatalogItemImageContentQuery
     ) -> GetCatalogItemImageContentResultDTO:
-        """Не допускает произвольный file ID вне эффективной галереи item."""
+        """Не допускает произвольный file ID вне галереи item."""
         LocaleVO(query.locale)
         result = await self._repository.get(
             GetCatalogItemQuery(query.tenant_id, query.item_id, query.locale),
             self._clock.now(),
         )
-        gallery = result.item.effective.gallery
+        gallery = result.item.gallery
         image = (
-            next((i for i in gallery.images if i.id.uuid == query.image_id), None)
+            next((i for i in gallery.images if i.id == query.image_id), None)
             if gallery
             else None
         )
         if image is None:
             raise CatalogNotFoundError("Изображение отсутствует в галерее.")
-        value = await self._files.content(query.tenant_id.uuid, image.file_id.uuid)
+        value = await self._files.content(query.tenant_id.uuid, image.file_id)
         return GetCatalogItemImageContentResultDTO(
             value.file_id,
             value.name,

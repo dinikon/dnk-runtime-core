@@ -15,5 +15,5 @@ class SetCatalogItemPriceCommand:
     tenant_id: EntityIdVO
     actor_id: EntityIdVO
     item_id: CatalogItemIdVO
-    expected_root_revision: int
+    expected_revision: int
     price: PriceSpecificationVO | None

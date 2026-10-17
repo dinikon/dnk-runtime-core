@@ -16,12 +16,6 @@ from src.modules.catalog.infrastructure.persistence.models.catalog_item_attribut
 from src.modules.catalog.infrastructure.persistence.models.catalog_item_attribute_option import (
     CatalogItemAttributeOptionModel,
 )
-from src.modules.catalog.infrastructure.persistence.models.catalog_item_variant_selection import (
-    CatalogItemVariantSelectionModel,
-)
-from src.modules.catalog.infrastructure.persistence.models.catalog_item_default_selection import (
-    CatalogItemDefaultSelectionModel,
-)
 from src.modules.catalog.infrastructure.persistence.models.catalog_item_category import (
     CatalogItemCategoryModel,
 )
@@ -52,7 +46,7 @@ from src.modules.catalog.infrastructure.catalog_item.persistence.rows import rea
 
 
 class SqlAlchemyCatalogItemRepository:
-    """Хранит семью в общей tenant-транзакции, сохраняя только изменённые части."""
+    """Хранит товары в общей tenant-транзакции, сохраняя только изменённые части."""
 
     def __init__(self, session: AsyncSession) -> None:
         """Принимает внешнюю session и держит исходные строки для diff сохранения."""
@@ -62,104 +56,71 @@ class SqlAlchemyCatalogItemRepository:
         ] = {}
 
     async def get(self, identifier: CatalogItemIdVO) -> CatalogItem:
-        """Загружает только корень с принадлежащими детьми и восстанавливает семью."""
+        """Загружает только самостоятельный простой товар и его собственные связи."""
         table = CatalogItemModel.__table__
-        rows = (
+        row = (
             (
                 await self._session.execute(
                     select(table).where(
-                        (table.c.id == identifier.uuid)
-                        | (table.c.parent_id == identifier.uuid)
+                        table.c.id == identifier.uuid,
+                        table.c.kind == "simple",
+                        table.c.parent_id.is_(None),
                     )
                 )
             )
             .mappings()
-            .all()
+            .one_or_none()
         )
-        root = next(
-            (r for r in rows if r["id"] == identifier.uuid and r["parent_id"] is None),
-            None,
-        )
-        if root is None:
-            raise CatalogNotFoundError("Корень CatalogItem отсутствует.")
-        parts = await read_parts(self._session, tuple(r["id"] for r in rows))
-        values = {r["id"]: CatalogItemMapper.to_values(r, parts) for r in rows}
-        children = tuple(
-            CatalogItemMapper.to_domain(values[r["id"]])
-            for r in sorted(rows, key=lambda r: str(r["id"]))
-            if r["parent_id"] == identifier.uuid
-        )
-        entity = CatalogItemMapper.to_domain(values[identifier.uuid], children)
-        for item in (entity, *entity.children):
-            self._original[item.id.uuid] = (
-                CatalogItemMapper.to_insert_values(item),
-                CatalogItemMapper.to_parts(item),
+        if row is None:
+            raise CatalogNotFoundError("Товар отсутствует.")
+        parts = await read_parts(self._session, (identifier.uuid,))
+        entity = CatalogItemMapper.to_domain(CatalogItemMapper.to_values(row, parts))
+        original_parts = CatalogItemMapper.to_parts(entity)
+        # Старые clear означают отсутствие, но удаляются при следующем сохранении.
+        for name in (
+            "catalog_item_content_values",
+            "catalog_item_attributes",
+            "catalog_item_metadata",
+        ):
+            original_parts[name].extend(
+                row for row in parts[name] if row["mode"] == "clear"
             )
+        self._original[entity.id.uuid] = (
+            CatalogItemMapper.to_insert_values(entity),
+            original_parts,
+        )
         return entity
 
     async def add(self, entity: CatalogItem) -> None:
-        """Добавляет корень и дочерние строки без самостоятельного commit."""
+        """Добавляет самостоятельный товар без собственного commit."""
         await self.save(entity)
 
     async def save(self, entity: CatalogItem) -> None:
-        """Синхронизирует diff агрегата; repo не вычисляет товарные правила."""
-        items = (entity, *entity.children)
-        current = {i.id.uuid for i in items}
-        removed = {
-            i
-            for i, (row, _) in self._original.items()
-            if row["parent_id"] == entity.id.uuid
-        } - current
-        if removed:
-            await self._session.execute(
-                delete(CatalogItemModel).where(CatalogItemModel.id.in_(removed))
-            )
-        for item in items:
-            values = CatalogItemMapper.to_insert_values(item)
-            before = self._original.get(item.id.uuid)
-            if before is None:
-                await self._session.execute(insert(CatalogItemModel).values(**values))
-            else:
-                changes = {k: v for k, v in values.items() if v != before[0][k]}
-                if changes:
-                    result = await self._session.execute(
-                        update(CatalogItemModel)
-                        .where(
-                            CatalogItemModel.id == item.id.uuid,
-                            CatalogItemModel.revision == before[0]["revision"],
-                        )
-                        .values(**changes)
+        """Сохраняет изменённые поля и группы связей с проверкой ревизии."""
+        values = CatalogItemMapper.to_insert_values(entity)
+        before = self._original.get(entity.id.uuid)
+        if before is None:
+            await self._session.execute(insert(CatalogItemModel).values(**values))
+        else:
+            changes = {
+                key: value for key, value in values.items() if value != before[0][key]
+            }
+            if changes:
+                result = await self._session.execute(
+                    update(CatalogItemModel)
+                    .where(
+                        CatalogItemModel.id == entity.id.uuid,
+                        CatalogItemModel.kind == "simple",
+                        CatalogItemModel.parent_id.is_(None),
+                        CatalogItemModel.revision == before[0]["revision"],
                     )
-                    if result.rowcount != 1:
-                        raise CatalogConflictError("Конкурентная запись CatalogItem.")
-        # First release removed selections/defaults, then changed axis links.
-        for item in items:
-            after = CatalogItemMapper.to_parts(item)
-            before = self._original.get(item.id.uuid)
-            old_parts = before[1] if before else {}
-            for name in (
-                "catalog_item_variant_selections",
-                "catalog_item_default_selections",
-            ):
-                if old_parts.get(name, []) != after[name]:
-                    model = (
-                        CatalogItemVariantSelectionModel
-                        if name.endswith("variant_selections")
-                        else CatalogItemDefaultSelectionModel
-                    )
-                    await self._session.execute(
-                        delete(model).where(model.catalog_item_id == item.id.uuid)
-                    )
-        for item in items:
-            after = CatalogItemMapper.to_parts(item)
-            before = self._original.get(item.id.uuid)
-            await self._save_parts(item.id.uuid, before[1] if before else {}, after)
-            self._original[item.id.uuid] = (
-                CatalogItemMapper.to_insert_values(item),
-                after,
-            )
-        for identifier in removed:
-            self._original.pop(identifier, None)
+                    .values(**changes)
+                )
+                if result.rowcount != 1:
+                    raise CatalogConflictError("Конкурентная запись товара.")
+        after = CatalogItemMapper.to_parts(entity)
+        await self._save_parts(entity.id.uuid, before[1] if before else {}, after)
+        self._original[entity.id.uuid] = (values, after)
 
     async def _save_parts(
         self,
@@ -190,21 +151,14 @@ class SqlAlchemyCatalogItemRepository:
                 rows = after[model.__table__.name]
                 if rows:
                     await self._session.execute(insert(model), rows)
-        for model in (
-            CatalogItemVariantSelectionModel,
-            CatalogItemDefaultSelectionModel,
-        ):
-            if (
-                before.get(model.__table__.name, []) != after[model.__table__.name]
-                and after[model.__table__.name]
-            ):
-                await self._session.execute(insert(model), after[model.__table__.name])
 
     async def delete(self, entity: CatalogItem) -> None:
-        """Удаляет уже проверенный корень с внутренними дочерними строками."""
+        """Удаляет уже проверенный товар с его внутренними связями."""
         result = await self._session.execute(
             delete(CatalogItemModel).where(
                 CatalogItemModel.id == entity.id.uuid,
+                CatalogItemModel.kind == "simple",
+                CatalogItemModel.parent_id.is_(None),
                 CatalogItemModel.revision == entity.revision,
             )
         )

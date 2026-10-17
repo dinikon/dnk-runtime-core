@@ -14,7 +14,6 @@ import type { LocaleOption } from "../../model/catalog.types";
 defineProps<{
   title: string;
   status?: string;
-  kind?: string;
   sku?: string | null;
   editing?: boolean;
   creating?: boolean;
@@ -52,7 +51,6 @@ defineEmits<{ back: []; mode: []; locale: [value: string] }>();
           class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground"
         >
           <Badge variant="secondary">{{ status }}</Badge
-          ><span>{{ kind }}</span
           ><span v-if="sku">{{ sku }}</span>
         </div>
       </div>

@@ -17,11 +17,11 @@ class CatalogMutationLockPort(Protocol):
         ...
 
     async def acquire_reference(self, tenant_id: EntityIdVO) -> None:
-        """Получает shared reference guard перед изменением семьи."""
+        """Получает shared reference guard перед изменением товара."""
         ...
 
-    async def acquire_family(
-        self, tenant_id: EntityIdVO, root_id: CatalogItemIdVO
+    async def acquire_item(
+        self, tenant_id: EntityIdVO, item_id: CatalogItemIdVO
     ) -> None:
-        """Сериализует записи только одной семьи до конца UoW."""
+        """Сериализует записи только одного товара до конца UoW."""
         ...

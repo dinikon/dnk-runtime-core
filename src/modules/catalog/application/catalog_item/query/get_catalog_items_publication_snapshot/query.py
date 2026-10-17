@@ -15,4 +15,4 @@ class GetCatalogItemsPublicationSnapshotQuery:
     item_ids: tuple[CatalogItemIdVO, ...]
     locale: str
     as_of: datetime | None = None
-    expected_root_revisions: dict[UUID, int] | None = None
+    expected_revisions: dict[UUID, int] | None = None

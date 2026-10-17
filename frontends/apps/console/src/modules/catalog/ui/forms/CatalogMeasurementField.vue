@@ -24,7 +24,6 @@ const props = defineProps<{
   effective: ProductMeasurement<U> | null;
   units: readonly U[];
   defaultUnit: U;
-  inherited: boolean;
 }>();
 const emit = defineEmits<{
   "update:modelValue": [value: ProductMeasurement<U> | null];
@@ -96,7 +95,7 @@ function changeUnit(event: Event) {
     </InputGroup>
     <FieldError v-if="error">{{ error }}</FieldError>
     <FieldDescription :id="`${fieldId}-hint`"
-      >{{ inherited ? "От родителя" : "Текущее значение" }}:
+      >Текущее значение:
       {{
         effective ? `${effective.value} ${labels[effective.unit]}` : "Не задано"
       }}</FieldDescription

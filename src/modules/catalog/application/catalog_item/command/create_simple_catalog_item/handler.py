@@ -38,23 +38,20 @@ class CreateSimpleCatalogItemHandler:
     async def execute(
         self, command: CreateSimpleCatalogItemCommand
     ) -> CreateSimpleCatalogItemResultDTO:
-        """Создаёт явную модель и сохраняет семью без commit."""
+        """Создаёт явную модель и сохраняет товар без commit."""
         await self._lock.acquire_reference(command.tenant_id)
         identifier = CatalogItemIdVO(self._uuid.new())
         now = self._clock.now()
-        root = CatalogItem.create_simple(
+        item = CatalogItem.create_simple(
             identifier, command.actor_id, now, command.virtual
         )
-        await self._repository.add(root)
+        await self._repository.add(item)
         logger.debug(
-            "Catalog family creation prepared for external commit",
+            "Catalog item creation prepared for external commit",
             extra={
                 "event": "catalog.create.prepared",
                 "tenant_id": str(command.tenant_id.uuid),
-                "root_id": str(root.id.uuid),
-                "kind": root.kind.value,
+                "item_id": str(item.id.uuid),
             },
         )
-        return CreateSimpleCatalogItemResultDTO(
-            root.id.uuid, root.revision, tuple(c.id.uuid for c in root.children)
-        )
+        return CreateSimpleCatalogItemResultDTO(item.id.uuid, item.revision)

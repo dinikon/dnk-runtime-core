@@ -46,8 +46,8 @@ async def set_catalog_item_metadata(
                 tenant_id=EntityIdVO.from_value(principal.tenant_id),
                 actor_id=EntityIdVO.from_value(principal.user_id),
                 item_id=CatalogItemIdVO(item_id),
-                metadata=tuple(v.to_entity() for v in payload.metadata),
-                expected_root_revision=payload.expected_root_revision,
+                values=tuple(v.to_entity() for v in payload.metadata),
+                expected_revision=payload.expected_revision,
             )
         )
     except CatalogNotFoundError as exc:

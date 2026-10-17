@@ -21,14 +21,11 @@ class SetCatalogItemSkuHandler:
     async def execute(
         self, command: SetCatalogItemSkuCommand
     ) -> SetCatalogItemSkuResultDTO:
-        """Загружает семью, вызывает доменный метод и сохраняет изменение без commit."""
-        root = await self._mutations.load(
-            command.tenant_id, command.item_id, command.expected_root_revision
+        """Загружает товар, вызывает доменный метод и сохраняет изменение без commit."""
+        item = await self._mutations.load(
+            command.tenant_id, command.item_id, command.expected_revision
         )
         now = self._clock.now()
-        root.set_sku(command.item_id, command.sku, command.actor_id, now)
-        await self._mutations.save(root)
-        item = root.find_item(command.item_id)
-        return SetCatalogItemSkuResultDTO(
-            item.id.uuid, root.id.uuid, item.revision, root.revision
-        )
+        item.set_sku(command.sku, command.actor_id, now)
+        await self._mutations.save(item)
+        return SetCatalogItemSkuResultDTO(item.id.uuid, item.revision)

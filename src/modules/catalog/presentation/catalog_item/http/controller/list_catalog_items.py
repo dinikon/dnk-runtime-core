@@ -11,8 +11,7 @@ from src.modules.catalog.domain.error import (
     CatalogNotFoundError,
     CatalogConflictError,
 )
-from src.modules.catalog.domain.catalog_item.value_object.kind import (
-    CatalogItemKind,
+from src.modules.catalog.domain.catalog_item.value_object.status import (
     CatalogItemStatus,
 )
 from src.modules.catalog.presentation.catalog_item.http.serialization import (
@@ -33,13 +32,10 @@ async def list_catalog_items(
     context: AuthenticatedRequestContextDep,
     handler: ListCatalogItemsHandlerDep,
     locale: str,
-    kind: CatalogItemKind | None = None,
     status: CatalogItemStatus | None = None,
     search: str | None = None,
     category_id: UUID | None = None,
     tag_id: UUID | None = None,
-    include_variants: bool = False,
-    parent_id: UUID | None = None,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=100),
     as_of: datetime | None = None,
@@ -53,13 +49,10 @@ async def list_catalog_items(
             ListCatalogItemsQuery(
                 tenant_id=EntityIdVO.from_value(principal.tenant_id),
                 locale=locale,
-                kind=kind,
                 status=status,
                 search=search,
                 category_id=category_id,
                 tag_id=tag_id,
-                include_variants=include_variants,
-                parent_id=parent_id,
                 offset=offset,
                 limit=limit,
                 as_of=as_of,

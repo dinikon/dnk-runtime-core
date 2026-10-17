@@ -52,7 +52,7 @@ async def set_catalog_item_measurements(
                     if payload.dimensions is not None
                     else None
                 ),
-                expected_root_revision=payload.expected_root_revision,
+                expected_revision=payload.expected_revision,
             )
         )
     except CatalogNotFoundError as exc:

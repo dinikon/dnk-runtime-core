@@ -46,8 +46,8 @@ async def set_catalog_item_attributes(
                 tenant_id=EntityIdVO.from_value(principal.tenant_id),
                 actor_id=EntityIdVO.from_value(principal.user_id),
                 item_id=CatalogItemIdVO(item_id),
-                attributes=tuple(v.to_vo() for v in payload.attributes),
-                expected_root_revision=payload.expected_root_revision,
+                values=tuple(v.to_vo() for v in payload.attributes),
+                expected_revision=payload.expected_revision,
             )
         )
     except CatalogNotFoundError as exc:

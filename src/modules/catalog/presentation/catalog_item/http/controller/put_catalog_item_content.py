@@ -48,8 +48,8 @@ async def put_catalog_item_content(
                 actor_id=EntityIdVO.from_value(principal.user_id),
                 item_id=CatalogItemIdVO(item_id),
                 expected_schema_version=payload.expected_schema_version,
-                values={k: v.to_vo() for k, v in payload.values.items()},
-                expected_root_revision=payload.expected_root_revision,
+                values=payload.values,
+                expected_revision=payload.expected_revision,
                 locale=locale,
             )
         )

@@ -3,9 +3,7 @@ from uuid import UUID
 
 
 class SetCatalogItemTagsResponse(BaseModel):
-    """HTTP результат отдельного сценария set_catalog_item_tags."""
+    """Отдельный HTTP-результат сценария set_catalog_item_tags."""
 
-    item_id: UUID
-    root_id: UUID
-    item_revision: int
-    root_revision: int
+    id: UUID
+    revision: int

@@ -20,6 +20,24 @@ export function useCatalogContext(
     tenant = useTenantStore(),
     user = useUserStore(),
     cache = useQueryClient();
+  watch(
+    () => [route.path, route.query.kind, route.query.variant, route.query.tab],
+    () => {
+      if (!route.path.startsWith("/catalog/items")) return;
+      if (
+        route.query.kind === undefined &&
+        route.query.variant === undefined &&
+        route.query.tab !== "variants"
+      )
+        return;
+      const query = { ...route.query };
+      delete query.kind;
+      delete query.variant;
+      if (query.tab === "variants") query.tab = "general";
+      void router.replace({ query });
+    },
+    { immediate: true },
+  );
   const tenantId = computed(() => tenant.tenant?.tenant_id ?? "");
   const sessionKey = computed(() => `${tenantId.value}:${user.user?.id ?? ""}`);
   const locale = computed(() =>

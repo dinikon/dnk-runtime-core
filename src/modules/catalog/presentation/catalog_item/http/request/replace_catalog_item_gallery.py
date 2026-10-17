@@ -8,5 +8,5 @@ class ReplaceCatalogItemGalleryRequest(BaseModel):
     """Отдельное тело команды replace_catalog_item_gallery."""
 
     model_config = ConfigDict(extra="forbid")
-    expected_root_revision: int = Field(ge=1)
+    expected_revision: int = Field(ge=1)
     gallery: GalleryValue

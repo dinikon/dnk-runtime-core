@@ -4,9 +4,7 @@ from uuid import UUID
 
 @dataclass(frozen=True, slots=True)
 class PutCatalogItemContentResultDTO:
-    """Результат только сценария put_catalog_item_content после доменной проверки."""
+    """Результат сценария put_catalog_item_content: идентичность и новая ревизия товара."""
 
-    item_id: UUID
-    root_id: UUID
-    item_revision: int
-    root_revision: int
+    id: UUID
+    revision: int

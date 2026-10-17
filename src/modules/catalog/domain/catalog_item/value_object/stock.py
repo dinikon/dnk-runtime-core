@@ -29,7 +29,7 @@ class StockSpecificationVO:
     backorders: BackorderPolicy = BackorderPolicy.NO
 
     def __post_init__(self) -> None:
-        """Проверяет согласованность настроек; источник родителя выбирает политика семьи."""
+        """Проверяет согласованность собственного количества и ручного статуса."""
         if type(self.manage_stock) is not bool or not isinstance(
             self.backorders, BackorderPolicy
         ):

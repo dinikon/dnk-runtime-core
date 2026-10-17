@@ -38,7 +38,7 @@ async def upload_catalog_item_image(
     item_id: UUID,
     locale: str,
     image: Annotated[UploadFile, File()],
-    expected_root_revision: Annotated[int, Form(ge=1)],
+    expected_revision: Annotated[int, Form(ge=1)],
     main: Annotated[bool, Form()] = False,
     alt: Annotated[str, Form(max_length=1000)] = "",
     caption: Annotated[str, Form(max_length=5000)] = "",
@@ -48,7 +48,7 @@ async def upload_catalog_item_image(
     if principal is None or not principal.tenant_id:
         raise HTTPException(403, "Tenant context is required.")
     payload = UploadCatalogItemImageRequest(
-        expected_root_revision=expected_root_revision,
+        expected_revision=expected_revision,
         main=main,
         alt=alt,
         caption=caption,
@@ -59,7 +59,7 @@ async def upload_catalog_item_image(
                 tenant_id=EntityIdVO.from_value(principal.tenant_id),
                 actor_id=EntityIdVO.from_value(principal.user_id),
                 item_id=CatalogItemIdVO(item_id),
-                expected_root_revision=expected_root_revision,
+                expected_revision=expected_revision,
                 locale=locale,
                 source=image.file,
                 size_bytes=image.size or 0,

@@ -18,7 +18,6 @@ defineProps<{
 defineEmits<{
   save: [value: Record<string, unknown>];
   dirty: [value: boolean];
-  inherit: [];
 }>();
 </script>
 <template>
@@ -40,7 +39,6 @@ defineEmits<{
         :attributes="attributes"
         :schema-version="schemaVersion"
         @dirty="$emit('dirty', $event)"
-        @save="$emit('save', $event)"
-        @inherit="$emit('inherit')" /></CardContent
+        @save="$emit('save', $event)" /></CardContent
   ></Card>
 </template>

@@ -18,17 +18,6 @@ export const catalogRoutes: RouteRecordRaw[] = [
     component: () => import("./ui/page/CatalogItemEditorPage.vue"),
   },
   {
-    path: "catalog/items/:rootId/variants/:itemId",
-    redirect: (to) => ({
-      path: `/catalog/items/${to.params.rootId}/edit`,
-      query: {
-        ...to.query,
-        tab: "variants",
-        variant: String(to.params.itemId),
-      },
-    }),
-  },
-  {
     path: "catalog/categories",
     component: () => import("./ui/page/CategoryTreePage.vue"),
   },

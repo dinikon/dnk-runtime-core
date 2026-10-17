@@ -4,16 +4,13 @@ import { Button } from "@/components/ui/button";
 import { clone } from "../../model/clone";
 import type { ProductGallery } from "../../model/product.types";
 const props = defineProps<{
-  own: ProductGallery | null;
-  effective: ProductGallery | null;
+  value: ProductGallery | null;
   pending: boolean;
   reset: number;
-  variant: boolean;
   imageUrl: (id: string) => string;
 }>();
 const emit = defineEmits<{
   save: [gallery: ProductGallery];
-  inherit: [];
   upload: [file: File, main: boolean];
   dirty: [value: boolean];
 }>();
@@ -24,31 +21,18 @@ function mark() {
   emit("dirty", true);
 }
 function resetFields() {
-  gallery.value = clone(
-    props.own ?? props.effective ?? { images: [], primary_image_id: null },
-  );
+  gallery.value = clone(props.value ?? { images: [], primary_image_id: null });
   dirty.value = false;
   emit("dirty", false);
 }
 resetFields();
 watch(() => props.reset, resetFields);
 watch(
-  () => props.own,
+  () => props.value,
   () => {
     if (!dirty.value) resetFields();
   },
 );
-function copy() {
-  const ids = new Map(
-    gallery.value.images.map((i) => [i.id, crypto.randomUUID()]),
-  );
-  emit("save", {
-    images: gallery.value.images.map((i) => ({ ...i, id: ids.get(i.id)! })),
-    primary_image_id: gallery.value.primary_image_id
-      ? (ids.get(gallery.value.primary_image_id) ?? null)
-      : null,
-  });
-}
 function move(index: number, delta: number) {
   const next = index + delta;
   if (next < 0 || next >= gallery.value.images.length) return;
@@ -71,39 +55,7 @@ function upload(event: Event) {
 </script>
 <template>
   <div class="flex flex-col gap-4">
-    <p v-if="variant && !own" class="break-words text-sm text-muted-foreground">
-      Галерея наследуется от родителя в выбранном языке.
-    </p>
-    <div v-if="variant && !own" class="flex flex-wrap gap-3">
-      <figure
-        v-for="image in gallery.images"
-        :key="image.id"
-        class="flex flex-col gap-1"
-      >
-        <img
-          :src="imageUrl(image.id)"
-          :alt="image.alt"
-          class="h-24 w-24 rounded object-cover"
-        />
-        <figcaption class="break-words text-sm text-muted-foreground">
-          {{
-            image.id === gallery.primary_image_id ? "Главное" : image.caption
-          }}
-        </figcaption>
-      </figure>
-    </div>
-    <div v-if="variant && !own" class="flex flex-wrap gap-2">
-      <Button variant="outline" :disabled="pending" @click="copy"
-        >Создать свою копию галереи</Button
-      ><Button
-        variant="outline"
-        :disabled="pending"
-        @click="emit('save', { images: [], primary_image_id: null })"
-        >Скрыть изображения</Button
-      >
-    </div>
     <form
-      v-else
       class="flex flex-col gap-4"
       @submit.prevent="
         emit('save', {
@@ -175,12 +127,6 @@ function upload(event: Event) {
           <Button type="submit">Сохранить галерею</Button
           ><Button type="button" variant="outline" @click="resetFields"
             >Отмена</Button
-          ><Button
-            v-if="variant"
-            type="button"
-            variant="outline"
-            @click="emit('inherit')"
-            >Наследовать</Button
           >
         </div>
       </fieldset>

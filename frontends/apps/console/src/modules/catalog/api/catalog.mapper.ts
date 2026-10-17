@@ -56,36 +56,18 @@ export function tagItem(
 }
 
 export function itemFromDto(value: ReadItemDTO): CatalogItem {
-  return {
-    id: value.own.id,
-    rootId: value.root_id,
-    rootRevision: value.root_revision,
-    kind: value.own.kind,
-    title: value.effective.content?.name ?? null,
-    own: value.own,
-    effective: value.effective,
-    stockStatus: value.stock_status,
-    priceCurrency: value.price_currency,
-    priceMin: value.price_min,
-    priceMax: value.price_max,
-    priceIncomplete: value.price_incomplete,
-    availableForSale: value.effective.available_for_sale,
-  };
+  return { ...value, title: value.content?.name ?? null };
 }
 
 export function listItemFromDto(value: import("./catalog.dto").ListItemDTO) {
   return {
     id: value.id,
-    kind: value.kind,
-    rootRevision: value.root_revision,
+    revision: value.revision,
     status: value.status,
     sku: value.sku,
     title: value.title,
     price: value.price,
     currency: value.currency,
-    priceMin: value.price_min,
-    priceMax: value.price_max,
-    priceIncomplete: value.price_incomplete,
     availableForSale: value.available_for_sale,
   };
 }
