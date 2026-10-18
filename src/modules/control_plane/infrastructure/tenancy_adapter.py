@@ -1,6 +1,17 @@
 """Composition adapter to tenancy and identity; no foreign ORM in application."""
 
 from uuid import UUID
+from src.modules.tenancy.infrastructure.adapter.catalog_provisioning import (
+    CatalogProvisioningAdapter,
+)
+from src.modules.catalog.application.product_type.facade import (
+    CatalogProvisioningFacade,
+)
+from src.modules.catalog.infrastructure.product_type.persistence.repository import (
+    SqlAlchemyProductTypeRepository,
+)
+from src.modules.shared.infrastructure.uuid.uuid7_generator import UUID7Generator
+from src.modules.shared.infrastructure.time.utc_clock import UtcClock
 from src.modules.reference_data.application.currency.query.validate_currency.handler import (
     ValidateCurrencyHandler,
 )
@@ -131,6 +142,15 @@ class TenancyAdapter:
                 ValidateCurrencyHandler(SqlAlchemyCurrencyQueryRepository(self.session))
             ),
             TenantCurrencySettingsPersistenceAdapter(self.session, self.naming),
+            CatalogProvisioningAdapter(
+                self.session,
+                self.naming,
+                CatalogProvisioningFacade(
+                    SqlAlchemyProductTypeRepository(self.session),
+                    UUID7Generator(),
+                    UtcClock(),
+                ),
+            ),
         )
         profile = command["owner"].get("profile", {})
         result = await use_case.execute(

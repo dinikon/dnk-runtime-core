@@ -1,10 +1,5 @@
 import DOMPurify from "dompurify";
-import type {
-  CatalogAttribute,
-  CatalogCategory,
-  CatalogItem,
-  CatalogTag,
-} from "./catalog.types";
+import type { CatalogItem } from "./catalog.types";
 import type { ProductOverviewModel } from "./product.types";
 export const statusLabels: Record<string, string> = {
   draft: "Черновик",
@@ -24,15 +19,11 @@ export const sectionTitles: Record<string, string> = {
   price: "Цена",
   stock: "Наличие",
   measurements: "Вес и размеры",
-  metadata: "Дополнительные поля",
-  attributes: "Общие характеристики",
 };
 export const productTabs = [
   { id: "general", label: "Основные" },
   { id: "inventory", label: "Наличие" },
   { id: "shipping", label: "Доставка" },
-  { id: "attributes", label: "Характеристики" },
-  { id: "additional", label: "Дополнительно" },
 ] as const;
 export function safeProductHtml(value: string | null | undefined): string {
   return DOMPurify.sanitize(value ?? "", {
@@ -64,9 +55,6 @@ export function productPrice(item: CatalogItem): string {
 }
 export function overviewModel(
   item: CatalogItem,
-  attributes: CatalogAttribute[],
-  categories: CatalogCategory[],
-  tags: CatalogTag[],
   imageUrl: (imageId: string) => string,
 ): ProductOverviewModel {
   const unitLabels: Record<string, string> = {
@@ -94,35 +82,13 @@ export function overviewModel(
     price: productPrice(item),
     stock: stockLabels[item.stock_status ?? ""] ?? "Не задано",
     available: item.available_for_sale,
-    descriptions: {
-      short: safeProductHtml(item.content?.short_desc),
-      full: safeProductHtml(item.content?.desc),
-    },
+    body: safeProductHtml(item.content?.body),
     images: (item.gallery?.images ?? []).map((v) => ({
       ...v,
       url: imageUrl(v.id),
     })),
     primaryImage: item.gallery?.primary_image_id ?? null,
     measurements,
-    attributes: item.attributes.map((v) => {
-      const a = attributes.find((a) => a.id === v.attribute_id);
-      return {
-        label: a?.label ?? "Нет перевода",
-        value:
-          v.option_ids
-            .map(
-              (o) =>
-                a?.options.find((v) => v.id === o)?.label ?? "Нет перевода",
-            )
-            .join(", ") || "Не задано",
-      };
-    }),
-    categories: item.category_ids.map(
-      (id) => categories.find((v) => v.id === id)?.label ?? "Без перевода",
-    ),
-    tags: item.tag_ids.map(
-      (id) => tags.find((v) => v.id === id)?.label ?? "Без перевода",
-    ),
     quantity: item.stock.manage_stock ? item.stock.stock_quantity : null,
   };
 }

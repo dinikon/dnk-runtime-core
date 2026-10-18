@@ -78,7 +78,7 @@ test("invalid sections stay in the draft while valid sections save", async () =>
   );
   queue.stage(
     "content",
-    { content: { expected_schema_version: 1, values: { name: "" } } },
+    { content: { expected_schema_version: 1, values: { title: "" } } },
     "Name required",
   );
   queue.stage("sku", { sku: "valid" });

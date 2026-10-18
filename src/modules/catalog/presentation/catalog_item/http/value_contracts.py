@@ -19,16 +19,8 @@ from src.modules.catalog.domain.catalog_item.value_object.stock import (
     StockStatus,
     BackorderPolicy,
 )
-from src.modules.catalog.domain.catalog_item.value_object.attribute import (
-    EnumAttributeAssignmentVO,
-)
-from src.modules.catalog.domain.catalog_item.entity.metadata import CatalogMetadataEntry
 from src.modules.catalog.domain.catalog_item.entity.image import CatalogItemImage
 from src.modules.catalog.domain.catalog_item.entity.gallery import CatalogItemGallery
-from src.modules.catalog.domain.attribute.value_object.identifier import AttributeIdVO
-from src.modules.catalog.domain.attribute.value_object.option_id import (
-    AttributeOptionIdVO,
-)
 
 
 class PriceValue(BaseModel):
@@ -112,46 +104,6 @@ class StockValue(BaseModel):
         )
 
 
-class AttributeValue(BaseModel):
-    """Enum-характеристика самостоятельного товара."""
-
-    model_config = ConfigDict(extra="forbid")
-    attribute_id: UUID
-    option_ids: tuple[UUID, ...]
-    visible: bool = True
-    position: int = Field(ge=0)
-
-    def to_vo(self) -> EnumAttributeAssignmentVO:
-        """Создаёт назначение для проверки в агрегате."""
-        return EnumAttributeAssignmentVO(
-            AttributeIdVO(self.attribute_id),
-            tuple(AttributeOptionIdVO(i) for i in self.option_ids),
-            self.visible,
-            self.position,
-        )
-
-
-class MetadataValue(BaseModel):
-    """Типизированное расширение без platform payload."""
-
-    model_config = ConfigDict(extra="forbid")
-    key: str
-    value_type: Literal["text", "decimal", "boolean"]
-    value: str | Decimal | StrictBool
-    position: int = Field(ge=0)
-
-    def to_entity(self) -> CatalogMetadataEntry:
-        """Преобразует числовую строку в Decimal только при явном типе."""
-        value = (
-            Decimal(self.value)
-            if self.value_type == "decimal" and self.value is not None
-            else self.value
-        )
-        return CatalogMetadataEntry.create(
-            self.key, self.value_type, value, self.position
-        )
-
-
 class ImageValue(BaseModel):
     """Локализованное назначение готового Files файла."""
 
@@ -174,14 +126,16 @@ class GalleryValue(BaseModel):
         """Передаёт проверку ownership и primary агрегату."""
         return CatalogItemGallery.create(
             tuple(
-                CatalogItemImage.create(
-                    EntityIdVO(i.id),
-                    EntityIdVO(i.file_id),
-                    i.position,
-                    i.alt,
-                    i.caption,
+                (
+                    CatalogItemImage.create(
+                        EntityIdVO(i.id),
+                        EntityIdVO(i.file_id),
+                        i.position,
+                        i.alt,
+                        i.caption,
+                    )
+                    for i in self.images
                 )
-                for i in self.images
             ),
             EntityIdVO(self.primary_image_id) if self.primary_image_id else None,
         )
@@ -212,7 +166,6 @@ class ListItemResponse(BaseModel):
     """Краткие поля списка товаров без собственного контента и внутренних связей."""
 
     id: UUID
-
     status: Literal["draft", "active", "archived"]
     sku: str | None
     title: str | None

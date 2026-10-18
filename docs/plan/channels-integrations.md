@@ -18,8 +18,8 @@
 Уточнение от 2026-10-18 имеет приоритет над полным целевым объёмом разделов ниже.
 Пользователь подтвердил: **только обновление существующих карточек**, без создания
 новых товаров на площадках. Единственные управляемые поля — название и полное
-описание в двух явно выбранных locale Connection. Catalog `name` и `desc`
-остаются источником; `short_desc`, характеристики, категории, media, цена,
+описание в двух явно выбранных locale Connection. Catalog `title` и `body`
+остаются источником; характеристики, категории, media, цена,
 наличие, наценки, склады, публикационный статус и создание переводов отложены.
 Разделы 1–14 сохраняют целевую модель развития, а не список обязательных работ v1.
 
@@ -88,7 +88,7 @@ import identity и проверка отсутствия неожиданно с
 | `channel_product_representations` | connection_id, catalog_item_id, состояние подготовки; UNIQUE(connection_id, catalog_item_id) для simple v1 |
 | `channel_external_bindings` | representation_id, external_publication_id, target locale, подтверждённая import identity/translation target; только существующие цели |
 | `channel_sync_runs` | connection_id, операция, status, remote operation reference, типизированный versioned delivery state, audit |
-| `channel_sync_run_items` | run_id, representation_id, immutable snapshot двух name/desc, content hash, targets, результаты по locale и ошибки |
+| `channel_sync_run_items` | run_id, representation_id, immutable snapshot двух title/body, content hash, targets, результаты по locale и ошибки |
 | `channel_export_artifacts` | run_id, storage reference, checksum, размер, формат, срок доступности; неизменяемый XML данного run |
 
 SQL не дублирует snapshot отдельной редактируемой карточкой: canonical content
@@ -155,7 +155,7 @@ Application, сборка — внешнему composition root. SQL models на
 | sync_run/complete_content_update | run ID, terminal outcome | None |
 | product_representation/get_catalog_usage | Catalog item IDs | GetCatalogUsageResultDTO |
 
-Preview не создаёт внешние объекты: возвращает name/desc по locale, content hashes,
+Preview не создаёт внешние объекты: возвращает title/body по locale, content hashes,
 origins и issues. Start повторно проверяет hashes и атомарно фиксирует immutable
 run items + Outbox/jobs, возвращает run ID; HTTP 202 после commit.
 Get run показывает внешнюю обработку и результат по каждому item/locale.
@@ -179,7 +179,7 @@ Woo может вернуть partial при успехе только одно�
 подтверждённо незавершённые операции после сверки. Prom показывает run accepted,
 processing и результат проверки; ответ запуска не называется «Обновлено».
 
-Приёмка v1 проверяет изменение только name/desc в двух locale, неизменность всех
+Приёмка v1 проверяет изменение только title/body в двух locale, неизменность всех
 остальных внешних полей и Catalog, запрет создания карточек/переводов,
 точный import identity, allowlist и переводные XML-теги, partial/retry/timeout,
 неизменяемость URL артефакта до окончания импорта, сохранение import ID и polling,
@@ -207,7 +207,7 @@ Infrastructure adapters. Будущая самостоятельная моде�
 | --- | --- |
 | Авторизация, tenant/actor, связь Channel/Connection и разрешённые операции | Внешняя аутентификация и проверка identity/прав ресурса |
 | Чтение Catalog через публичный контракт, разрешение двух locale, content hash/preview | Поиск/чтение внешних targets и нормализация наблюдаемого контента |
-| Бизнес-правило «только name/desc существующих targets», запрет записи Catalog | Преобразование подготовленного content update в wire format платформы |
+| Бизнес-правило «только title/body существующих targets», запрет записи Catalog | Преобразование подготовленного content update в wire format платформы |
 | Создание runs/items, leases, checkpoint, Outbox/jobs, commit/rollback | Ограниченный сетевой шаг: API update либо XML + запуск/проверка импорта |
 | Общая интерпретация результата, история, локальные query-проекции и UI | Перевод native статусов/ошибок в типизированный результат операции |
 
@@ -329,7 +329,7 @@ contract, подключается только новым пакетом/fixtur
 root. Общие handlers, controllers, DTO Catalog и страницы Console не меняются.
 Обязательны архитектурные проверки импортов, contract suite каждого плагина,
 проверки Completed/Pending/Partial/UnknownOutcome, lease/revision/tenant fencing,
-отсутствие записей Catalog и внешних изменений вне разрешённых name/desc.
+отсутствие записей Catalog и внешних изменений вне разрешённых title/body.
 Поведение общих экранов проверяется на manifest тестового плагина.
 
 Гарантия относится к **новой платформе с уже поддержанной операцией**.
@@ -773,7 +773,7 @@ class CatalogContentReadFacade(Protocol):
 
 Его Infrastructure consumer adapter вызывает существующий публичный
 GetCatalogItemsPublicationSnapshot для двух locale в одном согласованном read
-UoW с единым as_of и выбирает name/desc. Снимок Catalog не получает connection ID,
+UoW с единым as_of и выбирает title/body. Снимок Catalog не получает connection ID,
 внешнюю schema или expected Catalog revisions. Content hash считает ядро Channels
 по используемым полям двух locale, без неиспользуемой цены, audit и времени чтения.
 
@@ -829,7 +829,7 @@ ContentUpdateRunner координирует один фоновый шаг че
 не продвигает актуальный run; факт уже отправленного запроса сохраняется для
 сверки согласно разделу 11. Нет общей транзакции между SQL и внешним API.
 
-Start принимает ожидаемые hashes preview, проверяет актуальные name/desc, создаёт
+Start принимает ожидаемые hashes preview, проверяет актуальные title/body, создаёт
 immutable run items и Outbox/jobs в одной транзакции. HTTP 202 с run ID отправляется
 после commit. Prepare повторно проверяет источник перед отправкой; изменившийся
 контент требует нового preview, а не скрытой замены подтверждённого payload.
@@ -1454,7 +1454,7 @@ connection, scope, schema version, locale и фильтры по необход�
 | Этап | Результат и проверяемая граница |
 | --- | --- |
 | 1. Ядро v1 | Channel/Connection, verify, два явных языка и проверенный multilingual adapter, существующие внешние targets |
-| 2. Подготовка v1 | Явные bindings, Catalog snapshot name/desc двух locale, preview/hash, usage protection |
+| 2. Подготовка v1 | Явные bindings, Catalog snapshot title/body двух locale, preview/hash, usage protection |
 | 3. Обновление v1 | Woo API update, Prom XML + import_url + status polling после подтверждения update-only, immutable artifacts и результаты по locale |
 | 4. Приёмка v1 | Ни одной созданной карточки/перевода, изменены только тексты; внешняя сверка, Catalog isolation, retries/partial и архитектурные проверки |
 | 5. Последующие срезы | Создание карточек, taxonomy/schema/dictionaries/mappings, overrides/media, наценки/цены/наличие — отдельные утверждаемые объёмы |
@@ -1519,7 +1519,7 @@ Channel/Connection, JSONB requirements в Channels и отсутствие об�
 История: 2026-10-04–07 — прежний read-срез и исследование платформ;
 2026-10-18 — разделены Channel/Connection, определены внешние справочники,
 публикационный pipeline и независимость Catalog; учтено удаление старого модуля.
-Дальнейшее уточнение 2026-10-18: v1 ограничена обновлением name/desc существующих
+Дальнейшее уточнение 2026-10-18: v1 ограничена обновлением title/body существующих
 карточек на двух locale; учтён API запуска/проверки XML-импорта Prom.
 Зафиксирован plugin SDK: платформенные пакеты, внутренние фасады, декларативная
 регистрация и contract suite без platform-specific условий в общем ядре/UI.

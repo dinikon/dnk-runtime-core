@@ -3,7 +3,7 @@
 from alembic import op
 
 revision = "0027_remove_channels"
-down_revision = "0026_catalog_attribute_ids"
+down_revision = "0025_user_display_currency"
 branch_labels = None
 depends_on = None
 

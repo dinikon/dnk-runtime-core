@@ -1,5 +1,7 @@
-from src.modules.catalog.domain.category.value_object.identifier import CategoryIdVO
-from src.modules.catalog.domain.tag.value_object.identifier import TagIdVO
+from src.modules.catalog.domain.product_type.value_object.schema import (
+    ProductTypeSchemaSnapshot,
+)
+from uuid import UUID
 from src.modules.catalog.infrastructure.persistence.models.catalog_item_translation import (
     CatalogItemTranslationModel,
 )
@@ -12,22 +14,6 @@ from src.modules.catalog.infrastructure.persistence.models.catalog_item_gallery 
 from src.modules.catalog.infrastructure.persistence.models.catalog_item_image import (
     CatalogItemImageModel,
 )
-from src.modules.catalog.infrastructure.persistence.models.catalog_item_attribute import (
-    CatalogItemAttributeModel,
-)
-from src.modules.catalog.infrastructure.persistence.models.catalog_item_attribute_option import (
-    CatalogItemAttributeOptionModel,
-)
-from src.modules.catalog.infrastructure.persistence.models.catalog_item_category import (
-    CatalogItemCategoryModel,
-)
-from src.modules.catalog.infrastructure.persistence.models.catalog_item_tag import (
-    CatalogItemTagModel,
-)
-from src.modules.catalog.infrastructure.persistence.models.catalog_item_metadata import (
-    CatalogItemMetadataModel,
-)
-
 from collections.abc import Mapping
 from typing import Any
 from src.modules.catalog.domain.catalog_item.aggregate import CatalogItem
@@ -56,17 +42,8 @@ from src.modules.catalog.domain.catalog_item.value_object.sku import SkuCodeVO
 from src.modules.catalog.domain.catalog_item.value_object.snapshot import (
     CatalogItemValuesSnapshot,
 )
-from src.modules.catalog.domain.catalog_item.value_object.attribute import (
-    EnumAttributeAssignmentVO,
-)
-from src.modules.catalog.domain.attribute.value_object.identifier import AttributeIdVO
-from src.modules.catalog.domain.attribute.value_object.option_id import (
-    AttributeOptionIdVO,
-)
 from src.modules.catalog.domain.catalog_item.entity.gallery import CatalogItemGallery
 from src.modules.catalog.domain.catalog_item.entity.image import CatalogItemImage
-from src.modules.catalog.domain.catalog_item.entity.metadata import CatalogMetadataEntry
-from src.modules.catalog.domain.product_type.value_object.schema import BLOCK_IDS
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 
 
@@ -99,13 +76,17 @@ class CatalogItemMapper:
         )
         sizes = tuple(
             (
-                LengthVO(row[name], LengthUnit(row[f"{name}_unit"]))
-                if row[name] is not None
-                else None
+                (
+                    LengthVO(row[name], LengthUnit(row[f"{name}_unit"]))
+                    if row[name] is not None
+                    else None
+                )
+                for name in ("length", "width", "height")
             )
-            for name in ("length", "width", "height")
         )
-        dimensions = DimensionsVO(*sizes) if any(v is not None for v in sizes) else None
+        dimensions = (
+            DimensionsVO(*sizes) if any((v is not None for v in sizes)) else None
+        )
         stock = StockSpecificationVO(
             row["manage_stock"],
             row["stock_quantity"],
@@ -113,23 +94,24 @@ class CatalogItemMapper:
             BackorderPolicy(row["backorders"]),
         )
         translations = {r["locale"]: {} for r in rows("catalog_item_translations")}
-        codes = {v.uuid: k for k, v in BLOCK_IDS.items()}
         for r in rows("catalog_item_content_values"):
             if r["mode"] == "set":
-                translations[r["locale"]][codes[r["block_id"]]] = r["value"]
+                translations[r["locale"]][r["block_code"]] = r["value"]
         galleries = {}
         images = rows("catalog_item_images")
         for gallery in rows("catalog_item_galleries"):
             members = tuple(
-                CatalogItemImage.restore(
-                    EntityIdVO(i["id"]),
-                    EntityIdVO(i["file_id"]),
-                    i["position"],
-                    i["alt"],
-                    i["caption"],
+                (
+                    CatalogItemImage.restore(
+                        EntityIdVO(i["id"]),
+                        EntityIdVO(i["file_id"]),
+                        i["position"],
+                        i["alt"],
+                        i["caption"],
+                    )
+                    for i in sorted(images, key=lambda i: i["position"])
+                    if i["locale"] == gallery["locale"]
                 )
-                for i in sorted(images, key=lambda i: i["position"])
-                if i["locale"] == gallery["locale"]
             )
             galleries[gallery["locale"]] = CatalogItemGallery.restore(
                 members,
@@ -139,48 +121,6 @@ class CatalogItemMapper:
                     else None
                 ),
             )
-        attrs = []
-        options = rows("catalog_item_attribute_options")
-        for assignment in sorted(
-            rows("catalog_item_attributes"), key=lambda a: a["position"]
-        ):
-            if assignment["mode"] != "set":
-                continue
-            attrs.append(
-                EnumAttributeAssignmentVO(
-                    AttributeIdVO(assignment["attribute_id"]),
-                    tuple(
-                        AttributeOptionIdVO(o["option_id"])
-                        for o in sorted(options, key=lambda o: o["position"])
-                        if o["attribute_id"] == assignment["attribute_id"]
-                    ),
-                    assignment["visible"],
-                    assignment["position"],
-                )
-            )
-        categories = rows("catalog_item_categories")
-        primary = next(
-            (CategoryIdVO(r["category_id"]) for r in categories if r["is_primary"]),
-            None,
-        )
-        metadata = tuple(
-            CatalogMetadataEntry.restore(
-                r["key"],
-                r["value_type"],
-                (
-                    r["text_value"]
-                    if r["value_type"] == "text"
-                    else (
-                        r["decimal_value"]
-                        if r["value_type"] == "decimal"
-                        else r["boolean_value"]
-                    )
-                ),
-                r["position"],
-            )
-            for r in sorted(rows("catalog_item_metadata"), key=lambda r: r["position"])
-            if r["mode"] == "set"
-        )
         return CatalogItemValuesSnapshot(
             id=CatalogItemIdVO(identifier),
             product_type_id=EntityIdVO(row["product_type_id"]),
@@ -197,17 +137,6 @@ class CatalogItemMapper:
             stock=stock,
             translations=translations,
             galleries=galleries,
-            attributes=tuple(attrs),
-            metadata=metadata,
-            category_ids=tuple(
-                sorted((CategoryIdVO(r["category_id"]) for r in categories), key=str)
-            ),
-            primary_category_id=primary,
-            tag_ids=tuple(
-                sorted(
-                    (TagIdVO(r["tag_id"]) for r in rows("catalog_item_tags")), key=str
-                )
-            ),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             created_by=EntityIdVO(row["created_by"]),
@@ -215,7 +144,9 @@ class CatalogItemMapper:
         )
 
     @staticmethod
-    def to_domain(value: CatalogItemValuesSnapshot) -> CatalogItem:
+    def to_domain(
+        value: CatalogItemValuesSnapshot, schema: ProductTypeSchemaSnapshot
+    ) -> CatalogItem:
         """Восстанавливает агрегат исключительно через проверяющую фабрику."""
         return CatalogItem.restore(
             identifier=CatalogItemIdVO.from_value(value.id),
@@ -233,11 +164,7 @@ class CatalogItemMapper:
             updated_by=EntityIdVO.from_value(value.updated_by),
             translations=value.translations,
             galleries=value.galleries,
-            attributes=value.attributes,
-            metadata=value.metadata,
-            category_ids=value.category_ids,
-            primary_category_id=value.primary_category_id,
-            tag_ids=value.tag_ids,
+            schema=schema,
         )
 
     @staticmethod
@@ -295,7 +222,9 @@ class CatalogItemMapper:
         )
 
     @staticmethod
-    def to_parts(item: CatalogItem) -> dict[str, list[dict[str, Any]]]:
+    def to_parts(
+        item: CatalogItem, block_ids: Mapping[str, UUID]
+    ) -> dict[str, list[dict[str, Any]]]:
         """Разбирает принадлежащие компоненты на нормализованные собственные строки."""
         identifier = item.id.uuid
         parts = {
@@ -305,11 +234,6 @@ class CatalogItemMapper:
                 CatalogItemContentValueModel,
                 CatalogItemGalleryModel,
                 CatalogItemImageModel,
-                CatalogItemAttributeModel,
-                CatalogItemAttributeOptionModel,
-                CatalogItemCategoryModel,
-                CatalogItemTagModel,
-                CatalogItemMetadataModel,
             )
         }
         for locale, values in item.translations.items():
@@ -321,7 +245,7 @@ class CatalogItemMapper:
                     dict(
                         catalog_item_id=identifier,
                         locale=locale,
-                        block_id=BLOCK_IDS[code].uuid,
+                        block_id=block_ids[code],
                         mode="set",
                         value=value,
                     )
@@ -350,54 +274,4 @@ class CatalogItemMapper:
                         caption=image.caption,
                     )
                 )
-        for assignment in item.attributes:
-            parts["catalog_item_attributes"].append(
-                dict(
-                    catalog_item_id=identifier,
-                    attribute_id=assignment.attribute_id.uuid,
-                    position=assignment.position,
-                    visible=assignment.visible,
-                    is_variation=False,
-                    mode="set",
-                )
-            )
-            parts["catalog_item_attribute_options"].extend(
-                dict(
-                    catalog_item_id=identifier,
-                    attribute_id=assignment.attribute_id.uuid,
-                    option_id=option.uuid,
-                    position=position,
-                    is_variation=False,
-                )
-                for position, option in enumerate(assignment.option_ids)
-            )
-        parts["catalog_item_categories"] = [
-            dict(
-                catalog_item_id=identifier,
-                category_id=c.uuid,
-                is_primary=c == item.primary_category_id,
-            )
-            for c in sorted(item.category_ids, key=str)
-        ]
-        parts["catalog_item_tags"] = [
-            dict(catalog_item_id=identifier, tag_id=t.uuid)
-            for t in sorted(item.tag_ids, key=str)
-        ]
-        for entry in item.metadata:
-            parts["catalog_item_metadata"].append(
-                dict(
-                    catalog_item_id=identifier,
-                    key=entry.key,
-                    mode="set",
-                    value_type=entry.value_type,
-                    text_value=entry.value if entry.value_type == "text" else None,
-                    decimal_value=(
-                        entry.value if entry.value_type == "decimal" else None
-                    ),
-                    boolean_value=(
-                        entry.value if entry.value_type == "boolean" else None
-                    ),
-                    position=entry.position,
-                )
-            )
         return parts

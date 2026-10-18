@@ -2,12 +2,10 @@ import { computed, reactive, ref, watch, onBeforeUnmount } from "vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { getApiErrorMessage } from "@/app/providers/http";
 import { catalogApi } from "../api/catalog.api";
-import { itemFromDto } from "../api/catalog.mapper";
-import { loadAttributes, loadCategories, loadTags } from "./catalog-options";
 import { useCatalogContext } from "./use-catalog-context";
 import type { ProductSection, ProductTab } from "./product.types";
 import axios from "axios";
-import type { UpdateItemRequest } from "../api/catalog.dto";
+import type { ProductPatch } from "./product.types";
 import { ProductAutosave, type AutosaveState } from "./product-autosave";
 import { sectionError, fieldSections } from "./product-validation";
 import { productTabs } from "./product-presentation";
@@ -50,25 +48,8 @@ export function useProductPage(editing: boolean) {
     queryKey: computed(() => ctx.key("get-item", id.value)),
     enabled,
     refetchOnWindowFocus: false,
-    queryFn: async ({ signal }) =>
-      itemFromDto(
-        (await catalogApi.getItem(id.value, ctx.locale.value, signal)).item,
-      ),
-  });
-  const attributes = useQuery({
-    queryKey: computed(() => ctx.key("attribute-options")),
-    enabled,
-    queryFn: ({ signal }) => loadAttributes(ctx.locale.value, signal),
-  });
-  const categories = useQuery({
-    queryKey: computed(() => ctx.key("category-options")),
-    enabled,
-    queryFn: ({ signal }) => loadCategories(ctx.locale.value, signal),
-  });
-  const tags = useQuery({
-    queryKey: computed(() => ctx.key("tag-options")),
-    enabled,
-    queryFn: ({ signal }) => loadTags(ctx.locale.value, signal),
+    queryFn: ({ signal }) =>
+      catalogApi.getItem(id.value, ctx.locale.value, signal),
   });
   const schema = useQuery({
     queryKey: computed(() => ctx.key("product-schema")),
@@ -170,17 +151,16 @@ export function useProductPage(editing: boolean) {
   watch(() => [id.value, ctx.locale.value], clear);
   onBeforeUnmount(clear);
   function save(section: ProductSection, value: Record<string, unknown>) {
-    let patch: UpdateItemRequest;
+    let patch: ProductPatch;
     if (section === "content")
       patch = {
-        content: value as unknown as NonNullable<UpdateItemRequest["content"]>,
+        content: value as unknown as NonNullable<ProductPatch["content"]>,
       };
     else if (section === "price")
       patch = {
-        price_specification:
-          value.price as UpdateItemRequest["price_specification"],
+        price_specification: value.price as ProductPatch["price_specification"],
       };
-    else patch = value as UpdateItemRequest;
+    else patch = value as ProductPatch;
     autosave.stage(section, patch, sectionError(section, patch));
   }
   function upload(file: File, main: boolean): Promise<void> {
@@ -257,12 +237,7 @@ export function useProductPage(editing: boolean) {
       autosave.cancel();
       for (const section of new Set(Object.values(fieldSections)))
         resets[section] = (resets[section] ?? 0) + 1;
-      await Promise.all([
-        ...(schema.isError.value ? [schema.refetch()] : []),
-        ...(attributes.isError.value ? [attributes.refetch()] : []),
-        ...(categories.isError.value ? [categories.refetch()] : []),
-        ...(tags.isError.value ? [tags.refetch()] : []),
-      ]);
+      await Promise.all([...(schema.isError.value ? [schema.refetch()] : [])]);
     } finally {
       if (relevant()) {
         reloading.value = false;
@@ -281,9 +256,6 @@ export function useProductPage(editing: boolean) {
     ctx,
     id,
     item,
-    attributes,
-    categories,
-    tags,
     schema,
     tab,
     selectTab,

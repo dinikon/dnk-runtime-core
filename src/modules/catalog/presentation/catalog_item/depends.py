@@ -23,23 +23,11 @@ from src.modules.catalog.application.catalog_item.port.query_repository import (
 from src.modules.catalog.application.catalog_item.mutation_service import (
     CatalogItemMutationService,
 )
-from src.modules.catalog.application.catalog_item.port.attribute_definitions import (
-    AttributeDefinitionsPort,
-)
-from src.modules.catalog.infrastructure.catalog_item.attribute_definitions import (
-    SqlAlchemyAttributeDefinitions,
-)
-from src.modules.catalog.application.catalog_item.port.classification_references import (
-    ClassificationReferencesPort,
-)
-from src.modules.catalog.infrastructure.catalog_item.classification_references import (
-    SqlAlchemyClassificationReferences,
-)
 from src.modules.catalog.application.catalog_item.port.content_schema import (
     CatalogItemContentSchemaPort,
 )
 from src.modules.catalog.infrastructure.catalog_item.content_schema import (
-    SqlAlchemyDefaultContentSchema,
+    SqlAlchemyProductTypeSchemas,
 )
 from src.modules.catalog.application.catalog_item.port.usage import CatalogItemUsagePort
 from src.modules.catalog.infrastructure.catalog_item.usage import (
@@ -65,25 +53,9 @@ ItemRepositoryDep = Annotated[
 ]
 
 
-def get_definitions(uow: UoWDep) -> AttributeDefinitionsPort:
-    """Собирает порт definitions конкретного процесса."""
-    return SqlAlchemyAttributeDefinitions(uow.session)
-
-
-DefinitionsDep = Annotated[AttributeDefinitionsPort, Depends(get_definitions)]
-
-
-def get_references(uow: UoWDep) -> ClassificationReferencesPort:
-    """Собирает порт references конкретного процесса."""
-    return SqlAlchemyClassificationReferences(uow.session)
-
-
-ReferencesDep = Annotated[ClassificationReferencesPort, Depends(get_references)]
-
-
 def get_schemas(uow: UoWDep) -> CatalogItemContentSchemaPort:
     """Собирает порт schemas конкретного процесса."""
-    return SqlAlchemyDefaultContentSchema(uow.session)
+    return SqlAlchemyProductTypeSchemas(uow.session)
 
 
 SchemasDep = Annotated[CatalogItemContentSchemaPort, Depends(get_schemas)]
@@ -130,30 +102,23 @@ def get_mutations(
 
 
 MutationsDep = Annotated[CatalogItemMutationService, Depends(get_mutations)]
-
-
 from src.modules.catalog.application.catalog_item.command.create_catalog_item.handler import (
     CreateCatalogItemHandler,
 )
 
 
 def get_create_catalog_item_handler(
-    repository: ItemRepositoryDep,
-    lock: MutationLockDep,
-    clock: ClockDep,
-    uuid: UuidDep,
+    repository: ItemRepositoryDep, schemas: SchemasDep, clock: ClockDep, uuid: UuidDep
 ) -> CreateCatalogItemHandler:
     """Собирает отдельный handler сценария create_catalog_item."""
     return CreateCatalogItemHandler(
-        repository=repository, lock=lock, clock=clock, uuid=uuid
+        repository=repository, schemas=schemas, clock=clock, uuid=uuid
     )
 
 
 CreateCatalogItemHandlerDep = Annotated[
     CreateCatalogItemHandler, Depends(get_create_catalog_item_handler)
 ]
-
-
 from src.modules.catalog.application.catalog_item.command.delete_catalog_item.handler import (
     DeleteCatalogItemHandler,
 )
@@ -171,7 +136,6 @@ def get_delete_catalog_item_handler(
 DeleteCatalogItemHandlerDep = Annotated[
     DeleteCatalogItemHandler, Depends(get_delete_catalog_item_handler)
 ]
-
 from src.modules.catalog.application.catalog_item.command.upload_catalog_item_image.handler import (
     UploadCatalogItemImageHandler,
 )
@@ -193,7 +157,6 @@ def get_upload_catalog_item_image_handler(
 UploadCatalogItemImageHandlerDep = Annotated[
     UploadCatalogItemImageHandler, Depends(get_upload_catalog_item_image_handler)
 ]
-
 from src.modules.catalog.application.catalog_item.query.get_catalog_item.handler import (
     GetCatalogItemHandler,
 )
@@ -209,7 +172,6 @@ def get_get_catalog_item_handler(
 GetCatalogItemHandlerDep = Annotated[
     GetCatalogItemHandler, Depends(get_get_catalog_item_handler)
 ]
-
 from src.modules.catalog.application.catalog_item.query.get_catalog_item_image_content.handler import (
     GetCatalogItemImageContentHandler,
 )
@@ -228,7 +190,6 @@ GetCatalogItemImageContentHandlerDep = Annotated[
     GetCatalogItemImageContentHandler,
     Depends(get_get_catalog_item_image_content_handler),
 ]
-
 from src.modules.catalog.application.catalog_item.query.get_catalog_items_publication_snapshot.handler import (
     GetCatalogItemsPublicationSnapshotHandler,
 )
@@ -245,8 +206,6 @@ GetCatalogItemsPublicationSnapshotHandlerDep = Annotated[
     GetCatalogItemsPublicationSnapshotHandler,
     Depends(get_get_catalog_items_publication_snapshot_handler),
 ]
-
-
 from src.modules.catalog.application.catalog_item.query.list_catalog_items.handler import (
     ListCatalogItemsHandler,
 )
@@ -262,8 +221,6 @@ def get_list_catalog_items_handler(
 ListCatalogItemsHandlerDep = Annotated[
     ListCatalogItemsHandler, Depends(get_list_catalog_items_handler)
 ]
-
-
 from src.modules.catalog.application.catalog_item.command.update_catalog_item.handler import (
     UpdateCatalogItemHandler,
 )
@@ -276,21 +233,11 @@ def get_update_catalog_item_handler(
     schemas: SchemasDep,
     sanitizer: SanitizerDep,
     currencies: CurrenciesDep,
-    definitions: DefinitionsDep,
-    references: ReferencesDep,
     files: FilesDep,
 ) -> UpdateCatalogItemHandler:
     """Собирает единый сценарий изменения на портах общего UoW."""
     return UpdateCatalogItemHandler(
-        mutations,
-        clock,
-        locales,
-        schemas,
-        sanitizer,
-        currencies,
-        definitions,
-        references,
-        files,
+        mutations, clock, locales, schemas, sanitizer, currencies, files
     )
 
 

@@ -1,3 +1,6 @@
+from src.modules.catalog.infrastructure.persistence.models.content_block import (
+    ContentBlockModel,
+)
 from src.modules.catalog.infrastructure.persistence.models.catalog_item_translation import (
     CatalogItemTranslationModel,
 )
@@ -10,22 +13,6 @@ from src.modules.catalog.infrastructure.persistence.models.catalog_item_gallery 
 from src.modules.catalog.infrastructure.persistence.models.catalog_item_image import (
     CatalogItemImageModel,
 )
-from src.modules.catalog.infrastructure.persistence.models.catalog_item_attribute import (
-    CatalogItemAttributeModel,
-)
-from src.modules.catalog.infrastructure.persistence.models.catalog_item_attribute_option import (
-    CatalogItemAttributeOptionModel,
-)
-from src.modules.catalog.infrastructure.persistence.models.catalog_item_category import (
-    CatalogItemCategoryModel,
-)
-from src.modules.catalog.infrastructure.persistence.models.catalog_item_tag import (
-    CatalogItemTagModel,
-)
-from src.modules.catalog.infrastructure.persistence.models.catalog_item_metadata import (
-    CatalogItemMetadataModel,
-)
-
 from typing import Any
 from uuid import UUID
 from sqlalchemy import select
@@ -36,11 +23,6 @@ PART_MODELS = (
     CatalogItemContentValueModel,
     CatalogItemGalleryModel,
     CatalogItemImageModel,
-    CatalogItemAttributeModel,
-    CatalogItemAttributeOptionModel,
-    CatalogItemCategoryModel,
-    CatalogItemTagModel,
-    CatalogItemMetadataModel,
 )
 
 
@@ -55,6 +37,12 @@ async def read_parts(
             parts[table.name] = []
             continue
         statement = select(table).where(table.c.catalog_item_id.in_(identifiers))
+        if model is CatalogItemContentValueModel:
+            statement = (
+                select(table, ContentBlockModel.code.label("block_code"))
+                .join(ContentBlockModel, ContentBlockModel.id == table.c.block_id)
+                .where(table.c.catalog_item_id.in_(identifiers))
+            )
         if locale is not None and "locale" in table.c:
             statement = statement.where(table.c.locale == locale)
         rows = (await session.execute(statement)).mappings().all()

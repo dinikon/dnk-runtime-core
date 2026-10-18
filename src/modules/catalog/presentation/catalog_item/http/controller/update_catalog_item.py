@@ -11,8 +11,6 @@ from src.modules.catalog.domain.catalog_item.value_object.identifier import (
     CatalogItemIdVO,
 )
 from src.modules.catalog.domain.catalog_item.value_object.sku import SkuCodeVO
-from src.modules.catalog.domain.category.value_object.identifier import CategoryIdVO
-from src.modules.catalog.domain.tag.value_object.identifier import TagIdVO
 from src.modules.catalog.domain.error import (
     CatalogError,
     CatalogConflictError,
@@ -102,37 +100,6 @@ async def update_catalog_item(
                     if payload.gallery
                     else None
                 ),
-                attributes=(
-                    converted(
-                        "attributes",
-                        lambda: tuple(v.to_vo() for v in payload.attributes),
-                    )
-                    if payload.attributes is not None
-                    else None
-                ),
-                metadata=(
-                    converted(
-                        "metadata",
-                        lambda: tuple(v.to_entity() for v in payload.metadata),
-                    )
-                    if payload.metadata is not None
-                    else None
-                ),
-                category_ids=(
-                    tuple(CategoryIdVO(i) for i in payload.category_ids)
-                    if payload.category_ids is not None
-                    else None
-                ),
-                primary_category_id=(
-                    CategoryIdVO(payload.primary_category_id)
-                    if payload.primary_category_id
-                    else None
-                ),
-                tag_ids=(
-                    tuple(TagIdVO(i) for i in payload.tag_ids)
-                    if payload.tag_ids is not None
-                    else None
-                ),
             )
         )
     except CatalogNotFoundError as exc:
@@ -151,7 +118,6 @@ async def update_catalog_item(
             },
         ) from exc
     except IntegrityError as exc:
-        # Constraint identity is safe; SQL values and driver messages never leave this boundary.
         original = getattr(exc.orig, "__cause__", None) or exc.orig
         constraint = getattr(original, "constraint_name", None)
         if constraint == "uq_catalog_item_sku":

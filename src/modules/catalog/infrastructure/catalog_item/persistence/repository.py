@@ -1,3 +1,7 @@
+from src.modules.shared.domain.value_object.entity_id import EntityIdVO
+from src.modules.catalog.infrastructure.catalog_item.content_schema import (
+    SqlAlchemyProductTypeSchemas,
+)
 from src.modules.catalog.infrastructure.persistence.models.catalog_item_translation import (
     CatalogItemTranslationModel,
 )
@@ -10,22 +14,6 @@ from src.modules.catalog.infrastructure.persistence.models.catalog_item_gallery 
 from src.modules.catalog.infrastructure.persistence.models.catalog_item_image import (
     CatalogItemImageModel,
 )
-from src.modules.catalog.infrastructure.persistence.models.catalog_item_attribute import (
-    CatalogItemAttributeModel,
-)
-from src.modules.catalog.infrastructure.persistence.models.catalog_item_attribute_option import (
-    CatalogItemAttributeOptionModel,
-)
-from src.modules.catalog.infrastructure.persistence.models.catalog_item_category import (
-    CatalogItemCategoryModel,
-)
-from src.modules.catalog.infrastructure.persistence.models.catalog_item_tag import (
-    CatalogItemTagModel,
-)
-from src.modules.catalog.infrastructure.persistence.models.catalog_item_metadata import (
-    CatalogItemMetadataModel,
-)
-
 from collections.abc import Mapping
 from typing import Any
 from uuid import UUID
@@ -74,16 +62,17 @@ class SqlAlchemyCatalogItemRepository:
         if row is None:
             raise CatalogNotFoundError("Товар отсутствует.")
         parts = await read_parts(self._session, (identifier.uuid,))
-        entity = CatalogItemMapper.to_domain(CatalogItemMapper.to_values(row, parts))
-        original_parts = CatalogItemMapper.to_parts(entity)
-        # Старые clear означают отсутствие, но удаляются при следующем сохранении.
-        for name in (
-            "catalog_item_content_values",
-            "catalog_item_attributes",
-            "catalog_item_metadata",
-        ):
+        schema = await SqlAlchemyProductTypeSchemas(self._session).get_by_id(
+            EntityIdVO(row["product_type_id"])
+        )
+        entity = CatalogItemMapper.to_domain(
+            CatalogItemMapper.to_values(row, parts), schema
+        )
+        block_ids = {block.code: block.id.uuid for block in schema.blocks}
+        original_parts = CatalogItemMapper.to_parts(entity, block_ids)
+        for name in ("catalog_item_content_values",):
             original_parts[name].extend(
-                row for row in parts[name] if row["mode"] == "clear"
+                (row for row in parts[name] if row["mode"] == "clear")
             )
         self._original[entity.id.uuid] = (
             CatalogItemMapper.to_insert_values(entity),
@@ -119,7 +108,12 @@ class SqlAlchemyCatalogItemRepository:
                 )
                 if result.rowcount != 1:
                     raise CatalogConflictError("Конкурентная запись товара.")
-        after = CatalogItemMapper.to_parts(entity)
+        schema = await SqlAlchemyProductTypeSchemas(self._session).get_by_id(
+            entity.product_type_id
+        )
+        after = CatalogItemMapper.to_parts(
+            entity, {block.code: block.id.uuid for block in schema.blocks}
+        )
         await self._save_parts(entity.id.uuid, before[1] if before else {}, after)
         self._original[entity.id.uuid] = (values, after)
 
@@ -133,15 +127,17 @@ class SqlAlchemyCatalogItemRepository:
         groups = (
             (CatalogItemContentValueModel, CatalogItemTranslationModel),
             (CatalogItemImageModel, CatalogItemGalleryModel),
-            (CatalogItemAttributeOptionModel, CatalogItemAttributeModel),
-            (CatalogItemMetadataModel,),
-            (CatalogItemCategoryModel,),
-            (CatalogItemTagModel,),
+            (),
+            (),
+            (),
+            (),
         )
         for models in groups:
             if all(
-                before.get(m.__table__.name, []) == after[m.__table__.name]
-                for m in models
+                (
+                    before.get(m.__table__.name, []) == after[m.__table__.name]
+                    for m in models
+                )
             ):
                 continue
             for model in models:

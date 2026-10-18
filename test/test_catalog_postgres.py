@@ -29,6 +29,10 @@ from src.modules.shared.infrastructure.persistence.unit_of_work.sqlalchemy impor
     UnitOfWork,
 )
 from test.crm_company_support import company_app
+from test.catalog_support import initialize_catalog
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_connection import (
+    bind_tenant_schema,
+)
 
 URL = os.environ.get("TEST_POSTGRES_URL")
 
@@ -71,6 +75,13 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             for schema in self.schemas:
                 await connection.execute(CreateSchema(schema))
                 await TenantMigrator().upgrade(connection, schema)
+        for tenant in (self.tenant, self.other):
+            async with self.sessions() as session:
+                await bind_tenant_schema(
+                    await session.connection(), tenant.uuid, self.naming
+                )
+                await initialize_catalog(session, tenant, self.actor)
+                await session.commit()
         self.context = RequestContext(
             Principal(str(self.actor), str(self.tenant), "test", ("member",)),
             None,
@@ -151,17 +162,17 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         return await self.request("POST", "/items", {}, 201)
 
     async def test_fixed_default_schema_localized_labels(self) -> None:
-        """Default и три блока имеют фиксированные подписи, без редактора схемы."""
+        """Default и два блока имеют фиксированные подписи, без редактора схемы."""
         result = await self.request("GET", "/product-type/default?locale=ru")
         self.assertEqual(result["locale"], "ru")
         self.assertEqual(result["schema"]["label"], "Стандартный")
         self.assertEqual(
             [b["code"] for b in result["schema"]["blocks"]],
-            ["name", "desc", "short_desc"],
+            ["title", "body"],
         )
         self.assertEqual(
             [b["label"] for b in result["schema"]["blocks"]],
-            ["Название", "Описание", "Краткое описание"],
+            ["Название", "Описание"],
         )
         missing = await self.request("GET", "/product-type/default?locale=fr")
         self.assertIsNone(missing["schema"]["label"])
@@ -199,14 +210,14 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             {
                 "expected_schema_version": 1,
                 "values": {
-                    "name": "Title",
-                    "desc": "<p>Good</p><script>alert(1)</script>",
+                    "title": "Title",
+                    "body": "<p>Good</p><script>alert(1)</script>",
                 },
             },
         )
         read = await self.request("GET", f"/items/{ident}?locale=en")
-        self.assertEqual(read["item"]["content"]["name"], "Title")
-        self.assertNotIn("<script", read["item"]["content"]["desc"])
+        self.assertEqual(read["item"]["content"]["title"], "Title")
+        self.assertNotIn("<script", read["item"]["content"]["body"])
         missing = await self.request("GET", f"/items/{ident}?locale=ru")
         self.assertIsNone(missing["item"]["content"])
         await self.patch_section(ident, f"status", {"status": "active"}, 200)
@@ -302,21 +313,9 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(read["weight"])
         self.assertIsNone(read["dimensions"])
 
-    async def test_classification_gallery_and_unique_sku(self) -> None:
+    async def test_gallery_and_unique_sku(self) -> None:
         item = await self.create_item()
         ident = item["id"]
-        category = await self.request(
-            "POST",
-            "/categories",
-            {"locale": "en", "label": "Category", "parent_id": None},
-            201,
-        )
-        await self.patch_section(
-            ident,
-            f"categories",
-            {"category_ids": [category["id"]], "primary_category_id": category["id"]},
-        )
-        await self.request("DELETE", f"/categories/{category['id']}", status=409)
         await self.patch_section(
             ident, f"gallery/en", {"gallery": {"images": [], "primary_image_id": None}}
         )
@@ -324,10 +323,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         another = await self.create_item()
         await self.patch_section(another["id"], f"sku", {"sku": "SKU-1"}, 409)
         read = await self.request("GET", f"/items/{another['id']}?locale=en")
-        listed = await self.request(
-            "GET", f"/items?locale=en&category_id={category['id']}"
-        )
-        self.assertEqual(listed["total"], 1)
+        self.assertIsNone(read["item"]["sku"])
 
     async def test_competing_writes_and_csrf(self) -> None:
         created = await self.create_item()
@@ -392,6 +388,22 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
 
             differences = await connection.run_sync(compare)
             self.assertEqual(differences, [])
+            self.assertEqual(
+                await connection.scalar(
+                    text(f'SELECT count(*) FROM "{schema}".catalog_product_types')
+                ),
+                0,
+            )
+            self.assertEqual(
+                await connection.scalar(
+                    text(
+                        f'SELECT count(*) FROM "{schema}".catalog_content_block_definitions'
+                    )
+                ),
+                0,
+            )
+        await self.request("GET", "/product-type/default?locale=en", status=404)
+        await self.request("POST", "/items", {}, status=404)
 
     async def test_inactive_locale_reads_and_sql_constraints(self) -> None:
         from sqlalchemy.exc import IntegrityError
@@ -401,18 +413,18 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         await self.patch_section(
             ident,
             f"content/en",
-            {"expected_schema_version": 1, "values": {"name": "Kept"}},
+            {"expected_schema_version": 1, "values": {"title": "Kept"}},
         )
         async with self.engine.begin() as connection:
             await connection.execute(
                 text("UPDATE public.ref_locales SET active=false WHERE code='en'")
             )
         result = await self.request("GET", f"/items/{ident}?locale=en")
-        self.assertEqual(result["item"]["content"]["name"], "Kept")
+        self.assertEqual(result["item"]["content"]["title"], "Kept")
         await self.patch_section(
             ident,
             f"content/en",
-            {"expected_schema_version": 1, "values": {"name": "Denied"}},
+            {"expected_schema_version": 1, "values": {"title": "Denied"}},
             422,
         )
         schema = self.schemas[0]
@@ -613,66 +625,16 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         created = await self.create_item()
         self.assertEqual(set(created), {"id"})
         ident = created["id"]
-        attribute = await self.request(
-            "POST",
-            "/attributes",
-            {
-                "locale": "en",
-                "label": "Color",
-                "options": [
-                    {"label": "Red"},
-                    {"label": "Blue"},
-                ],
-            },
-            201,
-        )
-        definition = await self.request(
-            "GET", f"/attributes/{attribute['id']}?locale=en"
-        )
-        tag = await self.request("POST", "/tags", {"locale": "en", "label": "Tag"}, 201)
         sections = [
             ("status", {"status": "active"}),
             ("virtual", {"virtual": True}),
             ("sku", {"sku": " ZERO "}),
             ("price", {"price": {"regular_price": "0", "currency": "UAH"}}),
             (
-                "attributes",
-                {
-                    "attributes": [
-                        {
-                            "attribute_id": attribute["id"],
-                            "option_ids": [o["id"] for o in definition["options"]],
-                            "visible": False,
-                            "position": 0,
-                        }
-                    ]
-                },
-            ),
-            ("tags", {"tag_ids": [tag["id"]]}),
-            (
-                "metadata",
-                {
-                    "metadata": [
-                        {
-                            "key": "enabled",
-                            "value_type": "boolean",
-                            "value": False,
-                            "position": 0,
-                        },
-                        {
-                            "key": "count",
-                            "value_type": "decimal",
-                            "value": "0",
-                            "position": 1,
-                        },
-                    ]
-                },
-            ),
-            (
                 "content/en",
                 {
                     "expected_schema_version": 1,
-                    "values": {"name": "Simple", "desc": ""},
+                    "values": {"title": "Simple", "body": ""},
                 },
             ),
             ("gallery/en", {"gallery": {"images": [], "primary_image_id": None}}),
@@ -684,9 +646,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(item["price"], "0")
         self.assertTrue(item["available_for_sale"])
         self.assertEqual(item["sku"], "ZERO")
-        self.assertFalse(item["metadata"][0]["value"])
-        self.assertEqual(item["metadata"][1]["value"], "0")
-        self.assertEqual(item["content"], {"name": "Simple", "desc": ""})
+        self.assertEqual(item["content"], {"title": "Simple", "body": ""})
         self.assertFalse(
             {
                 "own",
@@ -716,210 +676,43 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
                 )
                 snapshot = await repository.snapshot(query, datetime.now(UTC))
                 self.assertEqual(snapshot.items[0].content, item["content"])
-        async with self.engine.begin() as connection:
-            await connection.execute(
-                text(
-                    f'INSERT INTO "{self.schemas[0]}".catalog_item_metadata (catalog_item_id,key,mode,value_type,text_value,decimal_value,boolean_value,position) VALUES (:id,:key,:mode,NULL,NULL,NULL,NULL,2)'
-                ),
-                {"id": UUID(ident), "key": "legacy", "mode": "clear"},
-            )
-        legacy_read = (await self.request("GET", f"/items/{ident}?locale=en"))["item"]
-        self.assertEqual(len(legacy_read["metadata"]), 2)
-        for section, body in [
-            ("attributes", {"attributes": []}),
-            ("tags", {"tag_ids": []}),
-            ("metadata", {"metadata": []}),
-        ]:
-            await self.patch_section(ident, f"{section}", {**body})
         for section in ("content/en", "gallery/en"):
             await self.patch_section(ident, f"{section}", status=204)
         item = (await self.request("GET", f"/items/{ident}?locale=en"))["item"]
         self.assertIsNone(item["content"])
         self.assertIsNone(item["gallery"])
-        self.assertEqual(item["attributes"], [])
-        self.assertEqual(item["metadata"], [])
         await self.request("DELETE", f"/items/{ident}", status=204)
         await self.request("GET", f"/items/{ident}?locale=en", status=404)
 
     async def test_sql_variable_storage_is_preserved_and_inaccessible(self) -> None:
-        """SQL хранит будущие семьи/оси/выборы, а все границы MVP работают только с simple."""
-        from datetime import UTC, datetime
+        """Роли и parent FK остаются в SQL, но MVP не читает и не меняет семьи."""
         from uuid import UUID
-        from sqlalchemy import insert, select
-        from sqlalchemy.exc import IntegrityError
-        from src.modules.catalog.domain.catalog_item.aggregate import CatalogItem
-        from src.modules.catalog.domain.catalog_item.value_object.identifier import (
-            CatalogItemIdVO,
-        )
-        from src.modules.catalog.domain.error import CatalogNotFoundError
-        from src.modules.catalog.infrastructure.catalog_item.persistence.mapper import (
-            CatalogItemMapper,
-        )
-        from src.modules.catalog.infrastructure.catalog_item.persistence.repository import (
-            SqlAlchemyCatalogItemRepository,
-        )
-        from src.modules.catalog.infrastructure.catalog_item.persistence.query_repository import (
-            SqlAlchemyCatalogItemQueryRepository,
-        )
-        from src.modules.catalog.application.catalog_item.query.get_catalog_items_publication_snapshot.query import (
-            GetCatalogItemsPublicationSnapshotQuery,
-        )
-        from src.modules.catalog.infrastructure.persistence.models.catalog_item import (
-            CatalogItemModel,
-        )
-        from src.modules.catalog.infrastructure.persistence.models.catalog_item_attribute import (
-            CatalogItemAttributeModel,
-        )
-        from src.modules.catalog.infrastructure.persistence.models.catalog_item_attribute_option import (
-            CatalogItemAttributeOptionModel,
-        )
-        from src.modules.catalog.infrastructure.persistence.models.catalog_item_variant_selection import (
-            CatalogItemVariantSelectionModel,
-        )
-        from src.modules.catalog.infrastructure.persistence.models.catalog_item_default_selection import (
-            CatalogItemDefaultSelectionModel,
-        )
 
-        simple = await self.create_item()
-        attribute = await self.request(
-            "POST",
-            "/attributes",
-            {
-                "locale": "en",
-                "label": "Axis",
-                "options": [{"label": "A"}, {"label": "B"}],
-            },
-            201,
-        )
-        definition = await self.request(
-            "GET", f"/attributes/{attribute['id']}?locale=en"
-        )
-        attribute_id = UUID(attribute["id"])
-        options = tuple((UUID(o["id"]) for o in definition["options"]))
-        parent_id, first_id, second_id = (uuid4(), uuid4(), uuid4())
-        template = CatalogItemMapper.to_insert_values(
-            CatalogItem.create(
-                CatalogItemIdVO(parent_id), self.actor, datetime.now(UTC)
-            )
-        )
+        parent = await self.create_item()
+        child = await self.create_item()
+        schema = self.schemas[0]
         async with self.engine.begin() as connection:
-            connection = await connection.execution_options(
-                schema_translate_map={"tenant": self.schemas[0]}
+            await connection.execute(
+                text(f'UPDATE "{schema}".catalog_item SET kind=:kind WHERE id=:id'),
+                {"id": UUID(parent["id"]), "kind": "variable"},
             )
             await connection.execute(
-                insert(CatalogItemModel), {**template, "kind": "variable"}
-            )
-            await connection.execute(
-                insert(CatalogItemModel),
-                [
-                    {
-                        **template,
-                        "id": child,
-                        "kind": "variant",
-                        "parent_id": parent_id,
-                        "product_type_id": None,
-                    }
-                    for child in (first_id, second_id)
-                ],
-            )
-            await connection.execute(
-                insert(CatalogItemAttributeModel),
+                text(
+                    f'UPDATE "{schema}".catalog_item SET kind=:kind,parent_id=:parent,product_type_id=NULL WHERE id=:id'
+                ),
                 {
-                    "catalog_item_id": parent_id,
-                    "attribute_id": attribute_id,
-                    "is_variation": True,
-                    "mode": "set",
-                    "visible": True,
-                    "position": 0,
+                    "id": UUID(child["id"]),
+                    "parent": UUID(parent["id"]),
+                    "kind": "variant",
                 },
             )
-            await connection.execute(
-                insert(CatalogItemAttributeOptionModel),
-                [
-                    {
-                        "catalog_item_id": parent_id,
-                        "attribute_id": attribute_id,
-                        "option_id": option,
-                        "is_variation": True,
-                        "position": position,
-                    }
-                    for position, option in enumerate(options)
-                ],
-            )
-            await connection.execute(
-                insert(CatalogItemVariantSelectionModel),
-                [
-                    {
-                        "catalog_item_id": child,
-                        "parent_id": parent_id,
-                        "attribute_id": attribute_id,
-                        "option_id": option,
-                        "is_variation": True,
-                    }
-                    for child, option in zip((first_id, second_id), options)
-                ],
-            )
-            await connection.execute(
-                insert(CatalogItemDefaultSelectionModel),
-                {
-                    "catalog_item_id": parent_id,
-                    "attribute_id": attribute_id,
-                    "option_id": options[0],
-                    "is_variation": True,
-                },
-            )
-        for identifier in (parent_id, first_id):
-            await self.request("GET", f"/items/{identifier}?locale=en", status=404)
-            await self.patch_section(identifier, f"status", {"status": "active"}, 404)
-            await self.request("DELETE", f"/items/{identifier}", status=404)
+        for item in (parent, child):
+            await self.request("GET", f"/items/{item['id']}?locale=en", status=404)
             await self.request(
-                "GET", f"/items/{identifier}/images/en/{uuid4()}/content", status=404
+                "PATCH", f"/items/{item['id']}", {"sku": "denied"}, status=404
             )
-        listed = await self.request(
-            "GET",
-            f"/items?locale=en&include_variants=true&kind=variant&parent_id={parent_id}",
-        )
-        self.assertEqual([item["id"] for item in listed["items"]], [simple["id"]])
-        self.assertEqual(listed["total"], 1)
-        async with self.engine.connect() as connection:
-            connection = await connection.execution_options(
-                schema_translate_map={"tenant": self.schemas[0]}
-            )
-            async with async_sessionmaker(connection)() as session:
-                with self.assertRaises(CatalogNotFoundError):
-                    await SqlAlchemyCatalogItemRepository(session).get(
-                        CatalogItemIdVO(parent_id)
-                    )
-                with self.assertRaises(CatalogNotFoundError):
-                    await SqlAlchemyCatalogItemQueryRepository(session).snapshot(
-                        GetCatalogItemsPublicationSnapshotQuery(
-                            self.tenant, (CatalogItemIdVO(first_id),), "en"
-                        ),
-                        datetime.now(UTC),
-                    )
-                self.assertEqual(
-                    len(
-                        (
-                            await session.execute(
-                                select(CatalogItemVariantSelectionModel)
-                            )
-                        ).all()
-                    ),
-                    2,
-                )
-        for statement, params in [
-            (
-                f'UPDATE "{self.schemas[0]}".catalog_item SET parent_id=:parent WHERE id=:child',
-                {"parent": UUID(simple["id"]), "child": first_id},
-            ),
-            (
-                f'UPDATE "{self.schemas[0]}".catalog_item_variant_selections SET option_id=:option WHERE catalog_item_id=:child',
-                {"option": uuid4(), "child": first_id},
-            ),
-        ]:
-            with self.assertRaises(IntegrityError):
-                async with self.engine.begin() as connection:
-                    await connection.execute(text(statement), params)
+            await self.request("DELETE", f"/items/{item['id']}", status=404)
+        self.assertEqual((await self.request("GET", "/items?locale=en"))["total"], 0)
 
     async def test_removed_api_and_legacy_payloads_are_unavailable(self) -> None:
         """OpenAPI не рекламирует вариативность, старые body-контракты не принимаются."""
@@ -951,7 +744,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
                 "content/en",
                 {
                     "expected_schema_version": 1,
-                    "values": {"name": {"mode": "set", "value": "Name"}},
+                    "values": {"title": {"mode": "set", "value": "Name"}},
                 },
             ),
             (
@@ -984,31 +777,6 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         ]:
             await self.patch_section(ident, f"{section}", payload, 422)
 
-    async def test_legacy_clear_only_metadata_is_deleted_on_save(self) -> None:
-        """Пустой новый набор удаляет старую clear-запись даже без собственных значений."""
-        from uuid import UUID
-
-        created = await self.create_item()
-        ident = created["id"]
-        async with self.engine.begin() as connection:
-            await connection.execute(
-                text(
-                    f'INSERT INTO "{self.schemas[0]}".catalog_item_metadata (catalog_item_id,key,mode,position) VALUES (:id,:key,:mode,0)'
-                ),
-                {"id": UUID(ident), "key": "legacy", "mode": "clear"},
-            )
-        item = (await self.request("GET", f"/items/{ident}?locale=en"))["item"]
-        self.assertEqual(item["metadata"], [])
-        await self.patch_section(ident, f"metadata", {"metadata": []})
-        async with self.engine.connect() as connection:
-            count = await connection.scalar(
-                text(
-                    f'SELECT count(*) FROM "{self.schemas[0]}".catalog_item_metadata WHERE catalog_item_id=:id'
-                ),
-                {"id": UUID(ident)},
-            )
-        self.assertEqual(count, 0)
-
     async def test_atomic_patch_fields_and_passive_sql_revision(self) -> None:
         """PATCH откатывает весь кандидат, различает null и пропуск, SQL revision пассивен."""
         from uuid import UUID
@@ -1036,7 +804,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             json={
                 "sku": "candidate",
                 "virtual": True,
-                "content": {"expected_schema_version": 1, "values": {"name": ""}},
+                "content": {"expected_schema_version": 1, "values": {"title": ""}},
             },
         )
         self.assertEqual(failed.status_code, 422)
@@ -1054,7 +822,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
                 "price_specification": {"regular_price": "0", "currency": "UAH"},
                 "content": {
                     "expected_schema_version": 1,
-                    "values": {"name": "Saved", "desc": ""},
+                    "values": {"title": "Saved", "body": ""},
                 },
             },
         )
@@ -1116,257 +884,72 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         ]
         self.assertFalse(other_read["virtual"])
 
-    async def test_removed_section_routes_and_dictionary_revision_contracts(
+    async def test_tenant_defaults_are_idempotent_and_incomplete_schema_fails(
         self,
     ) -> None:
-        """OpenAPI не содержит старых записей и ревизий, справочники работают без них."""
-        paths = self.app.openapi()["paths"]
-        self.assertNotIn(self.base + "/items/simple", paths)
-        for suffix in (
-            "sku",
-            "status",
-            "virtual",
-            "price",
-            "stock",
-            "measurements",
-            "attributes",
-            "categories",
-            "tags",
-            "metadata",
-            "content/{locale}",
-            "gallery/{locale}",
-        ):
-            self.assertNotIn(self.base + "/items/{item_id}/" + suffix, paths)
-        for schema in self.app.openapi()["components"]["schemas"].values():
-            self.assertFalse(
-                {"revision", "expected_revision"} & schema.get("properties", {}).keys()
+        """Системные коды одинаковы, UUID tenant независимы, повторы не меняют audit."""
+        from src.modules.catalog.infrastructure.product_type.persistence.repository import (
+            SqlAlchemyProductTypeRepository,
+        )
+        from src.modules.catalog.domain.error import CatalogConflictError
+
+        saved = []
+        for tenant in (self.tenant, self.other):
+            async with self.sessions() as session:
+                await bind_tenant_schema(
+                    await session.connection(), tenant.uuid, self.naming
+                )
+                repository = SqlAlchemyProductTypeRepository(session)
+                before = await repository.get_by_code("default")
+                await initialize_catalog(session, tenant, self.actor)
+                after = await repository.get_by_code("default")
+                self.assertEqual(before, after)
+                self.assertEqual(after.created_by, self.actor)
+                self.assertEqual(after.id.uuid.version, 7)
+                self.assertTrue(
+                    all(block.id.uuid.version == 7 for block in after.blocks)
+                )
+                self.assertEqual(
+                    [block.code for block in after.blocks], ["title", "body"]
+                )
+                saved.append(after)
+                await session.commit()
+        self.assertNotEqual(saved[0].id, saved[1].id)
+        self.assertTrue(
+            {block.id for block in saved[0].blocks}.isdisjoint(
+                {block.id for block in saved[1].blocks}
             )
-        tag = await self.request(
-            "POST", "/tags", {"locale": "en", "label": "Before"}, 201
         )
-        self.assertEqual(set(tag), {"id"})
-        changed = await self.request(
-            "PUT", f'/tags/{tag["id"]}/translations/en', {"label": "After"}
-        )
-        self.assertEqual(set(changed), {"id"})
-        read = await self.request("GET", f'/tags/{tag["id"]}?locale=en')
-        self.assertEqual(read["label"], "After")
-        self.assertNotIn("revision", read)
-
-    async def test_attribute_ids_translations_and_replacement_without_codes(
-        self,
-    ) -> None:
-        """HTTP сохраняет UUID и локали, защищает связи и отклоняет старые коды."""
-        created = await self.request(
-            "POST",
-            "/attributes",
-            {
-                "locale": "en",
-                "label": "Color",
-                "options": [{"label": "Red"}, {"label": "Blue"}],
-            },
-            201,
-        )
-        attribute_id = created["id"]
-        path = f"/attributes/{attribute_id}"
-        english = await self.request("GET", path + "?locale=en")
-        red, blue = english["options"]
-        self.assertNotIn("code", english)
-        self.assertTrue(all("code" not in option for option in english["options"]))
-        await self.request(
-            "POST", "/attributes", {"code": "old", "locale": "en", "label": "Old"}, 422
-        )
-        await self.request(
-            "POST",
-            "/attributes",
-            {
-                "locale": "en",
-                "label": "Old",
-                "options": [{"code": "old", "label": "Old"}],
-            },
-            422,
-        )
-        missing = await self.request("GET", path + "?locale=ru")
-        self.assertIsNone(missing["label"])
-        self.assertTrue(all(option["label"] is None for option in missing["options"]))
-        await self.request("PUT", path + "/translations/ru", {"label": "Цвет"})
-        await self.request(
-            "PUT",
-            path + "/options/ru",
-            {
-                "options": [
-                    {"option_id": blue["id"]},
-                    {"option_id": red["id"], "label": "Красный"},
-                ]
-            },
-        )
-        russian = await self.request("GET", path + "?locale=ru")
-        self.assertEqual(
-            [(o["id"], o["label"]) for o in russian["options"]],
-            [(blue["id"], None), (red["id"], "Красный")],
-        )
-        english = await self.request("GET", path + "?locale=en")
-        self.assertEqual([o["label"] for o in english["options"]], ["Blue", "Red"])
-        await self.request(
-            "PUT",
-            path + "/options/ru",
-            {
-                "options": [
-                    {"option_id": blue["id"], "label": "Синий"},
-                    {"option_id": red["id"], "label": None},
-                ]
-            },
-        )
-        listing = await self.request("GET", "/attributes?locale=ru&search=Цвет")
-        self.assertEqual([a["id"] for a in listing["items"]], [attribute_id])
-        self.assertNotIn("code", listing["items"][0])
-        self.assertEqual(
-            (await self.request("GET", f"/attributes?locale=en&search={attribute_id}"))[
-                "total"
-            ],
-            1,
-        )
-        self.assertEqual(
-            (await self.request("GET", "/attributes?locale=en&search=Цвет"))["total"], 0
-        )
-        before = await self.request("GET", path + "?locale=ru")
-        for invalid in (
-            [{"option_id": red["id"]}, {"option_id": red["id"]}],
-            [{"option_id": str(uuid4()), "label": "Foreign"}],
-            [{"label": None}],
-            [{"label": ""}],
-            [{"option_id": red["id"], "code": "old", "label": "Old"}],
-        ):
-            await self.request("PUT", path + "/options/ru", {"options": invalid}, 422)
-            self.assertEqual(await self.request("GET", path + "?locale=ru"), before)
-        item = await self.create_item()
-        await self.request(
-            "PATCH",
-            f'/items/{item["id"]}',
-            {
-                "attributes": [
-                    {
-                        "attribute_id": attribute_id,
-                        "option_ids": [red["id"]],
-                        "visible": True,
-                        "position": 0,
-                    }
-                ]
-            },
-        )
-        await self.request(
-            "PUT",
-            path + "/options/ru",
-            {"options": [{"option_id": blue["id"], "label": "Синий"}]},
-            409,
-        )
-        await self.request("DELETE", path, status=409)
-        for name, schema in self.app.openapi()["components"]["schemas"].items():
-            if "Attribute" in name:
-                self.assertNotIn("code", schema.get("properties", {}), name)
-        denied = await self.client.put(
-            self.base + path + "/translations/en", json={"label": "Denied"}
-        )
-        self.assertEqual(denied.status_code, 403)
-        self.app.state.test_context = replace(
-            self.context,
-            principal=replace(self.context.principal, tenant_id=str(self.other)),
-        )
-        await self.request("GET", path + "?locale=en", status=404)
-        await self.request(
-            "PUT", path + "/translations/en", {"label": "Foreign tenant"}, 404
-        )
-
-    async def test_attribute_code_migration_preserves_data_and_tenant_isolation(
-        self,
-    ) -> None:
-        """Upgrade/downgrade/upgrade не меняет UUID, переводы, порядок и назначения."""
-        from sqlalchemy import inspect
-
-        attribute = await self.request(
-            "POST",
-            "/attributes",
-            {
-                "locale": "en",
-                "label": "Color",
-                "options": [{"label": "Red"}, {"label": "Blue"}],
-            },
-            201,
-        )
-        path = f'/attributes/{attribute["id"]}'
-        await self.request("PUT", path + "/translations/ru", {"label": "Цвет"})
-        definition = await self.request("GET", path + "?locale=en")
-        option = definition["options"][0]["id"]
-        await self.request(
-            "PUT",
-            path + "/options/ru",
-            {
-                "options": [
-                    {
-                        "option_id": o["id"],
-                        "label": "Красный" if o["id"] == option else "Синий",
-                    }
-                    for o in definition["options"]
-                ]
-            },
-        )
-        item = await self.create_item()
-        await self.request(
-            "PATCH",
-            f'/items/{item["id"]}',
-            {
-                "attributes": [
-                    {
-                        "attribute_id": attribute["id"],
-                        "option_ids": [option],
-                        "visible": False,
-                        "position": 0,
-                    }
-                ]
-            },
-        )
-        before = await self.request("GET", path + "?locale=ru")
-        item_before = await self.request("GET", f'/items/{item["id"]}?locale=en')
-        schema, other = self.schemas
-        migrator = TenantMigrator()
+        schema = self.schemas[0]
         async with self.engine.begin() as connection:
-            await migrator.downgrade(connection, schema, "0025_user_display_currency")
             await connection.execute(
-                text(f"UPDATE \"{schema}\".catalog_attributes SET code='legacy_color'")
-            )
-            await migrator.upgrade(connection, schema)
-            for table in ("catalog_attributes", "catalog_attribute_options"):
-                for tenant_schema in (schema, other):
-                    columns = await connection.run_sync(
-                        lambda sync, s=tenant_schema, t=table: {
-                            c["name"] for c in inspect(sync).get_columns(t, schema=s)
-                        }
-                    )
-                    self.assertNotIn("code", columns)
-            await migrator.downgrade(connection, schema, "0025_user_display_currency")
-            restored = (
-                await connection.execute(
-                    text(f'SELECT id, code FROM "{schema}".catalog_attributes')
+                text(
+                    f'DELETE FROM "{schema}".catalog_product_type_content_blocks WHERE position=1'
                 )
-            ).one()
-            self.assertEqual(restored.code, "a_" + attribute["id"].replace("-", ""))
-            codes = (
-                (
-                    await connection.execute(
-                        text(f'SELECT code FROM "{schema}".catalog_attribute_options')
-                    )
-                )
-                .scalars()
-                .all()
             )
-            self.assertEqual(len(set(codes)), 2)
-            self.assertTrue(all(code.startswith("o_") for code in codes))
-            await migrator.upgrade(connection, schema)
-        self.assertEqual(await self.request("GET", path + "?locale=ru"), before)
-        item_after = await self.request("GET", f'/items/{item["id"]}?locale=en')
-        self.assertEqual(item_after["item"], item_before["item"])
-        english_after = await self.request("GET", path + "?locale=en")
-        self.assertEqual(
-            [(o["id"], o["label"], o["position"]) for o in english_after["options"]],
-            [(o["id"], o["label"], o["position"]) for o in definition["options"]],
-        )
+        await self.request("GET", "/product-type/default?locale=en", status=409)
+        await self.request("POST", "/items", {}, status=409)
+        async with self.sessions() as session:
+            await bind_tenant_schema(
+                await session.connection(), self.tenant.uuid, self.naming
+            )
+            with self.assertRaises(CatalogConflictError):
+                await initialize_catalog(session, self.tenant, self.actor)
+
+    async def test_removed_content_codes_are_rejected(self) -> None:
+        """Новый контракт принимает только title/body, старые блоки не сохраняются."""
+        item = await self.create_item()
+        for code in ("name", "desc", "short_desc"):
+            await self.request(
+                "PATCH",
+                f"/items/{item['id']}?locale=en",
+                {
+                    "content": {
+                        "expected_schema_version": 1,
+                        "values": {"title": "Title", code: "Old"},
+                    }
+                },
+                422,
+            )
+        read = await self.request("GET", f"/items/{item['id']}?locale=en")
+        self.assertIsNone(read["item"]["content"])

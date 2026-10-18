@@ -9,8 +9,6 @@ from src.modules.catalog.presentation.catalog_item.http.value_contracts import (
     WeightValue,
     DimensionsValue,
     GalleryValue,
-    AttributeValue,
-    MetadataValue,
 )
 
 
@@ -18,7 +16,6 @@ class CatalogItemDetailsResponse(BaseModel):
     """Поля и вычисляемые значения самостоятельного товара выбранной locale."""
 
     id: UUID
-
     product_type_id: UUID
     status: Literal["draft", "active", "archived"]
     sku: str | None
@@ -35,11 +32,6 @@ class CatalogItemDetailsResponse(BaseModel):
     available_for_publication: bool
     content: dict[str, str] | None
     gallery: GalleryValue | None
-    attributes: tuple[AttributeValue, ...]
-    metadata: tuple[MetadataValue, ...]
-    category_ids: tuple[UUID, ...]
-    primary_category_id: UUID | None
-    tag_ids: tuple[UUID, ...]
     created_at: datetime
     updated_at: datetime
     created_by: UUID

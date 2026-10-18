@@ -7,10 +7,6 @@ export type ProductSection =
   | "price"
   | "stock"
   | "measurements"
-  | "metadata"
-  | "attributes"
-  | "categories"
-  | "tags"
   | "galleries";
 export type WeightUnit = "g" | "kg";
 export type LengthUnit = "cm" | "m";
@@ -37,18 +33,6 @@ export interface ProductStock {
   stock_status: "in_stock" | "out_of_stock" | "on_backorder" | null;
   backorders: "no" | "notify" | "yes";
 }
-export interface ProductMetadata {
-  key: string;
-  value_type: "text" | "decimal" | "boolean";
-  value: string | boolean;
-  position: number;
-}
-export interface ProductAttribute {
-  attribute_id: string;
-  option_ids: string[];
-  visible: boolean;
-  position: number;
-}
 export interface ProductGallery {
   images: {
     id: string;
@@ -59,8 +43,7 @@ export interface ProductGallery {
   }[];
   primary_image_id: string | null;
 }
-export type ProductTab =
-  "general" | "inventory" | "shipping" | "attributes" | "additional";
+export type ProductTab = "general" | "inventory" | "shipping";
 export interface ProductOverviewModel {
   title: string;
   status: string;
@@ -68,12 +51,25 @@ export interface ProductOverviewModel {
   price: string;
   stock: string;
   available: boolean;
-  descriptions: { short: string; full: string };
+  body: string;
   images: { id: string; url: string; alt: string; caption: string }[];
   primaryImage: string | null;
   measurements: { label: string; value: string }[];
-  attributes: { label: string; value: string }[];
-  categories: string[];
-  tags: string[];
   quantity: number | null;
+}
+
+export type ProductStatus = "draft" | "active" | "archived";
+export interface ProductPatch {
+  status?: ProductStatus;
+  sku?: string | null;
+  virtual?: boolean;
+  price_specification?: ProductPrice | null;
+  stock?: ProductStock;
+  weight?: ProductWeight | null;
+  dimensions?: ProductDimensions | null;
+  content?: {
+    expected_schema_version: number;
+    values: Record<string, string>;
+  } | null;
+  gallery?: ProductGallery | null;
 }

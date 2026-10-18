@@ -1,3 +1,8 @@
+from src.modules.catalog.domain.error import (
+    CatalogError,
+    CatalogNotFoundError,
+    CatalogConflictError,
+)
 from fastapi import HTTPException
 from src.modules.identity.presentation.auth.depends import (
     AuthenticatedRequestContextDep,
@@ -26,8 +31,6 @@ async def get_default_product_type(
     principal = context.principal
     if principal is None or not principal.tenant_id:
         raise HTTPException(403, "Tenant context is required.")
-    from src.modules.catalog.domain.error import CatalogError, CatalogNotFoundError
-
     try:
         result = await handler.execute(
             GetDefaultProductTypeQuery(
@@ -36,6 +39,8 @@ async def get_default_product_type(
         )
     except CatalogNotFoundError as exc:
         raise HTTPException(404, str(exc)) from exc
+    except CatalogConflictError as exc:
+        raise HTTPException(409, str(exc)) from exc
     except CatalogError as exc:
         raise HTTPException(422, str(exc)) from exc
     return GetDefaultProductTypeResponse.model_validate(transport_value(result))

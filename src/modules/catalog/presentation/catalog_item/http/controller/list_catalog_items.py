@@ -1,4 +1,3 @@
-from uuid import UUID
 from datetime import datetime
 from fastapi import HTTPException, Query
 from sqlalchemy.exc import IntegrityError
@@ -34,8 +33,6 @@ async def list_catalog_items(
     locale: str,
     status: CatalogItemStatus | None = None,
     search: str | None = None,
-    category_id: UUID | None = None,
-    tag_id: UUID | None = None,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=100),
     as_of: datetime | None = None,
@@ -51,8 +48,6 @@ async def list_catalog_items(
                 locale=locale,
                 status=status,
                 search=search,
-                category_id=category_id,
-                tag_id=tag_id,
                 offset=offset,
                 limit=limit,
                 as_of=as_of,

@@ -1,8 +1,6 @@
 from dataclasses import dataclass, field, replace
 from datetime import datetime
-from decimal import Decimal
 from typing import Self
-import re
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.catalog.domain.catalog_item.value_object.identifier import (
     CatalogItemIdVO,
@@ -21,20 +19,12 @@ from src.modules.catalog.domain.catalog_item.value_object.measurements import (
     WeightVO,
 )
 from src.modules.catalog.domain.catalog_item.value_object.sku import SkuCodeVO
-from src.modules.catalog.domain.catalog_item.value_object.attribute import (
-    EnumAttributeAssignmentVO,
-)
-from src.modules.catalog.domain.catalog_item.value_object.attribute_snapshot import (
-    EnumAttributeSnapshot,
-)
 from src.modules.catalog.domain.catalog_item.value_object.snapshot import (
     CatalogItemValuesSnapshot,
 )
 from src.modules.catalog.domain.catalog_item.entity.gallery import CatalogItemGallery
 from src.modules.catalog.domain.catalog_item.entity.image import CatalogItemImage
-from src.modules.catalog.domain.catalog_item.entity.metadata import CatalogMetadataEntry
 from src.modules.catalog.domain.product_type.value_object.schema import (
-    DEFAULT_TYPE_ID,
     ProductTypeSchemaSnapshot,
 )
 from src.modules.catalog.domain.value_object.locale import LocaleVO
@@ -57,19 +47,12 @@ class CatalogItem:
     weight: WeightVO | None
     dimensions: DimensionsVO | None
     stock: StockSpecificationVO
-
     created_at: datetime
     updated_at: datetime
     created_by: EntityIdVO
     updated_by: EntityIdVO
-
     translations: dict[str, dict[str, str]] = field(default_factory=dict)
     galleries: dict[str, CatalogItemGallery] = field(default_factory=dict)
-    attributes: tuple[EnumAttributeAssignmentVO, ...] = ()
-    metadata: tuple[CatalogMetadataEntry, ...] = ()
-    category_ids: tuple[EntityIdVO, ...] = ()
-    primary_category_id: EntityIdVO | None = None
-    tag_ids: tuple[EntityIdVO, ...] = ()
 
     @classmethod
     def create(
@@ -77,12 +60,13 @@ class CatalogItem:
         identifier: CatalogItemIdVO,
         actor: EntityIdVO,
         now: datetime,
+        product_type_id: EntityIdVO,
         virtual: bool = False,
     ) -> Self:
         """Создаёт самостоятельную позицию без скрытого варианта."""
         return cls.restore(
             identifier=identifier,
-            product_type_id=DEFAULT_TYPE_ID,
+            product_type_id=product_type_id,
             status=CatalogItemStatus.DRAFT,
             sku=None,
             virtual=virtual,
@@ -115,11 +99,7 @@ class CatalogItem:
         updated_by: EntityIdVO,
         translations: dict[str, dict[str, str]] | None = None,
         galleries: dict[str, CatalogItemGallery] | None = None,
-        attributes: tuple[EnumAttributeAssignmentVO, ...] = (),
-        metadata: tuple[CatalogMetadataEntry, ...] = (),
-        category_ids: tuple[EntityIdVO, ...] = (),
-        primary_category_id: EntityIdVO | None = None,
-        tag_ids: tuple[EntityIdVO, ...] = (),
+        schema: ProductTypeSchemaSnapshot | None = None,
     ) -> Self:
         """Восстанавливает самостоятельный товар и проверяет его инварианты."""
         item = cls(
@@ -138,13 +118,15 @@ class CatalogItem:
             updated_by=updated_by,
             translations={k: dict(v) for k, v in (translations or {}).items()},
             galleries=dict(galleries or {}),
-            attributes=attributes,
-            metadata=metadata,
-            category_ids=category_ids,
-            primary_category_id=primary_category_id,
-            tag_ids=tag_ids,
         )
         item._validate()
+        if item.translations:
+            if schema is None or schema.id != product_type_id:
+                raise InvalidCatalogValueError(
+                    "Для восстановления контента нужна схема товара."
+                )
+            for values in item.translations.values():
+                schema.validate_content(values)
         return item
 
     def snapshot(self) -> CatalogItemValuesSnapshot:
@@ -165,11 +147,6 @@ class CatalogItem:
             updated_by=self.updated_by,
             translations={k: dict(v) for k, v in self.translations.items()},
             galleries=dict(self.galleries),
-            attributes=self.attributes,
-            metadata=self.metadata,
-            category_ids=self.category_ids,
-            primary_category_id=self.primary_category_id,
-            tag_ids=self.tag_ids,
         )
 
     def ensure_deletable(self, used: bool) -> None:
@@ -183,41 +160,31 @@ class CatalogItem:
             not isinstance(self.id, CatalogItemIdVO)
             or not isinstance(self.created_by, EntityIdVO)
             or not isinstance(self.updated_by, EntityIdVO)
-            or self.product_type_id != DEFAULT_TYPE_ID
+            or not isinstance(self.product_type_id, EntityIdVO)
             or not isinstance(self.status, CatalogItemStatus)
         ):
             raise InvalidCatalogValueError(
                 "Некорректная идентичность, схема или статус."
             )
         if any(
-            v.tzinfo is None or v.utcoffset() is None
-            for v in (self.created_at, self.updated_at)
+            (
+                v.tzinfo is None or v.utcoffset() is None
+                for v in (self.created_at, self.updated_at)
+            )
         ):
             raise InvalidCatalogValueError("Audit требует timezone.")
         if self.sku is not None and not isinstance(self.sku, SkuCodeVO):
             raise InvalidCatalogValueError("Некорректный SKU.", ("sku",))
-        if (
-            len(set(self.category_ids)) != len(self.category_ids)
-            or bool(self.category_ids) != (self.primary_category_id is not None)
-            or (
-                self.primary_category_id is not None
-                and self.primary_category_id not in self.category_ids
-            )
-        ):
-            raise InvalidCatalogValueError(
-                "Нужны уникальные назначения и одна основная категория.",
-                ("category_ids", "primary_category_id"),
-            )
-        if len(set(self.tag_ids)) != len(self.tag_ids):
-            raise InvalidCatalogValueError("Метки должны быть уникальны.", ("tag_ids",))
         if type(self.virtual) is not bool:
             raise InvalidCatalogValueError("Virtual требует bool.", ("virtual",))
-        if self.price is not None and not isinstance(self.price, PriceSpecificationVO):
+        if self.price is not None and (
+            not isinstance(self.price, PriceSpecificationVO)
+        ):
             raise InvalidCatalogValueError(
                 "Некорректная спецификация цены.", ("price_specification",)
             )
-        if self.dimensions is not None and not isinstance(
-            self.dimensions, DimensionsVO
+        if self.dimensions is not None and (
+            not isinstance(self.dimensions, DimensionsVO)
         ):
             raise InvalidCatalogValueError(
                 "Размеры требуют значения с единицами.", ("dimensions",)
@@ -234,12 +201,6 @@ class CatalogItem:
         for locale, gallery in self.galleries.items():
             LocaleVO(locale)
             self._validate_gallery(gallery)
-        if len({a.attribute_id for a in self.attributes}) != len(
-            self.attributes
-        ) or len({a.position for a in self.attributes}) != len(self.attributes):
-            raise InvalidCatalogValueError(
-                "Атрибуты и позиции назначений уникальны.", ("attributes",)
-            )
         image_ids = [
             image.id for gallery in self.galleries.values() for image in gallery.images
         ]
@@ -247,27 +208,26 @@ class CatalogItem:
             raise InvalidCatalogValueError(
                 "ID изображений уникальны во всех locale товара."
             )
-        self._validate_metadata(self.metadata)
 
     @staticmethod
     def _validate_content(values: dict[str, str]) -> None:
-        """Проверяет фиксированные блоки и обязательное непустое имя перевода."""
-        if set(values) - {"name", "desc", "short_desc"}:
-            raise InvalidCatalogValueError("Блок отсутствует в Default.", ("content",))
+        """Проверяет форму сохранённых текстовых значений и каноническое имя товара."""
         if any(
-            not isinstance(value, str) or len(value) > 1_000_000
-            for value in values.values()
+            (
+                not isinstance(value, str) or len(value) > 1000000
+                for value in values.values()
+            )
         ):
             raise InvalidCatalogValueError(
                 "Контент требует текст до 1000000 символов.", ("content",)
             )
         if (
-            "name" not in values
-            or not values["name"].strip()
-            or len(values["name"]) > 255
+            "title" not in values
+            or not values["title"].strip()
+            or len(values["title"]) > 255
         ):
             raise InvalidCatalogValueError(
-                "Name должен быть непустым текстом до 255 символов.", ("content",)
+                "Title должен быть непустым текстом до 255 символов.", ("content",)
             )
 
     @staticmethod
@@ -278,15 +238,17 @@ class CatalogItem:
             len(images) > 100
             or len({i.id for i in images}) != len(images)
             or len({i.file_id for i in images}) != len(images)
-            or len({i.position for i in images}) != len(images)
+            or (len({i.position for i in images}) != len(images))
             or any(
-                type(i.position) is not int
-                or i.position < 0
-                or not isinstance(i.id, EntityIdVO)
-                or not isinstance(i.file_id, EntityIdVO)
-                or len(i.alt) > 1000
-                or len(i.caption) > 5000
-                for i in images
+                (
+                    type(i.position) is not int
+                    or i.position < 0
+                    or not isinstance(i.id, EntityIdVO)
+                    or not isinstance(i.file_id, EntityIdVO)
+                    or (len(i.alt) > 1000)
+                    or (len(i.caption) > 5000)
+                    for i in images
+                )
             )
         ):
             raise InvalidCatalogValueError(
@@ -299,57 +261,6 @@ class CatalogItem:
                 "Непустая галерея требует главное изображение из своего набора.",
                 ("gallery",),
             )
-
-    @staticmethod
-    def _validate_metadata(values: tuple[CatalogMetadataEntry, ...]) -> None:
-        """Проверяет канонические типы, порядок и запрет обхода полей карточки."""
-        reserved = {
-            "name",
-            "desc",
-            "short_desc",
-            "sku",
-            "price",
-            "regular_price",
-            "sale_price",
-            "stock_quantity",
-            "stock_status",
-            "manage_stock",
-            "virtual",
-            "kind",
-            "parent_id",
-            "status",
-            "weight",
-            "dimensions",
-            "product_type",
-        }
-        if len({v.key for v in values}) != len(values) or len(
-            {v.position for v in values}
-        ) != len(values):
-            raise InvalidCatalogValueError(
-                "Metadata key и position уникальны.", ("metadata",)
-            )
-        for v in values:
-            if (
-                not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_.-]{0,63}", v.key)
-                or v.key in reserved
-                or v.position < 0
-            ):
-                raise InvalidCatalogValueError(
-                    "Некорректный или зарезервированный metadata key.", ("metadata",)
-                )
-            if not (
-                (v.value_type == "text" and isinstance(v.value, str))
-                or (v.value_type == "boolean" and type(v.value) is bool)
-                or (
-                    v.value_type == "decimal"
-                    and isinstance(v.value, Decimal)
-                    and v.value.is_finite()
-                    and v.value.as_tuple().exponent >= -6
-                )
-            ):
-                raise InvalidCatalogValueError(
-                    "Metadata принимает text/decimal/boolean.", ("metadata",)
-                )
 
     def update(
         self,
@@ -367,14 +278,6 @@ class CatalogItem:
         locale: LocaleVO | None = None,
         content: dict[str, str] | None = None,
         gallery: CatalogItemGallery | None = None,
-        attributes: tuple[EnumAttributeAssignmentVO, ...] | None = None,
-        metadata: tuple[CatalogMetadataEntry, ...] | None = None,
-        category_ids: tuple[EntityIdVO, ...] | None = None,
-        primary_category_id: EntityIdVO | None = None,
-        tag_ids: tuple[EntityIdVO, ...] | None = None,
-        definitions: tuple[EnumAttributeSnapshot, ...] = (),
-        existing_categories: frozenset[EntityIdVO] = frozenset(),
-        existing_tags: frozenset[EntityIdVO] = frozenset(),
         schema: ProductTypeSchemaSnapshot | None = None,
         expected_schema_version: int | None = None,
     ) -> None:
@@ -387,66 +290,34 @@ class CatalogItem:
             "stock": stock,
             "weight": weight,
             "dimensions": dimensions,
-            "attributes": attributes,
-            "metadata": metadata,
-            "category_ids": category_ids,
-            "primary_category_id": primary_category_id,
-            "tag_ids": tag_ids,
         }
         if not fields or fields - (values.keys() | {"content", "gallery"}):
             raise InvalidCatalogValueError("Нужны известные поля изменения.")
-        for name in fields & {
-            "status",
-            "virtual",
-            "stock",
-            "attributes",
-            "metadata",
-            "category_ids",
-            "tag_ids",
-        }:
+        for name in fields & {"status", "virtual", "stock"}:
             if values[name] is None:
                 raise InvalidCatalogValueError("Значение не может быть null.", (name,))
         changes = {
-            ("price" if name == "price_specification" else name): value
+            "price" if name == "price_specification" else name: value
             for name, value in values.items()
             if name in fields
         }
         if (
             "dimensions" in fields
             and isinstance(dimensions, DimensionsVO)
-            and not any(
-                value is not None
-                for value in (dimensions.length, dimensions.width, dimensions.height)
+            and (
+                not any(
+                    (
+                        value is not None
+                        for value in (
+                            dimensions.length,
+                            dimensions.width,
+                            dimensions.height,
+                        )
+                    )
+                )
             )
         ):
             changes["dimensions"] = None
-        for name in fields & {"category_ids", "tag_ids"}:
-            changes[name] = tuple(sorted(values[name], key=str))
-        if "attributes" in fields:
-            allowed = {d.id: d.option_ids for d in definitions}
-            if any(
-                a.attribute_id not in allowed
-                or not set(a.option_ids).issubset(allowed[a.attribute_id])
-                for a in attributes or ()
-            ):
-                raise InvalidCatalogValueError(
-                    "Option отсутствует в определении.", ("attributes",)
-                )
-            changes["attributes"] = tuple(
-                sorted(attributes or (), key=lambda a: a.position)
-            )
-        if "metadata" in fields:
-            changes["metadata"] = tuple(
-                sorted(metadata or (), key=lambda m: m.position)
-            )
-        if "category_ids" in fields and not set(category_ids or ()).issubset(
-            existing_categories
-        ):
-            raise InvalidCatalogValueError(
-                "Категория отсутствует в tenant.", ("category_ids",)
-            )
-        if "tag_ids" in fields and not set(tag_ids or ()).issubset(existing_tags):
-            raise InvalidCatalogValueError("Метка отсутствует в tenant.", ("tag_ids",))
         if fields & {"content", "gallery"}:
             if not isinstance(locale, LocaleVO):
                 raise InvalidCatalogValueError(
@@ -461,12 +332,12 @@ class CatalogItem:
                     if (
                         schema is None
                         or schema.id != self.product_type_id
-                        or schema.code != "default"
-                        or schema.schema_version != expected_schema_version
+                        or (schema.schema_version != expected_schema_version)
                     ):
                         raise CatalogConflictError(
                             "Версия схемы изменилась.", ("content",)
                         )
+                    schema.validate_content(content)
                     translations[locale.value] = dict(content)
                 changes["translations"] = translations
             if "gallery" in fields:

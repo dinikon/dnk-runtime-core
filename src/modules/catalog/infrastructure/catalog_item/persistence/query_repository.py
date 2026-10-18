@@ -12,20 +12,16 @@ from src.modules.catalog.infrastructure.persistence.models.catalog_item import (
 from src.modules.catalog.infrastructure.persistence.models.catalog_item_content_value import (
     CatalogItemContentValueModel,
 )
-from src.modules.catalog.infrastructure.persistence.models.catalog_item_category import (
-    CatalogItemCategoryModel,
-)
-from src.modules.catalog.infrastructure.persistence.models.catalog_item_tag import (
-    CatalogItemTagModel,
-)
 from src.modules.catalog.infrastructure.catalog_item.persistence.mapper import (
     CatalogItemMapper,
 )
 from src.modules.catalog.infrastructure.catalog_item.persistence.rows import read_parts
 from src.modules.catalog.infrastructure.catalog_item.content_schema import (
-    SqlAlchemyDefaultContentSchema,
+    SqlAlchemyProductTypeSchemas,
 )
-from src.modules.catalog.domain.product_type.value_object.schema import BLOCK_IDS
+from src.modules.catalog.infrastructure.persistence.models.content_block import (
+    ContentBlockModel,
+)
 from src.modules.catalog.domain.error import (
     CatalogNotFoundError,
     CatalogConflictError,
@@ -49,8 +45,6 @@ from src.modules.catalog.application.catalog_item.query.get_catalog_items_public
 from src.modules.catalog.application.catalog_item.query.get_catalog_items_publication_snapshot.dto import (
     GetCatalogItemsPublicationSnapshotResultDTO,
 )
-
-
 from src.modules.catalog.domain.catalog_item.value_object.snapshot import (
     CatalogItemValuesSnapshot,
 )
@@ -68,11 +62,11 @@ class SqlAlchemyCatalogItemQueryRepository:
     ) -> tuple[CatalogItemValuesSnapshot, ...]:
         """Читает собственные связи одним запросом на группу, без родительских данных."""
         parts = (
-            await read_parts(self._session, tuple(r["id"] for r in rows), locale)
+            await read_parts(self._session, tuple((r["id"] for r in rows)), locale)
             if rows
             else {}
         )
-        return tuple(CatalogItemMapper.to_values(row, parts) for row in rows)
+        return tuple((CatalogItemMapper.to_values(row, parts) for row in rows))
 
     async def get(
         self, query: GetCatalogItemQuery, as_of: datetime
@@ -120,34 +114,16 @@ class SqlAlchemyCatalogItemQueryRepository:
             content = CatalogItemContentValueModel.__table__
             name = (
                 select(content.c.catalog_item_id)
+                .join(ContentBlockModel, ContentBlockModel.id == content.c.block_id)
                 .where(
                     content.c.catalog_item_id == table.c.id,
                     content.c.locale == query.locale,
-                    content.c.block_id == BLOCK_IDS["name"].uuid,
+                    ContentBlockModel.code == "title",
                     content.c.value.ilike("%" + query.search + "%"),
                 )
                 .exists()
             )
             filters.append(or_(table.c.sku.ilike("%" + query.search + "%"), name))
-        if query.category_id:
-            category = CatalogItemCategoryModel.__table__
-            filters.append(
-                select(category.c.catalog_item_id)
-                .where(
-                    category.c.catalog_item_id == table.c.id,
-                    category.c.category_id == query.category_id,
-                )
-                .exists()
-            )
-        if query.tag_id:
-            tag = CatalogItemTagModel.__table__
-            filters.append(
-                select(tag.c.catalog_item_id)
-                .where(
-                    tag.c.catalog_item_id == table.c.id, tag.c.tag_id == query.tag_id
-                )
-                .exists()
-            )
         total = await self._session.scalar(
             select(func.count()).select_from(table).where(*filters)
         )
@@ -167,8 +143,10 @@ class SqlAlchemyCatalogItemQueryRepository:
         values = await self._values(rows, query.locale)
         return ListCatalogItemsResultDTO(
             tuple(
-                CatalogItemQueryMapper.list_row(item, query.locale, as_of)
-                for item in values
+                (
+                    CatalogItemQueryMapper.list_row(item, query.locale, as_of)
+                    for item in values
+                )
             ),
             int(total or 0),
             query.offset,
@@ -189,7 +167,7 @@ class SqlAlchemyCatalogItemQueryRepository:
             (
                 await self._session.execute(
                     select(table).where(
-                        table.c.id.in_(tuple(i.uuid for i in query.item_ids)),
+                        table.c.id.in_(tuple((i.uuid for i in query.item_ids))),
                         table.c.kind == "simple",
                         table.c.parent_id.is_(None),
                     )
@@ -202,13 +180,15 @@ class SqlAlchemyCatalogItemQueryRepository:
             raise CatalogNotFoundError("Один из CatalogItem отсутствует.")
         by_id = {row["id"]: row for row in rows}
         values = await self._values(
-            tuple(by_id[i.uuid] for i in query.item_ids), query.locale
+            tuple((by_id[i.uuid] for i in query.item_ids)), query.locale
         )
         items = tuple(
-            CatalogItemQueryMapper.publication(value, query.locale, as_of)
-            for value in values
+            (
+                CatalogItemQueryMapper.publication(value, query.locale, as_of)
+                for value in values
+            )
         )
-        schema = await SqlAlchemyDefaultContentSchema(self._session).get_default()
+        schema = await SqlAlchemyProductTypeSchemas(self._session).get_by_code()
         return GetCatalogItemsPublicationSnapshotResultDTO(
             items, schema, query.locale, as_of
         )

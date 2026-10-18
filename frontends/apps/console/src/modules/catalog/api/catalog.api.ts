@@ -1,192 +1,22 @@
+import {
+  itemFromDto,
+  listItemFromDto,
+  updateItemToDto,
+  schemaFromDto,
+} from "./catalog.mapper";
+import type {
+  CatalogItem,
+  CatalogItemsPage,
+  CatalogSchema,
+} from "../model/catalog.types";
+import type { ProductPatch, ProductStatus } from "../model/product.types";
 import { httpClient } from "@/app/providers/http";
 import type * as DTO from "./catalog.dto";
 const base = "/console/catalog";
 export const catalogApi = {
-  async createCategory(
-    body: DTO.CreateCategoryRequest,
-  ): Promise<DTO.CreateCategoryResponse> {
-    return (
-      await httpClient.post<DTO.CreateCategoryResponse>(
-        base + "/categories",
-        body,
-      )
-    ).data;
-  },
-  async putCategoryContent(
-    id: string,
-    locale: string,
-    body: DTO.PutCategoryContentRequest,
-  ): Promise<DTO.PutCategoryContentResponse> {
-    return (
-      await httpClient.put<DTO.PutCategoryContentResponse>(
-        base +
-          `/categories/${encodeURIComponent(id)}/translations/${encodeURIComponent(locale)}`,
-        body,
-      )
-    ).data;
-  },
-  async getCategory(
-    id: string,
-    locale: string,
+  async locales(
     signal?: AbortSignal,
-  ): Promise<DTO.GetCategoryResponse> {
-    return (
-      await httpClient.get<DTO.GetCategoryResponse>(
-        base + `/categories/${encodeURIComponent(id)}`,
-        { params: { locale }, signal },
-      )
-    ).data;
-  },
-  async deleteCategory(id: string): Promise<void> {
-    await httpClient.delete(base + `/categories/${encodeURIComponent(id)}`, {});
-  },
-  async listCategories(
-    locale: string,
-    search = "",
-    page = 1,
-    page_size = 20,
-    signal?: AbortSignal,
-    parentId?: string,
-    rootsOnly = false,
-  ): Promise<DTO.ListCategoriesResponse> {
-    return (
-      await httpClient.get<DTO.ListCategoriesResponse>(base + "/categories", {
-        params: {
-          locale,
-          search,
-          page,
-          page_size,
-          parent_id: parentId,
-          roots_only: rootsOnly,
-        },
-        signal,
-      })
-    ).data;
-  },
-  async createTag(body: DTO.CreateTagRequest): Promise<DTO.CreateTagResponse> {
-    return (await httpClient.post<DTO.CreateTagResponse>(base + "/tags", body))
-      .data;
-  },
-  async putTagTranslation(
-    id: string,
-    locale: string,
-    body: DTO.PutTagTranslationRequest,
-  ): Promise<DTO.PutTagTranslationResponse> {
-    return (
-      await httpClient.put<DTO.PutTagTranslationResponse>(
-        base +
-          `/tags/${encodeURIComponent(id)}/translations/${encodeURIComponent(locale)}`,
-        body,
-      )
-    ).data;
-  },
-  async getTag(
-    id: string,
-    locale: string,
-    signal?: AbortSignal,
-  ): Promise<DTO.GetTagResponse> {
-    return (
-      await httpClient.get<DTO.GetTagResponse>(
-        base + `/tags/${encodeURIComponent(id)}`,
-        { params: { locale }, signal },
-      )
-    ).data;
-  },
-  async deleteTag(id: string): Promise<void> {
-    await httpClient.delete(base + `/tags/${encodeURIComponent(id)}`, {});
-  },
-  async listTags(
-    locale: string,
-    search = "",
-    page = 1,
-    page_size = 20,
-    signal?: AbortSignal,
-  ): Promise<DTO.ListTagsResponse> {
-    return (
-      await httpClient.get<DTO.ListTagsResponse>(base + "/tags", {
-        params: { locale, search, page, page_size },
-        signal,
-      })
-    ).data;
-  },
-  async moveCategory(
-    id: string,
-    body: DTO.MoveCategoryRequest,
-  ): Promise<DTO.MoveCategoryResponse> {
-    return (
-      await httpClient.put<DTO.MoveCategoryResponse>(
-        base + `/categories/${encodeURIComponent(id)}/parent`,
-        body,
-      )
-    ).data;
-  },
-  async createAttribute(
-    body: DTO.CreateAttributeRequest,
-  ): Promise<DTO.CreateAttributeResponse> {
-    return (
-      await httpClient.post<DTO.CreateAttributeResponse>(
-        base + "/attributes",
-        body,
-      )
-    ).data;
-  },
-  async putAttributeTranslation(
-    id: string,
-    locale: string,
-    body: DTO.PutAttributeTranslationRequest,
-  ): Promise<DTO.PutAttributeTranslationResponse> {
-    return (
-      await httpClient.put<DTO.PutAttributeTranslationResponse>(
-        base +
-          `/attributes/${encodeURIComponent(id)}/translations/${encodeURIComponent(locale)}`,
-        body,
-      )
-    ).data;
-  },
-  async replaceAttributeOptions(
-    id: string,
-    locale: string,
-    body: DTO.ReplaceAttributeOptionsRequest,
-  ): Promise<DTO.ReplaceAttributeOptionsResponse> {
-    return (
-      await httpClient.put<DTO.ReplaceAttributeOptionsResponse>(
-        base +
-          `/attributes/${encodeURIComponent(id)}/options/${encodeURIComponent(locale)}`,
-        body,
-      )
-    ).data;
-  },
-  async deleteAttribute(id: string): Promise<void> {
-    await httpClient.delete(base + `/attributes/${encodeURIComponent(id)}`, {});
-  },
-  async getAttribute(
-    id: string,
-    locale: string,
-    signal?: AbortSignal,
-  ): Promise<DTO.GetAttributeResponse> {
-    return (
-      await httpClient.get<DTO.GetAttributeResponse>(
-        base + `/attributes/${encodeURIComponent(id)}`,
-        { params: { locale }, signal },
-      )
-    ).data;
-  },
-  async listAttributes(
-    locale: string,
-    search = "",
-    page = 1,
-    page_size = 20,
-    signal?: AbortSignal,
-  ): Promise<DTO.ListAttributesResponse> {
-    return (
-      await httpClient.get<DTO.ListAttributesResponse>(base + "/attributes", {
-        params: { locale, search, page, page_size },
-        signal,
-      })
-    ).data;
-  },
-
-  async locales(signal?: AbortSignal): Promise<DTO.LocaleDTO[]> {
+  ): Promise<{ code: string; name: string }[]> {
     return (
       await httpClient.get<DTO.LocaleDTO[]>("/console/reference-data/locales", {
         signal,
@@ -198,29 +28,30 @@ export const catalogApi = {
     search = "",
     offset = 0,
     limit = 20,
-    status?: DTO.ItemStatus,
+    status?: ProductStatus,
     signal?: AbortSignal,
-  ): Promise<DTO.ListItemsResponse> {
-    return (
-      await httpClient.get<DTO.ListItemsResponse>(base + "/items", {
+  ): Promise<CatalogItemsPage> {
+    const { data } = await httpClient.get<DTO.ListItemsResponse>(
+      base + "/items",
+      {
         params: { locale, search, offset, limit, status },
         signal,
-      })
-    ).data;
+      },
+    );
+    return { ...data, items: data.items.map(listItemFromDto) };
   },
   async getItem(
     id: string,
     locale: string,
     signal?: AbortSignal,
-  ): Promise<DTO.GetItemResponse> {
-    return (
-      await httpClient.get<DTO.GetItemResponse>(
-        base + `/items/${encodeURIComponent(id)}`,
-        { params: { locale }, signal },
-      )
-    ).data;
+  ): Promise<CatalogItem> {
+    const { data } = await httpClient.get<DTO.GetItemResponse>(
+      base + `/items/${encodeURIComponent(id)}`,
+      { params: { locale }, signal },
+    );
+    return itemFromDto(data.item);
   },
-  async createItem(virtual = false): Promise<DTO.CreateItemResponse> {
+  async createItem(virtual = false): Promise<{ id: string }> {
     return (
       await httpClient.post<DTO.CreateItemResponse>(base + "/items", {
         virtual,
@@ -229,13 +60,13 @@ export const catalogApi = {
   },
   async updateItem(
     id: string,
-    value: DTO.UpdateItemRequest,
+    value: ProductPatch,
     locale?: string,
-  ): Promise<DTO.UpdateItemResponse> {
+  ): Promise<{ id: string }> {
     return (
       await httpClient.patch<DTO.UpdateItemResponse>(
         base + `/items/${encodeURIComponent(id)}`,
-        value,
+        updateItemToDto(value),
         { params: { locale } },
       )
     ).data;
@@ -248,7 +79,7 @@ export const catalogApi = {
     locale: string,
     file: File,
     main: boolean,
-  ): Promise<DTO.UploadImageResponse> {
+  ): Promise<{ id: string; image_id: string; file_id: string }> {
     const body = new FormData();
     body.append("image", file);
     body.append("main", String(main));
@@ -267,12 +98,11 @@ export const catalogApi = {
   async defaultSchema(
     locale: string,
     signal?: AbortSignal,
-  ): Promise<DTO.DefaultSchemaResponse> {
-    return (
-      await httpClient.get<DTO.DefaultSchemaResponse>(
-        base + "/product-type/default",
-        { params: { locale }, signal },
-      )
-    ).data;
+  ): Promise<CatalogSchema> {
+    const { data } = await httpClient.get<DTO.DefaultSchemaResponse>(
+      base + "/product-type/default",
+      { params: { locale }, signal },
+    );
+    return schemaFromDto(data);
   },
 };

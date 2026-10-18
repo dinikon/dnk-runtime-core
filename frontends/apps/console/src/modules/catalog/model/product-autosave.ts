@@ -1,8 +1,8 @@
 import type { ProductSection } from "./product.types";
-import type { UpdateItemRequest } from "../api/catalog.dto";
+import type { ProductPatch } from "./product.types";
 
 export interface DraftEntry {
-  value: UpdateItemRequest;
+  value: ProductPatch;
   token: number;
   error: string;
 }
@@ -28,15 +28,15 @@ export class ProductAutosave {
 
   constructor(
     readonly state: AutosaveState,
-    private send: (value: UpdateItemRequest) => Promise<unknown>,
+    private send: (value: ProductPatch) => Promise<unknown>,
     private acknowledge: (sections: ProductSection[]) => Promise<void>,
     private failure: (error: unknown) => SaveFailure,
     private delay = 800,
   ) {}
 
-  stage(section: ProductSection, value: UpdateItemRequest, error = ""): void {
+  stage(section: ProductSection, value: ProductPatch, error = ""): void {
     this.state.entries[section] = {
-      value: JSON.parse(JSON.stringify(value)) as UpdateItemRequest,
+      value: JSON.parse(JSON.stringify(value)) as ProductPatch,
       token: ++this.token,
       error,
     };
@@ -91,7 +91,7 @@ export class ProductAutosave {
         ) as [ProductSection, DraftEntry][];
         if (!entries.length) break;
         if (!force && Date.now() < this.changedAt + this.delay) break;
-        const value: UpdateItemRequest = Object.assign(
+        const value: ProductPatch = Object.assign(
           {},
           ...entries.map(([, entry]) => entry.value),
         );

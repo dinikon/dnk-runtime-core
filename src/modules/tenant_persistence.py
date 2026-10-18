@@ -92,31 +92,16 @@ import src.modules.files.infrastructure.persistence.models.bucket  # noqa: F401
 import src.modules.files.infrastructure.persistence.models.stored_file  # noqa: F401
 
 
-import src.modules.catalog.infrastructure.persistence.models.attribute  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.attribute_option  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.attribute_option_translation  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.attribute_translation  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.catalog_item  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.catalog_item_attribute  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.catalog_item_attribute_option  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.catalog_item_category  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.catalog_item_content_value  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.catalog_item_default_selection  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.catalog_item_gallery  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.catalog_item_image  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.catalog_item_metadata  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.catalog_item_tag  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.catalog_item_translation  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.catalog_item_variant_selection  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.category  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.category_translation  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.content_block  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.content_block_translation  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.product_type  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.product_type_block  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.product_type_translation  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.tag  # noqa: F401
-import src.modules.catalog.infrastructure.persistence.models.tag_translation  # noqa: F401
 
 import src.modules.currency.infrastructure.persistence.models.exchange_rate_book  # noqa: F401
 import src.modules.currency.infrastructure.persistence.models.exchange_rate_quote  # noqa: F401

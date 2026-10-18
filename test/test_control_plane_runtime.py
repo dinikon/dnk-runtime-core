@@ -153,6 +153,11 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
         self.sessions = async_sessionmaker(self.engine, expire_on_commit=False)
         async with self.engine.begin() as connection:
             await GlobalMigrator().upgrade(connection)
+            await connection.execute(
+                text(
+                    "INSERT INTO public.ref_currencies(code,numeric_code,name,minor_units,active) VALUES ('UAH','980','Hryvnia',2,true) ON CONFLICT(code) DO UPDATE SET active=true"
+                )
+            )
         self.core_ids = []
 
     async def asyncTearDown(self):
@@ -311,6 +316,27 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
                 (UUID(payload["tenant_id"]), UUID(payload["owner"]["sub"])),
             )
             self.assertEqual((projection.version, projection.available), (1, True))
+            schema = f"dnk_{installation.runtime_tenant_id.hex}"
+            product_type = (
+                await session.execute(
+                    text(
+                        f'SELECT id, created_by FROM "{schema}".catalog_product_types WHERE code=:code'
+                    ),
+                    {"code": "default"},
+                )
+            ).one()
+            self.assertEqual(product_type.id.version, 7)
+            self.assertEqual(product_type.created_by, installation.owner_user_id)
+            self.assertEqual(
+                await session.scalar(
+                    text(
+                        f'SELECT count(*) FROM "{schema}".catalog_content_block_definitions WHERE code IN (:title,:body)'
+                    ),
+                    {"title": "title", "body": "body"},
+                ),
+                2,
+            )
+
         _, replay = await self.accept(payload)
         self.assertEqual(replay.state, "succeeded")
         await installer.run(UUID(payload["attempt_id"]))

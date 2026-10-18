@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class CatalogItemMutationService:
-    """Координирует порядок блокировок, без бизнес-правил."""
+    """Координирует загрузку и сохранение под блокировкой товара."""
 
     def __init__(
         self,
@@ -27,8 +27,7 @@ class CatalogItemMutationService:
     async def load(
         self, tenant_id: EntityIdVO, item_id: CatalogItemIdVO
     ) -> CatalogItem:
-        """Блокирует справочные ссылки и загружает актуальный товар под item lock."""
-        await self._lock.acquire_reference(tenant_id)
+        """Загружает актуальный товар под его транзакционной блокировкой."""
         await self._lock.acquire_item(tenant_id, item_id)
         item = await self._repository.get(item_id)
 

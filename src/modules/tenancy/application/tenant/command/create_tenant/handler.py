@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from src.modules.tenancy.application.tenant.port.catalog_provisioning import (
+    CatalogProvisioningPort,
+)
+from src.modules.shared.domain.value_object.entity_id import EntityIdVO
+
 from src.modules.shared.domain.value_object.currency import CurrencyVO
 from src.modules.tenancy.application.tenant.port.currency_validator import (
     CurrencyValidatorProtocol,
@@ -44,8 +49,10 @@ class CreateTenantHandler:
         tenant_storage: TenantStorageProtocol,
         currency_validator: CurrencyValidatorProtocol,
         currency_settings_writer: TenantCurrencySettingsWriterProtocol,
+        catalog_provisioning: CatalogProvisioningPort,
     ) -> None:
         """Инициализирует orchestration зависимости tenant onboarding."""
+        self._catalog_provisioning = catalog_provisioning
         self._tenant_storage = tenant_storage
         self._currency_validator = currency_validator
         self._currency_settings_writer = currency_settings_writer
@@ -60,7 +67,7 @@ class CreateTenantHandler:
         """Подготавливает tenant, оставляя активацию следующему durable этапу.
 
         Сначала создается tenant и primary domain, затем bootstrap tenant-схемы
-        через внешний порт, регистрирует файловый бакет, затем tenant admin.
+        через внешний порт, регистрирует файловый бакет, затем tenant admin и Default Catalog.
         Внешняя сборка фиксирует этап до обращения к MinIO.
         """
         base_currency = CurrencyVO.from_value(command.base_currency)
@@ -97,6 +104,10 @@ class CreateTenantHandler:
             first_name=command.user_first_name,
             last_name=command.user_last_name,
             email=command.user_email,
+        )
+
+        await self._catalog_provisioning.initialize_defaults(
+            onboarding.tenant.id, EntityIdVO(user.user_id)
         )
 
         return CreateTenantResultDTO(

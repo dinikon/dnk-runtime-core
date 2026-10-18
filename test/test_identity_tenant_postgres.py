@@ -8,6 +8,17 @@ import os
 import unittest
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
+from src.modules.tenancy.infrastructure.adapter.catalog_provisioning import (
+    CatalogProvisioningAdapter,
+)
+from src.modules.catalog.application.product_type.facade import (
+    CatalogProvisioningFacade,
+)
+from src.modules.catalog.infrastructure.product_type.persistence.repository import (
+    SqlAlchemyProductTypeRepository,
+)
+from src.modules.shared.infrastructure.uuid.uuid7_generator import UUID7Generator
+from src.modules.shared.infrastructure.time.utc_clock import UtcClock
 from uuid import uuid4
 
 from fastapi import FastAPI
@@ -194,6 +205,15 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
 
                 provisioning.create_tenant_admin = fail_after_insert
             use_case = CreateTenantHandler(
+                catalog_provisioning=CatalogProvisioningAdapter(
+                    uow.session,
+                    self.naming,
+                    CatalogProvisioningFacade(
+                        SqlAlchemyProductTypeRepository(uow.session),
+                        UUID7Generator(),
+                        UtcClock(),
+                    ),
+                ),
                 currency_validator=AsyncMock(),
                 currency_settings_writer=AsyncMock(),
                 tenant_onboarding_service=TenantOnboardingService(
@@ -406,6 +426,34 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
     async def test_admin_failure_rolls_back_schema_and_global_records(self):
         with self.assertRaisesRegex(RuntimeError, "Injected admin failure"):
             await self.onboard("fail", fail_admin=True)
+        async with self.engine.begin() as connection:
+            for schema in self.schemas:
+                self.assertFalse(await schema_exists(connection, schema))
+            self.assertIsNone(
+                await connection.scalar(
+                    select(TenantModel.id).where(TenantModel.id.in_(self.tenant_ids))
+                )
+            )
+            self.assertIsNone(
+                await connection.scalar(
+                    select(TenantDomainModel.id).where(
+                        TenantDomainModel.tenant_id.in_(self.tenant_ids)
+                    )
+                )
+            )
+
+    async def test_catalog_failure_rolls_back_schema_and_global_records(self):
+        original = CatalogProvisioningFacade.initialize_defaults
+
+        async def fail_after_catalog(facade, tenant_id, actor_id):
+            await original(facade, tenant_id, actor_id)
+            raise RuntimeError("Injected catalog failure after insert")
+
+        with patch.object(
+            CatalogProvisioningFacade, "initialize_defaults", fail_after_catalog
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Injected catalog failure"):
+                await self.onboard("catalog-fail")
         async with self.engine.begin() as connection:
             for schema in self.schemas:
                 self.assertFalse(await schema_exists(connection, schema))

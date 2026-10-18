@@ -6,8 +6,8 @@ import { useProductContentDraft } from "../src/modules/catalog/model/use-product
 test("refetch cannot replace newer unsaved content; clean content accepts server values", async () => {
   const scope = effectScope();
   const source = ref<Record<string, string> | null>({
-    name: "Server",
-    desc: "Full",
+    title: "Server",
+    body: "Full",
   });
   const dirty = ref(false);
   const saved: Record<string, string>[] = [];
@@ -22,18 +22,17 @@ test("refetch cannot replace newer unsaved content; clean content accepts server
       },
     ),
   )!;
-  draft.change("name", "Newer");
-  source.value = { name: "Older acknowledgement", desc: "Full" };
+  draft.change("title", "Newer");
+  source.value = { title: "Older acknowledgement", body: "Full" };
   await nextTick();
-  assert.equal(draft.values.value.name, "Newer");
-  draft.change("short_desc", "Short");
+  assert.equal(draft.values.value.title, "Newer");
+  draft.change("body", "Updated body");
   assert.deepEqual(saved.at(-1), {
-    name: "Newer",
-    desc: "Full",
-    short_desc: "Short",
+    title: "Newer",
+    body: "Updated body",
   });
   dirty.value = false;
-  source.value = { name: "Canonical", desc: "Clean" };
+  source.value = { title: "Canonical", body: "Clean" };
   await nextTick();
   assert.deepEqual(draft.values.value, source.value);
   scope.stop();
@@ -41,7 +40,7 @@ test("refetch cannot replace newer unsaved content; clean content accepts server
 
 test("scope switch and explicit reload reset content without staging a write", async () => {
   const effects = effectScope();
-  const source = ref<Record<string, string> | null>({ name: "RU" });
+  const source = ref<Record<string, string> | null>({ title: "RU" });
   const session = ref("tenant:item:ru"),
     dirty = ref(false),
     reset = ref(0);
@@ -58,15 +57,15 @@ test("scope switch and explicit reload reset content without staging a write", a
       () => reset.value,
     ),
   )!;
-  draft.change("name", "Unsaved");
+  draft.change("title", "Unsaved");
   reset.value++;
   await nextTick();
-  assert.equal(draft.values.value.name, "RU");
-  draft.change("desc", "Old context");
+  assert.equal(draft.values.value.title, "RU");
+  draft.change("body", "Old context");
   session.value = "other-tenant:item:uk";
-  source.value = { name: "UK" };
+  source.value = { title: "UK" };
   await nextTick();
-  assert.deepEqual(draft.values.value, { name: "UK" });
+  assert.deepEqual(draft.values.value, { title: "UK" });
   assert.equal(writes, 2);
   effects.stop();
 });

@@ -2,121 +2,6 @@ export interface LocaleDTO {
   code: string;
   name: string;
 }
-export interface CreateAttributeRequest {
-  locale: string;
-  label: string;
-  options?: { label: string }[];
-}
-export interface CreateAttributeResponse {
-  id: string;
-}
-export interface PutAttributeTranslationRequest {
-  label: string;
-}
-export interface PutAttributeTranslationResponse {
-  id: string;
-}
-export interface ReplaceAttributeOptionsRequest {
-  options: { option_id: string | null; label: string | null }[];
-}
-export interface ReplaceAttributeOptionsResponse {
-  id: string;
-}
-export interface GetAttributeResponse {
-  id: string;
-  value_type: "enum";
-  label: string | null;
-
-  locales: string[];
-  options: {
-    id: string;
-    label: string | null;
-    position: number;
-    locales: string[];
-  }[];
-}
-export interface ListAttributeItemDTO {
-  id: string;
-  label: string | null;
-
-  option_count: number;
-}
-export interface ListAttributesResponse {
-  items: ListAttributeItemDTO[];
-  total: number;
-  page: number;
-  page_size: number;
-}
-export interface GetCategoryResponse {
-  id: string;
-  label: string | null;
-
-  locales: string[];
-  parent_id: string | null;
-  child_count: number;
-}
-export interface ListCategoryItemDTO {
-  id: string;
-  label: string | null;
-
-  parent_id: string | null;
-  child_count: number;
-}
-export interface ListCategoriesResponse {
-  items: ListCategoryItemDTO[];
-  total: number;
-  page: number;
-  page_size: number;
-}
-export interface CreateCategoryRequest {
-  locale: string;
-  label: string;
-  parent_id: string | null;
-}
-export interface CreateCategoryResponse {
-  id: string;
-}
-export interface PutCategoryContentRequest {
-  label: string;
-}
-export interface PutCategoryContentResponse {
-  id: string;
-}
-export interface GetTagResponse {
-  id: string;
-  label: string | null;
-
-  locales: string[];
-}
-export interface ListTagItemDTO {
-  id: string;
-  label: string | null;
-}
-export interface ListTagsResponse {
-  items: ListTagItemDTO[];
-  total: number;
-  page: number;
-  page_size: number;
-}
-export interface CreateTagRequest {
-  locale: string;
-  label: string;
-}
-export interface CreateTagResponse {
-  id: string;
-}
-export interface PutTagTranslationRequest {
-  label: string;
-}
-export interface PutTagTranslationResponse {
-  id: string;
-}
-export interface MoveCategoryRequest {
-  parent_id: string | null;
-}
-export interface MoveCategoryResponse {
-  id: string;
-}
 export type ItemStatus = "draft" | "active" | "archived";
 export interface PriceDTO {
   regular_price: string;
@@ -143,18 +28,6 @@ export interface StockDTO {
   stock_quantity: number | null;
   stock_status: "in_stock" | "out_of_stock" | "on_backorder" | null;
   backorders: "no" | "notify" | "yes";
-}
-export interface AttributeDTO {
-  attribute_id: string;
-  option_ids: string[];
-  visible: boolean;
-  position: number;
-}
-export interface MetadataDTO {
-  key: string;
-  value_type: "text" | "decimal" | "boolean";
-  value: string | boolean;
-  position: number;
 }
 export interface ImageDTO {
   id: string;
@@ -186,11 +59,6 @@ export interface ReadItemDTO {
   available_for_publication: boolean;
   content: Record<string, string> | null;
   gallery: GalleryDTO | null;
-  attributes: AttributeDTO[];
-  metadata: MetadataDTO[];
-  category_ids: string[];
-  primary_category_id: string | null;
-  tag_ids: string[];
   created_at: string;
   updated_at: string;
   created_by: string;
@@ -265,9 +133,4 @@ export interface UpdateItemRequest {
     values: Record<string, string>;
   } | null;
   gallery?: GalleryDTO | null;
-  attributes?: AttributeDTO[];
-  metadata?: MetadataDTO[];
-  category_ids?: string[];
-  primary_category_id?: string | null;
-  tag_ids?: string[];
 }

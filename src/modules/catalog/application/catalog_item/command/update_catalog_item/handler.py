@@ -9,12 +9,6 @@ from src.modules.catalog.application.catalog_item.command.update_catalog_item.dt
 from src.modules.catalog.application.catalog_item.mutation_service import (
     CatalogItemMutationService,
 )
-from src.modules.catalog.application.catalog_item.port.attribute_definitions import (
-    AttributeDefinitionsPort,
-)
-from src.modules.catalog.application.catalog_item.port.classification_references import (
-    ClassificationReferencesPort,
-)
 from src.modules.catalog.application.catalog_item.port.content_schema import (
     CatalogItemContentSchemaPort,
 )
@@ -24,8 +18,6 @@ from src.modules.catalog.application.catalog_item.port.files import (
 from src.modules.catalog.application.port.currencies import CurrencyPort
 from src.modules.catalog.application.port.locales import LocalePort
 from src.modules.catalog.application.port.rich_text import RichTextSanitizerPort
-from src.modules.catalog.domain.category.value_object.identifier import CategoryIdVO
-from src.modules.catalog.domain.tag.value_object.identifier import TagIdVO
 from src.modules.catalog.domain.value_object.locale import LocaleVO
 from src.modules.catalog.domain.error import (
     CatalogError,
@@ -58,8 +50,6 @@ class UpdateCatalogItemHandler:
         schemas: CatalogItemContentSchemaPort,
         sanitizer: RichTextSanitizerPort,
         currencies: CurrencyPort,
-        definitions: AttributeDefinitionsPort,
-        references: ClassificationReferencesPort,
         files: CatalogImageFilesPort,
     ) -> None:
         """Принимает порты одного внешнего tenant UoW, без управления транзакцией."""
@@ -69,8 +59,6 @@ class UpdateCatalogItemHandler:
         self._schemas = schemas
         self._sanitizer = sanitizer
         self._currencies = currencies
-        self._definitions = definitions
-        self._references = references
         self._files = files
 
     async def execute(
@@ -92,13 +80,12 @@ class UpdateCatalogItemHandler:
         schema = None
         content = None
         if "content" in command.fields and command.content is not None:
-            schema = await self._schemas.get_default()
+            schema = await self._schemas.get_by_id(item.product_type_id)
+            rich_codes = {
+                block.code for block in schema.blocks if block.value_type == "rich_text"
+            }
             content = {
-                code: (
-                    self._sanitizer.clean(value)
-                    if code in {"desc", "short_desc"}
-                    else value
-                )
+                code: self._sanitizer.clean(value) if code in rich_codes else value
                 for code, value in command.content.values.items()
             }
         if (
@@ -109,38 +96,12 @@ class UpdateCatalogItemHandler:
                 "price_specification",
                 self._currencies.ensure_active(command.price_specification.currency),
             )
-        definitions = ()
-        if "attributes" in command.fields:
-            definitions = await field_result(
-                "attributes",
-                self._definitions.get_definitions(
-                    tuple(a.attribute_id for a in command.attributes or ())
-                ),
-            )
-        categories = frozenset()
-        if "category_ids" in command.fields:
-            categories = await field_result(
-                "category_ids",
-                self._references.categories(
-                    tuple(
-                        CategoryIdVO.from_value(i) for i in command.category_ids or ()
-                    )
-                ),
-            )
-        tags = frozenset()
-        if "tag_ids" in command.fields:
-            tags = await field_result(
-                "tag_ids",
-                self._references.tags(
-                    tuple(TagIdVO.from_value(i) for i in command.tag_ids or ())
-                ),
-            )
         if "gallery" in command.fields and command.gallery is not None:
             await field_result(
                 "gallery",
                 self._files.ensure_images(
                     command.tenant_id.uuid,
-                    tuple(i.file_id.uuid for i in command.gallery.images),
+                    tuple((i.file_id.uuid for i in command.gallery.images)),
                 ),
             )
         item.update(
@@ -157,14 +118,6 @@ class UpdateCatalogItemHandler:
             locale=locale,
             content=content,
             gallery=command.gallery,
-            attributes=command.attributes,
-            metadata=command.metadata,
-            category_ids=command.category_ids,
-            primary_category_id=command.primary_category_id,
-            tag_ids=command.tag_ids,
-            definitions=definitions,
-            existing_categories=categories,
-            existing_tags=tags,
             schema=schema,
             expected_schema_version=(
                 command.content.expected_schema_version if command.content else None

@@ -243,6 +243,7 @@ class CurrencyApplicationTests(unittest.IsolatedAsyncioTestCase):
             storage,
             ReferenceDataCurrencyValidator(ValidateCurrencyHandler(currencies)),
             settings_writer,
+            AsyncMock(),
         )
         return handler, [
             tenants,

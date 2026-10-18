@@ -63,7 +63,15 @@ class CreateTenantHandlerTests(unittest.IsolatedAsyncioTestCase):
             async def register(self, tenant_id):
                 steps.append("files")
 
+        class CatalogProvisioningStub:
+            async def initialize_defaults(self, tenant_id, actor_id):
+                steps.append("catalog")
+                self_tenant.assertEqual(tenant_id, tenant.id)
+                self_tenant.assertEqual(actor_id.uuid, created_user_id)
+
+        self_tenant = self
         use_case = CreateTenantHandler(
+            catalog_provisioning=CatalogProvisioningStub(),
             currency_validator=AsyncMock(),
             currency_settings_writer=AsyncMock(),
             tenant_onboarding_service=TenantOnboardingServiceStub(),
@@ -86,7 +94,7 @@ class CreateTenantHandlerTests(unittest.IsolatedAsyncioTestCase):
             )
         )
 
-        self.assertEqual(steps, ["tenant", "schema", "files", "admin"])
+        self.assertEqual(steps, ["tenant", "schema", "files", "admin", "catalog"])
         self.assertIsNotNone(recorded_context)
         self.assertEqual(
             recorded_context.schema_name,

@@ -23,5 +23,5 @@ class GetDefaultProductTypeHandler:
         """Отдаёт Default без возможности изменения схемы."""
         LocaleVO(query.locale)
         return GetDefaultProductTypeResultDTO(
-            await self._schemas.get_default(query.locale), query.locale
+            await self._schemas.get_by_code(locale=query.locale), query.locale
         )

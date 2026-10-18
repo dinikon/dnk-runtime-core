@@ -42,7 +42,7 @@ export function useCreateCatalogItem(
       try {
         const target = {
           path: `/catalog/items/${id}/edit`,
-          query: { locale: ctx.locale.value, focus: "name" },
+          query: { locale: ctx.locale.value, focus: "title" },
         };
         const result = await (direct
           ? ctx.router.replace(target)

@@ -6,17 +6,14 @@ import {
   type AutosaveState,
 } from "../src/modules/catalog/model/product-autosave.ts";
 
-test("separate editors preserve name, both descriptions and optional block semantics", () => {
-  const source = { name: "Original", short_desc: "Short", desc: "Full" };
-  let values = changeProductContent(source, "name", "Changed");
-  values = changeProductContent(values, "short_desc", "");
-  values = changeProductContent(values, "desc", undefined);
-  assert.deepEqual(values, { name: "Changed", short_desc: "" });
-  assert.deepEqual(source, {
-    name: "Original",
-    short_desc: "Short",
-    desc: "Full",
-  });
+test("title and body editors preserve optional body semantics", () => {
+  const source = { title: "Original", body: "Full" };
+  let values = changeProductContent(source, "title", "Changed");
+  values = changeProductContent(values, "body", "");
+  assert.deepEqual(values, { title: "Changed", body: "" });
+  values = changeProductContent(values, "body", undefined);
+  assert.deepEqual(values, { title: "Changed" });
+  assert.deepEqual(source, { title: "Original", body: "Full" });
 });
 
 test("typing in multiple content editors during a slow PATCH preserves the newest complete snapshot", async () => {
@@ -41,12 +38,11 @@ test("typing in multiple content editors during a slow PATCH preserves the newes
     async () => {},
     () => ({ fields: {}, message: "error" }),
   );
-  let values: Record<string, string> = { name: "Original", desc: "Full" };
-  values = changeProductContent(values, "name", "New name");
+  let values: Record<string, string> = { title: "Original", body: "Full" };
+  values = changeProductContent(values, "title", "New name");
   queue.stage("content", { content: { expected_schema_version: 1, values } });
   const flush = queue.flush();
-  values = changeProductContent(values, "short_desc", "New short");
-  values = changeProductContent(values, "desc", "New full");
+  values = changeProductContent(values, "body", "New full");
   queue.stage("content", { content: { expected_schema_version: 1, values } });
   release();
   await flush;
@@ -54,13 +50,13 @@ test("typing in multiple content editors during a slow PATCH preserves the newes
     {
       content: {
         expected_schema_version: 1,
-        values: { name: "New name", desc: "Full" },
+        values: { title: "New name", body: "Full" },
       },
     },
     {
       content: {
         expected_schema_version: 1,
-        values: { name: "New name", short_desc: "New short", desc: "New full" },
+        values: { title: "New name", body: "New full" },
       },
     },
   ]);
