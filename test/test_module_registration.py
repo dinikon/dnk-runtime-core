@@ -1,4 +1,4 @@
-"""Проверки состава API и tenant metadata после первого среза Catalog и удаления Inventory."""
+"""Проверки состава API и tenant metadata после удаления Inventory и Channels."""
 
 import unittest
 from pathlib import Path
@@ -18,26 +18,42 @@ from src.modules.tenant_persistence import HISTORICAL_TENANT_TABLE_NAMES
 class ModuleRegistrationTests(unittest.TestCase):
     """Проверяет отсутствие удалённого модуля и доступность его соседей."""
 
-    def test_inventory_source_and_console_module_are_absent(self) -> None:
+    def test_removed_source_and_console_modules_are_absent(self) -> None:
         """Удалённый модуль не остаётся в исходниках backend и консоли."""
         root = Path(__file__).resolve().parents[1]
         for relative_path in (
             "src/modules/inventory",
             "src/modules/warehousing",
             "frontends/apps/console/src/modules/inventory",
+            "src/modules/channels",
+            "frontends/apps/console/src/modules/channels",
+            "src/config/feature/channels_config.py",
         ):
             self.assertFalse((root / relative_path).exists())
 
-    def test_routes_include_catalog_and_channels_but_exclude_inventory(self) -> None:
-        """Сборка API содержит Catalog и Channels, Inventory отсутствует."""
+    def test_routes_include_neighbors_but_exclude_removed_modules(self) -> None:
+        """Сборка API сохраняет соседние модули без контрактов Inventory и Channels."""
         app = FastAPI()
         app.include_router(router)
-        paths = set(app.openapi()["paths"])
+        schema = app.openapi()
+        paths = set(schema["paths"])
         self.assertTrue(any(path.startswith("/api/console/catalog") for path in paths))
         self.assertFalse(
             any(path.startswith("/api/console/inventory") for path in paths)
         )
-        self.assertTrue(any(path.startswith("/api/console/channels") for path in paths))
+        self.assertFalse(
+            any(path.startswith("/api/console/channels") for path in paths)
+        )
+        self.assertFalse(
+            any("channel" in name.lower() for name in schema["components"]["schemas"])
+        )
+        self.assertFalse(
+            any(
+                "channels" in operation.get("tags", ())
+                for methods in schema["paths"].values()
+                for operation in methods.values()
+            )
+        )
         self.assertTrue(
             {"/api/console/files/providers/", "/api/console/files/buckets/"} <= paths
         )
@@ -59,7 +75,13 @@ class ModuleRegistrationTests(unittest.TestCase):
             <= tables
         )
         self.assertTrue({"skus", "warehouses"}.isdisjoint(tables))
-        self.assertTrue({"channels", "channel_publications"} <= tables)
+        retired_channels = {
+            "channels",
+            "channel_publications",
+            "channel_publication_import_runs",
+        }
+        self.assertTrue(retired_channels.isdisjoint(tables))
+        self.assertTrue(retired_channels <= HISTORICAL_TENANT_TABLE_NAMES)
         self.assertTrue(
             {"files_providers", "files_buckets", "files_registry"} <= tables
         )

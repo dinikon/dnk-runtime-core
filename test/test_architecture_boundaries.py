@@ -35,6 +35,7 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                                 "src.modules.schema_registry",
                                 "src.modules.runtime_data",
                                 "src.modules.inventory",
+                                "src.modules.channels",
                             )
                         ),
                         msg=f"{path} imports removed module {module_name}",

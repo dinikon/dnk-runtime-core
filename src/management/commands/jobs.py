@@ -12,12 +12,6 @@ from src.modules.files.presentation.jobs.trash_cleanup import (
     ensure_trash_cleanup_jobs,
     JOB_TYPE as FILES_TRASH_JOB_TYPE,
 )
-from src.modules.channels.application.publication_import_run.service import (
-    JOB_TYPE as CHANNEL_IMPORT_JOB_TYPE,
-)
-from src.modules.channels.presentation.publication_import_run.depends import (
-    PublicationImportJobRuntime,
-)
 from src.modules.price_lists.presentation.depends.application import (
     get_synchronize_price_list_use_case,
     get_cleanup_price_list_use_case,
@@ -148,9 +142,6 @@ async def handle_worker(_args: argparse.Namespace) -> int:
                 db_helper.session_factory
             ),
             FILES_TRASH_JOB_TYPE: FilesTrashCleanupJobHandler(
-                db_helper.session_factory
-            ),
-            CHANNEL_IMPORT_JOB_TYPE: PublicationImportJobRuntime(
                 db_helper.session_factory
             ),
         }

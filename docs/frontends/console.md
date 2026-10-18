@@ -324,8 +324,11 @@ The new tenant migration `0026_catalog_attribute_ids` removes attribute and opti
 codes and their uniqueness constraints, preserving IDs, translations and product
 assignments. Product SQL and future variable-product behavior are preserved in
 the [Catalog plan](../plan/catalog.md). Release the migration with the new backend;
-the previous backend still requires those columns. External Channels publications
-continue to support their existing read capabilities.
+the previous backend still requires those columns.
+
+The Channels module and its navigation group have been removed. Previous
+`/channels/...` links use the existing catch-all redirect to `/dashboard`.
+No channel API requests or import polling remain in the Console.
 
 ## File Storage
 

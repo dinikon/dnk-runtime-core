@@ -1,8 +1,5 @@
 """Регистрация статических tenant-моделей и их исторических имён."""
 
-import src.modules.channels.infrastructure.persistence.models.external_publication  # noqa: F401
-import src.modules.channels.infrastructure.persistence.models.publication_import_run  # noqa: F401
-import src.modules.channels.infrastructure.persistence.models.channel  # noqa: F401
 import src.modules.crm.infrastructure.persistence.models.company  # noqa: F401
 import src.modules.crm.infrastructure.persistence.models.contact  # noqa: F401
 import src.modules.crm.infrastructure.persistence.models.contact_company  # noqa: F401
