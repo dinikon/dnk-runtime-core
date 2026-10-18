@@ -9,5 +9,5 @@ class UnboundCatalogItemUsage:
     async def used_ids(
         self, identifiers: tuple[CatalogItemIdVO, ...]
     ) -> frozenset[CatalogItemIdVO]:
-        """Текущие observed Channels не содержат связей с CatalogItem."""
+        """Возвращает пустой набор, пока внешние связи с CatalogItem отсутствуют."""
         return frozenset()

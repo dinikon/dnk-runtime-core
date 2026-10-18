@@ -64,7 +64,7 @@ SQL-колонки catalog_attributes.code и catalog_attribute_options.code и 
 ID, переводы, позиции, назначения, FK и готовность к будущим осям сохраняются.
 Downgrade создаёт технические коды из UUID; исходные коды требуют резервной копии.
 Console не показывает и не запрашивает коды; отсутствие перевода обозначается
-«Нет перевода». Сопоставления Channels используют attribute_id/option_id.
+«Нет перевода». Все назначения используют attribute_id/option_id.
 
 ### Console
 
@@ -92,8 +92,8 @@ SQL товара, регистрация и история миграций со
 revision пассивны: INSERT=1, UPDATE сохраняет старое значение. Сохранена готовность
 SQL хранить variable/variant, оси и selections/defaults. Активные репозитории
 принимают только kind=simple AND parent_id IS NULL. Старые clear читаются как
-отсутствие, запись выполняется с mode=set. Channels external publications read
-сохраняется. Publication snapshot содержит locale/as_of и значения без ревизий.
+отсутствие, запись выполняется с mode=set. Publication snapshot содержит
+locale/as_of и значения без ревизий.
 
 Обязательны unit/HTTP/PostgreSQL, конкурентные записи и два tenant, архитектурный
 checklist, Black, frontend lint/typecheck/build, тесты очереди и браузерные сценарии
@@ -105,10 +105,10 @@ desktop/mobile. Upgrade/downgrade/upgrade и autogenerate drift выполняю
 
 ## Следующий этап v2: сохранённая полная спецификация
 
-Ниже полностью сохранён исходный план единой модели CatalogItem. Его требования
+Ниже сохранён план единой модели CatalogItem. Его требования
 к VARIABLE как корню, VARIANT как внутренней Entity, осям, полным уникальным
-комбинациям, default selection, наследованию, переходам вида и будущим Channels
-representations относятся к этапу v2, а не к текущему MVP v1. Вариативность
+комбинациям, default selection, наследованию и переходам вида относятся
+к этапу v2, а не к текущему MVP v1. Вариативность
 возвращается явной реализацией поверх сохранённой SQL-схемы.
 
 Описания замены старого Product/Variant, переписывания baseline и ранее выполненных
@@ -142,9 +142,7 @@ representations относятся к этапу v2, а не к текущему
 
 Нормативный источник: [архитектурные правила](../architecture/AGENTS.md).
 Связанные документы: [текущая реализация Catalog](../modules/catalog.md),
-[Files](../modules/files.md), [Channels](../modules/channels.md),
-[план Channels](channels-integrations.md),
-[исследование платформ](channel-platforms/README.md),
+[Files](../modules/files.md),
 [tenant-миграции](../data/tenant-migrations.md),
 [Console](../frontends/console.md).
 
@@ -243,8 +241,8 @@ Application-порт поиска владельца, загружает VARIABL
 Сохраняем действующее правило структуры: VARIABLE имеет непустой набор осей
 и минимум два VARIANT, включая черновики. Каждый selection полон, допустим
 и уникален внутри родителя. Default selection отсутствует либо совпадает
-с существующей комбинацией. Неполная внешняя карточка остаётся наблюдаемой
-публикацией Channels до явного создания допустимого CatalogItem.
+с существующей комбинацией. Импорт создаёт CatalogItem только после проверки
+полноты и допустимости его состояния.
 
 У каждого узла свои audit-поля и revision. Любая мутация дочерней записи
 увеличивает revision корня и изменённого узла. Команды принимают
@@ -253,9 +251,8 @@ Application-порт поиска владельца, загружает VARIABL
 Общие значения родителя не копируются в строки детей и не изменяют их audit
 при обычном переопределении родительского значения.
 
-Все ID остаются UUID в соответствии с проектом. Приблизительное `integer`
-в таблице Woo не меняет внутренний формат ID. Внешние числовые ID принадлежат
-Channels и не используются как PK Catalog.
+Все ID остаются UUID в соответствии с проектом. Внешние числовые ID
+не используются как PK Catalog.
 
 ## 3. Поля CatalogItem, единицы и наличие
 
@@ -353,7 +350,7 @@ selection и audit всегда собственные. Цена и virtual не
 Enum-характеристики наследуются по attribute ID с replace/clear; metadata —
 по key с set/clear. Parent key сохраняет своё место, новые ключи идут следом
 в собственном порядке. Metadata принимает только text/decimal/boolean;
-канонические ключи зарезервированы, native payload остаётся в Channels.
+канонические ключи зарезервированы, внешний payload не входит в metadata Catalog.
 Галерея наследуется целиком по locale, replace заменяет набор, empty блокирует
 наследование, delete возвращает наследование. Category/Tag принадлежат SIMPLE.
 
@@ -378,9 +375,9 @@ ProductType — отдельная схема, не таблица товаро�
 
 Коды `title`, `description`, `short_description` старой модели заменяются
 на `name`, `desc`, `short_desc` в новых контрактах и seed. Переноса старых
-значений и совместимых aliases нет. Внешние названия полей Woo преобразует
-Channels mapper. PRODUCT/VARIANT scope дублированного хранения удаляется;
-схема разрешает поля по роли kind, общий владелец значения — CatalogItem.
+значений и совместимых aliases нет. PRODUCT/VARIANT scope дублированного
+хранения удаляется; схема разрешает поля по роли kind, общий владелец
+значения — CatalogItem.
 
 Схема валидирует состав, типы и обязательность контента. Мультиязычность
 обеспечивается хранением значений по `(catalog_item_id, locale, block_id)`:
@@ -401,7 +398,6 @@ locale читаются. Нет языка по умолчанию tenant, уг�
 Товар может быть создан без переводов. Сохранение own-перевода корня требует
 name; у VARIANT допускается частичный набор override без собственного name.
 Пустое name отклоняется, пустые desc/short_desc являются собственными значениями.
-Обязательность effective name для публикации проверяет Channels preview.
 Rich text очищается Infrastructure-адаптером за Application-портом до проверки
 результата Domain; необработанный внешний HTML не показывается в Console.
 
@@ -507,7 +503,7 @@ Category имеет собственный parent ID и переводы. Дер
 у корня цена очищается, virtual=false, manage_stock=false. Измерения остаются
 defaults семьи. SKU корня не остаётся SKU семейства.
 Категории/теги не могут остаться у VARIABLE: при непустых назначениях переход
-отклоняется до их явного снятия. Они не переносятся автоматически в Channels.
+отклоняется до их явного снятия.
 
 Переход VARIABLE → SIMPLE также сохраняет ID корня и явно выбирает ребёнка,
 чьи effective продаваемые данные и локализованный контент/галерея будут
@@ -516,7 +512,7 @@ defaults семьи. SKU корня не остаётся SKU семейства
 перечнем затрагиваемых ID и подтверждением потери их данных в команде.
 Категории/теги новой SIMPLE назначаются отдельными сценариями.
 
-ID удалённых детей не подменяется ID корня. После появления Channels bindings
+ID удалённых детей не подменяется ID корня. После появления внешних связей
 переход/удаление с зависимостями требует согласованного плана обработки связей
 либо отклоняется; внешние карточки не удаляются автоматически. Безопасность
 идентичности проверяется по CatalogItem ID и роли, а не только по сохранению
@@ -664,9 +660,9 @@ Write port работает с корнем CatalogItem; query port принад
 и role, schema/definition/reference ports — immutable snapshots.
 Files port использует потребительские DTO и stream contract, не Files Entity.
 Locale/currency adapters используют публичные Application-контракты reference_data.
-Usage port нужен для удаления/переходов; до появления bindings адаптер явно
-отражает отсутствие этого вида зависимостей, а не молча игнорирует их после
-реализации Channels. HTTP-контракты не подменяют межмодульный snapshot.
+Usage port нужен для удаления/переходов; пока внешних связей нет, адаптер
+возвращает пустой набор. При появлении связей он проверяет публичный контракт
+потребителя. HTTP-контракты не подменяют межмодульный snapshot.
 
 ## 10. SQL, ограничения, транзакции и запросы
 
@@ -705,7 +701,7 @@ nullable weight/length/width/height и отдельные unit-столбцы. M
 
 Таблиц `catalog_products`, `catalog_variants`, раздельных product/variant
 translations/content/media в новой схеме нет. Контент и metadata хранятся
-нормализованно, без JSON/JSONB товарного документа. Native JSON остаётся у Channels.
+нормализованно, без JSON/JSONB товарного документа или внешнего native payload.
 
 ### 10.2. Ограничения и индексы
 
@@ -765,8 +761,8 @@ Repositories не делают commit/rollback и не выбирают tenant s
 
 CatalogItemChanged фиксирует root ID, изменённые item ID и root revision;
 после появления потребителя сообщение записывается в Outbox той же транзакции.
-Channels обновляет готовность представлений после commit. Внешние HTTP-вызовы
-доставки не выполняются внутри длительной SQL-транзакции Catalog.
+Потребитель обрабатывает событие после commit. Внешние HTTP-вызовы
+не выполняются внутри длительной SQL-транзакции Catalog.
 
 ### 10.4. Чтение и производительность
 
@@ -839,140 +835,18 @@ downgrade/upgrade новой baseline и отсутствие autogenerate drift
 schema; их успешное выполнение для старой истории не является критерием новой.
 Глобальные миграции и команды tenant bootstrap сохраняют своих владельцев.
 
-## 12. Channels: bindings, representations, mappings и overrides
+## 12. Публичный контракт для потребителей
 
-Channels остаётся владельцем внешних публикаций и способов их представления.
-Catalog предоставляет канонический effective snapshot; платформенные поля
-и внешний статус не переносятся в CatalogItem. Текущие read-коннекторы и загрузка
-native/типизированных observed-проекций сохраняются; наличие плана не включает
-автоматически исходящую запись адаптеров.
+Catalog предоставляет собственный batch Application snapshot по item IDs,
+locale и as_of. Результат содержит эффективные значения и самостоятельные DTO,
+без ORM, Aggregate objects, секретов и платформенного JSON. Потребитель
+открывает краткий согласованный read UoW и вызывает публичный контракт через
+свой Infrastructure adapter.
 
-| Состояние | Содержание |
-| --- | --- |
-| Observed | Последнее чтение источника, raw payload, read projection, внешняя идентичность и время |
-| Desired | Effective CatalogItem snapshot + publication schema + mappings + overrides |
-| Delivery | Зафиксированная версия плана, операции, отправка, принятие/проверка и ошибки |
-
-```mermaid
-flowchart LR
-  SRC["API / XML источника"] --> OBS["Observed publications"]
-  OBS --> IMP["Import mapping + preview"]
-  IMP -->|"Явные use cases"| CAT["CatalogItem: own + effective"]
-  CAT --> REP["Representation + mappings + overrides"]
-  REP --> DES["Desired publication"]
-  DES --> PLAN["Publication plan с ревизиями"]
-  PLAN --> API["API adapter"]
-  PLAN --> XML["XML feed builder"]
-```
-
-### 12.1. Независимая топология и единая идентичность
-
-ProductRepresentation сохраняется как модель представления Channels;
-слово Product в её имени не означает сохранение старого агрегата Product.
-RepresentationItem имеет роль external parent/variant/single и optional
-`source_catalog_item_id`. Набор source items representation не ограничен
-одним root ID: допускается объединение нескольких SIMPLE.
-Synthetic parent в Channels не требует фиктивного VARIABLE в Catalog.
-
-Binding связывает внешнюю публикацию с representation item. У источника
-representation item один CatalogItem ID либо synthetic role без источника.
-Много источников в одном внешнем parent задаётся явными правилами композиции
-представления; scalar FK не заменяет эту политику.
-
-| Каталог | Стратегия Channels | Внешняя структура |
-| --- | --- | --- |
-| SIMPLE A | SINGLE_ITEM | Один simple item из A |
-| VARIABLE P с VARIANT V1/V2 | PARENT_WITH_VARIANTS | Parent из P и variations из V1/V2 |
-| VARIABLE P с VARIANT V1/V2 | VARIANTS_AS_ITEMS | Несколько simple items из effective V1/V2; external parent не нужен |
-| Несколько SIMPLE A/B | ITEMS_AS_VARIANTS | Synthetic external parent и variations из A/B; оси/selection принадлежат representation |
-
-Один CatalogItem может участвовать в нескольких representations и каналах.
-Канонический parent_id не обязан совпадать с external parent. Нельзя менять
-kind только потому, что площадка требует другую форму публикации.
-
-Для группирования SIMPLE задаются внешние оси, selection каждого source,
-источник name/description/галереи/категорий внешнего родителя и общие defaults.
-Противоречащие значения не выбираются случайно; preview требует явного mapping
-или override. Это особенно важно, поскольку классификация MVP назначена
-только SIMPLE, а не VARIABLE/VARIANT.
-
-Экспорт общего stock source в независимые простые публикации не создаёт
-независимые остатки. Resolver явно сообщает source ID и проверяет, можно ли
-передать общий учёт или нужна отдельная стратегия обновления/ограничения.
-Поддержка topology задаётся capabilities платформы, а не только типом CatalogItem.
-
-### 12.2. Мапперы, приоритеты и импорт
-
-Mapping адресует direction, CatalogItem kind, effective field/block code,
-locale, product_type code/version, external resource role и schema version.
-Старый discriminator PRODUCT/VARIANT заменяется kind/ролью источника;
-внешние поля `description`, `short_description` и прочие адресует platform mapper.
-В MVP внутренний тип только default, но mapping не зашивает его поля в коннектор.
-
-Приоритет для допустимого external поля:
-
-```text
-item override
-  → representation override
-  → явное field mapping из effective CatalogItem / источников композиции
-  → разрешённый default PublicationSchema
-```
-
-Catalog наследование вычисляется перед этими уровнями. Channels override
-не становится own CatalogItem value и не меняет родителя/детей в Catalog.
-Inherit/set/clear различаются на каждом уровне; locale и source ID показаны
-в preview. Пустая строка, false, 0 не означают отсутствие override.
-
-Атрибуты, options, категории и теги имеют отдельные mappings внешних ID.
-Ключи включают channel ID, connection revision и область внешнего справочника;
-совпадение названия/SKU только предлагает кандидата. Никаких автоматических
-bindings или группирования по похожим названиям.
-
-External identity сохраняет channel ID, connection revision, resource type,
-external ID и parent scope, когда его требует адаптер. Смена подключения
-не переносит bindings в новый магазин автоматически. Binding creation,
-rebind, remove и изменение topology — отдельные сценарии Channels.
-
-Импорт направляется через единые CatalogItem use cases и отдельный import
-mapping. External variable может создать VARIABLE+VARIANT либо несколько
-SIMPLE по выбранному плану. Несколько external simple могут составить семейство
-после явного сопоставления осей и defaults. Экспортное преобразование не считается
-обратимым автоматически. Повтор загрузки observed не переписывает Catalog,
-локальные overrides или заявленное наличие без политики владельца поля.
-
-GetCatalogItemsPublicationSnapshotDTO поддерживает batch item IDs и возвращает
-только согласованные данные: role/kind/root/parent IDs, revisions, schema,
-locale/as_of, effective контент/enum/медиа, sellable price, stock source,
-measurements и доступную классификацию. Нет ORM, Aggregate objects, secrets
-и платформенного JSON. Channels объявляет свой потребительский порт;
-Infrastructure adapter вызывает публичный Application-контракт Catalog.
-
-### 12.3. Мастер и доставка
-
-Сохраняются шаги мастера: подключение/capabilities, загрузка публикаций,
-внешних справочников, PublicationSchema, связи CatalogItem и topology,
-field mappings, dictionary mappings, разрешённые внешние операции,
-preview, направление обмена и расписание. Прогресс хранится на сервере;
-открытие экрана читает локальные проекции без скрытого внешнего вызова.
-
-Preview показывает own/effective Catalog origin, Channels override origin,
-ошибки контента/атрибутов/медиа/цены/stock source и неподдерживаемых операций.
-Нельзя обещать создание публикации или запись справочника, если коннектор
-поддерживает только read. Пустой внешний источник допускает настройку экспорта.
-
-API/XML используют одну проверенную desired-проекцию. Platform mapper
-сериализует её, не выбирает произвольно владельца цены или locale.
-API поддерживает зависимости внешних parent/children, отдельные результаты,
-повторы с идемпотентностью/сверкой. XML имеет свой диалект, стабильные ID,
-escaping/валидацию и атомарную замену готового файла.
-
-План фиксирует source revisions, schema/mapping/override versions,
-connection revision, locale/as_of и срок актуальности цены. Изменение Catalog,
-родительского default, topology или настроек помечает desired устаревшим.
-Поздний ответ старой отправки не подтверждает новый план. Генерация,
-отправка, принятие и подтверждение различаются; XML/read-only канал
-не получает вымышленного подтверждения без наблюдаемого результата.
-Удаление CatalogItem/binding/topology не удаляет внешние ресурсы неявно.
+Usage port проверяет внешние зависимости удаления и переходов. Пока связей
+нет, адаптер явно возвращает пустой набор. При появлении потребителя его
+проверка связей реализуется через публичный контракт; связанные события
+записываются в Outbox общей транзакции.
 
 ## 13. Console и замена публичных контрактов
 
@@ -993,7 +867,6 @@ connection revision, locale/as_of и срок актуальности цены.
 | Глобальные атрибуты | /catalog/attributes | enum definition/options/переводы, protection использования |
 | Категории | /catalog/categories | Дерево по ветвям, create/move/translation/delete |
 | Теги | /catalog/tags | create/translation/delete/list |
-| Channels | Существующие маршруты /channels/... | Master/bindings/mappings/override/preview/delivery из раздела 12 |
 
 ProductType/ContentBlock редакторы и меню удаляются; доступен read-only просмотр
 фиксированной схемы Default. Старые Product/Variant HTTP DTO, mapper и запросы
@@ -1001,9 +874,9 @@ ProductType/ContentBlock редакторы и меню удаляются; до
 переходят на item/root ID. Прикладное слово «товар» может остаться в UI;
 техническая модель CatalogItem не должна перегружать пользовательские формы.
 
-Список по умолчанию содержит SIMPLE/VARIABLE, но поиск источника для Channels
-может включать VARIANT. Цены и наличие редактора используют канонические
-спецификации, вычисляемые поля read-only. Parent stock показывает общий
+Список по умолчанию содержит SIMPLE/VARIABLE; поиск может включать VARIANT.
+Цены и наличие редактора используют канонические спецификации, вычисляемые
+поля read-only. Parent stock показывает общий
 источник, а не редактируемую локальную копию. VARIANT редактор показывает
 наследуемые измерения с единицами и источниками. Каждое поле имеет выбор g/kg
 либо cm/m; пустое поле не создаёт значение. Смена единицы точно пересчитывает
@@ -1011,7 +884,7 @@ ProductType/ContentBlock редакторы и меню удаляются; до
 
 Locale выбирается явно и включается в URL/query key. Галерея не переключает
 язык скрыто. Query keys включают tenant, сценарий, item/root ID, locale,
-filters/pagination; Channels дополнительно channel/connection revision.
+filters/pagination.
 После изменения parent инвалидируются effective данные детей и preview.
 
 Каждый раздел сохраняет свой use case. В UI есть dirty/pending/error, отмена
@@ -1036,14 +909,10 @@ Mutation успех показывается после ответа серве�
 | 2. Persistence и миграции | Один CatalogItemModel, общие связи, repositories/mappers, tenant registration, новая baseline и цепочка | Fresh upgrade, реальные FK/индексы, rollback, один head, autogenerate без drift |
 | 3. Application и HTTP | Все MVP-команды/запросы раздела 9, Depends, публичный batch snapshot | Отдельные DTO/request/response, общий UoW, tenant/CSRF/409, нет старых Product/Variant API |
 | 4. Медиа и Console | Files consumer adapter, upload/stream, galleries; существующий Catalog frontend | Рабочее главное/порядок/локали/наследование, формы цены/наличия/размеров, справочники, UI static/browser checks |
-| 5. Channels representations | CatalogItem bindings/порт, четыре topology, schemas/mappings/overrides и import preview | Все связи используют один item ID, grouping/splitting независимы от kind, origin/conflicts проверены |
-| 6. Доставка и синхронизация | Адаптеры по capabilities, API/XML планы, версии/расписание/повторы | Полный/частичный успех, outdated plans, общий stock source, цена на as_of, честные статусы |
 
 Этапы 1–4 заменяют текущий Catalog и образуют MVP этой переработки.
-Этапы 5–6 сохраняют и адаптируют направление Channels; завершение Catalog
-не объявляет исходящую синхронизацию уже реализованной. Необходимый snapshot
-и usage port включаются в этап 3, чтобы дальнейшие связи не требовали
-возвращения к двум товарным моделям.
+Публичный snapshot и usage port включаются в этап 3 и сохраняются
+как самостоятельные контракты Catalog.
 
 Старая реализация не получает совместимый слой и не остаётся вторым владельцем.
 Существующие тесты инвариантов справочников/локалей/tenant можно адаптировать;
@@ -1051,7 +920,7 @@ Mutation успех показывается после ответа серве�
 миграционных данных заменяются. Все вспомогательные paths/fixtures/imports,
 API registration и frontend routes пересматриваются в том же проекте.
 После замены актуализируются `docs/modules/catalog.md`, tenant migration docs,
-Channels contracts и документы срезов. Исторические отчёты не выдаются
+публичные контракты и документы срезов. Исторические отчёты не выдаются
 за проверки новой модели.
 
 ## 15. Архитектурный checklist и проверка реализации
@@ -1063,7 +932,7 @@ Channels contracts и документы срезов. Исторические 
 2. Domain чистый, без SQLAlchemy/HTTP/I/O/logging; Application зависит от Domain
    и портов. Infrastructure реализует порты, ORM не выходит наружу.
 3. Межмодульные связи только IDs/Application contracts/immutable snapshots,
-   без чужой ORM или внутреннего агрегата. Files/Channels/reference_data
+   без чужой ORM или внутреннего агрегата. Files/reference_data
    адаптеры находятся в Infrastructure потребителя.
 4. Aggregate/Entity создаются и восстанавливаются явными фабриками;
    состояние меняется доменными методами. `__post_init__` только VO.
@@ -1108,8 +977,6 @@ Channels contracts и документы срезов. Исторические 
 | Persistence | Self/composite FK, роли владельцев, нормализованные значения, optimistic revision/family lock, независимые семьи параллельны |
 | Migrations | Удалены старые Catalog revisions, один head, base→head в двух tenants, новый downgrade, onboarding rollback, no drift |
 | Queries | Counts без JOIN-умножения, batch locale/content/media, SQL-count не растёт на строку списка, get child без братьев |
-| Channels | Четыре topology, synthetic parent, единый item ID, mapping/origins/overrides, import conflicts и rebind/deletion policy |
-| Delivery | Capabilities, stock source, source/schema revisions, partial retry, stale reply, API/XML state и media access |
 | Console | Все MVP use cases, own/effective, no editable Default, locale/media, dirty/pending/409/204, tenant switch |
 
 Переписать `test/test_catalog.py`, `test/test_catalog_variable.py`,
@@ -1133,16 +1000,14 @@ npm run build:console
 Выполнить браузерные сценарии для реализованного UI. Проверять EXPLAIN ANALYZE
 там, где заявлено улучшение запросов; без замеров не объявлять новую схему
 быстрее. В итоговом отчёте разделять выполненные проверки, пропуски окружения
-и отложенные этапы Channels.
+и отложенные этапы Catalog.
 
 ## 16. Что уточняется при детализации, а не меняет выбранную архитектуру
 
 - Конкретные лимиты изображений/размера файла и поддержанные MIME, cache policy
-  consumer endpoint и способ доставки media каждой внешней платформе.
+  consumer endpoint.
 - Payload input/result DTO каждой строки раздела 9 и точные SQL precision/scale,
   длины строк/ограничения pagination, индексы под реальные фильтры.
-- Матрицы capabilities исходящего Prom/Woo/других коннекторов, XML-диалекты,
-  правила rebind/deletion и идемпотентности каждой внешней операции.
 - Дальнейшая граница Inventory/Pricing, если появится самостоятельный учёт:
   новый владелец вводится отдельным решением, без двух одновременно изменяемых
   источников цены/наличия. Текущий Catalog MVP от этого не зависит.
@@ -1178,9 +1043,7 @@ optional ожидаемые root revisions. Для чтения деактиви
 Галерея ограничена 100 изображениями на locale, upload PNG/JPEG/WebP до 10 MiB
 с проверкой сигнатуры и MIME. Files должен быть заранее подготовлен своим модулем.
 
-Публичный Application snapshot адаптирован для будущих representations/mappings/
-overrides Channels. Существующие observed/read коннекторы продолжают работать.
-Bindings и исходящая доставка этапов 5–6 по-прежнему не реализованы; текущий usage
-adapter пустой, поскольку observed Channels не содержит Catalog source ссылок.
-При добавлении bindings этот адаптер обязательно заменяется проверкой владельца
-Channels, а consumer события связываются с Outbox общего UoW.
+Публичный Application snapshot остаётся самостоятельным контрактом Catalog.
+Текущий usage adapter возвращает пустой набор при отсутствии внешних связей.
+При добавлении потребителей адаптер проверяет их публичные контракты,
+а необходимые события записываются в Outbox общего UoW.

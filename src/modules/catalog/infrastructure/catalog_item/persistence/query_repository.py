@@ -179,7 +179,7 @@ class SqlAlchemyCatalogItemQueryRepository:
     async def snapshot(
         self, query: GetCatalogItemsPublicationSnapshotQuery, as_of: datetime
     ) -> GetCatalogItemsPublicationSnapshotResultDTO:
-        """Отдаёт согласованный batch контракт для адаптеров Channels."""
+        """Отдаёт согласованный batch контракт для внешних потребителей Catalog."""
         if not 1 <= len(query.item_ids) <= 1000 or len(set(query.item_ids)) != len(
             query.item_ids
         ):

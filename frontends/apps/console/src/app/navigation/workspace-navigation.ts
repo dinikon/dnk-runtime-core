@@ -2,7 +2,6 @@ import {
   Building2,
   FolderTree,
   Tags,
-  Plug,
   FileSpreadsheet,
   LifeBuoy,
   ShoppingBasket,
@@ -25,10 +24,6 @@ export const workspaceNavigation: WorkspaceNavigation = {
           icon: FileSpreadsheet,
         },
       ],
-    },
-    {
-      title: "Интеграции",
-      items: [{ title: "Каналы", url: "/channels", icon: Plug }],
     },
     {
       title: "CRM",

@@ -8,6 +8,7 @@ from uuid import uuid4
 import httpx
 from alembic import command
 from sqlalchemy import inspect, text
+from sqlalchemy.engine import Connection
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -18,9 +19,103 @@ from src.modules.shared.infrastructure.persistence.global_migrations import (
 from src.modules.shared.infrastructure.persistence.alembic_lock import (
     serialized_alembic,
 )
+from src.modules.shared.domain.jobs.scheduled_job_status import ScheduledJobStatus
 
 
 class GlobalMigrationsPostgresTests(unittest.IsolatedAsyncioTestCase):
+    async def test_channel_jobs_removal_is_exact_transactional_and_not_reversed(
+        self,
+    ) -> None:
+        """Удаляет все статусы импорта, сохраняя чужие jobs при retry и downgrade."""
+        migrator = GlobalMigrator()
+        config = migrator.config()
+
+        def prepare(connection: Connection) -> None:
+            """Разворачивает прежнюю global-ревизию для заполнения исторических jobs."""
+            config.attributes["connection"] = connection
+            command.upgrade(config, "0006_reference_data")
+
+        def downgrade(connection: Connection) -> None:
+            """Откатывает очистку без воссоздания удалённых заданий."""
+            config.attributes["connection"] = connection
+            command.downgrade(config, "0006_reference_data")
+
+        async with self.engine.begin() as connection, serialized_alembic():
+            await connection.run_sync(prepare)
+        insert_job = text(
+            "INSERT INTO public.scheduled_jobs "
+            "(id, tenant_id, job_type, payload, run_at, status) "
+            "VALUES (:id, :tenant, :kind, '{\"preserved\": true}', now(), :status)"
+        )
+        tenant_ids = (uuid4(), uuid4())
+        async with self.engine.begin() as connection:
+            for tenant_id in tenant_ids:
+                for status in ScheduledJobStatus:
+                    await connection.execute(
+                        insert_job,
+                        {
+                            "id": uuid4(),
+                            "tenant": tenant_id,
+                            "kind": "channels.publication_import",
+                            "status": status.value,
+                        },
+                    )
+            for kind, tenant_id in (
+                ("price_list.sync", tenant_ids[0]),
+                ("files.purge", tenant_ids[1]),
+                ("reference_data.refresh", None),
+                ("channels.publication_import.retry", tenant_ids[0]),
+            ):
+                await connection.execute(
+                    insert_job,
+                    {
+                        "id": uuid4(),
+                        "tenant": tenant_id,
+                        "kind": kind,
+                        "status": "scheduled",
+                    },
+                )
+            before = (
+                await connection.execute(
+                    text("SELECT * FROM public.scheduled_jobs ORDER BY id")
+                )
+            ).all()
+        with self.assertRaisesRegex(RuntimeError, "rollback cleanup"):
+            async with self.engine.begin() as connection:
+                await migrator.upgrade(connection)
+                raise RuntimeError("rollback cleanup")
+        async with self.engine.connect() as connection:
+            self.assertEqual(
+                await migrator.current(connection), ("0006_reference_data",)
+            )
+            self.assertEqual(
+                (
+                    await connection.execute(
+                        text("SELECT * FROM public.scheduled_jobs ORDER BY id")
+                    )
+                ).all(),
+                before,
+            )
+        async with self.engine.begin() as connection:
+            await migrator.upgrade(connection)
+            await migrator.upgrade(connection)
+        async with self.engine.begin() as connection, serialized_alembic():
+            await connection.run_sync(downgrade)
+        async with self.engine.begin() as connection:
+            await migrator.upgrade(connection)
+            self.assertEqual(
+                (
+                    await connection.execute(
+                        text("SELECT * FROM public.scheduled_jobs ORDER BY id")
+                    )
+                ).all(),
+                [
+                    row
+                    for row in before
+                    if row.job_type != "channels.publication_import"
+                ],
+            )
+
     async def asyncSetUp(self):
         value = os.environ.get("DNK_TEST_DATABASE_URL")
         if not value:

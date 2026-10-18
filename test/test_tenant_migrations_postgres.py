@@ -19,7 +19,7 @@ from uuid import UUID, uuid4
 from alembic import command
 
 from sqlalchemy import Column, MetaData, String, delete, func, inspect, select, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import (
     AsyncConnection,
     async_sessionmaker,
@@ -161,6 +161,209 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
             {"id": warehouse_id, "parent": parent_id, "actor": uuid4()},
         )
         return warehouse_id
+
+    async def insert_channel_state(
+        self, connection: AsyncConnection, schema: str
+    ) -> UUID:
+        """Заполняет три исторические таблицы Channels без runtime-моделей."""
+        channel_id, run_id, actor = uuid4(), uuid4(), uuid4()
+        await connection.execute(
+            text(
+                f'INSERT INTO "{schema}".channels '
+                "(id, name, kind, config_version, connection_revision, "
+                "connection_settings, encrypted_secrets, configured_secret_fields, "
+                "is_active, status, created_by, updated_by) "
+                "VALUES (:id, 'Retired channel', 'prom', 1, 1, '{}', "
+                "'test-encrypted-value', '[]', true, 'unverified', :actor, :actor)"
+            ),
+            {"id": channel_id, "actor": actor},
+        )
+        await connection.execute(
+            text(
+                f'INSERT INTO "{schema}".channel_publication_import_runs '
+                "(id, channel_id, connection_revision, status, checkpoint, pages, "
+                "resources, job_id, created_at, updated_at) "
+                "VALUES (:id, :channel, 1, 'running', '{}', 1, 1, :job, now(), now())"
+            ),
+            {"id": run_id, "channel": channel_id, "job": uuid4()},
+        )
+        await connection.execute(
+            text(
+                f'INSERT INTO "{schema}".channel_publications '
+                "(id, channel_id, connection_revision, resource_type, external_id, "
+                "raw_payload, document, revision, last_run_id, created_at, observed_at) "
+                "VALUES (:id, :channel, 1, 'product', 'observed-1', '{}', '{}', "
+                "1, :run, now(), now())"
+            ),
+            {"id": uuid4(), "channel": channel_id, "run": run_id},
+        )
+        return channel_id
+
+    async def test_channels_removal_preserves_neighbors_and_restores_empty_schema(
+        self,
+    ) -> None:
+        """Проверяет данные двух tenants, FK и индексы отката, затем повторный upgrade."""
+        schema = await self.new_schema(upgrade=False)
+        other = await self.new_schema(upgrade=False)
+        removed = {
+            "channels",
+            "channel_publications",
+            "channel_publication_import_runs",
+        }
+        async with self.engine.begin() as connection:
+            for target in (schema, other):
+                await self.migrator._migrate(
+                    connection, target, command.upgrade, "0026_catalog_attribute_ids"
+                )
+                await self.insert_channel_state(connection, target)
+            contact_id, attribute_id, actor = uuid4(), uuid4(), uuid4()
+            await connection.execute(
+                text(
+                    f'INSERT INTO "{schema}".contacts '
+                    "(id, first_name, created_by, updated_by) "
+                    "VALUES (:id, 'Preserved contact', :actor, :actor)"
+                ),
+                {"id": contact_id, "actor": actor},
+            )
+            await connection.execute(
+                text(
+                    f'INSERT INTO "{schema}".catalog_attributes '
+                    "(id, revision, created_by, updated_by) VALUES (:id, 1, :actor, :actor)"
+                ),
+                {"id": attribute_id, "actor": actor},
+            )
+            before = set(
+                await connection.run_sync(
+                    lambda conn: inspect(conn).get_table_names(schema=schema)
+                )
+            )
+            original_structure = await connection.run_sync(
+                lambda conn: {
+                    name: (
+                        inspect(conn).get_foreign_keys(name, schema=schema),
+                        inspect(conn).get_indexes(name, schema=schema),
+                        inspect(conn).get_check_constraints(name, schema=schema),
+                        inspect(conn).get_unique_constraints(name, schema=schema),
+                        [
+                            col["name"]
+                            for col in inspect(conn).get_columns(name, schema=schema)
+                        ],
+                    )
+                    for name in removed
+                }
+            )
+            await self.migrator.upgrade(connection, schema)
+            await self.migrator.upgrade(connection, schema)
+            self.assertEqual(
+                set(
+                    await connection.run_sync(
+                        lambda conn: inspect(conn).get_table_names(schema=schema)
+                    )
+                ),
+                before - removed,
+            )
+            self.assertEqual(
+                await connection.scalar(text(f'SELECT id FROM "{schema}".contacts')),
+                contact_id,
+            )
+            self.assertEqual(
+                await connection.scalar(
+                    text(f'SELECT id FROM "{schema}".catalog_attributes')
+                ),
+                attribute_id,
+            )
+            for name in removed:
+                self.assertEqual(
+                    await connection.scalar(
+                        text(f'SELECT count(*) FROM "{other}"."{name}"')
+                    ),
+                    1,
+                )
+            self.assertEqual(
+                await self.migrator.current(connection, other),
+                ("0026_catalog_attribute_ids",),
+            )
+            await self.migrator.downgrade(
+                connection, schema, "0026_catalog_attribute_ids"
+            )
+            restored_structure = await connection.run_sync(
+                lambda conn: {
+                    name: (
+                        inspect(conn).get_foreign_keys(name, schema=schema),
+                        inspect(conn).get_indexes(name, schema=schema),
+                        inspect(conn).get_check_constraints(name, schema=schema),
+                        inspect(conn).get_unique_constraints(name, schema=schema),
+                        [
+                            col["name"]
+                            for col in inspect(conn).get_columns(name, schema=schema)
+                        ],
+                    )
+                    for name in removed
+                }
+            )
+            self.assertEqual(restored_structure, original_structure)
+            for name in removed:
+                self.assertEqual(
+                    await connection.scalar(
+                        text(f'SELECT count(*) FROM "{schema}"."{name}"')
+                    ),
+                    0,
+                )
+            with self.assertRaises(IntegrityError):
+                async with connection.begin_nested():
+                    await connection.execute(
+                        text(
+                            f'INSERT INTO "{schema}".channel_publications SELECT * FROM "{other}".channel_publications'
+                        )
+                    )
+            await self.migrator.upgrade(connection, schema)
+            self.assertEqual(
+                await self.migrator.current(connection, schema), (self.migrator.head(),)
+            )
+
+    async def test_channels_removal_failure_rolls_back_all_drops_and_can_retry(
+        self,
+    ) -> None:
+        """Неизвестный FK блокирует DROP без потери дочерних таблиц и Alembic-ревизии."""
+        schema = await self.new_schema(upgrade=False)
+        async with self.engine.begin() as connection:
+            await self.migrator._migrate(
+                connection, schema, command.upgrade, "0026_catalog_attribute_ids"
+            )
+            channel_id = await self.insert_channel_state(connection, schema)
+            await connection.execute(
+                text(
+                    f'CREATE TABLE "{schema}".external_binding (channel_id uuid REFERENCES "{schema}".channels(id))'
+                )
+            )
+            await connection.execute(
+                text(f'INSERT INTO "{schema}".external_binding VALUES (:id)'),
+                {"id": channel_id},
+            )
+        with self.assertRaises(DBAPIError):
+            async with self.engine.begin() as connection:
+                await self.migrator.upgrade(connection, schema)
+        async with self.engine.begin() as connection:
+            self.assertEqual(
+                await self.migrator.current(connection, schema),
+                ("0026_catalog_attribute_ids",),
+            )
+            for name in (
+                "channels",
+                "channel_publications",
+                "channel_publication_import_runs",
+            ):
+                self.assertEqual(
+                    await connection.scalar(
+                        text(f'SELECT count(*) FROM "{schema}"."{name}"')
+                    ),
+                    1,
+                )
+            await connection.execute(text(f'DROP TABLE "{schema}".external_binding'))
+            await self.migrator.upgrade(connection, schema)
+            self.assertEqual(
+                await self.migrator.current(connection, schema), (self.migrator.head(),)
+            )
 
     async def test_inventory_removal_is_tenant_scoped_and_reversible(self) -> None:
         """Проверяет удаление Inventory, изоляцию tenant и восстановление пустой схемы."""
