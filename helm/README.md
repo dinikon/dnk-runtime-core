@@ -35,7 +35,7 @@ helm/
   build.py
 ```
 
-В `charts/` включены PostgreSQL, Redis и RabbitMQ. Общие helper-шаблоны входят непосредственно
+В `charts/` включены PostgreSQL, Redis, RabbitMQ и опциональный MinIO. Общие helper-шаблоны входят непосредственно
 в `templates/`; отдельной зависимости `dnk-common` больше нет. Стандартный каталог
 Helm называется `templates/`. Настройки описаны в [values.yaml](values.yaml).
 
@@ -63,11 +63,42 @@ Ingress направляет `/api` в FastAPI, остальные пути — 
 Новый public baseline предназначен для пустой БД. Автоматического принятия старой
 неверсионированной БД, stamp или сброса данных нет. API только проверяет ревизию.
 
-Любую инфраструктурную зависимость можно переключить на внешний сервер отдельно:
+PostgreSQL, Redis и RabbitMQ можно переключить на внешний сервер отдельно:
 `enabled: false` и параметры `external`. Для внешнего Redis поддерживается URL
 `redis://` или `rediss://` из Secret. Сохраняйте существующие БД, пользователей и
 Redis logical database при переходе; смена значений в chart не меняет пароль уже
 инициализированной БД.
+
+## Внутренний MinIO
+
+Для файлов и создания tenant через Control Plane подключите
+[values-minio.yaml](examples/values-minio.yaml) к существующим values Runtime.
+Создайте Secret `runtime-minio` в namespace `dnk-runtime-core` с ключами
+`access-key` и `secret-key`, затем включите `minio.enabled: true` и укажите ссылки
+на него в `minio.auth`. Access key должен содержать минимум 3 символа, secret key —
+минимум 8. Credentials хранятся в Kubernetes Secret; для приватного values без Git
+поддерживаются также `minio.auth.accessKey.value` и `minio.auth.secretKey.value`.
+
+Chart установит `quay.io/thanos/minio:RELEASE.2025-09-07T16-13-09Z`, StatefulSet
+с PVC `20Gi`, ClusterIP Service и NetworkPolicy. Данные PVC сохраняются при
+удалении StatefulSet. Service доступен на порту 9000 внутри кластера;
+Console отключена, публичного Ingress нет. Это один экземпляр MinIO;
+планирование резервного копирования остаётся задачей оператора.
+
+Runtime автоматически получает `FILES__ENDPOINT=<release>-runtime-minio:9000`,
+`FILES__SECURE=false` и те же Secret references, что и MinIO. Это относится к
+backend, lifecycle, cron и publisher. Не дублируйте endpoint и credentials в
+`application.files`, пока внутренний MinIO включён.
+
+В ArgoCD добавьте блок `minio` из примера внутрь действующего
+`Application.spec.source.helm.values`, рядом с `application`, `redis` и остальными
+настройками. После публикации нового chart выполните Sync; конфигурация изменит
+checksum pod и вызовет rollout Runtime. Менять настройки Control Plane не нужно.
+
+По умолчанию `minio.enabled=false` сохраняет существующие установки.
+Для внешнего MinIO оставьте его выключенным и задайте `application.files.endpoint`,
+`secure`, `accessKey` и `secretKey`. Endpoint — адрес S3 API без scheme/path;
+параметр `secure` выбирает TLS.
 
 ## Secrets и HTTPS
 

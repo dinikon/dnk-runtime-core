@@ -170,7 +170,7 @@ subjects:
 {{- end -}}
 {{- end -}}
 {{- end -}}
-{{- range $service := list "postgresql" "redis" "rabbitmq" -}}
+{{- range $service := list "postgresql" "redis" "rabbitmq" "minio" -}}
 {{- if hasKey $app.Values $service -}}
 {{- $dependency := index $app.Values $service -}}
 {{- if $dependency.enabled -}}
@@ -179,9 +179,13 @@ subjects:
 {{- range $kind := list "StatefulSet" "Service" -}}
 {{- include "dnk.lifecycle.reserveName" (dict "names" $names "kind" $kind "name" $name "owner" $depOwner) -}}
 {{- end -}}
-{{- $headlessSuffix := index (dict "postgresql" "pg-headless" "redis" "rd-headless" "rabbitmq" "mq-headless") $service -}}
+{{- $headlessSuffix := index (dict "postgresql" "pg-headless" "redis" "rd-headless" "rabbitmq" "mq-headless" "minio" "s3-headless") $service -}}
 {{- include "dnk.lifecycle.reserveName" (dict "names" $names "kind" "Service" "name" (printf "%s-%s" $name $headlessSuffix) "owner" $depOwner) -}}
-{{- if $dependency.auth.password.value -}}
+{{- $inlineAuth := false -}}
+{{- if eq $service "minio" -}}
+{{- $inlineAuth = or $dependency.auth.accessKey.value $dependency.auth.secretKey.value -}}
+{{- else -}}{{- $inlineAuth = $dependency.auth.password.value -}}{{- end -}}
+{{- if $inlineAuth -}}
 {{- include "dnk.lifecycle.reserveName" (dict "names" $names "kind" "Secret" "name" (printf "%s-auth" $name) "owner" $depOwner) -}}
 {{- end -}}
 {{/* Distinct resource names must not mask two Services selecting both databases. */}}

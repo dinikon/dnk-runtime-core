@@ -84,8 +84,8 @@ from src.modules.files.infrastructure.stored_file.jobs.purge_queue import (
 from src.modules.shared.application.jobs.schedule_scheduled_job_use_case import (
     ScheduleScheduledJobUseCase,
 )
-from src.modules.shared.infrastructure.jobs.sqlalchemy_scheduled_job_repository import (
-    SqlAlchemyScheduledJobRepository,
+from src.modules.shared.presentation.jobs.management import (
+    build_scheduled_job_repository,
 )
 from src.modules.shared.domain.time.clock_port import ClockPort
 from src.modules.shared.application.uuid.uuid_port import UUIdGeneratorProtocol
@@ -142,7 +142,7 @@ def build_files_handlers(
     resolver = storage if storage is not None else get_storage_resolver()
     actual_clock = clock if clock is not None else UtcClock()
     actual_uuid = uuid_generator if uuid_generator is not None else UUID7Generator()
-    jobs = SqlAlchemyScheduledJobRepository(session)
+    jobs = build_scheduled_job_repository(session)
     queue = ScheduledFilePurgeQueue(
         ScheduleScheduledJobUseCase(
             repository=jobs,

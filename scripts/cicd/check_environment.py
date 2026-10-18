@@ -1,5 +1,6 @@
 """Isolated source snapshots and disposable integration services for checks."""
 
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 import shutil
@@ -69,8 +70,8 @@ def postgres():
 
 
 @contextmanager
-def integration_stores():
-    """Exercise Redis, RabbitMQ and private MinIO with disposable CI services."""
+def integration_stores() -> Iterator[dict[str, str]]:
+    """Поднимает изолированные Redis, RabbitMQ и приватный MinIO для проверок CI."""
     tag = uuid.uuid4().hex[:12]
     redis_name, rabbit_name = f"dnk-check-redis-{tag}", f"dnk-check-rabbit-{tag}"
     minio_name = f"dnk-check-minio-{tag}"
@@ -82,7 +83,7 @@ def integration_stores():
             (
                 minio_name,
                 9000,
-                "quay.io/minio/minio:latest",
+                "quay.io/thanos/minio:RELEASE.2025-09-07T16-13-09Z",
                 (
                     "-e",
                     "MINIO_ROOT_USER=runtime_test",

@@ -12,8 +12,8 @@ from src.modules.files.application.stored_file.command.purge_file.command import
 )
 from src.modules.files.infrastructure.assembly import build_files_handlers
 from src.modules.shared.domain.jobs.scheduled_job import ScheduledJob
-from src.modules.shared.infrastructure.jobs.sqlalchemy_scheduled_job_repository import (
-    SqlAlchemyScheduledJobRepository,
+from src.modules.shared.presentation.jobs.management import (
+    build_scheduled_job_repository,
 )
 from src.modules.shared.infrastructure.persistence.unit_of_work.sqlalchemy import (
     UnitOfWork,
@@ -62,7 +62,7 @@ class FilesPurgeJobHandler:
                 async with UnitOfWork(
                     async_sessionmaker(connection, expire_on_commit=False)
                 ) as uow:
-                    jobs = SqlAlchemyScheduledJobRepository(uow.session)
+                    jobs = build_scheduled_job_repository(uow.session)
                     if not await jobs.owns_current_lease(
                         job_id=job.id,
                         tenant_id=job.tenant_id,
