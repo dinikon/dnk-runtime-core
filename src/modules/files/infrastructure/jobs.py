@@ -11,8 +11,8 @@ from src.modules.files.infrastructure.stored_file.jobs.purge_queue import (
 from src.modules.shared.application.jobs.schedule_scheduled_job_use_case import (
     ScheduleScheduledJobUseCase,
 )
-from src.modules.shared.infrastructure.jobs.sqlalchemy_scheduled_job_repository import (
-    SqlAlchemyScheduledJobRepository,
+from src.modules.shared.presentation.jobs.management import (
+    build_scheduled_job_repository,
 )
 from src.modules.shared.infrastructure.time.utc_clock import UtcClock
 from src.modules.shared.infrastructure.uuid.uuid7_generator import UUID7Generator
@@ -28,7 +28,7 @@ async def schedule_trash_cleanup(
     if stamp.utcoffset() is None:
         raise ValueError("Trash cleanup registration time must be timezone-aware.")
     window = stamp.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
-    jobs = SqlAlchemyScheduledJobRepository(session)
+    jobs = build_scheduled_job_repository(session)
     queue = ScheduledFilePurgeQueue(
         ScheduleScheduledJobUseCase(
             repository=jobs, clock=UtcClock(), uuid_generator=UUID7Generator()
@@ -49,7 +49,7 @@ async def schedule_cleanup(
     window = stamp.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
     # Регистрация уже защищена outer admission; новый tenant ещё не виден отдельной сессии.
     scheduler = ScheduleScheduledJobUseCase(
-        repository=SqlAlchemyScheduledJobRepository(session),
+        repository=build_scheduled_job_repository(session),
         clock=UtcClock(),
         uuid_generator=UUID7Generator(),
     )

@@ -29,8 +29,8 @@ from src.modules.shared.application.jobs.schedule_scheduled_job_use_case import 
 from src.modules.shared.application.jobs.scheduled_job_deferred import (
     ScheduledJobDeferred,
 )
-from src.modules.shared.infrastructure.jobs.sqlalchemy_scheduled_job_repository import (
-    SqlAlchemyScheduledJobRepository,
+from src.modules.shared.presentation.jobs.management import (
+    build_scheduled_job_repository,
 )
 from src.modules.shared.infrastructure.persistence.unit_of_work.sqlalchemy import (
     UnitOfWork,
@@ -81,7 +81,7 @@ class FilesTrashCleanupJobHandler:
                 async with UnitOfWork(
                     async_sessionmaker(connection, expire_on_commit=False)
                 ) as uow:
-                    jobs = SqlAlchemyScheduledJobRepository(uow.session)
+                    jobs = build_scheduled_job_repository(uow.session)
                     if not await jobs.owns_current_lease(
                         job_id=job.id,
                         tenant_id=job.tenant_id,
