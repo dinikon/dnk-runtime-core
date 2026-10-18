@@ -57,7 +57,13 @@ Orphan cleanup защищает все зарегистрированные кл
 
 Helm передаёт настройки через `application.files`. Access key и secret key
 поддерживают `existingSecret` либо `value` по общему контракту secrets chart.
-Helm не создаёт внешний MinIO: его DNS, TLS и network isolation готовятся на Instance.
+Внешний MinIO настраивается оператором: DNS, TLS и network isolation готовятся на Instance.
+Для установки MinIO внутри релиза включите `minio.enabled=true`, задайте credentials
+через `minio.auth.accessKey` / `minio.auth.secretKey` и размер PVC в
+`minio.persistence.size`. Chart сам передаст backend и workers внутренний endpoint,
+HTTP-режим и общие Secret references. `application.files` endpoint и credentials
+в этом режиме оставьте пустыми. См. [пример values](../../helm/examples/values-minio.yaml)
+и [описание установки](../../helm/README.md#внутренний-minio).
 В Compose MinIO подключён к `file-storage` (`internal: true`); backend и workers
 имеют доступ к этой сети по `minio:9000`. API и консоль опубликованы только на
 `127.0.0.1`, порты задаются `MINIO_API_PORT` (9000) и `MINIO_CONSOLE_PORT` (9001).
