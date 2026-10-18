@@ -27,7 +27,7 @@ class PackageLayoutTests(unittest.TestCase):
         )
         self.assertTrue(
             all(
-                d["name"] in {"postgresql", "redis", "rabbitmq"}
+                d["name"] in {"postgresql", "redis", "rabbitmq", "minio"}
                 for d in chart["dependencies"]
             )
         )
@@ -74,6 +74,8 @@ class PackageLayoutTests(unittest.TestCase):
             self.assertIn("Chart.yaml", names)
             self.assertIn("templates/workloads.yaml", names)
             self.assertIn("templates/_gate.py.tpl", names)
+            self.assertIn("charts/minio/Chart.yaml", names)
+            self.assertIn("charts/minio/templates/statefulset.yaml", names)
             self.assertNotIn("build.py", names)
             self.assertFalse(
                 any(

@@ -16,3 +16,6 @@ dependencies:
 - name: rabbitmq
   version: 0.1.0
   condition: rabbitmq.enabled
+- name: minio
+  version: 0.1.0
+  condition: minio.enabled

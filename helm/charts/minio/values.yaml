@@ -1,0 +1,49 @@
+global:
+  imagePullSecrets: []
+enabled: true
+nameOverride: runtime-minio
+fullnameOverride: ''
+image:
+  repository: quay.io/thanos/minio
+  tag: RELEASE.2025-09-07T16-13-09Z
+  pullPolicy: IfNotPresent
+auth:
+  accessKey:
+    value: ''
+    existingSecret: {name: '', key: ''}
+  secretKey:
+    value: ''
+    existingSecret: {name: '', key: ''}
+persistence:
+  enabled: true
+  size: 5Gi
+  storageClass: null
+  existingClaim: ''
+networkPolicy:
+  enabled: true
+  clientPodSelector:
+    app.kubernetes.io/name: dnk-runtime-core
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 1Gi
+pod:
+  annotations: {}
+  labels: {}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    fsGroupChangePolicy: OnRootMismatch
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: [ALL]
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  imagePullSecrets: []

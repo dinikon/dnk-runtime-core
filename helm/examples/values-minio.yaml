@@ -1,0 +1,18 @@
+# Merge into the existing Runtime values. Create this Secret in the Runtime namespace.
+# Runtime endpoint, TLS mode and FILES credentials are derived automatically.
+minio:
+  enabled: true
+  auth:
+    accessKey:
+      existingSecret:
+        name: runtime-minio
+        key: access-key
+    secretKey:
+      existingSecret:
+        name: runtime-minio
+        key: secret-key
+  persistence:
+    enabled: true
+    size: 20Gi
+    # null selects the default StorageClass, e.g. local-path on k3s.
+    storageClass: null
