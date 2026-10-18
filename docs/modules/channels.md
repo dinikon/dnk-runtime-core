@@ -1,344 +1,252 @@
 # Channels
 
-Реализованы настройки подключений и чтение публикаций Prom/WooCommerce/Rozetka через
-Console и HTTP API. Карточки сохраняются локально; импорт выполняет shared jobs
-worker. Проверка подключения как отдельный сценарий, запись на платформы и связь
-с Catalog остаются следующими этапами.
+Реализован backend-срез MVP: Channel с единственным Connection, проверка
+подключения и первичная загрузка публикаций Prom/WooCommerce в локальную БД.
+API доступен под `/api/console/channels`. Фоновые шаги выполняет существующий
+shared jobs worker. Исходящая синхронизация по умолчанию выключена.
 
-## Модель
+Console для настройки и read-сценариев реализована. Связывание с Catalog,
+создание Draft и исходящие изменения — следующие срезы [плана Channels](../plan/channels-integrations.md). Catalog этот срез не меняет.
+Прежний Channels удалён миграцией 0027; его контракты не используются новой реализацией.
+Исторический срез Rozetka сохранён в [разделе 15 плана](../plan/channels-integrations.md#15-исторический-срез-rozetka-контракт-и-результаты).
 
-`ChannelKind` — конечная платформа (`prom`, `woocommerce`, `shopify`, …).
-`ChannelType` — категория платформы: `marketplace`, `cms`, `shop`; она выводится
-из реестра по kind и не дублируется в tenant-таблице. Отдельного ConnectionType нет.
+## Границы и состояние
 
-Корни модуля: `Channel`, `ExternalPublication`, `PublicationImportRun`. В каждом
-слое они размещены в `channel/`, `external_publication/`,
-`publication_import_run/`; SQL-модели находятся в общей
-`infrastructure/persistence/models/`.
-Агрегат неизменяем: его методы возвращают новое проверенное состояние.
-Он хранит название, kind, версию конфигурации, настройки, активность, статус и audit.
-Domain получает только запечатанные credentials; открытые ключи используются
-в Application при объединении настроек и в HTTP-адаптерах при чтении источника.
-Секреты не входят в repr.
+Channel — конкретный источник продаж, например отдельный магазин Prom.
+Он является Aggregate Root, управляет названием, platform kind, разрешением
+исходящей синхронизации, архивированием и lifecycle единственного Connection.
+Connection — внутренняя Entity в `domain/channel/entity/connection.py`.
+До настройки его может не быть; второй Connection запрещают Domain и SQL
+`UNIQUE(channel_id)`, включая архивную строку. Самостоятельного ConnectionRepository нет.
 
-- `is_active` управляется пользователем, по умолчанию `true`.
-- `status`: `unverified`, `connected`, `error`; новый канал — `unverified`.
-- Изменение настроек сбрасывает проверку. Идентичная запись, переименование
-  и переключение активности её не меняют.
-- Kind нельзя менять: для другой платформы создаётся новый канал.
-- Выключенный канал можно редактировать и удалить.
+Connection хранит endpoint, выбранные языки, валюту, защищённые credentials,
+подтверждённую resource identity, техническую паузу и verification status:
+`unverified / queued / verified / error`. Изменения проходят через Channel;
+HTTP-команды существующего источника требуют revision Channel.
 
-## Архитектура и контракты сценариев
+`is_enabled=false` запрещает исходящую синхронизацию. Verify и первичная загрузка
+при этом разрешены и никогда не включают Channel автоматически. В этом срезе
+нет исходящих capabilities или заданий, даже если разрешение явно включить.
+Пауза Connection или архивирование Channel запрещают новые сетевые шаги.
 
-Правила: [архитектура проекта](../architecture/AGENTS.md) и корневой `AGENTS.md`.
-Сценарии разделены по Aggregate Root внутри соответствующего слоя.
+Ротация credentials сначала сохраняет зашифрованного кандидата. Рабочие ключи
+заменяются после проверки того же ресурса. Смена подтверждённого магазина/site
+требует нового Channel; старые публикации и история сохраняются.
 
-| Сценарий Application | Вход | Результат | HTTP response |
-| --- | --- | --- | --- |
-| `create_channel` | `CreateChannelCommand` | `CreateChannelResultDTO` | `CreateChannelResponse` |
-| `update_channel` | `UpdateChannelCommand` | `UpdateChannelResultDTO` | `UpdateChannelResponse` |
-| `delete_channel` | `DeleteChannelCommand` | `None` | 204 без тела |
-| `get_channel` | `GetChannelQuery` | `ChannelDetailsDTO` | `GetChannelResponse` |
-| `list_channels` | `ListChannelsQuery` | `tuple[ChannelListItemDTO, ...]` | список `ListChannelItemResponse` |
-| `list_kinds` | `ListKindsQuery` | `tuple[ChannelKindListItemDTO, ...]` | список `ListChannelKindItemResponse` |
-| `get_kind_config` | `GetKindConfigQuery` | `ChannelKindConfigDTO` | `GetKindConfigResponse` |
-
-Каждый сценарий находится в `application/<aggregate_root>/command|query/<scenario>/` с отдельными
-`command.py` или `query.py`, `handler.py` и `dto.py` при наличии результата.
-Удалению пустой DTO не нужен. Все методы имеют явные аннотации и docstrings.
-Каждый HTTP-метод имеет собственные controller/response файлы; request нужен
-только созданию и PATCH. Общих DTO и response для разных методов нет.
-
-`Channel.create` и `Channel.restore` проверяют состояние явно; `__post_init__`
-используется только в VO настроек. Переименование, изменение настроек и активности
-проверяют значения и обновляют audit через методы агрегата. Сохранение одинаковых
-значений сохраняет статус и audit. Фабрики не позволяют восстановить некорректные
-типы ID, статус, версию, название или audit без часового пояса.
-
-`ChannelMapper` преобразует агрегат в значения вставки/обновления и восстанавливает
-его через `Channel.restore`. `ChannelQueryMapper` отдельно собирает карточку и
-строку списка из явной публичной SQL-проекции без загрузки агрегата и credentials.
-
-Handlers получают только порты. Depends собирает SQL-адаптеры на общей сессии
-внешнего UoW; handlers, repositories и mappers не выполняют commit/rollback.
-Команды возвращают собственный безопасный DTO из изменённого агрегата; контроллер
-не вызывает дополнительный query handler для формирования ответа. Успех HTTP
-отправляется только после завершения UoW; ошибка commit не становится успехом.
-
-Ошибки проверки схемы, конфликта версии и хранилища credentials принадлежат
-Application. Ошибки полей имеют независимые от транспорта path/message/code.
-Контроллер каждого метода явно преобразует DTO в свой response и ожидаемые ошибки
-в HTTP-статусы; префикс `body` добавляется только здесь. `ChannelRoute` очищает
-ошибки валидации FastAPI от входных значений. Domain не содержит HTTP-контрактов.
-
-## Реестр и форма
-
-Реестр находится в `infrastructure/channel/definitions/registry.py`, выдаёт копии определений
-и включает 21 платформу из плана, кроме Facebook Leads и TikTok Leads.
-Сохранение доступно для Prom, WooCommerce и Rozetka. Остальные записи имеют причину
-недоступности и `config.connection: null`.
-
-Определение содержит kind, type, label, can_configure, unavailable_reason,
-config_version и config. В `config.connection` находятся JSON Schema Draft 2020-12
-и ui_schema (упорядоченные property/widget/help_text).
-`config.capabilities.read_publications` доступна для Prom, WooCommerce и Rozetka.
-Application и Console определяют возможность импорта по этому флагу;
-списков kind с отдельной проверкой Prom/Woo нет. Схемы не редактируются через API.
-
-Prom требует секретный `api_key`. WooCommerce требует `url` и секретные
-`consumer_key`, `consumer_secret`. URL — HTTPS без userinfo, query и fragment,
-с поддержкой магазина в подкаталоге. Формат `https-store-url` проверяется
-серверным FormatChecker и renderer Console. Сервер валидирует ту же схему,
-которую отдаёт UI. Дополнительные поля запрещены.
-
-Rozetka требует публичный текстовый `username` и секретный `password` кабинета
-продавца. API host фиксирован; временный токен не вводится пользователем.
-Пароль хранится зашифрованным и не выдаётся в HTTP ответах; замена использует
-существующую форму и семантику ревизии подключения. Base64 применяется только
-в запросе авторизации и не заменяет шифрование.
+ExternalPublication и SyncRun — самостоятельные корни. Первый хранит observed
+состояние карточки, второй — прогресс обхода. Ссылки между корнями передаются
+по ID. Доменные IDs — EntityIdVO; DTO и SQL используют UUID на своих границах.
+Правила реализации заданы [архитектурой backend](../architecture/backend.md).
 
 ## API
 
-База: `/api/console/channels`. Все запросы аутентифицированы и требуют tenant;
-запись использует существующий CSRF. Tenant и actor из тела не принимаются.
+Пути в таблице относительны к `/api/console/channels`. Tenant/actor поступают
+из Identity, в body их передавать нельзя. Чтение требует `channels.read`,
+изменения — `channels.manage` и CSRF. Query-чтение не обращается к внешнему API.
 
-| Метод | Путь относительно базы | Назначение |
-| --- | --- | --- |
-| GET | `/kinds` | Каталог платформ |
-| GET | `/kinds/{kind}/config` | Определение со схемой |
-| GET / POST | пустой | Список / создание |
-| GET / PATCH / DELETE | `/{channel_id}` | Карточка / изменение / удаление |
+| Метод и путь | Результат |
+| --- | --- |
+| `GET /platforms` | Manifest зарегистрированных Prom/WooCommerce, SDK/config versions, реализованные capabilities и secret schema |
+| `GET /platforms/{kind}/config` | Конфигурационный контракт одной платформы |
+| `POST /` | Новый Channel, revision, is_enabled=false; 201 |
+| `GET /`, `GET /{channel_id}` | Локальный список и карточка Channel |
+| `PATCH /{channel_id}` | revision и изменённые name/is_enabled |
+| `POST /{channel_id}/archive` | Архивирование источника целиком; 204 |
+| `POST /{channel_id}/connection` | Создание единственного подключения и постановка проверки; 201 |
+| `GET /{channel_id}/connection` | Настройки, статус и признаки наличия credentials без ciphertext/секретов |
+| `PATCH /{channel_id}/connection` | revision, полная замена settings и optional новые credentials; неприостановленное подключение получает новую проверку |
+| `POST /{channel_id}/connection/verify` | revision → job_id, revision; 202 |
+| `POST /{channel_id}/connection/pause` | revision → техническая пауза; 204 |
+| `POST /{channel_id}/connection/resume` | revision → продолжение/проверка, без включения записи; 204 |
+| `POST /connections/{connection_id}/initialization` | request_key UUID → run_id/status/job_id; 202 |
+| `GET /connections/{connection_id}/initialization` | Последний прогресс либо not_started, read_complete и recovery_required |
+| `GET /connections/{connection_id}/publications` | Core-строки, total, search/stock_status, offset/limit до 100 |
+| `GET /publications/{publication_id}` | Core и schema-versioned extensions одной публикации |
 
-Пример создания (значение ключа демонстрационное):
+В OpenAPI пути коллекции указаны без завершающего `/`.
+Каждый сценарий имеет отдельные Command/Query, Handler, DTO и HTTP-контракты;
+операции 204 возвращают None без пустых DTO/Response. Валидационные ответы
+Channels исключают исходные input и exception ctx, содержащие credentials.
+
+Пример создания Channel:
+
+```json
+{"name": "Основной WooCommerce", "platform_kind": "woocommerce"}
+```
+
+Следующий запрос `POST /{channel_id}/connection`:
 
 ```json
 {
-  "name": "Основной Prom",
-  "kind": "prom",
-  "config_version": 1,
-  "connection_settings": {"api_key": "example-only"},
-  "is_active": true
+  "revision": 1,
+  "settings": {
+    "endpoint": "https://shop.example",
+    "locales": ["uk", "ru"],
+    "currency": "UAH"
+  },
+  "credentials": {
+    "consumer_key": "<consumer key>",
+    "consumer_secret": "<consumer secret>"
+  }
 }
 ```
 
-PATCH поддерживает name, is_active, connection_settings и config_version.
-Настройки и версия передаются вместе. Пропущенные настройки сохраняются;
-null и пустые обязательные значения отклоняются. Kind и status недоступны для записи.
-При несовпадении версии возвращается 409; валидация — 422; отсутствие — 404;
-невозможность использовать хранилище credentials — 503.
-
-Ответ содержит безопасные connection_settings и configured_secret_fields,
-но никогда не содержит ключи доступа или их маски. Ошибки валидации содержат
-loc/msg/type без input. Ошибка проходит через исключение HTTP и приводит к rollback UoW.
-
-## Хранение и запуск
-
-Tenant-миграция `0013_channels` следует за `0012_catalog`;
-`0014_channel_publications` добавляет локальные карточки, запуски и ревизию подключения. Таблица channels
-хранит публичные параметры в JSONB, секретные — одним Fernet ciphertext.
-Query-проекции не выбирают ciphertext. PATCH блокирует строку на время UoW;
-HTTP-вызовов внешних платформ внутри транзакции нет.
-
-Для записи credentials требуется отдельный ключ Channels:
-
-```sh
-python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
-```
-
-Передать его через `CHANNELS__SECRET_ENCRYPTION_KEY` или файл, указанный в
-`CHANNELS__ENCRYPTION_KEY_PATH`. Одновременно использовать оба параметра нельзя.
-Ключ должен сохраняться между перезапусками; его замена без перешифровки сделает
-существующие credentials недоступными. Не использовать ключи других модулей.
-
-Без ключа работают каталог, безопасное чтение, переименование, переключение
-активности и удаление. Создание и изменение настроек требуют доступного ключа.
-Миграция применяется штатным механизмом tenant-миграций; код не меняет рабочую БД
-автоматически при открытии Console.
+Prom использует endpoint `https://my.prom.ua` и credentials с полем `token`.
+Если `/products/list` возвращает `group_id=0`, проверка получает до 100 групп
+через `/groups/list` и закрепляет ID единственной группы с явным
+`parent_group_id=null`. Ноль не используется как общая identity магазинов.
+Отсутствующий или неоднозначный корень в этой странице приводит к
+`resource_identity_unavailable`; ID товаров остаются строго положительными.
+WooCommerce читает публичный `/wp-json/` без credentials для проверки адреса
+сайта. Ключи передаются через Basic header только в `/wp-json/wc/v3/*`;
+доступность публичного корня не заменяет проверку прав на чтение товаров.
+Коды locale/currency проверяются через публичные контракты reference_data. Settings
+задаются явно: нет подстановки валюты/языка из tenant или автоперевода.
+У paused Connection настройки можно исправить локально; проверка кандидата
+произойдёт после resume. Секреты не возвращаются API и не попадают в job payload.
 
 ## Console
 
-Раздел «Интеграции → Каналы»:
+Раздел `/channels` показывает каналы с пагинацией и состоянием единственного
+подключения. Создание состоит из двух шагов: название/платформа, затем настройки
+Connection. Если второй шаг прерван, канал остаётся доступен для настройки.
+Страница `/channels/:channelId` содержит вкладки «Публикации» и «Подключение».
 
-- `/channels` — список, активность и технический статус отдельно.
-- `/channels/new` — выбор платформы и динамическая форма из API.
-- `/channels/:channelId` — переход к вкладке «Публикации».
-- `/channels/:channelId/publications` — список локальных карточек и обновление.
-- `/channels/:channelId/publications/:publicationId` — поля карточки и вариации.
-- `/channels/:channelId/settings` — существующая форма подключения.
+Manifest обоих read-сценариев (`platforms` и `platforms/{kind}/config`) содержит
+`endpoint_schema`: JSON Schema для string/uri с title, description, maxLength и
+optional default/const. Prom объявляет фиксированный `https://my.prom.ua`, Woo —
+ввод HTTPS-адреса магазина. Credentials schema поддерживает string-поля,
+required, minLength/maxLength и writeOnly. Console не ветвится по platform kind;
+неподдержанная версия/структура формы показывается недоступной. Семантическая
+валидация и ограничения безопасности остаются на backend.
 
-На странице канала общие вкладки «Публикации» и «Настройки подключения».
-Карточка сохраняет активность вкладки публикаций. Переход из изменённой формы
-защищён существующим подтверждением несохранённых изменений.
+Сохранение Connection запускает проверку автоматически, затем backend запускает
+инициализацию. UI показывает processed/invalid, время обновления, ограничения
+охвата и recovery_required. Процент не вычисляется без total источника. Завершённый
+partial/read_complete и прерванный partial имеют разные сообщения. На активной
+странице проверка/прогресс опрашиваются раз в 2 секунды, публикации — раз в 3;
+опрос прекращается после завершения, паузы, ошибки чтения или ухода со страницы.
 
-Сохранённые секреты представлены текстом «Ключ задан». Действие «Заменить»
-включает ввод нового значения; без этого секрет не отправляется. Изменение платформы
-сбрасывает параметры. Неизвестная структура схемы блокирует сохранение.
+Список публикаций читает локальную БД, поддерживает поиск, stock_status и
+пагинацию; вкладка/фильтры/страница находятся в URL. Уже загруженные строки
+сохраняются при refetch/error. Decimal остаётся строкой, отображение раскрывает
+экспоненту и убирает незначащие нули без floating point. Неизвестные поля не
+заменяются нулями. Ключи и пароли не возвращаются в форму и не сохраняются в
+web storage; замена явная, после успеха секретный ввод очищается.
 
-Credentials не сохраняются в web storage или query/mutation cache; запросы записи
-не используют mutation cache, ошибки Axios очищаются от тела запроса. Query keys
-изолированы по tenant, смена tenant очищает форму и отменяет текущий запрос.
-При 409 пользователь явно обновляет схему; автоматической повторной отправки нет.
-В публикациях доступна кнопка загрузки/обновления и прогресс активного импорта.
-Страницы читают локальное хранилище; GET страницы Console не вызывает платформу.
+Frontend-модуль — `frontends/apps/console/src/modules/channels`: отдельные DTO,
+mapper, API, query keys, queries, mutations, URL state, страницы-оркестраторы и
+UI через props/emits. Query keys включают tenant/session. Смена контекста очищает
+формы, отменяет запросы и не допускает применения позднего результата. Черновик
+не перезаписывается фоновыми запросами; конфликт revision сохраняет ввод.
+Права проверяет backend, 403 отображается явно. В текущем Identity нет публичного
+каталога capabilities пользователя: роль admin не используется как выдуманный
+заменитель channels.manage.
 
-## Проверки
+Новые Console-сценарии не включают outbound, не меняют Catalog и не предлагают
+связывание/Create Draft до реализации этих use cases. Техническая пауза/продолжение
+подключения не меняет разрешение исходящей синхронизации.
 
-```sh
-.venv/bin/python -m unittest test.test_channels test.test_channels_http test.test_channel_publications test.test_channels_architecture -q
-TEST_POSTGRES_URL='<disposable PostgreSQL URL>' .venv/bin/python -m unittest test.test_channels_postgres test.test_channel_publications_postgres.ChannelPublicationsPostgresTests -q
-npm --prefix frontends run typecheck:console
-npm --prefix frontends run lint:console
-npm --prefix frontends run build:console
-```
+## Проверка и фоновая загрузка
 
-PostgreSQL-тесты создают отдельные временные tenant-схемы, проверяют миграцию,
-шифрование, изоляцию, rollback, конкурентное объединение PATCH и удаление.
+1. CreateConnection сохраняет агрегат и `channels.verify_connection` в общей транзакции.
+2. Worker проверяет tenant admission и lease, читает immutable вход и закрывает UoW.
+3. Плагин выполняет GET через scoped credentials/HTTP фасады без SQL session.
+4. Новый UoW повторно проверяет generation. Verified-состояние, initialization run
+   и первое `channels.initialize_publications` задание сохраняются атомарно.
+5. Каждая порция проходит prepare → HTTP → apply. Публикации, checkpoint,
+   счётчики и следующее задание фиксируются вместе. При завершении Domain
+   проверяет read_complete перед терминальным переходом.
+6. Перед commit worker повторно проверяет действующую lease под блокировкой.
+   Ошибка commit или потеря lease откатывает весь apply, включая продолжение.
 
-`test_channels_architecture.py` проверяет структуру сценариев всех трёх корней, отдельные DTO
-и HTTP-схемы, аннотации, русские docstrings, запрет `__post_init__` вне VO,
-направление импортов, границы транзакций, mapper-ы и пустые `__init__.py`.
-Он включается стандартным `unittest discover`, используемым `scripts.cicd.checks`,
-и также запускается отдельно без PostgreSQL. Семантику фабрик, audit, безопасных
-результатов команд, ошибок полей и сбоя commit проверяют регрессионные тесты.
+Во время HTTP удерживается tenant admission, но нет открытой SQL-транзакции.
+Плагин не управляет jobs, агрегатами, Catalog, ORM, commit или rollback.
+Все новые публичные HTTPS адреса проверяются по DNS и закреплённому IP;
+локальные/служебные адреса и redirects запрещены. GET ограничен временем и размером.
 
-## Read публикации и импорт
+Run statuses: `queued / running / succeeded / partial / failed / cancelled`.
+`read_complete=true` означает завершение обхода согласованного API scope.
+`partial + read_complete=true` сообщает о постоянном ограничении охвата/неполных
+строках; `partial + read_complete=false` — о прерванном обходе с сохранёнными данными.
+Total источника не выдумывается; processed считает уникальные публикации данного run.
 
-`ExternalPublication` сохраняет идентичность `(channel_id, connection_revision,
-resource_type, external_id)`, внешний ID родителя, native `raw_payload` в JSONB,
-типизированный `document` с `schema_version=1`, ревизию снимка и время наблюдения.
-Native данные сохраняют неизвестные поля, но не выдаются Read API. Документ
-содержит название, SKU, ссылки, очищенные описания, изображения, категории,
-характеристики, цены, валюту, остаток, наличие, внешний статус и тип товара.
-`None` означает отсутствие данных; нулевые цена/остаток остаются нулём.
-Изменение снимка увеличивает ревизию; повторный одинаковый импорт сохраняет ID
-и ревизию. Этот документ описывает наблюдаемое состояние и не является payload
-будущего создания/обновления на платформе.
+Повтор страницы не увеличивает счётчики. Сетевые transient ошибки имеют ограниченный
+retry. После сбоя новый request_key продолжает checkpoint той же generation.
+После полного обхода или смены generation создаётся новый run с чтением с начала;
+внутренние publication IDs сохраняются. Исчезновение из неполного обхода не удаляет
+карточку и не обнуляет её остаток. Повтор прежнего request_key не ставит новое задание.
 
-`PublicationImportRun` хранит queued/running/succeeded/partial/failed, число
-сохранённых порций и уникальных ресурсов, курсор, текущий job_id и безопасный код ошибки.
-Создание активного канала автоматически ставит первоначальный импорт в очередь.
-Существующие каналы загружаются кнопкой. Повторный запуск возвращает активный run.
-Пустой успешный источник завершается succeeded с нулём ресурсов.
+Если shared job исчерпал собственные попытки/удалён, read-side показывает
+recovery_required. Явный initialization с новым request_key восстанавливает процесс,
+а не оставляет его навсегда queued/running.
 
-| Сценарий | Вход | Результат |
-| --- | --- | --- |
-| start_publication_import | StartPublicationImportCommand | StartPublicationImportResultDTO |
-| prepare_publication_import | PreparePublicationImportCommand | PreparePublicationImportResultDTO или None для устаревшего job |
-| import_publication_page | ImportPublicationPageCommand | ImportPublicationPageResultDTO |
-| complete_publication_import | CompletePublicationImportCommand | None |
-| list_publications | ListPublicationsQuery | PublicationPageDTO |
-| get_publication | GetPublicationQuery | PublicationDetailsDTO |
-| get_publication_import_run | GetPublicationImportRunQuery | PublicationImportRunDetailsDTO или None |
+## Core и плагины
 
-HTTP относительно `/api/console/channels/{channel_id}`:
+Хранение: `channels`, `channel_connections`, `channel_sync_runs`,
+`channel_external_publications`. Новая forward-миграция —
+[0028_channels_core](../../migrations/tenant/versions/0028_channels_core.py), после 0027.
+У публикации UNIQUE(connection_id, resource_type, external_id); внешний SKU не уникален.
 
-- POST `/publication-imports` — 202 и run_id, обязательный CSRF, без фиктивного body.
-- GET `/publication-imports/latest` — последний run текущего подключения или null.
-- GET `/publication-imports/{run_id}` — прогресс конкретного run или 404.
-- GET `/publications?offset=0&limit=25` — пагинированные локальные публикации.
-- GET `/publications/{publication_id}` — поля карточки и связанные позиции.
+Core SQL-поля: external_id/SKU, price/sale_price/currency, quantity/stock_status,
+title/title_locale, main_image_url, source_updated_at, first_seen_at/last_seen_at,
+last_import_run_id, observed_revision, core_version и warnings. Цена/количество
+передаются Decimal-строками без округления. 0 и null различаются. Невалидное
+optional поле превращается в null с предупреждением; невалидный native ID
+учитывается в неполноте run. Дополнительные поля проходят версионные Pydantic
+read-схемы провайдера и сохраняются в extensions; произвольные meta_data не копируются.
 
-Prom использует GET `/products/list` без фильтра группы/статуса. Курсор `last_id`
-уменьшается согласно верхней границе ID. Ответ списка уже содержит поля модели
-Product; отдельное чтение карточки пока не требуется. Вариации Prom остаются
-отдельными публикациями; связи строятся только по явному `variation_base_id`.
-Совпадение названий и SKU ничего не группирует. Локализованные native поля
-сохраняются; этот срез отображает основной контент ответа без выбора fallback.
+Единственная точка подключения provider factories —
+`presentation/depends/plugin_registry.py`. Application SDK содержит capabilities
+VerifyConnectionPlugin и ReadPublicationPagePlugin; реализации находятся в
+`infrastructure/plugin/prom/` и `woocommerce/`. Общие handlers не ветвятся по kind.
 
-Для Prom `regular_price` берётся из native `price`, а `sale_price` вычисляется
-из `discount`: процент (`percent`) или фиксированная сумма (`amount`). Например,
-480 UAH со скидкой 20% даёт 384 UAH. `price` сохраняет цену ответа платформы;
-`sale_price` отражает заданную скидку без определения её активности по датам.
-Период скидки остаётся в native JSON. Некорректная скидка даёт предупреждение
-`invalid_discount` и пустую `sale_price`, не прерывая импорт карточки.
+WooCommerce читает административный REST products и отдельные variation-потоки.
+Identity подтверждается каноническим site URL. Валюта и основная locale являются
+явной конфигурацией ресурса; их нельзя считать автоматически обнаруженными.
+Требование multilingual adapter относится к будущему outbound-срезу.
 
-Woo использует REST v3 GET products со status=any и страницы GET
-products/{id}/variations. В списке находятся верхние ресурсы, в деталях —
-дочерние позиции текущего run. Если получение вариаций не завершено, карточка
-показывает неполноту. Валюта читается через general/woocommerce_currency;
-если права магазина не позволяют прочитать настройку, значение остаётся пустым
-с предупреждением. Доступные статусы определяет API и права ключа: данные вне
-его области видимости не считаются загруженными.
+Prom подтверждает root group авторизованным products/list, обходит страницы
+списка групп и затем products/list каждой группы. Native id не подменяется
+provider external_id для XML-импорта. Остаток из `quantity_in_stock` сохраняется
+в core `quantity` как Decimal, включая ноль. Отсутствующее или пустое количество
+остаётся null с `quantity_not_exposed`; невалидное — null с `invalid_quantity`.
+Количество не вычисляется из `presence`, `in_stock` или минимального заказа.
+Sale price не вычисляется по неоднозначным discount/date полям;
+discount сохраняется отдельно с предупреждением.
 
-### Rozetka
+Оба плагина явно объявляют ограничение `api_visible_statuses_only`: официальный
+read-контракт не доказывает охват недоступных/удалённых статусов. Завершённый
+обход поэтому сохраняет partial/read_complete=true с указанным scope, не обещая
+полную копию всех состояний кабинета. Проверка на реальном кабинете остаётся
+отдельной приёмкой; fixtures не заменяют её.
 
-Контракт: [официальный Seller API](https://api-seller.rozetka.com.ua/apidoc/).
-Авторизация выполняется через JSON POST `/sites` с username и password в base64.
-Bearer используется только в памяти текущей порции. Ошибка `success=false`
-проверяется и при HTTP 200; истёкший токен обновляется один раз с повтором GET,
-отказ в правах/credentials заканчивает run. Временные сбои и 429 повторяют jobs.
+Источники wire-контрактов: [WooCommerce REST API](https://developer.woocommerce.com/docs/apis/rest-api/v3/products),
+[Prom Swagger](https://prom.ua/cloud-cgi/static/uaprom-static/docs/swagger/index.html).
 
-Обход состоит из `GET /goods/all` отдельно с `available=0`, `1`, `2`, затем
-`GET /goods/archive` с документированными фильтрами по умолчанию. `item_active`
-и один конкретный прайс не фильтруются. Используются `page`, `pageSize=20`,
-`sort=price_offer_id`, `_meta`; повтор последних страниц или неверная пагинация
-прерывает обход. Реализация не гарантирует неизменный snapshot внешнего кабинета.
+## Запуск и проверки
 
-Каждая порция получает детали одной позиции через `/goods/details` по `item_id`
-и при наличии `sync_source_id`. Объект и одиночный массив `content.item`
-разбираются явно с проверкой ID. Checkpoint хранит поток, страницу и не более
-20 ожидающих list позиций, а также ограниченную историю отпечатков страниц.
-Токен, логин и пароль подключения не сохраняются в checkpoint или job payload.
-HTTP timeout Rozetka — 10 секунд; общая порция ограничена меньшим из 60 секунд,
-половины lease и половины job timeout. Сеть выполняется вне SQL-транзакции.
+Deployment должен предоставить Fernet key через
+`CHANNELS__CREDENTIALS_ENCRYPTION_KEY` либо mounted file
+`CHANNELS__CREDENTIALS_ENCRYPTION_KEY_PATH`. Ключ сохраняется между перезапусками;
+отсутствие настройки даёт явный отказ сохранения credentials, а не plaintext fallback.
+HTTP-пределы: `CHANNELS__HTTP_TIMEOUT_SECONDS`, `CHANNELS__MAX_RESPONSE_BYTES`.
 
-Внешний ключ — `str(item_id)` в области канала/ревизии, включая позиции без
-`rz_item_id`. Native snapshot содержит `list_item` и `detail_item` полностью;
-детали перекрывают присутствующие поля списка при нормализации. Первая полная
-карточка ресурса в run сохраняется один раз, пересечения потоков не увеличивают
-счётчик уникальных карточек и не перезаписывают снимок. Исчезновение детали
-прерывает run с `source_item_not_found`, сохраняя полученные карточки и checkpoint.
-`rz_group_id` не создаёт вариации или родителей.
+Перед использованием API tenant-схемы обновляются обычным
+`dnk-manage tenant-migrations upgrade`; production фоновые шаги исполняет
+`dnk-manage jobs worker`. Рабочая БД не изменяется при импорте модуля.
 
-Read документ отображает украинские поля, полученное название, article, описания,
-изображения, категории и params. Значения Boolean, ноль, единицы и списки подписей
-сохраняются. Публичный статус — upload_status_title с исходным кодом; без подписи
-выдаётся код с namespace, который Console переводит при известном значении.
-`rz_status` и `rz_sell_status` сохраняются отдельно в native и не смешиваются с ним.
+Тесты: `test/test_channels.py`, `test/test_channels_manifest.py`,
+`test/test_channels_architecture.py`,
+`test/test_channels_postgres.py`. PostgreSQL-тесты требуют TEST_POSTGRES_URL
+одноразовой БД. Они проверяют реальный HTTP/CSRF/UoW, оба read plugins,
+пагинацию/вариации/группы, повторы, lease, commit failure, identity collision,
+ротацию ключей, recovery, Catalog isolation и миграционный roundtrip/drift.
 
-`price` остаётся исходной ценой. При `price_old > price` обычная цена — price_old,
-скидочная — price. Положительная `price_promo < price` задаёт промо-цену; нулевые
-old/promo трактуются как отсутствие дополнительной цены, но нулевой price
-сохраняется. Однозначные `prices.price_type` 1/2 используются при отсутствии
-основных полей. Даты действия и флаг new_flow_old_price не вычисляют активность
-скидки и остаются в native. При отсутствии валюты поле остаётся None с
-предупреждением, валюта не назначается автоматически.
 
-Проверки выполнены на синтетических fixtures официального контракта,
-изолированном PostgreSQL и Console. Подключение реального кабинета, права,
-rate limits, полнота охвата статусов/архива и действующая семантика цен
-требуют проверки на реальном аккаунте продавца. Источник fixtures описан
-в `test/fixtures/rozetka/README.md`.
-
-Worker зарегистрирован как `channels.publication_import` в `jobs worker`.
-Каждое задание обрабатывает ограниченную порцию. Подготовка коммитится до HTTP;
-после HTTP открывается новый короткий UoW. Запись карточек, прогресса и задания
-продолжения атомарна. Lease проверяется с блокировкой перед записью; повтор старой
-страницы не продвигает прогресс. Shared jobs повторяют временные ошибки.
-Окончательная ошибка сохраняет уже полученные карточки и статус partial/failed;
-исчерпанное или потерянное job видно в проекции и допускает новый ручной запуск.
-
-`connection_revision` увеличивается только при действительном изменении настроек.
-Старый worker не сохраняет данные после смены подключения или выключения канала.
-Чтение выбирает только текущую ревизию; старые снимки остаются в БД до удаления
-канала. Ротация ключей также создаёт новую область снимков и требует загрузки.
-Отсутствие карточки в следующем обходе пока не удаляет ранее полученный снимок:
-автоматическая сверка удалений и периодический импорт отложены. Исчезнувшие
-вариации не смешиваются с текущим набором родителя.
-
-HTTP адаптеры разрешают HTTPS с публичным IP, закрепляют DNS адрес и TLS host,
-отключают proxy/redirect, ограничивают распакованный JSON до 16 MiB на запрос.
-Внешние ошибки не содержат URL, credentials и тела ответа. Описания очищает nh3
-за Application-портом; ссылки изображений и карточек ограничены HTTP(S) без
-userinfo. JSON POST разрешён только для фиксированного login endpoint Rozetka.
-Запись на Prom/Woo/Rozetka, YML, локальные правки и привязка Catalog не входят
-в текущий срез.
-
-Проверки импорта покрывают страницы Prom, более 100 вариаций Woo, отсутствие
-валюты, нулевые значения, очистку HTML, сохранение native полей, повторные запуски,
-lease/ревизию подключения, частичный сбой, пустой источник и HTTP tenant isolation.
-Проверяются остановка при повторяющейся странице источника и полный rollback
-карточек, курсора и задания продолжения с успешным повтором после сбоя.
-Rozetka дополнительно проверяется на auth envelopes, обновление токена,
-разные прайсы, архив, дубли потоков, bounded checkpoint, общий timeout,
-цены/скидки, Boolean/list params, nullable изображения и секреты в HTTP ответах.
+Проверки Console: scripts `lint:console`, `typecheck:console`, `build:console`
+из `frontends/`, `test:channels` из workspace `@dnk/console`. Браузерная приёмка
+выполняется на изолированном API/PostgreSQL с настоящими HTTP/CSRF/UoW/jobs и
+fixture-ответами внешних API: Prom/Woo, ошибки, повтор, конфликт revision,
+сохранность черновика, pause/resume, URL/reload, session reset и mobile viewport.
+Это не заменяет приёмку с реальными кабинетами.

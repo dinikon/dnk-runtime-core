@@ -7,6 +7,7 @@ import { accessRoutes } from "@/modules/access/routes";
 import { authRoutes } from "@/modules/auth/routes";
 import { catalogRoutes } from "@/modules/catalog/routes";
 import { filesRoutes } from "@/modules/files/routes";
+import { channelsRoutes } from "@/modules/channels";
 import { crmRoutes } from "@/modules/crm";
 import { dashboardRoutes } from "@/modules/dashboard";
 import { priceListRoutes } from "@/modules/price-lists";
@@ -38,6 +39,7 @@ export const router = createRouter({
         ...dashboardRoutes,
         ...catalogRoutes,
         ...crmRoutes,
+        ...channelsRoutes,
         ...priceListRoutes,
         {
           path: "settings/members",

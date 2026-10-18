@@ -65,7 +65,7 @@ Revision `0016_remove_inventory`, after `0014_channel_publications`, retires
 the Inventory schema; its own upgrade/downgrade behavior is preserved.
 Catalog no longer references Inventory SKUs or warehouses.
 
-Tenant head `0027_remove_channels`, after `0025_user_display_currency`, drops
+Historical revision `0027_remove_channels`, after `0025_user_display_currency`, drops
 `channel_publications`, `channel_publication_import_runs`, then `channels`,
 without CASCADE. It removes stored credentials, observed publications and import
 progress. The whole tenant migration rolls back if an unexpected dependency
@@ -73,7 +73,17 @@ blocks a drop. Other module tables remain. Downgrade recreates the empty
 historical structure, including foreign keys, checks and indexes, through
 `0013_channels` and `0014_channel_publications`; it cannot recover deleted data.
 Both historical revisions and their table ownership names stay in the project.
-Fresh tenants also reach this head and have no Channels tables.
+At revision 0027 tenants have no Channels tables.
+
+The current head `0028_channels_core` follows 0027 and creates the new Channels
+model: `channels`, `channel_connections`, `channel_sync_runs` and
+`channel_external_publications`. Channel owns its single Connection, protected
+by an unconditional UNIQUE(channel_id); outbound synchronization defaults to false.
+The migration does not restore old credentials/publications, modify Catalog,
+seed channels, or rewrite previous revisions. Downgrade drops only these new
+four tables and returns to the empty Channels state of 0027. See the
+[current Channels module](../modules/channels.md) for credentials configuration
+and the verification/initialization worker.
 
 ## Transition from shared identity tables
 

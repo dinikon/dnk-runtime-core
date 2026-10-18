@@ -263,8 +263,12 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                     for name in removed
                 }
             )
-            await self.migrator.upgrade(connection, schema)
-            await self.migrator.upgrade(connection, schema)
+            await self.migrator._migrate(
+                connection, schema, command.upgrade, "0027_remove_channels"
+            )
+            await self.migrator._migrate(
+                connection, schema, command.upgrade, "0027_remove_channels"
+            )
             self.assertEqual(
                 set(
                     await connection.run_sync(

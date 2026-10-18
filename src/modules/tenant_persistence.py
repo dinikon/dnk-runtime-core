@@ -105,3 +105,7 @@ import src.modules.catalog.infrastructure.persistence.models.product_type_transl
 
 import src.modules.currency.infrastructure.persistence.models.exchange_rate_book  # noqa: F401
 import src.modules.currency.infrastructure.persistence.models.exchange_rate_quote  # noqa: F401
+import src.modules.channels.infrastructure.persistence.models.channel  # noqa: F401
+import src.modules.channels.infrastructure.persistence.models.connection  # noqa: F401
+import src.modules.channels.infrastructure.persistence.models.sync_run  # noqa: F401
+import src.modules.channels.infrastructure.persistence.models.external_publication  # noqa: F401

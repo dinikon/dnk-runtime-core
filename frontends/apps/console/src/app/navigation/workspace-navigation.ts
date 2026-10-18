@@ -3,6 +3,7 @@ import {
   FileSpreadsheet,
   LifeBuoy,
   ShoppingBasket,
+  Plug,
   Users,
 } from "@lucide/vue";
 
@@ -13,6 +14,10 @@ export const workspaceNavigation: WorkspaceNavigation = {
     {
       title: "Каталог",
       items: [{ title: "Товары", url: "/catalog/items", icon: ShoppingBasket }],
+    },
+    {
+      title: "Продажи",
+      items: [{ title: "Каналы", url: "/channels", icon: Plug }],
     },
     {
       title: "CRM",

@@ -1,4 +1,14 @@
 from __future__ import annotations
+from src.modules.channels.presentation.jobs.verification import (
+    ChannelsVerificationJobHandler,
+)
+from src.modules.channels.presentation.jobs.initialization import (
+    ChannelsInitializationJobHandler,
+)
+from src.modules.channels.infrastructure.jobs import (
+    VERIFY_JOB as CHANNELS_VERIFY_JOB,
+    PAGE_JOB as CHANNELS_PAGE_JOB,
+)
 from src.modules.files.presentation.jobs.empty_trash import (
     FilesEmptyTrashJobHandler,
     JOB_TYPE as FILES_EMPTY_TRASH_JOB_TYPE,
@@ -129,6 +139,12 @@ async def handle_worker(_args: argparse.Namespace) -> int:
 
     dispatcher = build_scheduled_job_dispatcher(
         {
+            CHANNELS_VERIFY_JOB: ChannelsVerificationJobHandler(
+                db_helper.session_factory
+            ),
+            CHANNELS_PAGE_JOB: ChannelsInitializationJobHandler(
+                db_helper.session_factory
+            ),
             "price_list.sync": PriceListSyncJobHandler(
                 get_synchronize_price_list_use_case(db_helper.session_factory)
             ),
