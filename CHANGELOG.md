@@ -1,3 +1,9 @@
+## v3.1.0-rc.1 (2026-10-18)
+
+### Feat
+
+- **charts**: add MinIO helm chart with optional internal S3 setup
+
 ## v3.0.0 (2026-10-18)
 
 ### BREAKING CHANGE
