@@ -24,6 +24,11 @@ helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | quote }}
 {{- $source := $.Values -}}{{- range (splitList "." $path) -}}{{- $source = index $source . -}}{{- end -}}
 {{- $_ := set $bindings $env (dict "source" $source "name" $name "key" $env) -}}
 {{- end -}}
+{{- if .Values.minio.enabled -}}
+{{- $minioName := printf "%s-auth" (include "dnk.runtime.dependencyName" (dict "root" . "values" .Values.minio "service" "minio")) -}}
+{{- $_ := set $bindings "FILES__ACCESS_KEY" (dict "source" .Values.minio.auth.accessKey "name" $minioName "key" "access-key") -}}
+{{- $_ := set $bindings "FILES__SECRET_KEY" (dict "source" .Values.minio.auth.secretKey "name" $minioName "key" "secret-key") -}}
+{{- end -}}
 {{- range $dep, $env := dict "postgresql" "DB_PASSWORD" "redis" "REDIS_PASSWORD" "rabbitmq" "DNK_RABBITMQ_PASSWORD" -}}
 {{- $v := index $.Values $dep -}}{{- $inline := $name -}}{{- $key := $env -}}
 {{- if $v.enabled -}}{{- $inline = printf "%s-auth" (include "dnk.runtime.dependencyName" (dict "root" $ "values" $v "service" $dep)) -}}{{- $key = "password" -}}{{- end -}}
@@ -60,7 +65,11 @@ SQLALCHEMY_DATABASE_URI_SCHEME: "postgresql+asyncpg"
 {{- range $env, $path := (.Files.Get "files/environment.yaml" | fromYaml) }}
 {{- $v := $.Values -}}{{- range (splitList "." $path) -}}{{- $v = index $v . -}}{{- end }}
 {{- if or (not (hasPrefix "CONTROL_PLANE__" $env)) $.Values.controlPlane.enabled (eq $env "CONTROL_PLANE__ENABLED") }}
-{{- if or (kindIs "float64" $v) (kindIs "slice" $v) }}
+{{- if and $.Values.minio.enabled (eq $env "FILES__ENDPOINT") }}
+{{ $env }}: {{ printf "%s:9000" (include "dnk.runtime.dependencyName" (dict "root" $ "values" $.Values.minio "service" "minio")) | quote }}
+{{- else if and $.Values.minio.enabled (eq $env "FILES__SECURE") }}
+{{ $env }}: "false"
+{{- else if or (kindIs "float64" $v) (kindIs "slice" $v) }}
 {{ $env }}: {{ $v | toJson | quote }}
 {{- else }}
 {{ $env }}: {{ $v | toString | quote }}
@@ -97,6 +106,12 @@ EVENT_BUS__PUBLISHER_WORKER_ENABLED: {{ .Values.workers.publisher.enabled | quot
 {{- if and $port (or (lt (int $port) 1) (gt (int $port) 65535)) -}}{{- fail "application.server.publicOrigin port must be between 1 and 65535" -}}{{- end -}}
 {{- if and (eq $app.server.environment "PRODUCTION") (ne $url.scheme "https") -}}{{- fail "production application.server.publicOrigin requires HTTPS" -}}{{- end -}}
 {{- include "dnk.runtime.validateControlPlane" . -}}
+{{- if .Values.minio.enabled -}}
+{{- include "dnk.minio.validate" (dict "Values" .Values.minio) -}}
+{{- if or $app.files.endpoint $app.files.accessKey.value $app.files.accessKey.existingSecret.name $app.files.accessKey.existingSecret.key $app.files.secretKey.value $app.files.secretKey.existingSecret.name $app.files.secretKey.existingSecret.key -}}
+{{- fail "minio.enabled=true configures application.files automatically; set credentials under minio.auth and leave application.files endpoint and credentials empty" -}}
+{{- end -}}
+{{- end -}}
 {{- include "dnk.runtime.validateSecret" (dict "secret" $app.email.smtp.password "path" "application.email.smtp.password" "required" false) -}}
 {{- include "dnk.runtime.validateSecret" (dict "secret" $app.priceLists.sourceEncryptionKey "path" "application.priceLists.sourceEncryptionKey" "required" false) -}}
 {{- $_ := required "application.email.smtp.host is required" $app.email.smtp.host -}}

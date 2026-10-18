@@ -8,5 +8,8 @@ dependencies:
 - name: rabbitmq
   repository: ""
   version: 0.1.0
-digest: sha256:085e30f6e056a25c7683f3932cf1ff029ad59f504d638b0297186c92e4ac658d
-generated: "2026-09-09T21:58:25.659573+03:00"
+- name: minio
+  repository: ""
+  version: 0.1.0
+digest: sha256:578d65e54e261c22ab70537deb31d5eb7d1b90b19d1457194d83758d01cc0017
+generated: "2026-10-18T16:20:43.068277+03:00"
