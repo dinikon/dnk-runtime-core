@@ -24,7 +24,7 @@ Google Drive остаётся следующим этапом: расширен�
 
 ## Архитектурный перечень
 
-Нормативный источник — `docs/architecture/AGENTS.md`.
+Нормативный источник — `docs/architecture/backend.md`.
 
 - Aggregate Roots: `StorageProvider`, `Bucket`, `StoredFile`.
 - Структура: `domain/<aggregate>/`, `application/<aggregate>/command|query/`,
@@ -774,7 +774,7 @@ Forms/AdminLayout и shadcn-композиция выполняются этап
 
 Реализован 2026-10-11. Aggregate Roots остаются `StorageProvider`, `Bucket`,
 `StoredFile`; новое состояние и инварианты корзины не вводились. Перед реализацией
-прочитан полный `docs/architecture/AGENTS.md`: применены направление импортов,
+прочитан полный `docs/architecture/backend.md`: применены направление импортов,
 организация по агрегатам/сценариям, конкретные DTO, фабрики/методы Domain,
 аннотации и русские docstrings, пустые init, mapper без I/O и внешняя транзакция.
 
