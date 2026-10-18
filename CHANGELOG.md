@@ -1,3 +1,82 @@
+## v3.0.0-rc.1 (2026-10-18)
+
+### BREAKING CHANGE
+
+- repositories now rely on connection-bound tenant schemas; module APIs and handlers no longer accept tenant ID parameters.
+
+### Feat
+
+- **catalog**: remove catalog attributes, categories, and tags
+- **channels**: remove channel management module
+- **catalog**: remove outdated product-field components and add tests for content editing
+- **catalog**: remove technical codes for attributes and options
+- **catalog**: remove commands and handlers for catalog item management
+- **catalog**: remove support for variable catalog items and restructuring commands
+- **catalog**: implement product details view with dynamic rendering and measurements
+- **files**: add bulk file management and trash handling features
+- **files**: implement files module with overview, filters, table views, and actions
+- **catalog,tenancy,files**: revamp onboarding, catalog attributes, and file storage
+- **catalog**: restrict SIMPLE content to PRODUCT scope
+- **catalog**: default locale to user interface language if query param is absent
+- **catalog**: introduce catalog module with migrations, aggregates, commands, queries, and infrastructure setup
+- **warehousing**: add standalone warehouse creation with domain and HTTP layers
+- **reference_data**: limit locales query for demo purposes
+- **channels**: add Rozetka Read connector with fixtures, normalizer, and tests
+- **channels**: implement Prom discount normalization and validation with tests
+- **channels**: remove channels module and all related components
+- **channels**: restructure response models and introduce DTOs for application layer
+- **channels**: add channels module with migration, aggregate, API, and editor
+- **catalog**: enhance product and variant content handling with improved validation and isolation
+- **catalog**: consolidate catalog schema and modules for products and categories
+- **catalog**: reintroduce variable product and variant management
+- **catalog**: rename product type to kind and update related constraints
+- **catalog**: add category management with tenant-scoped localization
+- **catalog**: add product creation and translation management
+- **catalog**: introduce tenant product and attribute models
+- **reference_data, tenancy**: add global catalogs and tenant locales
+- **inventory**: add initial implementation of SKU aggregate and tenant migration
+- **inventory**: add initial implementation of SKU aggregate and tenant migration
+- **crm**: add contact point management for companies and contacts
+- **crm**: implement contact-company linking and retrieval
+- **crm**: implement company management with full CRUD and HTTP stack
+- **crm**: implement update and delete operations for contacts
+- **crm**: implement contact retrieval by ID with full HTTP and persistence stack
+- **crm**: rename company name field to legal_name with migration updates
+- **crm**: implement contact creation logic with full HTTP and persistence stack
+- **crm**: establish CRM contact-company links with backend, frontend, and migrations
+- **contact_points**: add mappers for persistence and domain transformation
+- **contact_points**: introduce module with tables, API, and integration contracts
+- **docs**: add architectural plan for contact points module
+- **ui**: improve CRM navigation and sidebar interactivity
+
+### Refactor
+
+- **identity**: replace `User` entity with aggregate and update references
+- **identity**: replace `User` entity with aggregate and update references
+- **migrations**: remove legacy catalog schemas to prepare for new model
+- **migrations**: remove legacy catalog schemas to prepare for new model
+- **warehousing**: remove standalone warehouse model and associated logic
+- **inventory**: remove SKU and warehouse modules with all related functionalities
+- **catalog**: remove catalog module and associated domain aggregates
+- **catalog**: remove content schema and associated modules
+- **catalog**: remove catalog attribute and variable product support
+- **tenancy**: remove tenant locale module and related components
+- **inventory**: replace warehouse entity with immutable aggregate and refactor dependencies
+- **contact_points**: remove contact points module and associated logic
+- **contact_points**: remove contact points module and related dependencies
+- **crm**: split HTTP controllers, requests, and responses into separate files
+- **crm**: inject UUID generator into contact creation handler
+- **tenancy, crm**: replace tenant schema selection with connection binding
+- **crm**: rename `Contact` aggregate to `ContactEntity` across the module
+- **identity**: remove access services, persistence, and HTTP dependencies
+- **shared**: remove tenant-layered infrastructure and email system components
+- **identity**: relocate shared identity and access layers to identity module
+- **crm**: reorganize persistence models into dedicated submodules
+- **crm**: remove redundant module structure and deprecated components
+- **persistence**: reorganize UnitOfWork into dedicated SQLAlchemy submodule
+- **docs**: remove outdated architecture documentation
+- **contact_points**: reorganize persistence layer into dedicated submodules
+
 ## v2.2.0 (2026-09-24)
 
 ### Feat
