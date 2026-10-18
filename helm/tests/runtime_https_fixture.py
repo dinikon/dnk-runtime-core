@@ -19,12 +19,12 @@ from uuid import UUID
 from sqlalchemy import text
 from src.config import dnk_config
 from src.modules.shared.infrastructure.persistence.database_helper import db_helper
-from src.modules.shared.infrastructure.persistence.tenant_migrations import TenantMigrator
-from src.modules.shared.application.persistence.tenant_schema_naming import TenantSchemaNaming
-from src.modules.tenancy.domain.tenant.value_object import TenantIdVO
-from src.modules.identity.application.auth.service import OtpService
-from src.modules.identity.application.ports import OtpChallenge
-from src.modules.identity.infrastructure.adapter import TokenManagerBackedOtpChallengeStore
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import TenantMigrator
+from src.modules.tenancy.application.tenant.tenant_schema_naming import TenantSchemaNaming
+from src.modules.tenancy.domain.tenant.value_object.tenant_id import TenantIdVO
+from src.modules.identity.application.auth.service.otp_service import OtpService
+from src.modules.identity.application.auth.port.otp_challenge_store import OtpChallenge
+from src.modules.identity.infrastructure.auth.otp_challenge_store import TokenManagerBackedOtpChallengeStore
 from src.modules.shared.application.tokens import TokenManager
 from src.modules.shared.infrastructure.tokens import RedisTokenBackend
 

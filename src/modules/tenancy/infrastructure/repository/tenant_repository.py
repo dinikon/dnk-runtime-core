@@ -2,15 +2,14 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.tenancy.domain.tenant import Tenant, TenantRepositoryProtocol
-from src.modules.tenancy.domain.tenant.value_object import TenantIdVO
-from src.modules.tenancy.infrastructure.mapper import (
-    tenant_model_to_entity,
-    tenant_to_model,
-)
+from src.modules.tenancy.domain.tenant.entity import Tenant
+from src.modules.tenancy.domain.tenant.repository import TenantRepositoryProtocol
+from src.modules.tenancy.domain.tenant.value_object.tenant_id import TenantIdVO
+from src.modules.tenancy.infrastructure.mapper.tenant import tenant_model_to_entity
+from src.modules.tenancy.infrastructure.mapper.tenant import tenant_to_model
 from src.modules.tenancy.infrastructure.persistence.tenant import TenantModel
 
 
@@ -20,6 +19,14 @@ class SqlAlchemyTenantRepository(TenantRepositoryProtocol):
     def __init__(self, session: AsyncSession) -> None:
         """Инициализирует repository текущей async-сессией."""
         self._session = session
+
+    async def save(self, tenant: Tenant) -> None:
+        """Сохраняет состояние доменной сущности в текущей транзакции."""
+        await self._session.execute(
+            update(TenantModel)
+            .where(TenantModel.id == tenant.id.uuid)
+            .values(status=tenant.status.value, updated_at=tenant.updated_at)
+        )
 
     async def add(self, tenant: Tenant) -> None:
         """Добавляет tenant model и flush-ит сессию."""

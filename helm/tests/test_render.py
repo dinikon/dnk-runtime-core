@@ -381,6 +381,52 @@ class HelmContractTests(unittest.TestCase):
                 )
                 self.assertEqual(container["imagePullPolicy"], "Always")
 
+    def test_files_upload_ingress_limit_and_overrides(self) -> None:
+        """Ingress учитывает multipart overhead, timeout и явные настройки оператора."""
+        prefix = "nginx.ingress.kubernetes.io/"
+        for limit, timeout, ingress_class, overrides in (
+            (1073741824, 600, "nginx", {}),
+            (2000000000, 599.5, "nginx", {prefix + "proxy-body-size": "3g"}),
+            (1073741824, 600, "traefik", {}),
+        ):
+            with self.subTest(limit=limit, ingress_class=ingress_class):
+                values = runtime_values(ingress=True)
+                values["application"]["files"] = {
+                    "consoleMaxUploadBytes": limit,
+                    "operationTimeoutSeconds": timeout,
+                }
+                values["ingress"]["className"] = ingress_class
+                values["ingress"]["annotations"] = overrides
+                manifests = self.render(values)
+                ingress = next(r for r in manifests if r["kind"] == "Ingress")
+                annotations = ingress["metadata"]["annotations"]
+                if ingress_class == "nginx":
+                    self.assertEqual(
+                        annotations[prefix + "proxy-body-size"],
+                        overrides.get(prefix + "proxy-body-size", str(limit + 65536)),
+                    )
+                    self.assertEqual(
+                        annotations[prefix + "proxy-request-buffering"], "off"
+                    )
+                    expected_timeout = "600"
+                    self.assertEqual(
+                        annotations[prefix + "proxy-read-timeout"], expected_timeout
+                    )
+                    self.assertEqual(
+                        annotations[prefix + "proxy-send-timeout"], expected_timeout
+                    )
+                else:
+                    self.assertNotIn(prefix + "proxy-body-size", annotations)
+                configs = [r for r in manifests if r["kind"] == "ConfigMap"]
+                settings = next(
+                    r["data"]
+                    for r in configs
+                    if "FILES__CONSOLE_MAX_UPLOAD_BYTES" in r.get("data", {})
+                )
+                self.assertEqual(
+                    settings["FILES__CONSOLE_MAX_UPLOAD_BYTES"], str(limit)
+                )
+
     def test_direct_ingress_and_certificate_defaults(self):
         for chart, fixture, backend_paths in [
             (

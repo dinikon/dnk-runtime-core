@@ -1,6 +1,7 @@
 """Real tenant migrations, invitation concurrency and access/session revocation."""
 
 import asyncio
+from contextlib import asynccontextmanager
 import os
 import unittest
 from types import SimpleNamespace
@@ -13,30 +14,36 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.schema import CreateSchema, DropSchema
 
 from src.config.feature.identity.auth_config import IdentityAuthSettings
-from src.modules.identity.application.access_service import IdentityAccessService
-from src.modules.identity.application.cloud_auth_service import CloudAuthService
-from src.modules.identity.application.ports.cloud import CloudConnection
-from src.modules.identity.application.auth.service import OtpService, SessionService
-from src.modules.identity.domain.access import IdentityAccessError
-from src.modules.identity.domain.user import User, UserIdVO
-from src.modules.identity.infrastructure.repository.access_repository import (
+from test.identity_scenarios import AccessScenarios
+from test.identity_scenarios import CloudScenarios
+from src.modules.identity.application.cloud.port.cloud import CloudConnection
+from src.modules.identity.application.auth.service.otp_service import OtpService
+from src.modules.identity.application.auth.service.session_service import SessionService
+from src.modules.identity.domain.access.error import IdentityAccessError
+from src.modules.identity.domain.user.aggregate import User
+from src.modules.identity.infrastructure.access.persistence.repository import (
     AccessRepository,
 )
-from src.modules.identity.infrastructure.repository.user_repository import (
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_connection import (
+    bind_tenant_schema,
+)
+from src.modules.identity.infrastructure.user.persistence.repository import (
     SqlAlchemyUserRepository,
 )
-from src.modules.identity.infrastructure.adapter.session_store import (
+from src.modules.identity.infrastructure.auth.session_store import (
     TokenManagerBackedSessionStore,
 )
 from src.modules.shared import EntityIdVO
-from src.modules.shared.domain.email import SystemEmailKind
-from src.modules.shared.application.persistence.tenant_schema_naming import (
+from src.modules.identity.application.email.system_email_kind import SystemEmailKind
+from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
 from src.modules.shared.application.tokens import TokenManager
 from src.modules.shared.infrastructure.tokens import InMemoryTokenBackend
-from src.modules.shared.infrastructure.persistence.unit_of_work import UnitOfWork
-from src.modules.shared.infrastructure.persistence.tenant_migrations import (
+from src.modules.shared.infrastructure.persistence.unit_of_work.sqlalchemy import (
+    UnitOfWork,
+)
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
     TenantMigrator,
 )
 
@@ -70,7 +77,7 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.member = User.create_tenant_admin(self.tenant, "Local", "Member")
         self.member.role = "member"
         self.member.add_email("member@example.com", is_primary=True, is_verified=True)
-        async with UnitOfWork(self.sessions) as uow:
+        async with self.tenant_uow() as uow:
             service = self.service(uow)
             await service.users.add(self.admin, tenant_id=self.tenant)
             await service.users.add(self.member, tenant_id=self.tenant)
@@ -82,8 +89,17 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
             await connection.execute(DropSchema(self.schema, cascade=True))
         await self.engine.dispose()
 
+    @asynccontextmanager
+    async def tenant_uow(self):
+        async with self.engine.connect() as connection:
+            await bind_tenant_schema(connection, self.tenant.uuid, self.naming)
+            async with UnitOfWork(
+                async_sessionmaker(connection, expire_on_commit=False)
+            ) as uow:
+                yield uow
+
     def service(self, uow):
-        return IdentityAccessService(
+        return AccessScenarios(
             uow=uow,
             users=SqlAlchemyUserRepository(uow.session, self.naming),
             access=AccessRepository(uow.session, self.naming),
@@ -100,7 +116,7 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
     async def test_revoke_reenable_never_resurrects_old_sessions_and_last_admin_guard(
         self,
     ):
-        async with UnitOfWork(self.sessions) as uow:
+        async with self.tenant_uow() as uow:
             service = self.service(uow)
             with self.assertRaises(IdentityAccessError):
                 await service.change_user(
@@ -144,7 +160,7 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
     async def test_invitation_creates_only_after_one_time_otp_and_refuses_existing_account(
         self,
     ):
-        async with UnitOfWork(self.sessions) as uow:
+        async with self.tenant_uow() as uow:
             service = self.service(uow)
             with self.assertRaises(IdentityAccessError):
                 await service.invite(
@@ -176,7 +192,7 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
 
         async def accept():
             try:
-                async with UnitOfWork(self.sessions) as uow:
+                async with self.tenant_uow() as uow:
                     return await self.service(uow).accept_invitation(
                         "tenant.example",
                         secret,
@@ -190,7 +206,7 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
 
         results = await asyncio.gather(accept(), accept())
         self.assertEqual(sum(r is not None for r in results), 1)
-        async with UnitOfWork(self.sessions) as uow:
+        async with self.tenant_uow() as uow:
             service = self.service(uow)
             users = await service.access.list_users(self.tenant.uuid)
             self.assertEqual(
@@ -213,9 +229,9 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
         oidc = AsyncMock()
         oidc.authorization_url.return_value = "https://core.example/authorize"
         oidc.exchange.return_value = str(uuid4())
-        async with UnitOfWork(self.sessions) as uow:
+        async with self.tenant_uow() as uow:
             service = self.service(uow)
-            cloud = CloudAuthService(service, reader, oidc)
+            cloud = CloudScenarios(service, reader, oidc)
             await cloud.start(
                 "tenant.example", self.member_session.token, "browser", "link"
             )
@@ -279,7 +295,7 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_role_only_changes_publish_the_bound_users_current_role(self):
         subject = uuid4()
-        async with UnitOfWork(self.sessions) as uow:
+        async with self.tenant_uow() as uow:
             service = self.service(uow)
             await service.access.bind(
                 self.tenant.uuid,
@@ -308,9 +324,11 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
     async def test_http_callback_failure_rolls_back_binding_before_safe_redirect(self):
         from fastapi import FastAPI
         from httpx import AsyncClient, ASGITransport
-        from src.modules.identity.presentation.http.integration import cloud_router
-        from src.modules.identity.presentation.depends.integration import (
-            get_cloud_service,
+        from src.modules.identity.presentation.cloud.http.router import (
+            router as cloud_router,
+        )
+        from src.modules.identity.presentation.cloud.depends import (
+            get_complete_cloud_auth_handler,
         )
 
         core_tenant = uuid4()
@@ -329,9 +347,9 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.projections.set_available.side_effect = RuntimeError(
             "injected outbox write failure"
         )
-        async with UnitOfWork(self.sessions) as uow:
+        async with self.tenant_uow() as uow:
             local = self.service(uow)
-            cloud = CloudAuthService(local, reader, oidc)
+            cloud = CloudScenarios(local, reader, oidc)
             await cloud.start(
                 "tenant.example", self.member_session.token, "browser", "link"
             )
@@ -342,7 +360,12 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
             app = FastAPI()
             app.include_router(cloud_router)
-            app.dependency_overrides[get_cloud_service] = lambda: cloud
+            app.dependency_overrides[get_complete_cloud_auth_handler] = (
+                lambda: cloud.handler("complete_cloud_auth")
+            )
+            from src.modules.shared.presentation.persistence.depends import get_uow
+
+            app.dependency_overrides[get_uow] = lambda: uow
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="https://tenant.example"
             ) as client:

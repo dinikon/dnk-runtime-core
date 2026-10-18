@@ -8,17 +8,19 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.modules.shared.infrastructure.persistence import (
-    LongText,
-    PortableJSON,
-    StringUUID,
-    TenantBase,
-    TenantSystemMixin,
+from src.modules.shared.infrastructure.persistence import LongText
+from src.modules.shared.infrastructure.persistence import PortableJSON
+from src.modules.shared.infrastructure.persistence import StringUUID
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_base import TenantBase
+from src.modules.shared.infrastructure.persistence.titled_entity_audit_mixin import (
+    TitledEntityAuditMixin,
 )
-from src.modules.shared.infrastructure.persistence.base import TENANT_SCHEMA_ALIAS
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_base import (
+    TENANT_SCHEMA_ALIAS,
+)
 
 
-class PriceListModel(TenantSystemMixin, TenantBase):
+class PriceListModel(TitledEntityAuditMixin, TenantBase):
     """Статическая tenant-модель PriceListModel."""
 
     __tablename__ = "price_lists"
@@ -91,7 +93,7 @@ class PriceListModel(TenantSystemMixin, TenantBase):
     archived_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
 
 
-class PartnerOfferModel(TenantSystemMixin, TenantBase):
+class PartnerOfferModel(TitledEntityAuditMixin, TenantBase):
     """Статическая tenant-модель PartnerOfferModel."""
 
     __tablename__ = "partner_offers"

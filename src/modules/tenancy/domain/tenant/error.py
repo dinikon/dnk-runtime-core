@@ -1,4 +1,4 @@
-from src.modules.shared import DomainError
+from src.modules.shared.domain.domain_error import DomainError
 
 
 class InvalidTenantNameError(DomainError):
@@ -39,3 +39,7 @@ __all__ = [
     "TenantExternalIdAlreadyExistsError",
     "TenantNameAlreadyExistsError",
 ]
+
+
+class TenantCannotActivateError(DomainError):
+    """Tenant не может стать активным до готовности обязательных ресурсов."""

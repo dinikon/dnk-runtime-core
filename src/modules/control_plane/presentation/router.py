@@ -205,8 +205,10 @@ async def deletion_capability(
 ):
     from sqlalchemy.ext.asyncio import async_sessionmaker
     from src.modules.control_plane.infrastructure.models import InstallationModel
-    from src.modules.shared.infrastructure.persistence.tenant_gate import (
+    from src.modules.tenancy.infrastructure.tenant.persistence.tenant_gate import (
         TenantGate,
+    )
+    from src.modules.tenancy.application.tenant.tenant_admission import (
         TenantUnavailable,
     )
 

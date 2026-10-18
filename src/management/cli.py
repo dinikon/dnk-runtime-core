@@ -31,6 +31,9 @@ def build_parser() -> argparse.ArgumentParser:
     from src.management.commands.tenant_migrations import (
         register as register_tenant_migrations,
     )
+    from src.management.commands.reference_data import (
+        register as register_reference_data,
+    )
 
     parser = argparse.ArgumentParser(
         prog="dnk-manage",
@@ -41,6 +44,13 @@ def build_parser() -> argparse.ArgumentParser:
     register_jobs(subparsers)
     register_tenant_migrations(subparsers)
     register_database(subparsers)
+    register_reference_data(subparsers)
+    from src.management.commands.files import register as register_files
+
+    register_files(subparsers)
+    from src.management.commands.currency import register as register_currency
+
+    register_currency(subparsers)
     return parser
 
 

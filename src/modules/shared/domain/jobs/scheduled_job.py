@@ -14,7 +14,7 @@ class ScheduledJob:
     """Shared scheduled job contract for deferred/timer/polling work."""
 
     id: UUID
-    tenant_id: UUID
+    tenant_id: UUID | None
     job_type: str
     payload: dict[str, Any]
     run_at: datetime
@@ -39,7 +39,7 @@ class ScheduledJob:
         """Serializes the job into a database/API friendly payload."""
         return {
             "id": str(self.id),
-            "tenant_id": str(self.tenant_id),
+            "tenant_id": str(self.tenant_id) if self.tenant_id else None,
             "job_type": self.job_type,
             "payload": dict(self.payload),
             "run_at": self.run_at.isoformat(),
@@ -63,7 +63,9 @@ class ScheduledJob:
         locked_until = payload.get("locked_until")
         return cls(
             id=UUID(str(payload["id"])),
-            tenant_id=UUID(str(payload["tenant_id"])),
+            tenant_id=(
+                UUID(str(payload["tenant_id"])) if payload.get("tenant_id") else None
+            ),
             job_type=str(payload["job_type"]),
             payload=dict(job_payload),
             run_at=datetime.fromisoformat(str(payload["run_at"])),

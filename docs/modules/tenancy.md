@@ -1,37 +1,22 @@
 # Tenancy
 
-Tenancy owns tenant accounts, domain bindings, host resolution and onboarding.
+Модуль Tenancy владеет жизненным циклом tenant, его доменами, разрешением по host,
+доступностью и tenant-схемами PostgreSQL. Он управляет tenant-миграциями и
+подключением к нужной схеме в пределах общего HTTP Unit of Work.
 
-## Public flows
+Tenancy не содержит системного списка языков и не задаёт ограничений локалей для
+других модулей. Глобальные коды стран, валют, локалей и временных зон предоставляет
+`reference_data`. Модули используют Application-контракты глобального справочника
+без доступа к его SQL-моделям. Локаль конкретного сценария выбирает его потребитель.
 
-- Creation is invoked by the durable [Control Plane installer](control-plane.md); the former bearer-key endpoint is removed.
-- `GET /api/console/tenants/resolve`: resolves the incoming host and tenant availability.
+Tenant-таблицы обслуживаются миграциями в `migrations/tenant/`. Текущая ревизия —
+`0027_remove_channels`. Миграции не запускаются
+автоматически при обычном HTTP-запросе.
 
-Runtime UUIDs are reserved before installation. New installations remain `provisioning` until local verification and activation commit. Exact host bindings have a global unique constraint; display names may repeat.
+## Планируемое удаление через CLI
 
-## Domain and persistence
-
-`Tenant` and `TenantDomain` have their domain entities, typed ids, repository protocols, global SQLAlchemy models and explicit mappers. Identity provisioning uses a tenancy-owned port implemented by the identity adapter.
-
-## Schema bootstrap
-
-`TenantSchemaBootstrapContext` contains `tenant_id` and `schema_name`. Its factory delegates to the shared `TenantSchemaNaming`: configured prefix plus UUID hex.
-
-`TenantSchemaBootstrapPort` is implemented by `AlembicTenantSchemaBootstrapAdapter`. It uses the current UoW session, locks the target schema, rejects an existing schema, creates it and runs tenant migrations. There is no seed, datasource metadata or dynamic schema dependency.
-
-Administrator provisioning runs only after schema bootstrap succeeds. The whole onboarding operation commits together or rolls back together, including failures after administrator insertion. A schema-name conflict is a tenancy error mapped to HTTP 409. Technical migration errors remain server errors.
-
-## Presentation and management
-
-HTTP DI is assembled in `presentation/depends`. Migration CLI composition lives in `presentation/depends/management.py`; it reads existing tenant identifiers and processes one tenant per UoW. Existing schemas are required by management commands.
-
-## Tests
-
-Unit tests cover orchestration, host resolution and the bootstrap boundary. PostgreSQL integration tests verify successful onboarding, schema-conflict handling and complete rollback after migration or administrator provisioning failure.
-
-## Related
-
-- [Inventory](inventory.md)
-- [Identity](identity.md)
-- [Tenant migrations](../data/tenant-migrations.md)
-- [HTTP API](../interfaces/http-api.md)
+Отдельный административный сценарий полного удаления локального tenant описан
+в [плане CLI-удаления](../plan/tenant-deletion-cli.md). План включает очистку
+файлов, токенов, tenant-схемы и общих записей, блокировку конкурентных операций,
+dry-run и продолжение после сбоя. Команда пока не реализована; tenant под
+управлением Control Plane удаляется через существующий CP-протокол.

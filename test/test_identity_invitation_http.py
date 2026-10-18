@@ -8,8 +8,20 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from src.config import dnk_config
-from src.modules.identity.presentation.depends.integration import get_access_service
-from src.modules.identity.presentation.http.integration import router
+from src.modules.identity.presentation.invitation.depends import (
+    get_request_invitation_otp_handler,
+)
+from src.modules.identity.presentation.auth.providers import get_tenant_context_reader
+from src.modules.identity.presentation.auth.http.csrf_router import (
+    router as csrf_router,
+)
+from src.modules.identity.application.invitation.command.request_invitation_otp.dto import (
+    RequestInvitationOtpResultDTO,
+)
+from src.modules.identity.application.invitation.command.request_invitation_otp.command import (
+    RequestInvitationOtpCommand,
+)
+from src.modules.identity.presentation.invitation.http.router import router
 from src.modules.shared.application.tokens import TokenManager
 from src.modules.shared.infrastructure.tokens import InMemoryTokenBackend
 
@@ -17,15 +29,17 @@ from src.modules.shared.infrastructure.tokens import InMemoryTokenBackend
 class InvitationOtpHttpTests(unittest.IsolatedAsyncioTestCase):
     async def request_otp(self, environment):
         service = SimpleNamespace(
-            context=AsyncMock(),
-            request_invitation_otp=AsyncMock(
-                return_value={"token": "challenge", "expires_in": 300, "code": "123456"}
+            get_by_host=AsyncMock(),
+            execute=AsyncMock(
+                return_value=RequestInvitationOtpResultDTO("challenge", 300, "123456")
             ),
         )
         app = FastAPI()
         app.include_router(router)
+        app.include_router(csrf_router)
         app.state.token_manager = TokenManager(InMemoryTokenBackend())
-        app.dependency_overrides[get_access_service] = lambda: service
+        app.dependency_overrides[get_request_invitation_otp_handler] = lambda: service
+        app.dependency_overrides[get_tenant_context_reader] = lambda: service
         async with AsyncClient(
             transport=ASGITransport(app=app, raise_app_exceptions=False),
             base_url="https://tenant.example",
@@ -41,8 +55,8 @@ class InvitationOtpHttpTests(unittest.IsolatedAsyncioTestCase):
                         "X-CSRF-Token": csrf.json()["csrf_token"],
                     },
                 )
-        service.request_invitation_otp.assert_awaited_once_with(
-            "tenant.example", "i" * 43
+        service.execute.assert_awaited_once_with(
+            RequestInvitationOtpCommand("tenant.example", "i" * 43)
         )
         return response
 

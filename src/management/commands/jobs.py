@@ -1,4 +1,17 @@
 from __future__ import annotations
+from src.modules.files.presentation.jobs.empty_trash import (
+    FilesEmptyTrashJobHandler,
+    JOB_TYPE as FILES_EMPTY_TRASH_JOB_TYPE,
+)
+from src.modules.files.presentation.jobs.purge_file import (
+    FilesPurgeJobHandler,
+    JOB_TYPE as FILES_PURGE_JOB_TYPE,
+)
+from src.modules.files.presentation.jobs.trash_cleanup import (
+    FilesTrashCleanupJobHandler,
+    ensure_trash_cleanup_jobs,
+    JOB_TYPE as FILES_TRASH_JOB_TYPE,
+)
 from src.modules.price_lists.presentation.depends.application import (
     get_synchronize_price_list_use_case,
     get_cleanup_price_list_use_case,
@@ -11,6 +24,12 @@ from pathlib import Path
 import signal
 
 from src.config import dnk_config
+from src.modules.reference_data.presentation.jobs.refresh import (
+    JOB_TYPE,
+    ReferenceDataRefreshJobHandler,
+    ensure_weekly_jobs,
+)
+from datetime import UTC, datetime
 from src.management.job_healthcheck import main as probe_main
 from src.modules.shared.application.jobs import (
     ProcessDueScheduledJobsCommand,
@@ -102,6 +121,12 @@ async def handle_worker(_args: argparse.Namespace) -> int:
             loop.add_signal_handler(event, stop.set)
         except NotImplementedError:
             pass
+    from src.modules.files.presentation.jobs.cleanup import (
+        FilesCleanupJobHandler,
+        ensure_cleanup_jobs,
+        JOB_TYPE as FILES_CLEANUP_JOB_TYPE,
+    )
+
     dispatcher = build_scheduled_job_dispatcher(
         {
             "price_list.sync": PriceListSyncJobHandler(
@@ -109,6 +134,15 @@ async def handle_worker(_args: argparse.Namespace) -> int:
             ),
             "price_list.cleanup": PriceListCleanupJobHandler(
                 get_cleanup_price_list_use_case(db_helper.session_factory)
+            ),
+            JOB_TYPE: ReferenceDataRefreshJobHandler(db_helper.session_factory),
+            FILES_CLEANUP_JOB_TYPE: FilesCleanupJobHandler(db_helper.session_factory),
+            FILES_PURGE_JOB_TYPE: FilesPurgeJobHandler(db_helper.session_factory),
+            FILES_EMPTY_TRASH_JOB_TYPE: FilesEmptyTrashJobHandler(
+                db_helper.session_factory
+            ),
+            FILES_TRASH_JOB_TYPE: FilesTrashCleanupJobHandler(
+                db_helper.session_factory
             ),
         }
     )
@@ -128,10 +162,40 @@ async def handle_worker(_args: argparse.Namespace) -> int:
         job_timeout_seconds=settings.job_timeout_seconds,
         shutdown_grace_seconds=settings.shutdown_grace_seconds,
     )
+
+    async def register_recurring_jobs() -> None:
+        """Регистрирует периодические задания независимо при сбое одного из модулей."""
+        logger = logging.getLogger(__name__)
+        registrars = (
+            ("reference_data", ensure_weekly_jobs),
+            ("files.orphans", ensure_cleanup_jobs),
+            ("files.trash", ensure_trash_cleanup_jobs),
+        )
+        while not stop.is_set():
+            for kind, register_jobs in registrars:
+                try:
+                    await register_jobs(db_helper.session_factory, datetime.now(UTC))
+                except Exception as error:
+                    logger.warning(
+                        "Recurring job registration failed",
+                        extra={
+                            "event": "jobs.registration.failed",
+                            "job_kind": kind,
+                            "error_type": type(error).__name__,
+                        },
+                    )
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=3600)
+            except TimeoutError:
+                pass
+
+    registrar = asyncio.create_task(register_recurring_jobs())
     try:
         await worker.run(stop)
         return 0
     finally:
+        registrar.cancel()
+        await asyncio.gather(registrar, return_exceptions=True)
         await db_helper.dispose()
 
 

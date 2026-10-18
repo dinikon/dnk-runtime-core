@@ -10,7 +10,7 @@ from uuid import UUID
 class ScheduleScheduledJobCommand:
     """Command for scheduling a shared deferred job."""
 
-    tenant_id: UUID
+    tenant_id: UUID | None
     job_type: str
     payload: dict[str, Any]
     run_at: datetime

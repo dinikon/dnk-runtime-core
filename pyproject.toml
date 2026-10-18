@@ -1,6 +1,6 @@
 [project]
 name = "dnk-runtime-core"
-version = "2.2.0"
+version = "3.0.0-rc.2"
 description = "Add your description here"
 readme = "README.md"
 requires-python = "==3.13.9"
@@ -23,6 +23,10 @@ dependencies = [
     "redis>=6.4.0",
     "sqlalchemy[asyncio]>=2.0.48",
     "uuid6>=2025.0.1",
+    "phonenumbers>=9,<10",
+    "email-validator>=2.3,<3",
+    "nh3>=0.3.7",
+    "minio>=7.2.20,<8",
 ]
 
 [dependency-groups]

@@ -14,7 +14,7 @@ from src.modules.price_lists.application.sync_run.ports import (
     StagingPort,
     JobSchedulerPort,
 )
-from src.modules.shared.application.persistence.unit_of_work_protocol import (
+from src.modules.shared.application.persistence.unit_of_work import (
     UnitOfWorkProtocol,
 )
 from dataclasses import dataclass

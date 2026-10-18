@@ -129,7 +129,7 @@ def inside_tests():
     import unittest
 
     from sqlalchemy import event, text
-    from sqlalchemy.engine import URL
+    from sqlalchemy.engine import Connection, URL
     from sqlalchemy.ext.asyncio import create_async_engine
     from sqlalchemy.pool import NullPool
 
@@ -234,7 +234,7 @@ def inside_tests():
 
         async def test_published_image_bootstrap_migrations_repeat_preserve_existing_data(
             self,
-        ):
+        ) -> None:
             ids = await self.seed_tenants()
             await self.cli()
             await self.cli()
@@ -248,7 +248,7 @@ def inside_tests():
                 self.assertIsNotNone(
                     await self.scalar(
                         "SELECT to_regclass(:name)",
-                        {"name": "dnk_{}.warehouses".format(tenant_id.hex)},
+                        {"name": "dnk_{}.users".format(tenant_id.hex)},
                     )
                 )
             self.assertEqual(
@@ -259,7 +259,9 @@ def inside_tests():
                 "tenant-preserved",
             )
 
-        async def test_published_image_missing_second_tenant_rolls_back_first(self):
+        async def test_published_image_missing_second_tenant_rolls_back_first(
+            self,
+        ) -> None:
             ids = await self.seed_tenants(missing_last=True)
             output = await self.cli(success=False)
             self.assertIn("batch rolled back", output)
@@ -272,9 +274,117 @@ def inside_tests():
             self.assertIsNone(
                 await self.scalar(
                     "SELECT to_regclass(:name)",
-                    {"name": "dnk_{}.warehouses".format(ids[0].hex)},
+                    {"name": "dnk_{}.users".format(ids[0].hex)},
                 )
             )
+            self.assertEqual(
+                await self.scalar("SELECT value FROM public.protected"), "preserved"
+            )
+
+        async def test_channels_removal_rolls_back_global_jobs_and_tenant_drops(
+            self,
+        ) -> None:
+            """Проверяет общий rollback реального runner при FK второго tenant и retry."""
+            from alembic import command
+
+            from src.modules.shared.infrastructure.persistence.alembic_lock import (
+                serialized_alembic,
+            )
+            from src.modules.shared.infrastructure.persistence.global_migrations import (
+                GlobalMigrator,
+            )
+            from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
+                TenantMigrator,
+            )
+
+            ids = await self.seed_tenants()
+            config = GlobalMigrator().config()
+
+            def downgrade_public(connection: Connection) -> None:
+                """Возвращает предыдущий global head перед проверкой перехода."""
+                config.attributes["connection"] = connection
+                command.downgrade(config, "0006_reference_data")
+
+            async with self.admin.begin() as connection:
+                async with serialized_alembic():
+                    await connection.run_sync(downgrade_public)
+                migrator = TenantMigrator()
+                for tenant_id in ids:
+                    schema = "dnk_" + tenant_id.hex
+                    await migrator._migrate(
+                        connection,
+                        schema,
+                        command.upgrade,
+                        "0026_catalog_attribute_ids",
+                    )
+                    await connection.execute(
+                        text(
+                            f'INSERT INTO "{schema}".channels '
+                            "(id, name, kind, config_version, connection_settings, "
+                            "encrypted_secrets, configured_secret_fields, is_active, "
+                            "status, created_by, updated_by) "
+                            "VALUES (:id, 'Test channel', 'prom', 1, '{}', "
+                            "'test-encrypted', '[]', true, 'unverified', :id, :id)"
+                        ),
+                        {"id": tenant_id},
+                    )
+                    await connection.execute(
+                        text(
+                            "INSERT INTO public.scheduled_jobs "
+                            "(id, tenant_id, job_type, payload, run_at) "
+                            "VALUES (:id, :id, 'channels.publication_import', '{}', now())"
+                        ),
+                        {"id": tenant_id},
+                    )
+                blocked = "dnk_" + ids[1].hex
+                await connection.execute(
+                    text(
+                        f'CREATE TABLE "{blocked}".external_binding '
+                        f'(channel_id uuid REFERENCES "{blocked}".channels(id))'
+                    )
+                )
+            self.assertIn("batch rolled back", await self.cli(success=False))
+            self.assertEqual(
+                await self.scalar(
+                    "SELECT version_num FROM public.alembic_version_global"
+                ),
+                "0006_reference_data",
+            )
+            self.assertEqual(
+                await self.scalar("SELECT count(*) FROM public.scheduled_jobs"), 2
+            )
+            for tenant_id in ids:
+                schema = "dnk_" + tenant_id.hex
+                self.assertEqual(
+                    await self.scalar(f'SELECT count(*) FROM "{schema}".channels'), 1
+                )
+                self.assertEqual(
+                    await self.scalar(
+                        f'SELECT version_num FROM "{schema}".alembic_version'
+                    ),
+                    "0026_catalog_attribute_ids",
+                )
+            async with self.admin.begin() as connection:
+                await connection.execute(
+                    text(f'DROP TABLE "{blocked}".external_binding')
+                )
+            await self.cli()
+            await self.cli()
+            self.assertEqual(
+                await self.scalar("SELECT count(*) FROM public.scheduled_jobs"), 0
+            )
+            for tenant_id in ids:
+                for table in (
+                    "channels",
+                    "channel_publications",
+                    "channel_publication_import_runs",
+                ):
+                    self.assertIsNone(
+                        await self.scalar(
+                            "SELECT to_regclass(:name)",
+                            {"name": f"dnk_{tenant_id.hex}.{table}"},
+                        )
+                    )
             self.assertEqual(
                 await self.scalar("SELECT value FROM public.protected"), "preserved"
             )

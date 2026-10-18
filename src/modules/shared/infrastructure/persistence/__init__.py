@@ -1,21 +1,23 @@
 from __future__ import annotations
 
+
 from importlib import import_module
 from typing import Any
 
 from src.modules.shared.infrastructure.persistence.audience_mixin import AudienceMixin
-from src.modules.shared.infrastructure.persistence.base import Base, TENANT_SCHEMA_ALIAS
+from src.modules.shared.infrastructure.persistence.base import Base
 from src.modules.shared.infrastructure.persistence.database_startup_error import (
     DatabaseStartupError,
+)
+from src.modules.shared.infrastructure.persistence.entity_audit_mixin import (
+    EntityAuditMixin,
 )
 from src.modules.shared.infrastructure.persistence.long_text import LongText
 from src.modules.shared.infrastructure.persistence.portable_json import PortableJSON
 from src.modules.shared.infrastructure.persistence.string_uuid import StringUUID
-from src.modules.shared.infrastructure.persistence.tenant_base import TenantBase
-from src.modules.shared.infrastructure.persistence.tenant_system_mixin import (
-    TenantSystemMixin,
+from src.modules.shared.infrastructure.persistence.unit_of_work.sqlalchemy import (
+    UnitOfWork,
 )
-from src.modules.shared.infrastructure.persistence.unit_of_work import UnitOfWork
 
 _LAZY_EXPORTS: dict[str, str] = {
     "DatabaseHelper": "src.modules.shared.infrastructure.persistence.database_helper",
@@ -27,12 +29,10 @@ __all__ = [
     "Base",
     "DatabaseHelper",
     "DatabaseStartupError",
+    "EntityAuditMixin",
     "LongText",
     "PortableJSON",
     "StringUUID",
-    "TENANT_SCHEMA_ALIAS",
-    "TenantBase",
-    "TenantSystemMixin",
     "UnitOfWork",
     "db_helper",
 ]

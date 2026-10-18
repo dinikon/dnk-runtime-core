@@ -1,70 +1,52 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useQueryClient } from "@tanstack/vue-query";
+import { useRouter } from "vue-router";
 import { Button } from "@/components/ui/button";
-import { useCrmListState } from "../model/use-crm-list-state";
 import { useContactsQuery } from "../model/use-contacts-query";
 import {
   useCreateContact,
   useDeleteContact,
-  useUpdateContact,
 } from "../model/use-contact-mutations";
+import { crmRecordRoute } from "../model/use-crm-navigation";
+import { crmKeys } from "../model/crm.query-keys";
 import type { Contact, ContactInput } from "../model/crm.types";
 import CrmCollectionBody from "../ui/common/CrmCollectionBody.vue";
 import CrmPageHeader from "../ui/common/CrmPageHeader.vue";
-import CrmPagination from "../ui/common/CrmPagination.vue";
-import CrmSearchBar from "../ui/common/CrmSearchBar.vue";
 import DeleteCrmEntityDialog from "../ui/common/DeleteCrmEntityDialog.vue";
-import ContactFormDialog from "../ui/contacts/ContactFormDialog.vue";
 import ContactsTable from "../ui/contacts/ContactsTable.vue";
+import CreateContactDialog from "../ui/contacts/CreateContactDialog.vue";
 
-const { page, pageSize, params, search, setPage } = useCrmListState();
-const contacts = useContactsQuery(params);
+const router = useRouter();
+const queryClient = useQueryClient();
+const contacts = useContactsQuery();
 const createMutation = useCreateContact();
-const updateMutation = useUpdateContact();
 const deleteMutation = useDeleteContact();
-const formOpen = ref(false);
-const editing = ref<Contact | null>(null);
+const createOpen = ref(false);
 const deleting = ref<Contact | null>(null);
-const items = computed(() => contacts.data.value?.items ?? []);
-const total = computed(() => contacts.data.value?.total ?? 0);
-const formPending = computed(
-  () => createMutation.isPending.value || updateMutation.isPending.value,
-);
+const items = computed(() => contacts.data.value ?? []);
 
-function openCreate() {
-  editing.value = null;
-  formOpen.value = true;
-}
-
-function openEdit(contact: Contact) {
-  editing.value = contact;
-  formOpen.value = true;
-}
-
-async function submitForm(input: ContactInput) {
+async function create(input: ContactInput) {
   try {
-    if (editing.value) {
-      await updateMutation.mutateAsync({ id: editing.value.id, input });
-    } else {
-      await createMutation.mutateAsync(input);
-    }
+    const contact = await createMutation.mutateAsync(input);
+    createOpen.value = false;
+    await router.push(crmRecordRoute("contacts", contact.id));
   } catch {
-    return;
+    /* mutation displays the API error */
   }
-  formOpen.value = false;
-  editing.value = null;
 }
-
 async function confirmDelete() {
   if (!deleting.value) return;
-  const shouldMoveBack = items.value.length === 1 && page.value > 1;
   try {
-    await deleteMutation.mutateAsync(deleting.value.id);
+    const id = deleting.value.id;
+    await deleteMutation.mutateAsync(id);
+    deleting.value = null;
+    queryClient.removeQueries({ queryKey: crmKeys.detail("contacts", id) });
+    queryClient.removeQueries({ queryKey: crmKeys.relations("contacts", id) });
+    queryClient.removeQueries({ queryKey: crmKeys.points("contacts", id) });
   } catch {
-    return;
+    /* mutation displays the API error */
   }
-  deleting.value = null;
-  if (shouldMoveBack) await setPage(page.value - 1);
 }
 </script>
 
@@ -77,50 +59,32 @@ async function confirmDelete() {
       title="Контакты"
       description="Клиенты — физические лица вашего рабочего пространства."
       action-label="Новый контакт"
-      @create="openCreate"
+      @create="createOpen = true"
     />
-    <CrmSearchBar v-model="search" placeholder="Поиск по ФИО" />
     <CrmCollectionBody
       :pending="contacts.isPending.value"
       :error="contacts.isError.value"
       :empty="items.length === 0"
-      :search-active="params.q.length > 0"
       empty-title="Контактов пока нет"
       empty-description="Создайте первого клиента в CRM."
       @retry="contacts.refetch()"
     >
-      <template #empty-action>
-        <Button @click="openCreate">Создать контакт</Button>
-      </template>
-      <ContactsTable
-        :items="items"
-        @edit="openEdit"
-        @delete="deleting = $event"
-      />
+      <template #empty-action
+        ><Button @click="createOpen = true">Создать контакт</Button></template
+      >
+      <ContactsTable :items="items" @delete="deleting = $event" />
     </CrmCollectionBody>
-    <CrmPagination
-      :page="page"
-      :total="total"
-      :page-size="pageSize"
-      @update:page="setPage"
-    />
-    <ContactFormDialog
-      :open="formOpen"
-      :contact="editing"
-      :pending="formPending"
-      @update:open="formOpen = $event"
-      @submit="submitForm"
+    <CreateContactDialog
+      v-model:open="createOpen"
+      :pending="createMutation.isPending.value"
+      @submit="create"
     />
     <DeleteCrmEntityDialog
       :open="deleting !== null"
       label="контакт"
       :entity-name="deleting?.displayName ?? ''"
       :pending="deleteMutation.isPending.value"
-      @update:open="
-        (open) => {
-          if (!open) deleting = null;
-        }
-      "
+      @update:open="!$event && (deleting = null)"
       @confirm="confirmDelete"
     />
   </div>

@@ -1,3 +1,7 @@
+import type { ContactPointArrays } from "@/modules/contact-points";
+
+export type CrmKind = "contacts" | "companies";
+
 export interface AuditFields {
   id: string;
   createdAt: string;
@@ -14,8 +18,11 @@ export interface Contact extends AuditFields {
 }
 
 export interface Company extends AuditFields {
-  name: string;
+  legalName: string;
 }
+
+export type CrmRecord = Contact | Company;
+export type CrmContactPoints = ContactPointArrays;
 
 export interface ContactInput {
   firstName: string;
@@ -24,18 +31,5 @@ export interface ContactInput {
 }
 
 export interface CompanyInput {
-  name: string;
-}
-
-export interface Page<T> {
-  items: T[];
-  total: number;
-  limit: number;
-  offset: number;
-}
-
-export interface ListParams {
-  q: string;
-  limit: number;
-  offset: number;
+  legalName: string;
 }

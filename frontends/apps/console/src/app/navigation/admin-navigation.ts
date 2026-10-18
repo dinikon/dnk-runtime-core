@@ -1,8 +1,25 @@
-import { CreditCard, Plug, Settings2, Users } from "@lucide/vue";
+import { CreditCard, HardDrive, Plug, Settings2, Users } from "@lucide/vue";
 
 import type { AdminNavigationGroup } from "./admin-navigation.types";
 
 export const adminNavigation: AdminNavigationGroup[] = [
+  {
+    title: "Модули",
+    items: [
+      {
+        title: "Файлы",
+        icon: HardDrive,
+        url: "/admin/files",
+        requiredRole: "admin",
+      },
+      {
+        title: "Точки контакта",
+        icon: Settings2,
+        url: "/admin/contact-points",
+        requiredRole: "admin",
+      },
+    ],
+  },
   {
     title: "Общие",
     hidden: true,

@@ -6,26 +6,32 @@ from fastapi import Depends
 
 from src.config import dnk_config
 
-from src.modules.identity.application.user import UserService
-from src.modules.identity.infrastructure.repository import SqlAlchemyUserRepository
+from src.modules.identity.application.user.command.create_tenant_admin.handler import (
+    CreateTenantAdminHandler,
+)
+from src.modules.identity.infrastructure.user.persistence.repository import (
+    SqlAlchemyUserRepository,
+)
 
 from src.modules.shared.presentation.persistence.depends import UoWDep
-from src.modules.shared.application.persistence.tenant_schema_naming import (
+from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
 from src.modules.tenancy.application.ports.identity import (
     IdentityProvisioningServiceProtocol,
 )
-from src.modules.tenancy.domain.service import TenantOnboardingService
-from src.modules.tenancy.domain.tenant import TenantRepositoryProtocol
-from src.modules.tenancy.domain.tenant_domain import (
+from src.modules.tenancy.application.tenant.onboarding import TenantOnboardingService
+from src.modules.tenancy.domain.tenant.repository import TenantRepositoryProtocol
+from src.modules.tenancy.domain.tenant_domain.repository import (
     TenantDomainRepositoryProtocol,
 )
 from src.modules.tenancy.infrastructure.adapter.identity_provisioning import (
     IdentityProvisioningServiceAdapter,
 )
-from src.modules.tenancy.infrastructure.repository import (
+from src.modules.tenancy.infrastructure.repository.tenant_domain_repository import (
     SqlAlchemyTenantDomainRepository,
+)
+from src.modules.tenancy.infrastructure.repository.tenant_repository import (
     SqlAlchemyTenantRepository,
 )
 
@@ -57,7 +63,7 @@ def get_identity_provisioning_service(
     uow: UoWDep,
 ) -> IdentityProvisioningServiceProtocol:
     """Создает tenancy adapter к identity provisioning сервису."""
-    user_service = UserService(
+    user_service = CreateTenantAdminHandler(
         SqlAlchemyUserRepository(
             uow.session, TenantSchemaNaming(dnk_config.SCHEMA_PREFIX)
         )
@@ -75,7 +81,7 @@ def get_tenant_onboarding_service(
     tenants_repository: TenantsRepositoryDep,
     tenant_domains_repository: TenantDomainsRepositoryDep,
 ) -> TenantOnboardingService:
-    """Создает доменный сервис onboarding tenant."""
+    """Собирает Application orchestration подготовки tenant."""
     return TenantOnboardingService(
         tenants_repository=tenants_repository,
         tenant_domains_repository=tenant_domains_repository,

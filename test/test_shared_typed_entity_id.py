@@ -3,9 +3,9 @@ from __future__ import annotations
 import unittest
 from uuid import uuid4
 
-from src.modules.identity.domain.user.value_object import UserIdVO
+from src.modules.identity.domain.user.value_object.user_id import UserIdVO
 from src.modules.shared import EntityIdTypeError, EntityIdVO
-from src.modules.tenancy.domain.tenant.value_object import TenantIdVO
+from src.modules.tenancy.domain.tenant.value_object.tenant_id import TenantIdVO
 
 
 class EntityIdVOTests(unittest.TestCase):

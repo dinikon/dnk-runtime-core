@@ -36,6 +36,16 @@ server {
     proxy_set_header ssl-client-cert "";
     location = /.well-known/dnk/tenant-ready { proxy_pass http://api:8000; }
     location = /.well-known/dnk/instance-routing { proxy_pass http://api:8000; }
+    # Streaming Console upload: 1 GiB per file plus 64 KiB multipart overhead.
+    location = /api/console/files/items/ {
+        client_max_body_size 1073807360;
+        client_body_timeout 600s;
+        proxy_request_buffering off;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+        proxy_http_version 1.1;
+        proxy_pass http://api:8000;
+    }
     location /api/ { proxy_pass http://api:8000; }
     location /internal/ { return 404; }
     location / { proxy_pass http://frontend:80; }

@@ -8,20 +8,22 @@ from src.config.infrastructure.email_config import (
     EmailSettings,
     EmailSmtpSettings,
 )
-from src.modules.shared.presentation.email.depends import build_email_service
-from src.modules.shared.infrastructure.email import (
-    SmtpEmailTransport,
+from src.modules.identity.presentation.email.depends import build_email_service
+from src.modules.shared.infrastructure.email import SmtpEmailTransport
+from src.modules.identity.infrastructure.email.system_email_service import (
     SystemEmailService,
 )
-from src.modules.shared.infrastructure.email.rendered_email_message import (
+from src.modules.shared.application.email.rendered_email_message import (
     RenderedEmailMessage,
 )
-from src.modules.shared.domain.email import (
-    EmailProviderNotImplementedError,
+from src.modules.shared.domain.email import EmailProviderNotImplementedError
+from src.modules.identity.application.email.send_invitation_variables import (
     SendInvitationVariables,
-    SendOtpCodeVariables,
-    SystemEmailKind,
 )
+from src.modules.identity.application.email.send_otp_code_variables import (
+    SendOtpCodeVariables,
+)
+from src.modules.identity.application.email.system_email_kind import SystemEmailKind
 
 
 class _EmailTransportStub:

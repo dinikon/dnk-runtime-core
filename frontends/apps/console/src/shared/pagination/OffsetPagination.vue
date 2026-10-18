@@ -6,6 +6,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectGroup,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -17,9 +18,11 @@ const props = withDefaults(
     total: number;
     disabled?: boolean;
     limitOptions?: number[];
+    locale?: "en" | "ru";
   }>(),
   {
     disabled: false,
+    locale: "en",
     limitOptions: () => [10, 20, 50, 100],
   },
 );
@@ -86,7 +89,8 @@ function changeLimit(value: unknown) {
     class="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between"
   >
     <p class="text-sm text-muted-foreground">
-      Showing {{ from }}–{{ to }} of {{ safeTotal }}
+      {{ locale === "ru" ? "Показано" : "Showing" }} {{ from }}–{{ to }}
+      {{ locale === "ru" ? "из" : "of" }} {{ safeTotal }}
     </p>
 
     <div class="flex flex-wrap items-center gap-2">
@@ -95,18 +99,23 @@ function changeLimit(value: unknown) {
         :disabled="disabled"
         @update:model-value="changeLimit"
       >
-        <SelectTrigger class="h-9 w-32">
+        <SelectTrigger
+          class="h-9 w-32"
+          :aria-label="locale === 'ru' ? 'Строк на странице' : 'Rows per page'"
+        >
           <SelectValue />
         </SelectTrigger>
-        <SelectContent>
-          <SelectItem
-            v-for="option in limitOptions"
-            :key="option"
-            :value="String(option)"
-          >
-            {{ option }} / page
-          </SelectItem>
-        </SelectContent>
+        <SelectContent
+          ><SelectGroup>
+            <SelectItem
+              v-for="option in limitOptions"
+              :key="option"
+              :value="String(option)"
+            >
+              {{ option }} / {{ locale === "ru" ? "стр." : "page" }}
+            </SelectItem>
+          </SelectGroup></SelectContent
+        >
       </Select>
 
       <Button
@@ -116,7 +125,7 @@ function changeLimit(value: unknown) {
         :disabled="disabled || !canGoPrev"
         @click="goToPage(normalizedPage - 1)"
       >
-        Previous
+        {{ locale === "ru" ? "Назад" : "Previous" }}
       </Button>
 
       <span class="min-w-24 text-center text-sm text-muted-foreground">
@@ -130,7 +139,7 @@ function changeLimit(value: unknown) {
         :disabled="disabled || !canGoNext"
         @click="goToPage(normalizedPage + 1)"
       >
-        Next
+        {{ locale === "ru" ? "Вперёд" : "Next" }}
       </Button>
     </div>
   </div>

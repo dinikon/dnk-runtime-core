@@ -4,7 +4,7 @@ This page maps the main business entities that currently appear in the service.
 
 Identifier convention: `EntityIdVO` is the single shared UUID primitive and the base class for concrete ids. Tenant
 scope uses `EntityIdVO` directly; concrete entities expose concrete subclasses such as `UserIdVO`,
-`WarehouseIdVO`.
+`ContactIdVO`.
 
 ## Tenancy
 
@@ -64,20 +64,16 @@ scope uses `EntityIdVO` directly; concrete entities expose concrete subclasses s
     - `is_verified`
     - `is_deleted`
 
-## Inventory
-
-`Warehouse` represents a physical warehouse with `WarehouseIdVO`, title, nullable parent id and audit fields. Storage uses a self-FK within each tenant schema. Multiple roots are allowed, self-parent is rejected, and deletion of a parent with children is restricted. Longer cycles are deferred to future hierarchy use cases.
-
-## Shared Kernel Concepts
+## Identity Request Context
 
 ### `Principal`
 
-- Module owner: `shared`
+- Module owner: `identity`
 - Business meaning: authenticated session identity bound to request context
 
 ### `RequestContext`
 
-- Module owner: `shared`
+- Module owner: `identity`
 - Business meaning: request-scoped envelope with principal, request id, IP and user agent
 
 ## Related
@@ -85,7 +81,6 @@ scope uses `EntityIdVO` directly; concrete entities expose concrete subclasses s
 - [Tenant migrations](tenant-migrations.md)
 - [Tenancy module](../modules/tenancy.md)
 - [Identity module](../modules/identity.md)
-- [Inventory module](../modules/inventory.md)
 
 ## Source Of Truth
 

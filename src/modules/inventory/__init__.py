@@ -1,1 +1,0 @@
-"""Inventory bounded context."""
