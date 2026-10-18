@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Check, CircleMinus } from "@lucide/vue";
 import ProductMedia from "./ProductMedia.vue";
@@ -17,20 +16,7 @@ defineProps<{
         <h2 class="text-lg font-semibold">О товаре</h2>
         <!-- HTML очищается в модели представления через DOMPurify. -->
         <!-- eslint-disable-next-line vue/no-v-html -->
-        <div
-          v-if="model.descriptions.short"
-          class="product-prose"
-          v-html="model.descriptions.short"
-        />
-        <p v-else class="text-sm text-muted-foreground">
-          Краткое описание: Не задано
-        </p>
-        <!-- eslint-disable-next-line vue/no-v-html -->
-        <div
-          v-if="model.descriptions.full"
-          class="product-prose"
-          v-html="model.descriptions.full"
-        />
+        <div v-if="model.body" class="product-prose" v-html="model.body" />
         <p v-else class="text-sm text-muted-foreground">Описание: Не задано</p>
       </section>
       <Separator />
@@ -49,36 +35,6 @@ defineProps<{
             <dd class="mt-2 text-sm">{{ measurement.value }}</dd>
           </div>
         </dl>
-      </section>
-      <Separator />
-      <section class="flex flex-col gap-4">
-        <h2 class="text-lg font-semibold">Характеристики</h2>
-        <dl v-if="model.attributes.length" class="grid gap-5 sm:grid-cols-2">
-          <div v-for="attribute in model.attributes" :key="attribute.label">
-            <dt class="text-sm text-muted-foreground">{{ attribute.label }}</dt>
-            <dd class="mt-1 text-sm font-medium">{{ attribute.value }}</dd>
-          </div>
-        </dl>
-        <p v-else class="text-sm text-muted-foreground">Не задано</p>
-      </section>
-      <section class="flex flex-col gap-4">
-        <Separator />
-        <h2 class="text-lg font-semibold">Категории и метки</h2>
-        <div class="flex flex-wrap gap-2">
-          <Badge
-            v-for="category in model.categories"
-            :key="category"
-            variant="secondary"
-            >{{ category }}</Badge
-          ><Badge v-for="tag in model.tags" :key="tag" variant="outline">{{
-            tag
-          }}</Badge
-          ><span
-            v-if="!model.categories.length && !model.tags.length"
-            class="text-sm text-muted-foreground"
-            >Не задано</span
-          >
-        </div>
       </section>
     </div>
     <aside class="flex min-w-0 flex-col gap-5">

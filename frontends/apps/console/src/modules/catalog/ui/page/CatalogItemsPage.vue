@@ -4,9 +4,8 @@ import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { Button } from "@/components/ui/button";
 import { getApiErrorMessage } from "@/app/providers/http";
 import { catalogApi } from "../../api/catalog.api";
-import { listItemFromDto } from "../../api/catalog.mapper";
 import { useCreateCatalogItem } from "../../model/use-create-catalog-item";
-import type { ItemStatus } from "../../api/catalog.dto";
+import type { ProductStatus } from "../../model/product.types";
 import CatalogHeader from "../CatalogHeader.vue";
 import CatalogToolbar from "../CatalogToolbar.vue";
 import CatalogSearchBar from "../CatalogSearchBar.vue";
@@ -21,7 +20,7 @@ const search = computed(() => String(ctx.route.query.search ?? "")),
   page = computed(() => Math.max(1, Number(ctx.route.query.page) || 1)),
   status = computed(() =>
     ["draft", "active", "archived"].includes(String(ctx.route.query.status))
-      ? (ctx.route.query.status as ItemStatus)
+      ? (ctx.route.query.status as ProductStatus)
       : undefined,
   );
 const items = useQuery({
@@ -38,7 +37,7 @@ const items = useQuery({
       status.value,
       signal,
     );
-    return { ...d, items: d.items.map(listItemFromDto) };
+    return d;
   },
 });
 function filter(values: Record<string, string | number | undefined>) {

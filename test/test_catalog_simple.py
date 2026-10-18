@@ -1,3 +1,5 @@
+from test.catalog_support import default_schema
+
 """Регрессия самостоятельных товаров без наследования и вариативных сценариев."""
 
 from dataclasses import fields
@@ -8,15 +10,8 @@ from uuid import uuid4
 from src.modules.catalog.domain.catalog_item.aggregate import CatalogItem
 from src.modules.catalog.domain.catalog_item.entity.gallery import CatalogItemGallery
 from src.modules.catalog.domain.catalog_item.entity.image import CatalogItemImage
-from src.modules.catalog.domain.catalog_item.entity.metadata import CatalogMetadataEntry
 from src.modules.catalog.domain.catalog_item.policy.values import (
     CatalogItemValuesPolicy,
-)
-from src.modules.catalog.domain.catalog_item.value_object.attribute import (
-    EnumAttributeAssignmentVO,
-)
-from src.modules.catalog.domain.catalog_item.value_object.attribute_snapshot import (
-    EnumAttributeSnapshot,
 )
 from src.modules.catalog.domain.catalog_item.value_object.identifier import (
     CatalogItemIdVO,
@@ -40,16 +35,11 @@ from src.modules.catalog.domain.catalog_item.value_object.stock import (
     StockStatus,
     BackorderPolicy,
 )
-from src.modules.catalog.domain.attribute.value_object.identifier import AttributeIdVO
-from src.modules.catalog.domain.attribute.value_object.option_id import (
-    AttributeOptionIdVO,
-)
 from src.modules.catalog.domain.error import (
     CatalogConflictError,
     InvalidCatalogValueError,
 )
 from src.modules.catalog.domain.product_type.value_object.schema import (
-    DEFAULT_TYPE_ID,
     ProductTypeSchemaSnapshot,
 )
 from src.modules.catalog.domain.value_object.locale import LocaleVO
@@ -69,18 +59,15 @@ class CatalogSimpleDomainTests(unittest.TestCase):
         """Создаёт товар и независимые снимки справочников."""
         self.now = datetime(2026, 10, 17, tzinfo=UTC)
         self.actor = EntityIdVO(uuid4())
-        self.item = CatalogItem.create(CatalogItemIdVO(uuid4()), self.actor, self.now)
-        self.schema = ProductTypeSchemaSnapshot(DEFAULT_TYPE_ID, "default", 1, ())
-        self.attribute = AttributeIdVO(uuid4())
-        self.options = (AttributeOptionIdVO(uuid4()), AttributeOptionIdVO(uuid4()))
-        self.definitions = (
-            EnumAttributeSnapshot(self.attribute, frozenset(self.options)),
+        self.schema = default_schema()
+        self.item = CatalogItem.create(
+            CatalogItemIdVO(uuid4()), self.actor, self.now, self.schema.id
         )
 
     def test_creation_and_restore_validate_one_item(self) -> None:
         """Создание не содержит семейных полей, восстановление проверяет инварианты."""
         self.assertFalse(hasattr(self.item, "revision"))
-        self.assertEqual(self.item.product_type_id, DEFAULT_TYPE_ID)
+        self.assertEqual(self.item.product_type_id, self.schema.id)
         self.assertFalse(self.item.stock.manage_stock)
         self.assertEqual(self.item.stock.effective_status(), StockStatus.IN_STOCK)
         self.assertFalse(
@@ -92,7 +79,7 @@ class CatalogSimpleDomainTests(unittest.TestCase):
         restored = CatalogItem.restore(**values)
         self.assertEqual(restored.snapshot(), self.item.snapshot())
         for changes in (
-            {"product_type_id": EntityIdVO(uuid4())},
+            {"product_type_id": None},
             {"created_at": self.now.replace(tzinfo=None)},
             {"virtual": "false"},
         ):
@@ -110,7 +97,7 @@ class CatalogSimpleDomainTests(unittest.TestCase):
                 fields=frozenset({"content"}),
                 actor=self.actor,
                 now=self.now,
-                content={"desc": "No name"},
+                content={"body": "No name"},
                 locale=LocaleVO("en"),
                 schema=self.schema,
                 expected_schema_version=1,
@@ -133,7 +120,7 @@ class CatalogSimpleDomainTests(unittest.TestCase):
             fields=frozenset({"content"}),
             actor=self.actor,
             now=self.now,
-            content={"name": "Name", "desc": "", "short_desc": "Short"},
+            content={"title": "Name", "body": ""},
             locale=LocaleVO("en"),
             schema=self.schema,
             expected_schema_version=1,
@@ -142,7 +129,7 @@ class CatalogSimpleDomainTests(unittest.TestCase):
             fields=frozenset({"content"}),
             actor=self.actor,
             now=self.now,
-            content={"name": "Имя"},
+            content={"title": "Имя"},
             locale=LocaleVO("ru"),
             schema=self.schema,
             expected_schema_version=1,
@@ -151,28 +138,28 @@ class CatalogSimpleDomainTests(unittest.TestCase):
             fields=frozenset({"content"}),
             actor=self.actor,
             now=self.now,
-            content={"name": "New", "desc": ""},
+            content={"title": "New", "body": ""},
             locale=LocaleVO("en"),
             schema=self.schema,
             expected_schema_version=1,
         )
-        self.assertEqual(self.item.translations["en"], {"name": "New", "desc": ""})
-        self.assertEqual(self.item.translations["ru"]["name"], "Имя")
+        self.assertEqual(self.item.translations["en"], {"title": "New", "body": ""})
+        self.assertEqual(self.item.translations["ru"]["title"], "Имя")
         with self.assertRaises(CatalogConflictError):
             self.item.update(
                 fields=frozenset({"content"}),
                 actor=self.actor,
                 now=self.now,
-                content={"name": "Name"},
+                content={"title": "Name"},
                 locale=LocaleVO("en"),
                 schema=self.schema,
                 expected_schema_version=2,
             )
         for content in (
-            {"name": " "},
-            {"name": "x" * 256},
-            {"name": "Name", "extra": "x"},
-            {"name": {"mode": "set", "value": "Name"}},
+            {"title": " "},
+            {"title": "x" * 256},
+            {"title": "Name", "extra": "x"},
+            {"title": {"mode": "set", "value": "Name"}},
         ):
             with (
                 self.subTest(content=content),
@@ -325,110 +312,6 @@ class CatalogSimpleDomainTests(unittest.TestCase):
         self.assertIsNone(self.item.weight)
         self.assertIsNone(self.item.dimensions)
 
-    def test_attribute_values_and_classification_invariants(self) -> None:
-        """Несколько options не создают варианты; принадлежность и primary защищены агрегатом."""
-        assignment = EnumAttributeAssignmentVO(self.attribute, self.options, False, 0)
-        self.item.update(
-            fields=frozenset({"attributes"}),
-            actor=self.actor,
-            now=self.now,
-            attributes=(assignment,),
-            definitions=self.definitions,
-        )
-        self.assertEqual(self.item.attributes, (assignment,))
-        with self.assertRaises(InvalidCatalogValueError):
-            self.item.update(
-                fields=frozenset({"attributes"}),
-                actor=self.actor,
-                now=self.now,
-                attributes=(assignment,),
-                definitions=(),
-            )
-        with self.assertRaises(InvalidCatalogValueError):
-            EnumAttributeAssignmentVO(self.attribute, (), True, 0)
-        category = EntityIdVO(uuid4())
-        self.item.update(
-            fields=frozenset({"category_ids", "primary_category_id"}),
-            actor=self.actor,
-            now=self.now,
-            category_ids=(category,),
-            primary_category_id=category,
-            existing_categories=frozenset({category}),
-        )
-        with self.assertRaises(InvalidCatalogValueError):
-            self.item.update(
-                fields=frozenset({"category_ids", "primary_category_id"}),
-                actor=self.actor,
-                now=self.now,
-                category_ids=(category,),
-                primary_category_id=None,
-                existing_categories=frozenset({category}),
-            )
-        self.item.update(
-            fields=frozenset({"category_ids", "primary_category_id"}),
-            actor=self.actor,
-            now=self.now,
-            category_ids=(),
-            primary_category_id=None,
-            existing_categories=frozenset(),
-        )
-        self.item.update(
-            fields=frozenset({"attributes"}),
-            actor=self.actor,
-            now=self.now,
-            attributes=(),
-            definitions=(),
-        )
-        self.item.update(
-            fields=frozenset({"tag_ids"}),
-            actor=self.actor,
-            now=self.now,
-            tag_ids=(category,),
-            existing_tags=frozenset({category}),
-        )
-        with self.assertRaises(InvalidCatalogValueError):
-            self.item.update(
-                fields=frozenset({"tag_ids"}),
-                actor=self.actor,
-                now=self.now,
-                tag_ids=(category, category),
-                existing_tags=frozenset({category}),
-            )
-
-    def test_metadata_full_replacement_preserves_false_zero_and_order(self) -> None:
-        """Metadata сохраняет тип, порядок и значения false/0, удаляется исключением из набора."""
-        entries = (
-            CatalogMetadataEntry.create("enabled", "boolean", False, 2),
-            CatalogMetadataEntry.create("amount", "decimal", Decimal("0"), 1),
-        )
-        self.item.update(
-            fields=frozenset({"metadata"}),
-            actor=self.actor,
-            now=self.now,
-            metadata=entries,
-        )
-        self.assertEqual(
-            [entry.key for entry in self.item.metadata], ["amount", "enabled"]
-        )
-        self.assertEqual(self.item.metadata[0].value, Decimal("0"))
-        self.assertIs(self.item.metadata[1].value, False)
-        for entry in (
-            CatalogMetadataEntry.create("sku", "text", "x", 0),
-            CatalogMetadataEntry.create("flag", "boolean", "false", 0),
-            CatalogMetadataEntry.create("value", "decimal", Decimal("NaN"), 0),
-        ):
-            with self.assertRaises(InvalidCatalogValueError):
-                self.item.update(
-                    fields=frozenset({"metadata"}),
-                    actor=self.actor,
-                    now=self.now,
-                    metadata=(entry,),
-                )
-        self.item.update(
-            fields=frozenset({"metadata"}), actor=self.actor, now=self.now, metadata=()
-        )
-        self.assertEqual(self.item.metadata, ())
-
     def test_gallery_primary_order_unique_ids_and_preflight(self) -> None:
         """Главное принадлежит набору, preflight не меняет товар, locale независимы."""
         image = CatalogItemImage.create(
@@ -482,7 +365,7 @@ class CatalogSimpleDomainTests(unittest.TestCase):
             fields=frozenset({"content"}),
             actor=self.actor,
             now=self.now,
-            content={"name": "Name", "desc": ""},
+            content={"title": "Name", "body": ""},
             locale=LocaleVO("en"),
             schema=self.schema,
             expected_schema_version=1,
@@ -493,50 +376,34 @@ class CatalogSimpleDomainTests(unittest.TestCase):
             now=self.now,
             sku=SkuCodeVO(" SKU "),
         )
-        self.item.update(
-            fields=frozenset({"attributes"}),
-            actor=self.actor,
-            now=self.now,
-            attributes=(
-                EnumAttributeAssignmentVO(self.attribute, self.options, True, 0),
-            ),
-            definitions=self.definitions,
-        )
-        self.item.update(
-            fields=frozenset({"metadata"}),
-            actor=self.actor,
-            now=self.now,
-            metadata=(CatalogMetadataEntry.create("flag", "boolean", False, 0),),
-        )
         row = CatalogItemMapper.to_insert_values(self.item)
-        parts = CatalogItemMapper.to_parts(self.item)
+        parts = CatalogItemMapper.to_parts(
+            self.item, {block.code: block.id.uuid for block in self.schema.blocks}
+        )
+        codes = {block.id.uuid: block.code for block in self.schema.blocks}
+        for record in parts["catalog_item_content_values"]:
+            record["block_code"] = codes[record["block_id"]]
         self.assertEqual(row["kind"], "simple")
         self.assertIsNone(row["parent_id"])
         self.assertNotIn("catalog_item_variant_selections", parts)
         self.assertNotIn("catalog_item_default_selections", parts)
-        self.assertFalse(parts["catalog_item_attributes"][0]["is_variation"])
         values = CatalogItemMapper.to_values(row, parts)
         self.assertEqual(
-            CatalogItemMapper.to_domain(values).snapshot(), self.item.snapshot()
+            CatalogItemMapper.to_domain(values, self.schema).snapshot(),
+            self.item.snapshot(),
         )
-        for name in (
-            "catalog_item_content_values",
-            "catalog_item_attributes",
-            "catalog_item_metadata",
-        ):
+        for name in ("catalog_item_content_values",):
             records = parts[name]
             for record in records:
                 if name != "catalog_item_content_values" or record["value"] == "":
                     record["mode"] = "clear"
         values = CatalogItemMapper.to_values(row, parts)
-        self.assertEqual(values.translations["en"], {"name": "Name"})
-        self.assertEqual(values.attributes, ())
-        self.assertEqual(values.metadata, ())
+        self.assertEqual(values.translations["en"], {"title": "Name"})
         details = CatalogItemQueryMapper.details(values, "en", self.now)
         publication = CatalogItemQueryMapper.publication(values, "en", self.now)
         self.assertNotEqual(type(details), type(publication))
         self.assertEqual(details.id, publication.id)
-        self.assertEqual(details.content, {"name": "Name"})
+        self.assertEqual(details.content, {"title": "Name"})
 
     def test_measurement_precision_units_and_exact_conversion(self) -> None:
         """Точность считается в канонических единицах и не зависит от Decimal context."""
@@ -581,7 +448,7 @@ class CatalogSimpleDomainTests(unittest.TestCase):
                 now=self.now + timedelta(seconds=1),
                 sku=SkuCodeVO("candidate"),
                 locale=LocaleVO("en"),
-                content={"name": ""},
+                content={"title": ""},
                 schema=self.schema,
                 expected_schema_version=1,
             )
@@ -605,10 +472,10 @@ class CatalogSimpleDomainTests(unittest.TestCase):
         )
         self.assertEqual(accepted, self.item.snapshot())
 
-    def test_equivalent_empty_dimensions_and_classification_sets_are_noops(
+    def test_equivalent_empty_dimensions_are_noops(
         self,
     ) -> None:
-        """Канонические пустые размеры и неупорядоченные наборы не меняют audit."""
+        """Канонические пустые размеры не меняют audit."""
         self.item.update(
             fields=frozenset({"dimensions"}),
             dimensions=DimensionsVO(),
@@ -616,20 +483,3 @@ class CatalogSimpleDomainTests(unittest.TestCase):
             now=self.now + timedelta(seconds=1),
         )
         self.assertEqual(self.item.updated_at, self.now)
-        a, b = EntityIdVO(uuid4()), EntityIdVO(uuid4())
-        self.item.update(
-            fields=frozenset({"tag_ids"}),
-            tag_ids=(a, b),
-            existing_tags=frozenset({a, b}),
-            actor=self.actor,
-            now=self.now + timedelta(seconds=2),
-        )
-        before = self.item.snapshot()
-        self.item.update(
-            fields=frozenset({"tag_ids"}),
-            tag_ids=(b, a),
-            existing_tags=frozenset({a, b}),
-            actor=self.actor,
-            now=self.now + timedelta(seconds=3),
-        )
-        self.assertEqual(before, self.item.snapshot())

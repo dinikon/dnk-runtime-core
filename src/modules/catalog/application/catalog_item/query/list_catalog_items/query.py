@@ -15,8 +15,6 @@ class ListCatalogItemsQuery:
     locale: str
     status: CatalogItemStatus | None = None
     search: str | None = None
-    category_id: UUID | None = None
-    tag_id: UUID | None = None
     offset: int = 0
     limit: int = 50
     as_of: datetime | None = None

@@ -14,9 +14,6 @@ const {
   id,
   scope,
   item,
-  attributes,
-  categories,
-  tags,
   schema,
   tab,
   pending,
@@ -43,36 +40,12 @@ const sections: ProductSection[] = [
   "price",
   "stock",
   "measurements",
-  "metadata",
-  "attributes",
-  "categories",
-  "tags",
   "galleries",
 ];
 const errors = computed(() =>
   Object.fromEntries(sections.map((s) => [s, fieldError(s)])),
 );
 const dirty = computed(() => sections.filter(isDirty));
-const references = computed(() => ({
-  categories: categories.isError.value
-    ? ("error" as const)
-    : categories.isPending.value
-      ? ("loading" as const)
-      : ("ready" as const),
-  tags: tags.isError.value
-    ? ("error" as const)
-    : tags.isPending.value
-      ? ("loading" as const)
-      : ("ready" as const),
-  attributes: attributes.isError.value
-    ? ("error" as const)
-    : attributes.isPending.value
-      ? ("loading" as const)
-      : ("ready" as const),
-}));
-function retryReference(kind: "categories" | "tags" | "attributes"): void {
-  void { categories, tags, attributes }[kind].refetch();
-}
 function focused(): void {
   const query = { ...ctx.route.query };
   delete query.focus;
@@ -149,18 +122,13 @@ function focused(): void {
         :save-status="saveStatus"
         :error="error"
         :initial-group="ctx.route.query.tab ? tabGroup[tab] : undefined"
-        :focus-name="ctx.route.query.focus === 'name'"
-        :categories="categories.data.value ?? []"
-        :tags="tags.data.value ?? []"
-        :attributes="attributes.data.value ?? []"
-        :references="references"
+        :focus-title="ctx.route.query.focus === 'title'"
         :image-url="imageUrl"
         @content="changeContent"
         @save="save"
         @upload="upload"
         @reload="reload"
         @retry="retry"
-        @reference="retryReference"
         @focused="focused"
       />
     </div>

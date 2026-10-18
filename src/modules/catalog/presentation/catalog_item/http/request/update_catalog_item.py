@@ -1,5 +1,4 @@
 from typing import Self
-from uuid import UUID
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -16,8 +15,6 @@ from src.modules.catalog.presentation.catalog_item.http.value_contracts import (
     StockValue,
     WeightValue,
     DimensionsValue,
-    AttributeValue,
-    MetadataValue,
     GalleryValue,
 )
 
@@ -43,21 +40,8 @@ class UpdateCatalogItemRequest(BaseModel):
     dimensions: DimensionsValue | None = None
     content: UpdateCatalogItemContentRequest | None = None
     gallery: GalleryValue | None = None
-    attributes: tuple[AttributeValue, ...] | None = None
-    metadata: tuple[MetadataValue, ...] | None = None
-    category_ids: tuple[UUID, ...] | None = None
-    primary_category_id: UUID | None = None
-    tag_ids: tuple[UUID, ...] | None = None
 
-    @field_validator(
-        "status",
-        "virtual",
-        "stock",
-        "attributes",
-        "metadata",
-        "category_ids",
-        "tag_ids",
-    )
+    @field_validator("status", "virtual", "stock")
     @classmethod
     def reject_null(cls, value: object) -> object:
         """Отклоняет явный null обязательных значений, сохраняя пропущенные поля."""

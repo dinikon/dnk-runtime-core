@@ -1,150 +1,113 @@
 # Catalog
 
-Catalog MVP v1 хранит только простые самостоятельные товары, их контент и
-заявленные коммерческие значения. Полная спецификация вариативности сохранена
-в [плане следующего этапа](../plan/catalog.md); обязательны
-[архитектурные требования](../architecture/AGENTS.md).
+Catalog MVP хранит простые самостоятельные товары, локализованный контент,
+галереи и коммерческие значения. Атрибуты, категории, метки и metadata удалены
+из Domain, Application, HTTP, Console и текущей SQL-схемы. Архитектура описана в
+[backend](../architecture/backend.md) и [frontend](../architecture/frontend.md).
 
-## Модель и границы
+## Модель и транзакции
 
-CatalogItem — Aggregate Root одной продаваемой позиции. У него нет родителя,
-детей, осей, selections или смены kind. AttributeDefinition, Category и Tag
-имеют самостоятельные корни; options принадлежат определению атрибута.
-ProductType Default — фиксированная read-only схема migration seed.
+CatalogItem и ProductType — отдельные Aggregate Roots. Блоки контента и их
+переводы принадлежат ProductType, отдельного write repository для блока нет.
+Фабрики create/restore и доменные методы проверяют состояние. Mapper выполняет
+только преобразования; чтение коллекций использует batch-проекции без N+1.
 
-Сохранение проходит через create/restore и один CatalogItem.update. Обработчик
-берёт shared guard справочных ссылок, затем блокировку одного товара и загружает
-актуальное состояние. Изменения справочников берут exclusive guard. Ревизий
-в активных Domain, Application, HTTP и Console контрактах Catalog нет.
-При конкурентной правке одного поля или набора побеждает последняя успешная запись;
-PATCH разных полей применяется к актуальному состоянию без потери остальных полей.
-Write repository сохраняет только изменённые группы связей. Транзакцией владеет
-внешний UoW. Query repositories читают согласованные batch-проекции без N+1.
+Товар изменяется одним атомарным PATCH под блокировкой конкретного item.
+Разные поля применяются к актуальному состоянию; для одного поля побеждает
+последняя успешная запись. Репозиторий сохраняет изменённые группы связей.
+Reference guards удалены вместе с изменяемыми справочниками.
+Внешний UoW владеет транзакцией; ревизий в активных контрактах нет.
+
+## ProductType и создание Tenant
+
+CatalogProvisioningFacade.initialize_defaults(tenant_id, actor_id) — публичный
+Application-контракт установки Default. Tenancy обращается к нему через свой порт
+и Infrastructure-адаптер после создания схемы и администратора, до commit общего
+UoW. CLI и Control Plane используют тот же процесс. Ошибка откатывает onboarding.
+
+Фасад создаёт системный тип code=default, schema_version=1 и два блока:
+
+| Код | Тип | Обязательность |
+| --- | --- | --- |
+| title | text | Непустой текст до 255 символов при сохранении перевода |
+| body | rich_text | Необязательный текст до 1000000 символов |
+
+ProductType и каждый блок получают собственный UUIDv7. UUID разных Tenant
+независимы; audit содержит UUID созданного администратора. Подписи en/ru/uk
+создаются вместе со схемой, без межъязыкового fallback. Повторная инициализация
+полной схемы сохраняет UUID; неполная или изменённая системная схема — ошибка.
+Чтение и создание товара не инициализируют отсутствующий Default.
+
+CreateCatalogItemCommand принимает product_type_code="default". Application
+разрешает код в существующий UUID текущего tenant и передаёт его фабрике товара.
+HTTP пока принимает только virtual; выбора и изменения типа в Console нет.
+Схема сохранённого товара читается по его product_type_id. GET /product-type/default
+находит схему по коду. Фиксированных UUID и таблиц соответствия UUID в коде нет.
 
 ## Поля товара
 
-У товара собственные status (draft/active/archived), virtual, SKU, цена,
-наличие, измерения, тексты, галереи, характеристики, metadata и классификация.
-Наследование и own/effective/origins отсутствуют. SKU — trim-код, уникальный
-в tenant с сохранением регистра; nullable SKU не мешает созданию черновика.
+Сохраняются status draft/active/archived, virtual, nullable SKU, цена, наличие,
+измерения, переводы и галереи. SKU уникален в tenant после trim с сохранением
+регистра. Товар создаётся черновиком без контента, цены и SKU.
 
-Цена хранится как price_specification: regular/sale, currency и UTC-интервал
-[from,to). Текущая price вычисляется на as_of; 0 допустим, отсутствие цены
-блокирует продажу. Decimal точный, до шести дробных разрядов, без float.
-Валюта проверяется публичным контрактом Reference Data.
+Price specification хранит regular/sale, currency и UTC-интервал [from,to).
+Текущая price вычисляется на as_of. Decimal точный, до шести дробных разрядов;
+0 допустим, отсутствие цены блокирует продажу. Валюта проверяется Reference Data.
 
-Вес — nullable пара value/unit g/kg, размеры независимо nullable в cm/m.
-Ноль является значением. Точность проверяется в канонических g/mm, до шести
-дробных разрядов без округления; хранятся только исходные пары. Virtual не
-очищает измерения и не меняет наличие. Inventory, резервы и движения отсутствуют.
+Вес — nullable value/unit g/kg; размеры независимо nullable cm/m. Точность
+проверяется в g/mm до шести знаков без округления, хранятся исходные пары.
+Virtual не очищает измерения и не меняет наличие. Inventory и резервы отсутствуют.
 
-Новые товары получают manage_stock=false, stock_quantity=null,
-stock_status=in_stock, backorders=no. Boolean строгий. При true обязательно
-целое количество, включая отрицательное; stock_status вычисляется по порогу 0
-и политике no/notify/yes. При false количества нет, backorders=no, действует
-ручной in_stock/out_of_stock/on_backorder. Общего запаса и stock source нет.
+Новый товар: manage_stock=false, stock_quantity=null, stock_status=in_stock,
+backorders=no. При учёте количества требуется целое число, включая отрицательное;
+наличие вычисляется по количеству и политике backorders. При выключенном учёте
+действует ручной stock_status. Boolean строгий. Продажа требует active, цену
+и наличие in_stock/on_backorder; публикация проверяет active.
 
-available_for_sale требует active, собственную цену и наличие
-in_stock/on_backorder. available_for_publication проверяет active.
-backorders_allowed/backordered — вычисляемые поля. Domain policy не читает часы.
+## Контент и медиа
 
-## Контент, справочники и медиа
-
-Default version 1 содержит name (обязательный непустой текст при сохранении
-перевода), desc и short_desc (optional rich_text). CRUD типов/блоков отсутствует.
-PATCH content.values передаёт полный dict[str,str] выбранной locale; отсутствие optional
-блока удаляет его, пустая строка сохраняется. content=null удаляет перевод.
-HTML очищается NH3 через порт и DOMPurify перед показом в Console.
-
-Locale передаётся явно; запись разрешена для активной locale Reference Data.
-Сохранённый перевод неактивной locale читается. Межъязыкового fallback нет.
-Default labels en/ru/uk читаются по выбранной locale, без угадывания языка.
-
-Глобальные атрибуты — enum с устойчивыми ID definitions/options и переводами.
-Коды отсутствуют в Domain, Application, HTTP, Console и текущем SQL. Название
-атрибута и значение option — независимый label для каждой locale; переименование
-и сортировка не меняют ID. Совпадающие labels не объединяют разные ID.
-POST /attributes принимает locale/label и необязательные options(label).
-PUT /attributes/{id}/options/{locale} заменяет упорядоченный набор: option_id
-сохраняется для существующей опции, для новой UUID создаёт сервер. У существующей
-опции пропущенный/null label сохраняет переводы и допускает сортировку при
-отсутствующем переводе; у новой label обязателен. Пустой label отклоняется.
-Чтение возвращает null без перевода, Console показывает «Нет перевода».
-Поиск характеристик выполняется по label выбранной locale и UUID.
-Назначение содержит несколько option IDs, position и visible; вариантов это
-не создаёт. Options должны принадлежать определению. Категории образуют дерево
-с защитой циклов. Непустое назначение требует ровно одну primary; назначаются
-только явные узлы. Используемые справочники/options не удаляются.
-
-Metadata — полный упорядоченный набор keys с типами text/decimal/boolean,
-без режимов override. Зарезервированные канонические ключи запрещены. Удаление
-характеристики или metadata выполняется исключением из полного набора.
+Контент передаётся по кодам title/body. PATCH content.values заменяет полный
+набор выбранной locale; пропуск body удаляет его, пустая строка сохраняется.
+content=null удаляет перевод. Состав, обязательность, типы и expected_schema_version
+проверяются по снимку схемы товара. Rich text очищается NH3 до доменной проверки
+и DOMPurify перед показом. Запись разрешена для активной locale Reference Data,
+сохранённый перевод неактивной locale читается. Межъязыкового fallback нет.
 
 Галерея принадлежит item+locale: Files links, порядок, alt/caption и одно главное
-изображение в непустом наборе. Replace заменяет полный набор, empty очищает,
-gallery=null удаляет локализованную галерею. До 100 изображений; upload PNG/JPEG/WebP
-до 10 MiB с проверкой MIME/сигнатуры. Files adapter использует публичные handlers
-на общем UoW, без Files ORM/FK. HTTP отдаёт закрываемый поток только для
-изображения галереи этого товара и tenant. Снятие связи не удаляет Files объект.
-Хранилище подготавливается сценариями Files до загрузки.
+изображение в непустом наборе. Полный набор заменяется атомарно; gallery=null
+удаляет галерею. До 100 изображений. Upload PNG/JPEG/WebP до 10 MiB проверяет
+MIME/сигнатуру. Files handlers работают на общем UoW без Files ORM/FK в Catalog.
+Image stream закрывается после ответа; снятие связи не удаляет Files объект.
 
-## API и Console
+## HTTP и Console
 
 Префикс /api/console/catalog: POST/GET /items, GET/PATCH/DELETE /items/{id},
-/product-type/default, /attributes, /categories, /tags. Создание возвращает id,
-PATCH возвращает id, delete -> None/204. Сценарии имеют собственные Command/Query,
-Handler, DTO и HTTP-контракты. Старый /items/simple и endpoints изменения отдельных
-полей удалены без aliases. Upload /items/{id}/images/{locale}/upload возвращает
-id/image_id/file_id; получение содержимого изображения отдаёт закрываемый поток.
+GET /product-type/default, upload и image content. Удалённые справочники отсутствуют
+в OpenAPI. PATCH принимает status, sku, virtual, price_specification, stock, weight,
+dimensions, content, gallery. Неизвестные поля и пустой PATCH дают 422.
+Пропуск поля сохраняет значение; null очищает только nullable-поля. Изменение
+content/gallery требует query locale. Ошибки разделов содержат field/message.
+List поддерживает locale/search/status и offset/limit до 100; поиск идёт по SKU/title.
 
-PATCH принимает status, sku, virtual, price_specification, stock, weight, dimensions,
-content, gallery, attributes, metadata, category_ids, primary_category_id, tag_ids.
-Отсутствие поля сохраняет значение, null очищает только nullable-значения. Явный
-null запрещён для status, virtual, stock и наборов attributes/metadata/category_ids/tag_ids.
-Вложенные спецификации и наборы заменяются полностью. Пустой PATCH и неизвестные
-поля отклоняются с 422. Изменение content/gallery требует query locale; content
-принимает expected_schema_version и values. Версия фиксированной схемы сохраняется.
-Все изменения одного запроса атомарны; ошибки разделов содержат field/message.
-409 обозначает бизнес-конфликт, например занятый SKU или используемую связь.
+Console показывает список, создание товара/услуги, обзор и редактор. Поля title
+и body сохраняются общей очередью autosave через 800 мс. Подтверждение запроса
+не стирает более новый ввод. Ошибочный раздел остаётся в черновике, сеть/5xx
+приостанавливают очередь до явного повтора. Upload не повторяется автоматически.
+Уход и смена locale сначала сохраняют ввод; смена tenant/session отменяет очередь.
 
-List — компактные строки, locale/search/status/category/tag и offset/limit (до 100).
-Detail сохраняет item/as_of с прямыми полями; price_specification отличается от
-вычисляемой price, stock — от stock_status. Нет kind, root/parent, own/effective,
-origins, осей или диапазона цен. Чтение использует REPEATABLE READ на общей session
-до SQL Identity. Unsupported SQL kinds не читаются и не меняются через MVP.
+Публичный GetCatalogItemsPublicationSnapshot сохраняет собственные DTO,
+locale/as_of, схему и значения товаров с вычислениями. Удалённых полей в нём нет.
 
-Console /catalog/items: список, явное создание черновика, обзор и редактор.
-Все разделы товара автоматически сохраняются через 800 мс после последней правки.
-Одна очередь отправляет только корректные изменённые разделы; во время запроса
-ввод доступен, более новые значения сохраняются следующим PATCH. Ошибочный раздел
-остаётся в черновике, остальные продолжают сохраняться. Сеть/5xx приостанавливают
-очередь с общей кнопкой «Повторить». Статус доступен через aria-live. Upload следует
-после сохранения галереи в той же очереди; его неоднозначный результат не повторяется.
-Уход со страницы и смена locale сначала сохраняют изменения; при оставшемся вводе
-требуется подтверждение отказа. Смена tenant/session отменяет отложенные записи.
-Редакторы характеристик, категорий и тегов сохраняют текущие кнопки без ревизий.
+## SQL и выпуск
 
-## SQL и публичные контракты
+Baseline 0023_catalog_item создаёт структуру без seed Catalog. Данные Default
+создаются только через onboarding. Таблицы справочников, назначений, metadata,
+variant selections и default selections удалены. Сохраняются SQL kind,
+parent_id и ограничения ролей simple/variable/variant. Активный MVP работает
+только с simple без parent; сценарии вариативности остаются будущим этапом.
 
-SQL товара и регистрация сохраняются: catalog_item поддерживает
-simple/variable/variant, parent role FK, оси и таблицы selections/defaults.
-MVP mapper записывает simple, parent_id=NULL, is_variation=false и mode=set;
-старый clear простого товара читается как отсутствие. Активные adapters не
-загружают детей и не читают/записывают selections/defaults.
-История миграций, включая baseline 0023_catalog_item, сохраняется. Новая tenant-
-миграция 0026_catalog_attribute_ids удаляет code и UNIQUE по коду только у
-catalog_attributes/catalog_attribute_options. UUID, переводы, позиции и FK
-назначений/осей не изменяются. Downgrade заполняет коды из UUID с префиксами a_/o_;
-исходные коды можно вернуть только из резервной копии. Backend, Console и миграция
-выпускаются согласованно: старый backend несовместим с удалёнными колонками.
-Для сокращения уже развёрнутого Catalog пересоздание БД не требуется.
-SQL-колонки revision пассивны: при INSERT adapter записывает 1, UPDATE сохраняет
-прежнее значение. Domain и проекции их не используют; проверок сравнения нет.
-
-GetCatalogItemsPublicationSnapshot — публичный batch Application-контракт простых
-товаров: locale/as_of, fixed schema и собственные
-значения с вычислениями. Он имеет собственные вложенные DTO. Потребитель открывает
-краткий согласованный read UoW. Usage port проверяет внешние зависимости удаления;
-пока внешние связи отсутствуют, адаптер возвращает пустой набор. При появлении
-внешнего потребителя адаптер проверяет его зависимости через публичный контракт.
-Связанные сообщения Outbox записываются в общей транзакции.
+Ревизия 0026_catalog_attribute_ids удалена; 0027_remove_channels следует за
+0025_user_display_currency. Глобальные миграции и другие модули сохраняются.
+Исторические имена таблиц остаются в ownership registry для autogenerate.
+Переход требует пересозданных tenant-схем и повторного onboarding; переноса данных
+нет. Backend и Console выпускаются согласованно.

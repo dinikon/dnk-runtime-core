@@ -1,4 +1,4 @@
-import type { WeightUnit, LengthUnit } from "../api/catalog.dto";
+import type { WeightUnit, LengthUnit } from "./product.types";
 
 /** Пересчитывает десятичную строку без промежуточного floating point. */
 export function convertMeasurement(

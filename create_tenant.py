@@ -44,6 +44,7 @@ async def main() -> None:
                 app.get_tenant_storage(uow),
                 app.get_currency_validator(get_validate_currency_handler(uow)),
                 app.get_currency_settings_writer(uow),
+                app.get_catalog_provisioning(uow),
             )
             result = await use_case.execute(
                 CreateTenantCommand(

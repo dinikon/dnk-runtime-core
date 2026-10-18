@@ -19,12 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type {
-  CatalogItem,
-  CatalogCategory,
-  CatalogTag,
-  CatalogAttribute,
-} from "../../model/catalog.types";
+import type { CatalogItem } from "../../model/catalog.types";
 import type { ProductSection } from "../../model/product.types";
 import {
   editorGroups,
@@ -34,18 +29,13 @@ import { useProductSectionDraft } from "../../model/use-product-section-draft";
 import { statusLabels, stockLabels } from "../../model/product-presentation";
 import ProductEditorSection from "./ProductEditorSection.vue";
 import ProductEditorSections from "./ProductEditorSections.vue";
-import ProductReferenceState from "./ProductReferenceState.vue";
 import ProductFieldError from "./ProductFieldError.vue";
 import ProductIdentityForm from "../forms/ProductIdentityForm.vue";
 import ProductPricingForm from "../forms/ProductPricingForm.vue";
 import ProductStockForm from "../forms/ProductStockForm.vue";
 import ProductDescriptionsForm from "../forms/ProductDescriptionsForm.vue";
 import CatalogItemGalleryForm from "../forms/CatalogItemGalleryForm.vue";
-import ProductCategoriesForm from "../forms/ProductCategoriesForm.vue";
-import ProductTagsForm from "../forms/ProductTagsForm.vue";
-import ProductAttributesForm from "../forms/ProductAttributesForm.vue";
 import ProductMeasurementsForm from "../forms/ProductMeasurementsForm.vue";
-import ProductMetadataForm from "../forms/ProductMetadataForm.vue";
 const props = defineProps<{
   item: CatalogItem;
   content: Record<string, string>;
@@ -59,39 +49,31 @@ const props = defineProps<{
   saveStatus: string;
   error: string;
   initialGroup?: EditorGroup;
-  focusName?: boolean;
-  categories: CatalogCategory[];
-  tags: CatalogTag[];
-  attributes: CatalogAttribute[];
-  references: Record<
-    "categories" | "tags" | "attributes",
-    "loading" | "error" | "ready"
-  >;
+  focusTitle?: boolean;
   imageUrl: (id: string) => string;
 }>();
 const emit = defineEmits<{
   save: [section: ProductSection, value: Record<string, unknown>];
-  content: [code: "name" | "desc" | "short_desc", value: string | undefined];
+  content: [code: "title" | "body", value: string | undefined];
   upload: [file: File, main: boolean];
   reload: [];
   retry: [];
-  reference: [kind: "categories" | "tags" | "attributes"];
   focused: [];
 }>();
 const root = ref<HTMLElement | null>(null);
 const revealed = reactive<Partial<Record<EditorGroup, number>>>({});
 let titleFocused = false;
-async function focusTitle(): Promise<void> {
+async function focusTitleField(): Promise<void> {
   if (
     titleFocused ||
-    !props.focusName ||
+    !props.focusTitle ||
     props.contentDisabled ||
     props.disabled
   )
     return;
   await nextTick();
   const input = root.value?.querySelector<HTMLInputElement>(
-    "[data-product-name]",
+    "[data-product-title]",
   );
   if (input && !input.disabled) {
     input.focus();
@@ -102,7 +84,7 @@ async function focusTitle(): Promise<void> {
 watch(
   () => [props.contentDisabled, props.disabled],
   () => {
-    void focusTitle();
+    void focusTitleField();
   },
 );
 const { value: status, change: changeStatus } = useProductSectionDraft(
@@ -156,8 +138,8 @@ watch(
   },
 );
 onMounted(async () => {
-  if (props.focusName) {
-    await focusTitle();
+  if (props.focusTitle) {
+    await focusTitleField();
   } else if (props.initialGroup) await navigate(props.initialGroup);
 });
 </script>
@@ -275,7 +257,7 @@ onMounted(async () => {
             :content-disabled="contentDisabled"
             :errors="props.errors"
             :resets="resets"
-            @name="emit('content', 'name', $event)"
+            @title="emit('content', 'title', $event)"
             @save="(section, value) => emit('save', section, value)"
         /></ProductEditorSection>
         <ProductEditorSection
@@ -337,86 +319,17 @@ onMounted(async () => {
         /></ProductEditorSection>
         <ProductEditorSection
           id="product-descriptions"
-          title="Описания"
+          title="Описание"
           :dirty="groupDirty('descriptions')"
           :error="groupError('descriptions')"
           ><ProductDescriptionsForm
             :content="content"
             :disabled="disabled || contentDisabled"
             :error="props.errors.content"
-            :reveal="revealed.descriptions"
             @change="(code, value) => emit('content', code, value)"
         /></ProductEditorSection>
       </div>
       <aside class="min-w-0" aria-label="Дополнительные сведения о товаре">
-        <ProductEditorSection
-          id="product-classification"
-          title="Категории и метки"
-          collapsible
-          :summary="
-            summary(
-              'classification',
-              `Категорий: ${item.category_ids.length} · Меток: ${item.tag_ids.length}`,
-            )
-          "
-          :dirty="groupDirty('classification')"
-          :error="groupError('classification')"
-          :reveal="revealed.classification"
-          ><div class="flex min-w-0 flex-col gap-6">
-            <ProductReferenceState
-              :state="references.categories"
-              label="категории"
-              @retry="emit('reference', 'categories')"
-            /><ProductCategoriesForm
-              :ids="item.category_ids"
-              :primary-id="item.primary_category_id"
-              :categories="categories"
-              :pending="false"
-              :disabled="disabled || references.categories !== 'ready'"
-              :reset="resets.categories ?? 0"
-              :validation-error="props.errors.categories"
-              @submit="
-                (category_ids, primary_category_id) =>
-                  emit('save', 'categories', {
-                    category_ids,
-                    primary_category_id,
-                  })
-              "
-            /><ProductReferenceState
-              :state="references.tags"
-              label="метки"
-              @retry="emit('reference', 'tags')"
-            /><ProductTagsForm
-              :ids="item.tag_ids"
-              :tags="tags"
-              :pending="false"
-              :disabled="disabled || references.tags !== 'ready'"
-              :reset="resets.tags ?? 0"
-              :validation-error="props.errors.tags"
-              @submit="emit('save', 'tags', { tag_ids: $event })"
-            /></div
-        ></ProductEditorSection>
-        <ProductEditorSection
-          id="product-attributes"
-          title="Характеристики"
-          collapsible
-          :summary="
-            summary('attributes', `Назначено: ${item.attributes.length}`)
-          "
-          :dirty="groupDirty('attributes')"
-          :error="groupError('attributes')"
-          :reveal="revealed.attributes"
-          ><ProductReferenceState
-            :state="references.attributes"
-            label="характеристики"
-            @retry="emit('reference', 'attributes')" /><ProductAttributesForm
-            :value="item.attributes"
-            :attributes="attributes"
-            :disabled="disabled || references.attributes !== 'ready'"
-            :reset="resets.attributes ?? 0"
-            :error="props.errors.attributes"
-            @change="emit('save', 'attributes', { attributes: $event })"
-        /></ProductEditorSection>
         <ProductEditorSection
           id="product-measurements"
           title="Вес и размеры"
@@ -438,21 +351,6 @@ onMounted(async () => {
             :reset="resets.measurements ?? 0"
             :error="props.errors.measurements"
             @change="emit('save', 'measurements', { ...$event })"
-        /></ProductEditorSection>
-        <ProductEditorSection
-          id="product-metadata"
-          title="Дополнительные поля"
-          collapsible
-          :summary="summary('metadata', `Полей: ${item.metadata.length}`)"
-          :dirty="groupDirty('metadata')"
-          :error="groupError('metadata')"
-          :reveal="revealed.metadata"
-          ><ProductMetadataForm
-            :value="item.metadata"
-            :disabled="disabled"
-            :reset="resets.metadata ?? 0"
-            :error="props.errors.metadata"
-            @change="emit('save', 'metadata', { metadata: $event })"
         /></ProductEditorSection>
       </aside>
     </div>

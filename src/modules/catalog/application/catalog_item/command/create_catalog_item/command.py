@@ -9,3 +9,4 @@ class CreateCatalogItemCommand:
     tenant_id: EntityIdVO
     actor_id: EntityIdVO
     virtual: bool = False
+    product_type_code: str = "default"

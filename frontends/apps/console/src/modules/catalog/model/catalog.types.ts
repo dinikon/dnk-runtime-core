@@ -4,50 +4,12 @@ import type {
   ProductDimensions,
   ProductStock,
   ProductGallery,
-  ProductAttribute,
-  ProductMetadata,
 } from "./product.types";
-export interface CatalogCategory {
-  id: string;
-  label: string | null;
-
-  parentId: string | null;
-  childCount: number;
-}
-export interface CatalogTag {
-  id: string;
-  label: string | null;
-}
-export interface CatalogAttributeOption {
-  id: string;
-  label: string | null;
-  position: number;
-  locales: string[];
-}
-export interface CatalogAttribute {
-  id: string;
-  label: string | null;
-
-  locales: string[];
-  options: CatalogAttributeOption[];
-}
-export interface AttributeOptionDraft {
-  id: string | null;
-  label: string | null;
-}
-export interface CollectionItem {
-  id: string;
-  label: string;
-  description: string;
-
-  system: boolean;
-}
 export interface LocaleOption {
   code: string;
   name: string;
   active: boolean;
 }
-export type CollectionKind = "attributes" | "tags";
 export interface CatalogItem {
   id: string;
   title: string | null;
@@ -68,13 +30,42 @@ export interface CatalogItem {
   available_for_publication: boolean;
   content: Record<string, string> | null;
   gallery: ProductGallery | null;
-  attributes: ProductAttribute[];
-  metadata: ProductMetadata[];
-  category_ids: string[];
-  primary_category_id: string | null;
-  tag_ids: string[];
   created_at: string;
   updated_at: string;
   created_by: string;
   updated_by: string;
+}
+
+export interface CatalogListItem {
+  id: string;
+  status: import("./product.types").ProductStatus;
+  sku: string | null;
+  title: string | null;
+  price: string | null;
+  currency: string | null;
+  availableForSale: boolean;
+}
+export interface CatalogItemsPage {
+  items: CatalogListItem[];
+  total: number;
+  offset: number;
+  limit: number;
+  as_of: string;
+}
+export interface CatalogSchema {
+  locale: string;
+  schema: {
+    id: string;
+    code: string;
+    label: string | null;
+    schema_version: number;
+    blocks: {
+      id: string;
+      code: string;
+      value_type: string;
+      required: boolean;
+      position: number;
+      label: string | null;
+    }[];
+  };
 }

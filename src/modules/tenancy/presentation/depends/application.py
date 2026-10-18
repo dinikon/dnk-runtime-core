@@ -92,6 +92,38 @@ TenantCurrencySettingsWriterDep = Annotated[
 ]
 
 
+from src.modules.tenancy.application.tenant.port.catalog_provisioning import (
+    CatalogProvisioningPort,
+)
+from src.modules.tenancy.infrastructure.adapter.catalog_provisioning import (
+    CatalogProvisioningAdapter,
+)
+from src.modules.catalog.application.product_type.facade import (
+    CatalogProvisioningFacade,
+)
+from src.modules.catalog.infrastructure.product_type.persistence.repository import (
+    SqlAlchemyProductTypeRepository,
+)
+from src.modules.shared.infrastructure.time.utc_clock import UtcClock
+from src.modules.shared.infrastructure.uuid.uuid7_generator import UUID7Generator
+
+
+def get_catalog_provisioning(uow: UoWDep) -> CatalogProvisioningPort:
+    """Собирает Catalog и Tenancy adapter на общей сессии создания tenant."""
+    return CatalogProvisioningAdapter(
+        uow.session,
+        TenantSchemaNaming(dnk_config.SCHEMA_PREFIX),
+        CatalogProvisioningFacade(
+            SqlAlchemyProductTypeRepository(uow.session), UUID7Generator(), UtcClock()
+        ),
+    )
+
+
+CatalogProvisioningDep = Annotated[
+    CatalogProvisioningPort, Depends(get_catalog_provisioning)
+]
+
+
 def get_create_tenant_handler(
     tenant_onboarding_service: TenantOnboardingServiceDep,
     identity_provisioning_service: IdentityProvisioningServiceDep,
@@ -100,6 +132,7 @@ def get_create_tenant_handler(
     tenant_storage: TenantStorageDep,
     currency_validator: CurrencyValidatorDep,
     currency_settings_writer: TenantCurrencySettingsWriterDep,
+    catalog_provisioning: CatalogProvisioningDep,
 ) -> CreateTenantHandler:
     """Создает use case полного tenant onboarding."""
 
@@ -111,6 +144,7 @@ def get_create_tenant_handler(
         tenant_storage=tenant_storage,
         currency_validator=currency_validator,
         currency_settings_writer=currency_settings_writer,
+        catalog_provisioning=catalog_provisioning,
     )
 
 

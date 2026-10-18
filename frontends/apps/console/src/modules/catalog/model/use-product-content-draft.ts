@@ -17,10 +17,7 @@ export function useProductContentDraft(
     },
     { immediate: true },
   );
-  function change(
-    code: "name" | "short_desc" | "desc",
-    value: string | undefined,
-  ): void {
+  function change(code: "title" | "body", value: string | undefined): void {
     values.value = changeProductContent(values.value, code, value);
     save({ ...values.value });
   }

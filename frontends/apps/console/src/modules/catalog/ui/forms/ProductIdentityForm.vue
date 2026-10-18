@@ -21,7 +21,7 @@ const props = defineProps<{
   resets: Partial<Record<ProductSection, number>>;
 }>();
 const emit = defineEmits<{
-  name: [value: string];
+  title: [value: string];
   save: [section: ProductSection, value: Record<string, unknown>];
 }>();
 const { value: sku, change: changeSku } = useProductSectionDraft(
@@ -40,13 +40,13 @@ const { value: virtual, change: changeVirtual } = useProductSectionDraft(
     <legend class="sr-only">Основные сведения</legend>
     <FieldGroup class="gap-5">
       <Field :data-invalid="!!errors.content || undefined">
-        <FieldLabel :for="`${item.id}-name`"
+        <FieldLabel :for="`${item.id}-title`"
           >Название <span aria-hidden="true">*</span></FieldLabel
         >
         <Input
-          :id="`${item.id}-name`"
-          data-product-name
-          :model-value="content.name ?? ''"
+          :id="`${item.id}-title`"
+          data-product-title
+          :model-value="content.title ?? ''"
           placeholder="Название товара"
           required
           :disabled="contentDisabled || disabled"
@@ -55,7 +55,7 @@ const { value: virtual, change: changeVirtual } = useProductSectionDraft(
           :aria-describedby="
             errors.content ? `${item.id}-content-error` : undefined
           "
-          @update:model-value="emit('name', String($event))"
+          @update:model-value="emit('title', String($event))"
         />
         <ProductFieldError
           :id="`${item.id}-content-error`"

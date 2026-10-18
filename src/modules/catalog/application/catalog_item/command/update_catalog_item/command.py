@@ -17,10 +17,6 @@ from src.modules.catalog.domain.catalog_item.value_object.measurements import (
     WeightVO,
     DimensionsVO,
 )
-from src.modules.catalog.domain.catalog_item.value_object.attribute import (
-    EnumAttributeAssignmentVO,
-)
-from src.modules.catalog.domain.catalog_item.entity.metadata import CatalogMetadataEntry
 from src.modules.catalog.domain.catalog_item.entity.gallery import CatalogItemGallery
 
 
@@ -50,8 +46,3 @@ class UpdateCatalogItemCommand:
     dimensions: DimensionsVO | None = None
     content: UpdateCatalogItemContent | None = None
     gallery: CatalogItemGallery | None = None
-    attributes: tuple[EnumAttributeAssignmentVO, ...] | None = None
-    metadata: tuple[CatalogMetadataEntry, ...] | None = None
-    category_ids: tuple[EntityIdVO, ...] | None = None
-    primary_category_id: EntityIdVO | None = None
-    tag_ids: tuple[EntityIdVO, ...] | None = None

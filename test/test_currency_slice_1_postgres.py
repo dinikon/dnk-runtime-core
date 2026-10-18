@@ -7,6 +7,17 @@ import os
 from pathlib import Path
 import unittest
 from unittest.mock import AsyncMock
+from src.modules.tenancy.infrastructure.adapter.catalog_provisioning import (
+    CatalogProvisioningAdapter,
+)
+from src.modules.catalog.application.product_type.facade import (
+    CatalogProvisioningFacade,
+)
+from src.modules.catalog.infrastructure.product_type.persistence.repository import (
+    SqlAlchemyProductTypeRepository,
+)
+from src.modules.shared.infrastructure.uuid.uuid7_generator import UUID7Generator
+from src.modules.shared.infrastructure.time.utc_clock import UtcClock
 from uuid import uuid4
 
 from alembic.migration import MigrationContext
@@ -386,6 +397,15 @@ class CurrencySliceOnePostgresTests(unittest.IsolatedAsyncioTestCase):
                 ValidateCurrencyHandler(SqlAlchemyCurrencyQueryRepository(session))
             ),
             TenantCurrencySettingsPersistenceAdapter(session, self.naming),
+            CatalogProvisioningAdapter(
+                session,
+                self.naming,
+                CatalogProvisioningFacade(
+                    SqlAlchemyProductTypeRepository(session),
+                    UUID7Generator(),
+                    UtcClock(),
+                ),
+            ),
         ), [storage, identity]
 
     def make_command(self, code: str) -> CreateTenantCommand:

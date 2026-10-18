@@ -8,15 +8,12 @@ import { useProductPage } from "../../model/use-product-page";
 import { overviewModel } from "../../model/product-presentation";
 import ProductHeader from "../product/ProductHeader.vue";
 import ProductOverview from "../product/ProductOverview.vue";
-const { ctx, id, item, attributes, categories, tags, imageUrl } =
-  useProductPage(false);
+const { ctx, id, item, imageUrl } = useProductPage(false);
 const model = computed(() =>
   item.data.value
     ? overviewModel(
         item.data.value,
-        attributes.data.value ?? [],
-        categories.data.value ?? [],
-        tags.data.value ?? [],
+
         imageUrl,
       )
     : null,

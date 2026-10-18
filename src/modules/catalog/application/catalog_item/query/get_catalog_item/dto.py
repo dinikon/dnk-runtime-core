@@ -37,31 +37,10 @@ class CatalogItemDetailsGalleryDTO:
 
 
 @dataclass(frozen=True, slots=True)
-class CatalogItemDetailsAttributeDTO:
-    """Характеристика результата чтения."""
-
-    attribute_id: UUID
-    option_ids: tuple[UUID, ...]
-    visible: bool
-    position: int
-
-
-@dataclass(frozen=True, slots=True)
-class CatalogItemDetailsMetadataDTO:
-    """Типизированное дополнительное значение результата чтения."""
-
-    key: str
-    value_type: str
-    value: str | Decimal | bool
-    position: int
-
-
-@dataclass(frozen=True, slots=True)
 class CatalogItemDetailsDTO:
     """Проекция самостоятельного товара для сценария get_catalog_item."""
 
     id: UUID
-
     product_type_id: UUID
     status: CatalogItemStatus
     sku: str | None
@@ -78,11 +57,6 @@ class CatalogItemDetailsDTO:
     available_for_publication: bool
     content: dict[str, str] | None
     gallery: CatalogItemDetailsGalleryDTO | None
-    attributes: tuple[CatalogItemDetailsAttributeDTO, ...]
-    metadata: tuple[CatalogItemDetailsMetadataDTO, ...]
-    category_ids: tuple[UUID, ...]
-    primary_category_id: UUID | None
-    tag_ids: tuple[UUID, ...]
     created_at: datetime
     updated_at: datetime
     created_by: UUID

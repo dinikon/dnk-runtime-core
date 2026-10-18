@@ -13,15 +13,11 @@ from src.modules.catalog.application.catalog_item.query.get_catalog_item.dto imp
     CatalogItemDetailsDTO,
     CatalogItemDetailsImageDTO,
     CatalogItemDetailsGalleryDTO,
-    CatalogItemDetailsAttributeDTO,
-    CatalogItemDetailsMetadataDTO,
 )
 from src.modules.catalog.application.catalog_item.query.get_catalog_items_publication_snapshot.dto import (
     CatalogItemPublicationDTO,
     CatalogItemPublicationImageDTO,
     CatalogItemPublicationGalleryDTO,
-    CatalogItemPublicationAttributeDTO,
-    CatalogItemPublicationMetadataDTO,
 )
 
 
@@ -57,34 +53,18 @@ class CatalogItemQueryMapper:
             gallery=(
                 CatalogItemDetailsGalleryDTO(
                     tuple(
-                        CatalogItemDetailsImageDTO(
-                            i.id.uuid, i.file_id.uuid, i.position, i.alt, i.caption
+                        (
+                            CatalogItemDetailsImageDTO(
+                                i.id.uuid, i.file_id.uuid, i.position, i.alt, i.caption
+                            )
+                            for i in gallery.images
                         )
-                        for i in gallery.images
                     ),
                     gallery.primary_image_id.uuid if gallery.primary_image_id else None,
                 )
                 if gallery is not None
                 else None
             ),
-            attributes=tuple(
-                CatalogItemDetailsAttributeDTO(
-                    a.attribute_id.uuid,
-                    tuple(o.uuid for o in a.option_ids),
-                    a.visible,
-                    a.position,
-                )
-                for a in item.attributes
-            ),
-            metadata=tuple(
-                CatalogItemDetailsMetadataDTO(m.key, m.value_type, m.value, m.position)
-                for m in item.metadata
-            ),
-            category_ids=tuple(i.uuid for i in item.category_ids),
-            primary_category_id=(
-                item.primary_category_id.uuid if item.primary_category_id else None
-            ),
-            tag_ids=tuple(i.uuid for i in item.tag_ids),
             created_at=item.created_at,
             updated_at=item.updated_at,
             created_by=item.created_by.uuid,
@@ -120,36 +100,18 @@ class CatalogItemQueryMapper:
             gallery=(
                 CatalogItemPublicationGalleryDTO(
                     tuple(
-                        CatalogItemPublicationImageDTO(
-                            i.id.uuid, i.file_id.uuid, i.position, i.alt, i.caption
+                        (
+                            CatalogItemPublicationImageDTO(
+                                i.id.uuid, i.file_id.uuid, i.position, i.alt, i.caption
+                            )
+                            for i in gallery.images
                         )
-                        for i in gallery.images
                     ),
                     gallery.primary_image_id.uuid if gallery.primary_image_id else None,
                 )
                 if gallery is not None
                 else None
             ),
-            attributes=tuple(
-                CatalogItemPublicationAttributeDTO(
-                    a.attribute_id.uuid,
-                    tuple(o.uuid for o in a.option_ids),
-                    a.visible,
-                    a.position,
-                )
-                for a in item.attributes
-            ),
-            metadata=tuple(
-                CatalogItemPublicationMetadataDTO(
-                    m.key, m.value_type, m.value, m.position
-                )
-                for m in item.metadata
-            ),
-            category_ids=tuple(i.uuid for i in item.category_ids),
-            primary_category_id=(
-                item.primary_category_id.uuid if item.primary_category_id else None
-            ),
-            tag_ids=tuple(i.uuid for i in item.tag_ids),
             created_at=item.created_at,
             updated_at=item.updated_at,
             created_by=item.created_by.uuid,
@@ -172,7 +134,7 @@ class CatalogItemQueryMapper:
             id=item.id.uuid,
             status=item.status,
             sku=item.sku,
-            title=item.translations.get(locale, {}).get("name"),
+            title=item.translations.get(locale, {}).get("title"),
             price=computed.price,
             currency=item.price.currency if item.price else None,
             stock_status=computed.stock_status.value,

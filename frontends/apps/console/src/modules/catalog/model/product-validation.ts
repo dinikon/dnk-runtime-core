@@ -1,4 +1,4 @@
-import type { UpdateItemRequest } from "../api/catalog.dto";
+import type { ProductPatch } from "./product.types";
 import type { ProductSection } from "./product.types";
 import { convertMeasurement } from "./measurement-conversion";
 
@@ -16,10 +16,10 @@ function decimal(value: string): bigint | null {
 /** Проверяет готовность раздела к отправке; бизнес-инварианты повторно проверяет сервер. */
 export function sectionError(
   section: ProductSection,
-  patch: UpdateItemRequest,
+  patch: ProductPatch,
 ): string {
   if (section === "content" && patch.content) {
-    const name = patch.content.values.name ?? "";
+    const name = patch.content.values.title ?? "";
     if (!name.trim() || name.length > 255)
       return "Введите название до 255 символов.";
   }
@@ -66,34 +66,6 @@ export function sectionError(
         return "Введите неотрицательные измерения с точностью до 6 знаков в базовой единице.";
     }
   }
-  if (
-    section === "attributes" &&
-    patch.attributes?.some((value) => !value.option_ids.length)
-  )
-    return "Выберите хотя бы одно значение характеристики.";
-  if (section === "metadata" && patch.metadata) {
-    const keys = new Set<string>();
-    for (const entry of patch.metadata) {
-      if (
-        !/^[a-zA-Z][a-zA-Z0-9_.-]{0,63}$/.test(entry.key) ||
-        keys.has(entry.key)
-      )
-        return "Укажите уникальные корректные ключи metadata.";
-      keys.add(entry.key);
-      if (
-        entry.value_type === "decimal" &&
-        (typeof entry.value !== "string" || decimal(entry.value) === null)
-      )
-        return "Введите число metadata до 6 знаков после запятой.";
-    }
-  }
-  if (
-    section === "categories" &&
-    patch.category_ids?.length &&
-    (!patch.primary_category_id ||
-      !patch.category_ids.includes(patch.primary_category_id))
-  )
-    return "Выберите основную категорию.";
   return "";
 }
 
@@ -107,9 +79,4 @@ export const fieldSections: Record<string, ProductSection> = {
   dimensions: "measurements",
   content: "content",
   gallery: "galleries",
-  attributes: "attributes",
-  metadata: "metadata",
-  category_ids: "categories",
-  primary_category_id: "categories",
-  tag_ids: "tags",
 };

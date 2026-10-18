@@ -14,6 +14,17 @@ import unittest
 from unittest.mock import AsyncMock
 from pathlib import Path
 from unittest.mock import patch
+from src.modules.tenancy.infrastructure.adapter.catalog_provisioning import (
+    CatalogProvisioningAdapter,
+)
+from src.modules.catalog.application.product_type.facade import (
+    CatalogProvisioningFacade,
+)
+from src.modules.catalog.infrastructure.product_type.persistence.repository import (
+    SqlAlchemyProductTypeRepository,
+)
+from src.modules.shared.infrastructure.uuid.uuid7_generator import UUID7Generator
+from src.modules.shared.infrastructure.time.utc_clock import UtcClock
 from uuid import UUID, uuid4
 
 from alembic import command
@@ -213,10 +224,10 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
         async with self.engine.begin() as connection:
             for target in (schema, other):
                 await self.migrator._migrate(
-                    connection, target, command.upgrade, "0026_catalog_attribute_ids"
+                    connection, target, command.upgrade, "0025_user_display_currency"
                 )
                 await self.insert_channel_state(connection, target)
-            contact_id, attribute_id, actor = uuid4(), uuid4(), uuid4()
+            contact_id, product_type_id, actor = uuid4(), uuid4(), uuid4()
             await connection.execute(
                 text(
                     f'INSERT INTO "{schema}".contacts '
@@ -227,10 +238,10 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
             await connection.execute(
                 text(
-                    f'INSERT INTO "{schema}".catalog_attributes '
-                    "(id, revision, created_by, updated_by) VALUES (:id, 1, :actor, :actor)"
+                    f'INSERT INTO "{schema}".catalog_product_types '
+                    "(id, code, is_system, schema_version, revision, created_by, updated_by) VALUES (:id, 'neighbor', false, 1, 1, :actor, :actor)"
                 ),
-                {"id": attribute_id, "actor": actor},
+                {"id": product_type_id, "actor": actor},
             )
             before = set(
                 await connection.run_sync(
@@ -268,9 +279,9 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(
                 await connection.scalar(
-                    text(f'SELECT id FROM "{schema}".catalog_attributes')
+                    text(f'SELECT id FROM "{schema}".catalog_product_types')
                 ),
-                attribute_id,
+                product_type_id,
             )
             for name in removed:
                 self.assertEqual(
@@ -281,10 +292,10 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 )
             self.assertEqual(
                 await self.migrator.current(connection, other),
-                ("0026_catalog_attribute_ids",),
+                ("0025_user_display_currency",),
             )
             await self.migrator.downgrade(
-                connection, schema, "0026_catalog_attribute_ids"
+                connection, schema, "0025_user_display_currency"
             )
             restored_structure = await connection.run_sync(
                 lambda conn: {
@@ -328,7 +339,7 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
         schema = await self.new_schema(upgrade=False)
         async with self.engine.begin() as connection:
             await self.migrator._migrate(
-                connection, schema, command.upgrade, "0026_catalog_attribute_ids"
+                connection, schema, command.upgrade, "0025_user_display_currency"
             )
             channel_id = await self.insert_channel_state(connection, schema)
             await connection.execute(
@@ -346,7 +357,7 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
         async with self.engine.begin() as connection:
             self.assertEqual(
                 await self.migrator.current(connection, schema),
-                ("0026_catalog_attribute_ids",),
+                ("0025_user_display_currency",),
             )
             for name in (
                 "channels",
@@ -555,7 +566,7 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 await connection.scalar(
                     text(f'SELECT count(*) FROM "{schema}".catalog_product_types')
                 ),
-                1,
+                0,
             )
             self.assertIsNone(
                 await connection.scalar(
@@ -902,6 +913,15 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
 
         async with UnitOfWork(sessions) as uow:
             use_case = CreateTenantHandler(
+                catalog_provisioning=CatalogProvisioningAdapter(
+                    uow.session,
+                    TenantSchemaNaming("dnk_"),
+                    CatalogProvisioningFacade(
+                        SqlAlchemyProductTypeRepository(uow.session),
+                        UUID7Generator(),
+                        UtcClock(),
+                    ),
+                ),
                 currency_validator=AsyncMock(),
                 currency_settings_writer=AsyncMock(),
                 tenant_onboarding_service=TenantOnboardingService(

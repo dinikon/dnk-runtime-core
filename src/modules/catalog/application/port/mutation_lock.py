@@ -6,19 +6,7 @@ from src.modules.catalog.domain.catalog_item.value_object.identifier import (
 
 
 class CatalogMutationLockPort(Protocol):
-    """Согласованный порядок справочного guard и блокировок независимых товаров."""
-
-    async def acquire(self, tenant_id: EntityIdVO) -> None:
-        """Получает exclusive reference guard для мутации справочников."""
-        ...
-
-    async def acquire_read(self, tenant_id: EntityIdVO) -> None:
-        """Обычная read projection не требует advisory lock."""
-        ...
-
-    async def acquire_reference(self, tenant_id: EntityIdVO) -> None:
-        """Получает shared reference guard перед изменением товара."""
-        ...
+    """Транзакционные блокировки независимых товаров."""
 
     async def acquire_item(
         self, tenant_id: EntityIdVO, item_id: CatalogItemIdVO

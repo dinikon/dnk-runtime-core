@@ -1,10 +1,10 @@
+from src.modules.catalog.domain.product_type.aggregate import ProductType
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.catalog.domain.product_type.value_object.schema import (
     ProductTypeSchemaSnapshot,
     ContentBlockSnapshot,
-    DEFAULT_TYPE_ID,
 )
 from src.modules.catalog.domain.error import CatalogNotFoundError
 from src.modules.catalog.infrastructure.persistence.models.product_type import (
@@ -25,21 +25,36 @@ from src.modules.catalog.infrastructure.persistence.models.content_block_transla
 )
 
 
-class SqlAlchemyDefaultContentSchema:
-    """Читает фиксированную схему; изменяемого API типов нет."""
+class SqlAlchemyProductTypeSchemas:
+    """Читает существующие tenant-схемы без создания данных."""
 
     def __init__(self, session: AsyncSession) -> None:
         """Получает общую tenant session."""
         self._session = session
 
-    async def get_default(self, locale: str | None = None) -> ProductTypeSchemaSnapshot:
-        """Возвращает Default и упорядоченные определения полей."""
-        version = await self._session.scalar(
-            select(ProductTypeModel.schema_version).where(
-                ProductTypeModel.id == DEFAULT_TYPE_ID.uuid
-            )
+    async def get_by_code(
+        self, code: str = "default", locale: str | None = None
+    ) -> ProductTypeSchemaSnapshot:
+        """Находит существующую tenant-схему по устойчивому коду."""
+        identifier = await self._session.scalar(
+            select(ProductTypeModel.id).where(ProductTypeModel.code == code)
         )
-        if version is None:
+        if identifier is None:
+            raise CatalogNotFoundError("Схема товара не установлена.")
+        return await self.get_by_id(EntityIdVO(identifier), locale)
+
+    async def get_by_id(
+        self, identifier: EntityIdVO, locale: str | None = None
+    ) -> ProductTypeSchemaSnapshot:
+        """Возвращает Default и упорядоченные определения полей."""
+        row = (
+            await self._session.execute(
+                select(ProductTypeModel.code, ProductTypeModel.schema_version).where(
+                    ProductTypeModel.id == identifier.uuid
+                )
+            )
+        ).one_or_none()
+        if row is None:
             raise CatalogNotFoundError("Системная схема Default не установлена.")
         rows = (
             await self._session.execute(
@@ -63,7 +78,7 @@ class SqlAlchemyDefaultContentSchema:
                     )
                     & (ContentBlockTranslationModel.locale == locale),
                 )
-                .where(ProductTypeBlockModel.product_type_id == DEFAULT_TYPE_ID.uuid)
+                .where(ProductTypeBlockModel.product_type_id == identifier.uuid)
                 .order_by(ProductTypeBlockModel.position)
             )
         ).all()
@@ -71,8 +86,7 @@ class SqlAlchemyDefaultContentSchema:
             (
                 await self._session.scalar(
                     select(ProductTypeTranslationModel.label).where(
-                        ProductTypeTranslationModel.product_type_id
-                        == DEFAULT_TYPE_ID.uuid,
+                        ProductTypeTranslationModel.product_type_id == identifier.uuid,
                         ProductTypeTranslationModel.locale == locale,
                     )
                 )
@@ -80,10 +94,10 @@ class SqlAlchemyDefaultContentSchema:
             if locale is not None
             else None
         )
-        return ProductTypeSchemaSnapshot(
-            DEFAULT_TYPE_ID,
-            "default",
-            version,
+        schema = ProductTypeSchemaSnapshot(
+            identifier,
+            row.code,
+            row.schema_version,
             tuple(
                 ContentBlockSnapshot(
                     EntityIdVO(r.id),
@@ -97,3 +111,6 @@ class SqlAlchemyDefaultContentSchema:
             ),
             label,
         )
+        if schema.code == "default":
+            ProductType.validate_default_schema(schema)
+        return schema

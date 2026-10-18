@@ -1,8 +1,8 @@
 # Tenant migrations
 
-The revision history below describes the current code. The historical
-[CatalogItem baseline rewrite](../plan/catalog.md) required a fresh database;
-the incremental removals below upgrade existing versioned installations.
+The revision history below describes the current code. The current
+[Catalog simplification](../plan/catalog.md) requires recreated tenant schemas
+and onboarding; no Catalog data migration is provided.
 
 ## Ownership
 
@@ -24,7 +24,7 @@ Tenant models use `TenantBase` with logical schema `tenant`. `src/modules/tenant
 
 ## New tenants
 
-`CreateTenantHandler` validates the requested base currency against active Reference Data before creating resources, creates the tenant and primary domain, invokes the tenancy-owned bootstrap port, initializes `tenant_currency_settings` in that schema, then provisions the administrator and email. The currency-settings migration seeds existing schemas with UAH; new onboarding replaces that initial value with the validated selection in the same transaction. `AlembicTenantSchemaBootstrapAdapter` uses the same UoW session to acquire a schema lock, reject an existing schema, create it and upgrade to `head`.
+`CreateTenantHandler` validates the requested base currency against active Reference Data before creating resources, creates the tenant and primary domain, invokes the tenancy-owned bootstrap port, initializes `tenant_currency_settings` in that schema, then provisions the administrator and email and initializes Catalog through its public Application facade. Catalog writes use that administrator UUID for audit and generate separate UUIDv7 identifiers for Default and its title/body blocks. Repeated initialization preserves a complete existing schema and rejects an incomplete one. The currency-settings migration seeds existing schemas with UAH; new onboarding replaces that initial value with the validated selection in the same transaction. `AlembicTenantSchemaBootstrapAdapter` uses the same UoW session to acquire a schema lock, reject an existing schema, create it and upgrade to `head`.
 
 The adapter and migrator never commit. PostgreSQL DDL, Alembic version writes, tenant, domain, owner identity and cloud connection writes commit together. Any failure rolls everything back. The Control Plane installer records accepted-command errors in its durable attempt state and reconciles actual resources before declaring absence.
 
@@ -41,36 +41,31 @@ tenants before running code that reads the new CRM arrays. Existing CRM rows are
 Revision `0011_inventory_skus`, after `0010_crm_company_legal_name`, adds the tenant-local
 Inventory `skus` directory with unique codes and audit fields; this revision remains
 in the migration history after removal of the module.
-Catalog now uses a fresh `0023_catalog_item` baseline after
-`0022_tenant_currency_settings`. It creates `catalog_item` for simple, variable
-and variant nodes, normalized content/media/enum/classification links and the
-fixed Default schema. The 2026-10-15 rebuild removes scalar override modes,
-uses boolean stock management and stores each measurement as a nullable value/unit
-pair (g/kg for weight, cm/m for each dimension). Revision identity remains
-0023_catalog_item; 0024_currency_exchange_rates still depends on it. It does not
-migrate old Product/Variant rows or existing CatalogItem data.
+Catalog uses a rewritten `0023_catalog_item` baseline after
+`0022_tenant_currency_settings`. It creates `catalog_item`, normalized content/media
+and ProductType/block tables. Roles simple/variable/variant and their parent
+constraints remain in SQL; attributes, options, classification, metadata and
+selections/defaults have no runtime models or fresh-schema tables.
+The baseline contains no Catalog seed. `CatalogProvisioningFacade` creates the
+system type `default` and blocks `title` (required text) and `body` (optional rich text)
+only during tenant onboarding. Queries and item creation never seed missing data.
 
-The five Catalog revisions 0012/0015/0017/0018/0019 are removed. Only chain links
-in preserved migrations change: 0013 -> 0011, 0016 -> 0014, 0020 -> 0016. Files
-0020/0021 and currency settings 0022 remain intact. There is one tenant head.
-Downgrade from 0023 to 0022 removes only the new Catalog; upgrading recreates its empty
-schema and Default seed. The historical baseline rebuild required fresh database
-recreation; subsequent incremental migrations do not require it. No command here
-automatically drops the application database.
+Revision identity remains `0023_catalog_item`; `0024_currency_exchange_rates`
+still depends on it. Revision `0026_catalog_attribute_ids` is removed;
+`0027_remove_channels` now follows `0025_user_display_currency`. One tenant head
+remains. Unrelated module migrations are preserved. Downgrade to 0022 removes
+only Catalog; upgrade recreates its empty structure without system values.
+Historical table ownership names remain for autogenerate.
 
-Revision `0026_catalog_attribute_ids`, after `0025_user_display_currency`, removes
-only the `code` columns and their uniqueness constraints from `catalog_attributes`
-and `catalog_attribute_options`. IDs, translations, positions, assignments and
-foreign keys remain intact, including future variation storage. Apply it together
-with the new backend and Console: the previous backend requires those columns.
-Downgrade recreates unique technical codes from UUIDs (`a_` / `o_` prefixes),
-not the original code values; recovering those values requires a backup.
+This change requires recreated tenant schemas and repeated onboarding. It does
+not transfer existing Catalog data. Deploy backend and Console together. Schema
+reset is an operational rollout step; migration commands do not drop the database.
 
 Revision `0016_remove_inventory`, after `0014_channel_publications`, retires
 the Inventory schema; its own upgrade/downgrade behavior is preserved.
 Catalog no longer references Inventory SKUs or warehouses.
 
-Tenant head `0027_remove_channels`, after `0026_catalog_attribute_ids`, drops
+Tenant head `0027_remove_channels`, after `0025_user_display_currency`, drops
 `channel_publications`, `channel_publication_import_runs`, then `channels`,
 without CASCADE. It removes stored credentials, observed publications and import
 progress. The whole tenant migration rolls back if an unexpected dependency
@@ -161,4 +156,4 @@ downgrade alone returns empty tables and cannot restore credentials or snapshots
 - [Files](../modules/files.md): `0020_files` creates tenant registry tables;
   `dnk-manage files prepare --all` prepares private buckets after SQL migrations.
 - [Tenancy](../modules/tenancy.md)
-- [Persistence and UoW rules](../architecture/AGENTS.md#unit-of-work)
+- [Persistence and UoW rules](../architecture/backend.md#unit-of-work)
