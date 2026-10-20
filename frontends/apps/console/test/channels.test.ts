@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   mapPublication,
   mapConnection,
+  mapPlatform,
   updateConnectionPayload,
 } from "../src/modules/channels/api/channels.mapper.ts";
 import {
@@ -28,8 +29,28 @@ import type {
 const platform: Platform = {
   kind: "new-plugin",
   label: "New plugin",
-  sdkVersion: 1,
-  configVersion: 1,
+  sdkVersion: 5,
+  configVersion: 3,
+  settingsSchema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["locales", "currency"],
+    properties: {
+      locales: {
+        type: "array",
+        minItems: 1,
+        maxItems: 2,
+        uniqueItems: true,
+        items: { type: "string", "x-reference": "locale" },
+      },
+      currency: {
+        type: "string",
+        minLength: 3,
+        maxLength: 3,
+        "x-reference": "currency",
+      },
+    },
+  },
   capabilities: ["verify_connection", "read_publications"],
   endpointSchema: {
     type: "string",
@@ -78,7 +99,7 @@ test("a new plugin config supplies fixed endpoint and fields without kind condit
   assert.equal(values.endpoint, "https://api.example");
   assert.deepEqual(values.credentials, { api_key: "" });
   assert.equal(platformSupported(platform), true);
-  assert.equal(platformSupported({ ...platform, sdkVersion: 2 }), false);
+  assert.equal(platformSupported({ ...platform, sdkVersion: 1 }), false);
   assert.equal(
     platformSupported({
       ...platform,
@@ -89,28 +110,25 @@ test("a new plugin config supplies fixed endpoint and fields without kind condit
     }),
     false,
   );
-  values.primaryLocale = "uk";
-  values.secondaryLocale = "ru";
+  values.settings = { locales: ["uk", "ru"], currency: "UAH" };
   assert.match(
     validateConnectionForm(values, platform, true) ?? "",
     /поля доступа/,
   );
   values.credentials.api_key = "secret";
   assert.equal(validateConnectionForm(values, platform, true), null);
-  values.secondaryLocale = "uk";
+  values.settings.locales = ["uk", "uk"];
   assert.match(
     validateConnectionForm(values, platform, true) ?? "",
-    /разные языки/,
+    /должны отличаться/,
   );
 });
 test("settings and credential replacement are explicit; unchanged secrets are omitted", () => {
   const values = connectionFormValues(platform, undefined);
-  values.primaryLocale = "uk";
-  values.currency = "UAH";
+  values.settings = { locales: ["uk"], currency: "UAH" };
   assert.deepEqual(connectionSettings(values), {
     endpoint: "https://api.example",
-    locales: ["uk"],
-    currency: "UAH",
+    options: { locales: ["uk"], currency: "UAH" },
   });
   const input = {
     channelId: "id",
@@ -131,7 +149,6 @@ test("publication mapper preserves exact decimal strings, zero and unknown value
   const item = mapPublication({
     publication_id: "p",
     connection_id: "c",
-    core_version: 1,
     resource_type: "product",
     external_id: "native",
     external_sku: null,
@@ -161,8 +178,7 @@ test("connection mapping exposes presence flags, never invents credential values
     connection_id: "co",
     revision: 2,
     endpoint: "https://api.example",
-    locales: ["uk", "ru"],
-    currency: "UAH",
+    settings: { locales: ["uk", "ru"], currency: "UAH" },
     resource_identity: null,
     verification_status: "queued",
     verification_job_id: "job",
@@ -209,7 +225,7 @@ test("Decimal exponent display preserves exact value without binary floating poi
 test("form validation rejects unsafe endpoint syntax and allows unchanged credentials", () => {
   const configurable = { ...platform, endpointSchema: { type: "string" } };
   const values = connectionFormValues(configurable, undefined);
-  values.primaryLocale = "uk";
+  values.settings = { locales: ["uk"], currency: "UAH" };
   for (const endpoint of [
     "http://shop.example",
     "https://u:p@shop.example",
@@ -238,29 +254,118 @@ test("transport errors cannot retain credentials in UI or mutation errors", () =
   assert.doesNotMatch(JSON.stringify(safe), /private-token/);
 });
 
-test("missing or unsupported plugin form schema fails closed", () => {
+test("missing or unsupported plugin settings schema fails closed", () => {
+  assert.equal(platformSupported(platform), true);
+  for (const sdkVersion of [1, 2, 3, 4]) {
+    assert.equal(platformSupported({ ...platform, sdkVersion }), false);
+  }
+  assert.equal(platformSupported({ ...platform, configVersion: 2 }), false);
   assert.equal(
     platformSupported({
       ...platform,
-      endpointSchema: undefined,
+      settingsSchema: undefined,
     } as unknown as Platform),
     false,
   );
   assert.equal(
     platformSupported({
       ...platform,
-      credentialsSchema: undefined,
-    } as unknown as Platform),
-    false,
-  );
-  assert.equal(
-    platformSupported({
-      ...platform,
-      credentialsSchema: {
+      settingsSchema: {
         type: "object",
-        properties: { api_key: { type: "string", enum: ["x"] } },
+        properties: { unknown: { type: "unsupported" } },
       },
+    }),
+    false,
+  );
+  assert.equal(
+    platformSupported({
+      ...platform,
+      settingsSchema: { type: "object", anyOf: [] },
     } as unknown as Platform),
     false,
   );
+});
+
+test("manifest settings schema supplies fixed values and validates optional array slots", () => {
+  const fixed = mapPlatform({
+    kind: "fixed-plugin",
+    label: "Fixed",
+    sdk_version: 5,
+    config_version: 3,
+    capabilities: platform.capabilities,
+    credentials_schema: platform.credentialsSchema,
+    endpoint_schema: platform.endpointSchema,
+    settings_schema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["locales", "currency"],
+      properties: {
+        locales: {
+          type: "array",
+          minItems: 1,
+          maxItems: 2,
+          uniqueItems: true,
+          default: ["ru"],
+          items: { type: "string", enum: ["ru", "uk"] },
+          prefixItems: [
+            { type: "string", const: "ru", title: "Основной язык" },
+            { type: "string", enum: ["uk"], title: "Дополнительный язык" },
+          ],
+        },
+        currency: { type: "string", const: "UAH", default: "UAH" },
+      },
+    },
+  });
+  assert.equal(platformSupported(fixed), true);
+  const values = connectionFormValues(fixed, undefined);
+  values.credentials.api_key = "secret";
+  assert.deepEqual(values.settings, { locales: ["ru"], currency: "UAH" });
+  assert.equal(validateConnectionForm(values, fixed, true), null);
+  values.settings.locales = ["ru", "uk"];
+  assert.equal(validateConnectionForm(values, fixed, true), null);
+  values.settings.locales = ["ru", "en"];
+  assert.ok(validateConnectionForm(values, fixed, true));
+  values.settings.locales = ["uk"];
+  assert.match(
+    validateConnectionForm(values, fixed, true) ?? "",
+    /фиксированное/,
+  );
+  values.settings.locales = ["ru"];
+  values.settings.currency = "USD";
+  assert.match(
+    validateConnectionForm(values, fixed, true) ?? "",
+    /фиксированное/,
+  );
+});
+
+test("new plugin fields, nested objects, booleans and numbers need no platform conditions", () => {
+  const extra: Platform = {
+    ...platform,
+    settingsSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["limit", "advanced"],
+      properties: {
+        limit: { type: "integer", minimum: 1, maximum: 1000, default: 50 },
+        advanced: {
+          type: "object",
+          additionalProperties: false,
+          required: ["enabled"],
+          properties: { enabled: { type: "boolean", default: false } },
+        },
+      },
+    },
+  };
+  const values = connectionFormValues(extra, undefined);
+  assert.equal(platformSupported(extra), true);
+  assert.deepEqual(values.settings, {
+    limit: 50,
+    advanced: { enabled: false },
+  });
+  assert.equal(validateConnectionForm(values, extra, false), null);
+  values.settings.limit = 0;
+  assert.ok(validateConnectionForm(values, extra, false));
+  values.settings.limit = 5;
+  values.settings.unknown = "extra";
+  assert.ok(validateConnectionForm(values, extra, false));
 });

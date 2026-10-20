@@ -26,7 +26,7 @@ class ChannelMapper:
             if data["verification_job_id"] is not None:
                 data["verification_job_id"] = EntityIdVO(data["verification_job_id"])
             data["settings"] = ConnectionSettingsVO(
-                data.pop("endpoint"), tuple(data.pop("locales")), data.pop("currency")
+                data.pop("endpoint"), data.pop("settings")
             )
             data["scope_limitations"] = tuple(data["scope_limitations"])
             connection = Connection.restore(**data)
@@ -69,8 +69,7 @@ class ChannelMapper:
             id=c.id.uuid,
             channel_id=channel.id.uuid,
             endpoint=c.settings.endpoint,
-            locales=list(c.settings.locales),
-            currency=c.settings.currency,
+            settings=dict(c.settings.options),
             credentials_ciphertext=c.credentials_ciphertext,
             candidate_ciphertext=c.candidate_ciphertext,
             resource_identity=c.resource_identity,

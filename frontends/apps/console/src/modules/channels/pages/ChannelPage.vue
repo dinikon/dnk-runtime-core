@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PublicationIdentitySummary from "../ui/PublicationIdentitySummary.vue";
 import { computed, ref, watch, watchEffect, onBeforeUnmount } from "vue";
 import {
   useRoute,
@@ -48,15 +49,81 @@ import ChannelInitializationCard from "../ui/ChannelInitializationCard.vue";
 import ConnectionForm from "../ui/ConnectionForm.vue";
 import PublicationsToolbar from "../ui/PublicationsToolbar.vue";
 import PublicationsList from "../ui/PublicationsList.vue";
+import ContentUpdatesHistory from "../ui/ContentUpdatesHistory.vue";
+import { useContentUpdatesQuery } from "../model/queries/use-content-updates-query";
+
+import { toast } from "vue-sonner";
+import { catalogItemLocation } from "@/modules/catalog";
+import type { Publication } from "../model/channels.types";
+import type { CatalogCandidate } from "../model/catalog-links.types";
+import { useCatalogCandidateState } from "../model/use-catalog-candidate-state";
+import { useCatalogCandidatesQuery } from "../model/queries/use-catalog-candidates-query";
+import { useBindPublication } from "../model/mutations/use-bind-publication";
+import { useUnbindPublication } from "../model/mutations/use-unbind-publication";
+import BindPublicationDialog from "../ui/BindPublicationDialog.vue";
+import UnbindPublicationDialog from "../ui/UnbindPublicationDialog.vue";
+
 const context = useChannelsContext(),
   state = useChannelsPageState(),
   route = useRoute(),
   router = useRouter();
 const id = computed(() => String(route.params.channelId ?? ""));
 const channel = useChannelQuery(context, id);
+const history = useContentUpdatesQuery(context, id);
+const contentSelection = ref<string[]>([]);
+function selectContent(id: string, selected: boolean): void {
+  contentSelection.value = selected
+    ? [...new Set([...contentSelection.value, id])]
+    : contentSelection.value.filter((value) => value !== id);
+}
+function openContentUpdate(publicationIds: string[]): void {
+  if (!publicationIds.length) return;
+  void router.push({
+    name: "channel-content-update",
+    params: { channelId: id.value, runId: crypto.randomUUID() },
+    query: { publications: publicationIds.join(",") },
+  });
+}
+function openContentResult(runId: string): void {
+  void router.push({
+    name: "channel-content-update",
+    params: { channelId: id.value, runId },
+  });
+}
+watch(
+  [
+    () => context.scope.value,
+    id,
+    () => route.query.page,
+    () => route.query.search,
+    () => route.query.binding,
+    () => route.query.stock,
+    () => route.query.identity,
+    () => route.query.identityKey,
+  ],
+  () => {
+    contentSelection.value = [];
+  },
+);
 const platform = usePlatformQuery(
   context,
   () => channel.data.value?.platformKind ?? "",
+);
+watch(
+  () => platform.data.value,
+  (value) => {
+    if (
+      value &&
+      !value.capabilities.includes("publication_identity_diagnostics") &&
+      (state.identityStatus.value || state.identityKey.value)
+    )
+      state.setFilters({
+        search: state.search.value,
+        stockStatus: state.stockStatus.value,
+        bindingStatus: state.bindingStatus.value,
+        identityStatus: "",
+      });
+  },
 );
 const references = useConnectionReferencesQuery(context);
 const connectionPolling = ref(false),
@@ -145,9 +212,110 @@ watch(
   () => connection.data.value?.generation,
   () => (initializationRequest.value = null),
 );
+
+const catalogAction = ref<"bind" | "unbind" | null>(null),
+  selectedPublication = ref<Publication | null>(null),
+  catalogActionError = ref<string | null>(null);
+const selectedId = computed(() => selectedPublication.value?.id ?? "");
+const candidateState = useCatalogCandidateState(selectedId);
+const candidates = useCatalogCandidatesQuery(
+  context,
+  candidateState.filters,
+  () => catalogAction.value === "bind" && !!selectedId.value,
+);
+const bindPublication = useBindPublication(context),
+  unbindPublication = useUnbindPublication(context);
+const catalogBusy = computed(
+  () => bindPublication.isPending.value || unbindPublication.isPending.value,
+);
+function sourceLocale(publication: Publication): string {
+  return publication.titleLocale ?? "";
+}
+function openCatalogAction(
+  action: "bind" | "draft" | "unbind",
+  publication: Publication,
+): void {
+  if (catalogBusy.value) return;
+  if (action === "draft") {
+    void router.push({
+      name: "channel-publication-import",
+      params: {
+        channelId: id.value,
+        publicationId: publication.id,
+        preparationId: crypto.randomUUID(),
+      },
+      query: { revision: String(publication.observedRevision) },
+    });
+    return;
+  }
+  selectedPublication.value = publication;
+  catalogAction.value = action;
+  catalogActionError.value = null;
+  candidateState.reset(sourceLocale(publication));
+}
+function closeCatalogAction(): void {
+  if (catalogBusy.value) return;
+  catalogAction.value = null;
+  selectedPublication.value = null;
+  catalogActionError.value = null;
+}
+function openCatalogItem(publication: Publication): void {
+  if (publication.catalogItemId)
+    void router.push(
+      catalogItemLocation(publication.catalogItemId, sourceLocale(publication)),
+    );
+}
+async function bindSelected(candidate: CatalogCandidate): Promise<void> {
+  const publication = selectedPublication.value;
+  if (!publication || catalogBusy.value) return;
+  const current = context.capture();
+  catalogActionError.value = null;
+  try {
+    await bindPublication.mutateAsync({
+      publicationId: publication.id,
+      catalogItemId: candidate.id,
+      expectedRevision: candidate.representationRevision,
+    });
+    if (current()) {
+      closeCatalogAction();
+      toast.success("Публикация связана с товаром");
+    }
+  } catch (error: unknown) {
+    if (current()) catalogActionError.value = channelErrorMessage(error);
+  } finally {
+    bindPublication.reset();
+  }
+}
+async function unbindSelected(): Promise<void> {
+  const publication = selectedPublication.value;
+  if (
+    !publication?.bindingId ||
+    publication.representationRevision === null ||
+    catalogBusy.value
+  )
+    return;
+  const current = context.capture();
+  catalogActionError.value = null;
+  try {
+    await unbindPublication.mutateAsync({
+      publicationId: publication.id,
+      bindingId: publication.bindingId,
+      expectedRevision: publication.representationRevision,
+    });
+    if (current()) {
+      closeCatalogAction();
+      toast.success("Связь снята. Товар сохранён");
+    }
+  } catch (error: unknown) {
+    if (current()) catalogActionError.value = channelErrorMessage(error);
+  } finally {
+    unbindPublication.reset();
+  }
+}
 function canLeave(): boolean {
   return (
     !pending.value &&
+    !catalogBusy.value &&
     (!dirty.value ||
       window.confirm(
         "Есть несохранённые настройки подключения. Отказаться от них?",
@@ -295,7 +463,7 @@ async function startInitialization(): Promise<void> {
           </div>
           <Badge variant="outline">{{
             channel.data.value.isEnabled
-              ? "Исходящая синхронизация разрешена · отправка ещё не реализована"
+              ? "Исходящие операции разрешены"
               : "Исходящая синхронизация выключена"
           }}</Badge>
         </header>
@@ -337,9 +505,38 @@ async function startInitialization(): Promise<void> {
             ><TabsTrigger value="connection">Подключение</TabsTrigger></TabsList
           ><TabsContent value="publications" class="flex flex-col gap-4"
             ><template v-if="connectionId"
-              ><PublicationsToolbar
+              ><ContentUpdatesHistory
+                :items="history.data.value ?? []"
+                @open="openContentResult" />
+              <div
+                v-if="contentSelection.length"
+                class="flex flex-wrap items-center gap-3"
+              >
+                <span class="text-muted-foreground text-sm"
+                  >Выбрано публикаций: {{ contentSelection.length }}</span
+                ><Button
+                  variant="outline"
+                  :disabled="catalogBusy"
+                  @click="openContentUpdate(contentSelection)"
+                  >Сравнить тексты выбранных</Button
+                ><Button variant="ghost" @click="contentSelection = []"
+                  >Снять выбор</Button
+                >
+              </div>
+              <PublicationIdentitySummary
+                v-if="publications.data.value?.identitySummary"
+                :key="connectionId"
+                :summary="publications.data.value.identitySummary"
+                @filter="state.setIdentity" />
+              <PublicationsToolbar
+                :identity-label="
+                  publications.data.value?.identitySummary?.label
+                "
+                :identity-status="state.identityStatus.value"
+                :identity-key="state.identityKey.value"
                 :search="state.search.value"
                 :stock-status="state.stockStatus.value"
+                :binding-status="state.bindingStatus.value"
                 @change="state.setFilters" /><ChannelsQueryBody
                 :pending="publications.isPending.value"
                 :error="
@@ -350,17 +547,59 @@ async function startInitialization(): Promise<void> {
                 :has-data="!!publications.data.value"
                 :empty="!publications.data.value?.items.length"
                 :empty-title="
-                  state.search.value || state.stockStatus.value
+                  state.search.value ||
+                  state.stockStatus.value ||
+                  state.bindingStatus.value ||
+                  state.identityStatus.value ||
+                  state.identityKey.value
                     ? 'Публикации не найдены'
                     : 'Публикаций пока нет'
                 "
                 :empty-description="
-                  state.search.value || state.stockStatus.value
-                    ? 'Измените поисковый запрос или фильтр наличия.'
+                  state.search.value ||
+                  state.stockStatus.value ||
+                  state.bindingStatus.value ||
+                  state.identityStatus.value ||
+                  state.identityKey.value
+                    ? 'Измените поисковый запрос или фильтры.'
                     : 'Они появятся после проверки доступа и первой загрузки.'
                 "
                 @retry="publications.refetch()"
                 ><PublicationsList
+                  :identity-label="
+                    publications.data.value?.identitySummary?.label
+                  "
+                  @duplicates="(key) => state.setIdentity('duplicate', key)"
+                  :can-update="
+                    (platform.data.value?.capabilities.includes(
+                      'preview_content_update',
+                    ) ??
+                      false) &&
+                    active &&
+                    connection.data.value?.verificationStatus === 'verified'
+                  "
+                  :selected-ids="contentSelection"
+                  @select="selectContent"
+                  @update-texts="
+                    (publication) => openContentUpdate([publication.id])
+                  "
+                  :archived="channel.data.value.isArchived"
+                  :busy="catalogBusy"
+                  :can-import="
+                    platform.data.value?.capabilities.includes(
+                      'read_publication_details',
+                    ) ?? false
+                  "
+                  @bind="
+                    (publication) => openCatalogAction('bind', publication)
+                  "
+                  @draft="
+                    (publication) => openCatalogAction('draft', publication)
+                  "
+                  @unbind="
+                    (publication) => openCatalogAction('unbind', publication)
+                  "
+                  @open-catalog="openCatalogItem"
                   :items="
                     publications.data.value?.items ?? []
                   " /></ChannelsQueryBody
@@ -501,5 +740,41 @@ async function startInitialization(): Promise<void> {
                           dirty = $event
                         " /></template></template></ChannelsQueryBody></CardContent></Card></TabsContent></Tabs></template
     ></ChannelsQueryBody>
+    <BindPublicationDialog
+      v-if="catalogAction === 'bind' && selectedPublication"
+      :key="selectedPublication.id"
+      :title="selectedPublication.title ?? selectedPublication.externalId"
+      :items="
+        candidates.data.value?.publicationId === selectedId &&
+        candidates.data.value?.locale === candidateState.locale.value
+          ? candidates.data.value
+          : undefined
+      "
+      :locale="candidateState.locale.value"
+      :locales="references.data.value?.locales ?? []"
+      :page="candidateState.page.value"
+      :loading="candidates.isFetching.value"
+      :pending="catalogBusy"
+      :error="
+        candidates.error.value
+          ? channelErrorMessage(candidates.error.value)
+          : null
+      "
+      :action-error="catalogActionError"
+      @close="closeCatalogAction"
+      @search="candidateState.setSearch"
+      @locale="candidateState.setLocale"
+      @page="candidateState.setPage"
+      @retry="candidates.refetch()"
+      @bind="bindSelected"
+    />
+    <UnbindPublicationDialog
+      v-if="catalogAction === 'unbind' && selectedPublication"
+      :title="selectedPublication.title ?? selectedPublication.externalId"
+      :pending="catalogBusy"
+      :error="catalogActionError"
+      @close="closeCatalogAction"
+      @confirm="unbindSelected"
+    />
   </main>
 </template>

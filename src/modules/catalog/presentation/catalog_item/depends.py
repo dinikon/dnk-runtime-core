@@ -1,3 +1,16 @@
+from src.modules.catalog.application.catalog_item.creation_service import (
+    CatalogItemCreationService,
+)
+from src.modules.catalog.infrastructure.catalog_item.sku import SqlAlchemyCatalogItemSku
+from src.modules.catalog.infrastructure.catalog_item.channels_usage import (
+    ChannelsCatalogItemUsage,
+)
+from src.modules.channels.application.product_representation.query.get_catalog_usage.handler import (
+    GetCatalogUsageHandler,
+)
+from src.modules.channels.infrastructure.product_representation.persistence.binding_queries import (
+    SqlAlchemyBindingQueries,
+)
 from typing import Annotated
 from fastapi import Depends
 from src.modules.shared.presentation.persistence.depends import UoWDep
@@ -30,9 +43,6 @@ from src.modules.catalog.infrastructure.catalog_item.content_schema import (
     SqlAlchemyProductTypeSchemas,
 )
 from src.modules.catalog.application.catalog_item.port.usage import CatalogItemUsagePort
-from src.modules.catalog.infrastructure.catalog_item.usage import (
-    UnboundCatalogItemUsage,
-)
 from src.modules.catalog.application.catalog_item.port.files import (
     CatalogImageFilesPort,
 )
@@ -61,9 +71,11 @@ def get_schemas(uow: UoWDep) -> CatalogItemContentSchemaPort:
 SchemasDep = Annotated[CatalogItemContentSchemaPort, Depends(get_schemas)]
 
 
-def get_usage() -> CatalogItemUsagePort:
+def get_usage(uow: UoWDep) -> CatalogItemUsagePort:
     """Собирает порт usage конкретного процесса."""
-    return UnboundCatalogItemUsage()
+    return ChannelsCatalogItemUsage(
+        GetCatalogUsageHandler(SqlAlchemyBindingQueries(uow.session))
+    )
 
 
 UsageDep = Annotated[CatalogItemUsagePort, Depends(get_usage)]
@@ -80,7 +92,7 @@ CurrenciesDep = Annotated[CurrencyPort, Depends(get_currencies)]
 def get_files(uow: UoWDep) -> CatalogImageFilesPort:
     """Собирает публичные Files handlers на сессии Catalog UoW."""
     handlers = build_files_handlers(uow.session)
-    return FilesCatalogImages(handlers.upload, handlers.content)
+    return FilesCatalogImages(handlers.upload, handlers.content, handlers.lock_ready)
 
 
 FilesDep = Annotated[CatalogImageFilesPort, Depends(get_files)]
@@ -108,11 +120,29 @@ from src.modules.catalog.application.catalog_item.command.create_catalog_item.ha
 
 
 def get_create_catalog_item_handler(
-    repository: ItemRepositoryDep, schemas: SchemasDep, clock: ClockDep, uuid: UuidDep
+    repository: ItemRepositoryDep,
+    schemas: SchemasDep,
+    clock: ClockDep,
+    uuid: UuidDep,
+    locales: LocalesDep,
+    currencies: CurrenciesDep,
+    sanitizer: SanitizerDep,
+    files: FilesDep,
+    uow: UoWDep,
 ) -> CreateCatalogItemHandler:
     """Собирает отдельный handler сценария create_catalog_item."""
     return CreateCatalogItemHandler(
-        repository=repository, schemas=schemas, clock=clock, uuid=uuid
+        repository,
+        CatalogItemCreationService(
+            schemas,
+            locales,
+            currencies,
+            SqlAlchemyCatalogItemSku(uow.session),
+            sanitizer,
+            files,
+            clock,
+            uuid,
+        ),
     )
 
 

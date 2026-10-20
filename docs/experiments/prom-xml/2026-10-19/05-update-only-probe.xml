@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<yml_catalog date="2026-10-19 13:22">
+  <shop>
+    <name>DNK XML contract test</name>
+    <currencies><currency id="UAH" rate="1"/></currencies>
+    <offers>
+      <offer id="dnk-xml-20261019-control" available="false" selling_type="r">
+        <name>DNK XML 05 RU — проверка только обновления</name>
+        <description>Известный импортный ID. Тест только обновления.</description>
+        <name_ua>DNK XML 05 UK — перевірка лише оновлення</name_ua>
+        <description_ua>Відомий імпортний ID. Тест лише оновлення.</description_ua>
+        <price>1</price><currencyId>UAH</currencyId>
+        <categoryId>82715301</categoryId><portal_category_id>161311</portal_category_id>
+      </offer>
+      <offer id="dnk-xml-20261019-only-update" available="false" selling_type="r">
+        <name>DNK XML 05 RU — новый ID, не создавать</name>
+        <description>Новый импортный ID. Проверка запрета создания. Не покупать.</description>
+        <name_ua>DNK XML 05 UK — новий ID, не створювати</name_ua>
+        <description_ua>Новий імпортний ID. Перевірка заборони створення. Не купувати.</description_ua>
+        <price>1</price><currencyId>UAH</currencyId>
+        <categoryId>82715301</categoryId><portal_category_id>161311</portal_category_id>
+      </offer>
+    </offers>
+  </shop>
+</yml_catalog>

@@ -1,0 +1,616 @@
+{
+  "state": "phase_09_launch_rejected_no_cases_processed",
+  "created_at": "2026-10-19T18:22:13.240Z",
+  "baseline_captured_at": "2026-10-19T18:18:34.054931+00:00",
+  "connection": "Bi+",
+  "encoding": "UTF-8 BOM",
+  "delimiter": ",",
+  "line_endings": "CRLF",
+  "headers": [
+    "Унікальний_ідентифікатор",
+    "Ідентифікатор_товару",
+    "Код_товару",
+    "Назва_позиції",
+    "Опис",
+    "Назва_позиції_укр",
+    "Опис_укр",
+    "Тип_товару",
+    "Ціна",
+    "Валюта",
+    "Наявність",
+    "Кількість",
+    "Номер_групи",
+    "Ідентифікатор_підрозділу",
+    "Одиниця_виміру"
+  ],
+  "files": [
+    {
+      "filename": "09-cases-create-update.csv",
+      "phase": "09",
+      "mode": "public_api_upsert",
+      "purpose": "Сопоставление ID, создание и защита нетекстовых полей",
+      "expected_url": "https://bioline.com.ua/crm/09-cases-create-update.csv",
+      "sha256": "62beac990e106252f05c2e1fec7c99b5208de0505089b85cec215e089a1d34f3",
+      "bytes": 4137,
+      "data_rows": 7,
+      "cases": [
+        {
+          "id": "M01",
+          "csv_row": 2,
+          "title": "Обновление по двум согласованным ID",
+          "kind": "required_existing_update_and_field_filter",
+          "native_id": "3240166618",
+          "import_key": "dnk-csv-20261019-missing-01",
+          "source_native_id": 3240166618,
+          "possible_existing_targets": [
+            3240166618
+          ],
+          "expected": "Тот же native ID 3240166618 получает четыре текста. Цена 1 UAH, количество 0 и наличие not_available сохраняются вопреки значениям CSV 13.37 / 17 / +.",
+          "expected_texts": {
+            "ru": {
+              "title": "DNK CSV 09 M01 RU — тест, не покупать",
+              "body": "<p>DNK CSV 09, кейс M01. Контроль названия и описания на русском. Тестовая карточка, не покупать.</p>"
+            },
+            "uk": {
+              "title": "DNK CSV 09 M01 UK — тест, не купувати",
+              "body": "<p>DNK CSV 09, кейс M01. Контроль назви й опису українською. Тестова картка, не купувати.</p>"
+            }
+          }
+        },
+        {
+          "id": "M02",
+          "csv_row": 3,
+          "title": "Обновление только по импортному ключу",
+          "kind": "required_external_key_matching",
+          "native_id": "",
+          "import_key": "dnk-xml-20261019-control",
+          "source_native_id": 3239767291,
+          "possible_existing_targets": [
+            3239767291
+          ],
+          "expected": "Импортный ключ находит прежний native ID 3239767291. Четыре текста обновлены, новой карточки нет.",
+          "expected_texts": {
+            "ru": {
+              "title": "DNK CSV 09 M02 RU — тест, не покупать",
+              "body": "<p>DNK CSV 09, кейс M02. Контроль названия и описания на русском. Тестовая карточка, не покупать.</p>"
+            },
+            "uk": {
+              "title": "DNK CSV 09 M02 UK — тест, не купувати",
+              "body": "<p>DNK CSV 09, кейс M02. Контроль назви й опису українською. Тестова картка, не купувати.</p>"
+            }
+          }
+        },
+        {
+          "id": "M03",
+          "csv_row": 4,
+          "title": "Создание по новому постоянному ключу",
+          "kind": "required_create",
+          "native_id": "",
+          "import_key": "dnk-csv-20261019-m09-create-01",
+          "source_native_id": null,
+          "possible_existing_targets": [],
+          "expected": "Создана ровно одна карточка с новым ключом. Прочитать и сохранить выданный Prom native ID, четыре текста и все нетекстовые поля.",
+          "expected_texts": {
+            "ru": {
+              "title": "DNK CSV 09 M03 RU — тест, не покупать",
+              "body": "<p>DNK CSV 09, кейс M03. Контроль названия и описания на русском. Тестовая карточка, не покупать.</p>"
+            },
+            "uk": {
+              "title": "DNK CSV 09 M03 UK — тест, не купувати",
+              "body": "<p>DNK CSV 09, кейс M03. Контроль назви й опису українською. Тестова картка, не купувати.</p>"
+            }
+          }
+        },
+        {
+          "id": "M04",
+          "csv_row": 5,
+          "title": "Привязка ручной карточки к новому ключу",
+          "kind": "diagnostic_adoption",
+          "native_id": "3239744864",
+          "import_key": "dnk-csv-20261019-m09-adopt-01",
+          "source_native_id": 3239744864,
+          "possible_existing_targets": [
+            3239744864
+          ],
+          "expected": "Поддержка привязки подтверждена только при сохранении native ID 3239744864 и назначении нового ключа. Дубль означает неподдержанный сценарий; безопасный отказ также не подтверждает привязку.",
+          "expected_texts": {
+            "ru": {
+              "title": "DNK CSV 09 M04 RU — тест, не покупать",
+              "body": "<p>DNK CSV 09, кейс M04. Контроль названия и описания на русском. Тестовая карточка, не покупать.</p>"
+            },
+            "uk": {
+              "title": "DNK CSV 09 M04 UK — тест, не купувати",
+              "body": "<p>DNK CSV 09, кейс M04. Контроль назви й опису українською. Тестова картка, не купувати.</p>"
+            }
+          }
+        },
+        {
+          "id": "M05",
+          "csv_row": 6,
+          "title": "Неизвестный native ID с новым ключом",
+          "kind": "diagnostic_missing_native",
+          "native_id": "4000000905",
+          "import_key": "dnk-csv-20261019-m09-unknown-01",
+          "source_native_id": null,
+          "possible_existing_targets": [],
+          "expected": "Зафиксировать: отказ, пропуск или создание нового native ID по ключу. Это обычный импорт с разрешённым созданием, поэтому создание здесь само по себе не является нарушением режима.",
+          "expected_texts": {
+            "ru": {
+              "title": "DNK CSV 09 M05 RU — тест, не покупать",
+              "body": "<p>DNK CSV 09, кейс M05. Контроль названия и описания на русском. Тестовая карточка, не покупать.</p>"
+            },
+            "uk": {
+              "title": "DNK CSV 09 M05 UK — тест, не купувати",
+              "body": "<p>DNK CSV 09, кейс M05. Контроль назви й опису українською. Тестова картка, не купувати.</p>"
+            }
+          }
+        },
+        {
+          "id": "M06",
+          "csv_row": 7,
+          "title": "Конфликт двух существующих ID",
+          "kind": "diagnostic_identity_conflict",
+          "native_id": "3239759991",
+          "import_key": "dnk-xml-20261019-only-update",
+          "source_native_id": 3239827664,
+          "possible_existing_targets": [
+            3239759991,
+            3239827664
+          ],
+          "expected": "Native ID принадлежит 3239759991, ключ принадлежит 3239827664. Прочитать обе карточки и определить приоритет либо отказ. Нельзя объявлять успешным обновление правильной карточки по одному счётчику.",
+          "expected_texts": {
+            "ru": {
+              "title": "DNK CSV 09 M06 RU — тест, не покупать",
+              "body": "<p>DNK CSV 09, кейс M06. Контроль названия и описания на русском. Тестовая карточка, не покупать.</p>"
+            },
+            "uk": {
+              "title": "DNK CSV 09 M06 UK — тест, не купувати",
+              "body": "<p>DNK CSV 09, кейс M06. Контроль назви й опису українською. Тестова картка, не купувати.</p>"
+            }
+          }
+        },
+        {
+          "id": "M07",
+          "csv_row": 8,
+          "title": "Native ID с пустым импортным ключом",
+          "kind": "diagnostic_empty_external_key",
+          "native_id": "3240166617",
+          "import_key": "",
+          "source_native_id": 3240166617,
+          "possible_existing_targets": [
+            3240166617
+          ],
+          "expected": "Повторная проверка native-only на принадлежащем тесту дубле. Различать обновление 3240166617, отказ и создание ещё одного дубля. Пустой ключ — намеренное отклонение от документации; SKU в файле также пустой, чтобы не использовать его для сопоставления.",
+          "expected_texts": {
+            "ru": {
+              "title": "DNK CSV 09 M07 RU — тест, не покупать",
+              "body": "<p>DNK CSV 09, кейс M07. Контроль названия и описания на русском. Тестовая карточка, не покупать.</p>"
+            },
+            "uk": {
+              "title": "DNK CSV 09 M07 UK — тест, не купувати",
+              "body": "<p>DNK CSV 09, кейс M07. Контроль назви й опису українською. Тестова картка, не купувати.</p>"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "filename": "10-cases-repeat.csv",
+      "phase": "10",
+      "mode": "public_api_upsert",
+      "purpose": "Повторное обновление с прежними ключами и новыми текстами",
+      "expected_url": "https://bioline.com.ua/crm/10-cases-repeat.csv",
+      "sha256": "575c25274921723aa07a0b17353893a0c9e3d16edfea898c16f72747cd15576f",
+      "bytes": 2014,
+      "data_rows": 3,
+      "cases": [
+        {
+          "id": "M01",
+          "csv_row": 2,
+          "title": "Обновление по двум согласованным ID",
+          "kind": "required_repeat_existing_update",
+          "native_id": "3240166618",
+          "import_key": "dnk-csv-20261019-missing-01",
+          "source_native_id": 3240166618,
+          "possible_existing_targets": [
+            3240166618
+          ],
+          "expected": "Тот же native ID 3240166618 получает четыре новых текста этапа 10. Цена 1 UAH, количество 0, наличие not_available и остальные нетекстовые поля сохранены; новых карточек нет.",
+          "expected_texts": {
+            "ru": {
+              "title": "DNK CSV 10 M01 RU — тест, не покупать",
+              "body": "<p>DNK CSV 10, кейс M01. Контроль названия и описания на русском. Тестовая карточка, не покупать.</p>"
+            },
+            "uk": {
+              "title": "DNK CSV 10 M01 UK — тест, не купувати",
+              "body": "<p>DNK CSV 10, кейс M01. Контроль назви й опису українською. Тестова картка, не купувати.</p>"
+            }
+          }
+        },
+        {
+          "id": "M02",
+          "csv_row": 3,
+          "title": "Обновление только по импортному ключу",
+          "kind": "required_external_key_matching",
+          "native_id": "",
+          "import_key": "dnk-xml-20261019-control",
+          "source_native_id": 3239767291,
+          "possible_existing_targets": [
+            3239767291
+          ],
+          "expected": "Импортный ключ находит прежний native ID 3239767291. Четыре текста обновлены, новой карточки нет.",
+          "expected_texts": {
+            "ru": {
+              "title": "DNK CSV 10 M02 RU — тест, не покупать",
+              "body": "<p>DNK CSV 10, кейс M02. Контроль названия и описания на русском. Тестовая карточка, не покупать.</p>"
+            },
+            "uk": {
+              "title": "DNK CSV 10 M02 UK — тест, не купувати",
+              "body": "<p>DNK CSV 10, кейс M02. Контроль назви й опису українською. Тестова картка, не купувати.</p>"
+            }
+          }
+        },
+        {
+          "id": "M03",
+          "csv_row": 4,
+          "title": "Повторное обновление созданной карточки по постоянному ключу",
+          "kind": "required_repeat_created_update",
+          "native_id": "",
+          "import_key": "dnk-csv-20261019-m09-create-01",
+          "source_native_id": null,
+          "source_result_reference": "09-cases-create-update.csv:M03:verified_created_native_id",
+          "possible_existing_targets": [],
+          "expected": "Карточка M03, созданная и прочитанная на этапе 09, получает четыре новых текста этапа 10 под тем же записанным native ID. Новая карточка не создаётся; нетекстовые поля сравниваются со снимком перед этапом 10.",
+          "expected_texts": {
+            "ru": {
+              "title": "DNK CSV 10 M03 RU — тест, не покупать",
+              "body": "<p>DNK CSV 10, кейс M03. Контроль названия и описания на русском. Тестовая карточка, не покупать.</p>"
+            },
+            "uk": {
+              "title": "DNK CSV 10 M03 UK — тест, не купувати",
+              "body": "<p>DNK CSV 10, кейс M03. Контроль назви й опису українською. Тестова картка, не купувати.</p>"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "filename": "11-cases-update-only.csv",
+      "phase": "11",
+      "mode": "manual_cabinet_only_update",
+      "purpose": "Ручной режим Только обновление: положительный и отрицательный контроль",
+      "expected_url": "https://bioline.com.ua/crm/11-cases-update-only.csv",
+      "sha256": "32780309b7469748e0763e002c5d7fd3822a227802075f3fffb597d37c4bc45f",
+      "bytes": 1493,
+      "data_rows": 2,
+      "cases": [
+        {
+          "id": "G01",
+          "csv_row": 2,
+          "title": "Известный ключ в режиме только обновления",
+          "kind": "required_guard_positive_control",
+          "native_id": "3240166618",
+          "import_key": "dnk-csv-20261019-missing-01",
+          "source_native_id": 3240166618,
+          "possible_existing_targets": [
+            3240166618
+          ],
+          "expected": "Обновлён прежний native ID 3240166618 на двух локалях. Метаданные сохранены.",
+          "expected_texts": {
+            "ru": {
+              "title": "DNK CSV 11 G01 RU — тест, не покупать",
+              "body": "<p>DNK CSV 11, кейс G01. Контроль названия и описания на русском. Тестовая карточка, не покупать.</p>"
+            },
+            "uk": {
+              "title": "DNK CSV 11 G01 UK — тест, не купувати",
+              "body": "<p>DNK CSV 11, кейс G01. Контроль назви й опису українською. Тестова картка, не купувати.</p>"
+            }
+          }
+        },
+        {
+          "id": "G02",
+          "csv_row": 3,
+          "title": "Свежий неизвестный ID в режиме только обновления",
+          "kind": "required_guard_negative_control",
+          "native_id": "4000000911",
+          "import_key": "dnk-csv-20261019-m11-guard-01",
+          "source_native_id": null,
+          "possible_existing_targets": [],
+          "expected": "Новая карточка не создаётся ни по native ID, ни по ключу, ни под другим выданным Prom ID. Одновременно G01 должен фактически обновиться.",
+          "expected_texts": {
+            "ru": {
+              "title": "DNK CSV 11 G02 RU — тест, не покупать",
+              "body": "<p>DNK CSV 11, кейс G02. Контроль названия и описания на русском. Тестовая карточка, не покупать.</p>"
+            },
+            "uk": {
+              "title": "DNK CSV 11 G02 UK — тест, не купувати",
+              "body": "<p>DNK CSV 11, кейс G02. Контроль назви й опису українською. Тестова картка, не купувати.</p>"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "public_api_settings": {
+    "force_update": false,
+    "only_available": false,
+    "mark_missing_product_as": "none",
+    "updated_fields": [
+      "name",
+      "description",
+      "name_ua",
+      "description_ua"
+    ]
+  },
+  "undocumented_is_import_v2_flag_used": false,
+  "immutable_baseline": {
+    "3239744864": {
+      "id": 3239744864,
+      "external_id": null,
+      "sku": "TEST",
+      "price": 10,
+      "currency": "UAH",
+      "measure_unit": "шт.",
+      "quantity_in_stock": null,
+      "presence": "available",
+      "status": "not_on_display",
+      "selling_type": "retail",
+      "name_multilang": {
+        "ru": "Тестовый товар",
+        "uk": "Тестовий товар"
+      },
+      "description_multilang": {
+        "ru": "Тестовый товар",
+        "uk": "Тестовий товар"
+      },
+      "images": [],
+      "discount": null,
+      "group_id": 82715301,
+      "category_id": 161311
+    },
+    "3239759991": {
+      "id": 3239759991,
+      "external_id": "3239744864",
+      "sku": "",
+      "price": null,
+      "currency": null,
+      "measure_unit": "",
+      "quantity_in_stock": null,
+      "presence": "not_available",
+      "status": "not_on_display",
+      "selling_type": "retail",
+      "name_multilang": {
+        "ru": "DNK XML 06 RU — обновление существующего товара",
+        "uk": "DNK XML 06 UK — оновлення наявного товару"
+      },
+      "description_multilang": {
+        "ru": "<p>Русское описание XML 06. Проверка режима только обновления.</p>",
+        "uk": "<p>Український опис XML 06. Перевірка режиму лише оновлення.</p>"
+      },
+      "images": [],
+      "discount": null,
+      "group_id": 82715301,
+      "category_id": 120212
+    },
+    "3239767291": {
+      "id": 3239767291,
+      "external_id": "dnk-xml-20261019-control",
+      "sku": "DNKXML20261019",
+      "price": 1,
+      "currency": "UAH",
+      "measure_unit": "шт.",
+      "quantity_in_stock": null,
+      "presence": "not_available",
+      "status": "not_on_display",
+      "selling_type": "retail",
+      "name_multilang": {
+        "ru": "DNK XML 05 RU — проверка только обновления",
+        "uk": "DNK XML 05 UK — перевірка лише оновлення"
+      },
+      "description_multilang": {
+        "ru": "Известный импортный ID. Тест только обновления.",
+        "uk": "Відомий імпортний ID. Тест лише оновлення."
+      },
+      "images": [],
+      "discount": null,
+      "group_id": 82715301,
+      "category_id": 161311
+    },
+    "3239827664": {
+      "id": 3239827664,
+      "external_id": "dnk-xml-20261019-only-update",
+      "sku": "",
+      "price": 1,
+      "currency": "UAH",
+      "measure_unit": "шт.",
+      "quantity_in_stock": null,
+      "presence": "not_available",
+      "status": "not_on_display",
+      "selling_type": "retail",
+      "name_multilang": {
+        "ru": "DNK XML 05 RU — новый ID, не создавать",
+        "uk": "DNK XML 05 UK — новий ID, не створювати"
+      },
+      "description_multilang": {
+        "ru": "Новый импортный ID. Проверка запрета создания. Не покупать.",
+        "uk": "Новий імпортний ID. Перевірка заборони створення. Не купувати."
+      },
+      "images": [],
+      "discount": null,
+      "group_id": 82715301,
+      "category_id": 28420310
+    },
+    "3240166617": {
+      "id": 3240166617,
+      "external_id": "",
+      "sku": "TEST",
+      "price": 10,
+      "currency": "UAH",
+      "measure_unit": "шт.",
+      "quantity_in_stock": null,
+      "presence": "available",
+      "status": "not_on_display",
+      "selling_type": "retail",
+      "name_multilang": {
+        "ru": "DNK CSV 07 RU — обновление исходного товара",
+        "uk": "DNK CSV 07 UK — оновлення початкового товару"
+      },
+      "description_multilang": {
+        "ru": "<p>Русское описание CSV 07. Обновление карточки Prom 3239744864.</p>",
+        "uk": "<p>Український опис CSV 07. Оновлення картки Prom 3239744864.</p>"
+      },
+      "images": [],
+      "discount": null,
+      "group_id": 157939479,
+      "category_id": 341022
+    },
+    "3240166618": {
+      "id": 3240166618,
+      "external_id": "dnk-csv-20261019-missing-01",
+      "sku": "DNKCSV20261019",
+      "price": 1,
+      "currency": "UAH",
+      "measure_unit": "шт.",
+      "quantity_in_stock": 0,
+      "presence": "not_available",
+      "status": "not_on_display",
+      "selling_type": "retail",
+      "name_multilang": {
+        "ru": "DNK CSV 07 RU — неизвестный ID, не создавать",
+        "uk": "DNK CSV 07 UK — невідомий ID, не створювати"
+      },
+      "description_multilang": {
+        "ru": "<p>Проверка запрета создания CSV 07. Тестовый товар. Не покупать.</p>",
+        "uk": "<p>Перевірка заборони створення CSV 07. Тестовий товар. Не купувати.</p>"
+      },
+      "images": [],
+      "discount": null,
+      "group_id": 157939479,
+      "category_id": 152413
+    }
+  },
+  "preparation_preflight": {
+    "new_keys_absent": {
+      "create": true,
+      "adopt": true,
+      "unknown": true,
+      "guard": true
+    },
+    "unknown_native_ids_absent": {
+      "4000000905": true,
+      "4000000911": true
+    },
+    "all_existing_targets_hidden": true
+  },
+  "stages": [
+    {
+      "file": "09-cases-create-update.csv",
+      "route": "POST /products/import_url",
+      "request": {
+        "url": "https://bioline.com.ua/crm/09-cases-create-update.csv",
+        "force_update": false,
+        "only_available": false,
+        "mark_missing_product_as": "none",
+        "updated_fields": [
+          "name",
+          "description",
+          "name_ua",
+          "description_ua"
+        ]
+      },
+      "preconditions": [
+        "Refresh exact product snapshots and compare identities to the prepared baseline.",
+        "Confirm all new M03/M04/M05 keys and native 4000000905 are absent.",
+        "Confirm M06 uses two distinct existing test-owned cards.",
+        "The source of M01 must still be price=1, quantity=0, presence=not_available.",
+        "Hosted file bytes must match sha256."
+      ],
+      "acceptance": "Evaluate each row separately. M01 and M02 must update their exact existing native IDs. M03 must create exactly one card. M04/M05/M06/M07 are diagnostic edge cases, so global created/updated counts are not predeclared."
+    },
+    {
+      "file": "10-cases-repeat.csv",
+      "route": "POST /products/import_url",
+      "request": {
+        "url": "https://bioline.com.ua/crm/10-cases-repeat.csv",
+        "force_update": false,
+        "only_available": false,
+        "mark_missing_product_as": "none",
+        "updated_fields": [
+          "name",
+          "description",
+          "name_ua",
+          "description_ua"
+        ]
+      },
+      "preconditions": [
+        "Finish stage 09, save all row results and complete cleanup first.",
+        "M01 and M02 resolved to their original native IDs with no unexplained duplicate.",
+        "M03 key exists, maps uniquely to its recorded new native ID, and its card is owned by this test.",
+        "Refresh snapshots and reconcile metadata after cleanup.",
+        "Do not submit the complete static stage-10 file if M03 did not create a verified owned card."
+      ],
+      "acceptance": "All three rows update their recorded native IDs with the new CSV 10 texts and create zero new cards. A separate identical replay may be skipped by Prom; it must still create no duplicate."
+    },
+    {
+      "file": "11-cases-update-only.csv",
+      "route": "Manual Prom cabinet import with Только обновление explicitly enabled",
+      "settings": {
+        "force_update": false,
+        "only_available": false,
+        "mark_missing_product_as": "none",
+        "updated_fields": [
+          "name",
+          "description",
+          "name_ua",
+          "description_ua"
+        ],
+        "only_update_checkbox": true,
+        "periodic_update": false
+      },
+      "preconditions": [
+        "The G02 key and native 4000000911 are still absent.",
+        "G01 still points to native 3240166618.",
+        "Use the documented manual checkbox; the tested public is_import_v2 parameter is not a verified equivalent."
+      ],
+      "acceptance": "G01 receives all four CSV 11 texts. G02 creates no card. A rejected whole import or unchanged G01 cannot establish update-only behavior."
+    }
+  ],
+  "required_readback": [
+    "Exact native IDs and import keys, including lookup of new keys and a test-marker scan to detect duplicates with empty keys.",
+    "Both titles and both descriptions for every processed row.",
+    "Price, quantity, presence, SKU, currency, measure unit, group, category, gallery, discount and visibility compared before cleanup.",
+    "For M06, read both existing native IDs and any new card with the case marker.",
+    "Read actual data rather than treating launch status or updated counters as proof."
+  ],
+  "cleanup": [
+    "Persist all observed changes before restoring anything.",
+    "Hide test-owned creations and re-read their hidden status.",
+    "Restore original visibility and presence.",
+    "If M01 price/quantity/presence changed, restore all three using supported editing and verify exact baseline values before stage 10.",
+    "Record and restore other unintended changes to existing test fixtures where a supported write is available; do not silently label them preserved.",
+    "A successful M04 adoption is an explicit experimental result: preserve the original native ID, record the assigned key, and do not pretend its external_id stayed null.",
+    "Do not permanently delete products, modify unrelated products, mutate the internal catalog or schedule periodic imports."
+  ],
+  "scope_limits": [
+    "M07 deliberately violates the documented required import-key rule.",
+    "Stage-09 M01 is adversarial for price, quantity and presence. M07 separately sends a blank SKU. Gallery is not varied in the input, so its unchanged state alone does not prove filtering.",
+    "The files do not contain intentionally broken headers, missing measure units, oversized texts or duplicate keys inside one batch; those failures would confound identity tests.",
+    "A native-ID-preserving round trip of a genuine Prom CSV export remains a separate experiment requiring an actual export artifact.",
+    "Preparation is not execution: expected outcomes are criteria, not claimed results.",
+    "M02 and the repeated M03 intentionally omit an existing product native ID to test external-key-only matching; the CSV documentation requires native IDs for existing products.",
+    "M07 sends an empty SKU to exclude SKU-based fallback. Its existing SKU must remain TEST under a text-only field list; capture any change separately."
+  ],
+  "sources": [
+    "https://support.prom.ua/hc/uk/articles/360004960817",
+    "https://support.prom.ua/hc/uk/articles/360004963478"
+  ],
+  "execution_attempts": [
+    {
+      "test": "25-csv-matrix",
+      "evidence": "25-csv-matrix-attempt.json",
+      "transport": "authenticated Prom cabinet; local file upload",
+      "import_id": null,
+      "assessment": "launch_rejected_before_case_processing_no_import_id"
+    }
+  ]
+}

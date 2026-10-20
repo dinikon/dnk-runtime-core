@@ -35,23 +35,35 @@ class PublicationCoreVO:
             or (len(self.resource_type) > 80)
         ):
             raise ChannelsValidationError("invalid_publication_identity")
-        if self.stock_status not in (
-            "in_stock",
-            "out_of_stock",
-            "on_backorder",
-            "unknown",
-        ):
-            raise ChannelsValidationError("invalid_stock_status")
-        for value in (self.price, self.sale_price, self.quantity):
-            if value is not None and (
-                not isinstance(value, Decimal)
-                or not value.is_finite()
-                or abs(value) >= Decimal("1e18")
-                or (value.as_tuple().exponent < -12)
-            ):
-                raise ChannelsValidationError("invalid_numeric_core")
+        validate_observed_values(
+            self.price, self.sale_price, self.quantity, self.stock_status
+        )
         if (
             self.source_updated_at is not None
             and self.source_updated_at.utcoffset() is None
         ):
             raise ChannelsValidationError("invalid_source_timezone")
+
+
+def validate_observed_values(
+    price: Decimal | None,
+    sale_price: Decimal | None,
+    quantity: Decimal | None,
+    stock_status: str,
+) -> None:
+    """Проверяет общие ограничения наблюдаемых денег и наличия без identity."""
+    if stock_status not in (
+        "in_stock",
+        "out_of_stock",
+        "on_backorder",
+        "unknown",
+    ):
+        raise ChannelsValidationError("invalid_stock_status")
+    for value in (price, sale_price, quantity):
+        if value is not None and (
+            not isinstance(value, Decimal)
+            or not value.is_finite()
+            or value.copy_abs() >= Decimal("1e18")
+            or (value.as_tuple().exponent < -12)
+        ):
+            raise ChannelsValidationError("invalid_numeric_core")

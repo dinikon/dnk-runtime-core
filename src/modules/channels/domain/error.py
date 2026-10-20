@@ -16,3 +16,12 @@ class ChannelsValidationError(ChannelsError):
 
 class ChannelsUnavailableError(ChannelsError):
     """Сообщает о недоступности требуемой операции."""
+
+
+class ChannelsDraftValidationError(ChannelsValidationError):
+    """Передаёт безопасные ошибки подтверждаемых полей Draft."""
+
+    def __init__(self, issues: tuple[tuple[str, str], ...]) -> None:
+        """Не сохраняет исходный payload или исключения инфраструктуры."""
+        super().__init__("invalid_catalog_draft")
+        self.issues = issues

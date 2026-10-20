@@ -1,0 +1,51 @@
+{
+  "date": "2026-10-20",
+  "native_id": 3240302692,
+  "new_import_key": "dnk-xlsx-probe-3240302692",
+  "source": "native Prom XLSX selected single hidden product, Ukrainian headers",
+  "changed_cell": "Export Products Sheet!Z2",
+  "preserved_native_cell": "Export Products Sheet!Y2",
+  "source_sha256": "99f12f7e881ad24bbac6e653673405c084da796c4f44824e94b185ada4a06d6b",
+  "prepared_sha256": "e2d9f3b0cda39ae948b5b861f2a86577ececd8c0f6d5612106fe2395ea2905a5",
+  "settings": {
+    "force_update": true,
+    "only_available": false,
+    "is_import_v2": false,
+    "mark_missing_product_as": "none",
+    "updated_fields": [
+      "sku"
+    ]
+  },
+  "submitted_from": "Prom cabinet form",
+  "outcome": "verified_with_visibility_restoration",
+  "import_id": "6ad68f8550712db41db1df54",
+  "created_native_ids": [],
+  "removed_native_ids": [],
+  "changed_fields_before_cleanup": [
+    "external_id",
+    "status",
+    "date_modified"
+  ],
+  "changed_fields_after_cleanup": [
+    "date_modified",
+    "external_id"
+  ],
+  "original_status": "not_on_display",
+  "restored_status": "not_on_display",
+  "all_other_products_unchanged": true,
+  "settings_source": "Visible cabinet form; HTTP request body was not intercepted",
+  "local_validation": {
+    "same_publication_uuid": true,
+    "missing_before": 2,
+    "missing_after": 1,
+    "publication_uuids_preserved": true,
+    "catalog_bindings_preserved": true,
+    "channel_outbound_flags_preserved": true,
+    "worker_read_complete": true,
+    "invalid_records": 0,
+    "all_publication_uuids_count": 325,
+    "unchanged_binding_history_rows": 5,
+    "database_revision": "0032_publication_payload_meta",
+    "qa_sessions_revoked": true
+  }
+}

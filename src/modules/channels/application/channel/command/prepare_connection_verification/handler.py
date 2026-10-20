@@ -39,8 +39,7 @@ class PrepareConnectionVerificationHandler:
             channel.platform_kind,
             ResourceSettingsDTO(
                 connection.settings.endpoint,
-                connection.settings.locales,
-                connection.settings.currency,
+                connection.settings.options,
             ),
             connection.candidate_ciphertext or connection.credentials_ciphertext,
         )

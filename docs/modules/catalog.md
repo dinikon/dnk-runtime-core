@@ -38,9 +38,10 @@ ProductType и каждый блок получают собственный UUI
 полной схемы сохраняет UUID; неполная или изменённая системная схема — ошибка.
 Чтение и создание товара не инициализируют отсутствующий Default.
 
-CreateCatalogItemCommand принимает product_type_code="default". Application
+Объект product команды CreateCatalogItemCommand содержит product_type_code="default". Application
 разрешает код в существующий UUID текущего tenant и передаёт его фабрике товара.
-HTTP пока принимает только virtual; выбора и изменения типа в Console нет.
+HTTP принимает все поддержанные разделы создания; Console по-прежнему создаёт
+пустой Draft и открывает редактор. Выбора и изменения типа в Console нет.
 Схема сохранённого товара читается по его product_type_id. GET /product-type/default
 находит схему по коду. Фиксированных UUID и таблиц соответствия UUID в коде нет.
 
@@ -75,8 +76,10 @@ content=null удаляет перевод. Состав, обязательно
 
 Галерея принадлежит item+locale: Files links, порядок, alt/caption и одно главное
 изображение в непустом наборе. Полный набор заменяется атомарно; gallery=null
-удаляет галерею. До 100 изображений. Upload PNG/JPEG/WebP до 10 MiB проверяет
-MIME/сигнатуру. Files handlers работают на общем UoW без Files ORM/FK в Catalog.
+удаляет галерею. До 100 изображений. Upload PNG/JPEG/WebP/GIF/AVIF/BMP до 10 MiB
+определяет MIME по сигнатуре файла общей инфраструктурной функцией, а не по расширению
+или объявлению клиента. В Files передаются те же байты без конвертации, resize и сжатия.
+Files handlers работают на общем UoW без Files ORM/FK в Catalog.
 Image stream закрывается после ответа; снятие связи не удаляет Files объект.
 
 ## HTTP и Console
@@ -111,3 +114,32 @@ parent_id и ограничения ролей simple/variable/variant. Акти
 Исторические имена таблиц остаются в ownership registry для autogenerate.
 Переход требует пересозданных tenant-схем и повторного onboarding; переноса данных
 нет. Backend и Console выпускаются согласованно.
+
+
+## Публичный контракт Draft и внешние связи
+
+`CreateCatalogItem` принимает типизированный объект `CreateCatalogItemValues`:
+тип, статус, virtual, SKU, price specification с периодом акции, stock, вес,
+габариты, контент нескольких локалей и локализованные галереи. Пустой объект
+по-прежнему создаёт Draft типа Default. Старые HTTP-входы `{}` и `{virtual: ...}`
+сохраняются; POST `/catalog/items` принимает дополнительные разделы без изменения
+ответа `{id}`. Переводы передаются как `translations[locale]` с `values` и
+`expected_schema_version`, галереи — как `galleries[locale]` по прежнему контракту Files.
+
+`CatalogItemCreationService` проверяет справочники, SKU, схемы, доступность файлов,
+очищает rich text и применяет Domain create/update до единственного сохранения.
+`ValidateCatalogDraft` использует ту же подготовку без записи. Отдельный сценарий
+CreateDraftCatalogItem удалён. `LockCatalogItemForBinding` предоставляет потребителю
+собственную item-блокировку и безопасную проекцию. Consumer query/lock не требуют
+дополнительных HTTP endpoints. Channels задаёт Draft/Default/virtual=false явно.
+
+Channels вызывает контракт через свой adapter. В Catalog не передаются platform
+kind, publication ID или native JSON. Ограничение двух языков интерфейса Channels
+не ограничивает количество переводов самого Catalog. Цены и количество не
+округляются, SKU проверяется также SQL uniqueness. Сервис не вызывает HTTP или
+соседние create/update handlers друг из друга и не выполняет commit.
+
+Delete подключён к CatalogItemUsagePort через публичный GetCatalogUsage Channels
+на той же сессии. Проверка под item-lock запрещает удаление при активных ссылках,
+включая архивные каналы. Явное снятие ссылки сохраняет товар. Последующая загрузка
+публикаций не меняет canonical значения Catalog.

@@ -32,9 +32,8 @@ async def create_connection(
             channel_id=channel_id,
             revision=payload.revision,
             settings=ConnectionSettingsVO(
-                payload.settings.endpoint,
-                payload.settings.locales,
-                payload.settings.currency,
+                payload.endpoint,
+                payload.settings,
             ),
             credentials=payload.credentials,
         )

@@ -30,4 +30,17 @@ class ListExternalPublicationsHandler:
             "unknown",
         ):
             raise ChannelsValidationError("invalid_stock_filter")
+        if query.binding_status not in (None, "bound", "unbound"):
+            raise ChannelsValidationError("invalid_binding_filter")
+        if query.identity_status is not None and query.identity_status not in (
+            "missing",
+            "duplicate",
+            "valid",
+            "not_required",
+        ):
+            raise ChannelsValidationError("invalid_identity_status")
+        if query.identity_key is not None and (
+            len(query.identity_key) > 512 or not query.identity_key
+        ):
+            raise ChannelsValidationError("invalid_identity_key")
         return await self.repository.list_external_publications(query)

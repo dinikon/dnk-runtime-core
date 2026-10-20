@@ -1,12 +1,15 @@
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from collections.abc import Mapping
-from dataclasses import asdict, fields
+from dataclasses import fields
 from typing import Any
 from src.modules.channels.domain.external_publication.aggregate import (
     ExternalPublication,
 )
-from src.modules.channels.domain.external_publication.value_object.core import (
-    PublicationCoreVO,
+from src.modules.channels.domain.external_publication.value_object.payload import (
+    PublicationPayloadVO,
+)
+from src.modules.channels.domain.external_publication.value_object.meta import (
+    PublicationMetaVO,
 )
 
 
@@ -17,15 +20,14 @@ class ExternalPublicationMapper:
     def to_domain(row: Mapping[str, Any]) -> ExternalPublication:
         """Восстанавливает core и технические отметки без нормализации источника."""
         values = dict(row)
-        core = {item.name: values.pop(item.name) for item in fields(PublicationCoreVO)}
-        core["warnings"] = tuple(core["warnings"])
+        values["payload"] = PublicationPayloadVO.from_document(values["payload"])
+        values["meta"] = PublicationMetaVO.from_document(values["meta"])
         values["identifier"] = EntityIdVO(values.pop("id"))
-        values.pop("core_version")
         if values["connection_id"] is not None:
             values["connection_id"] = EntityIdVO(values["connection_id"])
         if values["last_import_run_id"] is not None:
             values["last_import_run_id"] = EntityIdVO(values["last_import_run_id"])
-        return ExternalPublication.restore(**values, core=PublicationCoreVO(**core))
+        return ExternalPublication.restore(**values)
 
     @staticmethod
     def to_values(publication: ExternalPublication) -> dict[str, Any]:
@@ -37,9 +39,8 @@ class ExternalPublicationMapper:
                 else getattr(publication, item.name)
             )
             for item in fields(publication)
-            if item.name != "core"
+            if item.name not in ("payload", "meta")
         }
-        values.update(asdict(publication.core))
-        values["warnings"] = list(publication.core.warnings)
-        values["core_version"] = 1
+        values["payload"] = publication.payload.to_document()
+        values["meta"] = publication.meta.to_document()
         return values

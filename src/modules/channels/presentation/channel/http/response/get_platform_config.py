@@ -12,6 +12,7 @@ class GetPlatformConfigManifestResponse(BaseModel):
     capabilities: tuple[str, ...]
     credentials_schema: dict[str, JsonValue]
     endpoint_schema: dict[str, JsonValue]
+    settings_schema: dict[str, JsonValue]
 
 
 class GetPlatformConfigResponse(BaseModel):

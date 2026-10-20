@@ -157,7 +157,7 @@ def build_channels_handlers(
     secrets = ConnectionSecrets(encryption_key)
     channel_queries = SqlAlchemyChannelQueryRepository(session)
     run_queries = SqlAlchemySyncRunQueryRepository(session, jobs)
-    publication_queries = SqlAlchemyExternalPublicationQueryRepository(session)
+    publication_queries = SqlAlchemyExternalPublicationQueryRepository(session, registry)
     return ChannelsHandlers(
         apply_connection_verification=ApplyConnectionVerificationHandler(
             channels, initialization, clock

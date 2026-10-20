@@ -4,6 +4,11 @@ import type {
   ConnectionSettings,
   Platform,
 } from "./channels.types";
+import {
+  defaultSettings,
+  settingsIssue,
+  settingsSchemaSupported,
+} from "./settings-schema.ts";
 export function connectionFormValues(
   platform: Platform,
   connection: Connection | undefined,
@@ -14,9 +19,9 @@ export function connectionFormValues(
       platform.endpointSchema.const ??
       platform.endpointSchema.default ??
       "",
-    primaryLocale: connection?.locales[0] ?? "",
-    secondaryLocale: connection?.locales[1] ?? "",
-    currency: connection?.currency ?? "",
+    settings: connection
+      ? JSON.parse(JSON.stringify(connection.settings))
+      : defaultSettings(platform.settingsSchema),
     replaceCredentials: !connection,
     credentials: Object.fromEntries(
       Object.keys(platform.credentialsSchema.properties ?? {}).map((key) => [
@@ -31,21 +36,31 @@ export function connectionSettings(
 ): ConnectionSettings {
   return {
     endpoint: values.endpoint.trim(),
-    locales: [values.primaryLocale, values.secondaryLocale].filter(Boolean),
-    currency: values.currency || null,
+    options: JSON.parse(JSON.stringify(values.settings)),
   };
 }
 export function settingsSignature(settings: ConnectionSettings): string {
-  return JSON.stringify(settings);
+  function stable(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map(stable);
+    if (value && typeof value === "object")
+      return Object.fromEntries(
+        Object.entries(value)
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([key, item]) => [key, stable(item)]),
+      );
+    return value;
+  }
+  return JSON.stringify(stable(settings));
 }
 export function validateConnectionForm(
   values: ConnectionFormValues,
   platform: Platform,
   needsCredentials: boolean,
 ): string | null {
-  if (!values.primaryLocale) return "Выберите основной язык ресурса.";
-  if (values.primaryLocale === values.secondaryLocale)
-    return "Выберите разные языки.";
+  if (!settingsSchemaSupported(platform.settingsSchema))
+    return "Конфигурация формы платформы не поддерживается.";
+  const issue = settingsIssue(platform.settingsSchema, values.settings);
+  if (issue) return issue;
   try {
     const url = new URL(values.endpoint);
     if (
@@ -65,10 +80,9 @@ export function validateConnectionForm(
     values.endpoint !== platform.endpointSchema.const
   )
     return "Адрес этого источника фиксирован.";
-  if (needsCredentials) {
+  if (needsCredentials)
     for (const key of platform.credentialsSchema.required ?? [])
       if (!values.credentials[key]?.trim())
         return "Заполните обязательные поля доступа.";
-  }
   return null;
 }

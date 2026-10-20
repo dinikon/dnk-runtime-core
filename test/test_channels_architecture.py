@@ -71,9 +71,29 @@ class ChannelsArchitectureTests(unittest.TestCase):
                                 name.startswith("src.modules.channels.application"),
                                 str(relative),
                             )
-                        self.assertFalse(
-                            name.startswith("src.modules.catalog"), str(relative)
-                        )
+                        if name.startswith("src.modules.catalog"):
+                            self.assertTrue(
+                                relative.parts[:3]
+                                == (
+                                    "infrastructure",
+                                    "product_representation",
+                                    "adapter",
+                                )
+                                or relative
+                                in {
+                                    Path(
+                                        "presentation/product_representation/depends.py"
+                                    ),
+                                    Path("presentation/publication_import/assembly.py"),
+                                    Path("presentation/content_update/assembly.py"),
+                                }
+                                or relative.parts[:3]
+                                in {
+                                    ("infrastructure", "publication_import", "adapter"),
+                                    ("infrastructure", "content_update", "adapter"),
+                                },
+                                str(relative),
+                            )
                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
                     if layer == "application" or "persistence" in relative.parts:
                         self.assertNotIn(
@@ -107,6 +127,7 @@ class ChannelsArchitectureTests(unittest.TestCase):
     def test_every_scenario_has_concrete_contract_and_explicit_http_files(self) -> None:
         """Каждый сценарий имеет свой вход/handler; None не создаёт пустые DTO."""
         no_results = {
+            "unbind_publication",
             "pause_connection",
             "resume_connection",
             "archive_channel",

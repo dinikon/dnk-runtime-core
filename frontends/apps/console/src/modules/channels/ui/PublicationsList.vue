@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PublicationIdentityBadge from "./PublicationIdentityBadge.vue";
 import {
   Table,
   TableHeader,
@@ -8,7 +9,9 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { Publication } from "../model/channels.types";
 import {
   decimalLabel,
@@ -16,7 +19,24 @@ import {
   stockLabels,
   reasonLabel,
 } from "../model/channels.presentation";
-defineProps<{ items: Publication[] }>();
+defineProps<{
+  items: Publication[];
+  identityLabel?: string;
+  archived?: boolean;
+  busy?: boolean;
+  canImport?: boolean;
+  canUpdate?: boolean;
+  selectedIds?: string[];
+}>();
+defineEmits<{
+  duplicates: [key: string];
+  bind: [publication: Publication];
+  draft: [publication: Publication];
+  unbind: [publication: Publication];
+  openCatalog: [publication: Publication];
+  updateTexts: [publication: Publication];
+  select: [id: string, selected: boolean];
+}>();
 function safeImage(value: string | null): string | undefined {
   if (!value) return undefined;
   try {
@@ -31,13 +51,25 @@ function safeImage(value: string | null): string | undefined {
   <Table
     ><TableHeader
       ><TableRow
+        ><TableHead v-if="canUpdate" class="w-12">Выбор</TableHead
         ><TableHead class="min-w-64">Публикация</TableHead
-        ><TableHead>ID / SKU</TableHead><TableHead>Цена</TableHead
-        ><TableHead>Акционная цена</TableHead><TableHead>Количество</TableHead
-        ><TableHead>Наличие</TableHead><TableHead>Получено</TableHead></TableRow
+        ><TableHead>ID / SKU</TableHead
+        ><TableHead v-if="identityLabel">{{ identityLabel }}</TableHead
+        ><TableHead>Цена</TableHead><TableHead>Акционная цена</TableHead
+        ><TableHead>Количество</TableHead><TableHead>Наличие</TableHead
+        ><TableHead>Получено</TableHead
+        ><TableHead class="min-w-48">Товар каталога</TableHead></TableRow
       ></TableHeader
     ><TableBody
       ><TableRow v-for="item in items" :key="item.id"
+        ><TableCell v-if="canUpdate"
+          ><Checkbox
+            :aria-label="`Выбрать публикацию ${item.externalId}`"
+            :model-value="selectedIds?.includes(item.id) ?? false"
+            :disabled="busy || archived || !item.catalogItemId"
+            @update:model-value="
+              (value) => $emit('select', item.id, value === true)
+            " /></TableCell
         ><TableCell
           ><div class="flex items-start gap-3">
             <Avatar class="size-12 shrink-0 rounded-md"
@@ -82,6 +114,12 @@ function safeImage(value: string | null): string | undefined {
           <div class="text-muted-foreground">
             {{ item.externalSku ?? "SKU не указан" }}
           </div></TableCell
+        ><TableCell v-if="identityLabel"
+          ><PublicationIdentityBadge
+            v-if="item.identity"
+            :identity="item.identity"
+            :label="identityLabel"
+            @duplicates="(key) => $emit('duplicates', key)" /></TableCell
         ><TableCell class="tabular-nums">{{
           decimalLabel(item.price, item.currency)
         }}</TableCell
@@ -97,7 +135,52 @@ function safeImage(value: string | null): string | undefined {
           }}</Badge></TableCell
         ><TableCell class="text-muted-foreground text-xs">{{
           dateLabel(item.lastSeenAt)
-        }}</TableCell></TableRow
+        }}</TableCell
+        ><TableCell
+          ><div class="flex flex-col items-start gap-2">
+            <template v-if="item.catalogItemId"
+              ><Button
+                variant="link"
+                size="sm"
+                class="h-auto p-0"
+                @click="$emit('openCatalog', item)"
+                >Открыть товар</Button
+              ><span class="text-muted-foreground text-xs">{{
+                item.catalogItemId.slice(0, 8)
+              }}</span
+              ><Button
+                v-if="canUpdate"
+                variant="outline"
+                size="sm"
+                :disabled="busy || archived"
+                @click="$emit('updateTexts', item)"
+                >Обновить тексты</Button
+              ><Button
+                variant="outline"
+                size="sm"
+                :disabled="busy"
+                @click="$emit('unbind', item)"
+                >Снять связь</Button
+              ></template
+            >
+            <template v-else
+              ><span class="text-muted-foreground text-xs">Не связано</span
+              ><Button
+                variant="outline"
+                size="sm"
+                :disabled="busy || archived"
+                @click="$emit('bind', item)"
+                >Связать с товаром</Button
+              ><Button
+                variant="outline"
+                size="sm"
+                :disabled="busy || archived || !canImport"
+                @click="$emit('draft', item)"
+                >Создать Draft</Button
+              ></template
+            >
+          </div></TableCell
+        ></TableRow
       ></TableBody
     ></Table
   >

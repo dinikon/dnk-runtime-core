@@ -1,4 +1,17 @@
 from __future__ import annotations
+from src.modules.channels.presentation.jobs.content_update import (
+    ChannelsContentUpdateJobHandler,
+)
+from src.modules.channels.infrastructure.jobs import (
+    CONTENT_UPDATE_JOB as CHANNELS_CONTENT_UPDATE_JOB,
+)
+from src.modules.channels.presentation.jobs.publication_import import (
+    ChannelsPublicationImportJobHandler,
+)
+from src.modules.channels.infrastructure.jobs import (
+    IMPORT_JOB as CHANNELS_IMPORT_JOB,
+    IMPORT_CLEANUP_JOB as CHANNELS_IMPORT_CLEANUP_JOB,
+)
 from src.modules.channels.presentation.jobs.verification import (
     ChannelsVerificationJobHandler,
 )
@@ -140,6 +153,15 @@ async def handle_worker(_args: argparse.Namespace) -> int:
     dispatcher = build_scheduled_job_dispatcher(
         {
             CHANNELS_VERIFY_JOB: ChannelsVerificationJobHandler(
+                db_helper.session_factory
+            ),
+            CHANNELS_IMPORT_JOB: ChannelsPublicationImportJobHandler(
+                db_helper.session_factory
+            ),
+            CHANNELS_CONTENT_UPDATE_JOB: ChannelsContentUpdateJobHandler(
+                db_helper.session_factory
+            ),
+            CHANNELS_IMPORT_CLEANUP_JOB: ChannelsPublicationImportJobHandler(
                 db_helper.session_factory
             ),
             CHANNELS_PAGE_JOB: ChannelsInitializationJobHandler(

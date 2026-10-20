@@ -1,5 +1,4 @@
 from datetime import datetime
-from decimal import Decimal
 from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
@@ -20,10 +19,18 @@ class ExternalPublicationModel(TenantBase):
             name="uq_channel_external_publications_identity",
         ),
         sa.Index("ix_channel_publications_list", "connection_id", "id"),
-        sa.Index("ix_channel_publications_sku", "connection_id", "external_sku"),
-        sa.Index("ix_channel_publications_stock", "connection_id", "stock_status"),
+        sa.Index(
+            "ix_channel_publications_sku",
+            "connection_id",
+            sa.text("(payload ->> 'sku')"),
+        ),
+        sa.Index(
+            "ix_channel_publications_stock",
+            "connection_id",
+            sa.text("((payload -> 'stock') ->> 'status')"),
+        ),
         sa.CheckConstraint(
-            "observed_revision > 0 AND core_version = 1",
+            "observed_revision > 0",
             name="ck_channel_publications_revision",
         ),
     )
@@ -33,26 +40,11 @@ class ExternalPublicationModel(TenantBase):
     )
     resource_type: Mapped[str] = mapped_column(sa.String(80), nullable=False)
     external_id: Mapped[str] = mapped_column(sa.String(200), nullable=False)
-    external_sku: Mapped[str | None] = mapped_column(sa.String(512), nullable=True)
-    price: Mapped[Decimal | None] = mapped_column(sa.Numeric(30, 12), nullable=True)
-    sale_price: Mapped[Decimal | None] = mapped_column(
-        sa.Numeric(30, 12), nullable=True
-    )
-    currency: Mapped[str | None] = mapped_column(sa.String(3), nullable=True)
-    quantity: Mapped[Decimal | None] = mapped_column(sa.Numeric(30, 12), nullable=True)
-    stock_status: Mapped[str] = mapped_column(sa.String(30), nullable=False)
-    title: Mapped[str | None] = mapped_column(sa.String(2000), nullable=True)
-    title_locale: Mapped[str | None] = mapped_column(sa.String(100), nullable=True)
-    main_image_url: Mapped[str | None] = mapped_column(sa.String(4096), nullable=True)
+    payload: Mapped[dict[str, JsonValue]] = mapped_column(JSONB(), nullable=False)
+    meta: Mapped[dict[str, JsonValue]] = mapped_column(JSONB(), nullable=False)
     source_updated_at: Mapped[datetime | None] = mapped_column(
         sa.DateTime(timezone=True), nullable=True
     )
-    warnings: Mapped[list[str]] = mapped_column(JSONB(), nullable=False)
-    core_version: Mapped[int] = mapped_column(
-        sa.Integer(), nullable=False, server_default=sa.text("1")
-    )
-    extension_version: Mapped[str] = mapped_column(sa.String(100), nullable=False)
-    extensions: Mapped[dict[str, JsonValue]] = mapped_column(JSONB(), nullable=False)
     fingerprint: Mapped[str] = mapped_column(sa.String(64), nullable=False)
     observed_revision: Mapped[int] = mapped_column(sa.Integer(), nullable=False)
     first_seen_at: Mapped[datetime] = mapped_column(

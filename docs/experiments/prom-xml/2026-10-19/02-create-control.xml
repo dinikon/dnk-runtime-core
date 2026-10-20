@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<yml_catalog date="2026-10-19 12:01">
+  <shop>
+    <name>DNK XML contract test</name>
+    <currencies><currency id="UAH" rate="1"/></currencies>
+    <offers>
+      <offer id="dnk-xml-20261019-control" available="false" selling_type="r">
+        <name>DNK XML 02 RU — контроль создания, не покупать</name>
+        <description><![CDATA[<p>Контрольная карточка для проверки XML-импорта. Не для покупки.</p>]]></description>
+        <name_ua>DNK XML 02 UK — контроль створення, не купувати</name_ua>
+        <description_ua><![CDATA[<p>Контрольна картка для перевірки XML-імпорту. Не для купівлі.</p>]]></description_ua>
+        <price>1</price>
+        <currencyId>UAH</currencyId>
+        <categoryId>82715301</categoryId>
+        <portal_category_id>161311</portal_category_id>
+        <vendorCode>DNKXML20261019</vendorCode>
+      </offer>
+    </offers>
+  </shop>
+</yml_catalog>

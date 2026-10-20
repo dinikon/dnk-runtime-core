@@ -51,16 +51,15 @@ class UpdateConnectionSettingsHandler:
         """Сохраняет настройки и job в одной транзакции без сетевых вызовов."""
         channel = await self.channels.get(EntityIdVO.from_value(command.channel_id))
         channel.ensure_revision(command.revision)
-        self.registry.validate(
+        referenced = self.registry.validate(
             channel.platform_kind,
             ResourceSettingsDTO(
                 command.settings.endpoint,
-                command.settings.locales,
-                command.settings.currency,
+                command.settings.options,
             ),
             command.credentials,
         )
-        await self.references.validate(command.settings)
+        await self.references.validate(referenced)
         connection_id = channel.require_connection().id.uuid
         ciphertext = (
             self.secrets.seal(command.tenant_id, connection_id, command.credentials)

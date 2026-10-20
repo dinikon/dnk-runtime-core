@@ -1,3 +1,6 @@
+from src.modules.channels.application.external_publication.identity_contract import (
+    PublicationIdentityDiagnosticDTO,
+)
 from dataclasses import dataclass
 from uuid import UUID
 from datetime import datetime
@@ -9,7 +12,6 @@ class ListExternalPublicationsItemDTO:
     """Описывает core строки списка публикаций."""
 
     publication_id: UUID
-    core_version: int
     connection_id: UUID
     resource_type: str
     external_id: str
@@ -28,6 +30,31 @@ class ListExternalPublicationsItemDTO:
     first_seen_at: datetime
     last_seen_at: datetime
     last_import_run_id: UUID
+    catalog_item_id: UUID | None = None
+    binding_id: UUID | None = None
+    representation_id: UUID | None = None
+    representation_revision: int | None = None
+
+    identity: PublicationIdentityDiagnosticDTO | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ListPublicationIdentitySummaryDTO:
+    """Описывает диагностику всего подключения независимо от фильтров страницы."""
+
+    label: str
+    total: int
+    missing: int
+    duplicate: int
+    valid: int
+    duplicate_groups: int
+    assessment: str
+    checked_at: datetime | None
+    scope_limitations: tuple[str, ...]
+    help_title: str
+    help_steps: tuple[str, ...]
+    help_url: str
+    recovery_verified: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,3 +63,4 @@ class ListExternalPublicationsResultDTO:
 
     items: tuple[ListExternalPublicationsItemDTO, ...]
     total: int
+    identity_summary: ListPublicationIdentitySummaryDTO | None = None

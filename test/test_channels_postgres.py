@@ -10,6 +10,7 @@ import os
 import unittest
 from unittest.mock import AsyncMock, patch
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 from cryptography.fernet import Fernet
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy import text, select, insert, delete, update, func
@@ -86,6 +87,7 @@ class StoreFixtureTransport:
         self.fail_page = False
         self.callback: Callable[[], Awaitable[None]] | None = None
         self.price = "123.450000000001"
+        self.prom_discount = {"value": 10, "type": "percent"}
 
     async def get(
         self,
@@ -97,6 +99,10 @@ class StoreFixtureTransport:
         """Возвращает только fixture JSON; не открывает реальное сетевое соединение."""
         query = query or {}
         self.calls.append((path, dict(query)))
+        if path == "/wp-json/":
+            if headers and "Authorization" in headers:
+                raise AssertionError("WooCommerce credentials leaked to WordPress root")
+            return HttpResultDTO({"url": "https://shop.example"}, {})
         if not headers or "Authorization" not in headers:
             raise AssertionError("Credentials facade was not used")
         if self.callback:
@@ -104,8 +110,6 @@ class StoreFixtureTransport:
             await callback()
         if self.denied:
             raise PluginCallError("permission_denied")
-        if path == "/wp-json/":
-            return HttpResultDTO({"url": "https://shop.example"}, {})
         if path == "/wp-json/wc/v3/products":
             if self.fail_page and query.get("page") == "2":
                 raise PluginCallError("provider_request_rejected")
@@ -204,7 +208,7 @@ class StoreFixtureTransport:
                             "status": "on_display",
                             "group": {"id": group},
                             "main_image": "https://img.example/prom.jpg",
-                            "discount": {"value": 10, "type": "percent"},
+                            "discount": self.prom_discount,
                         }
                         for identifier in ids
                     ],
@@ -335,20 +339,20 @@ class ChannelsPostgresTests(unittest.IsolatedAsyncioTestCase):
             f"/{channel['channel_id']}/connection",
             {
                 "revision": channel["revision"],
-                "settings": {
-                    "endpoint": (
-                        "https://shop.example"
-                        if kind == "woocommerce"
-                        else "https://my.prom.ua"
-                    ),
-                    "locales": ["uk", "ru"],
-                    "currency": "UAH",
-                },
                 "credentials": (
                     {"consumer_key": "key", "consumer_secret": "secret"}
                     if kind == "woocommerce"
                     else {"token": "private-token"}
                 ),
+                "endpoint": (
+                    "https://shop.example"
+                    if kind == "woocommerce"
+                    else "https://my.prom.ua"
+                ),
+                "settings": {
+                    "locales": ["uk"] if kind == "woocommerce" else ["ru", "uk"],
+                    "currency": "UAH",
+                },
             },
             201,
         )
@@ -456,6 +460,133 @@ class ChannelsPostgresTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(progress["processed"], 3)
 
+    async def test_prom_sale_prices_persist_and_clear_after_discount_changes(
+        self,
+    ) -> None:
+        """Worker сохраняет обе скидки; повторный импорт очищает истёкшую акцию."""
+        today = datetime.now(ZoneInfo("Europe/Kyiv")).date()
+        self.transport.prom_discount = {
+            "type": "amount",
+            "value": 10,
+            "date_start": (today - timedelta(days=1)).strftime("%d.%m.%Y"),
+            "date_end": (today + timedelta(days=1)).strftime("%d.%m.%Y"),
+        }
+        _, connection = await self.create("prom")
+        await self.drain()
+        route = f"/connections/{connection['connection_id']}"
+        initial = await self.request("GET", route + "/publications")
+        self.assertEqual(initial["total"], 3)
+        for row in initial["items"]:
+            self.assertEqual(Decimal(row["price"]), Decimal("99.99"))
+            self.assertEqual(Decimal(row["sale_price"]), Decimal("89.99"))
+            self.assertNotIn("sale_price_semantics_unverified", row["warnings"])
+        for discount, expected in (
+            ({**self.transport.prom_discount, "type": "percent"}, Decimal("89.991")),
+            (
+                {
+                    **self.transport.prom_discount,
+                    "date_end": (today - timedelta(days=1)).strftime("%d.%m.%Y"),
+                },
+                None,
+            ),
+            (
+                {
+                    **self.transport.prom_discount,
+                    "date_start": (today + timedelta(days=1)).strftime("%d.%m.%Y"),
+                },
+                None,
+            ),
+            (None, None),
+        ):
+            self.transport.prom_discount = discount
+            await self.request(
+                "POST", route + "/initialization", {"request_key": str(uuid4())}, 202
+            )
+            await self.drain()
+            current = await self.request("GET", route + "/publications")
+            self.assertEqual(current["total"], 3)
+            for row in current["items"]:
+                self.assertEqual(
+                    (
+                        Decimal(row["sale_price"])
+                        if row["sale_price"] is not None
+                        else None
+                    ),
+                    expected,
+                )
+                self.assertEqual(Decimal(row["price"]), Decimal("99.99"))
+                self.assertNotIn("invalid_sale_price", row["warnings"])
+
+    async def test_manifest_settings_policy_applies_to_create_and_update(self) -> None:
+        """HTTP create и PATCH не обходят фиксированные языки и валюту manifest."""
+        for kind, invalid in (
+            ("woocommerce", [(("uk", "ru"), "UAH"), (("uk",), None)]),
+            (
+                "prom",
+                [
+                    (("uk",), "UAH"),
+                    (("ru", "en"), "UAH"),
+                    (("ru",), "USD"),
+                    (("ru",), None),
+                ],
+            ),
+        ):
+            channel = await self.request(
+                "POST", "", {"name": "Policy", "platform_kind": kind}, 201
+            )
+            endpoint = (
+                "https://shop.example"
+                if kind == "woocommerce"
+                else "https://my.prom.ua"
+            )
+            credentials = (
+                {"consumer_key": "key", "consumer_secret": "secret"}
+                if kind == "woocommerce"
+                else {"token": "token"}
+            )
+            for locales, currency in invalid:
+                with self.subTest(kind=kind, locales=locales, currency=currency):
+                    await self.request(
+                        "POST",
+                        f"/{channel['channel_id']}/connection",
+                        {
+                            "revision": channel["revision"],
+                            "credentials": credentials,
+                            "endpoint": endpoint,
+                            "settings": {"locales": locales, "currency": currency},
+                        },
+                        422,
+                    )
+            valid_locales = ["uk"] if kind == "woocommerce" else ["ru", "uk"]
+            saved = await self.request(
+                "POST",
+                f"/{channel['channel_id']}/connection",
+                {
+                    "revision": channel["revision"],
+                    "credentials": credentials,
+                    "endpoint": endpoint,
+                    "settings": {"locales": valid_locales, "currency": "UAH"},
+                },
+                201,
+            )
+            for locales, currency in invalid:
+                with self.subTest(
+                    kind=kind, locales=locales, currency=currency, action="update"
+                ):
+                    await self.request(
+                        "PATCH",
+                        f"/{channel['channel_id']}/connection",
+                        {
+                            "revision": saved["revision"],
+                            "endpoint": endpoint,
+                            "settings": {"locales": locales, "currency": currency},
+                        },
+                        422,
+                    )
+            current = await self.request("GET", f"/{channel['channel_id']}/connection")
+            self.assertEqual(current["settings"]["locales"], valid_locales)
+            self.assertEqual(current["settings"]["currency"], "UAH")
+
     async def test_auth_csrf_validation_and_secret_redaction(self) -> None:
         """Контракты не принимают tenant/actor из body и не возвращают secret inputs."""
         response = await self.client.post(
@@ -476,8 +607,9 @@ class ChannelsPostgresTests(unittest.IsolatedAsyncioTestCase):
             headers=self.headers,
             json={
                 "revision": 1,
-                "settings": {"endpoint": "https://my.prom.ua", "locales": ["uk"]},
                 "credentials": {"token": {"private-token": "value"}},
+                "endpoint": "https://my.prom.ua",
+                "settings": {"locales": ["uk"]},
             },
         )
         self.assertEqual(response.status_code, 422)
@@ -496,8 +628,9 @@ class ChannelsPostgresTests(unittest.IsolatedAsyncioTestCase):
         )
         body = {
             "revision": 1,
-            "settings": {"endpoint": "https://my.prom.ua", "locales": ["uk"]},
             "credentials": {"token": "token"},
+            "endpoint": "https://my.prom.ua",
+            "settings": {"locales": ["ru"], "currency": "UAH"},
         }
         path = f"/api/console/channels/{channel['channel_id']}/connection"
         responses = await asyncio.gather(
@@ -716,6 +849,9 @@ class ChannelsPostgresTests(unittest.IsolatedAsyncioTestCase):
                                 "channel_connections",
                                 "channel_sync_runs",
                                 "channel_external_publications",
+                                "channel_product_representations",
+                                "channel_external_bindings",
+                                "channel_catalog_creation_requests",
                             ),
                         },
                     )
@@ -863,15 +999,12 @@ class ChannelsPostgresTests(unittest.IsolatedAsyncioTestCase):
             f"/{channel['channel_id']}/connection",
             {
                 "revision": current["revision"],
-                "settings": {
-                    "endpoint": "https://shop.example",
-                    "locales": ["uk", "ru"],
-                    "currency": "UAH",
-                },
                 "credentials": {
                     "consumer_key": "replacement",
                     "consumer_secret": "new-secret",
                 },
+                "endpoint": "https://shop.example",
+                "settings": {"locales": ["uk"], "currency": "UAH"},
             },
         )
         self.assertIsNone(changed["verification_job_id"])
@@ -899,11 +1032,8 @@ class ChannelsPostgresTests(unittest.IsolatedAsyncioTestCase):
             f"/{channel['channel_id']}/connection",
             {
                 "revision": current["revision"],
-                "settings": {
-                    "endpoint": "https://another.example",
-                    "locales": ["uk"],
-                    "currency": "UAH",
-                },
+                "endpoint": "https://another.example",
+                "settings": {"locales": ["uk"], "currency": "UAH"},
             },
             409,
         )
@@ -1016,3 +1146,123 @@ class ChannelsPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(accepted["run_id"], completed["run_id"])
         self.assertEqual(completed["status"], "partial")
         self.assertEqual(await self.claim(), [])
+
+    async def test_settings_migration_roundtrip_preserves_existing_observation(
+        self,
+    ) -> None:
+        """0028 → 0029 переносит данные без сброса настроек и не трогает observed."""
+        channel, connection = await self.create()
+        await self.drain()
+        schema = self.schemas[self.tenant]
+        async with self.engine.begin() as connection_db:
+            migrator = TenantMigrator()
+            await migrator.downgrade(connection_db, schema, "0028_channels_core")
+
+            def old_settings(sync_connection) -> None:
+                """Добавляет исходные значения непосредственно в схему прежнего релиза."""
+                sync_connection.exec_driver_sql(
+                    f"UPDATE \"{schema}\".channel_connections SET locales='[\"uk\"]'::jsonb, currency='UAH'"
+                )
+
+            await connection_db.run_sync(old_settings)
+            await migrator.upgrade(connection_db, schema)
+            row = (
+                await connection_db.execute(
+                    text(f'SELECT settings FROM "{schema}".channel_connections')
+                )
+            ).scalar_one()
+            self.assertEqual(row, {"locales": ["uk"], "currency": "UAH"})
+            columns = set(
+                (
+                    await connection_db.execute(
+                        text(
+                            "SELECT column_name FROM information_schema.columns WHERE table_schema=:schema AND table_name='channel_external_publications'"
+                        ),
+                        {"schema": schema},
+                    )
+                ).scalars()
+            )
+            self.assertNotIn("core_version", columns)
+            self.assertEqual(
+                (
+                    await connection_db.execute(
+                        text(
+                            f'SELECT count(*) FROM "{schema}".channel_external_publications'
+                        )
+                    )
+                ).scalar_one(),
+                5,
+            )
+            await migrator.downgrade(connection_db, schema, "0028_channels_core")
+            row = (
+                await connection_db.execute(
+                    text(f'SELECT locales,currency FROM "{schema}".channel_connections')
+                )
+            ).one()
+            self.assertEqual(tuple(row), (["uk"], "UAH"))
+            self.assertEqual(
+                (
+                    await connection_db.execute(
+                        text(
+                            f'SELECT min(core_version) FROM "{schema}".channel_external_publications'
+                        )
+                    )
+                ).scalar_one(),
+                1,
+            )
+            await migrator.upgrade(connection_db, schema)
+        current = await self.request("GET", f"/{channel['channel_id']}/connection")
+        self.assertEqual(current["settings"], {"locales": ["uk"], "currency": "UAH"})
+        self.assertNotIn("locales", current)
+        self.assertNotIn("currency", current)
+        await self.request(
+            "POST",
+            f"/{channel['channel_id']}/connection",
+            {
+                "revision": current["revision"],
+                "settings": {
+                    "endpoint": "https://shop.example",
+                    "locales": ["uk"],
+                    "currency": "UAH",
+                },
+                "credentials": {"consumer_key": "key", "consumer_secret": "secret"},
+            },
+            422,
+        )
+
+    async def test_plugin_specific_settings_roundtrip_without_new_columns(self) -> None:
+        """Новый плагин сохраняет дополнительное поле через общий API и JSONB."""
+        from test.test_channels_manifest import ExtendedFactory
+        from src.modules.channels.infrastructure.plugin.registry import PluginRegistry
+        from src.modules.channels.presentation.depends.plugin_registry import (
+            get_plugin_registry,
+        )
+
+        self.app.dependency_overrides[get_plugin_registry] = lambda: PluginRegistry(
+            (ExtendedFactory(),)
+        )
+        channel = await self.request(
+            "POST", "", {"name": "Extended", "platform_kind": "custom-platform"}, 201
+        )
+        created = await self.request(
+            "POST",
+            f"/{channel['channel_id']}/connection",
+            {
+                "revision": channel["revision"],
+                "endpoint": "https://shop.example",
+                "settings": {"locales": ["uk"], "currency": "UAH", "batch_size": 250},
+                "credentials": {"consumer_key": "key", "consumer_secret": "secret"},
+            },
+            201,
+        )
+        current = await self.request("GET", f"/{channel['channel_id']}/connection")
+        self.assertEqual(current["settings"]["batch_size"], 250)
+        async with self.session() as session:
+            row = (
+                await session.execute(
+                    select(ConnectionModel.settings).where(
+                        ConnectionModel.id == UUID(created["connection_id"])
+                    )
+                )
+            ).scalar_one()
+            self.assertEqual(row, current["settings"])

@@ -1,12 +1,14 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
+from src.modules.catalog.application.catalog_item.creation_values import (
+    CreateCatalogItemValues,
+)
 
 
 @dataclass(frozen=True, slots=True)
 class CreateCatalogItemCommand:
-    """Вход создания самостоятельного корня simple."""
+    """Создаёт самостоятельный товар из типизированного объекта исходных значений."""
 
     tenant_id: EntityIdVO
     actor_id: EntityIdVO
-    virtual: bool = False
-    product_type_code: str = "default"
+    product: CreateCatalogItemValues = field(default_factory=CreateCatalogItemValues)

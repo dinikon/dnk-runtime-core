@@ -1,5 +1,5 @@
-from src.modules.channels.domain.channel.value_object.settings import (
-    ConnectionSettingsVO,
+from src.modules.channels.application.plugin_contract import (
+    ConnectionSettingsReferencesDTO,
 )
 from src.modules.channels.domain.error import ChannelsValidationError
 from src.modules.reference_data.application.port.catalog import CatalogRepositoryPort
@@ -23,13 +23,13 @@ class ConnectionReferencesAdapter:
         """Принимает контракт справочника и Application сценарий валют на общем UoW."""
         self.catalog, self.currency = (catalog, currency)
 
-    async def validate(self, settings: ConnectionSettingsVO) -> None:
+    async def validate(self, references: ConnectionSettingsReferencesDTO) -> None:
         """Проверяет каждую выбранную locale и optional валюту без foreign ORM."""
-        for code in settings.locales:
+        for code in references.locales:
             if not await self.catalog.has_active_locale(code):
                 raise ChannelsValidationError("locale_not_supported")
-        if settings.currency:
+        for currency in references.currencies:
             try:
-                await self.currency.execute(ValidateCurrencyQuery(settings.currency))
+                await self.currency.execute(ValidateCurrencyQuery(currency))
             except CurrencyCodeNotSupportedError:
                 raise ChannelsValidationError("currency_not_supported") from None

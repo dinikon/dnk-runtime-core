@@ -123,6 +123,13 @@ class Channel:
             raise ChannelsUnavailableError("connection_not_verified")
         return connection
 
+    def ensure_outbound(self, generation: int) -> Connection:
+        """Разрешает исходящую запись только после явного включения канала."""
+        connection = self.ensure_network(generation)
+        if not self.is_enabled:
+            raise ChannelsUnavailableError("outbound_sync_disabled")
+        return connection
+
     def attach_connection(
         self,
         identifier: EntityIdVO,

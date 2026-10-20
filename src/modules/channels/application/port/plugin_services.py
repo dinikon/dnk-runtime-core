@@ -27,6 +27,20 @@ class PluginHttpTransport(Protocol):
         ...
 
 
+class PluginContentHttpTransport(PluginHttpTransport, Protocol):
+    """Добавляет ограниченную запись текстов в пределах проверенного origin."""
+
+    async def put(
+        self,
+        path: str,
+        *,
+        payload: dict[str, str],
+        headers: dict[str, str] | None = None,
+    ) -> HttpResultDTO:
+        """Передаёт только название и описание без произвольных полей карточки."""
+        ...
+
+
 class PluginCallError(Exception):
     """Передаёт безопасный код сбоя провайдера без URL, body и секретов."""
 

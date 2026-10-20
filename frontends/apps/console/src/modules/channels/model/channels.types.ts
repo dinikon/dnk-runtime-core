@@ -1,3 +1,7 @@
+import type {
+  PublicationIdentity,
+  PublicationIdentitySummary,
+} from "./publication-identity.types";
 export interface StringFieldSchema {
   type?: string;
   title?: string;
@@ -15,6 +19,31 @@ export interface CredentialsSchema {
   required?: string[];
   additionalProperties?: boolean;
 }
+export type JsonValue =
+  null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+export type SettingsObject = { [key: string]: JsonValue };
+export interface SettingsSchema {
+  type?: string;
+  title?: string;
+  description?: string;
+  properties?: Record<string, SettingsSchema>;
+  required?: string[];
+  additionalProperties?: boolean;
+  items?: SettingsSchema;
+  prefixItems?: SettingsSchema[];
+  minItems?: number;
+  maxItems?: number;
+  uniqueItems?: boolean;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  minimum?: number;
+  maximum?: number;
+  enum?: JsonValue[];
+  const?: JsonValue;
+  default?: JsonValue;
+  "x-reference"?: "locale" | "currency";
+}
 export interface Platform {
   kind: string;
   label: string;
@@ -23,6 +52,7 @@ export interface Platform {
   capabilities: string[];
   credentialsSchema: CredentialsSchema;
   endpointSchema: StringFieldSchema;
+  settingsSchema: SettingsSchema;
 }
 export interface Channel {
   id: string;
@@ -40,8 +70,7 @@ export interface Connection {
   id: string;
   revision: number;
   endpoint: string;
-  locales: string[];
-  currency: string | null;
+  settings: SettingsObject;
   resourceIdentity: string | null;
   verificationStatus: string;
   verificationJobId: string | null;
@@ -67,8 +96,12 @@ export interface Initialization {
   recoveryRequired: boolean;
 }
 export interface Publication {
+  identity: PublicationIdentity | null;
+  catalogItemId: string | null;
+  bindingId: string | null;
+  representationId: string | null;
+  representationRevision: number | null;
   id: string;
-  coreVersion: number;
   connectionId: string;
   resourceType: string;
   externalId: string;
@@ -93,6 +126,7 @@ export interface ChannelsPage {
   total: number;
 }
 export interface PublicationsPage {
+  identitySummary: PublicationIdentitySummary | null;
   items: Publication[];
   total: number;
 }
@@ -115,8 +149,7 @@ export interface CreatedChannel {
 }
 export interface ConnectionSettings {
   endpoint: string;
-  locales: string[];
-  currency: string | null;
+  options: SettingsObject;
 }
 export interface CreateConnectionInput {
   channelId: string;
@@ -159,14 +192,15 @@ export interface ChannelsFilters {
   limit: number;
 }
 export interface PublicationsFilters extends ChannelsFilters {
+  identityStatus?: string;
+  identityKey?: string;
   search: string;
   stockStatus: string;
+  bindingStatus?: string;
 }
 export interface ConnectionFormValues {
   endpoint: string;
-  primaryLocale: string;
-  secondaryLocale: string;
-  currency: string;
+  settings: SettingsObject;
   replaceCredentials: boolean;
   credentials: Record<string, string>;
 }

@@ -1,3 +1,4 @@
+import { parseIdentityStatus } from "./publication-identity.presentation";
 import { type ComputedRef, computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { parsePage, parseStockStatus } from "./channels.url-state";
@@ -7,11 +8,20 @@ interface ChannelsPageState {
   tab: ComputedRef<string>;
   search: ComputedRef<string>;
   stockStatus: ComputedRef<string>;
+  bindingStatus: ComputedRef<string>;
+  identityStatus: ComputedRef<string>;
+  identityKey: ComputedRef<string>;
+  setIdentity: (status: string, key?: string) => void;
   listFilters: ComputedRef<ChannelsFilters>;
   publicationFilters: ComputedRef<PublicationsFilters>;
   setPage: (value: number) => void;
   setTab: (value: string) => void;
-  setFilters: (value: { search: string; stockStatus: string }) => void;
+  setFilters: (value: {
+    search: string;
+    stockStatus: string;
+    bindingStatus?: string;
+    identityStatus?: string;
+  }) => void;
 }
 export function useChannelsPageState(): ChannelsPageState {
   const route = useRoute(),
@@ -26,6 +36,19 @@ export function useChannelsPageState(): ChannelsPageState {
       : "",
   );
   const stockStatus = computed(() => parseStockStatus(route.query.stock));
+  const bindingStatus = computed(() =>
+    route.query.binding === "bound" || route.query.binding === "unbound"
+      ? route.query.binding
+      : "",
+  );
+  const identityStatus = computed(() =>
+    parseIdentityStatus(route.query.identity),
+  );
+  const identityKey = computed(() =>
+    typeof route.query.identityKey === "string"
+      ? route.query.identityKey.slice(0, 512)
+      : "",
+  );
   const listFilters = computed(() => ({
     offset: (page.value - 1) * 20,
     limit: 20,
@@ -34,6 +57,9 @@ export function useChannelsPageState(): ChannelsPageState {
     ...listFilters.value,
     search: search.value,
     stockStatus: stockStatus.value,
+    bindingStatus: bindingStatus.value,
+    identityStatus: identityStatus.value,
+    identityKey: identityKey.value,
   }));
   function setPage(value: number): void {
     void router.replace({
@@ -48,12 +74,36 @@ export function useChannelsPageState(): ChannelsPageState {
       },
     });
   }
-  function setFilters(value: { search: string; stockStatus: string }): void {
+  function setFilters(value: {
+    search: string;
+    stockStatus: string;
+    bindingStatus?: string;
+    identityStatus?: string;
+  }): void {
     void router.replace({
       query: {
         ...route.query,
         search: value.search || undefined,
         stock: value.stockStatus || undefined,
+        binding: value.bindingStatus || undefined,
+        identity: value.identityStatus || undefined,
+        identityKey:
+          value.identityStatus === identityStatus.value
+            ? identityKey.value || undefined
+            : undefined,
+        page: undefined,
+      },
+    });
+  }
+  function setIdentity(status: string, key?: string): void {
+    void router.replace({
+      query: {
+        ...route.query,
+        identity: status || undefined,
+        identityKey: key || undefined,
+        search: undefined,
+        stock: undefined,
+        binding: undefined,
         page: undefined,
       },
     });
@@ -63,6 +113,10 @@ export function useChannelsPageState(): ChannelsPageState {
     tab,
     search,
     stockStatus,
+    bindingStatus,
+    identityStatus,
+    identityKey,
+    setIdentity,
     listFilters,
     publicationFilters,
     setPage,

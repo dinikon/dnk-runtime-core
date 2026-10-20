@@ -1,5 +1,7 @@
 from pydantic import BaseModel, ConfigDict, Field
-from src.modules.channels.application.plugin_contract import PluginManifestDTO
+from src.modules.channels.application.plugin_contract import (
+    PluginManifestDTO,
+)
 
 
 class WooCredentials(BaseModel):
@@ -22,12 +24,48 @@ class WooCredentials(BaseModel):
     )
 
 
+class WooSettings(BaseModel):
+    """Определяет язык и валюту Woo в расширяемой схеме настроек."""
+
+    model_config = ConfigDict(
+        title="Настройки ресурса",
+        extra="forbid",
+        strict=True,
+        hide_input_in_errors=True,
+    )
+    locales: list[str] = Field(
+        title="Языки ресурса",
+        min_length=1,
+        max_length=1,
+        json_schema_extra={
+            "uniqueItems": True,
+            "items": {"type": "string", "minLength": 1, "x-reference": "locale"},
+            "prefixItems": [
+                {"type": "string", "title": "Основной язык", "x-reference": "locale"}
+            ],
+        },
+    )
+    currency: str = Field(
+        title="Валюта ресурса",
+        min_length=3,
+        max_length=3,
+        pattern="^[A-Z]{3}$",
+        json_schema_extra={"x-reference": "currency"},
+    )
+
+
 MANIFEST = PluginManifestDTO(
     "woocommerce",
     "WooCommerce",
-    1,
-    1,
-    ("verify_connection", "read_publications"),
+    5,
+    3,
+    (
+        "verify_connection",
+        "read_publications",
+        "read_publication_details",
+        "preview_content_update",
+        "update_content",
+    ),
     WooCredentials.model_json_schema(),
     {
         "type": "string",
@@ -36,4 +74,5 @@ MANIFEST = PluginManifestDTO(
         "format": "uri",
         "maxLength": 2048,
     },
+    WooSettings.model_json_schema(),
 )

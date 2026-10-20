@@ -1,4 +1,7 @@
 from dataclasses import dataclass
+from copy import deepcopy
+import json
+from src.modules.channels.domain.external_publication.value_object.core import JsonValue
 from urllib.parse import urlsplit
 from src.modules.channels.domain.error import ChannelsValidationError
 
@@ -8,11 +11,10 @@ class ConnectionSettingsVO:
     """Хранит подтверждаемые параметры одного внешнего ресурса."""
 
     endpoint: str
-    locales: tuple[str, ...]
-    currency: str | None = None
+    options: dict[str, JsonValue]
 
     def __post_init__(self) -> None:
-        """Отклоняет неоднозначные адреса и повторяющиеся языки."""
+        """Проверяет HTTPS-адрес и ограниченный JSON-объект без правил конкретного плагина."""
         try:
             parsed = urlsplit(self.endpoint)
             port = parsed.port
@@ -28,14 +30,13 @@ class ConnectionSettingsVO:
             or (port not in (None, 443))
         ):
             raise ChannelsValidationError("invalid_endpoint")
-        if (
-            not self.locales
-            or len(self.locales) > 2
-            or len(set(self.locales)) != len(self.locales)
-        ):
-            raise ChannelsValidationError("invalid_locales")
-        if self.currency is not None and (
-            len(self.currency) != 3 or not self.currency.isupper()
-        ):
-            raise ChannelsValidationError("invalid_currency")
+        if not isinstance(self.options, dict):
+            raise ChannelsValidationError("invalid_settings_shape")
+        try:
+            encoded = json.dumps(self.options, allow_nan=False)
+        except (ValueError, TypeError, RecursionError):
+            raise ChannelsValidationError("invalid_settings_shape") from None
+        if len(encoded.encode()) > 65536:
+            raise ChannelsValidationError("settings_too_large")
+        object.__setattr__(self, "options", deepcopy(self.options))
         object.__setattr__(self, "endpoint", self.endpoint.rstrip("/"))

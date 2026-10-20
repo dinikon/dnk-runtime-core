@@ -1,3 +1,7 @@
+from src.modules.channels.infrastructure.plugin.prom.manifest import PromSettings
+from zoneinfo import ZoneInfo
+from src.modules.shared.domain.time.clock_port import ClockPort
+from src.modules.shared.infrastructure.time.utc_clock import UtcClock
 from src.modules.channels.application.plugin_contract import (
     ReadPublicationPageInputDTO,
     ReadPublicationPageOutcomeDTO,
@@ -17,10 +21,15 @@ class PromReadPublicationPagePlugin:
     """Обходит страницы групп, затем товары каждой группы одним GET за шаг."""
 
     def __init__(
-        self, credentials: PluginCredentialsAccess, http: PluginHttpTransport
+        self,
+        credentials: PluginCredentialsAccess,
+        http: PluginHttpTransport,
+        *,
+        clock: ClockPort | None = None,
     ) -> None:
-        """Принимает scoped credentials и transport без repositories."""
+        """Принимает scoped credentials, transport и часы без repositories."""
         self.credentials, self.http = (credentials, http)
+        self.clock = clock if clock is not None else UtcClock()
 
     async def execute(
         self, request: ReadPublicationPageInputDTO
@@ -41,7 +50,12 @@ class PromReadPublicationPagePlugin:
         if state["stage"] == "complete":
             return ReadPublicationPageOutcomeDTO((), state, True)
         secrets = await self.credentials.resolve()
-        headers = {"Authorization": "Bearer " + secrets.values["token"]}
+        headers = {
+            "Authorization": "Bearer " + secrets.values["token"],
+            "X-LANGUAGE": PromSettings.model_validate(request.settings.options).locales[
+                0
+            ],
+        }
         query = {"limit": "100"}
         if state.get("last_id") is not None:
             query["last_id"] = str(state["last_id"])
@@ -96,13 +110,16 @@ class PromReadPublicationPagePlugin:
             )
             return ReadPublicationPageOutcomeDTO((), state, complete)
         result, ids, invalid = ([], [], 0)
+        observed_on = self.clock.now().astimezone(ZoneInfo("Europe/Kyiv")).date()
         for row in rows:
             try:
                 if not isinstance(row, dict):
                     raise PluginCallError("invalid_publication_identity")
                 identifier = int(native_id(row.get("id")))
                 ids.append(identifier)
-                result.append(normalize_product(row, request.settings))
+                result.append(
+                    normalize_product(row, request.settings, observed_on=observed_on)
+                )
             except PluginCallError:
                 invalid += 1
         if not ids:

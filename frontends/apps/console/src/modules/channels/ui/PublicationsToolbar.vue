@@ -8,10 +8,34 @@ import {
 } from "@/components/ui/native-select";
 import { Button } from "@/components/ui/button";
 import { stockLabels } from "../model/channels.presentation";
-const props = defineProps<{ search: string; stockStatus: string }>();
-const emit = defineEmits<{
-  change: [filters: { search: string; stockStatus: string }];
+const props = defineProps<{
+  search: string;
+  stockStatus: string;
+  bindingStatus?: string;
+  identityStatus?: string;
+  identityLabel?: string;
+  identityKey?: string;
 }>();
+const emit = defineEmits<{
+  change: [
+    filters: {
+      search: string;
+      stockStatus: string;
+      bindingStatus?: string;
+      identityStatus?: string;
+    },
+  ];
+}>();
+const identityInput = ref(props.identityStatus ?? "");
+watch(
+  () => props.identityStatus,
+  (value) => (identityInput.value = value ?? ""),
+);
+const bindingInput = ref(props.bindingStatus ?? "");
+watch(
+  () => props.bindingStatus,
+  (value) => (bindingInput.value = value ?? ""),
+);
 const searchInput = ref(props.search),
   stockInput = ref(props.stockStatus);
 watch(
@@ -26,6 +50,8 @@ function submit(): void {
   emit("change", {
     search: searchInput.value.trim(),
     stockStatus: stockInput.value,
+    bindingStatus: bindingInput.value,
+    identityStatus: identityInput.value,
   });
 }
 </script>
@@ -52,9 +78,35 @@ function submit(): void {
             :value="value"
             >{{ label }}</NativeSelectOption
           ></NativeSelect
-        >
-      </Field></FieldGroup
+        > </Field
+      ><Field class="sm:w-auto"
+        ><FieldLabel for="publication-binding">Связь с каталогом</FieldLabel
+        ><NativeSelect id="publication-binding" v-model="bindingInput"
+          ><NativeSelectOption value="">Все публикации</NativeSelectOption
+          ><NativeSelectOption value="bound">Связанные</NativeSelectOption
+          ><NativeSelectOption value="unbound"
+            >Не связанные</NativeSelectOption
+          ></NativeSelect
+        ></Field
+      ></FieldGroup
     >
+    <Field v-if="identityLabel" class="w-full sm:w-auto">
+      <FieldLabel for="publication-identity">{{ identityLabel }}</FieldLabel>
+      <NativeSelect id="publication-identity" v-model="identityInput">
+        <NativeSelectOption value="">Все ключи</NativeSelectOption>
+        <NativeSelectOption value="missing">Без ключа</NativeSelectOption>
+        <NativeSelectOption value="duplicate"
+          >Дублирующийся ключ</NativeSelectOption
+        >
+        <NativeSelectOption value="valid">Ключ указан</NativeSelectOption>
+      </NativeSelect>
+    </Field>
+    <p
+      v-if="identityKey"
+      class="max-w-full break-all text-xs text-muted-foreground"
+    >
+      Ключ: {{ identityKey }}
+    </p>
     <Button type="submit" variant="outline">Найти</Button>
   </form>
 </template>

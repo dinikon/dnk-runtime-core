@@ -213,11 +213,18 @@ export const channelsApi = {
             limit: filters.limit,
             search: filters.search || undefined,
             stock_status: filters.stockStatus || undefined,
+            binding_status: filters.bindingStatus || undefined,
+            identity_status: filters.identityStatus || undefined,
+            identity_key: filters.identityKey || undefined,
           },
           signal,
         },
       );
-      return { items: data.items.map(map.mapPublication), total: data.total };
+      return {
+        items: data.items.map(map.mapPublication),
+        total: data.total,
+        identitySummary: map.mapIdentitySummary(data.identity_summary),
+      };
     } catch (error: unknown) {
       throw normalizeApiError(error);
     }

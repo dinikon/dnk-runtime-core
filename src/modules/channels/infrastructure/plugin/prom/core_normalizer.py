@@ -1,4 +1,18 @@
+from dataclasses import asdict
+from src.modules.channels.domain.external_publication.value_object.core import (
+    PublicationCoreVO,
+)
+from src.modules.channels.domain.external_publication.value_object.payload import (
+    PublicationPayloadVO,
+)
+from src.modules.channels.domain.external_publication.value_object.meta import (
+    PublicationMetaVO,
+)
+from src.modules.channels.infrastructure.plugin.prom.promotion import promotion_period
+from src.modules.channels.infrastructure.plugin.prom.manifest import PromSettings
+from datetime import date
 from src.modules.channels.application.plugin_contract import (
+    ProviderJsonValue,
     ResourceSettingsDTO,
     PublicationCoreDTO,
     ObservedPublicationDTO,
@@ -14,13 +28,21 @@ from src.modules.channels.infrastructure.plugin.core_normalizer import (
 from src.modules.channels.infrastructure.plugin.prom.publication_read_schema import (
     PromReadExtension,
 )
-from src.modules.channels.domain.external_publication.value_object.core import JsonValue
+from src.modules.channels.infrastructure.plugin.prom.sale_price import (
+    normalize_sale_price,
+)
+from src.modules.channels.infrastructure.plugin.prom.translations import localized_field
+from src.modules.channels.infrastructure.plugin.prom.images import original_image_url
 
 
 def normalize_product(
-    row: dict[str, JsonValue], settings: ResourceSettingsDTO
+    row: dict[str, ProviderJsonValue],
+    settings: ResourceSettingsDTO,
+    *,
+    observed_on: date,
 ) -> ObservedPublicationDTO:
-    """Различает native ID и import external_id; неизвестную скидку не вычисляет."""
+    """Нормализует цену, действующую скидку и остаток на дату наблюдения Prom."""
+    parsed = PromSettings.model_validate(settings.options)
     identifier = native_id(row.get("id"))
     warnings: list[str] = []
     raw_quantity = row.get("quantity_in_stock")
@@ -29,14 +51,16 @@ def normalize_product(
     quantity = optional_decimal(raw_quantity, warnings, "quantity")
     price = optional_decimal(row.get("price"), warnings, "price")
     discount = row.get("discount")
+    sale_price = normalize_sale_price(price, discount, observed_on, warnings)
     safe_discount = None
     if isinstance(discount, dict):
-        warnings.append("sale_price_semantics_unverified")
         safe_discount = {
             key: str(discount[key])[:100] if discount.get(key) is not None else None
             for key in ("value", "type", "date_start", "date_end")
         }
-    title = safe_text(row.get("name"), 2000, warnings, "title")
+    title = safe_text(
+        localized_field(row, "name", parsed.locales[0]), 2000, warnings, "title"
+    )
     if not title:
         warnings.append("title_missing")
     currency = currency_code(row.get("currency"), warnings)
@@ -48,18 +72,30 @@ def normalize_product(
             if isinstance(group, dict) and isinstance(group.get("id"), int)
             else None
         ),
-        provider_external_id=safe_text(
+        import_key=safe_text(
             row.get("external_id"), 512, warnings, "provider_external_id"
         ),
-        description=clean_description(row.get("description")),
+        description=clean_description(
+            localized_field(row, "description", parsed.locales[0])
+        ),
         discount=safe_discount,
+    )
+    titles = tuple(
+        (locale, value)
+        for locale in parsed.locales
+        if (
+            value := safe_text(
+                localized_field(row, "name", locale), 2000, warnings, "title"
+            )
+        )
+        is not None
     )
     core = PublicationCoreDTO(
         "product",
         identifier,
         safe_text(row.get("sku"), 512, warnings, "external_sku"),
         price,
-        None,
+        sale_price,
         currency,
         quantity,
         {
@@ -72,11 +108,21 @@ def normalize_product(
             "unknown",
         ),
         title,
-        settings.locales[0],
-        safe_url(row.get("main_image"), warnings),
+        parsed.locales[0],
+        safe_url(original_image_url(row.get("main_image")), warnings),
         None,
         tuple(warnings),
     )
     return ObservedPublicationDTO(
-        core, "prom.read.v1", extension.model_dump(mode="json")
+        core.resource_type,
+        core.external_id,
+        PublicationPayloadVO.from_core(
+            PublicationCoreVO(**asdict(core)),
+            promotion=promotion_period(extension),
+            titles=titles,
+        ),
+        PublicationMetaVO.create(
+            "prom.read.v2", extension.model_dump(mode="json"), tuple(warnings)
+        ),
+        core.source_updated_at,
     )

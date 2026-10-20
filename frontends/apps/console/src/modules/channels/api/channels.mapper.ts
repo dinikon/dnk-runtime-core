@@ -1,3 +1,4 @@
+import type { PublicationIdentitySummary } from "../model/publication-identity.types";
 import type * as DTO from "./channels.dto";
 import type {
   Platform,
@@ -32,8 +33,7 @@ export function mapConnection(dto: DTO.GetConnectionResponseDto): Connection {
     id: dto.connection_id,
     revision: dto.revision,
     endpoint: dto.endpoint,
-    locales: dto.locales,
-    currency: dto.currency,
+    settings: JSON.parse(JSON.stringify(dto.settings)),
     resourceIdentity: dto.resource_identity,
     verificationStatus: dto.verification_status,
     verificationJobId: dto.verification_job_id,
@@ -65,8 +65,18 @@ export function mapInitialization(
 }
 export function mapPublication(dto: DTO.PublicationRowDto): Publication {
   return {
+    identity: dto.identity
+      ? {
+          state: dto.identity.state,
+          key: dto.identity.key,
+          conflictCount: dto.identity.conflict_count,
+        }
+      : null,
+    catalogItemId: dto.catalog_item_id,
+    bindingId: dto.binding_id,
+    representationId: dto.representation_id,
+    representationRevision: dto.representation_revision,
     id: dto.publication_id,
-    coreVersion: dto.core_version,
     connectionId: dto.connection_id,
     resourceType: dto.resource_type,
     externalId: dto.external_id,
@@ -97,6 +107,7 @@ export function mapPlatform(dto: DTO.PlatformManifestDto): Platform {
     capabilities: dto.capabilities,
     credentialsSchema: dto.credentials_schema,
     endpointSchema: dto.endpoint_schema,
+    settingsSchema: dto.settings_schema,
   };
 }
 export function createChannelPayload(
@@ -109,7 +120,8 @@ export function createConnectionPayload(
 ): DTO.CreateConnectionRequestDto {
   return {
     revision: input.revision,
-    settings: { ...input.settings },
+    endpoint: input.settings.endpoint,
+    settings: JSON.parse(JSON.stringify(input.settings.options)),
     credentials: { ...input.credentials },
   };
 }
@@ -118,7 +130,8 @@ export function updateConnectionPayload(
 ): DTO.UpdateConnectionRequestDto {
   return {
     revision: input.revision,
-    settings: { ...input.settings },
+    endpoint: input.settings.endpoint,
+    settings: JSON.parse(JSON.stringify(input.settings.options)),
     ...(input.credentials ? { credentials: { ...input.credentials } } : {}),
   };
 }
@@ -154,4 +167,25 @@ export function mapInitializationQueued(
   dto: DTO.StartInitializationResponseDto,
 ): InitializationQueued {
   return { runId: dto.run_id, status: dto.status, jobId: dto.job_id };
+}
+
+export function mapIdentitySummary(
+  dto: DTO.PublicationIdentitySummaryDto | null | undefined,
+): PublicationIdentitySummary | null {
+  if (!dto) return null;
+  return {
+    label: dto.label,
+    total: dto.total,
+    missing: dto.missing,
+    duplicate: dto.duplicate,
+    valid: dto.valid,
+    duplicateGroups: dto.duplicate_groups,
+    assessment: dto.assessment,
+    checkedAt: dto.checked_at,
+    scopeLimitations: [...dto.scope_limitations],
+    helpTitle: dto.help_title,
+    helpSteps: [...dto.help_steps],
+    helpUrl: dto.help_url,
+    recoveryVerified: dto.recovery_verified,
+  };
 }

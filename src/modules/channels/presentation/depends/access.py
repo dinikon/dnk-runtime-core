@@ -48,3 +48,39 @@ ChannelsReadContextDep = Annotated[
 ChannelsManageContextDep = Annotated[
     RequestContext, Depends(require_channels_manage_context)
 ]
+
+
+async def require_catalog_link_context(
+    context: ChannelsManageContextDep, authorization: AuthorizationServiceDep
+) -> RequestContext:
+    """Проверяет Channels manage и право чтения выбираемого Catalog."""
+    if not await authorization.can(
+        user_id=UUID(context.principal.user_id),
+        tenant_id=UUID(context.principal.tenant_id),
+        action="catalog.read",
+        resource_type="catalog_item",
+    ):
+        raise HTTPException(403, "catalog_access_denied")
+    return context
+
+
+CatalogLinkContextDep = Annotated[RequestContext, Depends(require_catalog_link_context)]
+
+
+async def require_catalog_create_context(
+    context: CatalogLinkContextDep, authorization: AuthorizationServiceDep
+) -> RequestContext:
+    """Не позволяет обойти право создания товара через импорт публикации."""
+    if not await authorization.can(
+        user_id=UUID(context.principal.user_id),
+        tenant_id=UUID(context.principal.tenant_id),
+        action="catalog.create",
+        resource_type="catalog_item",
+    ):
+        raise HTTPException(403, "catalog_access_denied")
+    return context
+
+
+CatalogCreateContextDep = Annotated[
+    RequestContext, Depends(require_catalog_create_context)
+]

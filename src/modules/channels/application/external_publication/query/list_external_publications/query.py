@@ -12,3 +12,6 @@ class ListExternalPublicationsQuery:
     stock_status: str | None = None
     offset: int = 0
     limit: int = 50
+    binding_status: str | None = None
+    identity_status: str | None = None
+    identity_key: str | None = None

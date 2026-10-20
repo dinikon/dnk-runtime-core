@@ -28,6 +28,5 @@ class ChannelQueryMapper:
     def to_connection(row: Mapping[str, Any]) -> GetConnectionResultDTO:
         """Исключает ciphertext из проекции технических настроек."""
         values = dict(row)
-        values["locales"] = tuple(values["locales"])
         values["scope_limitations"] = tuple(values["scope_limitations"])
         return GetConnectionResultDTO(**values)

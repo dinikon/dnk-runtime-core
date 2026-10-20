@@ -2,14 +2,20 @@ from uuid import UUID
 from datetime import datetime
 from decimal import Decimal
 from pydantic import BaseModel
-from src.modules.channels.domain.external_publication.value_object.core import JsonValue
+
+
+class PublicationIdentityResponse(BaseModel):
+    """Возвращает диагностическую проекцию без provider JSON."""
+
+    state: str
+    key: str | None
+    conflict_count: int
 
 
 class GetExternalPublicationResponse(BaseModel):
     """Определяет отдельный HTTP-ответ сценария get_external_publication."""
 
     publication_id: UUID
-    core_version: int
     connection_id: UUID
     resource_type: str
     external_id: str
@@ -28,5 +34,5 @@ class GetExternalPublicationResponse(BaseModel):
     first_seen_at: datetime
     last_seen_at: datetime
     last_import_run_id: UUID
-    extension_version: str
-    extensions: dict[str, JsonValue]
+
+    identity: PublicationIdentityResponse | None = None

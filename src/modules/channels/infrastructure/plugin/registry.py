@@ -1,7 +1,14 @@
+from src.modules.channels.application.content_update.port.plugin import (
+    ContentUpdatePlugin,
+)
+from src.modules.channels.application.port.plugin_services import (
+    PluginContentHttpTransport,
+)
 from typing import Protocol
 from src.modules.channels.application.plugin_contract import (
     PluginManifestDTO,
     ResourceSettingsDTO,
+    ConnectionSettingsReferencesDTO,
 )
 from src.modules.channels.application.port.plugin_services import (
     PluginCredentialsAccess,
@@ -13,6 +20,10 @@ from src.modules.channels.application.channel.port.verify_connection_plugin impo
 from src.modules.channels.application.external_publication.port.read_publication_page_plugin import (
     ReadPublicationPagePlugin,
 )
+from src.modules.channels.application.external_publication.port.read_publication_details_plugin import (
+    ReadPublicationDetailsPlugin,
+)
+
 from src.modules.channels.domain.error import (
     ChannelsUnavailableError,
     ChannelsValidationError,
@@ -26,7 +37,7 @@ class PluginFactoryProtocol(Protocol):
 
     def validate(
         self, settings: ResourceSettingsDTO, credentials: dict[str, str] | None
-    ) -> None:
+    ) -> ConnectionSettingsReferencesDTO:
         """Проверяет конкретную конфигурацию."""
         ...
 
@@ -42,6 +53,18 @@ class PluginFactoryProtocol(Protocol):
         """Собирает read capability."""
         ...
 
+    def detail_reader(
+        self, credentials: PluginCredentialsAccess, http: PluginHttpTransport
+    ) -> ReadPublicationDetailsPlugin:
+        """Собирает полное чтение содержимого."""
+        ...
+
+    def content_updater(
+        self, credentials: PluginCredentialsAccess, http: PluginContentHttpTransport
+    ) -> ContentUpdatePlugin:
+        """Собирает проверку и ограниченную запись контента."""
+        ...
+
 
 class PluginRegistry:
     """Разрешает явно зарегистрированные реализации без ветвлений по kind."""
@@ -53,9 +76,33 @@ class PluginRegistry:
             manifest = factory.manifest
             if (
                 manifest.kind in self._factories
-                or manifest.sdk_version != 1
-                or set(manifest.capabilities)
-                != {"verify_connection", "read_publications"}
+                or manifest.sdk_version != 5
+                or manifest.config_version != 3
+                or (
+                    (manifest.publication_identity is not None)
+                    != ("publication_identity_diagnostics" in manifest.capabilities)
+                )
+                or (
+                    manifest.publication_identity is not None
+                    and (
+                        not manifest.publication_identity.key_path
+                        or any(
+                            not segment or not isinstance(segment, str)
+                            for segment in manifest.publication_identity.key_path
+                        )
+                    )
+                )
+                or not {"verify_connection", "read_publications"}
+                <= set(manifest.capabilities)
+                or not set(manifest.capabilities)
+                <= {
+                    "verify_connection",
+                    "read_publications",
+                    "read_publication_details",
+                    "preview_content_update",
+                    "update_content",
+                    "publication_identity_diagnostics",
+                }
             ):
                 raise ChannelsValidationError("invalid_plugin_registration")
             self._factories[manifest.kind] = factory
@@ -79,9 +126,9 @@ class PluginRegistry:
         kind: str,
         settings: ResourceSettingsDTO,
         credentials: dict[str, str] | None,
-    ) -> None:
-        """Делегирует форму provider factory."""
-        self._factory(kind).validate(settings, credentials)
+    ) -> ConnectionSettingsReferencesDTO:
+        """Проверяет общую policy manifest и делегирует provider-specific форму."""
+        return self._factory(kind).validate(settings, credentials)
 
     def verifier(
         self, kind: str, credentials: PluginCredentialsAccess, http: PluginHttpTransport
@@ -94,3 +141,24 @@ class PluginRegistry:
     ) -> ReadPublicationPagePlugin:
         """Собирает read реализацию текущего scope."""
         return self._factory(kind).reader(credentials, http)
+
+    def detail_reader(
+        self, kind: str, credentials: PluginCredentialsAccess, http: PluginHttpTransport
+    ) -> ReadPublicationDetailsPlugin:
+        """Проверяет capability до создания runtime для выбранного ресурса."""
+        factory = self._factory(kind)
+        if "read_publication_details" not in factory.manifest.capabilities:
+            raise ChannelsUnavailableError("publication_details_unsupported")
+        return factory.detail_reader(credentials, http)
+
+    def content_updater(
+        self,
+        kind: str,
+        credentials: PluginCredentialsAccess,
+        http: PluginContentHttpTransport,
+    ) -> ContentUpdatePlugin:
+        """Разрешает capability без ветвления общего ядра по платформе."""
+        factory = self._factory(kind)
+        if "preview_content_update" not in factory.manifest.capabilities:
+            raise ChannelsUnavailableError("content_update_unsupported")
+        return factory.content_updater(credentials, http)

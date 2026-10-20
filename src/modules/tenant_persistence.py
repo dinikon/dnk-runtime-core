@@ -109,3 +109,12 @@ import src.modules.channels.infrastructure.persistence.models.channel  # noqa: F
 import src.modules.channels.infrastructure.persistence.models.connection  # noqa: F401
 import src.modules.channels.infrastructure.persistence.models.sync_run  # noqa: F401
 import src.modules.channels.infrastructure.persistence.models.external_publication  # noqa: F401
+
+import src.modules.channels.infrastructure.persistence.models.product_representation  # noqa: F401
+import src.modules.channels.infrastructure.persistence.models.external_binding  # noqa: F401
+import src.modules.channels.infrastructure.persistence.models.catalog_creation_request  # noqa: F401
+
+import src.modules.channels.infrastructure.persistence.models.publication_import  # noqa: F401
+
+import src.modules.channels.infrastructure.persistence.models.content_update  # noqa: F401
+import src.modules.channels.infrastructure.persistence.models.content_update_item  # noqa: F401

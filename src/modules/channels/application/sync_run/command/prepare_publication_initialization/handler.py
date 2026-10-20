@@ -51,8 +51,7 @@ class PreparePublicationInitializationHandler:
             ReadPublicationPageInputDTO(
                 ResourceSettingsDTO(
                     connection.settings.endpoint,
-                    connection.settings.locales,
-                    connection.settings.currency,
+                    connection.settings.options,
                 ),
                 connection.resource_identity,
                 dict(probe.checkpoint),

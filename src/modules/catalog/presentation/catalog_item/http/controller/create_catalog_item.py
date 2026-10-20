@@ -1,3 +1,10 @@
+from src.modules.catalog.application.catalog_item.creation_values import (
+    CreateCatalogItemValues,
+    CreateCatalogItemTranslation,
+)
+from src.modules.catalog.domain.catalog_item.value_object.stock import (
+    StockSpecificationVO,
+)
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from src.modules.identity.presentation.auth.depends import (
@@ -40,7 +47,36 @@ async def create_catalog_item(
             CreateCatalogItemCommand(
                 tenant_id=EntityIdVO.from_value(principal.tenant_id),
                 actor_id=EntityIdVO.from_value(principal.user_id),
-                virtual=payload.virtual,
+                product=CreateCatalogItemValues(
+                    product_type_code=payload.product_type_code,
+                    virtual=payload.virtual,
+                    status=payload.status,
+                    sku=payload.sku,
+                    price_specification=(
+                        payload.price_specification.to_vo()
+                        if payload.price_specification
+                        else None
+                    ),
+                    stock=(
+                        payload.stock.to_vo()
+                        if payload.stock is not None
+                        else StockSpecificationVO()
+                    ),
+                    weight=payload.weight.to_vo() if payload.weight else None,
+                    dimensions=(
+                        payload.dimensions.to_vo() if payload.dimensions else None
+                    ),
+                    translations={
+                        code: CreateCatalogItemTranslation(
+                            value.values, value.expected_schema_version
+                        )
+                        for code, value in payload.translations.items()
+                    },
+                    galleries={
+                        code: value.to_entity()
+                        for code, value in payload.galleries.items()
+                    },
+                ),
             )
         )
     except CatalogNotFoundError as exc:

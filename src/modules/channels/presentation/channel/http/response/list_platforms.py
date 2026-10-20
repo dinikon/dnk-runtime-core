@@ -12,6 +12,7 @@ class ListPlatformsManifestResponse(BaseModel):
     capabilities: tuple[str, ...]
     credentials_schema: dict[str, JsonValue]
     endpoint_schema: dict[str, JsonValue]
+    settings_schema: dict[str, JsonValue]
 
 
 class ListPlatformsResponse(BaseModel):

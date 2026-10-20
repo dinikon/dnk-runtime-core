@@ -1,3 +1,4 @@
+from src.modules.channels.domain.external_publication.value_object.core import JsonValue
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -10,8 +11,7 @@ class GetConnectionResultDTO:
     connection_id: UUID
     revision: int
     endpoint: str
-    locales: tuple[str, ...]
-    currency: str | None
+    settings: dict[str, JsonValue]
     resource_identity: str | None
     verification_status: str
     verification_job_id: UUID | None

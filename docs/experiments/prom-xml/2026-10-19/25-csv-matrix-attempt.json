@@ -1,0 +1,140 @@
+{
+  "test": "25-csv-matrix",
+  "file": "09-cases-create-update.csv",
+  "sha256": "62beac990e106252f05c2e1fec7c99b5208de0505089b85cec215e089a1d34f3",
+  "transport": "authenticated Prom cabinet; local file upload",
+  "attempt_time_kyiv": "2026-10-19 21:31",
+  "preflight_at": "2026-10-19T18:31:15.207297+00:00",
+  "readback_at": "2026-10-19T18:33:28.443263+00:00",
+  "settings": {
+    "only_update_checkbox": false,
+    "force_update": false,
+    "only_available": false,
+    "mark_missing_product_as": "none",
+    "updated_fields": [
+      "name",
+      "description",
+      "name_ua",
+      "description_ua"
+    ],
+    "periodic_update": false
+  },
+  "import_id": null,
+  "http_status": null,
+  "assessment": "launch_rejected_before_case_processing_no_import_id",
+  "visible_error": "В данный момент действует ограничение на запуск одновременных импортов. Запуск возможен после завершения или отмены предыдущего импорта.",
+  "cabinet_import_info_read": {
+    "source": "Authenticated same-origin GET /cms/import_service/api/import_infos; visible console output",
+    "http_status": 200,
+    "unfinished_imports_in_returned_list": [],
+    "previous_import": {
+      "id": "6ad6593d50712db41db1de41",
+      "current_state": "COMPLETED",
+      "finished": true,
+      "date_created": "2026-10-19T17:54:05+00:00"
+    }
+  },
+  "blocker_interpretation": {
+    "exact_backend_cause": "not_exposed_by_generic_cabinet_error",
+    "possible_causes": [
+      "Documented two-hour spacing after ten manual imports per day",
+      "Temporary Prom load restriction"
+    ],
+    "frequency_limit_source": "https://support.prom.ua/hc/uk/articles/360004963478",
+    "next_attempt_reference_kyiv": "2026-10-19 22:54:05",
+    "reference_is_guaranteed_unlock_time": false
+  },
+  "verified_after_rejection": {
+    "existing_test_products_unchanged": [
+      "3239744864",
+      "3239759991",
+      "3239767291",
+      "3239827664",
+      "3240166617",
+      "3240166618"
+    ],
+    "all_existing_test_products_hidden": true,
+    "external_lookups_unchanged": true,
+    "unknown_native_ids_absent": true,
+    "account_product_ids_unchanged": true,
+    "account_product_count": 34,
+    "new_matrix_markers": [],
+    "product_writes_performed": false,
+    "cancel_request_performed": false
+  },
+  "cases": [
+    {
+      "phase": "09",
+      "case": "M01",
+      "status": "not_executed",
+      "reason": "Main launch rejected"
+    },
+    {
+      "phase": "09",
+      "case": "M02",
+      "status": "not_executed",
+      "reason": "Main launch rejected"
+    },
+    {
+      "phase": "09",
+      "case": "M03",
+      "status": "not_executed",
+      "reason": "Main launch rejected"
+    },
+    {
+      "phase": "09",
+      "case": "M04",
+      "status": "not_executed",
+      "reason": "Main launch rejected"
+    },
+    {
+      "phase": "09",
+      "case": "M05",
+      "status": "not_executed",
+      "reason": "Main launch rejected"
+    },
+    {
+      "phase": "09",
+      "case": "M06",
+      "status": "not_executed",
+      "reason": "Main launch rejected"
+    },
+    {
+      "phase": "09",
+      "case": "M07",
+      "status": "not_executed",
+      "reason": "Main launch rejected"
+    },
+    {
+      "phase": "10",
+      "case": "M01",
+      "status": "not_executed",
+      "reason": "Stage-09 creation not executed; repeat preconditions unmet"
+    },
+    {
+      "phase": "10",
+      "case": "M02",
+      "status": "not_executed",
+      "reason": "Stage-09 creation not executed; repeat preconditions unmet"
+    },
+    {
+      "phase": "10",
+      "case": "M03",
+      "status": "not_executed",
+      "reason": "Stage-09 creation not executed; repeat preconditions unmet"
+    },
+    {
+      "phase": "11",
+      "case": "G01",
+      "status": "not_executed",
+      "reason": "Not submitted while account-level launch restriction is unresolved"
+    },
+    {
+      "phase": "11",
+      "case": "G02",
+      "status": "not_executed",
+      "reason": "Not submitted while account-level launch restriction is unresolved"
+    }
+  ],
+  "automatic_retry_scheduled": false
+}

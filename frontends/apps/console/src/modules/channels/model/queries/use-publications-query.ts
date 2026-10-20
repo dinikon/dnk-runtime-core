@@ -1,9 +1,5 @@
 import { computed, toValue, type MaybeRefOrGetter } from "vue";
-import {
-  type UseQueryReturnType,
-  useQuery,
-  keepPreviousData,
-} from "@tanstack/vue-query";
+import { type UseQueryReturnType, useQuery } from "@tanstack/vue-query";
 import type { PublicationsPage, PublicationsFilters } from "../channels.types";
 import type { ChannelsApiError } from "../../api/channels.error";
 import { channelsApi } from "../../api/channels.api";
@@ -24,7 +20,11 @@ export function usePublicationsQuery(
     enabled: computed(() => ctx.enabled.value && !!toValue(id)),
     retry: false,
     refetchIntervalInBackground: false,
-    placeholderData: keepPreviousData,
+    placeholderData: (previous, query) =>
+      query?.queryKey[1] === ctx.scope.value &&
+      query?.queryKey[3] === toValue(id)
+        ? previous
+        : undefined,
     refetchInterval: computed(() => (toValue(poll) ? 3000 : false)),
   });
 }

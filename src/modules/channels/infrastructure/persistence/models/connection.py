@@ -1,3 +1,4 @@
+from src.modules.channels.domain.external_publication.value_object.core import JsonValue
 from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
@@ -10,6 +11,10 @@ class ConnectionModel(TenantBase):
 
     __tablename__ = "channel_connections"
     __table_args__ = (
+        sa.CheckConstraint(
+            "jsonb_typeof(settings) = 'object'",
+            name="ck_channel_connections_settings_object",
+        ),
         sa.UniqueConstraint("channel_id", name="uq_channel_connections_channel"),
         sa.UniqueConstraint("resource_key", name="uq_channel_connections_resource"),
         sa.CheckConstraint("generation >= 0", name="ck_channel_connections_generation"),
@@ -19,8 +24,7 @@ class ConnectionModel(TenantBase):
         sa.UUID(), sa.ForeignKey("tenant.channels.id"), nullable=False
     )
     endpoint: Mapped[str] = mapped_column(sa.String(2048), nullable=False)
-    locales: Mapped[list[str]] = mapped_column(JSONB(), nullable=False)
-    currency: Mapped[str | None] = mapped_column(sa.String(3), nullable=True)
+    settings: Mapped[dict[str, JsonValue]] = mapped_column(JSONB(), nullable=False)
     credentials_ciphertext: Mapped[str] = mapped_column(sa.Text(), nullable=False)
     candidate_ciphertext: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
     resource_identity: Mapped[str | None] = mapped_column(

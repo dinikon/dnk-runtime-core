@@ -1,7 +1,4 @@
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
-from dataclasses import asdict
-from hashlib import sha256
-import json
 from src.modules.channels.application.sync_run.command.apply_publication_initialization.command import (
     ApplyPublicationInitializationCommand,
 )
@@ -18,9 +15,6 @@ from src.modules.channels.domain.external_publication.repository import (
 )
 from src.modules.channels.domain.external_publication.aggregate import (
     ExternalPublication,
-)
-from src.modules.channels.domain.external_publication.value_object.core import (
-    PublicationCoreVO,
 )
 from src.modules.channels.domain.error import (
     ChannelsConflictError,
@@ -79,30 +73,18 @@ class ApplyPublicationInitializationHandler:
             return ApplyPublicationInitializationResultDTO(True, False, run.sequence)
         processed = 0
         for row in outcome.publications:
-            core = PublicationCoreVO(**asdict(row.core))
-            fingerprint = sha256(
-                json.dumps(
-                    {
-                        "core": asdict(row.core),
-                        "version": row.extension_version,
-                        "extensions": row.extensions,
-                    },
-                    sort_keys=True,
-                    default=str,
-                    ensure_ascii=False,
-                ).encode()
-            ).hexdigest()
             publication = await self.publications.find(
-                run.connection_id, core.resource_type, core.external_id
+                run.connection_id, row.resource_type, row.external_id
             )
             if publication is None:
                 publication = ExternalPublication.create(
                     EntityIdVO.from_value(self.identifiers.new()),
                     run.connection_id,
-                    core,
-                    row.extension_version,
-                    row.extensions,
-                    fingerprint,
+                    row.resource_type,
+                    row.external_id,
+                    row.payload,
+                    row.meta,
+                    row.source_updated_at,
                     run.id,
                     self.clock.now(),
                 )
@@ -111,10 +93,11 @@ class ApplyPublicationInitializationHandler:
             else:
                 processed += int(publication.last_import_run_id != run.id)
                 publication.observe(
-                    core,
-                    row.extension_version,
-                    row.extensions,
-                    fingerprint,
+                    row.resource_type,
+                    row.external_id,
+                    row.payload,
+                    row.meta,
+                    row.source_updated_at,
                     run.id,
                     self.clock.now(),
                 )

@@ -1,7 +1,17 @@
-from dataclasses import dataclass, field
+from src.modules.channels.application.external_publication.identity_contract import (
+    PublicationIdentityPolicyDTO,
+)
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from src.modules.channels.domain.external_publication.value_object.core import JsonValue
+
+from src.modules.channels.domain.external_publication.value_object.payload import (
+    PublicationPayloadVO,
+)
+from src.modules.channels.domain.external_publication.value_object.meta import (
+    PublicationMetaVO,
+)
 
 type ProviderJsonValue = str | int | float | Decimal | bool | None | list[
     ProviderJsonValue
@@ -13,8 +23,7 @@ class ResourceSettingsDTO:
     """Передаёт immutable параметры текущего внешнего ресурса."""
 
     endpoint: str
-    locales: tuple[str, ...]
-    currency: str | None
+    options: dict[str, JsonValue]
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,9 +72,25 @@ class PublicationCoreDTO:
 class ObservedPublicationDTO:
     """Передаёт одну проверенную проекцию платформы без ORM и токенов."""
 
-    core: PublicationCoreDTO
-    extension_version: str
-    extensions: dict[str, JsonValue]
+    resource_type: str
+    external_id: str
+    payload: PublicationPayloadVO
+    meta: PublicationMetaVO
+    source_updated_at: datetime | None
+
+    @property
+    def core(self) -> PublicationCoreDTO:
+        """Возвращает временную типизированную проекцию для details/Draft."""
+        return PublicationCoreDTO(
+            **asdict(
+                self.payload.to_core(
+                    self.resource_type,
+                    self.external_id,
+                    self.source_updated_at,
+                    self.meta.read_issues,
+                )
+            )
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +113,53 @@ class ReadPublicationPageOutcomeDTO:
 
 
 @dataclass(frozen=True, slots=True)
+class ReadPublicationDetailsInputDTO:
+    """Адресует одну публикацию проверенного ресурса для полного чтения."""
+
+    settings: ResourceSettingsDTO
+    resource_identity: str
+    resource_type: str
+    external_id: str
+    provider_context: dict[str, JsonValue] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class PublicationTranslationDTO:
+    """Передаёт реально прочитанный текст одной настроенной локали."""
+
+    locale: str
+    title: str | None
+    body: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class PublicationImageDTO:
+    """Описывает изображение источника без файлового ID нашей платформы."""
+
+    id: str
+    url: str
+    alt: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class ReadPublicationDetailsOutcomeDTO:
+    """Возвращает содержимое для явного импорта, отдельно от списка публикаций."""
+
+    core: PublicationCoreDTO
+    translations: tuple[PublicationTranslationDTO, ...]
+    images: tuple[PublicationImageDTO, ...]
+    warnings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class ConnectionSettingsReferencesDTO:
+    """Передаёт используемые настройками коды для проверки через владельца справочников."""
+
+    locales: tuple[str, ...] = ()
+    currencies: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class PluginManifestDTO:
     """Описывает реализованные возможности и форму конфигурации плагина."""
 
@@ -98,6 +170,8 @@ class PluginManifestDTO:
     capabilities: tuple[str, ...]
     credentials_schema: dict[str, JsonValue]
     endpoint_schema: dict[str, JsonValue]
+    settings_schema: dict[str, JsonValue]
+    publication_identity: PublicationIdentityPolicyDTO | None = None
 
 
 @dataclass(frozen=True, slots=True)

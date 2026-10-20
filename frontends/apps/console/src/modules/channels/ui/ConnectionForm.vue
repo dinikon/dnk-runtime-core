@@ -7,10 +7,6 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import type {
@@ -18,6 +14,7 @@ import type {
   Connection,
   ConnectionReferences,
   ConnectionSettings,
+  JsonValue,
 } from "../model/channels.types";
 import {
   connectionFormValues,
@@ -25,6 +22,11 @@ import {
   settingsSignature,
   validateConnectionForm,
 } from "../model/connection-form";
+import SchemaSettingsFields from "./SchemaSettingsFields.vue";
+function setSettings(value: JsonValue | undefined): void {
+  if (value && typeof value === "object" && !Array.isArray(value))
+    values.settings = value;
+}
 const props = defineProps<{
   platform: Platform;
   connection: Connection | undefined;
@@ -92,8 +94,7 @@ watch(
     if (!props.connection) return;
     const current = settingsSignature({
       endpoint: props.connection.endpoint,
-      locales: props.connection.locales,
-      currency: props.connection.currency,
+      options: props.connection.settings,
     });
     if (current === baseline) draftRevision.value = revision;
     else serverChanged.value = true;
@@ -105,8 +106,7 @@ function acceptRevision(): void {
   baseline = props.connection
     ? settingsSignature({
         endpoint: props.connection.endpoint,
-        locales: props.connection.locales,
-        currency: props.connection.currency,
+        options: props.connection.settings,
       })
     : baseline;
 }
@@ -152,80 +152,18 @@ function submit(): void {
               : platform.endpointSchema.description
           }}</FieldDescription></Field
         >
-        <div class="grid gap-5 sm:grid-cols-2">
-          <Field
-            ><FieldLabel for="connection-locale-primary"
-              >Основной язык</FieldLabel
-            ><NativeSelect
-              id="connection-locale-primary"
-              v-model="values.primaryLocale"
-              required
-              ><NativeSelectOption value="" disabled
-                >Выберите язык</NativeSelectOption
-              ><NativeSelectOption
-                v-if="
-                  values.primaryLocale &&
-                  !references.locales.some(
-                    (l) => l.code === values.primaryLocale,
-                  )
-                "
-                :value="values.primaryLocale"
-                >{{ values.primaryLocale }} (недоступен)</NativeSelectOption
-              ><NativeSelectOption
-                v-for="locale in references.locales"
-                :key="locale.code"
-                :value="locale.code"
-                >{{ locale.name }} ({{ locale.code }})</NativeSelectOption
-              ></NativeSelect
-            ></Field
-          ><Field
-            ><FieldLabel for="connection-locale-secondary"
-              >Второй язык</FieldLabel
-            ><NativeSelect
-              id="connection-locale-secondary"
-              v-model="values.secondaryLocale"
-              ><NativeSelectOption value="">Не использовать</NativeSelectOption
-              ><NativeSelectOption
-                v-if="
-                  values.secondaryLocale &&
-                  !references.locales.some(
-                    (l) => l.code === values.secondaryLocale,
-                  )
-                "
-                :value="values.secondaryLocale"
-                >{{ values.secondaryLocale }} (недоступен)</NativeSelectOption
-              ><NativeSelectOption
-                v-for="locale in references.locales"
-                :key="locale.code"
-                :value="locale.code"
-                >{{ locale.name }} ({{ locale.code }})</NativeSelectOption
-              ></NativeSelect
-            ></Field
-          >
-        </div>
-        <Field
-          ><FieldLabel for="connection-currency">Валюта ресурса</FieldLabel
-          ><NativeSelect id="connection-currency" v-model="values.currency"
-            ><NativeSelectOption value="">Не задана</NativeSelectOption
-            ><NativeSelectOption
-              v-if="
-                values.currency &&
-                !references.currencies.some((c) => c.code === values.currency)
-              "
-              :value="values.currency"
-              >{{ values.currency }} (недоступна)</NativeSelectOption
-            ><NativeSelectOption
-              v-for="currency in references.currencies"
-              :key="currency.code"
-              :value="currency.code"
-              >{{ currency.code }} · {{ currency.name }}</NativeSelectOption
-            ></NativeSelect
-          ><FieldDescription
-            >Языки и валюта задаются явно. Автоматический перевод не
-            выполняется.</FieldDescription
-          ></Field
-        ></FieldGroup
-      >
+        <SchemaSettingsFields
+          :schema="platform.settingsSchema"
+          :model-value="values.settings"
+          path="connection-settings"
+          :references="references"
+          @update:model-value="setSettings"
+        />
+        <FieldDescription>
+          Выберите настройки магазина. Автоматический перевод и пересчёт валюты
+          не выполняются.
+        </FieldDescription>
+      </FieldGroup>
       <section class="flex flex-col gap-4">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -280,10 +218,17 @@ function submit(): void {
       ><AlertTitle>Настройки изменились на сервере</AlertTitle
       ><AlertDescription
         ><p>
-          Актуально: {{ connection?.endpoint }} ·
-          {{ connection?.locales.join(", ") }} ·
-          {{ connection?.currency ?? "Валюта не задана" }}. Ваш ввод сохранён.
+          Актуально: {{ connection?.endpoint }} · параметры подключения
+          обновлены. Ваш ввод сохранён.
         </p>
+        <fieldset v-if="connection" disabled class="w-full">
+          <SchemaSettingsFields
+            :schema="platform.settingsSchema"
+            :model-value="connection.settings"
+            path="connection-current-settings"
+            :references="references"
+          />
+        </fieldset>
         <Button
           type="button"
           variant="outline"

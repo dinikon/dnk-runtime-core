@@ -1,5 +1,41 @@
 import type { ChannelsFilters, PublicationsFilters } from "./channels.types";
+import type {
+  CatalogCandidatesInput,
+  DraftPreviewInput,
+} from "./catalog-links.types";
 export const channelsKeys = {
+  contentUpdate: (scope: string, id: string): readonly string[] => [
+    "channels",
+    scope,
+    "content-update",
+    id,
+  ],
+  contentUpdates: (scope: string, id: string): readonly string[] => [
+    "channels",
+    scope,
+    "content-updates",
+    id,
+  ],
+  publicationImport: (scope: string, id: string): readonly string[] => [
+    "channels",
+    scope,
+    "publication-import",
+    id,
+  ],
+  candidates: (
+    scope: string,
+    input: CatalogCandidatesInput,
+  ): readonly unknown[] => ["channels", scope, "catalog-candidates", input],
+  draftPreview: (
+    scope: string,
+    input: DraftPreviewInput,
+  ): readonly unknown[] => ["channels", scope, "draft-preview", input],
+  publicationSnapshot: (scope: string, id: string): readonly string[] => [
+    "channels",
+    scope,
+    "publication-snapshot",
+    id,
+  ],
   scope: (scope: string): readonly string[] => ["channels", scope],
   platforms: (scope: string): readonly string[] => [
     "channels",

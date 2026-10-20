@@ -15,7 +15,7 @@ def optional_decimal(value: object, warnings: list[str], name: str) -> Decimal |
         number = Decimal(str(value))
         if (
             not number.is_finite()
-            or abs(number) >= Decimal("1e18")
+            or number.copy_abs() >= Decimal("1e18")
             or number.as_tuple().exponent < -12
         ):
             raise ValueError("range")

@@ -1,3 +1,17 @@
+from dataclasses import asdict
+from src.modules.channels.domain.external_publication.value_object.core import (
+    PublicationCoreVO,
+)
+from src.modules.channels.domain.external_publication.value_object.payload import (
+    PublicationPayloadVO,
+)
+from src.modules.channels.domain.external_publication.value_object.meta import (
+    PublicationMetaVO,
+)
+from src.modules.channels.infrastructure.plugin.woocommerce.promotion import (
+    promotion_period,
+)
+from src.modules.channels.infrastructure.plugin.woocommerce.manifest import WooSettings
 from src.modules.channels.application.plugin_contract import (
     ResourceSettingsDTO,
     PublicationCoreDTO,
@@ -24,6 +38,7 @@ def normalize_product(
     parent_id: int | None = None,
 ) -> ObservedPublicationDTO:
     """Нормализует simple/variable/variation без создания товаров Catalog."""
+    parsed = WooSettings.model_validate(settings.options)
     identifier = native_id(row.get("id"))
     warnings = []
     price = optional_decimal(row.get("regular_price"), warnings, "price")
@@ -60,7 +75,7 @@ def normalize_product(
         safe_text(row.get("sku"), 512, warnings, "external_sku"),
         price,
         sale,
-        currency_code(settings.currency, warnings),
+        currency_code(parsed.currency, warnings),
         quantity,
         {
             "instock": "in_stock",
@@ -71,11 +86,20 @@ def normalize_product(
             "unknown",
         ),
         title,
-        settings.locales[0],
+        parsed.locales[0],
         safe_url(image.get("src"), warnings),
         observed_time(row.get("date_modified_gmt"), warnings, utc_field=True),
         tuple(warnings),
     )
     return ObservedPublicationDTO(
-        core, "woocommerce.read.v1", extension.model_dump(mode="json")
+        core.resource_type,
+        core.external_id,
+        PublicationPayloadVO.from_core(
+            PublicationCoreVO(**asdict(core)),
+            promotion=promotion_period(extension),
+        ),
+        PublicationMetaVO.create(
+            "woocommerce.read.v2", extension.model_dump(mode="json"), tuple(warnings)
+        ),
+        core.source_updated_at,
     )

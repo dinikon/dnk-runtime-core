@@ -10,7 +10,7 @@ from src.modules.channels.application.port.plugin_services import PluginCallErro
 
 
 class ScopedHttpTransport:
-    """Ограничивает GET текущим HTTPS origin, проверенным IP и размером ответа."""
+    """Ограничивает чтение и запись текстов текущим HTTPS origin и проверенным IP."""
 
     def __init__(
         self, endpoint: str, *, max_bytes: int = 4 * 1024 * 1024, timeout: float = 30
@@ -28,6 +28,34 @@ class ScopedHttpTransport:
         *,
         query: dict[str, str] | None = None,
         headers: dict[str, str] | None = None,
+    ) -> HttpResultDTO:
+        """Читает ограниченный JSON без redirects и автоматического повторения."""
+        return await self._request("GET", path, query=query, headers=headers)
+
+    async def put(
+        self,
+        path: str,
+        *,
+        payload: dict[str, str],
+        headers: dict[str, str] | None = None,
+    ) -> HttpResultDTO:
+        """Запрещает произвольные поля и создание: доступно только изменение текстов."""
+        if set(payload) != {"name", "description"} or any(
+            not isinstance(value, str) for value in payload.values()
+        ):
+            raise PluginCallError("invalid_content_payload")
+        if len(json.dumps(payload).encode()) > 1024 * 1024:
+            raise PluginCallError("invalid_content_payload")
+        return await self._request("PUT", path, headers=headers, payload=payload)
+
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        query: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
+        payload: dict[str, str] | None = None,
     ) -> HttpResultDTO:
         """Закрепляет публичный IP и TLS SNI; не возвращает тела ошибок в логи."""
         if (
@@ -60,20 +88,23 @@ class ScopedHttpTransport:
                     "Host": original.netloc.decode("ascii"),
                 }
                 for key, value in (headers or {}).items():
-                    if key.lower() not in ("authorization", "accept"):
+                    if key.lower() not in ("authorization", "accept", "x-language"):
                         raise PluginCallError("invalid_request_header")
                     safe_headers[key] = value
                 async with httpx.AsyncClient(
                     timeout=self.timeout, trust_env=False, follow_redirects=False
                 ) as client:
                     async with client.stream(
-                        "GET",
+                        method,
                         original.copy_with(host=addresses[0]),
                         headers=safe_headers,
+                        json=payload,
                         extensions={"sni_hostname": original.host},
                     ) as response:
                         if response.status_code in (401, 403):
                             raise PluginCallError("permission_denied")
+                        if response.status_code == 404:
+                            raise PluginCallError("publication_not_found")
                         if response.status_code == 429 or response.status_code >= 500:
                             raise PluginCallError(
                                 "provider_temporarily_unavailable", retryable=True

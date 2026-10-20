@@ -1,9 +1,12 @@
 from unittest.mock import AsyncMock, patch
+import asyncio
+import socket
+import httpx
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 
 "Предметные инварианты и контракт read-only плагинов Channels."
 from dataclasses import fields
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 import unittest
 from uuid import uuid4
@@ -64,7 +67,7 @@ class ChannelsDomainTests(unittest.TestCase):
             self.now,
         )
         self.settings = ConnectionSettingsVO(
-            "https://shop.example", ("uk", "ru"), "UAH"
+            "https://shop.example", {"locales": ["uk"], "currency": "UAH"}
         )
 
     def test_single_connection_and_default_off(self) -> None:
@@ -199,7 +202,9 @@ class ChannelsDomainTests(unittest.TestCase):
 
     def test_core_keeps_decimal_zero_and_unknown_values(self) -> None:
         """Core различает отсутствующую цену, нулевое количество и плохие optional поля."""
-        settings = ResourceSettingsDTO("https://shop.example", ("uk", "ru"), "UAH")
+        settings = ResourceSettingsDTO(
+            "https://shop.example", {"locales": ["uk"], "currency": "UAH"}
+        )
         row = woo_normalize(
             {
                 "id": 10,
@@ -237,17 +242,22 @@ class ChannelsDomainTests(unittest.TestCase):
                 "currency": "₴",
                 "discount": {"value": 10, "type": "percent"},
             },
-            settings,
+            ResourceSettingsDTO(
+                "https://my.prom.ua", {"locales": ["ru"], "currency": "UAH"}
+            ),
+            observed_on=date(2026, 10, 18),
         )
         self.assertEqual(prom.core.external_id, "99")
         self.assertIsNone(prom.core.sale_price)
         self.assertIsNone(prom.core.currency)
         self.assertIsNone(prom.core.quantity)
-        self.assertIn("sale_price_semantics_unverified", prom.core.warnings)
+        self.assertIn("invalid_sale_price", prom.core.warnings)
 
     def test_prom_stock_quantity_preserves_zero_and_decimal_precision(self) -> None:
         """Исходный остаток сохраняется без округления и независимо от наличия."""
-        settings = ResourceSettingsDTO("https://my.prom.ua", ("uk",), "UAH")
+        settings = ResourceSettingsDTO(
+            "https://my.prom.ua", {"locales": list(("ru",)), "currency": "UAH"}
+        )
         for source, expected in (
             (0, Decimal(0)),
             (17, Decimal(17)),
@@ -258,6 +268,7 @@ class ChannelsDomainTests(unittest.TestCase):
                 publication = prom_normalize(
                     {"id": 99, "quantity_in_stock": source, "presence": "available"},
                     settings,
+                    observed_on=date(2026, 10, 18),
                 )
                 self.assertEqual(publication.core.quantity, expected)
                 self.assertEqual(publication.core.stock_status, "in_stock")
@@ -266,7 +277,9 @@ class ChannelsDomainTests(unittest.TestCase):
 
     def test_prom_unavailable_quantity_is_not_inferred_from_availability(self) -> None:
         """Отсутствующий остаток не вычисляется из наличия и минимального заказа."""
-        settings = ResourceSettingsDTO("https://my.prom.ua", ("uk",), "UAH")
+        settings = ResourceSettingsDTO(
+            "https://my.prom.ua", {"locales": list(("ru",)), "currency": "UAH"}
+        )
         for extra in ({}, {"quantity_in_stock": None}, {"quantity_in_stock": ""}):
             with self.subTest(extra=extra):
                 publication = prom_normalize(
@@ -278,17 +291,22 @@ class ChannelsDomainTests(unittest.TestCase):
                         **extra,
                     },
                     settings,
+                    observed_on=date(2026, 10, 18),
                 )
                 self.assertIsNone(publication.core.quantity)
                 self.assertIn("quantity_not_exposed", publication.core.warnings)
 
     def test_prom_invalid_quantity_keeps_publication_with_warning(self) -> None:
         """Повреждённое optional количество не превращается в ноль или отказ страницы."""
-        settings = ResourceSettingsDTO("https://my.prom.ua", ("uk",), "UAH")
+        settings = ResourceSettingsDTO(
+            "https://my.prom.ua", {"locales": list(("ru",)), "currency": "UAH"}
+        )
         for source in (True, False, "bad", "NaN", "Infinity", "1e18", "1e-13"):
             with self.subTest(source=source):
                 publication = prom_normalize(
-                    {"id": 99, "quantity_in_stock": source}, settings
+                    {"id": 99, "quantity_in_stock": source},
+                    settings,
+                    observed_on=date(2026, 10, 18),
                 )
                 self.assertIsNone(publication.core.quantity)
                 self.assertIn("invalid_quantity", publication.core.warnings)
@@ -329,9 +347,75 @@ class RepeatingTransport:
 class ChannelsPluginTests(unittest.IsolatedAsyncioTestCase):
     """Проверяет bounded cursors и сетевые ограничения без реального кабинета."""
 
+    async def test_scoped_transport_forwards_explicit_language_header(self) -> None:
+        """SDK разрешает язык ответа, сохраняя закреплённый origin и публичный IP."""
+
+        def response(request: httpx.Request) -> httpx.Response:
+            """Проверяет заголовки без настоящего сетевого запроса."""
+            self.assertEqual(request.headers["X-LANGUAGE"], "ru")
+            self.assertEqual(request.headers["Host"], "my.prom.ua")
+            self.assertEqual(request.url.host, "8.8.8.8")
+            return httpx.Response(200, json={"products": []})
+
+        client = httpx.AsyncClient(transport=httpx.MockTransport(response))
+        with (
+            patch.object(
+                asyncio.get_running_loop(),
+                "getaddrinfo",
+                AsyncMock(
+                    return_value=[
+                        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443)),
+                    ]
+                ),
+            ),
+            patch(
+                "src.modules.channels.infrastructure.http.transport.httpx.AsyncClient",
+                return_value=client,
+            ),
+        ):
+            result = await ScopedHttpTransport("https://my.prom.ua").get(
+                "/api/v1/products/list", headers={"X-LANGUAGE": "ru"}
+            )
+        self.assertEqual(result.body, {"products": []})
+
+    async def test_prom_requests_the_configured_primary_language(self) -> None:
+        """Язык названия не зависит от украинского default API Prom."""
+        settings = ResourceSettingsDTO(
+            "https://my.prom.ua", {"locales": list(("ru", "uk")), "currency": "UAH"}
+        )
+        transport = RepeatingTransport()
+        with patch.object(
+            transport,
+            "get",
+            AsyncMock(
+                return_value=HttpResultDTO(
+                    {"products": [{"id": 10, "name": "Название"}]}, {}
+                )
+            ),
+        ) as get:
+            outcome = await PromReadPublicationPagePlugin(
+                CredentialsFixture(), transport
+            ).execute(
+                ReadPublicationPageInputDTO(
+                    settings,
+                    "root_group:100",
+                    {
+                        "version": 1,
+                        "stage": "products",
+                        "groups": [100],
+                        "group_index": 0,
+                        "last_id": None,
+                    },
+                )
+            )
+            self.assertEqual(get.await_args.kwargs["headers"]["X-LANGUAGE"], "ru")
+            self.assertEqual(outcome.publications[0].core.title_locale, "ru")
+
     async def test_woocommerce_keys_are_sent_only_to_woocommerce_api(self) -> None:
         """Публичный WordPress root может отклонять Woo Basic, хотя ключи рабочие."""
-        settings = ResourceSettingsDTO("https://shop.example", ("uk",), "UAH")
+        settings = ResourceSettingsDTO(
+            "https://shop.example", {"locales": list(("uk",)), "currency": "UAH"}
+        )
         transport = RepeatingTransport()
 
         async def response(
@@ -360,7 +444,9 @@ class ChannelsPluginTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_woocommerce_public_root_does_not_verify_rejected_keys(self) -> None:
         """Доступность публичного WordPress не заменяет проверку прав на товары."""
-        settings = ResourceSettingsDTO("https://shop.example", ("uk",), "UAH")
+        settings = ResourceSettingsDTO(
+            "https://shop.example", {"locales": list(("uk",)), "currency": "UAH"}
+        )
         transport = RepeatingTransport()
         with patch.object(
             transport,
@@ -380,7 +466,9 @@ class ChannelsPluginTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_prom_verification_resolves_zero_scope_to_real_root(self) -> None:
         """Нулевой scope не становится общей identity разных магазинов."""
-        settings = ResourceSettingsDTO("https://my.prom.ua", ("uk",), "UAH")
+        settings = ResourceSettingsDTO(
+            "https://my.prom.ua", {"locales": list(("ru",)), "currency": "UAH"}
+        )
         transport = RepeatingTransport()
         for root in (1000, 2000):
             with (
@@ -419,7 +507,9 @@ class ChannelsPluginTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_prom_verification_keeps_positive_root_identity(self) -> None:
         """Положительная identity ответа не требует дополнительных запросов."""
-        settings = ResourceSettingsDTO("https://my.prom.ua", ("uk",), "UAH")
+        settings = ResourceSettingsDTO(
+            "https://my.prom.ua", {"locales": list(("ru",)), "currency": "UAH"}
+        )
         transport = RepeatingTransport()
         with patch.object(
             transport,
@@ -440,7 +530,9 @@ class ChannelsPluginTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_prom_verification_rejects_invalid_root_group(self) -> None:
         """Разрешение нуля не принимает bool, строку, дробь и отсутствующий ID."""
-        settings = ResourceSettingsDTO("https://my.prom.ua", ("uk",), "UAH")
+        settings = ResourceSettingsDTO(
+            "https://my.prom.ua", {"locales": list(("ru",)), "currency": "UAH"}
+        )
         transport = RepeatingTransport()
         for root in (-1, None, False, True, "0", 0.0):
             with (
@@ -462,7 +554,9 @@ class ChannelsPluginTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_prom_zero_scope_requires_unambiguous_real_root(self) -> None:
         """Пустые, неоднозначные и повреждённые группы не подменяются нулём."""
-        settings = ResourceSettingsDTO("https://my.prom.ua", ("uk",), "UAH")
+        settings = ResourceSettingsDTO(
+            "https://my.prom.ua", {"locales": list(("ru",)), "currency": "UAH"}
+        )
         transport = RepeatingTransport()
         for groups in (
             [],
@@ -494,11 +588,13 @@ class ChannelsPluginTests(unittest.IsolatedAsyncioTestCase):
                         CredentialsFixture(), transport
                     ).execute(VerifyConnectionInputDTO(settings))
         with self.assertRaises(PluginCallError):
-            prom_normalize({"id": 0}, settings)
+            prom_normalize({"id": 0}, settings, observed_on=date(2026, 10, 18))
 
     async def test_repeating_woocommerce_page_is_rejected(self) -> None:
         """Плагин не маскирует повтор первой страницы увеличением номера."""
-        settings = ResourceSettingsDTO("https://shop.example", ("uk",), "UAH")
+        settings = ResourceSettingsDTO(
+            "https://shop.example", {"locales": list(("uk",)), "currency": "UAH"}
+        )
         plugin = WooReadPublicationPagePlugin(
             CredentialsFixture(), RepeatingTransport()
         )
@@ -512,7 +608,9 @@ class ChannelsPluginTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_repeating_prom_cursor_is_rejected(self) -> None:
         """Prom last_id монотонен и проверяется по возвращённым IDs."""
-        settings = ResourceSettingsDTO("https://my.prom.ua", ("uk",), "UAH")
+        settings = ResourceSettingsDTO(
+            "https://my.prom.ua", {"locales": list(("ru",)), "currency": "UAH"}
+        )
         plugin = PromReadPublicationPagePlugin(
             CredentialsFixture(), RepeatingTransport()
         )
@@ -535,7 +633,9 @@ class ChannelsPluginTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_provider_cannot_expand_a_bounded_page(self) -> None:
         """Ответ сверх запрошенного лимита не превращается в долгую SQL-порцию."""
-        settings = ResourceSettingsDTO("https://shop.example", ("uk",), "UAH")
+        settings = ResourceSettingsDTO(
+            "https://shop.example", {"locales": list(("uk",)), "currency": "UAH"}
+        )
         for plugin_type, body, identity in (
             (
                 WooReadPublicationPagePlugin,
@@ -554,7 +654,18 @@ class ChannelsPluginTests(unittest.IsolatedAsyncioTestCase):
             ):
                 with self.assertRaises(PluginCallError) as error:
                     await plugin_type(CredentialsFixture(), transport).execute(
-                        ReadPublicationPageInputDTO(settings, identity, {})
+                        ReadPublicationPageInputDTO(
+                            (
+                                ResourceSettingsDTO(
+                                    "https://my.prom.ua",
+                                    {"locales": ["ru"], "currency": "UAH"},
+                                )
+                                if identity.startswith("root_group:")
+                                else settings
+                            ),
+                            identity,
+                            {},
+                        )
                     )
                 self.assertEqual(
                     error.exception.reason_code, "page_size_limit_exceeded"

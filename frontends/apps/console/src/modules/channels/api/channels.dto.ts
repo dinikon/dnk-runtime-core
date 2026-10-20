@@ -1,6 +1,32 @@
 import type {
+  PublicationIdentityState,
+  PublicationIdentitySummary,
+} from "../model/publication-identity.types";
+export interface PublicationIdentityDto {
+  state: PublicationIdentityState;
+  key: string | null;
+  conflict_count: number;
+}
+export interface PublicationIdentitySummaryDto {
+  label: string;
+  total: number;
+  missing: number;
+  duplicate: number;
+  valid: number;
+  duplicate_groups: number;
+  assessment: PublicationIdentitySummary["assessment"];
+  checked_at: string | null;
+  scope_limitations: string[];
+  help_title: string;
+  help_steps: string[];
+  help_url: string;
+  recovery_verified: boolean;
+}
+import type {
   CredentialsSchema,
   StringFieldSchema,
+  SettingsObject,
+  SettingsSchema,
 } from "../model/channels.types";
 export interface ChannelRowDto {
   channel_id: string;
@@ -18,8 +44,7 @@ export interface GetConnectionResponseDto {
   connection_id: string;
   revision: number;
   endpoint: string;
-  locales: string[];
-  currency: string | null;
+  settings: SettingsObject;
   resource_identity: string | null;
   verification_status: string;
   verification_job_id: string | null;
@@ -45,8 +70,12 @@ export interface GetInitializationResponseDto {
   recovery_required: boolean;
 }
 export interface PublicationRowDto {
+  identity?: PublicationIdentityDto | null;
+  catalog_item_id: string | null;
+  binding_id: string | null;
+  representation_id: string | null;
+  representation_revision: number | null;
   publication_id: string;
-  core_version: number;
   connection_id: string;
   resource_type: string;
   external_id: string;
@@ -75,6 +104,7 @@ export interface PlatformManifestDto {
   capabilities: string[];
   credentials_schema: CredentialsSchema;
   endpoint_schema: StringFieldSchema;
+  settings_schema: SettingsSchema;
 }
 export interface ListPlatformsResponseDto {
   items: PlatformManifestDto[];
@@ -98,13 +128,9 @@ export interface GetChannelResponseDto {
   is_paused: boolean | null;
 }
 export interface ListPublicationsResponseDto {
+  identity_summary?: PublicationIdentitySummaryDto | null;
   items: PublicationRowDto[];
   total: number;
-}
-export interface ResourceSettingsDto {
-  endpoint: string;
-  locales: string[];
-  currency: string | null;
 }
 export interface CreateChannelRequestDto {
   name: string;
@@ -117,7 +143,8 @@ export interface CreateChannelResponseDto {
 }
 export interface CreateConnectionRequestDto {
   revision: number;
-  settings: ResourceSettingsDto;
+  endpoint: string;
+  settings: SettingsObject;
   credentials: Record<string, string>;
 }
 export interface CreateConnectionResponseDto {
@@ -128,7 +155,8 @@ export interface CreateConnectionResponseDto {
 }
 export interface UpdateConnectionRequestDto {
   revision: number;
-  settings: ResourceSettingsDto;
+  endpoint: string;
+  settings: SettingsObject;
   credentials?: Record<string, string>;
 }
 export interface UpdateConnectionResponseDto {
