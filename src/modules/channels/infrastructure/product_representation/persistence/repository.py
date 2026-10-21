@@ -66,7 +66,11 @@ class SqlAlchemyProductRepresentationRepository:
         statement = insert(R).values(**Mapper.to_values(representation))
         await self.session.execute(
             statement.on_conflict_do_update(
-                index_elements=["id"], set_={"revision": statement.excluded.revision}
+                index_elements=["id"],
+                set_={
+                    "revision": statement.excluded.revision,
+                    "export_enabled": statement.excluded.export_enabled,
+                },
             )
         )
         # Released bindings are applied first so the unique active index remains valid.

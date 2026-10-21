@@ -75,6 +75,7 @@ MANIFEST = PluginManifestDTO(
         "read_publication_details",
         "preview_content_update",
         "publication_identity_diagnostics",
+        "batch_content_export",
     ),
     PromCredentials.model_json_schema(),
     {

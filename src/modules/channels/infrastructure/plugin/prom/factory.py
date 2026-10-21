@@ -1,3 +1,12 @@
+from src.modules.channels.infrastructure.plugin.prom.batch_export import (
+    PromBatchExportPlugin,
+)
+from src.modules.channels.application.batch_export.plugin_contract import (
+    BatchExportPlugin,
+)
+from src.modules.channels.application.port.plugin_services import (
+    PluginBatchHttpTransport,
+)
 from src.modules.channels.infrastructure.plugin.prom.update_content import (
     PromContentUpdatePlugin,
 )
@@ -91,3 +100,9 @@ class PromPluginFactory:
     ) -> ContentUpdatePlugin:
         """Собирает scoped capability контентного обновления."""
         return PromContentUpdatePlugin(credentials, http)
+
+    def batch_exporter(
+        self, credentials: PluginCredentialsAccess, http: PluginBatchHttpTransport
+    ) -> BatchExportPlugin:
+        """Собирает XML-экспорт на публичных scoped фасадах."""
+        return PromBatchExportPlugin(credentials, http)

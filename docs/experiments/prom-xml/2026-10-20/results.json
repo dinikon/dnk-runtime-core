@@ -1,0 +1,32 @@
+{
+  "date": "2026-10-20",
+  "native_id": 3240302692,
+  "identity_key": "dnk-xlsx-probe-3240302692",
+  "file": "13-existing-texts-with-category.xml",
+  "sha256": "c489df7fa7dbfbb0f5a09f82f9f6fbf5c1ce695ca26ba823e5917739060166c1",
+  "import_file": {
+    "http_status": 200,
+    "id": "6ad7c3a950712db41db1e608",
+    "early_status": "SUCCESS",
+    "early_total": 0,
+    "texts_confirmed_after_late_completion": true
+  },
+  "import_url": {
+    "http_status": 400,
+    "accepted": false,
+    "reason": "concurrent_import_limit"
+  },
+  "changed_fields": [
+    "description",
+    "description_multilang",
+    "name",
+    "name_multilang"
+  ],
+  "unexpected_fields": [],
+  "new_native_ids": [],
+  "removed_native_ids": [],
+  "other_changed_native_ids": [],
+  "four_texts_confirmed": true,
+  "final_visibility": "not_on_display",
+  "public_runtime_test": "deferred_by_owner_until_deployment"
+}

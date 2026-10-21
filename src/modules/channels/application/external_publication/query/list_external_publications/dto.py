@@ -34,6 +34,7 @@ class ListExternalPublicationsItemDTO:
     binding_id: UUID | None = None
     representation_id: UUID | None = None
     representation_revision: int | None = None
+    export_enabled: bool = False
 
     identity: PublicationIdentityDiagnosticDTO | None = None
 

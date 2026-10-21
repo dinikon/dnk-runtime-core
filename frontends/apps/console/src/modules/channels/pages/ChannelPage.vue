@@ -1,4 +1,12 @@
 <script setup lang="ts">
+import BatchExportCard from "../ui/BatchExportCard.vue";
+import BatchExportConfirmDialog from "../ui/BatchExportConfirmDialog.vue";
+import { useBatchExportOverviewQuery } from "../model/queries/use-batch-export-overview-query";
+import { useStartBatchExport } from "../model/mutations/use-start-batch-export";
+import { useUpdateExportSchedule } from "../model/mutations/use-update-export-schedule";
+import { useSetPublicationExport } from "../model/mutations/use-set-publication-export";
+import { useSetOutbound } from "../model/mutations/use-set-outbound";
+import type { ExportScheduleInput } from "../model/batch-export.types";
 import PublicationIdentitySummary from "../ui/PublicationIdentitySummary.vue";
 import { computed, ref, watch, watchEffect, onBeforeUnmount } from "vue";
 import {
@@ -100,6 +108,7 @@ watch(
     () => route.query.stock,
     () => route.query.identity,
     () => route.query.identityKey,
+    () => route.query.export,
   ],
   () => {
     contentSelection.value = [];
@@ -125,6 +134,138 @@ watch(
       });
   },
 );
+const hasBatchExport = computed(
+  () =>
+    platform.data.value?.capabilities.includes("batch_content_export") ?? false,
+);
+const batchOverview = useBatchExportOverviewQuery(
+  context,
+  id,
+  () => hasBatchExport.value && !!channel.data.value?.connectionId,
+);
+const startBatch = useStartBatchExport(context),
+  saveSchedule = useUpdateExportSchedule(context),
+  setExport = useSetPublicationExport(context),
+  setOutbound = useSetOutbound(context);
+const batchError = ref<string | null>(null),
+  batchDialog = ref(false),
+  batchMode = ref<"provider" | "file">("provider"),
+  batchIntent = ref<string | null>(null),
+  scheduleSaveSequence = ref(0),
+  batchDirty = ref(false);
+const batchPending = computed(
+  () =>
+    startBatch.isPending.value ||
+    saveSchedule.isPending.value ||
+    setExport.isPending.value ||
+    setOutbound.isPending.value,
+);
+watch([context.scope, id], () => {
+  batchError.value = null;
+  batchDialog.value = false;
+  batchIntent.value = null;
+  batchDirty.value = false;
+});
+function openBatchDialog(mode: "provider" | "file"): void {
+  if (batchPending.value) return;
+  if (batchMode.value !== mode) batchIntent.value = null;
+  batchMode.value = mode;
+  batchError.value = null;
+  batchDialog.value = true;
+}
+function openBatchResult(runId: string): void {
+  void router.push({
+    name: "channel-batch-export",
+    params: { channelId: id.value, runId },
+  });
+}
+async function launchBatch(): Promise<void> {
+  if (batchPending.value) return;
+  const current = context.capture();
+  batchError.value = null;
+  batchIntent.value ??= crypto.randomUUID();
+  try {
+    const runId = await startBatch.mutateAsync({
+      channelId: id.value,
+      runId: batchIntent.value,
+      deliveryMode: batchMode.value,
+    });
+    if (current()) {
+      batchDialog.value = false;
+      batchIntent.value = null;
+      openBatchResult(runId);
+    }
+  } catch (error: unknown) {
+    if (current()) batchError.value = channelErrorMessage(error);
+  }
+}
+async function updateExportSchedule(
+  value: Omit<ExportScheduleInput, "channelId">,
+): Promise<void> {
+  if (batchPending.value) return;
+  const current = context.capture();
+  batchError.value = null;
+  try {
+    await saveSchedule.mutateAsync({ ...value, channelId: id.value });
+    if (current()) {
+      scheduleSaveSequence.value++;
+      batchDirty.value = false;
+      toast.success("Расписание сохранено");
+    }
+  } catch (error: unknown) {
+    if (current()) batchError.value = channelErrorMessage(error);
+  }
+}
+async function changeOutbound(enabled: boolean): Promise<void> {
+  if (batchPending.value) return;
+  const current = context.capture();
+  batchError.value = null;
+  try {
+    await setOutbound.mutateAsync({
+      channelId: id.value,
+      revision: revision.value,
+      enabled,
+    });
+  } catch (error: unknown) {
+    if (current()) batchError.value = channelErrorMessage(error);
+  }
+}
+async function changeExport(
+  items: Publication[],
+  enabled: boolean,
+): Promise<void> {
+  if (batchPending.value || catalogBusy.value) return;
+  const refs = items.flatMap((item) =>
+    item.representationId && item.representationRevision !== null
+      ? [
+          {
+            representationId: item.representationId,
+            expectedRevision: item.representationRevision,
+          },
+        ]
+      : [],
+  );
+  if (!refs.length) return;
+  const current = context.capture();
+  batchError.value = null;
+  try {
+    await setExport.mutateAsync({ channelId: id.value, enabled, items: refs });
+    if (current()) {
+      contentSelection.value = [];
+      toast.success(enabled ? "Экспорт разрешён" : "Экспорт выключен");
+    }
+  } catch (error: unknown) {
+    if (current()) batchError.value = channelErrorMessage(error);
+  }
+}
+function changeSelectedExport(enabled: boolean): void {
+  void changeExport(
+    (publications.data.value?.items ?? []).filter((item) =>
+      contentSelection.value.includes(item.id),
+    ),
+    enabled,
+  );
+}
 const references = useConnectionReferencesQuery(context);
 const connectionPolling = ref(false),
   initializationPolling = ref(false);
@@ -316,10 +457,9 @@ function canLeave(): boolean {
   return (
     !pending.value &&
     !catalogBusy.value &&
-    (!dirty.value ||
-      window.confirm(
-        "Есть несохранённые настройки подключения. Отказаться от них?",
-      ))
+    !batchPending.value &&
+    (!(dirty.value || batchDirty.value) ||
+      window.confirm("Есть несохранённые настройки. Отказаться от них?"))
   );
 }
 onBeforeRouteLeave(canLeave);
@@ -330,7 +470,7 @@ onBeforeRouteUpdate((to, from) =>
     : canLeave(),
 );
 function beforeUnload(event: BeforeUnloadEvent): void {
-  if (dirty.value || pending.value) {
+  if (dirty.value || batchDirty.value || pending.value || batchPending.value) {
     event.preventDefault();
     event.returnValue = "";
   }
@@ -508,6 +648,35 @@ async function startInitialization(): Promise<void> {
               ><ContentUpdatesHistory
                 :items="history.data.value ?? []"
                 @open="openContentResult" />
+              <ChannelsQueryBody
+                v-if="hasBatchExport"
+                :pending="batchOverview.isPending.value"
+                :error="
+                  batchOverview.error.value
+                    ? channelErrorMessage(batchOverview.error.value)
+                    : null
+                "
+                :has-data="!!batchOverview.data.value"
+                :empty="false"
+                empty-title=""
+                empty-description=""
+                @retry="batchOverview.refetch()"
+              >
+                <BatchExportCard
+                  v-if="batchOverview.data.value"
+                  :key="context.scope.value + id"
+                  :overview="batchOverview.data.value"
+                  :pending="batchPending"
+                  :archived="channel.data.value.isArchived"
+                  :error="batchError"
+                  :save-sequence="scheduleSaveSequence"
+                  @start="openBatchDialog"
+                  @outbound="changeOutbound"
+                  @schedule="updateExportSchedule"
+                  @dirty="(value) => (batchDirty = value)"
+                  @open="openBatchResult"
+                />
+              </ChannelsQueryBody>
               <div
                 v-if="contentSelection.length"
                 class="flex flex-wrap items-center gap-3"
@@ -515,6 +684,21 @@ async function startInitialization(): Promise<void> {
                 <span class="text-muted-foreground text-sm"
                   >Выбрано публикаций: {{ contentSelection.length }}</span
                 ><Button
+                  v-if="hasBatchExport"
+                  variant="outline"
+                  :disabled="
+                    batchPending || catalogBusy || channel.data.value.isArchived
+                  "
+                  @click="changeSelectedExport(true)"
+                  >Разрешить экспорт выбранных</Button
+                ><Button
+                  v-if="hasBatchExport"
+                  variant="outline"
+                  :disabled="batchPending || catalogBusy"
+                  @click="changeSelectedExport(false)"
+                  >Выключить экспорт выбранных</Button
+                ><Button
+                  v-if="!hasBatchExport"
                   variant="outline"
                   :disabled="catalogBusy"
                   @click="openContentUpdate(contentSelection)"
@@ -534,6 +718,8 @@ async function startInitialization(): Promise<void> {
                 "
                 :identity-status="state.identityStatus.value"
                 :identity-key="state.identityKey.value"
+                :can-export="hasBatchExport"
+                :export-status="state.exportStatus.value"
                 :search="state.search.value"
                 :stock-status="state.stockStatus.value"
                 :binding-status="state.bindingStatus.value"
@@ -551,7 +737,8 @@ async function startInitialization(): Promise<void> {
                   state.stockStatus.value ||
                   state.bindingStatus.value ||
                   state.identityStatus.value ||
-                  state.identityKey.value
+                  state.identityKey.value ||
+                  state.exportStatus.value
                     ? 'Публикации не найдены'
                     : 'Публикаций пока нет'
                 "
@@ -560,7 +747,8 @@ async function startInitialization(): Promise<void> {
                   state.stockStatus.value ||
                   state.bindingStatus.value ||
                   state.identityStatus.value ||
-                  state.identityKey.value
+                  state.identityKey.value ||
+                  state.exportStatus.value
                     ? 'Измените поисковый запрос или фильтры.'
                     : 'Они появятся после проверки доступа и первой загрузки.'
                 "
@@ -571,6 +759,7 @@ async function startInitialization(): Promise<void> {
                   "
                   @duplicates="(key) => state.setIdentity('duplicate', key)"
                   :can-update="
+                    !hasBatchExport &&
                     (platform.data.value?.capabilities.includes(
                       'preview_content_update',
                     ) ??
@@ -578,13 +767,18 @@ async function startInitialization(): Promise<void> {
                     active &&
                     connection.data.value?.verificationStatus === 'verified'
                   "
+                  :can-export="hasBatchExport"
+                  @export="
+                    (publication, enabled) =>
+                      changeExport([publication], enabled)
+                  "
                   :selected-ids="contentSelection"
                   @select="selectContent"
                   @update-texts="
                     (publication) => openContentUpdate([publication.id])
                   "
                   :archived="channel.data.value.isArchived"
-                  :busy="catalogBusy"
+                  :busy="catalogBusy || batchPending"
                   :can-import="
                     platform.data.value?.capabilities.includes(
                       'read_publication_details',
@@ -740,6 +934,15 @@ async function startInitialization(): Promise<void> {
                           dirty = $event
                         " /></template></template></ChannelsQueryBody></CardContent></Card></TabsContent></Tabs></template
     ></ChannelsQueryBody>
+    <BatchExportConfirmDialog
+      v-if="batchDialog"
+      :count="batchOverview.data.value?.enabledCount ?? 0"
+      :mode="batchMode"
+      :pending="startBatch.isPending.value"
+      :error="batchError"
+      @close="batchDialog = false"
+      @confirm="launchBatch"
+    />
     <BindPublicationDialog
       v-if="catalogAction === 'bind' && selectedPublication"
       :key="selectedPublication.id"

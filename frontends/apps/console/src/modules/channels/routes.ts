@@ -15,6 +15,11 @@ export const channelsRoutes: RouteRecordRaw[] = [
         component: () => import("./pages/PublicationImportPage.vue"),
       },
       {
+        path: ":channelId/batch-exports/:runId",
+        name: "channel-batch-export",
+        component: () => import("./pages/BatchExportPage.vue"),
+      },
+      {
         path: ":channelId/content-updates/:runId",
         name: "channel-content-update",
         component: () => import("./pages/ContentUpdatePage.vue"),

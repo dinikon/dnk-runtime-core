@@ -101,7 +101,14 @@ class ChannelsManifestTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         """Произвольный плагин подключает диагностику без ветвления ядра по kind."""
-        original = PromPluginFactory.manifest
+        original = replace(
+            PromPluginFactory.manifest,
+            capabilities=tuple(
+                value
+                for value in PromPluginFactory.manifest.capabilities
+                if value != "batch_content_export"
+            ),
+        )
         factory = ExtendedFactory()
         factory.manifest = replace(original, kind="custom-identity")
         registry = PluginRegistry((factory,))
@@ -196,3 +203,20 @@ class ChannelsManifestTests(unittest.IsolatedAsyncioTestCase):
             "batch_size",
             registry.manifest("custom-platform").settings_schema["properties"],
         )
+
+    async def test_batch_factory_is_optional_and_declared_capability_requires_implementation(
+        self,
+    ) -> None:
+        """Новая capability не заставляет Woo и сторонние read плагины иметь пустой exporter."""
+        registry = PluginRegistry((PromPluginFactory(), WooPluginFactory()))
+        self.assertIn("batch_content_export", registry.manifest("prom").capabilities)
+        self.assertNotIn(
+            "batch_content_export", registry.manifest("woocommerce").capabilities
+        )
+        factory = ExtendedFactory()
+        factory.manifest = replace(
+            factory.manifest,
+            capabilities=(*factory.manifest.capabilities, "batch_content_export"),
+        )
+        with self.assertRaises(ChannelsValidationError):
+            PluginRegistry((factory,))

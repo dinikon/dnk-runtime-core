@@ -26,6 +26,7 @@ defineProps<{
   busy?: boolean;
   canImport?: boolean;
   canUpdate?: boolean;
+  canExport?: boolean;
   selectedIds?: string[];
 }>();
 defineEmits<{
@@ -36,6 +37,7 @@ defineEmits<{
   openCatalog: [publication: Publication];
   updateTexts: [publication: Publication];
   select: [id: string, selected: boolean];
+  export: [publication: Publication, enabled: boolean];
 }>();
 function safeImage(value: string | null): string | undefined {
   if (!value) return undefined;
@@ -51,7 +53,7 @@ function safeImage(value: string | null): string | undefined {
   <Table
     ><TableHeader
       ><TableRow
-        ><TableHead v-if="canUpdate" class="w-12">Выбор</TableHead
+        ><TableHead v-if="canUpdate || canExport" class="w-12">Выбор</TableHead
         ><TableHead class="min-w-64">Публикация</TableHead
         ><TableHead>ID / SKU</TableHead
         ><TableHead v-if="identityLabel">{{ identityLabel }}</TableHead
@@ -62,7 +64,7 @@ function safeImage(value: string | null): string | undefined {
       ></TableHeader
     ><TableBody
       ><TableRow v-for="item in items" :key="item.id"
-        ><TableCell v-if="canUpdate"
+        ><TableCell v-if="canUpdate || canExport"
           ><Checkbox
             :aria-label="`Выбрать публикацию ${item.externalId}`"
             :model-value="selectedIds?.includes(item.id) ?? false"
@@ -155,6 +157,18 @@ function safeImage(value: string | null): string | undefined {
                 :disabled="busy || archived"
                 @click="$emit('updateTexts', item)"
                 >Обновить тексты</Button
+              ><Badge v-if="canExport" variant="outline">{{
+                item.exportEnabled ? "Экспорт разрешён" : "Экспорт выключен"
+              }}</Badge
+              ><Button
+                v-if="canExport"
+                variant="outline"
+                size="sm"
+                :disabled="busy || archived"
+                @click="$emit('export', item, !item.exportEnabled)"
+                >{{
+                  item.exportEnabled ? "Выключить экспорт" : "Разрешить экспорт"
+                }}</Button
               ><Button
                 variant="outline"
                 size="sm"

@@ -216,6 +216,7 @@ export const channelsApi = {
             binding_status: filters.bindingStatus || undefined,
             identity_status: filters.identityStatus || undefined,
             identity_key: filters.identityKey || undefined,
+            export_status: filters.exportStatus || undefined,
           },
           signal,
         },

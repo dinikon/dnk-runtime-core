@@ -76,6 +76,7 @@ export function mapPublication(dto: DTO.PublicationRowDto): Publication {
     bindingId: dto.binding_id,
     representationId: dto.representation_id,
     representationRevision: dto.representation_revision,
+    exportEnabled: dto.export_enabled ?? false,
     id: dto.publication_id,
     connectionId: dto.connection_id,
     resourceType: dto.resource_type,

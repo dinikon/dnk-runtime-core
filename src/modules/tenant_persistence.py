@@ -118,3 +118,11 @@ import src.modules.channels.infrastructure.persistence.models.publication_import
 
 import src.modules.channels.infrastructure.persistence.models.content_update  # noqa: F401
 import src.modules.channels.infrastructure.persistence.models.content_update_item  # noqa: F401
+
+from src.modules.channels.infrastructure.persistence.models.batch_export import (
+    BatchExportRunModel,
+    BatchExportItemModel,
+)
+from src.modules.channels.infrastructure.persistence.models.export_schedule import (
+    ExportScheduleModel,
+)

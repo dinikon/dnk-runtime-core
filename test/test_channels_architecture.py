@@ -86,6 +86,7 @@ class ChannelsArchitectureTests(unittest.TestCase):
                                     ),
                                     Path("presentation/publication_import/assembly.py"),
                                     Path("presentation/content_update/assembly.py"),
+                                    Path("presentation/batch_export/assembly.py"),
                                 }
                                 or relative.parts[:3]
                                 in {
@@ -133,6 +134,8 @@ class ChannelsArchitectureTests(unittest.TestCase):
             "archive_channel",
             "apply_connection_verification",
             "complete_publication_initialization",
+            "apply_batch_export_step",
+            "execute_daily_export",
         }
         for path in ROOT.glob("application/*/*/*/handler.py"):
             if path.parent.parent.name not in ("command", "query"):

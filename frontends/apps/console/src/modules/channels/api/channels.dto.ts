@@ -70,6 +70,7 @@ export interface GetInitializationResponseDto {
   recovery_required: boolean;
 }
 export interface PublicationRowDto {
+  export_enabled?: boolean;
   identity?: PublicationIdentityDto | null;
   catalog_item_id: string | null;
   binding_id: string | null;

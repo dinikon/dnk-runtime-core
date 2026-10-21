@@ -15,6 +15,8 @@ const props = defineProps<{
   identityStatus?: string;
   identityLabel?: string;
   identityKey?: string;
+  exportStatus?: string;
+  canExport?: boolean;
 }>();
 const emit = defineEmits<{
   change: [
@@ -23,9 +25,15 @@ const emit = defineEmits<{
       stockStatus: string;
       bindingStatus?: string;
       identityStatus?: string;
+      exportStatus?: string;
     },
   ];
 }>();
+const exportInput = ref(props.exportStatus ?? "");
+watch(
+  () => props.exportStatus,
+  (value) => (exportInput.value = value ?? ""),
+);
 const identityInput = ref(props.identityStatus ?? "");
 watch(
   () => props.identityStatus,
@@ -52,6 +60,7 @@ function submit(): void {
     stockStatus: stockInput.value,
     bindingStatus: bindingInput.value,
     identityStatus: identityInput.value,
+    exportStatus: exportInput.value,
   });
 }
 </script>
@@ -101,6 +110,17 @@ function submit(): void {
         <NativeSelectOption value="valid">Ключ указан</NativeSelectOption>
       </NativeSelect>
     </Field>
+    <Field v-if="canExport" class="w-full sm:w-auto"
+      ><FieldLabel for="publication-export">Экспорт</FieldLabel
+      ><NativeSelect id="publication-export" v-model="exportInput"
+        ><NativeSelectOption value="">Все публикации</NativeSelectOption
+        ><NativeSelectOption value="enabled"
+          >Экспорт разрешён</NativeSelectOption
+        ><NativeSelectOption value="disabled"
+          >Экспорт выключен</NativeSelectOption
+        ></NativeSelect
+      ></Field
+    >
     <p
       v-if="identityKey"
       class="max-w-full break-all text-xs text-muted-foreground"

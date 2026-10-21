@@ -11,6 +11,7 @@ interface ChannelsPageState {
   bindingStatus: ComputedRef<string>;
   identityStatus: ComputedRef<string>;
   identityKey: ComputedRef<string>;
+  exportStatus: ComputedRef<string>;
   setIdentity: (status: string, key?: string) => void;
   listFilters: ComputedRef<ChannelsFilters>;
   publicationFilters: ComputedRef<PublicationsFilters>;
@@ -21,6 +22,7 @@ interface ChannelsPageState {
     stockStatus: string;
     bindingStatus?: string;
     identityStatus?: string;
+    exportStatus?: string;
   }) => void;
 }
 export function useChannelsPageState(): ChannelsPageState {
@@ -49,6 +51,11 @@ export function useChannelsPageState(): ChannelsPageState {
       ? route.query.identityKey.slice(0, 512)
       : "",
   );
+  const exportStatus = computed(() =>
+    route.query.export === "enabled" || route.query.export === "disabled"
+      ? route.query.export
+      : "",
+  );
   const listFilters = computed(() => ({
     offset: (page.value - 1) * 20,
     limit: 20,
@@ -60,6 +67,7 @@ export function useChannelsPageState(): ChannelsPageState {
     bindingStatus: bindingStatus.value,
     identityStatus: identityStatus.value,
     identityKey: identityKey.value,
+    exportStatus: exportStatus.value,
   }));
   function setPage(value: number): void {
     void router.replace({
@@ -79,6 +87,7 @@ export function useChannelsPageState(): ChannelsPageState {
     stockStatus: string;
     bindingStatus?: string;
     identityStatus?: string;
+    exportStatus?: string;
   }): void {
     void router.replace({
       query: {
@@ -87,6 +96,7 @@ export function useChannelsPageState(): ChannelsPageState {
         stock: value.stockStatus || undefined,
         binding: value.bindingStatus || undefined,
         identity: value.identityStatus || undefined,
+        export: value.exportStatus || undefined,
         identityKey:
           value.identityStatus === identityStatus.value
             ? identityKey.value || undefined
@@ -116,6 +126,7 @@ export function useChannelsPageState(): ChannelsPageState {
     bindingStatus,
     identityStatus,
     identityKey,
+    exportStatus,
     setIdentity,
     listFilters,
     publicationFilters,

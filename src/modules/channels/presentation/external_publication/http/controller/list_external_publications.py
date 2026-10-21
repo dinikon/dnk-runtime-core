@@ -24,6 +24,7 @@ async def list_external_publications(
     limit: int = Query(default=50, ge=1, le=100),
     search: str | None = Query(default=None, max_length=200),
     stock_status: str | None = None,
+    export_status: Literal["enabled", "disabled"] | None = None,
     binding_status: Literal["bound", "unbound"] | None = None,
     identity_status: (
         Literal["missing", "duplicate", "valid", "not_required"] | None
@@ -39,6 +40,7 @@ async def list_external_publications(
             limit=limit,
             search=search,
             stock_status=stock_status,
+            export_status=export_status,
             binding_status=binding_status,
             identity_status=identity_status,
             identity_key=identity_key,

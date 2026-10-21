@@ -20,3 +20,6 @@ class ProductRepresentationModel(TenantBase):
     )
     catalog_item_id: Mapped[UUID] = mapped_column(sa.UUID(), nullable=False, index=True)
     revision: Mapped[int] = mapped_column(sa.Integer(), nullable=False)
+    export_enabled: Mapped[bool] = mapped_column(
+        sa.Boolean(), nullable=False, server_default=sa.false()
+    )

@@ -1,4 +1,8 @@
 from __future__ import annotations
+from src.modules.channels.presentation.jobs.batch_export import (
+    ChannelsBatchExportJobHandler,
+)
+from src.modules.channels.infrastructure.jobs import BATCH_EXPORT_JOB, DAILY_EXPORT_JOB
 from src.modules.channels.presentation.jobs.content_update import (
     ChannelsContentUpdateJobHandler,
 )
@@ -152,6 +156,8 @@ async def handle_worker(_args: argparse.Namespace) -> int:
 
     dispatcher = build_scheduled_job_dispatcher(
         {
+            BATCH_EXPORT_JOB: ChannelsBatchExportJobHandler(db_helper.session_factory),
+            DAILY_EXPORT_JOB: ChannelsBatchExportJobHandler(db_helper.session_factory),
             CHANNELS_VERIFY_JOB: ChannelsVerificationJobHandler(
                 db_helper.session_factory
             ),

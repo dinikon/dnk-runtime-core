@@ -139,6 +139,10 @@ class SqlAlchemyExternalPublicationQueryRepository:
             )
             .outerjoin(R.__table__, R.id == B.representation_id)
         )
+        if query.export_status == "enabled":
+            conditions.append(R.export_enabled.is_(True))
+        if query.export_status == "disabled":
+            conditions.append(func.coalesce(R.export_enabled, False).is_(False))
         if query.binding_status == "bound":
             conditions.append(B.id.is_not(None))
         if query.binding_status == "unbound":
@@ -163,6 +167,7 @@ class SqlAlchemyExternalPublicationQueryRepository:
                 B.id.label("binding_id"),
                 R.id.label("representation_id"),
                 R.revision.label("representation_revision"),
+                func.coalesce(R.export_enabled, False).label("export_enabled"),
             )
         )
         rows = (

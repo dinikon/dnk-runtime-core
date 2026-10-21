@@ -55,7 +55,7 @@ class ScopedHttpTransport:
         *,
         query: dict[str, str] | None = None,
         headers: dict[str, str] | None = None,
-        payload: dict[str, str] | None = None,
+        payload: dict[str, object] | None = None,
     ) -> HttpResultDTO:
         """Закрепляет публичный IP и TLS SNI; не возвращает тела ошибок в логи."""
         if (
@@ -141,3 +141,19 @@ class ScopedHttpTransport:
     def _reject_constant(value: str) -> None:
         """Отклоняет нестандартные NaN/Infinity в JSON провайдера."""
         raise ValueError("invalid_json_number")
+
+    async def post(
+        self,
+        path: str,
+        *,
+        payload: dict[str, object],
+        headers: dict[str, str] | None = None,
+    ) -> HttpResultDTO:
+        """Передаёт ограниченный JSON в scoped origin без знания полей конкретной площадки."""
+        try:
+            encoded = json.dumps(payload, ensure_ascii=False, allow_nan=False)
+        except (TypeError, ValueError, RecursionError):
+            raise PluginCallError("invalid_batch_payload") from None
+        if not isinstance(payload, dict) or len(encoded.encode()) > 1024 * 1024:
+            raise PluginCallError("invalid_batch_payload")
+        return await self._request("POST", path, headers=headers, payload=payload)

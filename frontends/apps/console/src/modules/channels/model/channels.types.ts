@@ -101,6 +101,7 @@ export interface Publication {
   bindingId: string | null;
   representationId: string | null;
   representationRevision: number | null;
+  exportEnabled: boolean;
   id: string;
   connectionId: string;
   resourceType: string;
@@ -192,6 +193,7 @@ export interface ChannelsFilters {
   limit: number;
 }
 export interface PublicationsFilters extends ChannelsFilters {
+  exportStatus?: string;
   identityStatus?: string;
   identityKey?: string;
   search: string;

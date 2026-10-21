@@ -38,6 +38,7 @@ class ListExternalPublicationsItemResponse(BaseModel):
     binding_id: UUID | None = None
     representation_id: UUID | None = None
     representation_revision: int | None = None
+    export_enabled: bool = False
 
     identity: PublicationIdentityResponse | None = None
 

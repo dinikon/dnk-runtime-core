@@ -27,3 +27,9 @@ from src.modules.channels.presentation.content_update.router import (
 )
 
 router.include_router(content_update_router)
+
+from src.modules.channels.presentation.batch_export.router import (
+    router as batch_export_router,
+)
+
+router.include_router(batch_export_router)

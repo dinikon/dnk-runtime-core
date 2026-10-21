@@ -17,6 +17,7 @@ class ProductRepresentation:
     catalog_item_id: EntityIdVO
     revision: int
     bindings: list[ExternalBinding]
+    export_enabled: bool = False
 
     @classmethod
     def create(
@@ -36,6 +37,7 @@ class ProductRepresentation:
         catalog_item_id: EntityIdVO,
         revision: int,
         bindings: list[ExternalBinding],
+        export_enabled: bool = False,
     ) -> Self:
         """Проверяет инварианты восстановления в Domain, а не mapper."""
         if (
@@ -43,13 +45,21 @@ class ProductRepresentation:
                 not isinstance(value, EntityIdVO)
                 for value in (identifier, connection_id, catalog_item_id)
             )
+            or type(export_enabled) is not bool
             or type(revision) is not int
             or revision < 1
             or sum(b.released_at is None for b in bindings) > 1
             or len({b.id for b in bindings}) != len(bindings)
         ):
             raise ChannelsConflictError("invalid_representation_state")
-        return cls(identifier, connection_id, catalog_item_id, revision, list(bindings))
+        return cls(
+            identifier,
+            connection_id,
+            catalog_item_id,
+            revision,
+            list(bindings),
+            export_enabled,
+        )
 
     def active_binding(self) -> ExternalBinding | None:
         """Возвращает основную действующую связь текущего представления."""
@@ -94,4 +104,14 @@ class ProductRepresentation:
         ):
             raise ChannelsConflictError("binding_revision_conflict")
         binding.release(actor, now)
+        self.export_enabled = False
+        self.revision += 1
+
+    def set_export(self, enabled: bool, expected_revision: int) -> None:
+        """Требует явного разрешения для действующей связи и актуальной версии."""
+        if type(enabled) is not bool or expected_revision != self.revision:
+            raise ChannelsConflictError("binding_revision_conflict")
+        if enabled and self.active_binding() is None:
+            raise ChannelsConflictError("publication_not_bound")
+        self.export_enabled = enabled
         self.revision += 1

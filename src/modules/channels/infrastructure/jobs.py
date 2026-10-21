@@ -14,6 +14,8 @@ VERIFY_JOB = "channels.verify_connection"
 PAGE_JOB = "channels.initialize_publications"
 IMPORT_JOB = "channels.prepare_publication_import"
 IMPORT_CLEANUP_JOB = "channels.cleanup_publication_import"
+BATCH_EXPORT_JOB = "channels.batch_export"
+DAILY_EXPORT_JOB = "channels.daily_export"
 CONTENT_UPDATE_JOB = "channels.update_publication_content"
 
 
@@ -113,5 +115,37 @@ class ScheduledChannelsJobs:
                 {"run_id": str(run_id), "sequence": sequence},
                 now,
                 uuid5(run_id, "content:" + str(sequence)),
+            )
+        )
+
+    async def batch_export(
+        self, tenant_id: UUID, run_id: UUID, sequence: int, at: datetime
+    ) -> None:
+        """Планирует уникальный шаг пакета в транзакции его корня."""
+        await self.scheduler(
+            ScheduleScheduledJobCommand(
+                tenant_id,
+                BATCH_EXPORT_JOB,
+                {"run_id": str(run_id), "sequence": sequence},
+                at,
+                uuid5(run_id, "batch:" + str(sequence)),
+            )
+        )
+
+    async def daily_export(
+        self, tenant_id: UUID, channel_id: UUID, revision: int, at: datetime
+    ) -> None:
+        """Планирует один момент IANA расписания без отдельного cron процесса."""
+        await self.scheduler(
+            ScheduleScheduledJobCommand(
+                tenant_id,
+                DAILY_EXPORT_JOB,
+                {
+                    "channel_id": str(channel_id),
+                    "revision": revision,
+                    "scheduled_at": at.isoformat(),
+                },
+                at,
+                uuid5(channel_id, "daily-job:" + str(revision) + ":" + at.isoformat()),
             )
         )

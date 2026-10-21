@@ -1,10 +1,16 @@
+from src.modules.channels.application.batch_export.plugin_contract import (
+    BatchExportPlugin,
+)
+from src.modules.channels.application.port.plugin_services import (
+    PluginBatchHttpTransport,
+)
 from src.modules.channels.application.content_update.port.plugin import (
     ContentUpdatePlugin,
 )
 from src.modules.channels.application.port.plugin_services import (
     PluginContentHttpTransport,
 )
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 from src.modules.channels.application.plugin_contract import (
     PluginManifestDTO,
     ResourceSettingsDTO,
@@ -66,6 +72,17 @@ class PluginFactoryProtocol(Protocol):
         ...
 
 
+@runtime_checkable
+class BatchExportPluginFactoryProtocol(Protocol):
+    """Описывает только опциональную capability; остальные плагины не обязаны её реализовывать."""
+
+    def batch_exporter(
+        self, credentials: PluginCredentialsAccess, http: PluginBatchHttpTransport
+    ) -> BatchExportPlugin:
+        """Собирает опциональную пакетную capability."""
+        ...
+
+
 class PluginRegistry:
     """Разрешает явно зарегистрированные реализации без ветвлений по kind."""
 
@@ -75,7 +92,11 @@ class PluginRegistry:
         for factory in factories:
             manifest = factory.manifest
             if (
-                manifest.kind in self._factories
+                (
+                    "batch_content_export" in manifest.capabilities
+                    and not isinstance(factory, BatchExportPluginFactoryProtocol)
+                )
+                or manifest.kind in self._factories
                 or manifest.sdk_version != 5
                 or manifest.config_version != 3
                 or (
@@ -102,6 +123,7 @@ class PluginRegistry:
                     "preview_content_update",
                     "update_content",
                     "publication_identity_diagnostics",
+                    "batch_content_export",
                 }
             ):
                 raise ChannelsValidationError("invalid_plugin_registration")
@@ -162,3 +184,17 @@ class PluginRegistry:
         if "preview_content_update" not in factory.manifest.capabilities:
             raise ChannelsUnavailableError("content_update_unsupported")
         return factory.content_updater(credentials, http)
+
+    def batch_exporter(
+        self,
+        kind: str,
+        credentials: PluginCredentialsAccess,
+        http: PluginBatchHttpTransport,
+    ) -> BatchExportPlugin:
+        """Разрешает пакетную capability по manifest без условий платформы в ядре."""
+        factory = self._factory(kind)
+        if "batch_content_export" not in factory.manifest.capabilities:
+            raise ChannelsUnavailableError("batch_export_unsupported")
+        if not isinstance(factory, BatchExportPluginFactoryProtocol):
+            raise ChannelsUnavailableError("batch_export_unsupported")
+        return factory.batch_exporter(credentials, http)

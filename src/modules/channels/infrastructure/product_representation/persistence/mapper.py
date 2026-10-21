@@ -33,6 +33,7 @@ class ProductRepresentationMapper:
                 )
                 for b in bindings
             ],
+            row["export_enabled"],
         )
 
     @staticmethod
@@ -43,6 +44,7 @@ class ProductRepresentationMapper:
             connection_id=item.connection_id.uuid,
             catalog_item_id=item.catalog_item_id.uuid,
             revision=item.revision,
+            export_enabled=item.export_enabled,
         )
 
     @staticmethod

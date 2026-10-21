@@ -1,3 +1,9 @@
+from src.modules.channels.application.batch_export.plugin_contract import (
+    BatchExportPlugin,
+)
+from src.modules.channels.application.port.plugin_services import (
+    PluginBatchHttpTransport,
+)
 from src.modules.channels.application.content_update.port.plugin import (
     ContentUpdatePlugin,
 )
@@ -71,4 +77,13 @@ class PluginRegistryProtocol(Protocol):
         http: PluginContentHttpTransport,
     ) -> ContentUpdatePlugin:
         """Собирает capability предпросмотра и ограниченного обновления."""
+        ...
+
+    def batch_exporter(
+        self,
+        kind: str,
+        credentials: PluginCredentialsAccess,
+        http: PluginBatchHttpTransport,
+    ) -> BatchExportPlugin:
+        """Собирает пакетную capability только зарегистрированного провайдера."""
         ...

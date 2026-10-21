@@ -23,6 +23,8 @@ class ListExternalPublicationsHandler:
         """Возвращает конкретный DTO сценария чтения."""
         if query.offset < 0 or not 1 <= query.limit <= 100:
             raise ChannelsValidationError("invalid_pagination")
+        if query.export_status not in (None, "enabled", "disabled"):
+            raise ChannelsValidationError("invalid_export_filter")
         if query.stock_status is not None and query.stock_status not in (
             "in_stock",
             "out_of_stock",

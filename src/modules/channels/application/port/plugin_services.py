@@ -48,3 +48,17 @@ class PluginCallError(Exception):
         """Сохраняет только стабильный код и разрешение ограниченного retry."""
         super().__init__(reason_code)
         self.reason_code, self.retryable = (reason_code, retryable)
+
+
+class PluginBatchHttpTransport(PluginHttpTransport, Protocol):
+    """Разрешает scoped POST только runtime объявленной пакетной capability."""
+
+    async def post(
+        self,
+        path: str,
+        *,
+        payload: dict[str, object],
+        headers: dict[str, str] | None = None,
+    ) -> HttpResultDTO:
+        """Ограничивает origin, JSON и размер; provider-схема принадлежит плагину."""
+        ...

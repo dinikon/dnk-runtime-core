@@ -1,7 +1,13 @@
 import { ChannelsApiError } from "../api/channels.error";
+import { exportReason } from "./batch-export.presentation";
 import { reasonLabel } from "./channels.presentation";
 export function channelErrorMessage(error: unknown): string {
   if (error instanceof ChannelsApiError) {
+    if (
+      error.code.startsWith("batch_export_") ||
+      error.code.startsWith("export_")
+    )
+      return exportReason(error.code);
     if (
       error.code.startsWith("content_update_") ||
       [

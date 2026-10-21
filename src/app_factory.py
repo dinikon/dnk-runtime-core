@@ -83,6 +83,11 @@ def create_app() -> DnkApp:
             {"url": "https://dniko.app", "description": "Production Server"},
         ],
     )
+    from src.modules.channels.presentation.batch_export.feed_router import (
+        router as channel_feeds,
+    )
+
+    app.include_router(channel_feeds)
     app.include_router(api_router)
     app.include_router(control_plane_router)
     app.include_router(identity_csrf_router)

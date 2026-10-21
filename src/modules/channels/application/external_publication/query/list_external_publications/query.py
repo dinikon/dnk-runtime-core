@@ -15,3 +15,4 @@ class ListExternalPublicationsQuery:
     binding_status: str | None = None
     identity_status: str | None = None
     identity_key: str | None = None
+    export_status: str | None = None

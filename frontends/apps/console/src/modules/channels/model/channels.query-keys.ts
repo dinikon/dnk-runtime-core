@@ -4,6 +4,16 @@ import type {
   DraftPreviewInput,
 } from "./catalog-links.types";
 export const channelsKeys = {
+  batchOverview: (scope: string, id: string): readonly string[] => [
+    "channels",
+    scope,
+    "batch-overview",
+    id,
+  ],
+  batchDetail: (
+    scope: string,
+    input: { runId: string; offset: number; limit: number },
+  ): readonly unknown[] => ["channels", scope, "batch-detail", input],
   contentUpdate: (scope: string, id: string): readonly string[] => [
     "channels",
     scope,
