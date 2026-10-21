@@ -1,3 +1,11 @@
+## v3.2.0-rc.1 (2026-10-21)
+
+### Feat
+
+- **channels**: introduce batch export operations with scheduling and XML support
+- **prom-xml**: add experimental XML and CSV contracts for item updates
+- **channels**: implement new channels core with simplified connection management
+
 ## v3.1.0 (2026-10-18)
 
 ### Feat
