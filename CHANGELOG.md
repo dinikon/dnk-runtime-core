@@ -1,3 +1,9 @@
+## v3.3.0-rc.1 (2026-10-23)
+
+### Feat
+
+- fix missing newline at end of Makefile
+
 ## v3.2.0 (2026-10-23)
 
 ### Feat
