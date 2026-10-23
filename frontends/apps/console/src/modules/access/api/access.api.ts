@@ -49,18 +49,5 @@ export const accessApi = {
     first_name: string;
     last_name: string;
   }) => (await httpClient.post("/console/invitations/accept", payload)).data,
-  cloudStatus: async () =>
-    (
-      await httpClient.get<{ enabled: boolean; linked: boolean }>(
-        "/auth/cloud/status/",
-      )
-    ).data,
-  cloudStart: async (purpose: "login" | "link") =>
-    (
-      await httpClient.post<{ authorization_url: string }>(
-        "/auth/cloud/start/",
-        { purpose },
-      )
-    ).data,
   cloudUnlink: async () => httpClient.delete("/auth/cloud/link/"),
 };

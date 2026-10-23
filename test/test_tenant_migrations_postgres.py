@@ -153,479 +153,93 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 await self.migrator.upgrade(connection, schema)
         return schema
 
-    async def insert_warehouse(
-        self,
-        connection: AsyncConnection,
-        schema: str,
-        *,
-        warehouse_id: UUID | None = None,
-        parent_id: UUID | None = None,
-    ) -> UUID:
-        """Заполняет историческую таблицу для проверки миграций без runtime-модели."""
-        warehouse_id = warehouse_id or uuid4()
-        await connection.execute(
-            text(
-                f'INSERT INTO "{schema}".warehouses '
-                "(id, title, parent_id, created_by, updated_by) "
-                "VALUES (:id, 'Warehouse', :parent, :actor, :actor)"
-            ),
-            {"id": warehouse_id, "parent": parent_id, "actor": uuid4()},
-        )
-        return warehouse_id
-
-    async def insert_channel_state(
-        self, connection: AsyncConnection, schema: str
-    ) -> UUID:
-        """Заполняет три исторические таблицы Channels без runtime-моделей."""
-        channel_id, run_id, actor = uuid4(), uuid4(), uuid4()
-        await connection.execute(
-            text(
-                f'INSERT INTO "{schema}".channels '
-                "(id, name, kind, config_version, connection_revision, "
-                "connection_settings, encrypted_secrets, configured_secret_fields, "
-                "is_active, status, created_by, updated_by) "
-                "VALUES (:id, 'Retired channel', 'prom', 1, 1, '{}', "
-                "'test-encrypted-value', '[]', true, 'unverified', :actor, :actor)"
-            ),
-            {"id": channel_id, "actor": actor},
-        )
-        await connection.execute(
-            text(
-                f'INSERT INTO "{schema}".channel_publication_import_runs '
-                "(id, channel_id, connection_revision, status, checkpoint, pages, "
-                "resources, job_id, created_at, updated_at) "
-                "VALUES (:id, :channel, 1, 'running', '{}', 1, 1, :job, now(), now())"
-            ),
-            {"id": run_id, "channel": channel_id, "job": uuid4()},
-        )
-        await connection.execute(
-            text(
-                f'INSERT INTO "{schema}".channel_publications '
-                "(id, channel_id, connection_revision, resource_type, external_id, "
-                "raw_payload, document, revision, last_run_id, created_at, observed_at) "
-                "VALUES (:id, :channel, 1, 'product', 'observed-1', '{}', '{}', "
-                "1, :run, now(), now())"
-            ),
-            {"id": uuid4(), "channel": channel_id, "run": run_id},
-        )
-        return channel_id
-
-    async def test_channels_removal_preserves_neighbors_and_restores_empty_schema(
-        self,
-    ) -> None:
-        """Проверяет данные двух tenants, FK и индексы отката, затем повторный upgrade."""
-        schema = await self.new_schema(upgrade=False)
-        other = await self.new_schema(upgrade=False)
-        removed = {
-            "channels",
-            "channel_publications",
-            "channel_publication_import_runs",
-        }
+    async def test_baseline_downgrade_is_tenant_local(self) -> None:
+        """Откат одного tenant не меняет соседние схемы или public."""
+        first, second = await self.new_schema(), await self.new_schema()
         async with self.engine.begin() as connection:
-            for target in (schema, other):
-                await self.migrator._migrate(
-                    connection, target, command.upgrade, "0025_user_display_currency"
+            await self.migrator.downgrade(connection, first, "base")
+            self.assertEqual(await self.migrator.current(connection, first), ())
+            self.assertEqual(
+                await self.migrator.current(connection, second), (self.migrator.head(),)
+            )
+            for table in migration_metadata().tables:
+                self.assertFalse(
+                    await connection.run_sync(
+                        lambda conn: inspect(conn).has_table(table, schema=first)
+                    )
                 )
-                await self.insert_channel_state(connection, target)
-            contact_id, product_type_id, actor = uuid4(), uuid4(), uuid4()
-            await connection.execute(
-                text(
-                    f'INSERT INTO "{schema}".contacts '
-                    "(id, first_name, created_by, updated_by) "
-                    "VALUES (:id, 'Preserved contact', :actor, :actor)"
-                ),
-                {"id": contact_id, "actor": actor},
+                self.assertTrue(
+                    await connection.run_sync(
+                        lambda conn: inspect(conn).has_table(table, schema=second)
+                    )
+                )
+            self.assertTrue(
+                await connection.run_sync(
+                    lambda conn: inspect(conn).has_table("tenants", schema="public")
+                )
             )
-            await connection.execute(
-                text(
-                    f'INSERT INTO "{schema}".catalog_product_types '
-                    "(id, code, is_system, schema_version, revision, created_by, updated_by) VALUES (:id, 'neighbor', false, 1, 1, :actor, :actor)"
-                ),
-                {"id": product_type_id, "actor": actor},
+            await self.migrator.upgrade(connection, first)
+            self.assertEqual(
+                await self.migrator.current(connection, first), (self.migrator.head(),)
             )
-            before = set(
+
+    async def test_upgrade_repeat_downgrade_and_constraints(self) -> None:
+        """Повтор сохраняет начальные данные, откат не трогает чужие таблицы."""
+        schema = await self.new_schema()
+        async with self.engine.begin() as connection:
+            tables = set(
                 await connection.run_sync(
                     lambda conn: inspect(conn).get_table_names(schema=schema)
                 )
             )
-            original_structure = await connection.run_sync(
-                lambda conn: {
-                    name: (
-                        inspect(conn).get_foreign_keys(name, schema=schema),
-                        inspect(conn).get_indexes(name, schema=schema),
-                        inspect(conn).get_check_constraints(name, schema=schema),
-                        inspect(conn).get_unique_constraints(name, schema=schema),
-                        [
-                            col["name"]
-                            for col in inspect(conn).get_columns(name, schema=schema)
-                        ],
-                    )
-                    for name in removed
-                }
+            self.assertEqual(
+                tables, set(migration_metadata().tables) | {"alembic_version"}
             )
-            await self.migrator.upgrade(connection, schema)
+            self.assertTrue(
+                {
+                    "price_lists",
+                    "price_list_sync_runs",
+                    "price_list_sync_items",
+                    "partner_offers",
+                    "partner_offer_states",
+                }.isdisjoint(tables)
+            )
+            original_path = await connection.scalar(text("SHOW search_path"))
             await self.migrator.upgrade(connection, schema)
             self.assertEqual(
-                set(
-                    await connection.run_sync(
-                        lambda conn: inspect(conn).get_table_names(schema=schema)
-                    )
-                ),
-                before - removed,
+                await connection.scalar(text("SHOW search_path")), original_path
             )
-            self.assertEqual(
-                await connection.scalar(text(f'SELECT id FROM "{schema}".contacts')),
-                contact_id,
-            )
-            self.assertEqual(
-                await connection.scalar(
-                    text(f'SELECT id FROM "{schema}".catalog_product_types')
-                ),
-                product_type_id,
-            )
-            for name in removed:
-                self.assertEqual(
-                    await connection.scalar(
-                        text(f'SELECT count(*) FROM "{other}"."{name}"')
-                    ),
-                    1,
-                )
-            self.assertEqual(
-                await self.migrator.current(connection, other),
-                ("0025_user_display_currency",),
-            )
-            await self.migrator.downgrade(
-                connection, schema, "0025_user_display_currency"
-            )
-            restored_structure = await connection.run_sync(
-                lambda conn: {
-                    name: (
-                        inspect(conn).get_foreign_keys(name, schema=schema),
-                        inspect(conn).get_indexes(name, schema=schema),
-                        inspect(conn).get_check_constraints(name, schema=schema),
-                        inspect(conn).get_unique_constraints(name, schema=schema),
-                        [
-                            col["name"]
-                            for col in inspect(conn).get_columns(name, schema=schema)
-                        ],
-                    )
-                    for name in removed
-                }
-            )
-            self.assertEqual(restored_structure, original_structure)
-            for name in removed:
-                self.assertEqual(
-                    await connection.scalar(
-                        text(f'SELECT count(*) FROM "{schema}"."{name}"')
-                    ),
-                    0,
-                )
-            with self.assertRaises(IntegrityError):
-                async with connection.begin_nested():
-                    await connection.execute(
-                        text(
-                            f'INSERT INTO "{schema}".channel_publications SELECT * FROM "{other}".channel_publications'
-                        )
-                    )
-            await self.migrator.upgrade(connection, schema)
-            self.assertEqual(
-                await self.migrator.current(connection, schema), (self.migrator.head(),)
-            )
-
-    async def test_channels_removal_failure_rolls_back_all_drops_and_can_retry(
-        self,
-    ) -> None:
-        """Неизвестный FK блокирует DROP без потери дочерних таблиц и Alembic-ревизии."""
-        schema = await self.new_schema(upgrade=False)
-        async with self.engine.begin() as connection:
-            await self.migrator._migrate(
-                connection, schema, command.upgrade, "0025_user_display_currency"
-            )
-            channel_id = await self.insert_channel_state(connection, schema)
-            await connection.execute(
-                text(
-                    f'CREATE TABLE "{schema}".external_binding (channel_id uuid REFERENCES "{schema}".channels(id))'
-                )
-            )
-            await connection.execute(
-                text(f'INSERT INTO "{schema}".external_binding VALUES (:id)'),
-                {"id": channel_id},
-            )
-        with self.assertRaises(DBAPIError):
-            async with self.engine.begin() as connection:
-                await self.migrator.upgrade(connection, schema)
-        async with self.engine.begin() as connection:
-            self.assertEqual(
-                await self.migrator.current(connection, schema),
-                ("0025_user_display_currency",),
-            )
-            for name in (
-                "channels",
-                "channel_publications",
-                "channel_publication_import_runs",
-            ):
-                self.assertEqual(
-                    await connection.scalar(
-                        text(f'SELECT count(*) FROM "{schema}"."{name}"')
-                    ),
-                    1,
-                )
-            await connection.execute(text(f'DROP TABLE "{schema}".external_binding'))
-            await self.migrator.upgrade(connection, schema)
-            self.assertEqual(
-                await self.migrator.current(connection, schema), (self.migrator.head(),)
-            )
-
-    async def test_inventory_removal_is_tenant_scoped_and_reversible(self) -> None:
-        """Проверяет удаление Inventory, изоляцию tenant и восстановление пустой схемы."""
-        schema = await self.new_schema(upgrade=False)
-        other = await self.new_schema(upgrade=False)
-        actor, sku_id, contact_id = uuid4(), uuid4(), uuid4()
-        async with self.engine.begin() as connection:
-            for tenant_schema in (schema, other):
-                await self.migrator._migrate(
-                    connection,
-                    tenant_schema,
-                    command.upgrade,
-                    "0014_channel_publications",
-                )
-                await self.insert_warehouse(connection, tenant_schema)
+            labels = (
                 await connection.execute(
                     text(
-                        f'INSERT INTO "{tenant_schema}".skus '
-                        "(id, code, title, created_by, updated_by) "
-                        "VALUES (:id, 'removed-sku', 'Removed SKU', :actor, :actor)"
-                    ),
-                    {"id": sku_id, "actor": actor},
+                        f'SELECT id,type,name FROM "{schema}".contact_point_labels ORDER BY id'
+                    )
                 )
-            await connection.execute(
-                ContactModel.__table__.insert()
-                .values(
-                    id=contact_id,
-                    first_name="Preserved contact",
-                    created_by=actor,
-                    updated_by=actor,
-                )
-                .execution_options(schema_translate_map={"tenant": schema})
-            )
-            await connection.execute(
-                text(f'CREATE TABLE "{schema}".legacy_objects (value text)')
-            )
-            await connection.execute(
-                text(f"INSERT INTO \"{schema}\".legacy_objects VALUES ('preserved')")
-            )
-            tables_before = set(
-                await connection.run_sync(
-                    lambda conn: inspect(conn).get_table_names(schema=schema)
-                )
-            )
-            public_before = set(
-                await connection.run_sync(
-                    lambda conn: inspect(conn).get_table_names(schema="public")
-                )
-            )
-            await self.migrator._migrate(
-                connection, schema, command.upgrade, "0016_remove_inventory"
-            )
-            await self.migrator._migrate(
-                connection, schema, command.upgrade, "0016_remove_inventory"
-            )
-            tables_after = set(
-                await connection.run_sync(
-                    lambda conn: inspect(conn).get_table_names(schema=schema)
-                )
-            )
-            self.assertEqual(tables_after, tables_before - {"skus", "warehouses"})
+            ).all()
+            self.assertEqual(len(labels), 6)
+            self.assertEqual({row.type for row in labels}, {"phone", "email"})
             self.assertEqual(
-                await connection.scalar(text(f'SELECT id FROM "{schema}".contacts')),
-                contact_id,
+                {row.name for row in labels}, {"Рабочий", "Личный", "Другой"}
             )
+            self.assertEqual(str(labels[0].id), "01997b20-0000-7000-8000-000000000001")
             self.assertEqual(
                 await connection.scalar(
-                    text(f'SELECT value FROM "{schema}".legacy_objects')
-                ),
-                "preserved",
-            )
-            self.assertEqual(
-                await self.migrator.current(connection, other),
-                ("0014_channel_publications",),
-            )
-            self.assertEqual(
-                await connection.scalar(text(f'SELECT id FROM "{other}".skus')),
-                sku_id,
-            )
-            self.assertEqual(
-                await connection.scalar(
-                    text(f'SELECT count(*) FROM "{other}".warehouses')
-                ),
-                1,
-            )
-            self.assertEqual(
-                set(
-                    await connection.run_sync(
-                        lambda conn: inspect(conn).get_table_names(schema="public")
+                    text(
+                        f'SELECT base_currency FROM "{schema}".tenant_currency_settings'
                     )
                 ),
-                public_before,
+                "UAH",
             )
-            await self.migrator.downgrade(
-                connection, schema, "0014_channel_publications"
-            )
-            restored = set(
-                await connection.run_sync(
-                    lambda conn: inspect(conn).get_table_names(schema=schema)
-                )
-            )
-            self.assertEqual(restored, tables_before)
-            for table in ("skus", "warehouses"):
-                self.assertEqual(
-                    await connection.scalar(
-                        text(f'SELECT count(*) FROM "{schema}"."{table}"')
-                    ),
-                    0,
-                )
-            root = await self.insert_warehouse(connection, schema)
-            with self.assertRaises(IntegrityError):
-                async with connection.begin_nested():
-                    await self.insert_warehouse(
-                        connection, schema, warehouse_id=uuid4(), parent_id=uuid4()
-                    )
-            with self.assertRaises(IntegrityError):
-                async with connection.begin_nested():
-                    await connection.execute(
-                        text(
-                            f'UPDATE "{schema}".warehouses SET parent_id=id WHERE id=:id'
-                        ),
-                        {"id": root},
-                    )
-            insert_sku = text(
-                f'INSERT INTO "{schema}".skus '
-                "(id, code, title, created_by, updated_by) "
-                "VALUES (:id, 'unique-code', 'SKU', :actor, :actor)"
-            )
-            await connection.execute(insert_sku, {"id": uuid4(), "actor": actor})
-            with self.assertRaises(IntegrityError):
-                async with connection.begin_nested():
-                    await connection.execute(
-                        insert_sku, {"id": uuid4(), "actor": actor}
-                    )
-            indexes = await connection.run_sync(
-                lambda conn: inspect(conn).get_indexes("warehouses", schema=schema)
-            )
-            self.assertIn(
-                "ix_warehouses_parent_id", {index["name"] for index in indexes}
-            )
-            await self.migrator.upgrade(connection, schema)
-            self.assertEqual(
-                await self.migrator.current(connection, schema), (self.migrator.head(),)
-            )
-
-    async def test_catalog_baseline_preserves_other_modules_and_tenants(self) -> None:
-        """Fresh baseline и его откат ограничены одной tenant-схемой."""
-        schema = await self.new_schema()
-        other = await self.new_schema()
-        async with self.engine.begin() as connection:
-            # Isolate this baseline from later migrations owned by other modules.
-            await self.migrator.downgrade(connection, schema, "0023_catalog_item")
-            tables_before = set(
-                await connection.run_sync(
-                    lambda conn: inspect(conn).get_table_names(schema=schema)
-                )
-            )
-            await self.migrator.downgrade(
-                connection, schema, "0022_tenant_currency_settings"
-            )
-            self.assertIsNone(
-                await connection.scalar(
-                    text("SELECT to_regclass(:table)"),
-                    {"table": schema + ".catalog_item"},
-                )
-            )
-            self.assertIsNotNone(
-                await connection.scalar(
-                    text("SELECT to_regclass(:table)"),
-                    {"table": other + ".catalog_item"},
-                )
-            )
-            tables_after = set(
-                await connection.run_sync(
-                    lambda conn: inspect(conn).get_table_names(schema=schema)
-                )
-            )
-            self.assertEqual(
-                tables_after, {t for t in tables_before if not t.startswith("catalog_")}
-            )
-            self.assertIsNotNone(
-                await connection.scalar(
-                    text("SELECT to_regclass(:table)"),
-                    {"table": schema + ".files_registry"},
-                )
-            )
-            await self.migrator.upgrade(connection, schema)
             self.assertEqual(
                 await connection.scalar(
                     text(f'SELECT count(*) FROM "{schema}".catalog_product_types')
                 ),
                 0,
             )
-            self.assertIsNone(
-                await connection.scalar(
-                    text("SELECT to_regclass(:table)"),
-                    {"table": schema + ".catalog_products"},
-                )
-            )
-            self.assertIsNone(
-                await connection.scalar(
-                    text("SELECT to_regclass(:table)"),
-                    {"table": schema + ".catalog_variants"},
-                )
-            )
-            self.assertEqual(
-                await self.migrator.current(connection, schema), (self.migrator.head(),)
-            )
-
-    async def test_upgrade_repeat_downgrade_and_constraints(self) -> None:
-        schema = await self.new_schema()
-        async with self.engine.begin() as connection:
-            original_path = await connection.scalar(text("SHOW search_path"))
-            await self.migrator.upgrade(connection, schema)
-            self.assertEqual(
-                await connection.scalar(text("SHOW search_path")), original_path
-            )
-            self.assertEqual(
-                await self.migrator.current(connection, schema),
-                (self.migrator.head(),),
-            )
-            await self.migrator.downgrade(
-                connection, schema, "0014_channel_publications"
-            )
-            indexes = await connection.run_sync(
-                lambda conn: inspect(conn).get_indexes("warehouses", schema=schema)
-            )
-            self.assertIn("ix_warehouses_parent_id", {item["name"] for item in indexes})
-            checks = await connection.run_sync(
-                lambda conn: inspect(conn).get_check_constraints(
-                    "warehouses", schema=schema
-                )
-            )
-            self.assertIn(
-                "ck_warehouses_parent_not_self", {item["name"] for item in checks}
-            )
-            root = await self.insert_warehouse(connection, schema)
-            child = await self.insert_warehouse(connection, schema, parent_id=root)
             with self.assertRaises(IntegrityError):
                 async with connection.begin_nested():
                     await connection.execute(
-                        text(f'DELETE FROM "{schema}".warehouses WHERE id = :id'),
-                        {"id": root},
-                    )
-            with self.assertRaises(IntegrityError):
-                async with connection.begin_nested():
-                    await connection.execute(
-                        text(
-                            f'UPDATE "{schema}".warehouses SET parent_id = id WHERE id = :id'
-                        ),
-                        {"id": child},
+                        text(f'UPDATE "{schema}".tenant_currency_settings SET id=2')
                     )
             await connection.execute(
                 text(f'CREATE TABLE "{schema}".legacy_objects (id integer)')
@@ -641,53 +255,15 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
             await self.migrator.upgrade(connection, schema)
-            self.assertFalse(
-                await connection.run_sync(
-                    lambda conn: inspect(conn).has_table("warehouses", schema=schema)
-                )
-            )
-
-    async def test_price_list_archive_migration_upgrade_and_downgrade(self):
-        schema = await self.new_schema()
-        price_list_id = uuid4()
-        actor_id = uuid4()
-        async with self.engine.begin() as connection:
-            columns = await connection.run_sync(
-                lambda conn: inspect(conn).get_columns("price_lists", schema=schema)
-            )
-            self.assertIn("archived_at", {column["name"] for column in columns})
-            await connection.execute(
-                text(
-                    f'INSERT INTO "{schema}".price_lists '
-                    "(id, title, created_by, updated_by, status, source_format, "
-                    "source_url_secret, source_url_display) "
-                    "VALUES (:id, 'Archive migration', :actor, :actor, "
-                    "'archived', 'xml', 'encrypted', 'https://example.com/…')"
-                ),
-                {"id": price_list_id, "actor": actor_id},
-            )
-            await self.migrator.downgrade(
-                connection, schema, "0004_partner_price_lists"
-            )
-            downgraded_columns = await connection.run_sync(
-                lambda conn: inspect(conn).get_columns("price_lists", schema=schema)
-            )
-            self.assertNotIn(
-                "archived_at", {column["name"] for column in downgraded_columns}
-            )
             self.assertEqual(
-                await connection.scalar(
-                    text(f'SELECT status FROM "{schema}".price_lists WHERE id = :id'),
-                    {"id": price_list_id},
-                ),
-                "paused",
-            )
-            await self.migrator.upgrade(connection, schema)
-            upgraded_columns = await connection.run_sync(
-                lambda conn: inspect(conn).get_columns("price_lists", schema=schema)
-            )
-            self.assertIn(
-                "archived_at", {column["name"] for column in upgraded_columns}
+                (
+                    await connection.execute(
+                        text(
+                            f'SELECT id,type,name FROM "{schema}".contact_point_labels ORDER BY id'
+                        )
+                    )
+                ).all(),
+                labels,
             )
 
     async def test_crm_migration_constraints_indexes_and_round_trip(self):
@@ -778,13 +354,12 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                         )
                         .execution_options(schema_translate_map={"tenant": schema})
                     )
-            await self.migrator.downgrade(
-                connection, schema, "0009_crm_contact_companies"
-            )
-            self.assertEqual(
-                await connection.scalar(text(f'SELECT name FROM "{schema}".companies')),
-                "Acme",
-            )
+            with self.assertRaises(IntegrityError):
+                async with connection.begin_nested():
+                    await connection.execute(
+                        text(f'UPDATE "{schema}".companies SET legal_name = :name'),
+                        {"name": "   "},
+                    )
             await self.migrator.upgrade(connection, schema)
             self.assertEqual(
                 await connection.scalar(
@@ -792,73 +367,9 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 ),
                 "Acme",
             )
-            with self.assertRaises(IntegrityError):
-                async with connection.begin_nested():
-                    await connection.execute(
-                        text(f'UPDATE "{schema}".companies SET legal_name = :name'),
-                        {"name": "   "},
-                    )
-            await self.migrator.downgrade(
-                connection, schema, "0006_price_list_streaming"
-            )
-            for table_name in ("contacts", "companies"):
-                self.assertFalse(
-                    await connection.run_sync(
-                        lambda conn, name=table_name: inspect(conn).has_table(
-                            name, schema=schema
-                        )
-                    )
-                )
-            await self.migrator.upgrade(connection, schema)
-            self.assertTrue(
-                await connection.run_sync(
-                    lambda conn: inspect(conn).has_table("contacts", schema=schema)
-                )
-            )
-
-    async def test_price_list_streaming_upgrade_preserves_existing_quarantine(self):
-        schema = await self.new_schema()
-        price_id, actor_id, run_id = uuid4(), uuid4(), uuid4()
-        async with self.engine.begin() as connection:
-            await self.migrator.downgrade(
-                connection, schema, "0005_price_list_management"
-            )
-            await connection.execute(
-                text(
-                    f"""INSERT INTO "{schema}".price_lists (id,title,created_by,updated_by,source_format,source_url_secret,source_url_display) VALUES (:id,'Existing',:actor,:actor,'xml','encrypted','masked')"""
-                ),
-                dict(id=price_id, actor=actor_id),
-            )
-            await connection.execute(
-                text(
-                    f"""INSERT INTO "{schema}".price_list_sync_runs (id,price_list_id,status,trigger,started_at,finished_at) VALUES (:id,:price,'partial','manual',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)"""
-                ),
-                dict(id=run_id, price=price_id),
-            )
-            await connection.execute(
-                text(
-                    f"""INSERT INTO "{schema}".price_list_sync_items (sync_run_id,row_number,external_id) VALUES (:run,1,'quarantine')"""
-                ),
-                dict(run=run_id),
-            )
-            await self.migrator.upgrade(connection, schema)
-            result = (
-                await connection.execute(
-                    text(
-                        f'SELECT sync_run_id,external_id,quarantined FROM "{schema}".price_list_sync_items'
-                    )
-                )
-            ).one()
-            self.assertEqual(tuple(result), (run_id, "quarantine", True))
-            indexes = await connection.run_sync(
-                lambda conn: inspect(conn).get_indexes("partner_offers", schema=schema)
-            )
-            self.assertTrue(
-                {"ix_partner_offers_list_id", "ix_partner_offers_search_document"}
-                <= {item["name"] for item in indexes}
-            )
 
     async def test_two_tenants_have_independent_versions_and_foreign_keys(self) -> None:
+        """Версии независимы, все FK Identity направлены в собственную схему."""
         left, right = await self.new_schema(), await self.new_schema(upgrade=False)
         async with self.engine.begin() as connection:
             self.assertEqual(await self.migrator.current(connection, right), ())
@@ -871,22 +382,17 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
             await self.migrator.upgrade(connection, right)
             for schema in (left, right):
-                await self.migrator.downgrade(
-                    connection, schema, "0014_channel_publications"
+                foreign_keys = await connection.run_sync(
+                    lambda conn: inspect(conn).get_foreign_keys(
+                        "user_emails", schema=schema
+                    )
                 )
-            root = await self.insert_warehouse(connection, left)
-            with self.assertRaises(IntegrityError):
-                async with connection.begin_nested():
-                    await self.insert_warehouse(connection, right, parent_id=root)
-            await self.insert_warehouse(connection, right, warehouse_id=root)
-            self.assertEqual(
-                await connection.scalar(
-                    text(f'SELECT count(*) FROM "{left}".warehouses')
-                ),
-                1,
-            )
+                self.assertTrue(foreign_keys)
+                self.assertTrue(
+                    all(fk["referred_schema"] == schema for fk in foreign_keys)
+                )
             await self.migrator.downgrade(connection, right, "base")
-            await self.migrator.upgrade(connection, left)
+            self.assertEqual(await self.migrator.current(connection, right), ())
             self.assertEqual(
                 await self.migrator.current(connection, left), (self.migrator.head(),)
             )

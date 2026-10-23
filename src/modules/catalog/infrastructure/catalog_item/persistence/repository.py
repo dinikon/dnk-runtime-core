@@ -18,6 +18,7 @@ from collections.abc import Mapping
 from typing import Any
 from uuid import UUID
 from sqlalchemy import select, insert, update, delete
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.catalog.domain.catalog_item.aggregate import CatalogItem
 from src.modules.catalog.domain.catalog_item.value_object.identifier import (
@@ -89,7 +90,15 @@ class SqlAlchemyCatalogItemRepository:
         values = CatalogItemMapper.to_insert_values(entity)
         before = self._original.get(entity.id.uuid)
         if before is None:
-            await self._session.execute(insert(CatalogItemModel).values(**values))
+            try:
+                await self._session.execute(insert(CatalogItemModel).values(**values))
+            except IntegrityError as error:
+                original = getattr(error.orig, "__cause__", None) or error.orig
+                if getattr(original, "constraint_name", None) != "uq_catalog_item_sku":
+                    raise
+                raise CatalogConflictError(
+                    "Конфликт уникального SKU.", ("sku",)
+                ) from error
         else:
             changes = {
                 key: value

@@ -16,6 +16,11 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import type { ProductGallery } from "../../model/product.types";
+import {
+  isProductImage,
+  productImageAccept,
+  productImageFormats,
+} from "../../model/product-images";
 import { useProductSectionDraft } from "../../model/use-product-section-draft";
 import ProductFieldError from "../product/ProductFieldError.vue";
 const props = defineProps<{
@@ -78,8 +83,8 @@ function upload(event: Event): void {
   const file = target.files?.[0];
   localError.value = "";
   if (file) {
-    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type))
-      localError.value = "Выберите PNG, JPEG или WebP.";
+    if (!isProductImage(file))
+      localError.value = `Выберите изображение: ${productImageFormats}.`;
     else if (file.size > 10 * 1024 * 1024)
       localError.value = "Размер изображения не должен превышать 10 МБ.";
     else if (gallery.value.images.length >= 100)
@@ -195,7 +200,7 @@ function upload(event: Event): void {
           :id="fileId"
           ref="fileInput"
           type="file"
-          accept="image/png,image/jpeg,image/webp"
+          :accept="productImageAccept"
           class="hidden"
           tabindex="-1"
           aria-hidden="true"
@@ -216,7 +221,7 @@ function upload(event: Event): void {
           />{{ uploading ? "Загрузка…" : "Загрузить изображение" }}</Button
         >
         <FieldDescription :id="`${fileId}-hint`"
-          >PNG, JPEG или WebP · до 10 МБ ·
+          >{{ productImageFormats }} · до 10 МБ ·
           {{ gallery.images.length }}/100</FieldDescription
         > </Field
       ><ProductFieldError :id="`${fileId}-error`" :error="error" />

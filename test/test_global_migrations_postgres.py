@@ -6,9 +6,8 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import httpx
-from alembic import command
-from sqlalchemy import inspect, text
-from sqlalchemy.engine import Connection
+from sqlalchemy import MetaData, inspect, text
+from sqlalchemy.schema import BLANK_SCHEMA
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -16,105 +15,9 @@ from src.modules.shared.infrastructure.persistence.global_migrations import (
     GlobalMigrator,
     GlobalSchemaNotReadyError,
 )
-from src.modules.shared.infrastructure.persistence.alembic_lock import (
-    serialized_alembic,
-)
-from src.modules.shared.domain.jobs.scheduled_job_status import ScheduledJobStatus
 
 
 class GlobalMigrationsPostgresTests(unittest.IsolatedAsyncioTestCase):
-    async def test_channel_jobs_removal_is_exact_transactional_and_not_reversed(
-        self,
-    ) -> None:
-        """Удаляет все статусы импорта, сохраняя чужие jobs при retry и downgrade."""
-        migrator = GlobalMigrator()
-        config = migrator.config()
-
-        def prepare(connection: Connection) -> None:
-            """Разворачивает прежнюю global-ревизию для заполнения исторических jobs."""
-            config.attributes["connection"] = connection
-            command.upgrade(config, "0006_reference_data")
-
-        def downgrade(connection: Connection) -> None:
-            """Откатывает очистку без воссоздания удалённых заданий."""
-            config.attributes["connection"] = connection
-            command.downgrade(config, "0006_reference_data")
-
-        async with self.engine.begin() as connection, serialized_alembic():
-            await connection.run_sync(prepare)
-        insert_job = text(
-            "INSERT INTO public.scheduled_jobs "
-            "(id, tenant_id, job_type, payload, run_at, status) "
-            "VALUES (:id, :tenant, :kind, '{\"preserved\": true}', now(), :status)"
-        )
-        tenant_ids = (uuid4(), uuid4())
-        async with self.engine.begin() as connection:
-            for tenant_id in tenant_ids:
-                for status in ScheduledJobStatus:
-                    await connection.execute(
-                        insert_job,
-                        {
-                            "id": uuid4(),
-                            "tenant": tenant_id,
-                            "kind": "channels.publication_import",
-                            "status": status.value,
-                        },
-                    )
-            for kind, tenant_id in (
-                ("price_list.sync", tenant_ids[0]),
-                ("files.purge", tenant_ids[1]),
-                ("reference_data.refresh", None),
-                ("channels.publication_import.retry", tenant_ids[0]),
-            ):
-                await connection.execute(
-                    insert_job,
-                    {
-                        "id": uuid4(),
-                        "tenant": tenant_id,
-                        "kind": kind,
-                        "status": "scheduled",
-                    },
-                )
-            before = (
-                await connection.execute(
-                    text("SELECT * FROM public.scheduled_jobs ORDER BY id")
-                )
-            ).all()
-        with self.assertRaisesRegex(RuntimeError, "rollback cleanup"):
-            async with self.engine.begin() as connection:
-                await migrator.upgrade(connection)
-                raise RuntimeError("rollback cleanup")
-        async with self.engine.connect() as connection:
-            self.assertEqual(
-                await migrator.current(connection), ("0006_reference_data",)
-            )
-            self.assertEqual(
-                (
-                    await connection.execute(
-                        text("SELECT * FROM public.scheduled_jobs ORDER BY id")
-                    )
-                ).all(),
-                before,
-            )
-        async with self.engine.begin() as connection:
-            await migrator.upgrade(connection)
-            await migrator.upgrade(connection)
-        async with self.engine.begin() as connection, serialized_alembic():
-            await connection.run_sync(downgrade)
-        async with self.engine.begin() as connection:
-            await migrator.upgrade(connection)
-            self.assertEqual(
-                (
-                    await connection.execute(
-                        text("SELECT * FROM public.scheduled_jobs ORDER BY id")
-                    )
-                ).all(),
-                [
-                    row
-                    for row in before
-                    if row.job_type != "channels.publication_import"
-                ],
-            )
 
     async def asyncSetUp(self):
         value = os.environ.get("DNK_TEST_DATABASE_URL")
@@ -157,6 +60,34 @@ class GlobalMigrationsPostgresTests(unittest.IsolatedAsyncioTestCase):
                 {table.name for table in Base.metadata.tables.values()}
                 | {"alembic_version_global"},
             )
+            from alembic.autogenerate import compare_metadata
+            from alembic.migration import MigrationContext
+
+            # Сравниваем public с default schema без ложного различия FK public/None.
+            metadata = MetaData()
+            for table in Base.metadata.sorted_tables:
+                table.to_metadata(
+                    metadata,
+                    schema=None,
+                    referred_schema_fn=lambda table, schema, constraint, referred: (
+                        BLANK_SCHEMA if referred == "public" else referred
+                    ),
+                )
+            differences = await connection.run_sync(
+                lambda conn: compare_metadata(
+                    MigrationContext.configure(
+                        conn,
+                        opts={
+                            "compare_type": True,
+                            "compare_server_default": True,
+                            "include_object": lambda obj, name, kind, reflected, compared: name
+                            != "alembic_version_global",
+                        },
+                    ),
+                    metadata,
+                )
+            )
+            self.assertEqual(differences, [])
             for table in Base.metadata.sorted_tables:
                 columns = await connection.run_sync(
                     lambda conn: inspect(conn).get_columns(table.name, schema="public")
@@ -182,16 +113,6 @@ class GlobalMigrationsPostgresTests(unittest.IsolatedAsyncioTestCase):
                 lambda conn: inspect(conn).get_table_names(schema="public")
             )
             self.assertEqual(tables, ["tenants"])
-
-    async def upgrade_previous_revision(self):
-        config = GlobalMigrator().config()
-        async with self.engine.begin() as connection, serialized_alembic():
-
-            def upgrade(conn):
-                config.attributes["connection"] = conn
-                command.upgrade(config, "0002_control_plane")
-
-            await connection.run_sync(upgrade)
 
     async def test_current_revision_with_missing_table_is_not_ready(self):
         import src.app_factory as app_factory
@@ -221,54 +142,25 @@ class GlobalMigrationsPostgresTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
 
-    async def test_upgrade_repairs_missing_domains_and_resource_inspection(self):
+    async def test_resource_inspection_after_fresh_upgrade(self) -> None:
+        """Начальная схема содержит реестр доменов для проверки ресурсов."""
         from src.modules.control_plane.infrastructure.tenancy_adapter import (
             TenancyAdapter,
         )
 
-        await self.upgrade_previous_revision()
-        existing_id, new_id = uuid4(), uuid4()
         async with self.engine.begin() as connection:
-            await connection.execute(
-                text(
-                    "INSERT INTO public.tenants (id, name, external_id) VALUES (:id, 'Existing', 'existing')"
+            await GlobalMigrator().upgrade(connection)
+        async with async_sessionmaker(self.engine)() as session:
+            self.assertEqual(
+                await TenancyAdapter(session, "dnk_").inspect(
+                    uuid4(), "new.example.test", "new"
                 ),
-                {"id": existing_id},
-            )
-            await connection.execute(text("DROP TABLE public.tenant_domains"))
-        async with self.engine.begin() as connection:
-            await GlobalMigrator().upgrade(connection)
-            await GlobalMigrator().require_current(connection)
-            self.assertEqual(
-                await connection.scalar(text("SELECT id FROM public.tenants")),
-                existing_id,
-            )
-        sessions = async_sessionmaker(self.engine)
-        async with sessions() as session:
-            adapter = TenancyAdapter(session, "dnk_")
-            self.assertEqual(
-                await adapter.inspect(new_id, "new.example.test", str(new_id)), "absent"
-            )
-            self.assertEqual(
-                await adapter.inspect(existing_id, "existing.example.test", "existing"),
-                "present",
-            )
-        async with self.engine.begin() as connection:
-            await GlobalMigrator().upgrade(connection)
-            indexes = await connection.run_sync(
-                lambda conn: inspect(conn).get_indexes(
-                    "tenant_domains", schema="public"
-                )
-            )
-            self.assertTrue(
-                any(
-                    index["name"] == "ix_tenant_domains_host" and index["unique"]
-                    for index in indexes
-                )
+                "absent",
             )
 
     async def test_upgrade_preserves_existing_domain_records(self):
-        await self.upgrade_previous_revision()
+        async with self.engine.begin() as connection:
+            await GlobalMigrator().upgrade(connection)
         tenant_id, domain_id = uuid4(), uuid4()
         async with self.engine.begin() as connection:
             await connection.execute(

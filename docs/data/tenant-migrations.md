@@ -65,7 +65,7 @@ Revision `0016_remove_inventory`, after `0014_channel_publications`, retires
 the Inventory schema; its own upgrade/downgrade behavior is preserved.
 Catalog no longer references Inventory SKUs or warehouses.
 
-Tenant head `0027_remove_channels`, after `0025_user_display_currency`, drops
+Historical revision `0027_remove_channels`, after `0025_user_display_currency`, drops
 `channel_publications`, `channel_publication_import_runs`, then `channels`,
 without CASCADE. It removes stored credentials, observed publications and import
 progress. The whole tenant migration rolls back if an unexpected dependency
@@ -73,7 +73,17 @@ blocks a drop. Other module tables remain. Downgrade recreates the empty
 historical structure, including foreign keys, checks and indexes, through
 `0013_channels` and `0014_channel_publications`; it cannot recover deleted data.
 Both historical revisions and their table ownership names stay in the project.
-Fresh tenants also reach this head and have no Channels tables.
+At revision 0027 tenants have no Channels tables.
+
+The current head `0028_channels_core` follows 0027 and creates the new Channels
+model: `channels`, `channel_connections`, `channel_sync_runs` and
+`channel_external_publications`. Channel owns its single Connection, protected
+by an unconditional UNIQUE(channel_id); outbound synchronization defaults to false.
+The migration does not restore old credentials/publications, modify Catalog,
+seed channels, or rewrite previous revisions. Downgrade drops only these new
+four tables and returns to the empty Channels state of 0027. See the
+[current Channels module](../modules/channels.md) for credentials configuration
+and the verification/initialization worker.
 
 ## Transition from shared identity tables
 
@@ -150,6 +160,77 @@ tenant upgrades while another fails; resume with the same image and retry.
 Do not roll back only the application image after dropping tables. Restore the
 required schema revisions and backup data before starting an older runtime;
 downgrade alone returns empty tables and cannot restore credentials or snapshots.
+
+## Channels Catalog bindings: 0029
+
+`0029_channels_catalog_bindings` follows `0028_channels_core`. It adds product
+representations, historical external bindings and completed Draft-creation receipts.
+It also moves connection locales/currency into a settings JSONB object and removes
+the constant publication core_version column. Existing settings and observations
+are preserved. The initial settings contract used SDK 2/config 3; the current release uses
+SDK 3/config 3 for full publication reading (0030).
+Catalog item IDs are references through public contracts, without cross-module SQL
+foreign keys. Apply tenant migrations before deploying the matching API/Console:
+Catalog deletion now checks active Channels usage on the same transaction.
+Downgrade drops these three tables, retains Catalog items, and does not restore
+binding history. It restores locales/currency and core_version=1; additional plugin
+settings without legacy columns are lost on downgrade. Revision 0028 remains
+unchanged. The working database is not migrated by importing the modules.
+
+## Channels full publication import: 0030
+
+`0030_channel_publication_imports` follows `0029_channels_catalog_bindings` and adds
+`channel_publication_import_preparations`. It stores a bounded normalized JSONB
+snapshot, connection/observed revisions, per-image results, lifecycle, sequence and
+preview expiration. It does not alter Catalog content or existing observations.
+Deploy API, Console, SDK 3 plugins and the jobs worker together after tenant upgrade.
+The worker handles `channels.prepare_publication_import` and
+`channels.cleanup_publication_import`. Files system storage must be provisioned.
+Downgrade removes preparations; it retains Catalog items and Files registrations.
+Stop workers and release temporary preparation files before a downgrade. SQL DDL
+cannot roll back physical objects; the Files orphan cleanup handles rolled-back
+uploads, while the preparation cleanup handles registered unused files.
+
+## Channels manual content updates: 0031
+
+`0031_channel_content_updates` follows `0030_channel_publication_imports` and adds
+`channel_content_update_runs` with owned `channel_content_update_items`. Immutable
+Catalog text snapshots, observed texts, binding revisions, confirmation hash,
+connection generation and per-item delivery results are stored here. The existing
+initialization SyncRun and Catalog tables are unchanged.
+
+Deploy API, Console, SDK 4/config 3 plugins and the jobs worker together after the
+tenant migration. The worker registers `channels.update_publication_content`.
+Woo product updates are supported; Prom comparison remains read-only until a
+public XML update-only contract is confirmed. No export-artifact table is created
+for an unavailable transport. Outbound permission remains false by default.
+Downgrade removes operation history, not external changes already made. Stop the
+worker and finish/reconcile in-flight operations before downgrade.
+
+## Channels publication snapshot: 0032
+
+`0032_publication_payload_meta` follows `0031_channel_content_updates`. It backfills
+versioned JSONB `payload` and `meta` in batches of 500 observations, then removes
+flat display/extension columns. Identity, UUIDs, bindings, representations, import
+preparations, content-update history, timestamps and observed revisions remain intact.
+Existing Prom `provider_external_id` moves to `meta.provider.import_key`; native ID
+is still `external_id`. Woo variation parent IDs, descriptions and raw sale metadata
+are retained. Numeric values become canonical Decimal strings. Expression indexes
+replace the previous SKU/stock indexes. Fingerprints are recalculated for the new
+canonical snapshot without incrementing observed revision.
+
+Finish or reconcile active SDK 4 content-update operations, then stop old API/jobs
+workers before applying the tenant migration; deploy SDK 5/config 3 plugins with
+the new runtime. Old SQL columns are no longer readable by old workers.
+Existing content-update previews use their saved SDK version and may require a new
+preview; completed history and delivery intents are retained. This migration does
+not enable Prom XML writes or change Catalog/outbound policy.
+
+Downgrade restores the old columns and provider v1 names. Additional payload locales
+are retained inside legacy `extensions._channels_payload_v1` for a subsequent upgrade.
+As with other schema downgrades, finish/reconcile active operations before reverting
+the runtime. Migration tests use disposable databases; importing modules does not
+migrate the working database.
 
 ## Related
 

@@ -24,6 +24,7 @@ from src.modules.identity.application.cloud.command.start_cloud_auth.dto import 
 
 
 class StartCloudAuthHandler:
+    """Готовит одноразовый OIDC flow с привязкой к tenant и браузеру."""
 
     def __init__(
         self,
@@ -35,6 +36,7 @@ class StartCloudAuthHandler:
         tenant_reader: TenantContextReaderPort,
         tokens: TokenManager,
     ) -> None:
+        """Принимает порты проверки доступа, провайдера и хранения состояния."""
         self.access = access
         self.authentication = authentication
         self.cloud_connection = cloud_connection
@@ -43,10 +45,15 @@ class StartCloudAuthHandler:
         self.tokens = tokens
 
     async def execute(self, request: StartCloudAuthCommand) -> StartCloudAuthResultDTO:
+        """Создаёт URL входа с PKCE, state и nonce без изменения локального аккаунта."""
         host = request.host
         session_token = request.session_token
         flow_cookie = request.flow_cookie
         purpose = request.purpose
+        if request.silent and purpose != "login":
+            raise IdentityAccessError(
+                "Silent authorization is only available for login.", 422
+            )
         context = await self.tenant_reader.get_by_host(host)
         user_id = session_id = None
         epoch = None
@@ -79,7 +86,11 @@ class StartCloudAuthHandler:
             secrets.token_urlsafe(48),
         )
         url = await self.oidc.authorization_url(
-            connection, state=state, nonce=nonce, verifier=verifier
+            connection,
+            state=state,
+            nonce=nonce,
+            verifier=verifier,
+            silent=request.silent,
         )
         await self.tokens.set_token(
             prefix="oidc_state",

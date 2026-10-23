@@ -1,3 +1,7 @@
+from src.modules.catalog.application.catalog_item.creation_service import (
+    CatalogItemCreationService,
+)
+from src.modules.catalog.infrastructure.catalog_item.sku import SqlAlchemyCatalogItemSku
 from typing import Annotated
 from fastapi import Depends
 from src.modules.shared.presentation.persistence.depends import UoWDep
@@ -29,10 +33,6 @@ from src.modules.catalog.application.catalog_item.port.content_schema import (
 from src.modules.catalog.infrastructure.catalog_item.content_schema import (
     SqlAlchemyProductTypeSchemas,
 )
-from src.modules.catalog.application.catalog_item.port.usage import CatalogItemUsagePort
-from src.modules.catalog.infrastructure.catalog_item.usage import (
-    UnboundCatalogItemUsage,
-)
 from src.modules.catalog.application.catalog_item.port.files import (
     CatalogImageFilesPort,
 )
@@ -61,14 +61,6 @@ def get_schemas(uow: UoWDep) -> CatalogItemContentSchemaPort:
 SchemasDep = Annotated[CatalogItemContentSchemaPort, Depends(get_schemas)]
 
 
-def get_usage() -> CatalogItemUsagePort:
-    """Собирает порт usage конкретного процесса."""
-    return UnboundCatalogItemUsage()
-
-
-UsageDep = Annotated[CatalogItemUsagePort, Depends(get_usage)]
-
-
 def get_currencies(handler: ValidateCurrencyHandlerDep) -> CurrencyPort:
     """Собирает порт currencies конкретного процесса."""
     return ReferenceDataCurrencies(handler)
@@ -80,7 +72,7 @@ CurrenciesDep = Annotated[CurrencyPort, Depends(get_currencies)]
 def get_files(uow: UoWDep) -> CatalogImageFilesPort:
     """Собирает публичные Files handlers на сессии Catalog UoW."""
     handlers = build_files_handlers(uow.session)
-    return FilesCatalogImages(handlers.upload, handlers.content)
+    return FilesCatalogImages(handlers.upload, handlers.content, handlers.lock_ready)
 
 
 FilesDep = Annotated[CatalogImageFilesPort, Depends(get_files)]
@@ -108,11 +100,29 @@ from src.modules.catalog.application.catalog_item.command.create_catalog_item.ha
 
 
 def get_create_catalog_item_handler(
-    repository: ItemRepositoryDep, schemas: SchemasDep, clock: ClockDep, uuid: UuidDep
+    repository: ItemRepositoryDep,
+    schemas: SchemasDep,
+    clock: ClockDep,
+    uuid: UuidDep,
+    locales: LocalesDep,
+    currencies: CurrenciesDep,
+    sanitizer: SanitizerDep,
+    files: FilesDep,
+    uow: UoWDep,
 ) -> CreateCatalogItemHandler:
     """Собирает отдельный handler сценария create_catalog_item."""
     return CreateCatalogItemHandler(
-        repository=repository, schemas=schemas, clock=clock, uuid=uuid
+        repository,
+        CatalogItemCreationService(
+            schemas,
+            locales,
+            currencies,
+            SqlAlchemyCatalogItemSku(uow.session),
+            sanitizer,
+            files,
+            clock,
+            uuid,
+        ),
     )
 
 
@@ -125,12 +135,10 @@ from src.modules.catalog.application.catalog_item.command.delete_catalog_item.ha
 
 
 def get_delete_catalog_item_handler(
-    mutations: MutationsDep, repository: ItemRepositoryDep, usage: UsageDep
+    mutations: MutationsDep, repository: ItemRepositoryDep
 ) -> DeleteCatalogItemHandler:
     """Собирает отдельный handler сценария delete_catalog_item."""
-    return DeleteCatalogItemHandler(
-        mutations=mutations, repository=repository, usage=usage
-    )
+    return DeleteCatalogItemHandler(mutations=mutations, repository=repository)
 
 
 DeleteCatalogItemHandlerDep = Annotated[
@@ -190,22 +198,8 @@ GetCatalogItemImageContentHandlerDep = Annotated[
     GetCatalogItemImageContentHandler,
     Depends(get_get_catalog_item_image_content_handler),
 ]
-from src.modules.catalog.application.catalog_item.query.get_catalog_items_publication_snapshot.handler import (
-    GetCatalogItemsPublicationSnapshotHandler,
-)
 
 
-def get_get_catalog_items_publication_snapshot_handler(
-    repository: QueriesDep, clock: ClockDep
-) -> GetCatalogItemsPublicationSnapshotHandler:
-    """Собирает отдельный handler сценария get_catalog_items_publication_snapshot."""
-    return GetCatalogItemsPublicationSnapshotHandler(repository=repository, clock=clock)
-
-
-GetCatalogItemsPublicationSnapshotHandlerDep = Annotated[
-    GetCatalogItemsPublicationSnapshotHandler,
-    Depends(get_get_catalog_items_publication_snapshot_handler),
-]
 from src.modules.catalog.application.catalog_item.query.list_catalog_items.handler import (
     ListCatalogItemsHandler,
 )

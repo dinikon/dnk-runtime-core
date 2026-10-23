@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<yml_catalog date="2026-10-19 13:48">
+  <shop>
+    <name>DNK XML contract test</name>
+    <currencies><currency id="UAH" rate="1"/></currencies>
+    <categories><category id="82715301">Корневая группа</category></categories>
+    <offers>
+      <offer id="3239744864" available="true" selling_type="r">
+        <name>DNK XML 06 RU — обновление существующего товара</name>
+        <description><![CDATA[<p>Русское описание XML 06. Проверка режима только обновления.</p>]]></description>
+        <name_ua>DNK XML 06 UK — оновлення наявного товару</name_ua>
+        <description_ua><![CDATA[<p>Український опис XML 06. Перевірка режиму лише оновлення.</p>]]></description_ua>
+        <price>10</price><currencyId>UAH</currencyId>
+        <categoryId>82715301</categoryId><portal_category_id>161311</portal_category_id>
+        <vendorCode>TEST</vendorCode>
+      </offer>
+      <offer id="999999999999" available="false" selling_type="r">
+        <name>DNK XML 06 RU — отсутствующий ID, не создавать</name>
+        <description>Проверка пропуска отсутствующего ID. Не покупать.</description>
+        <name_ua>DNK XML 06 UK — відсутній ID, не створювати</name_ua>
+        <description_ua>Перевірка пропуску відсутнього ID. Не купувати.</description_ua>
+        <price>1</price><currencyId>UAH</currencyId>
+        <categoryId>82715301</categoryId><portal_category_id>161311</portal_category_id>
+        <vendorCode>DNKXMLV2NEW</vendorCode>
+      </offer>
+    </offers>
+  </shop>
+</yml_catalog>

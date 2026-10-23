@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from decimal import Decimal
+from typing import Self
 from enum import StrEnum
 from src.modules.catalog.domain.error import InvalidCatalogValueError
 
@@ -41,6 +43,10 @@ class StockSpecificationVO:
                 raise InvalidCatalogValueError(
                     "Учёт требует целое количество и вычисляемый статус."
                 )
+            if not -2147483648 <= self.stock_quantity <= 2147483647:
+                raise InvalidCatalogValueError(
+                    "Количество вне поддерживаемого диапазона.", ("quantity",)
+                )
         elif (
             self.stock_quantity is not None
             or self.backorders != BackorderPolicy.NO
@@ -49,6 +55,33 @@ class StockSpecificationVO:
             raise InvalidCatalogValueError(
                 "Ручное наличие требует статус без количества и backorders=no."
             )
+
+    @classmethod
+    def from_declared_values(
+        cls,
+        manage_stock: bool,
+        quantity: Decimal | None,
+        status: str | None,
+        backorders: str,
+    ) -> Self:
+        """Преобразует точное количество без округления и проверяет политику наличия."""
+        if quantity is not None and (
+            not quantity.is_finite() or quantity != quantity.to_integral_value()
+        ):
+            raise InvalidCatalogValueError(
+                "Количество должно быть целым.", ("quantity",)
+            )
+        try:
+            return cls(
+                manage_stock,
+                int(quantity) if quantity is not None else None,
+                StockStatus(status) if status is not None else None,
+                BackorderPolicy(backorders),
+            )
+        except ValueError as error:
+            raise InvalidCatalogValueError(
+                "Выберите корректную политику наличия.", ("stock",)
+            ) from error
 
     def effective_status(self) -> StockStatus:
         """Вычисляет наличие собственного источника с порогом количества ноль."""

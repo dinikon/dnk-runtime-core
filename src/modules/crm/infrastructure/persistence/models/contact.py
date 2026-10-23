@@ -13,6 +13,7 @@ class ContactModel(EntityAuditMixin, AudienceMixin, TenantBase):
 
     __tablename__ = "contacts"
     __table_args__ = (
+        sa.PrimaryKeyConstraint("id", name="pk_contacts"),
         sa.CheckConstraint(
             "char_length(btrim(first_name)) BETWEEN 1 AND 255",
             name="ck_contacts_first_name",

@@ -8,11 +8,7 @@ import unittest
 from unittest.mock import patch
 from uuid import uuid4
 
-import importlib.util
-from pathlib import Path
 from contextlib import asynccontextmanager
-from alembic.migration import MigrationContext
-from alembic.operations import Operations
 import httpx
 from sqlalchemy import event, inspect, text
 from sqlalchemy.engine import make_url
@@ -57,23 +53,12 @@ from src.modules.tenancy.application.tenant.tenant_admission import TenantUnavai
 
 
 async def apply_book_migration(connection, schema, *, downgrade=False):
-    spec = importlib.util.spec_from_file_location(
-        "currency_book_migration",
-        Path(__file__).resolve().parents[1]
-        / "migrations/tenant/versions/0024_currency_exchange_rates.py",
-    )
-    migration = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(migration)
-    await connection.execute(
-        text("SELECT set_config('search_path', :schema, true)"), {"schema": schema}
-    )
-
-    def run(conn):
-        with Operations.context(MigrationContext.configure(conn)):
-            (migration.downgrade if downgrade else migration.upgrade)()
-
-    await connection.run_sync(run)
-    await connection.execute(text("SELECT set_config('search_path', 'public', true)"))
+    """Применяет актуальную tenant baseline во внешней транзакции."""
+    migrator = TenantMigrator()
+    if downgrade:
+        await migrator.downgrade(connection, schema, "base")
+    else:
+        await migrator.upgrade(connection, schema)
 
 
 class CurrencySliceTwoPostgresTests(unittest.IsolatedAsyncioTestCase):

@@ -1,0 +1,662 @@
+{
+  "state": "completed_negative_original_unchanged_two_created",
+  "filename": "08-native-update-with-units.csv",
+  "expected_url": "https://bioline.com.ua/crm/08-native-update-with-units.csv",
+  "sha256": "2a49b2e78079128849c19fdaf794eda4cb13e8bb82fb5982ab828c127dddbcb6",
+  "encoding": "UTF-8 with BOM",
+  "delimiter": ",",
+  "line_ending": "CRLF",
+  "data_rows": 2,
+  "original_native_id": 3239744864,
+  "original_import_id": null,
+  "missing_native_id": "4000000001",
+  "missing_import_id": "dnk-csv-20261019-missing-01",
+  "original_baseline": {
+    "id": 3239744864,
+    "external_id": null,
+    "sku": "TEST",
+    "price": 10,
+    "currency": "UAH",
+    "quantity_in_stock": null,
+    "presence": "available",
+    "status": "not_on_display",
+    "group": {
+      "id": 82715301,
+      "name": "Корневая группа",
+      "name_multilang": {
+        "ru": "Корневая группа",
+        "uk": "Коренева група"
+      }
+    },
+    "category": {
+      "id": 161311,
+      "caption": "Экспресс-тесты"
+    },
+    "images": [],
+    "discount": null,
+    "selling_type": "retail",
+    "measure_unit": "шт."
+  },
+  "expected_translations": {
+    "ru": {
+      "title": "DNK CSV 07 RU — обновление исходного товара",
+      "body": "<p>Русское описание CSV 07. Обновление карточки Prom 3239744864.</p>"
+    },
+    "uk": {
+      "title": "DNK CSV 07 UK — оновлення початкового товару",
+      "body": "<p>Український опис CSV 07. Оновлення картки Prom 3239744864.</p>"
+    }
+  },
+  "request": {
+    "url": "https://bioline.com.ua/crm/08-native-update-with-units.csv",
+    "is_import_v2": true,
+    "force_update": false,
+    "only_available": false,
+    "mark_missing_product_as": "none",
+    "updated_fields": [
+      "name",
+      "description",
+      "name_ua",
+      "description_ua"
+    ]
+  },
+  "acceptance": [
+    "Refresh the original snapshot and confirm unknown native/import IDs are absent immediately before submission.",
+    "The hosted CSV must exactly match the local bytes.",
+    "Native product 3239744864 receives all four CSV texts; imported alias 3239759991 is not the original.",
+    "No new native product or external/import key is created for the unknown row.",
+    "All non-text business fields, including the null external_id, are preserved.",
+    "An input-validation failure or an unprocessed import cannot prove update-only behavior.",
+    "If the empty original external_id is rejected, test native-ID-only matching separately; do not invent an external_id silently.",
+    "If a control product is created, discover its actual native ID by external_id, record it as test-owned, and hide it.",
+    "Restore original visibility and presence in finally and verify the state after cleanup."
+  ],
+  "previous_file": "07-native-update-and-missing.csv",
+  "change_from_previous": "Only append Одиниця_виміру=шт. to both rows; preserve identifiers, texts and all other columns for comparison.",
+  "references": [
+    "https://support.prom.ua/hc/uk/articles/360004960817",
+    "https://support.prom.ua/hc/uk/articles/360004963478"
+  ],
+  "last_attempt": {
+    "test": "24-csv",
+    "submitted_at": "2026-10-19T17:54:04.885560+00:00",
+    "launch_response": {
+      "http_status": 200,
+      "body": {
+        "status": "success",
+        "id": "6ad6593d50712db41db1de41"
+      }
+    },
+    "host_verification": {
+      "http_status": 200,
+      "matches_local": true,
+      "sha256": "2a49b2e78079128849c19fdaf794eda4cb13e8bb82fb5982ab828c127dddbcb6"
+    },
+    "import_id": "6ad6593d50712db41db1de41",
+    "state": "completed_negative_original_unchanged_two_created",
+    "update_only_behavior_tested": true,
+    "automatic_retry_scheduled": false,
+    "status": {
+      "status": "PARTIAL",
+      "total": 2,
+      "imported": 2,
+      "created": 2,
+      "updated": 0,
+      "not_changed": 0,
+      "actualized": 0,
+      "not_in_file": 0,
+      "created_active": 2,
+      "created_hidden": 0,
+      "errors": [],
+      "with_errors_count": 0
+    },
+    "acceptance_met": false,
+    "all_four_expected_texts_written": false,
+    "original_fields_unchanged": true,
+    "alias_fields_unchanged": true,
+    "unknown_control_created": true,
+    "created_duplicate_native_id": 3240166617,
+    "created_duplicate_external_id": "",
+    "created_control_native_id": 3240166618,
+    "created_control_external_id": "dnk-csv-20261019-missing-01",
+    "created_products_received_both_locales": true,
+    "unknown_native_id_still_absent": true,
+    "unknown_numeric_external_id_still_absent": true,
+    "created_active_before_cleanup": 2,
+    "control_status_before_cleanup": "on_display",
+    "cleanup_processed_ids": [
+      3240166617,
+      3240166618
+    ],
+    "owned_created_products_hidden": 7,
+    "verified_hidden_test_products": 8,
+    "original_visibility_and_presence_restored": true,
+    "original_restore_write_required": false,
+    "validation_ui": {
+      "observed_at": "2026-10-19T17:57:11.654732+00:00",
+      "import_id": "6ad6593d50712db41db1de41",
+      "source": "Visible Prom cabinet report for CSV 08",
+      "validated_rows": 2,
+      "reported_rows_with_data_issues": 2,
+      "messages": [
+        {
+          "text": "Товары загружены без идентификаторов",
+          "positions": [
+            "2"
+          ]
+        },
+        {
+          "text": "Для 2 товаров автоматически определена категория.",
+          "count": 2
+        }
+      ],
+      "processing_completion_not_yet_verified": true
+    },
+    "completion_ui": {
+      "source": "Visible Prom report for exact import ID",
+      "file": "08-native-update-with-units.csv",
+      "stage": "Импорт позиций",
+      "progress_percent": 100,
+      "processed": 2,
+      "total": 2
+    },
+    "readback": {
+      "original": {
+        "id": 3239744864,
+        "external_id": null,
+        "name_multilang": {
+          "ru": "Тестовый товар",
+          "uk": "Тестовий товар"
+        },
+        "description_multilang": {
+          "ru": "Тестовый товар",
+          "uk": "Тестовий товар"
+        },
+        "price": 10.0,
+        "currency": "UAH",
+        "sku": "TEST",
+        "quantity_in_stock": null,
+        "presence": "available",
+        "status": "not_on_display",
+        "images": [],
+        "discount": null,
+        "selling_type": "retail",
+        "measure_unit": "шт.",
+        "group_id": 82715301,
+        "category_id": 161311
+      },
+      "old_import_alias": {
+        "id": 3239759991,
+        "external_id": "3239744864",
+        "name_multilang": {
+          "ru": "DNK XML 06 RU — обновление существующего товара",
+          "uk": "DNK XML 06 UK — оновлення наявного товару"
+        },
+        "description_multilang": {
+          "ru": "<p>Русское описание XML 06. Проверка режима только обновления.</p>",
+          "uk": "<p>Український опис XML 06. Перевірка режиму лише оновлення.</p>"
+        },
+        "price": null,
+        "currency": null,
+        "sku": "",
+        "quantity_in_stock": null,
+        "presence": "not_available",
+        "status": "not_on_display",
+        "images": [],
+        "discount": null,
+        "selling_type": "retail",
+        "measure_unit": "",
+        "group_id": 82715301,
+        "category_id": 120212
+      },
+      "new_duplicate_after_hiding": {
+        "id": 3240166617,
+        "external_id": "",
+        "name_multilang": {
+          "ru": "DNK CSV 07 RU — обновление исходного товара",
+          "uk": "DNK CSV 07 UK — оновлення початкового товару"
+        },
+        "description_multilang": {
+          "ru": "<p>Русское описание CSV 07. Обновление карточки Prom 3239744864.</p>",
+          "uk": "<p>Український опис CSV 07. Оновлення картки Prom 3239744864.</p>"
+        },
+        "price": 10.0,
+        "currency": "UAH",
+        "sku": "TEST",
+        "quantity_in_stock": null,
+        "presence": "available",
+        "status": "not_on_display",
+        "images": [],
+        "discount": null,
+        "selling_type": "retail",
+        "measure_unit": "шт.",
+        "group_id": 157939479,
+        "category_id": 341022
+      },
+      "new_control_before_hiding": {
+        "id": 3240166618,
+        "external_id": "dnk-csv-20261019-missing-01",
+        "name_multilang": {
+          "ru": "DNK CSV 07 RU — неизвестный ID, не создавать",
+          "uk": "DNK CSV 07 UK — невідомий ID, не створювати"
+        },
+        "description_multilang": {
+          "ru": "<p>Проверка запрета создания CSV 07. Тестовый товар. Не покупать.</p>",
+          "uk": "<p>Перевірка заборони створення CSV 07. Тестовий товар. Не купувати.</p>"
+        },
+        "price": 1.0,
+        "currency": "UAH",
+        "sku": "DNKCSV20261019",
+        "quantity_in_stock": 0,
+        "presence": "not_available",
+        "status": "on_display",
+        "images": [],
+        "discount": null,
+        "selling_type": "retail",
+        "measure_unit": "шт.",
+        "group_id": 157939479,
+        "category_id": 152413
+      },
+      "new_control_after_hiding": {
+        "id": 3240166618,
+        "external_id": "dnk-csv-20261019-missing-01",
+        "name_multilang": {
+          "ru": "DNK CSV 07 RU — неизвестный ID, не создавать",
+          "uk": "DNK CSV 07 UK — невідомий ID, не створювати"
+        },
+        "description_multilang": {
+          "ru": "<p>Проверка запрета создания CSV 07. Тестовый товар. Не покупать.</p>",
+          "uk": "<p>Перевірка заборони створення CSV 07. Тестовий товар. Не купувати.</p>"
+        },
+        "price": 1.0,
+        "currency": "UAH",
+        "sku": "DNKCSV20261019",
+        "quantity_in_stock": 0,
+        "presence": "not_available",
+        "status": "not_on_display",
+        "images": [],
+        "discount": null,
+        "selling_type": "retail",
+        "measure_unit": "шт.",
+        "group_id": 157939479,
+        "category_id": 152413
+      }
+    },
+    "original_non_text_business_changes_before_cleanup": {},
+    "field_filter_enforcement_proven": false,
+    "limitations": [
+      "The original was not updated, so unchanged original fields do not establish safe text-only updating.",
+      "CSV non-text values equal the baseline, so unchanged values alone cannot prove updated_fields enforcement.",
+      "Both created cards received automatically selected categories; this does not show how a successful existing-card update preserves categories."
+    ],
+    "verified_at": "2026-10-19T17:58:38.355820+00:00",
+    "final_hidden_status_reverified_at": "2026-10-19T18:02:09.856030+00:00"
+  },
+  "attempts": [
+    {
+      "test": "19-csv",
+      "submitted_at": "2026-10-19T16:03:38.222473+00:00",
+      "launch_response": {
+        "http_status": 400,
+        "body": {
+          "error": {
+            "status": 400,
+            "message": "В данный момент действует ограничение на запуск одновременных импортов. Запуск возможен после завершения или отмены предыдущего импорта."
+          }
+        }
+      },
+      "host_verification": {
+        "http_status": 200,
+        "matches_local": true,
+        "sha256": "2a49b2e78079128849c19fdaf794eda4cb13e8bb82fb5982ab828c127dddbcb6"
+      },
+      "import_id": null,
+      "original_fields_unchanged": true,
+      "alias_fields_unchanged": true,
+      "unknown_ids_still_absent": true,
+      "update_only_behavior_tested": false,
+      "owned_created_products_hidden": 5,
+      "cleanup_write_required": false,
+      "state": "rejected_http_400_no_import_id",
+      "automatic_retry_scheduled": false
+    },
+    {
+      "test": "20-csv",
+      "submitted_at": "2026-10-19T16:32:25.434443+00:00",
+      "launch_response": {
+        "http_status": 400,
+        "body": {
+          "error": {
+            "status": 400,
+            "message": "В данный момент действует ограничение на запуск одновременных импортов. Запуск возможен после завершения или отмены предыдущего импорта."
+          }
+        }
+      },
+      "host_verification": {
+        "http_status": 200,
+        "matches_local": true,
+        "sha256": "2a49b2e78079128849c19fdaf794eda4cb13e8bb82fb5982ab828c127dddbcb6"
+      },
+      "import_id": null,
+      "original_fields_unchanged": true,
+      "alias_fields_unchanged": true,
+      "unknown_ids_still_absent": true,
+      "update_only_behavior_tested": false,
+      "owned_created_products_hidden": 5,
+      "cleanup_write_required": false,
+      "state": "rejected_http_400_no_import_id",
+      "automatic_retry_scheduled": false,
+      "previous_import_check": {
+        "api": {
+          "http_status": 200,
+          "body": {
+            "status": "PARTIAL",
+            "total": 2,
+            "imported": 0,
+            "created": 0,
+            "updated": 0,
+            "not_changed": 0,
+            "actualized": 0,
+            "not_in_file": 0,
+            "created_active": 0,
+            "created_hidden": 0,
+            "errors": [
+              {
+                "category": "validation",
+                "errors": [
+                  {
+                    "message": "1002",
+                    "code": 1002,
+                    "field_code": "measure_unit",
+                    "positions": [
+                      "2",
+                      "dnk-csv-20261019-missing-01"
+                    ],
+                    "extra": {
+                      "_field_current": "price",
+                      "_field_dependent": "measure_unit"
+                    }
+                  }
+                ]
+              }
+            ],
+            "with_errors_count": 0
+          }
+        },
+        "cabinet": {
+          "observed_at": "2026-10-19T16:33:06.812563+00:00",
+          "source": "Prom cabinet, report reloaded before attempt 20-csv",
+          "import_id": "6ad63ba050712db41db1dd95",
+          "observed_state": "Импорт в процессе отмены",
+          "cancellation_completed": false
+        }
+      }
+    },
+    {
+      "test": "24-csv",
+      "submitted_at": "2026-10-19T17:54:04.885560+00:00",
+      "launch_response": {
+        "http_status": 200,
+        "body": {
+          "status": "success",
+          "id": "6ad6593d50712db41db1de41"
+        }
+      },
+      "host_verification": {
+        "http_status": 200,
+        "matches_local": true,
+        "sha256": "2a49b2e78079128849c19fdaf794eda4cb13e8bb82fb5982ab828c127dddbcb6"
+      },
+      "import_id": "6ad6593d50712db41db1de41",
+      "state": "completed_negative_original_unchanged_two_created",
+      "update_only_behavior_tested": true,
+      "automatic_retry_scheduled": false,
+      "status": {
+        "status": "PARTIAL",
+        "total": 2,
+        "imported": 2,
+        "created": 2,
+        "updated": 0,
+        "not_changed": 0,
+        "actualized": 0,
+        "not_in_file": 0,
+        "created_active": 2,
+        "created_hidden": 0,
+        "errors": [],
+        "with_errors_count": 0
+      },
+      "acceptance_met": false,
+      "all_four_expected_texts_written": false,
+      "original_fields_unchanged": true,
+      "alias_fields_unchanged": true,
+      "unknown_control_created": true,
+      "created_duplicate_native_id": 3240166617,
+      "created_duplicate_external_id": "",
+      "created_control_native_id": 3240166618,
+      "created_control_external_id": "dnk-csv-20261019-missing-01",
+      "created_products_received_both_locales": true,
+      "unknown_native_id_still_absent": true,
+      "unknown_numeric_external_id_still_absent": true,
+      "created_active_before_cleanup": 2,
+      "control_status_before_cleanup": "on_display",
+      "cleanup_processed_ids": [
+        3240166617,
+        3240166618
+      ],
+      "owned_created_products_hidden": 7,
+      "verified_hidden_test_products": 8,
+      "original_visibility_and_presence_restored": true,
+      "original_restore_write_required": false,
+      "validation_ui": {
+        "observed_at": "2026-10-19T17:57:11.654732+00:00",
+        "import_id": "6ad6593d50712db41db1de41",
+        "source": "Visible Prom cabinet report for CSV 08",
+        "validated_rows": 2,
+        "reported_rows_with_data_issues": 2,
+        "messages": [
+          {
+            "text": "Товары загружены без идентификаторов",
+            "positions": [
+              "2"
+            ]
+          },
+          {
+            "text": "Для 2 товаров автоматически определена категория.",
+            "count": 2
+          }
+        ],
+        "processing_completion_not_yet_verified": true
+      },
+      "completion_ui": {
+        "source": "Visible Prom report for exact import ID",
+        "file": "08-native-update-with-units.csv",
+        "stage": "Импорт позиций",
+        "progress_percent": 100,
+        "processed": 2,
+        "total": 2
+      },
+      "readback": {
+        "original": {
+          "id": 3239744864,
+          "external_id": null,
+          "name_multilang": {
+            "ru": "Тестовый товар",
+            "uk": "Тестовий товар"
+          },
+          "description_multilang": {
+            "ru": "Тестовый товар",
+            "uk": "Тестовий товар"
+          },
+          "price": 10.0,
+          "currency": "UAH",
+          "sku": "TEST",
+          "quantity_in_stock": null,
+          "presence": "available",
+          "status": "not_on_display",
+          "images": [],
+          "discount": null,
+          "selling_type": "retail",
+          "measure_unit": "шт.",
+          "group_id": 82715301,
+          "category_id": 161311
+        },
+        "old_import_alias": {
+          "id": 3239759991,
+          "external_id": "3239744864",
+          "name_multilang": {
+            "ru": "DNK XML 06 RU — обновление существующего товара",
+            "uk": "DNK XML 06 UK — оновлення наявного товару"
+          },
+          "description_multilang": {
+            "ru": "<p>Русское описание XML 06. Проверка режима только обновления.</p>",
+            "uk": "<p>Український опис XML 06. Перевірка режиму лише оновлення.</p>"
+          },
+          "price": null,
+          "currency": null,
+          "sku": "",
+          "quantity_in_stock": null,
+          "presence": "not_available",
+          "status": "not_on_display",
+          "images": [],
+          "discount": null,
+          "selling_type": "retail",
+          "measure_unit": "",
+          "group_id": 82715301,
+          "category_id": 120212
+        },
+        "new_duplicate_after_hiding": {
+          "id": 3240166617,
+          "external_id": "",
+          "name_multilang": {
+            "ru": "DNK CSV 07 RU — обновление исходного товара",
+            "uk": "DNK CSV 07 UK — оновлення початкового товару"
+          },
+          "description_multilang": {
+            "ru": "<p>Русское описание CSV 07. Обновление карточки Prom 3239744864.</p>",
+            "uk": "<p>Український опис CSV 07. Оновлення картки Prom 3239744864.</p>"
+          },
+          "price": 10.0,
+          "currency": "UAH",
+          "sku": "TEST",
+          "quantity_in_stock": null,
+          "presence": "available",
+          "status": "not_on_display",
+          "images": [],
+          "discount": null,
+          "selling_type": "retail",
+          "measure_unit": "шт.",
+          "group_id": 157939479,
+          "category_id": 341022
+        },
+        "new_control_before_hiding": {
+          "id": 3240166618,
+          "external_id": "dnk-csv-20261019-missing-01",
+          "name_multilang": {
+            "ru": "DNK CSV 07 RU — неизвестный ID, не создавать",
+            "uk": "DNK CSV 07 UK — невідомий ID, не створювати"
+          },
+          "description_multilang": {
+            "ru": "<p>Проверка запрета создания CSV 07. Тестовый товар. Не покупать.</p>",
+            "uk": "<p>Перевірка заборони створення CSV 07. Тестовий товар. Не купувати.</p>"
+          },
+          "price": 1.0,
+          "currency": "UAH",
+          "sku": "DNKCSV20261019",
+          "quantity_in_stock": 0,
+          "presence": "not_available",
+          "status": "on_display",
+          "images": [],
+          "discount": null,
+          "selling_type": "retail",
+          "measure_unit": "шт.",
+          "group_id": 157939479,
+          "category_id": 152413
+        },
+        "new_control_after_hiding": {
+          "id": 3240166618,
+          "external_id": "dnk-csv-20261019-missing-01",
+          "name_multilang": {
+            "ru": "DNK CSV 07 RU — неизвестный ID, не создавать",
+            "uk": "DNK CSV 07 UK — невідомий ID, не створювати"
+          },
+          "description_multilang": {
+            "ru": "<p>Проверка запрета создания CSV 07. Тестовый товар. Не покупать.</p>",
+            "uk": "<p>Перевірка заборони створення CSV 07. Тестовий товар. Не купувати.</p>"
+          },
+          "price": 1.0,
+          "currency": "UAH",
+          "sku": "DNKCSV20261019",
+          "quantity_in_stock": 0,
+          "presence": "not_available",
+          "status": "not_on_display",
+          "images": [],
+          "discount": null,
+          "selling_type": "retail",
+          "measure_unit": "шт.",
+          "group_id": 157939479,
+          "category_id": 152413
+        }
+      },
+      "original_non_text_business_changes_before_cleanup": {},
+      "field_filter_enforcement_proven": false,
+      "limitations": [
+        "The original was not updated, so unchanged original fields do not establish safe text-only updating.",
+        "CSV non-text values equal the baseline, so unchanged values alone cannot prove updated_fields enforcement.",
+        "Both created cards received automatically selected categories; this does not show how a successful existing-card update preserves categories."
+      ],
+      "verified_at": "2026-10-19T17:58:38.355820+00:00",
+      "final_hidden_status_reverified_at": "2026-10-19T18:02:09.856030+00:00"
+    }
+  ],
+  "documentation_check": {
+    "checked_at": "2026-10-19T17:14:23.057543+00:00",
+    "source": "https://support.prom.ua/hc/uk/articles/360004960817",
+    "documented_required_fields": [
+      "Назва_позиції",
+      "Опис",
+      "Ідентифікатор_товару",
+      "Унікальний_ідентифікатор"
+    ],
+    "native_id_required_for": "existing_products",
+    "bilingual_update_requires_both": [
+      "Назва_позиції_укр",
+      "Опис_укр"
+    ],
+    "runtime_observed_conditional_requirement": {
+      "when_field": "Ціна",
+      "required_field": "Одиниця_виміру",
+      "observed_error_code": 1002,
+      "documented_as_unconditional_required": false
+    },
+    "rows": [
+      {
+        "row": 2,
+        "native_id": "3239744864",
+        "missing_documented_fields": [
+          "Ідентифікатор_товару"
+        ]
+      },
+      {
+        "row": 3,
+        "native_id": "4000000001",
+        "missing_documented_fields": []
+      }
+    ],
+    "assessment": "original_external_key_empty_documented_contract_deviation_native_only_hypothesis_unverified"
+  },
+  "previous_import_cancellation": {
+    "import_id": "6ad63ba050712db41db1dd95",
+    "id": "6ad63ba050712db41db1dd95",
+    "current_state": "CANCELLED_BY_USER",
+    "finished": true,
+    "verified_at": "2026-10-19T17:14:23.057543+00:00"
+  },
+  "processing_result": {
+    "test": "24-csv",
+    "original_updated": false,
+    "duplicate_created": true,
+    "unknown_control_created": true,
+    "empty_external_id_accepted_for_creation": true,
+    "native_only_update_verified": false
+  }
+}

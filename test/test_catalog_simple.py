@@ -110,9 +110,6 @@ class CatalogSimpleDomainTests(unittest.TestCase):
             status=CatalogItemStatus.ACTIVE,
         )
         self.assertFalse(hasattr(self.item, "revision"))
-        with self.assertRaises(CatalogConflictError):
-            self.item.ensure_deletable(True)
-        self.item.ensure_deletable(False)
 
     def test_content_full_replacement_locale_and_empty_text(self) -> None:
         """Переводы независимы, отсутствие удаляет optional блок, пустой текст сохраняется."""
@@ -400,9 +397,6 @@ class CatalogSimpleDomainTests(unittest.TestCase):
         values = CatalogItemMapper.to_values(row, parts)
         self.assertEqual(values.translations["en"], {"title": "Name"})
         details = CatalogItemQueryMapper.details(values, "en", self.now)
-        publication = CatalogItemQueryMapper.publication(values, "en", self.now)
-        self.assertNotEqual(type(details), type(publication))
-        self.assertEqual(details.id, publication.id)
         self.assertEqual(details.content, {"title": "Name"})
 
     def test_measurement_precision_units_and_exact_conversion(self) -> None:

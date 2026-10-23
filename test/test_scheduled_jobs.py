@@ -347,15 +347,15 @@ class ScheduledJobsRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("scheduled_jobs.status NOT IN", sql)
         self.assertIn("UPDATE scheduled_jobs", sql)
 
-    async def test_cancel_matching_revokes_all_price_list_job_leases(self) -> None:
+    async def test_cancel_matching_revokes_all_matching_job_leases(self) -> None:
         session = _SessionStub(rowcount=2)
         repository = SqlAlchemyScheduledJobRepository(session)
         tenant_id = uuid4()
 
         result = await repository.cancel_matching(
             tenant_id=tenant_id,
-            job_type="price_list.sync",
-            payload_contains={"price_list_id": "price-list-1"},
+            job_type="example.sync",
+            payload_contains={"entity_id": "entity-1"},
             canceled_at=self.now,
         )
 
@@ -373,8 +373,8 @@ class ScheduledJobsRepositoryTests(unittest.IsolatedAsyncioTestCase):
 
         result = await repository.delete_matching(
             tenant_id=uuid4(),
-            job_type="price_list.sync",
-            payload_contains={"price_list_id": "price-list-1"},
+            job_type="example.sync",
+            payload_contains={"entity_id": "entity-1"},
         )
 
         sql = _postgres_sql(session.execute_statement)

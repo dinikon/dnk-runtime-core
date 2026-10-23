@@ -16,15 +16,11 @@ from src.modules.catalog.infrastructure.catalog_item.persistence.mapper import (
     CatalogItemMapper,
 )
 from src.modules.catalog.infrastructure.catalog_item.persistence.rows import read_parts
-from src.modules.catalog.infrastructure.catalog_item.content_schema import (
-    SqlAlchemyProductTypeSchemas,
-)
 from src.modules.catalog.infrastructure.persistence.models.content_block import (
     ContentBlockModel,
 )
 from src.modules.catalog.domain.error import (
     CatalogNotFoundError,
-    CatalogConflictError,
     InvalidCatalogValueError,
 )
 from src.modules.catalog.application.catalog_item.query.get_catalog_item.query import (
@@ -38,12 +34,6 @@ from src.modules.catalog.application.catalog_item.query.list_catalog_items.query
 )
 from src.modules.catalog.application.catalog_item.query.list_catalog_items.dto import (
     ListCatalogItemsResultDTO,
-)
-from src.modules.catalog.application.catalog_item.query.get_catalog_items_publication_snapshot.query import (
-    GetCatalogItemsPublicationSnapshotQuery,
-)
-from src.modules.catalog.application.catalog_item.query.get_catalog_items_publication_snapshot.dto import (
-    GetCatalogItemsPublicationSnapshotResultDTO,
 )
 from src.modules.catalog.domain.catalog_item.value_object.snapshot import (
     CatalogItemValuesSnapshot,
@@ -152,43 +142,4 @@ class SqlAlchemyCatalogItemQueryRepository:
             query.offset,
             query.limit,
             as_of,
-        )
-
-    async def snapshot(
-        self, query: GetCatalogItemsPublicationSnapshotQuery, as_of: datetime
-    ) -> GetCatalogItemsPublicationSnapshotResultDTO:
-        """Отдаёт согласованный batch контракт для внешних потребителей Catalog."""
-        if not 1 <= len(query.item_ids) <= 1000 or len(set(query.item_ids)) != len(
-            query.item_ids
-        ):
-            raise InvalidCatalogValueError("Snapshot требует 1..1000 уникальных ID.")
-        table = CatalogItemModel.__table__
-        rows = (
-            (
-                await self._session.execute(
-                    select(table).where(
-                        table.c.id.in_(tuple((i.uuid for i in query.item_ids))),
-                        table.c.kind == "simple",
-                        table.c.parent_id.is_(None),
-                    )
-                )
-            )
-            .mappings()
-            .all()
-        )
-        if len(rows) != len(query.item_ids):
-            raise CatalogNotFoundError("Один из CatalogItem отсутствует.")
-        by_id = {row["id"]: row for row in rows}
-        values = await self._values(
-            tuple((by_id[i.uuid] for i in query.item_ids)), query.locale
-        )
-        items = tuple(
-            (
-                CatalogItemQueryMapper.publication(value, query.locale, as_of)
-                for value in values
-            )
-        )
-        schema = await SqlAlchemyProductTypeSchemas(self._session).get_by_code()
-        return GetCatalogItemsPublicationSnapshotResultDTO(
-            items, schema, query.locale, as_of
         )

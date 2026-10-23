@@ -46,11 +46,11 @@ class TenantMigrationManagementTests(unittest.IsolatedAsyncioTestCase):
         management.list_ids.return_value = ids
         management.run_one.side_effect = [
             TenantMigrationStatus(
-                ids[0], "dnk_a", ("0001_warehouses",), "0001_warehouses"
+                ids[0], "dnk_a", ("0001_tenant_baseline",), "0001_tenant_baseline"
             ),
             TenantMigrationError("missing schema"),
             TenantMigrationStatus(
-                ids[2], "dnk_c", ("0001_warehouses",), "0001_warehouses"
+                ids[2], "dnk_c", ("0001_tenant_baseline",), "0001_tenant_baseline"
             ),
         ]
         args = build_parser().parse_args(["tenant-migrations", "upgrade", "--all"])

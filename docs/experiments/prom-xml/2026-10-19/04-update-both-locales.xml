@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<yml_catalog date="2026-10-19 13:05">
+  <shop>
+    <name>DNK XML contract test</name>
+    <offers>
+      <!-- ID импорта; сейчас соответствует созданной тестом карточке 3239759991. -->
+      <offer id="3239744864">
+        <name>DNK XML 04 RU — обновление по ссылке</name>
+        <description><![CDATA[<p>Русское описание XML 04. Проверка обновления по ссылке.</p>]]></description>
+        <name_ua>DNK XML 04 UK — оновлення за посиланням</name_ua>
+        <description_ua><![CDATA[<p>Український опис XML 04. Перевірка оновлення за посиланням.</p>]]></description_ua>
+      </offer>
+    </offers>
+  </shop>
+</yml_catalog>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import "./product.css";
 import { ref, watch, useId } from "vue";
 import { useEditor, EditorContent } from "@tiptap/vue-3";
 import StarterKit from "@tiptap/starter-kit";

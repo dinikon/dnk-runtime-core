@@ -2,9 +2,7 @@
 
 from collections.abc import AsyncGenerator
 from decimal import Decimal
-import importlib.util
 import os
-from pathlib import Path
 import unittest
 from unittest.mock import AsyncMock
 from src.modules.tenancy.infrastructure.adapter.catalog_provisioning import (
@@ -20,8 +18,6 @@ from src.modules.shared.infrastructure.uuid.uuid7_generator import UUID7Generato
 from src.modules.shared.infrastructure.time.utc_clock import UtcClock
 from uuid import uuid4
 
-from alembic.migration import MigrationContext
-from alembic.operations import Operations
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import inspect, text
@@ -103,31 +99,20 @@ from src.modules.tenancy.infrastructure.tenant_currency_settings.persistence.que
 )
 from src.modules.tenancy.presentation.http.router import router
 
-MIGRATION_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "migrations/tenant/versions/0022_tenant_currency_settings.py"
-)
-
 
 async def apply_currency_migration(
     connection: AsyncConnection, schema: str, *, downgrade: bool = False
 ) -> None:
-    """Применяет настоящую ревизию в тестовой схеме без зависимости от чужих моделей."""
-    spec = importlib.util.spec_from_file_location(
-        "currency_settings_migration", MIGRATION_PATH
-    )
-    migration = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(migration)
-    await connection.execute(
-        text("SELECT set_config('search_path', :schema, true)"), {"schema": schema}
+    """Применяет tenant baseline в тестовой схеме во внешней транзакции."""
+    from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
+        TenantMigrator,
     )
 
-    def run(sync_connection) -> None:
-        with Operations.context(MigrationContext.configure(sync_connection)):
-            (migration.downgrade if downgrade else migration.upgrade)()
-
-    await connection.run_sync(run)
-    await connection.execute(text("SELECT set_config('search_path', 'public', true)"))
+    migrator = TenantMigrator()
+    if downgrade:
+        await migrator.downgrade(connection, schema, "base")
+    else:
+        await migrator.upgrade(connection, schema)
 
 
 class CurrencySliceOnePostgresTests(unittest.IsolatedAsyncioTestCase):

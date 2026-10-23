@@ -65,7 +65,9 @@ class CatalogArchitectureTests(unittest.TestCase):
                     and execute.returns.value is None
                 )
                 scenario, aggregate = path.parent.name, path.parents[2].name
-                if scenario == "get_catalog_items_publication_snapshot":
+                if scenario in {
+                    "find_used_image_files",
+                }:
                     self.assertTrue((path.parent / "dto.py").exists())
                     continue
                 http = root / "presentation" / aggregate / "http"

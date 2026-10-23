@@ -1,0 +1,2005 @@
+{
+  "account": "Bi+",
+  "experiment_date": "2026-10-19",
+  "scope": "Authorized test product 3239744864 and synthetic test creations only; no application code or internal catalog mutations.",
+  "conclusions": {
+    "url_updates_ru_and_uk_with_name_ua_description_ua": "verified_for_existing_external_id",
+    "native_id_updates_manually_created_product": "not_updated_in_xml_test_14_or_csv_test_24",
+    "public_api_is_import_v2_update_only": "not_enforced_for_tested_import_url_request_unknown_external_id_created",
+    "text_only_updated_fields_preserves_hidden_status_or_category": "not_guaranteed_side_effects_observed",
+    "reason_for_update_only_not_enforced": "undetermined_parameter_ignored_or_different_contract_required",
+    "increasing_feed_scope_does_not_establish_update_only": "identity_mapping_and_creation_policy_still_require_definition",
+    "csv_native_id_and_bilingual_update": "original_not_updated_new_duplicate_received_both_locales_in_test_24",
+    "csv_prevents_unknown_id_creation": "not_enforced_control_product_3240166618_created_in_test_24",
+    "cabinet_cancel_endpoint": "verified_in_authenticated_browser_session_public_api_bearer_rejected_401",
+    "public_status_reflects_cancellation": "not_reflected_still_partial_after_verified_cancel",
+    "csv_08_documented_required_external_id": "empty_original_key_did_not_block_creation_but_original_was_not_updated",
+    "csv_empty_external_key": "accepted_for_creation_of_new_product_3240166617_external_id_empty_string",
+    "csv_native_id_in_test_24": "existing_original_not_matched_unknown_native_id_not_reused_both_rows_created_new_native_ids",
+    "csv_text_only_existing_update_preservation": "not_proven_original_not_updated",
+    "csv_new_card_categories": "auto_selected_341022_and_152413_despite_file_161311"
+  },
+  "host_verification": [
+    {
+      "file": "01-update-native-id.xml",
+      "url": "https://bioline.com.ua/crm/01-update-native-id.xml",
+      "http_status": 200,
+      "matches_local": true,
+      "local_sha256": "9791f0f0262bd16d4628169fade937b3c03924e879853cd5a5c40284cc644a02",
+      "remote_sha256": "9791f0f0262bd16d4628169fade937b3c03924e879853cd5a5c40284cc644a02"
+    },
+    {
+      "file": "02-create-control.xml",
+      "url": "https://bioline.com.ua/crm/02-create-control.xml",
+      "http_status": 200,
+      "matches_local": true,
+      "local_sha256": "aef16f432ae8580c54e5a44f05d36685577e8096885a3e44c27e897146ec3147",
+      "remote_sha256": "aef16f432ae8580c54e5a44f05d36685577e8096885a3e44c27e897146ec3147"
+    },
+    {
+      "file": "03-update-and-create-matrix.xml",
+      "url": "https://bioline.com.ua/crm/03-update-and-create-matrix.xml",
+      "http_status": 200,
+      "matches_local": true,
+      "local_sha256": "a44816d77af5889faabe0c4ab22196244804ad5630ca1d75d002c46e35d03652",
+      "remote_sha256": "a44816d77af5889faabe0c4ab22196244804ad5630ca1d75d002c46e35d03652"
+    },
+    {
+      "file": "04-update-both-locales.xml",
+      "url": "https://bioline.com.ua/crm/04-update-both-locales.xml",
+      "http_status": 200,
+      "matches_local": true,
+      "local_sha256": "5b34b99712f3d267749e575a67213c8a7f58be6765cefcf961d7015f723a0aae",
+      "remote_sha256": "5b34b99712f3d267749e575a67213c8a7f58be6765cefcf961d7015f723a0aae"
+    },
+    {
+      "file": "05-update-only-probe.xml",
+      "url": "https://bioline.com.ua/crm/05-update-only-probe.xml",
+      "http_status": 200,
+      "matches_local": true,
+      "local_sha256": "acca31870f9e1e450020533db4249b99faedcb0d2a083e769d8c783ef8746bab",
+      "remote_sha256": "acca31870f9e1e450020533db4249b99faedcb0d2a083e769d8c783ef8746bab"
+    },
+    {
+      "file": "06-native-update-v2.xml",
+      "url": "https://bioline.com.ua/crm/06-native-update-v2.xml",
+      "http_status": 200,
+      "matches_local": true,
+      "local_sha256": "2741c60eecb02600be496dd8bda34dc70bf0a193222d1b6e76bfc5f9f40fac20",
+      "remote_sha256": "2741c60eecb02600be496dd8bda34dc70bf0a193222d1b6e76bfc5f9f40fac20"
+    }
+  ],
+  "tests": [
+    {
+      "test": "01",
+      "xml": "01-update-native-id.xml",
+      "endpoint": "/products/import_file",
+      "import_id": "6ad5e8ed50712db41db1db33",
+      "request": {
+        "force_update": true,
+        "only_available": false,
+        "mark_missing_product_as": "none",
+        "updated_fields": [
+          "name",
+          "description"
+        ]
+      },
+      "assessment": "verified_creation_instead_of_native_update",
+      "observed_status": {
+        "status": "PARTIAL",
+        "total": 1,
+        "imported": 1,
+        "created": 1,
+        "updated": 0,
+        "not_changed": 0,
+        "actualized": 0,
+        "with_errors_count": 0
+      }
+    },
+    {
+      "test": "03",
+      "xml": "03-update-and-create-matrix.xml",
+      "endpoint": "/products/import_file",
+      "import_id": "6ad5ead356f808a6bd689a95",
+      "request": {
+        "force_update": true,
+        "only_available": false,
+        "mark_missing_product_as": "none",
+        "updated_fields": [
+          "name",
+          "description"
+        ]
+      },
+      "assessment": "verified_ru_update_and_two_creations",
+      "observed_status": {
+        "status": "PARTIAL",
+        "total": 3,
+        "imported": 3,
+        "created": 2,
+        "updated": 1,
+        "not_changed": 0,
+        "actualized": 0,
+        "with_errors_count": 0
+      }
+    },
+    {
+      "test": "04",
+      "xml": "04-update-both-locales.xml",
+      "endpoint": "/products/import_url",
+      "import_id": "6ad5ec21ed18fc7bb0fd78c8",
+      "request": {
+        "force_update": true,
+        "only_available": false,
+        "mark_missing_product_as": "none",
+        "updated_fields": [
+          "name",
+          "description",
+          "name_uk",
+          "description_uk"
+        ],
+        "url": "https://bioline.com.ua/crm/04-update-both-locales.xml"
+      },
+      "assessment": "verified_ru_only_with_uk_field_names",
+      "observed_status": {
+        "status": "PARTIAL",
+        "total": 1,
+        "imported": 1,
+        "created": 0,
+        "updated": 1,
+        "not_changed": 0,
+        "actualized": 0,
+        "with_errors_count": 0
+      }
+    },
+    {
+      "test": "04b",
+      "xml": "04-update-both-locales.xml",
+      "endpoint": "/products/import_url",
+      "import_id": "6ad5ecb8d9cf00b10756e665",
+      "request": {
+        "force_update": true,
+        "only_available": false,
+        "mark_missing_product_as": "none",
+        "updated_fields": [
+          "name",
+          "description",
+          "name_ua",
+          "description_ua"
+        ],
+        "url": "https://bioline.com.ua/crm/04-update-both-locales.xml"
+      },
+      "assessment": "verified_both_locales_with_ua_field_names",
+      "observed_status": {
+        "status": "PARTIAL",
+        "total": 1,
+        "imported": 1,
+        "created": 0,
+        "updated": 1,
+        "not_changed": 0,
+        "actualized": 0,
+        "with_errors_count": 0
+      }
+    },
+    {
+      "test": "05",
+      "xml": "02-create-control.xml",
+      "endpoint": "/products/import_url",
+      "import_id": "6ad5ee4ac582af6559f4a82b",
+      "request": {
+        "force_update": true,
+        "only_available": false,
+        "mark_missing_product_as": "none",
+        "updated_fields": [
+          "name",
+          "description",
+          "name_ua",
+          "description_ua"
+        ],
+        "url": "https://bioline.com.ua/crm/02-create-control.xml"
+      },
+      "assessment": "verified_soft_deleted_product_restored",
+      "verified_counts": {
+        "total": 1,
+        "imported": 1,
+        "created": 0,
+        "updated": 1
+      }
+    },
+    {
+      "test": "06",
+      "xml": "02-create-control.xml",
+      "endpoint": "/products/import_url",
+      "import_id": "6ad5eeb956f808a6bd689abc",
+      "request": {
+        "force_update": true,
+        "only_available": false,
+        "mark_missing_product_as": "none",
+        "updated_fields": [
+          "name",
+          "description",
+          "name_ua",
+          "description_ua"
+        ],
+        "url": "https://bioline.com.ua/crm/02-create-control.xml"
+      },
+      "assessment": "verified_same_native_id_without_duplicate",
+      "observed_status": {
+        "status": "PARTIAL",
+        "total": 1,
+        "imported": 1,
+        "created": 0,
+        "updated": 1,
+        "not_changed": 0,
+        "actualized": 0,
+        "with_errors_count": 0
+      }
+    },
+    {
+      "test": "07",
+      "xml": "05-update-only-probe.xml",
+      "endpoint": "/products/import_file",
+      "import_id": "6ad5efc650712db41db1db77",
+      "request": {
+        "force_update": true,
+        "only_available": false,
+        "mark_missing_product_as": "none",
+        "updated_fields": [
+          "name",
+          "description",
+          "name_ua",
+          "description_ua"
+        ],
+        "only_update": true
+      },
+      "assessment": "inconclusive_no_completed_write_verified",
+      "observed_status": {
+        "status": "PARTIAL",
+        "total": 2,
+        "imported": 0,
+        "created": 0,
+        "updated": 0,
+        "not_changed": 1,
+        "actualized": 0,
+        "with_errors_count": 0
+      }
+    },
+    {
+      "test": "08",
+      "xml": "05-update-only-probe.xml",
+      "endpoint": "/products/import_url",
+      "import_id": "6ad5f28350712db41db1db8d",
+      "request": {
+        "url": "https://bioline.com.ua/crm/05-update-only-probe.xml",
+        "force_update": true,
+        "only_available": false,
+        "mark_missing_product_as": "none",
+        "updated_fields": [
+          "name",
+          "description",
+          "name_ua",
+          "description_ua"
+        ],
+        "only_update": true
+      },
+      "assessment": "inconclusive_counter_without_text_change",
+      "observed_status": {
+        "status": "PARTIAL",
+        "total": 2,
+        "imported": 0,
+        "created": 0,
+        "updated": 1,
+        "not_changed": 0,
+        "actualized": 0,
+        "with_errors_count": 0
+      }
+    },
+    {
+      "test": "09",
+      "xml": "01-update-native-id.xml",
+      "endpoint": "/products/import_url",
+      "import_id": "6ad5f371d9cf00b10756e695",
+      "request": {
+        "url": "https://bioline.com.ua/crm/01-update-native-id.xml",
+        "force_update": true,
+        "only_available": false,
+        "mark_missing_product_as": "none",
+        "updated_fields": [
+          "name",
+          "description",
+          "name_ua",
+          "description_ua"
+        ],
+        "only_update": true
+      },
+      "assessment": "inconclusive_counter_without_text_change",
+      "observed_status": {
+        "status": "PARTIAL",
+        "total": 1,
+        "imported": 0,
+        "created": 0,
+        "updated": 1,
+        "not_changed": 0,
+        "actualized": 0,
+        "with_errors_count": 0
+      }
+    },
+    {
+      "test": "10",
+      "xml": "05-update-only-probe.xml",
+      "endpoint": "/products/import_url",
+      "import_id": "6ad5f418ed18fc7bb0fd78f3",
+      "request": {
+        "url": "https://bioline.com.ua/crm/05-update-only-probe.xml",
+        "force_update": true,
+        "only_available": false,
+        "mark_missing_product_as": "none",
+        "updated_fields": [
+          "name",
+          "description",
+          "name_ua",
+          "description_ua"
+        ]
+      },
+      "assessment": "verified_known_update_and_unknown_creation",
+      "observed_status": {
+        "status": "PARTIAL",
+        "total": 2,
+        "imported": 2,
+        "created": 1,
+        "updated": 1,
+        "not_changed": 0,
+        "actualized": 0,
+        "with_errors_count": 0
+      }
+    },
+    {
+      "test": "11",
+      "xml": "06-native-update-v2.xml",
+      "endpoint": "/products/import_file",
+      "import_id": null,
+      "request": {
+        "force_update": true,
+        "only_available": false,
+        "mark_missing_product_as": "none",
+        "updated_fields": [
+          "name",
+          "description",
+          "name_ua",
+          "description_ua"
+        ],
+        "is_import_v2": true
+      },
+      "assessment": "not_started_http_400",
+      "launch_response": {
+        "http_status": 400,
+        "body": {
+          "error": {
+            "status": 400,
+            "message": "В данный момент действует ограничение на запуск одновременных импортов. Запуск возможен после завершения или отмены предыдущего импорта."
+          }
+        }
+      }
+    },
+    {
+      "test": "12",
+      "xml": "06-native-update-v2.xml",
+      "endpoint": "/products/import_url",
+      "import_id": null,
+      "request": {
+        "url": "https://bioline.com.ua/crm/06-native-update-v2.xml",
+        "force_update": false,
+        "only_available": false,
+        "mark_missing_product_as": "none",
+        "updated_fields": [
+          "name",
+          "description",
+          "name_ua",
+          "description_ua"
+        ],
+        "is_import_v2": true
+      },
+      "assessment": "not_started_http_400",
+      "launch_response": {
+        "http_status": 400,
+        "body": {
+          "error": {
+            "status": 400,
+            "message": "В данный момент действует ограничение на запуск одновременных импортов. Запуск возможен после завершения или отмены предыдущего импорта."
+          }
+        }
+      }
+    },
+    {
+      "test": "13",
+      "xml": "06-native-update-v2.xml",
+      "endpoint": "/products/import_url",
+      "import_id": null,
+      "request": {
+        "url": "https://bioline.com.ua/crm/06-native-update-v2.xml",
+        "force_update": false,
+        "only_available": false,
+        "mark_missing_product_as": "none",
+        "updated_fields": [
+          "name",
+          "description",
+          "name_ua",
+          "description_ua"
+        ],
+        "is_import_v2": true
+      },
+      "launch_response": {
+        "http_status": 400,
+        "body": {
+          "error": {
+            "status": 400,
+            "message": "В данный момент действует ограничение на запуск одновременных импортов. Запуск возможен после завершения или отмены предыдущего импорта."
+          }
+        }
+      },
+      "submitted_at": "2026-10-19T12:24:02.306496+00:00",
+      "assessment": "not_started_http_400"
+    },
+    {
+      "test": "14",
+      "xml": "06-native-update-v2.xml",
+      "endpoint": "/products/import_url",
+      "import_id": "6ad61090d9cf00b10756e74b",
+      "request": {
+        "url": "https://bioline.com.ua/crm/06-native-update-v2.xml",
+        "force_update": false,
+        "only_available": false,
+        "mark_missing_product_as": "none",
+        "updated_fields": [
+          "name",
+          "description",
+          "name_ua",
+          "description_ua"
+        ],
+        "is_import_v2": true
+      },
+      "launch_response": {
+        "http_status": 200,
+        "body": {
+          "status": "success",
+          "id": "6ad61090d9cf00b10756e74b"
+        }
+      },
+      "submitted_at": "2026-10-19T12:44:00.457078+00:00",
+      "assessment": "verified_update_only_not_enforced_original_unchanged_alias_updated_unknown_created",
+      "observed_status": {
+        "status": "PARTIAL",
+        "total": 2,
+        "imported": 2,
+        "created": 1,
+        "updated": 1,
+        "not_changed": 0,
+        "actualized": 0,
+        "with_errors_count": 0
+      },
+      "error_count": 0
+    },
+    {
+      "test": "15-csv",
+      "csv": "07-native-update-and-missing.csv",
+      "endpoint": "/products/import_url",
+      "import_id": null,
+      "request": {
+        "url": "https://bioline.com.ua/crm/07-native-update-and-missing.csv",
+        "is_import_v2": true,
+        "force_update": false,
+        "only_available": false,
+        "mark_missing_product_as": "none",
+        "updated_fields": [
+          "name",
+          "description",
+          "name_ua",
+          "description_ua"
+        ]
+      },
+      "launch_response": {
+        "http_status": 400,
+        "body": {
+          "error": {
+            "status": 400,
+            "message": "В данный момент действует ограничение на запуск одновременных импортов. Запуск возможен после завершения или отмены предыдущего импорта."
+          }
+        }
+      },
+      "host_verification": {
+        "http_status": 200,
+        "matches_local": true,
+        "sha256": "60afc73a6f81a54e82beac84bb6c8e7cc49cb8badd7c5b58d21953cf3f26769f"
+      },
+      "submitted_at": "2026-10-19T13:10:04.243048+00:00",
+      "assessment": "not_started_http_400_csv_semantics_not_tested"
+    },
+    {
+      "test": "16-csv",
+      "csv": "07-native-update-and-missing.csv",
+      "endpoint": "/products/import_url",
+      "import_id": null,
+      "request": {
+        "url": "https://bioline.com.ua/crm/07-native-update-and-missing.csv",
+        "is_import_v2": true,
+        "force_update": false,
+        "only_available": false,
+        "mark_missing_product_as": "none",
+        "updated_fields": [
+          "name",
+          "description",
+          "name_ua",
+          "description_ua"
+        ]
+      },
+      "launch_response": {
+        "http_status": 400,
+        "body": {
+          "error": {
+            "status": 400,
+            "message": "В данный момент действует ограничение на запуск одновременных импортов. Запуск возможен после завершения или отмены предыдущего импорта."
+          }
+        }
+      },
+      "host_verification": {
+        "http_status": 200,
+        "matches_local": true,
+        "sha256": "60afc73a6f81a54e82beac84bb6c8e7cc49cb8badd7c5b58d21953cf3f26769f"
+      },
+      "submitted_at": "2026-10-19T13:12:47.193907+00:00",
+      "assessment": "not_started_http_400_after_user_reported_xml_completion"
+    },
+    {
+      "test": "17-csv",
+      "csv": "07-native-update-and-missing.csv",
+      "endpoint": "/products/import_url",
+      "import_id": null,
+      "request": {
+        "url": "https://bioline.com.ua/crm/07-native-update-and-missing.csv",
+        "is_import_v2": true,
+        "force_update": false,
+        "only_available": false,
+        "mark_missing_product_as": "none",
+        "updated_fields": [
+          "name",
+          "description",
+          "name_ua",
+          "description_ua"
+        ]
+      },
+      "launch_response": {
+        "http_status": 400,
+        "body": {
+          "error": {
+            "status": 400,
+            "message": "В данный момент действует ограничение на запуск одновременных импортов. Запуск возможен после завершения или отмены предыдущего импорта."
+          }
+        }
+      },
+      "host_verification": {
+        "http_status": 200,
+        "matches_local": true,
+        "sha256": "60afc73a6f81a54e82beac84bb6c8e7cc49cb8badd7c5b58d21953cf3f26769f"
+      },
+      "submitted_at": "2026-10-19T14:23:35.902876+00:00",
+      "assessment": "not_started_http_400_retry_at_user_request"
+    },
+    {
+      "test": "18-csv",
+      "csv": "07-native-update-and-missing.csv",
+      "endpoint": "/products/import_url",
+      "import_id": "6ad63ba050712db41db1dd95",
+      "request": {
+        "url": "https://bioline.com.ua/crm/07-native-update-and-missing.csv",
+        "is_import_v2": true,
+        "force_update": false,
+        "only_available": false,
+        "mark_missing_product_as": "none",
+        "updated_fields": [
+          "name",
+          "description",
+          "name_ua",
+          "description_ua"
+        ]
+      },
+      "launch_response": {
+        "http_status": 200,
+        "body": {
+          "status": "success",
+          "id": "6ad63ba050712db41db1dd95"
+        }
+      },
+      "host_verification": {
+        "http_status": 200,
+        "matches_local": true,
+        "sha256": "60afc73a6f81a54e82beac84bb6c8e7cc49cb8badd7c5b58d21953cf3f26769f"
+      },
+      "submitted_at": "2026-10-19T15:47:44.306144+00:00",
+      "assessment": "validation_failed_missing_measure_unit_cancellation_pending_no_processing_verified",
+      "status": {
+        "status": "PARTIAL",
+        "total": 2,
+        "imported": 0,
+        "created": 0,
+        "updated": 0,
+        "not_changed": 0,
+        "actualized": 0,
+        "not_in_file": 0,
+        "created_active": 0,
+        "created_hidden": 0,
+        "errors": [
+          {
+            "category": "validation",
+            "errors": [
+              {
+                "message": "1002",
+                "code": 1002,
+                "field_code": "measure_unit",
+                "positions": [
+                  "2",
+                  "dnk-csv-20261019-missing-01"
+                ],
+                "extra": {
+                  "_field_current": "price",
+                  "_field_dependent": "measure_unit"
+                }
+              }
+            ]
+          }
+        ],
+        "with_errors_count": 0
+      },
+      "ui_validation": {
+        "observed_at": "2026-10-19T16:01:19.781265+00:00",
+        "source": "Prom cabinet report for import 6ad63ba050712db41db1dd95",
+        "report": "2 позиции не могут быть загружены",
+        "validation_message": "При заполнении Цена — Единица измерения обязательное поле",
+        "positions": [
+          "2",
+          "dnk-csv-20261019-missing-01"
+        ],
+        "cancellation_requested": true,
+        "cancellation_observed_state": "Импорт в процессе отмены",
+        "cancellation_completed": false
+      },
+      "original_fields_unchanged": true,
+      "alias_fields_unchanged": true,
+      "unknown_ids_still_absent": true,
+      "unknown_identity_checks": {
+        "native_4000000001": null,
+        "external_dnk_csv_20261019_missing_01": null,
+        "external_4000000001": null
+      },
+      "readback": {
+        "original": {
+          "id": 3239744864,
+          "external_id": null,
+          "name_multilang": {
+            "ru": "Тестовый товар",
+            "uk": "Тестовий товар"
+          },
+          "description_multilang": {
+            "ru": "Тестовый товар",
+            "uk": "Тестовий товар"
+          },
+          "price": 10.0,
+          "currency": "UAH",
+          "sku": "TEST",
+          "quantity_in_stock": null,
+          "presence": "available",
+          "status": "not_on_display",
+          "images": [],
+          "discount": null,
+          "selling_type": "retail",
+          "measure_unit": "шт.",
+          "group_id": 82715301,
+          "category_id": 161311
+        },
+        "alias": {
+          "id": 3239759991,
+          "external_id": "3239744864",
+          "name_multilang": {
+            "ru": "DNK XML 06 RU — обновление существующего товара",
+            "uk": "DNK XML 06 UK — оновлення наявного товару"
+          },
+          "description_multilang": {
+            "ru": "<p>Русское описание XML 06. Проверка режима только обновления.</p>",
+            "uk": "<p>Український опис XML 06. Перевірка режиму лише оновлення.</p>"
+          },
+          "price": null,
+          "currency": null,
+          "sku": "",
+          "quantity_in_stock": null,
+          "presence": "not_available",
+          "status": "not_on_display",
+          "images": [],
+          "discount": null,
+          "selling_type": "retail",
+          "measure_unit": "",
+          "group_id": 82715301,
+          "category_id": 120212
+        }
+      },
+      "all_four_expected_texts_written": false,
+      "update_only_behavior_tested": false,
+      "owned_created_products_hidden": 5,
+      "cleanup_write_required": false,
+      "cancellation_requested": true,
+      "cancellation_completed": false
+    },
+    {
+      "test": "19-csv",
+      "submitted_at": "2026-10-19T16:03:38.222473+00:00",
+      "launch_response": {
+        "http_status": 400,
+        "body": {
+          "error": {
+            "status": 400,
+            "message": "В данный момент действует ограничение на запуск одновременных импортов. Запуск возможен после завершения или отмены предыдущего импорта."
+          }
+        }
+      },
+      "host_verification": {
+        "http_status": 200,
+        "matches_local": true,
+        "sha256": "2a49b2e78079128849c19fdaf794eda4cb13e8bb82fb5982ab828c127dddbcb6"
+      },
+      "import_id": null,
+      "original_fields_unchanged": true,
+      "alias_fields_unchanged": true,
+      "unknown_ids_still_absent": true,
+      "update_only_behavior_tested": false,
+      "owned_created_products_hidden": 5,
+      "cleanup_write_required": false,
+      "state": "rejected_http_400_no_import_id",
+      "automatic_retry_scheduled": false,
+      "csv": "08-native-update-with-units.csv",
+      "endpoint": "/products/import_url",
+      "request": {
+        "url": "https://bioline.com.ua/crm/08-native-update-with-units.csv",
+        "is_import_v2": true,
+        "force_update": false,
+        "only_available": false,
+        "mark_missing_product_as": "none",
+        "updated_fields": [
+          "name",
+          "description",
+          "name_ua",
+          "description_ua"
+        ]
+      },
+      "assessment": "http_400_concurrent_import_limit_corrected_csv_not_processed"
+    },
+    {
+      "test": "20-csv",
+      "submitted_at": "2026-10-19T16:32:25.434443+00:00",
+      "launch_response": {
+        "http_status": 400,
+        "body": {
+          "error": {
+            "status": 400,
+            "message": "В данный момент действует ограничение на запуск одновременных импортов. Запуск возможен после завершения или отмены предыдущего импорта."
+          }
+        }
+      },
+      "host_verification": {
+        "http_status": 200,
+        "matches_local": true,
+        "sha256": "2a49b2e78079128849c19fdaf794eda4cb13e8bb82fb5982ab828c127dddbcb6"
+      },
+      "import_id": null,
+      "original_fields_unchanged": true,
+      "alias_fields_unchanged": true,
+      "unknown_ids_still_absent": true,
+      "update_only_behavior_tested": false,
+      "owned_created_products_hidden": 5,
+      "cleanup_write_required": false,
+      "state": "rejected_http_400_no_import_id",
+      "automatic_retry_scheduled": false,
+      "previous_import_check": {
+        "api": {
+          "http_status": 200,
+          "body": {
+            "status": "PARTIAL",
+            "total": 2,
+            "imported": 0,
+            "created": 0,
+            "updated": 0,
+            "not_changed": 0,
+            "actualized": 0,
+            "not_in_file": 0,
+            "created_active": 0,
+            "created_hidden": 0,
+            "errors": [
+              {
+                "category": "validation",
+                "errors": [
+                  {
+                    "message": "1002",
+                    "code": 1002,
+                    "field_code": "measure_unit",
+                    "positions": [
+                      "2",
+                      "dnk-csv-20261019-missing-01"
+                    ],
+                    "extra": {
+                      "_field_current": "price",
+                      "_field_dependent": "measure_unit"
+                    }
+                  }
+                ]
+              }
+            ],
+            "with_errors_count": 0
+          }
+        },
+        "cabinet": {
+          "observed_at": "2026-10-19T16:33:06.812563+00:00",
+          "source": "Prom cabinet, report reloaded before attempt 20-csv",
+          "import_id": "6ad63ba050712db41db1dd95",
+          "observed_state": "Импорт в процессе отмены",
+          "cancellation_completed": false
+        }
+      },
+      "csv": "08-native-update-with-units.csv",
+      "endpoint": "/products/import_url",
+      "request": {
+        "url": "https://bioline.com.ua/crm/08-native-update-with-units.csv",
+        "is_import_v2": true,
+        "force_update": false,
+        "only_available": false,
+        "mark_missing_product_as": "none",
+        "updated_fields": [
+          "name",
+          "description",
+          "name_ua",
+          "description_ua"
+        ]
+      },
+      "assessment": "http_400_concurrent_import_limit_prior_cancellation_still_pending_corrected_csv_not_processed"
+    },
+    {
+      "test": "21-cancel",
+      "operation": "cancel_import",
+      "endpoint": "/cms/import_service/api/cancel",
+      "target_import_id": "6ad63ba050712db41db1dd95",
+      "request": {
+        "import_id": "6ad63ba050712db41db1dd95"
+      },
+      "authentication": "existing_connection_bearer",
+      "attempted_at": "2026-10-19T17:08:39.501771+00:00",
+      "response": {
+        "http_status": 401,
+        "content_type": "application/json; charset=utf-8",
+        "body": {
+          "status": "error",
+          "errors": {
+            "errorCode": 401,
+            "errorMessage": "Unauthorized"
+          }
+        }
+      },
+      "assessment": "unauthorized_public_api_token_not_accepted_for_cabinet_endpoint"
+    },
+    {
+      "test": "22-cancel",
+      "operation": "cancel_import",
+      "endpoint": "/cms/import_service/api/cancel",
+      "target_import_id": "6ad63ba050712db41db1dd95",
+      "request": {
+        "import_id": "6ad63ba050712db41db1dd95"
+      },
+      "authentication": "existing_authorized_browser_session",
+      "attempted_at": "2026-10-19T17:10:00.801301+00:00",
+      "response": {
+        "http_status": 200,
+        "body": {
+          "status": "ok"
+        }
+      },
+      "verified_import_info": {
+        "id": "6ad63ba050712db41db1dd95",
+        "current_state": "CANCELLED_BY_USER",
+        "finished": true
+      },
+      "verified_at": "2026-10-19T17:14:23.057543+00:00",
+      "visible_report": "Импорт отменен",
+      "public_status_still_partial": true,
+      "assessment": "cancellation_completed_verified_by_cabinet_api_and_visible_report"
+    },
+    {
+      "test": "24-csv",
+      "submitted_at": "2026-10-19T17:54:04.885560+00:00",
+      "launch_response": {
+        "http_status": 200,
+        "body": {
+          "status": "success",
+          "id": "6ad6593d50712db41db1de41"
+        }
+      },
+      "host_verification": {
+        "http_status": 200,
+        "matches_local": true,
+        "sha256": "2a49b2e78079128849c19fdaf794eda4cb13e8bb82fb5982ab828c127dddbcb6"
+      },
+      "import_id": "6ad6593d50712db41db1de41",
+      "state": "completed_negative_original_unchanged_two_created",
+      "update_only_behavior_tested": true,
+      "automatic_retry_scheduled": false,
+      "csv": "08-native-update-with-units.csv",
+      "endpoint": "/products/import_url",
+      "request": {
+        "url": "https://bioline.com.ua/crm/08-native-update-with-units.csv",
+        "is_import_v2": true,
+        "force_update": false,
+        "only_available": false,
+        "mark_missing_product_as": "none",
+        "updated_fields": [
+          "name",
+          "description",
+          "name_ua",
+          "description_ua"
+        ]
+      },
+      "assessment": "csv_native_only_update_failed_two_cards_created_original_unchanged",
+      "status": {
+        "status": "PARTIAL",
+        "total": 2,
+        "imported": 2,
+        "created": 2,
+        "updated": 0,
+        "not_changed": 0,
+        "actualized": 0,
+        "not_in_file": 0,
+        "created_active": 2,
+        "created_hidden": 0,
+        "errors": [],
+        "with_errors_count": 0
+      },
+      "acceptance_met": false,
+      "all_four_expected_texts_written": false,
+      "original_fields_unchanged": true,
+      "alias_fields_unchanged": true,
+      "unknown_control_created": true,
+      "created_duplicate_native_id": 3240166617,
+      "created_duplicate_external_id": "",
+      "created_control_native_id": 3240166618,
+      "created_control_external_id": "dnk-csv-20261019-missing-01",
+      "created_products_received_both_locales": true,
+      "unknown_native_id_still_absent": true,
+      "unknown_numeric_external_id_still_absent": true,
+      "created_active_before_cleanup": 2,
+      "control_status_before_cleanup": "on_display",
+      "cleanup_processed_ids": [
+        3240166617,
+        3240166618
+      ],
+      "owned_created_products_hidden": 7,
+      "verified_hidden_test_products": 8,
+      "original_visibility_and_presence_restored": true,
+      "original_restore_write_required": false,
+      "validation_ui": {
+        "observed_at": "2026-10-19T17:57:11.654732+00:00",
+        "import_id": "6ad6593d50712db41db1de41",
+        "source": "Visible Prom cabinet report for CSV 08",
+        "validated_rows": 2,
+        "reported_rows_with_data_issues": 2,
+        "messages": [
+          {
+            "text": "Товары загружены без идентификаторов",
+            "positions": [
+              "2"
+            ]
+          },
+          {
+            "text": "Для 2 товаров автоматически определена категория.",
+            "count": 2
+          }
+        ],
+        "processing_completion_not_yet_verified": true
+      },
+      "completion_ui": {
+        "source": "Visible Prom report for exact import ID",
+        "file": "08-native-update-with-units.csv",
+        "stage": "Импорт позиций",
+        "progress_percent": 100,
+        "processed": 2,
+        "total": 2
+      },
+      "readback": {
+        "original": {
+          "id": 3239744864,
+          "external_id": null,
+          "name_multilang": {
+            "ru": "Тестовый товар",
+            "uk": "Тестовий товар"
+          },
+          "description_multilang": {
+            "ru": "Тестовый товар",
+            "uk": "Тестовий товар"
+          },
+          "price": 10.0,
+          "currency": "UAH",
+          "sku": "TEST",
+          "quantity_in_stock": null,
+          "presence": "available",
+          "status": "not_on_display",
+          "images": [],
+          "discount": null,
+          "selling_type": "retail",
+          "measure_unit": "шт.",
+          "group_id": 82715301,
+          "category_id": 161311
+        },
+        "old_import_alias": {
+          "id": 3239759991,
+          "external_id": "3239744864",
+          "name_multilang": {
+            "ru": "DNK XML 06 RU — обновление существующего товара",
+            "uk": "DNK XML 06 UK — оновлення наявного товару"
+          },
+          "description_multilang": {
+            "ru": "<p>Русское описание XML 06. Проверка режима только обновления.</p>",
+            "uk": "<p>Український опис XML 06. Перевірка режиму лише оновлення.</p>"
+          },
+          "price": null,
+          "currency": null,
+          "sku": "",
+          "quantity_in_stock": null,
+          "presence": "not_available",
+          "status": "not_on_display",
+          "images": [],
+          "discount": null,
+          "selling_type": "retail",
+          "measure_unit": "",
+          "group_id": 82715301,
+          "category_id": 120212
+        },
+        "new_duplicate_after_hiding": {
+          "id": 3240166617,
+          "external_id": "",
+          "name_multilang": {
+            "ru": "DNK CSV 07 RU — обновление исходного товара",
+            "uk": "DNK CSV 07 UK — оновлення початкового товару"
+          },
+          "description_multilang": {
+            "ru": "<p>Русское описание CSV 07. Обновление карточки Prom 3239744864.</p>",
+            "uk": "<p>Український опис CSV 07. Оновлення картки Prom 3239744864.</p>"
+          },
+          "price": 10.0,
+          "currency": "UAH",
+          "sku": "TEST",
+          "quantity_in_stock": null,
+          "presence": "available",
+          "status": "not_on_display",
+          "images": [],
+          "discount": null,
+          "selling_type": "retail",
+          "measure_unit": "шт.",
+          "group_id": 157939479,
+          "category_id": 341022
+        },
+        "new_control_before_hiding": {
+          "id": 3240166618,
+          "external_id": "dnk-csv-20261019-missing-01",
+          "name_multilang": {
+            "ru": "DNK CSV 07 RU — неизвестный ID, не создавать",
+            "uk": "DNK CSV 07 UK — невідомий ID, не створювати"
+          },
+          "description_multilang": {
+            "ru": "<p>Проверка запрета создания CSV 07. Тестовый товар. Не покупать.</p>",
+            "uk": "<p>Перевірка заборони створення CSV 07. Тестовий товар. Не купувати.</p>"
+          },
+          "price": 1.0,
+          "currency": "UAH",
+          "sku": "DNKCSV20261019",
+          "quantity_in_stock": 0,
+          "presence": "not_available",
+          "status": "on_display",
+          "images": [],
+          "discount": null,
+          "selling_type": "retail",
+          "measure_unit": "шт.",
+          "group_id": 157939479,
+          "category_id": 152413
+        },
+        "new_control_after_hiding": {
+          "id": 3240166618,
+          "external_id": "dnk-csv-20261019-missing-01",
+          "name_multilang": {
+            "ru": "DNK CSV 07 RU — неизвестный ID, не создавать",
+            "uk": "DNK CSV 07 UK — невідомий ID, не створювати"
+          },
+          "description_multilang": {
+            "ru": "<p>Проверка запрета создания CSV 07. Тестовый товар. Не покупать.</p>",
+            "uk": "<p>Перевірка заборони створення CSV 07. Тестовий товар. Не купувати.</p>"
+          },
+          "price": 1.0,
+          "currency": "UAH",
+          "sku": "DNKCSV20261019",
+          "quantity_in_stock": 0,
+          "presence": "not_available",
+          "status": "not_on_display",
+          "images": [],
+          "discount": null,
+          "selling_type": "retail",
+          "measure_unit": "шт.",
+          "group_id": 157939479,
+          "category_id": 152413
+        }
+      },
+      "original_non_text_business_changes_before_cleanup": {},
+      "field_filter_enforcement_proven": false,
+      "limitations": [
+        "The original was not updated, so unchanged original fields do not establish safe text-only updating.",
+        "CSV non-text values equal the baseline, so unchanged values alone cannot prove updated_fields enforcement.",
+        "Both created cards received automatically selected categories; this does not show how a successful existing-card update preserves categories."
+      ],
+      "verified_at": "2026-10-19T17:58:38.355820+00:00",
+      "final_hidden_status_reverified_at": "2026-10-19T18:02:09.856030+00:00"
+    },
+    {
+      "test": "25-csv-matrix",
+      "file": "09-cases-create-update.csv",
+      "sha256": "62beac990e106252f05c2e1fec7c99b5208de0505089b85cec215e089a1d34f3",
+      "transport": "authenticated Prom cabinet; local file upload",
+      "attempt_time_kyiv": "2026-10-19 21:31",
+      "preflight_at": "2026-10-19T18:31:15.207297+00:00",
+      "readback_at": "2026-10-19T18:33:28.443263+00:00",
+      "settings": {
+        "only_update_checkbox": false,
+        "force_update": false,
+        "only_available": false,
+        "mark_missing_product_as": "none",
+        "updated_fields": [
+          "name",
+          "description",
+          "name_ua",
+          "description_ua"
+        ],
+        "periodic_update": false
+      },
+      "import_id": null,
+      "http_status": null,
+      "assessment": "launch_rejected_before_case_processing_no_import_id",
+      "visible_error": "В данный момент действует ограничение на запуск одновременных импортов. Запуск возможен после завершения или отмены предыдущего импорта.",
+      "cabinet_import_info_read": {
+        "source": "Authenticated same-origin GET /cms/import_service/api/import_infos; visible console output",
+        "http_status": 200,
+        "unfinished_imports_in_returned_list": [],
+        "previous_import": {
+          "id": "6ad6593d50712db41db1de41",
+          "current_state": "COMPLETED",
+          "finished": true,
+          "date_created": "2026-10-19T17:54:05+00:00"
+        }
+      },
+      "blocker_interpretation": {
+        "exact_backend_cause": "not_exposed_by_generic_cabinet_error",
+        "possible_causes": [
+          "Documented two-hour spacing after ten manual imports per day",
+          "Temporary Prom load restriction"
+        ],
+        "frequency_limit_source": "https://support.prom.ua/hc/uk/articles/360004963478",
+        "next_attempt_reference_kyiv": "2026-10-19 22:54:05",
+        "reference_is_guaranteed_unlock_time": false
+      },
+      "verified_after_rejection": {
+        "existing_test_products_unchanged": [
+          "3239744864",
+          "3239759991",
+          "3239767291",
+          "3239827664",
+          "3240166617",
+          "3240166618"
+        ],
+        "all_existing_test_products_hidden": true,
+        "external_lookups_unchanged": true,
+        "unknown_native_ids_absent": true,
+        "account_product_ids_unchanged": true,
+        "account_product_count": 34,
+        "new_matrix_markers": [],
+        "product_writes_performed": false,
+        "cancel_request_performed": false
+      },
+      "cases": [
+        {
+          "phase": "09",
+          "case": "M01",
+          "status": "not_executed",
+          "reason": "Main launch rejected"
+        },
+        {
+          "phase": "09",
+          "case": "M02",
+          "status": "not_executed",
+          "reason": "Main launch rejected"
+        },
+        {
+          "phase": "09",
+          "case": "M03",
+          "status": "not_executed",
+          "reason": "Main launch rejected"
+        },
+        {
+          "phase": "09",
+          "case": "M04",
+          "status": "not_executed",
+          "reason": "Main launch rejected"
+        },
+        {
+          "phase": "09",
+          "case": "M05",
+          "status": "not_executed",
+          "reason": "Main launch rejected"
+        },
+        {
+          "phase": "09",
+          "case": "M06",
+          "status": "not_executed",
+          "reason": "Main launch rejected"
+        },
+        {
+          "phase": "09",
+          "case": "M07",
+          "status": "not_executed",
+          "reason": "Main launch rejected"
+        },
+        {
+          "phase": "10",
+          "case": "M01",
+          "status": "not_executed",
+          "reason": "Stage-09 creation not executed; repeat preconditions unmet"
+        },
+        {
+          "phase": "10",
+          "case": "M02",
+          "status": "not_executed",
+          "reason": "Stage-09 creation not executed; repeat preconditions unmet"
+        },
+        {
+          "phase": "10",
+          "case": "M03",
+          "status": "not_executed",
+          "reason": "Stage-09 creation not executed; repeat preconditions unmet"
+        },
+        {
+          "phase": "11",
+          "case": "G01",
+          "status": "not_executed",
+          "reason": "Not submitted while account-level launch restriction is unresolved"
+        },
+        {
+          "phase": "11",
+          "case": "G02",
+          "status": "not_executed",
+          "reason": "Not submitted while account-level launch restriction is unresolved"
+        }
+      ],
+      "automatic_retry_scheduled": false
+    }
+  ],
+  "readback_evidence": {
+    "01_created_alias": {
+      "id": 3239759991,
+      "external_id": "3239744864",
+      "name_multilang": {
+        "ru": "DNK XML 01 RU — тест обновления",
+        "uk": "DNK XML 01 UK — тест оновлення"
+      },
+      "description_multilang": {
+        "ru": "<p>Проверка XML: описание на русском. Тестовый товар, не для покупки. Символы: & < >.</p>",
+        "uk": "<p>Перевірка XML: опис українською. Тестовий товар, не для купівлі. Символи: & < >.</p>"
+      },
+      "price": null,
+      "currency": "UAH",
+      "sku": "",
+      "quantity_in_stock": null,
+      "presence": "not_available",
+      "status": "on_display",
+      "group_id": 82715301,
+      "category_id": 29
+    },
+    "03_before": {
+      "id": 3239759991,
+      "external_id": "3239744864",
+      "name_multilang": {
+        "ru": "DNK XML 01 RU — тест обновления",
+        "uk": "DNK XML 01 UK — тест оновлення"
+      },
+      "description_multilang": {
+        "ru": "<p>Проверка XML: описание на русском. Тестовый товар, не для покупки. Символы: & < >.</p>",
+        "uk": "<p>Перевірка XML: опис українською. Тестовий товар, не для купівлі. Символи: & < >.</p>"
+      },
+      "price": null,
+      "currency": null,
+      "sku": "",
+      "quantity_in_stock": null,
+      "presence": "not_available",
+      "status": "not_on_display",
+      "group_id": 82715301,
+      "category_id": 29
+    },
+    "03_after": {
+      "id": 3239759991,
+      "external_id": "3239744864",
+      "name_multilang": {
+        "ru": "DNK XML 03 RU — обновление русского текста",
+        "uk": "DNK XML 01 UK — тест оновлення"
+      },
+      "description_multilang": {
+        "ru": "<p>Русское описание после обновления XML 03.</p>",
+        "uk": "<p>Перевірка XML: опис українською. Тестовий товар, не для купівлі. Символи: & < >.</p>"
+      },
+      "price": null,
+      "currency": null,
+      "sku": "",
+      "quantity_in_stock": null,
+      "presence": "not_available",
+      "status": "on_display",
+      "group_id": 82715301,
+      "category_id": 29
+    },
+    "04b_after": {
+      "id": 3239759991,
+      "external_id": "3239744864",
+      "name_multilang": {
+        "ru": "DNK XML 04 RU — обновление по ссылке",
+        "uk": "DNK XML 04 UK — оновлення за посиланням"
+      },
+      "description_multilang": {
+        "ru": "<p>Русское описание XML 04. Проверка обновления по ссылке.</p>",
+        "uk": "<p>Український опис XML 04. Перевірка оновлення за посиланням.</p>"
+      },
+      "price": null,
+      "currency": null,
+      "sku": "",
+      "quantity_in_stock": null,
+      "presence": "not_available",
+      "status": "on_display",
+      "group_id": 82715301,
+      "category_id": 120212
+    },
+    "05_restored": {
+      "id": 3239767291,
+      "external_id": "dnk-xml-20261019-control",
+      "name_multilang": {
+        "ru": "DNK XML 02 RU — контроль создания, не покупать",
+        "uk": "DNK XML 02 UK — контроль створення, не купувати"
+      },
+      "description_multilang": {
+        "ru": "<p>Контрольная карточка для проверки XML-импорта. Не для покупки.</p>",
+        "uk": "<p>Контрольна картка для перевірки XML-імпорту. Не для купівлі.</p>"
+      },
+      "price": 1.0,
+      "currency": "UAH",
+      "sku": "DNKXML20261019",
+      "quantity_in_stock": null,
+      "presence": "not_available",
+      "status": "on_display",
+      "group_id": 82715301,
+      "category_id": 161311
+    },
+    "08_known_before_next_test": {
+      "id": 3239767291,
+      "external_id": "dnk-xml-20261019-control",
+      "name_multilang": {
+        "ru": "DNK XML 02 RU — контроль создания, не покупать",
+        "uk": "DNK XML 02 UK — контроль створення, не купувати"
+      },
+      "description_multilang": {
+        "ru": "<p>Контрольная карточка для проверки XML-импорта. Не для покупки.</p>",
+        "uk": "<p>Контрольна картка для перевірки XML-імпорту. Не для купівлі.</p>"
+      },
+      "price": 1.0,
+      "currency": "UAH",
+      "sku": "DNKXML20261019",
+      "quantity_in_stock": null,
+      "presence": "not_available",
+      "status": "not_on_display",
+      "group_id": 82715301,
+      "category_id": 161311
+    },
+    "09_original": {
+      "id": 3239744864,
+      "external_id": null,
+      "name_multilang": {
+        "ru": "Тестовый товар",
+        "uk": "Тестовий товар"
+      },
+      "description_multilang": {
+        "ru": "Тестовый товар",
+        "uk": "Тестовий товар"
+      },
+      "price": 10.0,
+      "currency": "UAH",
+      "sku": "TEST",
+      "quantity_in_stock": null,
+      "presence": "available",
+      "status": "not_on_display",
+      "group_id": 82715301,
+      "category_id": 161311
+    },
+    "09_alias": {
+      "id": 3239759991,
+      "external_id": "3239744864",
+      "name_multilang": {
+        "ru": "DNK XML 04 RU — обновление по ссылке",
+        "uk": "DNK XML 04 UK — оновлення за посиланням"
+      },
+      "description_multilang": {
+        "ru": "<p>Русское описание XML 04. Проверка обновления по ссылке.</p>",
+        "uk": "<p>Український опис XML 04. Перевірка оновлення за посиланням.</p>"
+      },
+      "price": null,
+      "currency": null,
+      "sku": "",
+      "quantity_in_stock": null,
+      "presence": "not_available",
+      "status": "on_display",
+      "group_id": 82715301,
+      "category_id": 120212
+    },
+    "10_unknown_before": null,
+    "10_known_after": {
+      "id": 3239767291,
+      "external_id": "dnk-xml-20261019-control",
+      "name_multilang": {
+        "ru": "DNK XML 05 RU — проверка только обновления",
+        "uk": "DNK XML 05 UK — перевірка лише оновлення"
+      },
+      "description_multilang": {
+        "ru": "Известный импортный ID. Тест только обновления.",
+        "uk": "Відомий імпортний ID. Тест лише оновлення."
+      },
+      "price": 1.0,
+      "currency": "UAH",
+      "sku": "DNKXML20261019",
+      "quantity_in_stock": null,
+      "presence": "not_available",
+      "status": "on_display",
+      "group_id": 82715301,
+      "category_id": 161311
+    },
+    "10_created_unknown_after": {
+      "id": 3239827664,
+      "external_id": "dnk-xml-20261019-only-update",
+      "name_multilang": {
+        "ru": "DNK XML 05 RU — новый ID, не создавать",
+        "uk": "DNK XML 05 UK — новий ID, не створювати"
+      },
+      "description_multilang": {
+        "ru": "Новый импортный ID. Проверка запрета создания. Не покупать.",
+        "uk": "Новий імпортний ID. Перевірка заборони створення. Не купувати."
+      },
+      "price": 1.0,
+      "currency": "UAH",
+      "sku": "",
+      "quantity_in_stock": null,
+      "presence": "not_available",
+      "status": "on_display",
+      "group_id": 82715301,
+      "category_id": 28420310
+    },
+    "14_original_before": {
+      "id": 3239744864,
+      "external_id": null,
+      "name_multilang": {
+        "ru": "Тестовый товар",
+        "uk": "Тестовий товар"
+      },
+      "description_multilang": {
+        "ru": "Тестовый товар",
+        "uk": "Тестовий товар"
+      },
+      "price": 10.0,
+      "currency": "UAH",
+      "sku": "TEST",
+      "quantity_in_stock": null,
+      "presence": "available",
+      "status": "not_on_display",
+      "group_id": 82715301,
+      "category_id": 161311
+    },
+    "14_original_after_cleanup": {
+      "id": 3239744864,
+      "external_id": null,
+      "name_multilang": {
+        "ru": "Тестовый товар",
+        "uk": "Тестовий товар"
+      },
+      "description_multilang": {
+        "ru": "Тестовый товар",
+        "uk": "Тестовий товар"
+      },
+      "price": 10.0,
+      "currency": "UAH",
+      "sku": "TEST",
+      "quantity_in_stock": null,
+      "presence": "available",
+      "status": "not_on_display",
+      "group_id": 82715301,
+      "category_id": 161311
+    },
+    "14_alias_before_cleanup": {
+      "id": 3239759991,
+      "external_id": "3239744864",
+      "name_multilang": {
+        "ru": "DNK XML 06 RU — обновление существующего товара",
+        "uk": "DNK XML 06 UK — оновлення наявного товару"
+      },
+      "description_multilang": {
+        "ru": "<p>Русское описание XML 06. Проверка режима только обновления.</p>",
+        "uk": "<p>Український опис XML 06. Перевірка режиму лише оновлення.</p>"
+      },
+      "price": null,
+      "currency": null,
+      "sku": "",
+      "quantity_in_stock": null,
+      "presence": "not_available",
+      "status": "on_display",
+      "group_id": 82715301,
+      "category_id": 120212
+    },
+    "14_created_unknown_before_cleanup": {
+      "id": 3239909460,
+      "external_id": "999999999999",
+      "name_multilang": {
+        "ru": "DNK XML 06 RU — отсутствующий ID, не создавать",
+        "uk": "DNK XML 06 UK — відсутній ID, не створювати"
+      },
+      "description_multilang": {
+        "ru": "Проверка пропуска отсутствующего ID. Не покупать.",
+        "uk": "Перевірка пропуску відсутнього ID. Не купувати."
+      },
+      "price": 1.0,
+      "currency": "UAH",
+      "sku": "DNKXMLV2NEW",
+      "quantity_in_stock": null,
+      "presence": "not_available",
+      "status": "on_display",
+      "group_id": 157939479,
+      "category_id": 161311
+    },
+    "14_unknown_external_before": null,
+    "14_unknown_native_before": {
+      "http_status": 404
+    },
+    "14_unknown_identity_after": [
+      {
+        "path": "products/999999999999",
+        "http_status": 404
+      },
+      {
+        "path": "products/by_external_id/999999999999",
+        "http_status": 200,
+        "native_id": 3239909460
+      }
+    ],
+    "15_csv_original_before": {
+      "id": 3239744864,
+      "external_id": null,
+      "name_multilang": {
+        "ru": "Тестовый товар",
+        "uk": "Тестовий товар"
+      },
+      "description_multilang": {
+        "ru": "Тестовый товар",
+        "uk": "Тестовий товар"
+      },
+      "price": 10.0,
+      "currency": "UAH",
+      "sku": "TEST",
+      "quantity_in_stock": null,
+      "presence": "available",
+      "status": "not_on_display",
+      "images": [],
+      "discount": null,
+      "selling_type": "retail",
+      "group_id": 82715301,
+      "category_id": 161311
+    },
+    "15_csv_original_after_rejection": {
+      "id": 3239744864,
+      "external_id": null,
+      "name_multilang": {
+        "ru": "Тестовый товар",
+        "uk": "Тестовий товар"
+      },
+      "description_multilang": {
+        "ru": "Тестовый товар",
+        "uk": "Тестовий товар"
+      },
+      "price": 10.0,
+      "currency": "UAH",
+      "sku": "TEST",
+      "quantity_in_stock": null,
+      "presence": "available",
+      "status": "not_on_display",
+      "images": [],
+      "discount": null,
+      "selling_type": "retail",
+      "group_id": 82715301,
+      "category_id": 161311
+    },
+    "15_csv_unknown_id_checks": {
+      "unknown_native": {
+        "before_present": false,
+        "after_present": false
+      },
+      "unknown_external": {
+        "before_present": false,
+        "after_present": false
+      },
+      "unknown_numeric_external": {
+        "before_present": false,
+        "after_present": false
+      }
+    },
+    "24_csv_original_before": {
+      "id": 3239744864,
+      "external_id": null,
+      "name_multilang": {
+        "ru": "Тестовый товар",
+        "uk": "Тестовий товар"
+      },
+      "description_multilang": {
+        "ru": "Тестовый товар",
+        "uk": "Тестовий товар"
+      },
+      "price": 10.0,
+      "currency": "UAH",
+      "sku": "TEST",
+      "quantity_in_stock": null,
+      "presence": "available",
+      "status": "not_on_display",
+      "images": [],
+      "discount": null,
+      "selling_type": "retail",
+      "measure_unit": "шт.",
+      "group_id": 82715301,
+      "category_id": 161311
+    },
+    "24_csv_original_after": {
+      "id": 3239744864,
+      "external_id": null,
+      "name_multilang": {
+        "ru": "Тестовый товар",
+        "uk": "Тестовий товар"
+      },
+      "description_multilang": {
+        "ru": "Тестовый товар",
+        "uk": "Тестовий товар"
+      },
+      "price": 10.0,
+      "currency": "UAH",
+      "sku": "TEST",
+      "quantity_in_stock": null,
+      "presence": "available",
+      "status": "not_on_display",
+      "images": [],
+      "discount": null,
+      "selling_type": "retail",
+      "measure_unit": "шт.",
+      "group_id": 82715301,
+      "category_id": 161311
+    },
+    "24_csv_created_duplicate": {
+      "id": 3240166617,
+      "external_id": "",
+      "name_multilang": {
+        "ru": "DNK CSV 07 RU — обновление исходного товара",
+        "uk": "DNK CSV 07 UK — оновлення початкового товару"
+      },
+      "description_multilang": {
+        "ru": "<p>Русское описание CSV 07. Обновление карточки Prom 3239744864.</p>",
+        "uk": "<p>Український опис CSV 07. Оновлення картки Prom 3239744864.</p>"
+      },
+      "price": 10.0,
+      "currency": "UAH",
+      "sku": "TEST",
+      "quantity_in_stock": null,
+      "presence": "available",
+      "status": "not_on_display",
+      "images": [],
+      "discount": null,
+      "selling_type": "retail",
+      "measure_unit": "шт.",
+      "group_id": 157939479,
+      "category_id": 341022
+    },
+    "24_csv_created_control_before_hiding": {
+      "id": 3240166618,
+      "external_id": "dnk-csv-20261019-missing-01",
+      "name_multilang": {
+        "ru": "DNK CSV 07 RU — неизвестный ID, не создавать",
+        "uk": "DNK CSV 07 UK — невідомий ID, не створювати"
+      },
+      "description_multilang": {
+        "ru": "<p>Проверка запрета создания CSV 07. Тестовый товар. Не покупать.</p>",
+        "uk": "<p>Перевірка заборони створення CSV 07. Тестовий товар. Не купувати.</p>"
+      },
+      "price": 1.0,
+      "currency": "UAH",
+      "sku": "DNKCSV20261019",
+      "quantity_in_stock": 0,
+      "presence": "not_available",
+      "status": "on_display",
+      "images": [],
+      "discount": null,
+      "selling_type": "retail",
+      "measure_unit": "шт.",
+      "group_id": 157939479,
+      "category_id": 152413
+    }
+  },
+  "final_products": [
+    {
+      "id": 3239744864,
+      "external_id": null,
+      "name_multilang": {
+        "ru": "Тестовый товар",
+        "uk": "Тестовий товар"
+      },
+      "description_multilang": {
+        "ru": "Тестовый товар",
+        "uk": "Тестовий товар"
+      },
+      "price": 10.0,
+      "currency": "UAH",
+      "sku": "TEST",
+      "quantity_in_stock": null,
+      "presence": "available",
+      "status": "not_on_display",
+      "images": [],
+      "discount": null,
+      "selling_type": "retail",
+      "measure_unit": "шт.",
+      "group_id": 82715301,
+      "category_id": 161311
+    },
+    {
+      "id": 3239759991,
+      "external_id": "3239744864",
+      "name_multilang": {
+        "ru": "DNK XML 06 RU — обновление существующего товара",
+        "uk": "DNK XML 06 UK — оновлення наявного товару"
+      },
+      "description_multilang": {
+        "ru": "<p>Русское описание XML 06. Проверка режима только обновления.</p>",
+        "uk": "<p>Український опис XML 06. Перевірка режиму лише оновлення.</p>"
+      },
+      "price": null,
+      "currency": null,
+      "sku": "",
+      "quantity_in_stock": null,
+      "presence": "not_available",
+      "status": "not_on_display",
+      "images": [],
+      "discount": null,
+      "selling_type": "retail",
+      "measure_unit": "",
+      "group_id": 82715301,
+      "category_id": 120212
+    },
+    {
+      "id": 3239767290,
+      "external_id": "dnk-xml-20261019-minimal",
+      "name_multilang": {
+        "ru": "DNK XML 03 RU — создание без группы",
+        "uk": "DNK XML 03 UK — створення без групи"
+      },
+      "description_multilang": {
+        "ru": "Тест создания без группы и цены. Не покупать.",
+        "uk": "Тест створення без групи та ціни. Не купувати."
+      },
+      "price": null,
+      "currency": null,
+      "sku": "",
+      "quantity_in_stock": null,
+      "presence": "not_available",
+      "status": "not_on_display",
+      "images": [],
+      "discount": null,
+      "selling_type": "retail",
+      "measure_unit": "",
+      "group_id": 82715301,
+      "category_id": 29
+    },
+    {
+      "id": 3239767291,
+      "external_id": "dnk-xml-20261019-control",
+      "name_multilang": {
+        "ru": "DNK XML 05 RU — проверка только обновления",
+        "uk": "DNK XML 05 UK — перевірка лише оновлення"
+      },
+      "description_multilang": {
+        "ru": "Известный импортный ID. Тест только обновления.",
+        "uk": "Відомий імпортний ID. Тест лише оновлення."
+      },
+      "price": 1.0,
+      "currency": "UAH",
+      "sku": "DNKXML20261019",
+      "quantity_in_stock": null,
+      "presence": "not_available",
+      "status": "not_on_display",
+      "images": [],
+      "discount": null,
+      "selling_type": "retail",
+      "measure_unit": "шт.",
+      "group_id": 82715301,
+      "category_id": 161311
+    },
+    {
+      "id": 3239827664,
+      "external_id": "dnk-xml-20261019-only-update",
+      "name_multilang": {
+        "ru": "DNK XML 05 RU — новый ID, не создавать",
+        "uk": "DNK XML 05 UK — новий ID, не створювати"
+      },
+      "description_multilang": {
+        "ru": "Новый импортный ID. Проверка запрета создания. Не покупать.",
+        "uk": "Новий імпортний ID. Перевірка заборони створення. Не купувати."
+      },
+      "price": 1.0,
+      "currency": "UAH",
+      "sku": "",
+      "quantity_in_stock": null,
+      "presence": "not_available",
+      "status": "not_on_display",
+      "images": [],
+      "discount": null,
+      "selling_type": "retail",
+      "measure_unit": "шт.",
+      "group_id": 82715301,
+      "category_id": 28420310
+    },
+    {
+      "id": 3239909460,
+      "external_id": "999999999999",
+      "name_multilang": {
+        "ru": "DNK XML 06 RU — отсутствующий ID, не создавать",
+        "uk": "DNK XML 06 UK — відсутній ID, не створювати"
+      },
+      "description_multilang": {
+        "ru": "Проверка пропуска отсутствующего ID. Не покупать.",
+        "uk": "Перевірка пропуску відсутнього ID. Не купувати."
+      },
+      "price": 1.0,
+      "currency": "UAH",
+      "sku": "DNKXMLV2NEW",
+      "quantity_in_stock": null,
+      "presence": "not_available",
+      "status": "not_on_display",
+      "images": [],
+      "discount": null,
+      "selling_type": "retail",
+      "measure_unit": "шт.",
+      "group_id": 157939479,
+      "category_id": 161311
+    },
+    {
+      "id": 3240166618,
+      "external_id": "dnk-csv-20261019-missing-01",
+      "name_multilang": {
+        "ru": "DNK CSV 07 RU — неизвестный ID, не создавать",
+        "uk": "DNK CSV 07 UK — невідомий ID, не створювати"
+      },
+      "description_multilang": {
+        "ru": "<p>Проверка запрета создания CSV 07. Тестовый товар. Не покупать.</p>",
+        "uk": "<p>Перевірка заборони створення CSV 07. Тестовий товар. Не купувати.</p>"
+      },
+      "price": 1.0,
+      "currency": "UAH",
+      "sku": "DNKCSV20261019",
+      "quantity_in_stock": 0,
+      "presence": "not_available",
+      "status": "not_on_display",
+      "images": [],
+      "discount": null,
+      "selling_type": "retail",
+      "measure_unit": "шт.",
+      "group_id": 157939479,
+      "category_id": 152413
+    },
+    {
+      "id": 3240166617,
+      "external_id": "",
+      "name_multilang": {
+        "ru": "DNK CSV 07 RU — обновление исходного товара",
+        "uk": "DNK CSV 07 UK — оновлення початкового товару"
+      },
+      "description_multilang": {
+        "ru": "<p>Русское описание CSV 07. Обновление карточки Prom 3239744864.</p>",
+        "uk": "<p>Український опис CSV 07. Оновлення картки Prom 3239744864.</p>"
+      },
+      "price": 10.0,
+      "currency": "UAH",
+      "sku": "TEST",
+      "quantity_in_stock": null,
+      "presence": "available",
+      "status": "not_on_display",
+      "images": [],
+      "discount": null,
+      "selling_type": "retail",
+      "measure_unit": "шт.",
+      "group_id": 157939479,
+      "category_id": 341022
+    }
+  ],
+  "cleanup": {
+    "owned_created_ids": [
+      3239759991,
+      3239767290,
+      3239767291,
+      3239827664,
+      3239909460,
+      3240166618,
+      3240166617
+    ],
+    "verified_status": "not_on_display",
+    "reverified_after_test_12": true,
+    "permanent_deletion_performed": false,
+    "reverified_after_test_14": true,
+    "original_business_fields_unchanged_after_test_14": true,
+    "reverified_after_test_15_csv": true,
+    "reverified_after_test_16_csv": true,
+    "reverified_after_test_17_csv": true,
+    "reverified_after_test_18_csv": true,
+    "reverified_after_test_19_csv": true,
+    "original_business_fields_unchanged_after_test_18_and_19_csv": true,
+    "reverified_after_test_20_csv": true,
+    "original_business_fields_unchanged_after_test_20_csv": true,
+    "reverified_after_cancellation_22": true,
+    "reverified_after_test_24_csv": true,
+    "new_products_hidden_after_test_24_csv": [
+      3240166617,
+      3240166618
+    ],
+    "original_fields_unchanged_after_test_24_csv": true,
+    "test_24_final_hidden_status_reverified_at": "2026-10-19T18:02:09.856030+00:00"
+  },
+  "remaining_test": {
+    "xml": "06-native-update-v2.xml",
+    "state": "completed_negative_test_14",
+    "acceptance_met": false,
+    "original_four_texts_changed": false,
+    "unknown_product_created": true,
+    "created_native_id": 3239909460,
+    "updated_alias_native_id": 3239759991,
+    "automatic_retry_scheduled": false,
+    "remaining_contract_question": "What supported public API contract, if any, enforces update-only and addresses native IDs?"
+  },
+  "final_verified_at": "2026-10-19T18:02:09.856030+00:00",
+  "remaining_csv_test": {
+    "file": "08-native-update-with-units.csv",
+    "state": "completed_negative_test_24",
+    "last_attempt": "24-csv",
+    "last_http_status": 200,
+    "import_id": "6ad6593d50712db41db1de41",
+    "prior_accepted_attempt": "18-csv",
+    "prior_import_id": "6ad63ba050712db41db1dd95",
+    "prior_import_validation_error": "measure_unit_required_with_price",
+    "prior_import_cancellation_requested": true,
+    "prior_import_cancellation_completed": true,
+    "corrected_file_host_matches_local": true,
+    "automatic_retry_scheduled": false,
+    "remaining_contract_questions": [
+      "What supported import contract matches an existing manually created native ID when external_id is absent?",
+      "What supported public contract enforces update-only rather than creating missing cards?",
+      "How are category, group and visibility preserved during an actual existing-card text update?"
+    ],
+    "previous_cancellation_last_check": {
+      "observed_at": "2026-10-19T17:14:23.057543+00:00",
+      "current_state": "CANCELLED_BY_USER",
+      "finished": true,
+      "source": "cabinet_api_and_visible_report"
+    },
+    "original_external_key_empty_against_documented_requirement": true,
+    "acceptance_met": false,
+    "original_four_texts_changed": false,
+    "original_duplicate_created": true,
+    "created_duplicate_native_id": 3240166617,
+    "unknown_product_created": true,
+    "created_control_native_id": 3240166618
+  }
+}

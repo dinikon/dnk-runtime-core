@@ -32,6 +32,21 @@ class CronWorkerDeploymentTests(HelmContractTests):
         self.assertEqual(env["SCHEDULED_JOBS__CONCURRENCY"], "4")
         self.assertEqual(env["SCHEDULED_JOBS__JOB_TIMEOUT_SECONDS"], "3600")
         self.assertEqual(container["resources"]["limits"]["memory"], "1Gi")
+        self.assertEqual(
+            next(volume for volume in spec["volumes"] if volume["name"] == "tmp"),
+            {"name": "tmp", "emptyDir": {}},
+        )
+        for resource in manifests:
+            if resource["kind"] == "ConfigMap":
+                self.assertFalse(
+                    any(
+                        name.startswith("PRICE_LISTS__")
+                        for name in resource.get("data", {})
+                    )
+                )
+        self.assertFalse(
+            any(item["name"].startswith("PRICE_LISTS__") for item in container["env"])
+        )
         self.assertFalse(
             any(
                 item["kind"] == "Service" and component(item) == "cron"

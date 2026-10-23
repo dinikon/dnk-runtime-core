@@ -388,7 +388,7 @@ class ContactPointsPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 201, response.text)
         self.assertEqual(response.json()["name"], "Support")
 
-    async def test_upgrade_existing_crm_and_migration_rollback(self):
+    async def test_repeated_upgrade_preserves_crm_and_bootstrap_rolls_back(self):
         from datetime import UTC, datetime
 
         contact_id = uuid4()
@@ -406,9 +406,6 @@ class ContactPointsPostgresTests(unittest.IsolatedAsyncioTestCase):
                 .execution_options(schema_translate_map={"tenant": self.schemas[0]})
             )
         async with self.engine.begin() as connection:
-            await TenantMigrator().downgrade(
-                connection, self.schemas[0], "0007_crm_contacts_companies"
-            )
             await TenantMigrator().upgrade(connection, self.schemas[0])
         async with self.sessions() as session:
             first_name = await session.scalar(

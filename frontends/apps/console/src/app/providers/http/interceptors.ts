@@ -2,6 +2,7 @@ import type { Pinia } from "pinia";
 import type { Router } from "vue-router";
 
 import { useUserStore } from "@/app/stores/user";
+import { requestsCloudLogin, withoutAuthProvider } from "@/modules/auth";
 import { httpClient } from "./http-client";
 
 let interceptorsInstalled = false;
@@ -21,13 +22,17 @@ export function installHttpInterceptors(router: Router, pinia: Pinia) {
       }
 
       const currentRoute = router.currentRoute.value;
-      if (!currentRoute.meta.public) {
+      // Before the initial navigation, the router guard owns the login redirect.
+      if (currentRoute.matched.length && !currentRoute.meta.public) {
         useUserStore(pinia).clearUser();
         void router
           .replace({
             name: "login",
             query: {
-              redirect: currentRoute.fullPath,
+              redirect: withoutAuthProvider(currentRoute.fullPath),
+              ...(requestsCloudLogin(currentRoute.query.auth_provider)
+                ? { auth_provider: "cloud" }
+                : {}),
             },
           })
           .catch(() => undefined);

@@ -12,12 +12,6 @@ from src.modules.catalog.application.catalog_item.query.list_catalog_items.query
 from src.modules.catalog.application.catalog_item.query.list_catalog_items.dto import (
     ListCatalogItemsResultDTO,
 )
-from src.modules.catalog.application.catalog_item.query.get_catalog_items_publication_snapshot.query import (
-    GetCatalogItemsPublicationSnapshotQuery,
-)
-from src.modules.catalog.application.catalog_item.query.get_catalog_items_publication_snapshot.dto import (
-    GetCatalogItemsPublicationSnapshotResultDTO,
-)
 
 
 class CatalogItemQueryRepositoryProtocol(Protocol):
@@ -33,10 +27,4 @@ class CatalogItemQueryRepositoryProtocol(Protocol):
         self, query: ListCatalogItemsQuery, as_of: datetime
     ) -> ListCatalogItemsResultDTO:
         """Возвращает результат list_catalog_items без Aggregate объектов."""
-        ...
-
-    async def snapshot(
-        self, query: GetCatalogItemsPublicationSnapshotQuery, as_of: datetime
-    ) -> GetCatalogItemsPublicationSnapshotResultDTO:
-        """Возвращает результат get_catalog_items_publication_snapshot без Aggregate объектов."""
         ...

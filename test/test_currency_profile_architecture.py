@@ -18,7 +18,7 @@ EXTRA_FILES = (
     "src/modules/identity/application/auth/service/session_issuer.py",
     "src/modules/identity/application/invitation/command/accept_invitation/handler.py",
     "src/modules/tenancy/infrastructure/tenant/persistence/tenant_connection.py",
-    "migrations/tenant/versions/0025_user_display_currency.py",
+    "migrations/tenant/versions/0001_tenant_baseline.py",
 )
 
 

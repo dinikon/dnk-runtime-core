@@ -1,3 +1,7 @@
+from src.modules.files.application.artifact.service import ArtifactFilesService
+from src.modules.files.application.stored_file.command.lock_ready_file.handler import (
+    LockReadyFileHandler,
+)
 from src.modules.files.application.stored_file.command.purge_file.handler import (
     PurgeFileHandler,
 )
@@ -124,6 +128,7 @@ class FilesHandlers:
     preview: GetFilePreviewHandler
     request_trash_empty: RequestTrashEmptyHandler
     empty_trash: EmptyTrashHandler
+    lock_ready: LockReadyFileHandler
 
 
 def build_files_handlers(
@@ -171,4 +176,15 @@ def build_files_handlers(
         GetFilePreviewHandler(queries, resolver),
         RequestTrashEmptyHandler(queue, actual_clock, actual_uuid),
         EmptyTrashHandler(files, file_queries, queue, actual_clock, actual_uuid),
+        LockReadyFileHandler(files),
+    )
+
+
+def build_artifact_files_facade(session: AsyncSession) -> ArtifactFilesService:
+    """Собирает публичный контракт двухфазной загрузки на общей сессии."""
+    return ArtifactFilesService(
+        SqlAlchemyStoredFileRepository(session),
+        SqlAlchemyBucketRepository(session),
+        SqlAlchemyStorageProviderRepository(session),
+        SqlAlchemyStorageQueryRepository(session),
     )

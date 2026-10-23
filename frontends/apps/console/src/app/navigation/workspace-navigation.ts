@@ -1,6 +1,5 @@
 import {
   Building2,
-  FileSpreadsheet,
   LifeBuoy,
   ShoppingBasket,
   Users,
@@ -34,21 +33,6 @@ export const workspaceNavigation: WorkspaceNavigation = {
               icon: Building2,
             },
           ],
-        },
-      ],
-    },
-    {
-      title: "Закупки",
-      items: [
-        {
-          title: "Прайс-листы",
-          url: "/purchases/price-lists",
-          icon: FileSpreadsheet,
-        },
-        {
-          title: "Офферы поставщиков",
-          url: "/purchases/offers",
-          icon: ShoppingBasket,
         },
       ],
     },

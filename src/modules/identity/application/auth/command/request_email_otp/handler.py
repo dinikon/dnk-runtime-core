@@ -40,7 +40,8 @@ class RequestEmailOtpHandler:
         otp_service: OtpServiceProtocol,
         email_service: EmailServicePort,
         otp_ttl_seconds: int,
-    ):
+        development_mode: bool = False,
+    ) -> None:
         """Инициализирует зависимости чтения tenant/user, OTP store и email sender."""
         self._tenant_context_reader = tenant_context_reader
         self._users_repository = users_repository
@@ -48,9 +49,10 @@ class RequestEmailOtpHandler:
         self._otp_service = otp_service
         self._email_service = email_service
         self._otp_ttl_seconds = otp_ttl_seconds
+        self._development_mode = development_mode
 
     async def execute(self, dto: RequestEmailOtpCommand) -> RequestEmailOtpResultDTO:
-        """Создает OTP challenge для primary email active user и отправляет code."""
+        """Создаёт challenge; Dev возвращает код, остальные режимы отправляют письмо."""
         host = normalize_host(dto.host)
         email = dto.email.strip().lower()
         tenant_context = await self._tenant_context_reader.get_by_host(host)
@@ -78,17 +80,22 @@ class RequestEmailOtpHandler:
             ),
             ttl_seconds=self._otp_ttl_seconds,
         )
-        variables: SendOtpCodeVariables = {"otp_code": generated.code}
-        try:
-            await self._email_service.send(
-                SystemEmailKind.SEND_OTP_CODE, primary_email.email, variables
-            )
-        except EmailDeliveryError:
-            log.exception(
-                "Failed to deliver login OTP email to '%s' for tenant '%s'.",
-                primary_email.email,
-                tenant_context.tenant_id,
-            )
+        if not self._development_mode:
+            variables: SendOtpCodeVariables = {"otp_code": generated.code}
+            try:
+                await self._email_service.send(
+                    SystemEmailKind.SEND_OTP_CODE, primary_email.email, variables
+                )
+            except EmailDeliveryError:
+                log.error(
+                    "Failed to deliver login OTP email.",
+                    extra={
+                        "event": "identity.login_otp.delivery_failed",
+                        "tenant_id": str(tenant_context.tenant_id),
+                    },
+                )
         return RequestEmailOtpResultDTO(
-            token=generated.token, expires_in=self._otp_ttl_seconds, code=generated.code
+            token=generated.token,
+            expires_in=self._otp_ttl_seconds,
+            code=generated.code if self._development_mode else None,
         )

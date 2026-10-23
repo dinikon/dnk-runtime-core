@@ -13,6 +13,7 @@ class CompanyModel(EntityAuditMixin, AudienceMixin, TenantBase):
 
     __tablename__ = "companies"
     __table_args__ = (
+        sa.PrimaryKeyConstraint("id", name="pk_companies"),
         sa.CheckConstraint(
             "char_length(btrim(legal_name)) BETWEEN 1 AND 255",
             name="ck_companies_legal_name",

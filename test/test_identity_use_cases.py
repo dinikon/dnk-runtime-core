@@ -219,12 +219,17 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(result.token.startswith("otp_"))
         self.assertEqual(result.expires_in, 300)
-        self.assertIsNotNone(result.code)
+        self.assertIsNone(result.code)
         self.assertEqual(challenge_store.created[0].email, "john@example.com")
         self.assertEqual(challenge_store.created[1], 300)
         self.assertEqual(email_service.sent[0][0], SystemEmailKind.SEND_OTP_CODE)
         self.assertEqual(email_service.sent[0][1], "john@example.com")
-        self.assertEqual(email_service.sent[0][2]["otp_code"], result.code)
+        self.assertTrue(
+            OtpService(6).verify_code(
+                code=email_service.sent[0][2]["otp_code"],
+                code_hash=challenge_store.created[0].code_hash,
+            )
+        )
 
     async def test_request_email_otp_keeps_success_when_email_delivery_fails(
         self,
@@ -257,6 +262,7 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.expires_in, 300)
         self.assertEqual(challenge_store.created[0].email, "john@example.com")
         self.assertEqual(challenge_store.invalidated, [])
+        self.assertIsNone(result.code)
 
     async def test_confirm_email_otp_verifies_email_and_creates_session(self) -> None:
         user = User.create_tenant_admin(

@@ -1,11 +1,15 @@
-"""Проверки состава API и tenant metadata после удаления Inventory и Channels."""
+"""Удалённые модули отсутствуют в API и новой начальной схеме."""
 
+import ast
 import unittest
 from pathlib import Path
 
-from fastapi import FastAPI
+from alembic.script import ScriptDirectory
 
-from src.modules.router import router
+from src.app_factory import create_app
+from src.modules.shared.infrastructure.persistence.global_migrations import (
+    GlobalMigrator,
+)
 from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migration_metadata import (
     migration_metadata,
 )
@@ -14,94 +18,131 @@ from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations imp
 )
 from src.modules.tenant_persistence import HISTORICAL_TENANT_TABLE_NAMES
 
+ROOT = Path(__file__).resolve().parents[1]
+
 
 class ModuleRegistrationTests(unittest.TestCase):
-    """Проверяет отсутствие удалённого модуля и доступность его соседей."""
+    """Проверяет границы удаления и доступность оставшихся модулей."""
 
-    def test_removed_source_and_console_modules_are_absent(self) -> None:
-        """Удалённый модуль не остаётся в исходниках backend и консоли."""
-        root = Path(__file__).resolve().parents[1]
-        for relative_path in (
+    def test_removed_source_modules_are_absent(self) -> None:
+        """Backend и Console не содержат исходников удалённых модулей."""
+        for relative in (
+            "src/modules/channels",
             "src/modules/inventory",
             "src/modules/warehousing",
-            "frontends/apps/console/src/modules/inventory",
-            "src/modules/channels",
+            "src/modules/price_lists",
             "frontends/apps/console/src/modules/channels",
+            "frontends/apps/console/src/modules/inventory",
+            "frontends/apps/console/src/modules/price-lists",
             "src/config/feature/channels_config.py",
+            "src/config/feature/price_lists_config.py",
         ):
-            self.assertFalse((root / relative_path).exists())
+            self.assertFalse((ROOT / relative).exists(), relative)
 
     def test_routes_include_neighbors_but_exclude_removed_modules(self) -> None:
-        """Сборка API сохраняет соседние модули без контрактов Inventory и Channels."""
-        app = FastAPI()
-        app.include_router(router)
-        schema = app.openapi()
+        """OpenAPI содержит соседние модули без контрактов удалённых функций."""
+        schema = create_app().openapi()
         paths = set(schema["paths"])
-        self.assertTrue(any(path.startswith("/api/console/catalog") for path in paths))
+        for prefix in (
+            "/api/console/channels",
+            "/api/channels",
+            "/api/console/inventory",
+            "/api/console/warehousing",
+            "/api/console/price-lists",
+            "/api/console/price-list-offers",
+        ):
+            self.assertFalse(any(path.startswith(prefix) for path in paths), prefix)
         self.assertFalse(
-            any(path.startswith("/api/console/inventory") for path in paths)
-        )
-        self.assertFalse(
-            any(path.startswith("/api/console/channels") for path in paths)
-        )
-        self.assertFalse(
-            any("channel" in name.lower() for name in schema["components"]["schemas"])
+            any(
+                token in name.lower()
+                for name in schema["components"]["schemas"]
+                for token in ("channel", "pricelist", "partneroffer")
+            )
         )
         self.assertFalse(
             any(
-                "channels" in operation.get("tags", ())
+                {"channels", "price-lists", "price-list-offers"}.intersection(
+                    operation.get("tags", ())
+                )
                 for methods in schema["paths"].values()
                 for operation in methods.values()
             )
         )
-        self.assertTrue(
-            {"/api/console/files/providers/", "/api/console/files/buckets/"} <= paths
-        )
-        self.assertFalse(
-            any(path.startswith("/api/console/warehousing") for path in paths)
-        )
+        for prefix in (
+            "/api/console/catalog",
+            "/api/console/files",
+            "/api/console/crm/contacts",
+            "/api/console/crm/companies",
+        ):
+            self.assertTrue(any(path.startswith(prefix) for path in paths), prefix)
 
-    def test_metadata_excludes_removed_modules_but_retains_migration_ownership(
-        self,
-    ) -> None:
-        """Исторические имена таблиц не регистрируют удалённые ORM-модели."""
+    def test_metadata_and_ownership_contain_only_current_tables(self) -> None:
+        """Новая история не содержит таблиц удалённых модулей."""
         tables = set(migration_metadata().tables)
+        self.assertEqual(tables, HISTORICAL_TENANT_TABLE_NAMES)
         self.assertTrue(
             {
                 "catalog_item",
-                "catalog_item_translations",
-                "catalog_item_content_values",
+                "contacts",
+                "companies",
+                "files_registry",
+                "users",
+                "tenant_currency_settings",
             }
             <= tables
         )
-        self.assertTrue({"skus", "warehouses"}.isdisjoint(tables))
-        retired_channels = {
-            "channels",
-            "channel_publications",
-            "channel_publication_import_runs",
-        }
-        self.assertTrue(retired_channels.isdisjoint(tables))
-        self.assertTrue(retired_channels <= HISTORICAL_TENANT_TABLE_NAMES)
         self.assertTrue(
-            {"files_providers", "files_buckets", "files_registry"} <= tables
+            {
+                "skus",
+                "warehouses",
+                "catalog_products",
+                "catalog_variants",
+                "price_lists",
+                "price_list_sync_runs",
+                "price_list_sync_items",
+                "partner_offers",
+                "partner_offer_states",
+            }.isdisjoint(tables)
         )
-        self.assertFalse(any(name.startswith("warehousing_") for name in tables))
-        self.assertIn("warehousing_warehouses", HISTORICAL_TENANT_TABLE_NAMES)
-        self.assertTrue({"skus", "warehouses"} <= HISTORICAL_TENANT_TABLE_NAMES)
-        self.assertIn("catalog_products", HISTORICAL_TENANT_TABLE_NAMES)
-
-    def test_cancelled_warehousing_migrations_are_absent(self) -> None:
-        """Warehousing отсутствует; fresh Catalog присутствует в единой tenant-цепочке."""
-        from alembic.config import Config
-        from alembic.script import ScriptDirectory
-
-        config = Config()
-        config.set_main_option("script_location", "migrations/tenant")
-        script = ScriptDirectory.from_config(config)
-        self.assertEqual(len(script.get_heads()), 1)
-        self.assertIn(
-            "0023_catalog_item", {r.revision for r in script.walk_revisions()}
+        self.assertFalse(
+            any(name.startswith(("channel", "warehousing_")) for name in tables)
         )
-        directory = Path(__file__).resolve().parents[1] / "migrations/tenant/versions"
-        for name in ("0017_warehousing_warehouses.py", "0018_warehousing_zones.py"):
-            self.assertFalse((directory / name).exists())
+
+    def test_migrations_have_one_independent_baseline_per_schema(self) -> None:
+        """Каждая цепочка начинается и заканчивается собственной baseline."""
+        configs = (
+            (GlobalMigrator().config(), "global"),
+            (TenantMigrator().config("dnk_test"), "tenant"),
+        )
+        for config, kind in configs:
+            script = ScriptDirectory.from_config(config)
+            revisions = list(script.walk_revisions())
+            self.assertEqual([r.revision for r in revisions], [f"0001_{kind}_baseline"])
+            self.assertIsNone(revisions[0].down_revision)
+            tree = ast.parse(Path(revisions[0].path).read_text())
+            imports = [
+                n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)
+            ]
+            self.assertFalse(any((name or "").startswith("src.") for name in imports))
+
+    def test_worker_and_configuration_do_not_depend_on_removed_modules(self) -> None:
+        """CLI и конфигурация не зависят от удалённых модулей."""
+        from src.config import dnk_config
+        from src.management.cli import build_parser
+
+        self.assertNotIn("CHANNELS", type(dnk_config).model_fields)
+        self.assertNotIn("PRICE_LISTS", type(dnk_config).model_fields)
+        self.assertEqual(
+            build_parser().parse_args(["jobs", "worker"]).handler.__name__,
+            "handle_worker",
+        )
+        tree = ast.parse((ROOT / "src/management/commands/jobs.py").read_text())
+        self.assertFalse(
+            any(
+                isinstance(n, ast.ImportFrom)
+                and {"channels", "price_lists"}.intersection(
+                    (n.module or "").split(".")
+                )
+                for n in ast.walk(tree)
+            )
+        )

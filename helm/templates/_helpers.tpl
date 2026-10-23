@@ -113,7 +113,6 @@ EVENT_BUS__PUBLISHER_WORKER_ENABLED: {{ .Values.workers.publisher.enabled | quot
 {{- end -}}
 {{- end -}}
 {{- include "dnk.runtime.validateSecret" (dict "secret" $app.email.smtp.password "path" "application.email.smtp.password" "required" false) -}}
-{{- include "dnk.runtime.validateSecret" (dict "secret" $app.priceLists.sourceEncryptionKey "path" "application.priceLists.sourceEncryptionKey" "required" false) -}}
 {{- $_ := required "application.email.smtp.host is required" $app.email.smtp.host -}}
 {{- $_ := required "application.email.fromAddress is required" $app.email.fromAddress -}}
 {{- if and $app.email.smtp.useTls $app.email.smtp.useStarttls -}}{{- fail "application.email.smtp.useTls and useStarttls are mutually exclusive" -}}{{- end -}}

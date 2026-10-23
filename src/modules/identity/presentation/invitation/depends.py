@@ -1,4 +1,5 @@
 from fastapi import Depends
+from src.config import dnk_config
 from src.modules.identity.application.invitation.command.accept_invitation.handler import (
     AcceptInvitationHandler,
 )
@@ -96,6 +97,7 @@ def get_request_invitation_otp_handler(
         settings=settings,
         tenant_reader=tenant_reader,
         tokens=tokens,
+        development_mode=dnk_config.DEPLOY_ENV == "DEVELOPMENT",
     )
 
 

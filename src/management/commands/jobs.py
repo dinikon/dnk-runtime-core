@@ -12,10 +12,6 @@ from src.modules.files.presentation.jobs.trash_cleanup import (
     ensure_trash_cleanup_jobs,
     JOB_TYPE as FILES_TRASH_JOB_TYPE,
 )
-from src.modules.price_lists.presentation.depends.application import (
-    get_synchronize_price_list_use_case,
-    get_cleanup_price_list_use_case,
-)
 
 import argparse
 import asyncio
@@ -37,10 +33,6 @@ from src.modules.shared.application.jobs import (
 )
 from src.modules.shared.infrastructure.persistence import UnitOfWork
 from src.modules.shared.infrastructure.persistence.database_helper import db_helper
-from src.modules.price_lists.presentation.jobs import (
-    PriceListCleanupJobHandler,
-    PriceListSyncJobHandler,
-)
 from src.modules.shared.presentation.jobs import (
     build_process_due_scheduled_jobs_use_case,
     build_recover_stuck_scheduled_jobs_use_case,
@@ -129,12 +121,6 @@ async def handle_worker(_args: argparse.Namespace) -> int:
 
     dispatcher = build_scheduled_job_dispatcher(
         {
-            "price_list.sync": PriceListSyncJobHandler(
-                get_synchronize_price_list_use_case(db_helper.session_factory)
-            ),
-            "price_list.cleanup": PriceListCleanupJobHandler(
-                get_cleanup_price_list_use_case(db_helper.session_factory)
-            ),
             JOB_TYPE: ReferenceDataRefreshJobHandler(db_helper.session_factory),
             FILES_CLEANUP_JOB_TYPE: FilesCleanupJobHandler(db_helper.session_factory),
             FILES_PURGE_JOB_TYPE: FilesPurgeJobHandler(db_helper.session_factory),

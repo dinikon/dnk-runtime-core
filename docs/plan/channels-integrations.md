@@ -1,33 +1,192 @@
 # План модуля интеграций и каналов
 
-Дата обновления: 2026-10-18. Статус: целевая модель, до реализации.
+Дата обновления: 2026-10-20. Статус: реализованы payload/meta (0032), диагностика ключей XML Prom с Console и проверка назначения отсутствующего ключа через XLSX; подключение/загрузка, bind/unbind, полный Catalog Draft и ручное обновление текстов Woo работают; пакетная XML-отправка Prom — следующий срез.
 
 Связанные документы: [Catalog](catalog.md), [архитектурные требования](../architecture/backend.md),
 [история tenant-миграций](../data/tenant-migrations.md),
 [исследование платформ](channel-platforms/README.md).
 
-Раздел 0 задаёт обязательный срез v1, разделы 1–14 — полную целевую модель. На дату обновления `src/modules/channels/`
-отсутствует: миграция `0027_remove_channels` удаляет прежние tenant-таблицы.
-[Описание прежнего модуля](../modules/channels.md), его API и раздел 15 ниже —
-исторические материалы, а не подтверждение доступности интеграций сейчас.
-Исследование платформ описывает внешний контракт на дату исследования;
-его runtime capabilities не определяют доступность новой реализации.
+Раздел 0 задаёт согласованный объём MVP, разделы 1–14 — полную целевую модель.
+Реализована первая итерация: Channel с единственным Connection, verify и read
+initialization Prom/WooCommerce, локальные API списка и прогресса. Синхронизация
+по умолчанию выключена. Console реализует список каналов, настройку единственного
+Connection, verify, прогресс/повтор загрузки и список публикаций с поиском/фильтрами.
+Endpoint и секретные поля описываются manifest плагина. Реализованы bind/unbind,
+preview и атомарный create Catalog Draft. Ручной outbound Woo реализован в 0031;
+XML-отправка Prom заблокирована до подтверждения update-only контракта (0.9).
+[Действующее описание](../modules/channels.md) фиксирует API, ограничения и запуск.
 
-## 0. Первая версия: обновление двуязычного контента существующих карточек
+Историческое хранение удалено 0027; новые четыре tenant-таблицы создаёт forward
+миграция 0028_channels_core; 0029_channels_catalog_bindings добавляет представления,
+историю связей и receipt создания Draft; она же переносит Connection settings в JSONB
+и удаляет publication.core_version. SDK 5 / config 3 публикуют settings_schema,
+read_publication_details и capabilities ручного обновления (0.9). Раздел 15 ниже описывает прежний Rozetka-срез,
+не доступную сейчас интеграцию. Исследования описывают внешний контракт, а не
+готовность коннектора. Read scope текущих Prom/Woo помечен api_visible_statuses_only;
+полный API-обход даёт read_complete=true с partial при ограниченном охвате.
 
-Уточнение от 2026-10-18 имеет приоритет над полным целевым объёмом разделов ниже.
-Пользователь подтвердил: **только обновление существующих карточек**, без создания
-новых товаров на площадках. Единственные управляемые поля — название и полное
-описание в двух явно выбранных locale Connection. Catalog `title` и `body`
-остаются источником; характеристики, категории, media, цена,
-наличие, наценки, склады, публикационный статус и создание переводов отложены.
-Разделы 1–14 сохраняют целевую модель развития, а не список обязательных работ v1.
+## Уточнение от 2026-10-20: хранение и пакетный коннектор Prom
 
-Пара locale задаётся явно; для двуязычного Prom рассматриваются `uk` и `ru`.
-Нет скрытого fallback, автоперевода и записи внешнего контента обратно в Catalog.
-В v1 нет канальных overrides текстов: исправление выполняется обычным редактором
-Catalog, после чего заново строится preview. Не найденный внешний товар или перевод
-даёт ошибку подготовки; worker не создаёт его автоматически.
+Этот раздел имеет приоритет над прежними ограничениями и моделью хранения ниже.
+Разделы 0–15 сохраняют историю и целевую архитектуру. Их утверждения о плоских
+полях публикации и строгом update-only для XML не определяют новый контракт Prom.
+Текущий срез — только перенос хранения; новая исходящая XML-отправка пока не включается.
+
+### Идентификаторы и границы
+
+- `publication.id` — внутренний UUID; `publication.external_id` — нативный ID
+  площадки (`id` API Prom). Уникальность — `(connection_id, resource_type, external_id)`.
+- `meta.provider.import_key` — `external_id` API Prom, ключ позиции XML.
+  Существующий ключ сохраняется без требования UUID. Пустой ключ не мешает чтению,
+  связыванию или созданию Draft, но исключает позицию из будущего XML-обновления.
+- `representation.id` — постоянный UUID представления товара в Connection.
+  Для новой явно создаваемой публикации он станет import key. После импорта
+  нативный ID появится в публикации при повторном чтении.
+- Catalog остаётся источником данных исходящего обмена. Загрузка публикаций
+  не меняет Catalog; перенос данных возможен только через явное создание Draft
+  с использованием существующего обработчика создания товара.
+- Core Channels управляет жизненным циклом, связями, заданиями и статусами.
+  Схема приватных данных, XML и протокол Prom принадлежат плагину. Общие handlers
+  и Console не содержат проверок вида `if platform == prom`.
+
+### 1. Перенос снимка публикации — первый срез
+
+В SQL остаются `id`, `connection_id`, `resource_type`, `external_id`, `payload`,
+`meta`, `source_updated_at`, `fingerprint`, `observed_revision`, `first_seen_at`,
+`last_seen_at`, `last_import_run_id`.
+
+`payload` — нормализованный снимок списка с `schema_version=1`: SKU, названия
+по известным локалям, выбранная локаль, базовая/акционная цена, валюта и период
+акции, количество/статус наличия, главное изображение. Decimal сериализуется
+строкой, ноль отличается от null. Неизвестная локаль исторического заголовка
+сохраняется как `und`, без приписывания ему другого языка.
+
+`meta` — envelope с `schema_version=1`, `provider_schema`, `provider`,
+`read_issues`. Provider JSON проходит схему плагина; это не сырой ответ API.
+В Prom хранятся import key, группа, статус, прочитанное описание и исходная
+скидка; в Woo — parent ID вариации, тип, статус, описание и исходные GMT-границы
+акции. Исторические данные не выбрасываются при изменении хранения.
+
+Плоские SQL-поля `external_sku`, `price`, `sale_price`, `currency`, `quantity`,
+`stock_status`, `title`, `title_locale`, `main_image_url`, `extensions`,
+`extension_version`, `warnings` удаляются после backfill новой forward-миграцией.
+UUID, FK, история связей/заданий и observed revision не меняются. Хеш снимка
+пересчитывается канонически, независимо от масштаба Decimal и порядка JSON.
+Откат сохраняет дополнительные локали в служебном поле старого `extensions`.
+
+Domain/Application сохраняют типизированные контракты. HTTP списка и detail
+возвращает прежние отображаемые поля как проекцию payload; provider JSON наружу
+не выдаётся. Поиск и пагинация выполняются SQL, индексы SKU/наличия используют
+фиксированные JSON-пути с Connection первым ключом. Описания и полная галерея
+для Draft по-прежнему загружаются отдельным `read_publication_details`.
+SDK наблюдения повышается до 5; settings config остаётся 3.
+
+Проверки среза: нормализация Prom/Woo, точность и null/zero, периоды акций,
+миграция с существующими связями/историей, откат/повторный upgrade, неизменный
+снимок без повышения ревизии, поиск/фильтры/изоляция tenant, bind/unbind,
+подготовка полного Draft и действующее обновление Woo, проверки Console.
+
+Результат первого среза: добавлена `0032_publication_payload_meta`; Prom/Woo,
+список/detail API, связи и источники Draft работают с новым хранением. Выполнены
+67 модульных/архитектурных проверок, 52 PostgreSQL-теста, 12 проверок полного
+импорта с отдельным MinIO и 29 тестов Console; typecheck, сборка и lint затронутого
+клиентского контракта проходят. Проверены существующие связи и история операций,
+legacy backfill, откат/повторный upgrade и отсутствие расхождения SQL metadata.
+Проверки миграций выполнены на одноразовых БД; рабочая БД этим срезом не изменялась.
+Перед развёртыванием завершить/сверить исходящие операции SDK 4 и остановить старые
+API/workers; применить tenant-миграцию и запустить runtime/плагины SDK 5.
+
+### 2. Диагностика и восстановление import key — реализовано 20.10.2026
+
+Плагин объявляет optional capability `publication_identity_diagnostics` и политику
+ключа. Prom использует `meta.provider.import_key`; у Woo проверка не требуется.
+Общие handlers и Console не ветвятся по `platform_kind`.
+
+Состояния: `missing / duplicate / valid / not_required`. `valid` означает наличие
+ключа без коллизий **среди загруженных публикаций**, не готовность к экспорту.
+SQL-проекция определяет дубли по всему Connection до поиска, binding/stock-фильтров
+и пагинации. Пустые и пробельные ключи считаются отсутствующими; `0`, ведущие нули
+и регистр сохраняются. Сводка общая для Connection: total, missing, duplicate,
+valid и число групп дублей. Повторное чтение пересчитывает её без хранения
+диагностики, новых таблиц и изменения observed revision самим чтением списка.
+
+HTTP возвращает `identity` строки и `identity_summary`; параметры фильтра —
+`identity_status` и точный `identity_key`. Приватный provider JSON наружу не выходит.
+Сводка сообщает полноту последнего SyncRun, изменения generation и ограничения
+охвата API. Прерванная загрузка не доказывает отсутствие дублей.
+
+Console показывает предупреждение, общие счётчики, фильтр ключей, копирование
+точного ключа, переход к его дублям и инструкцию плагина. Фильтры сохраняются
+в URL и входят в query key. Связывание и Draft остаются доступны без XML-ключа.
+
+Назначение отсутствующего ключа через **родной XLSX Prom подтверждено**:
+у native ID `3240302692` записан новый external_id, 27 native ID сохранились,
+остальные 26 карточек не изменены. Обнаружен побочный эффект: Prom опубликовал
+скрытую тестовую карточку; исходная видимость восстановлена и проверена.
+Инструкция требует проверки/восстановления видимости и сверки native ID.
+Дубли и массовое исправление этим тестом не подтверждены; сначала проверяется
+одна карточка. [Протокол и файлы XLSX](../experiments/prom-xlsx/2026-10-20/README.md).
+Назначение external_id через `/products/edit` по-прежнему не предлагается.
+
+### 3. Пакетное обновление XML из Catalog
+
+В пакет входят все связанные позиции с разрешённым экспортом представления,
+включённой исходящей синхронизацией Channel, подтверждёнными native/import ID
+и без конфликтов ключей. По умолчанию исходящая синхронизация выключена.
+Первый outbound-срез меняет только названия и описания ru/uk.
+
+Каждый запуск формирует неизменяемый файл по снимку Catalog: отдельный артефакт,
+хеш, стабильный URL на срок обработки, состав и результат каждой позиции.
+API Prom запускает и проверяет импорт; запуск не равен успеху. Задания bounded,
+одна исходящая операция на Connection; ежедневное расписание и принудительный
+запуск по запросу. Принятый или неоднозначно принятый запрос автоматически
+повторно не отправляется. Статусы завершаются фактической сверкой текстов,
+локалей и native ID. Использовать существующие Jobs/SyncRun и общий SDK/facade
+асинхронного batch; добавить дочерние export items/artifact по необходимости.
+Текущий строгий контракт ручного обновления Woo сохраняется отдельно.
+
+Prom XML имеет upsert-семантику: `updated_fields` не запрещает создание.
+Если удалённая карточка исчезла до импорта, новое создание или другой native ID
+фиксируются как конфликт, без молчаливой перепривязки. Исходящий пакет не должен
+менять цены, остатки и другие поля вне согласованного allowlist.
+
+### 4. Явное создание новых публикаций — отдельный будущий срез
+
+Команда создаёт pending intent с UUID представления и валидирует обязательные
+поля Prom. До ответа/повторного чтения не создаётся фиктивная публикация с этим
+UUID вместо native ID. После чтения привязка допускается только к известному
+pending intent того же Connection; случайный внешний UUID не даёт автоматическую
+связь. Снятая вручную связь не восстанавливается автоматически. Export item
+для создания может временно не иметь publication_id.
+
+Реализация по этапам: (1) payload/meta и миграция; (2) диагностика и XLS-восстановление;
+(3) полный пакет текстов ru/uk, статусы, принудительный запуск и расписание;
+(4) явная публикация новых товаров с полным контрактом обязательных полей.
+
+## 0. Первая версия: инициализация публикаций, Catalog Draft и обновление контента
+
+Уточнение от 2026-10-18 имеет приоритет над полным целевым объёмом ниже.
+MVP включает автоматическую инициализацию всех публикаций после подключения,
+стабильный core списка, явную привязку к Catalog или создание нового Draft.
+В Draft переносятся название, SKU, базовая и акционная цена, количество/наличие.
+Подробные сценарии и атомарный контракт создания — в разделе 0.7.
+
+Уточнение границы: один Channel — один конкретный источник продаж и максимум
+один Connection. Channel — Aggregate Root, Connection — его внутренняя Entity.
+До завершения настройки Connection может отсутствовать; после подключения связь
+1:1. Это правило всей модели, не ограничение только UI/MVP. Детали — в разделе 2.2.
+
+Исходящая запись по-прежнему обновляет **только существующие внешние карточки**:
+Catalog title/body на двух явных locale Connection. Внешние товары/переводы,
+характеристики/категории/media/price/stock не создаются и не обновляются этим
+outbound-сценарием. Channel.is_enabled по умолчанию false; первичная read
+инициализация не зависит от выключенной исходящей синхронизации.
+
+Пара locale задаётся явно; для Prom рассматриваются uk/ru. Нет скрытого fallback,
+автоперевода и автоматической перезаписи существующего товара Catalog.
+В v1 нет канальных overrides текстов. Явное создание Draft не включает
+синхронизацию; дальнейшие правки выполняются обычным редактором Catalog.
+Разделы 1–14 сохраняют полную целевую модель, не расширяя обязательный срез v1.
 
 ### 0.1. Транспорт WooCommerce и Prom
 
@@ -82,18 +241,20 @@ import identity и проверка отсутствия неожиданно с
 
 | Таблица | Состояние первой версии |
 | --- | --- |
-| `channels` | id, name, platform_kind, is_enabled, revision/audit; будущие политики не создают работающих price/stock функций |
-| `channel_connections` | channel_id, identity, зашифрованные credentials, две locale/bindings, adapter mode, доступность content update, revisions |
-| `channel_external_publications` | connection_id, внешний ID/scope, наблюдаемые name/description по locale и время проверки |
+| `channels` | id, name, platform_kind, is_enabled=false, revision/audit; будущие политики не создают работающих price/stock функций |
+| `channel_connections` | id, channel_id NOT NULL UNIQUE, identity, зашифрованные credentials, locale/bindings, adapter mode, read/content capabilities, revisions, initialization status/last run; хранение Entity внутри Channel |
+| `channel_external_publications` | connection_id, resource_type/external_id, external_sku, price/sale_price/currency, quantity/stock_status, title/locale, main_image_url, versioned extensions, observed revision и import metadata |
 | `channel_product_representations` | connection_id, catalog_item_id, состояние подготовки; UNIQUE(connection_id, catalog_item_id) для simple v1 |
 | `channel_external_bindings` | representation_id, external_publication_id, target locale, подтверждённая import identity/translation target; только существующие цели |
-| `channel_sync_runs` | connection_id, операция, status, remote operation reference, типизированный versioned delivery state, audit |
+| `channel_sync_runs` | connection_id, initialize_publications/content_update, status/progress/scope, remote operation reference, versioned checkpoint/delivery state, audit |
 | `channel_sync_run_items` | run_id, representation_id, immutable snapshot двух title/body, content hash, targets, результаты по locale и ошибки |
 | `channel_export_artifacts` | run_id, storage reference, checksum, размер, формат, срок доступности; неизменяемый XML данного run |
+| `channel_catalog_creation_requests` | idempotency key, publication ID, observed revision, Catalog item ID, сохранённый результат create+bind |
 
 SQL не дублирует snapshot отдельной редактируемой карточкой: canonical content
 остаётся в Catalog, snapshots run items — история конкретной операции.
-Цена/stock и категории не нужны в business input v1; технические поля,
+Цена/stock входят во входящую read-модель и явное создание Draft, но не в
+исходящий content update. Категории остаются вне MVP; технические поля,
 обязательные для файла, adapter берёт только из подтверждённого внешнего scope,
 не расширяя список разрешённых обновлений. Внешние валидаторы могут всё равно
 требовать определённый набор XML-тегов: минимальный файл проверяется на fixtures
@@ -139,6 +300,9 @@ Application, сборка — внешнему composition root. SQL models на
 
 ### 0.4. Сценарии v1, UI и приёмка
 
+Матрица ниже описывает content update; обязательные initialization/list/create-draft
+сценарии и уточнённые состояния добавлены в разделе 0.7.
+
 Настройки Channel/Connection используют отдельные существующие строки плана
 раздела 10: создание/чтение/изменение/пауза/архив и verify. Для контента нужны:
 
@@ -172,15 +336,18 @@ Generic batch-сценарии и taxonomy CRUD раздела 10 не расш�
 Все методы аннотированы и документированы; фабрики create/restore и бизнес-правила
 остаются в Domain, mappers не выполняют I/O или проверку разрешённых переходов.
 
-UI v1: связать существующую карточку → сравнить тексты на двух locale → обновить
-выбранные → просмотреть результат. Редактор категорий/характеристик, настройки
+UI v1: подключить → автоматически загрузить все публикации → связать с Catalog
+либо явно создать Draft → при необходимости включить исходящую синхронизацию →
+сравнить тексты двух locale → обновить выбранные → просмотреть результат. Редактор категорий/характеристик, настройки
 наценок/складов и создание публикаций не выводятся как доступные функции.
 Woo может вернуть partial при успехе только одной locale; повторяются только
 подтверждённо незавершённые операции после сверки. Prom показывает run accepted,
 processing и результат проверки; ответ запуска не называется «Обновлено».
 
-Приёмка v1 проверяет изменение только title/body в двух locale, неизменность всех
-остальных внешних полей и Catalog, запрет создания карточек/переводов,
+Приёмка outbound-среза v1 проверяет изменение только title/body двух locale,
+неизменность остальных внешних полей и существующих товаров Catalog, запрет
+создания внешних карточек/переводов. Явный create Catalog Draft и входящий core
+проверяются отдельно по разделу 0.7. Остальные проверки:
 точный import identity, allowlist и переводные XML-теги, partial/retry/timeout,
 неизменяемость URL артефакта до окончания импорта, сохранение import ID и polling,
 проверку прочитанных полей после внешней обработки, tenant/CSRF/UoW/rollback,
@@ -207,7 +374,7 @@ Infrastructure adapters. Будущая самостоятельная моде�
 | --- | --- |
 | Авторизация, tenant/actor, связь Channel/Connection и разрешённые операции | Внешняя аутентификация и проверка identity/прав ресурса |
 | Чтение Catalog через публичный контракт, разрешение двух locale, content hash/preview | Поиск/чтение внешних targets и нормализация наблюдаемого контента |
-| Бизнес-правило «только title/body существующих targets», запрет записи Catalog | Преобразование подготовленного content update в wire format платформы |
+| Outbound только title/body существующих targets; создание Catalog Draft только явным core-сценарием через публичный фасад | Преобразование подготовленного content update в wire format платформы |
 | Создание runs/items, leases, checkpoint, Outbox/jobs, commit/rollback | Ограниченный сетевой шаг: API update либо XML + запуск/проверка импорта |
 | Общая интерпретация результата, история, локальные query-проекции и UI | Перевод native статусов/ошибок в типизированный результат операции |
 
@@ -222,9 +389,11 @@ references. Он не получает агрегаты Catalog, его reposito
 
 SDK — небольшой публичный Application-контракт Channels, не универсальный сервис
 со всеми методами платформы. Он состоит из независимых интерфейсов операций:
-`VerifyConnectionPlugin`, `ReadExistingPublicationsPlugin`, `UpdateContentPlugin`.
-Плагин реализует только заявленные capabilities. Создание карточек, price/stock,
-taxonomy и moderation не добавляются фиктивными методами v1.
+`VerifyConnectionPlugin`, `ReadExistingPublicationsPlugin`,
+`ReadPublicationPagePlugin`, `UpdateContentPlugin`.
+Плагин реализует только заявленные capabilities. Создание внешних карточек,
+исходящая запись price/stock, taxonomy и moderation не добавляются фиктивными
+методами v1. Чтение наблюдаемых price/stock входит в read-publications core.
 
 Manifest объявляет стабильный `kind`, label, категорию платформы, версию SDK,
 версию конфигурации, connection JSON Schema/UI schema, реализованные capabilities
@@ -329,7 +498,8 @@ contract, подключается только новым пакетом/fixtur
 root. Общие handlers, controllers, DTO Catalog и страницы Console не меняются.
 Обязательны архитектурные проверки импортов, contract suite каждого плагина,
 проверки Completed/Pending/Partial/UnknownOutcome, lease/revision/tenant fencing,
-отсутствие записей Catalog и внешних изменений вне разрешённых title/body.
+отсутствие записей Catalog из plugins/initialization и внешних изменений вне
+разрешённых title/body; явное core-создание Draft проверяется отдельно.
 Поведение общих экранов проверяется на manifest тестового плагина.
 
 Гарантия относится к **новой платформе с уже поддержанной операцией**.
@@ -338,6 +508,9 @@ root. Общие handlers, controllers, DTO Catalog и страницы Console 
 её через произвольный payload/action в обход модели не считается расширяемостью.
 
 ### 0.6. Конкретные файлы, SDK-контракты и цепочка content update
+
+Дерево content update дополняется read-initialization и create-draft файлами
+раздела 0.7; ограничения на доступ plugins к Catalog остаются прежними.
 
 Этот раздел сохраняет согласованную в чате структуру реализации v1. Это целевые
 пути и эскизы контрактов, а не созданные backend-файлы. Применяются
@@ -366,10 +539,10 @@ flowchart LR
 конкретной реализации. Catalog читает ядро; плагин получает подготовленные
 name/description и существующие внешние targets.
 
-| Агрегат | Ответственность |
+| Объект / граница | Ответственность |
 | --- | --- |
-| Channel | Включение интеграции и бизнес-политики |
-| Connection | Ресурс, настройки, доступ и возможности |
+| Channel, Aggregate Root | Конкретный источник продаж, включение интеграции, бизнес-политики и lifecycle единственного Connection |
+| Connection, внутренняя Entity Channel | Техническая identity ресурса, настройки, доступ и возможности; собственного write repository нет |
 | ProductRepresentation | Связь CatalogItem с внешними целями |
 | ExternalPublication | Наблюдаемая внешняя карточка |
 | SyncRun | Зафиксированные изменения, прогресс, попытки и результаты |
@@ -387,10 +560,7 @@ channels/
 │   ├── channel/
 │   │   ├── aggregate.py
 │   │   ├── repository.py
-│   │   └── error.py
-│   ├── connection/
-│   │   ├── aggregate.py
-│   │   ├── repository.py
+│   │   ├── entity/connection.py
 │   │   └── error.py
 │   ├── product_representation/
 │   │   ├── aggregate.py
@@ -410,7 +580,7 @@ channels/
 │       └── error.py
 │
 ├── application/
-│   ├── connection/
+│   ├── channel/
 │   │   └── command/verify_connection/
 │   │       ├── command.py
 │   │       ├── handler.py
@@ -476,7 +646,7 @@ query port и Infrastructure query repository/mapper по фактическим
 
 В частности, bind и preview получают самостоятельные controllers/requests/responses
 в `presentation/product_representation/http/`, verify — в
-`presentation/connection/http/`. `router.py` регистрирует маршруты, `depends.py`
+`presentation/channel/http/`. `router.py` регистрирует маршруты, `depends.py`
 собирает обработчики на общей UoW-зависимости. Worker-сценариям фиктивные HTTP API
 не создаются. `get_content_update_run` не имеет request schema с пустым body.
 
@@ -493,7 +663,7 @@ channels/application/
 │   ├── plugin_credentials.py
 │   ├── plugin_http_transport.py
 │   └── clock.py
-├── connection/
+├── channel/
 │   ├── port/verify_connection_plugin.py
 │   └── plugin_contract/verify_connection.py
 ├── external_publication/
@@ -911,19 +1081,355 @@ updated_fields/переводы/минимальные XML-теги и пров�
 с существующими targets двух locale. Эскиз SDK не доказывает соблюдение этих
 внешних контрактов и не разрешает создание неизвестных товаров.
 
+### 0.7. Уточнение MVP: инициализация, список публикаций и создание Catalog Draft
+
+Этот раздел дополняет структуру и SDK 0.5–0.6 и уточняет направления обмена:
+входящая инициализация сохраняет публикации в Channels; пользователь может
+явно создать из выбранной публикации новый Draft в Catalog. Исходящая запись
+остаётся ограничена title/body существующих внешних карточек на двух locale.
+**Базовая и акционная цена копируются в новый Draft** — решение пользователя.
+Автоматической перезаписи уже существующего CatalogItem из источника нет.
+
+#### 0.7.1. Инициализация при подключении
+
+Создание Channel само по себе не делает HTTP-вызовы: без Connection внешнего
+ресурса ещё нет. CreateConnection сохраняет настройки и задачу проверки доступа
+через Outbox/jobs. После успешной проверки identity и права чтения ядро автоматически
+создаёт initialize_publications run для этого Connection независимо от выключенной
+исходящей синхронизации. Запись verified-состояния и планирование инициализации
+атомарны в одном внешнем UoW. Handlers одного модуля не вызывают друг друга;
+общая Application-координация использует порты и доменные методы.
+
+На одну подтверждённую identity/generation допускается одна первичная
+инициализация; повтор доставки verification event не создаёт второй run.
+Ротация credentials того же ресурса сохраняет публикации/привязки, останавливает
+старые сетевые порции и допускает продолжение/повтор после проверки. Новая
+identity требует нового Channel со своим Connection. Канал без подтверждённого чтения остаётся
+доступным для исправления настроек, но не получает ложный успешный импорт.
+
+Инициализация загружает **все публикации согласованного scope**: все страницы,
+разрешённые статусы, детали/вариации и дополнительные потоки, если они нужны
+платформе. Матрица охвата подтверждается отдельно для каждого плагина;
+недоступные по правам статусы показываются как ограничение. Одна страница,
+выборка только активных либо лимит первых N карточек не считаются полным успехом.
+Не обещается транзакционный snapshot меняющегося внешнего каталога.
+
+ReadPublicationPagePlugin выполняет ограниченные порции. Ядро сохраняет
+нормализованные публикации, checkpoint, счётчики и следующий job атомарно.
+Одинаковая публикация определяется по Connection + resource_type + external_id,
+а не по SKU или названию. Повтор страницы/задания не создаёт дубль. Отсутствие
+прогресса или повтор cursor останавливает run с ошибкой, а не зацикливает worker.
+Внешняя сеть выполняется между короткими UoW.
+
+`initialization_status`: not_started/queued/running/succeeded/partial/failed/cancelled,
+отдельно от verification и пользовательского включения синхронизации.
+UI показывает сохранённые строки по мере загрузки, число уникальных публикаций,
+этап, ошибки и время. Total/процент показываются только при достоверном total
+источника. Пустой полный источник — succeeded с нулём. Ошибка сохраняет уже
+полученные публикации и допускает повтор/продолжение с checkpoint.
+Публикации, не встреченные в неполном обходе, не удаляются и не получают quantity=0.
+Первичная загрузка и её повтор никогда автоматически не создают товары Catalog.
+
+#### 0.7.2. Обязательный core внешней публикации
+
+Core имеет стабильные типы, собственную format version и отдельные SQL-поля
+для списка/поиска/сортировки. Он не зависит от разборки всего native JSON в UI.
+Connection, internal publication ID и технические отметки назначает ядро,
+не внешний плагин. SKU не уникален и не является идентификатором публикации.
+
+| Поле | Тип / смысл |
+| --- | --- |
+| external_id | Обязательная непустая строка; native identity внутри scope/resource_type |
+| external_sku | Nullable string; внешний артикул, независимо от Catalog SKU |
+| price | Nullable Decimal; нормализованная базовая цена по подтверждённой семантике источника |
+| sale_price | Nullable Decimal; явно полученная акционная цена, не догадка по неизвестным полям |
+| currency | Nullable ISO-код; обязателен для переноса цены в Catalog, не угадывается по tenant или символу |
+| quantity | Nullable Decimal; исходное числовое количество без округления до int |
+| stock_status | in_stock/out_of_stock/on_backorder/unknown; это наличие, не модерация/публикационный статус |
+| title / title_locale | Nullable title и его подтверждённая locale; неполная карточка остаётся видна с предупреждением |
+| main_image_url | Nullable безопасный внешний URL главного изображения; не создаёт Files/Catalog gallery |
+| source_updated_at | Nullable время изменения у источника с проверенной timezone |
+| first_seen_at / last_seen_at | Время наблюдения в нашей системе |
+| last_successful_read_at / last_import_run_id | Связь со свежестью и запуском чтения |
+| observed_revision / content_fingerprint | Локальная версия и hash наблюдаемого состояния для preview/идемпотентности; это не Catalog revision |
+| warnings / read_status | Типизированные безопасные коды неполноты/ошибок отдельных полей |
+
+Деньги/quantity в JSON/HTTP передаются Decimal-строками. `null`, 0 и отсутствие
+акционной цены различаются. Если источник вернул некорректное optional-значение,
+нормализатор сохраняет nullable core + предупреждение и исходные данные в
+разрешённом payload, не теряя всю строку. Без валидного external_id публикацию
+нельзя надёжно upsert: ошибка фиксируется в run и влияет на полноту результата.
+Цена без известной валюты остаётся наблюдаемой ценой с предупреждением, но
+не может стать Money Catalog без явного исправления preview.
+
+Локализованные тексты и остальные платформенные данные хранятся в versioned
+`extensions`/native JSONB и валидируются backend по схеме плагина. Это схема
+read-документа конкретной платформы, не будущая schema внешней категории и не
+Catalog.ProductType. Extension schema определяет типы, структуру и допустимые
+значения; бизнес-инварианты Catalog и Channel проверяются их владельцами.
+Общие list DTO получают core, detail/preview — типизированные projections
+под конкретный use case. Неизвестная версия extension schema видна как
+ограничение детализации; доступный core остаётся читаемым.
+
+Для outbound сравнения плагин предоставляет отдельные проверенные title/body
+двух locale. Неполнота перевода не запрещает сохранять наблюдаемую строку,
+связывать её с товаром или открыть preview создания Draft; она может блокировать
+исходящее обновление двух locale. HTML/изображения проходят общую sanitization
+и URL policy. Credentials и auth tokens не сохраняются в core/extensions/logs.
+
+#### 0.7.3. Действия с публикацией
+
+У несвязанной строки два явных действия: «Связать с товаром» и «Создать товар».
+Связывание выбирает существующий CatalogItem по ID и сохраняет binding;
+не обновляет его SKU, цену, наличие или тексты. SKU/название могут помогать поиску,
+но совпадение не создаёт автоматическую связь. Неполный набор переводных targets
+допустим для связи и помечается как препятствие отдельного outbound preview.
+
+«Создать товар» запускает полное чтение через плагин и открывает подготовленный
+preview (уточнение и реализация — 0.8). Пользователь подтверждает перенос и исправляет
+неоднозначные/невалидные поля. MVP копирует:
+
+- Заголовок и описание на локалях подключения → Catalog title/body.
+  Отсутствующие переводы не генерируются; пропуски видны и доступны для ручного заполнения.
+- Галерею с порядком и главным изображением → собственные Files и галереи Catalog.
+- external_sku → SKU, если задан. Коллизия SKU требует исправления или явного
+  выбора «Связать с существующим»; нет автоматического объединения.
+- Базовую и акционную цену в подтверждённой валюте. Сохранённые границы акции
+  переносятся только при подтверждённой семантике; даты не вычисляются из догадок.
+  sale <= regular, precision и прочие правила проверяет Domain Catalog.
+- Количество/наличие по правилам ниже.
+- Status всегда Draft, product_type_code=default, virtual=false.
+
+Категории, характеристики, metadata и прочие платформенные данные пока не
+копируются. Default разрешается Catalog по коду в tenant UUID и не создаётся
+заново Channels. Полная карточка получается отдельной capability; observed core
+остаётся компактной read-моделью списка.
+
+Правило наличия:
+
+- Если quantity — целое, можно перенести его как manage_stock=true и
+  stock_quantity. Политика backorders указывается явно в preview; начальное
+  предложение no, для подтверждённого предзаказа пользователь выбирает её явно.
+- Если quantity отсутствует, переносится известный ручной stock_status при
+  manage_stock=false. Unknown требует выбора в preview, не становится in_stock.
+- Дробное количество не округляется. Пользователь исправляет его до поддержанного
+  Catalog значения либо явно выбирает ручное наличие без количества.
+- Если числовое количество и наблюдаемый status противоречат вычисляемой модели
+  Catalog, preview показывает конфликт и требует явного решения.
+
+Создание сначала проверяет tenant-scoped idempotency receipt: завершённый запрос
+с тем же key и входом возвращает сохранённый результат до проверки текущей
+observed_revision/binding; другой вход с прежним key даёт конфликт. Новый запрос
+использует общий внешний tenant UoW: получить/заблокировать исходную публикацию,
+повторно проверить receipt, observed_revision и отсутствие binding, зарезервировать
+idempotency key, вызвать публичный create-draft контракт Catalog через consumer
+adapter, затем сохранить representation/binding и receipt. Commit фиксирует
+товар, связь, receipt и нужный Outbox вместе. Ошибка любого шага откатывает всё;
+нет промежуточного пустого товара, последовательно коммитимых Create+PATCH
+или orphan CatalogItem при ошибке binding. Сеть в этой транзакции не вызывается.
+
+Повтор того же idempotency key возвращает тот же Catalog item ID; конкурентные
+команды для одной публикации не создают два товара. Уже связанная публикация
+предлагает открыть товар/показывает конфликт, а не создаёт дубль. Изменившийся
+после preview observed snapshot требует нового preview. Binding и создание
+Draft не включают исходящую синхронизацию и не ставят update-content job.
+
+После commit созданный товар становится самостоятельным источником истины.
+Следующая инициализация обновляет observed Channels, но не меняет существующий
+CatalogItem. Пользователь редактирует Draft в Catalog обычными средствами.
+
+#### 0.7.4. Фасад создания и новые файлы
+
+Существующий `CreateCatalogItemCommand` → `CreateCatalogItemResultDTO(id)`
+создаёт пустой или заполненный товар. Команда принимает tenant/actor и типизированный
+объект товара со всеми текущими разделами Catalog. Channels передаёт title/body, подготовленные галереи,
+SKU, цены и stock, явно задавая Draft/Default/virtual=false. Внешняя идентичность
+публикации и native JSON не входят в контракт Catalog.
+
+Общая подготовка используется созданием и preview; проверяет справочники, схемы,
+Files и санитаризацию rich text. Handler не вызывает другие write handlers и
+использует внешний UoW. Отдельный CreateDraftCatalogItem удалён; расширен имеющийся
+HTTP create, дополнительные HTTP endpoints для consumer validation/lock не нужны.
+
+В Channels добавляются:
+
+- `application/product_representation/port/catalog_drafts.py` —
+  CatalogDraftCreationFacade и конкретные consumer input/result DTO.
+- `infrastructure/product_representation/adapter/catalog_drafts.py` — adapter
+  публичного CreateCatalogItem на том же внешнем UoW.
+- `application/sync_run/command/start_publication_initialization/`,
+  `prepare_publication_initialization/`, `apply_publication_initialization/`,
+  `complete_publication_initialization/` — свои command/handler/dto при результате.
+- `application/sync_run/query/get_publication_initialization/`,
+  `application/external_publication/query/list_external_publications/` и
+  `get_external_publication/` — свои query/handler/dto.
+- `application/product_representation/query/preview_catalog_draft/`,
+  `command/create_catalog_item_from_publication/` — отдельные contracts/handlers/DTO.
+- `application/external_publication/port/read_publication_page_plugin.py` и
+  `plugin_contract/read_publication_page.py` — независимая SDK capability
+  read_publications с bounded cursor/page input и типизированным core output.
+- Prom/Woo `infrastructure/plugin/<platform>/read_publication_page.py`,
+  `core_normalizer.py`, `publication_read_schema.py` — реализации и schema read
+  extensions; общий registry не получает условий по kind.
+- `infrastructure/persistence/models/catalog_creation_request.py` — receipt
+  идемпотентного создания, не самостоятельный Aggregate Root.
+
+В `channel_external_publications` добавляются core-поля, core/extension schema
+versions и import metadata. Индексы списка привязаны к Connection, stable identity,
+external_sku, title, stock_status и пагинации; SKU не получает UNIQUE.
+`channel_sync_runs` получает operation=initialize_publications и progress scope;
+`channel_connections` — initialization status/last run. Дополнительная таблица
+`channel_catalog_creation_requests` хранит tenant-scoped idempotency receipt,
+publication ID, source revision и созданный Catalog item ID. Нет FK в чужую
+Catalog ORM; существование/usage проверяются через публичные контракты.
+
+Для связывания с существующим item и конкурентного удаления используется порядок:
+публичная блокировка Catalog item у его владельца → locks публикаций Channels
+в стабильном порядке → сохранение binding. Delete Catalog проверяет usage под
+той же item-блокировкой. Для нового Draft source publication блокируется до
+создания ещё невидимого другим транзакциям нового item; idempotency/uniqueness
+защищают повтор. Ранее удалённые tenant-wide reference guards Catalog не возвращаются.
+
+CatalogDraftCreationFacade доступен **только ядру Channels**, не plugin runtime.
+ReadPublicationPagePlugin возвращает core/extensions, но не вызывает Catalog.
+Все фасады полностью аннотированы и имеют docstrings; Domain фабрики/методы,
+use-case DTO, разделение HTTP request/response и внешние UoW сохраняются.
+
+#### 0.7.5. Сценарии и HTTP
+
+Пути относительно `/api/console/channels`; tenant/actor берутся из Identity.
+
+| Сценарий | Вход | execute → | HTTP |
+| --- | --- | --- | --- |
+| start_publication_initialization | connection ID, origin initial/manual_retry, idempotency context | StartPublicationInitializationResultDTO | POST /connections/{id}/initialization → 202; первичный запуск внутренний |
+| prepare_publication_initialization | run ID, lease, checkpoint | PreparePublicationInitializationResultDTO | Worker |
+| apply_publication_initialization | run ID, lease, typed page/core outcome | ApplyPublicationInitializationResultDTO | Worker |
+| complete_publication_initialization | run ID, terminal result | None | Worker |
+| get_publication_initialization | connection ID/run ID | GetPublicationInitializationResultDTO | GET /connections/{id}/initialization |
+| list_external_publications | connection ID, locale, search/filter, offset/limit | ListExternalPublicationsResultDTO | GET /connections/{id}/publications |
+| get_external_publication | publication ID, locale | GetExternalPublicationResultDTO | GET /publications/{id} |
+| preview_catalog_draft | publication ID, observed revision, явные locale | PreviewCatalogDraftResultDTO | GET /publications/{id}/catalog-draft-preview |
+| create_catalog_item_from_publication | publication ID, expected observed revision, idempotency key, подтверждённые typed fields preview | CreateCatalogItemFromPublicationResultDTO | POST /publications/{id}/catalog-item → 201 |
+
+CreateCatalogItemFromPublicationResultDTO содержит Catalog item ID, representation
+ID и binding IDs; preview возвращает предложенные значения, origins и issues,
+а не создаёт товар. Для каждой публичной строки — отдельные controller/request
+при body/response, router и именованный Depends у соответствующего root.
+Worker/consumer сценарии не получают фиктивных HTTP-контрактов; None не создаёт
+пустой DTO. Frontend API/DTO/mapper/query/mutation/page-state/UI разделены по
+[правилам frontend](../architecture/frontend.md); деньги не превращаются в float.
+
+#### 0.7.6. Выключенная по умолчанию синхронизация
+
+Channel.is_enabled создаётся как false: это пользовательское разрешение
+**исходящей синхронизации**, не состояние инициализации. Domain default,
+SQL default и UI согласованы. Проверка подключения, первичная загрузка/повтор
+чтения, локальное чтение списка, bind и явное создание Catalog Draft разрешены
+при false. Они не включают Channel автоматически.
+
+Исходящий start_content_update и его отправляющие шаги запрещены до явного
+включения Channel, разрешённой операции Connection и успешного preview.
+Binding/создание Draft сами по себе не являются согласием на внешнюю запись.
+Периодическая/событийная синхронизация остаётся вне v1; после включения пользователь
+по-прежнему вручную подтверждает конкретный content update.
+Connection.is_paused или архивирование Channel останавливает сетевые порции,
+включая initialization;
+отключение только исходящей синхронизации не прерывает первичное чтение.
+Уже отправленный write-запрос требует сохранения результата/сверки даже после
+выключения, без новых отправок.
+
+В UI после проверки подключения сразу открывается список с прогрессом
+инициализации и отдельным индикатором «Синхронизация выключена». Core строки
+показывают главное изображение, title, SKU, цены/валюту, quantity/stock status,
+связь с Catalog и актуальность. У несвязанной строки — link/create; у связанной —
+открыть Catalog, состояние и preview обновления. Список читает локальную БД,
+не вызывает внешний API на каждом открытии. Query keys включают tenant,
+Connection, filters/locale/pagination; смена tenant отменяет запросы/черновики.
+Повтор Create с неизвестным исходом использует прежний idempotency key и сначала
+проверяет результат; refetch не стирает ввод исправлений preview.
+
+Приёмка: полный paginated initialization при sync=false; отсутствие дублей и
+ложного success; 0/null/false, скидка и неизвестная валюта; версия core/extensions;
+create Draft с title/body на локалях подключения, собственной галереей,
+SKU/regular+sale/stock и атомарным binding; SKU collision, дробное/неизвестное количество и конфликт
+status; concurrent create/link/delete, rollback/commit failure и idempotent replay;
+повторный импорт не меняет созданный Catalog; default false не включает отправку;
+двухлокальное outbound обновляет только title/body после явного включения.
+Существующие fixtures/реальные проверки Prom/Woo дополняются всем read scope.
+
+### 0.8. Реализованный срез: полная карточка перед созданием Draft
+
+Реализация описана в [Channels](../modules/channels.md#полная-карточка-и-подготовка-импорта-0030).
+Миграция `0030_channel_publication_imports` добавляет общий процесс подготовки.
+SDK 3/config 3: `read_publication_details` возвращает typed translations/images и core;
+плагины изолируют Prom/Woo wire contracts. Подготовка закрепляет immutable JSONB
+снимок, выполняет отдельные durable шаги фотографий и показывает результат в Console.
+
+Локализованный контент и Files-backed galleries передаются существующему
+`CreateCatalogItemHandler` через публичную границу Catalog. Подготовка расходуется
+атомарно с товаром, binding и receipt. Очистка временных файлов использует Files lock
+и публичный запрос Catalog usage. Фоновое чтение и последующая инициализация не
+изменяют созданный товар; исходящая синхронизация остаётся выключенной.
+
+Приёмка: реальные PostgreSQL/MinIO и HTTP/CSRF; два языка Prom; Woo product/variation;
+санитаризация HTML; порядок/главное фото; частичный сбой/повтор/явное исключение;
+конкурентный create и receipt replay; actor/tenant isolation; отмена/TTL/очистка;
+восстановление прерванного job; desktop/mobile Console и reload с точным intent.
+Внешние кабинеты заменены contract fixtures: фактический доступ и локали аккаунта
+проверяются отдельным smoke-тестом с рабочими credentials.
+
+### 0.9. Ручное обновление контента: реализованный срез 0031
+
+Уточнение 2026-10-19 имеет приоритет над будущими схемами 0.1–0.6.
+Подробные контракты: [Channels](../modules/channels.md#ручное-обновление-текстов-0031).
+
+- Новый корень ContentUpdateRun внутри Channels; ContentUpdateItem — внутренняя
+  Entity. SyncRun остаётся процессом первичной загрузки.
+- Переиспользуются существующие Catalog item-lock и publication snapshot через
+  расширенный публичный фасад. Catalog не изменяется. Тексты фиксируются по
+  точным locale без fallback, затем проверяются при confirm и перед отправкой.
+- SDK 4/config 3: preview_content_update у обоих плагинов, update_content у Woo.
+  Woo пишет только name/description существующего product одной locale; variations
+  и мультиязычная запись Woo не поддерживаются этим срезом.
+- Prom сравнивает RU/UK, но не отправляет XML: ImportProductURL не документирует
+  update-only; updated_fields — плоский массив строк, а не запрет создания.
+  Кабинетный флаг «Тільки оновлення» не считается подтверждённым параметром API.
+  API редактирования не используется как скрытая смена согласованного транспорта.
+- Используются channel_content_update_runs/items; таблица артефактов не создаётся
+  до работающего XML-транспорта. Snapshot JSON имеет version=1, операция ограничена
+  50 публикациями/двумя locale и 24 часами. Пустые тексты не очищают внешние поля.
+- Start/Confirm/Retry имеют собственные Command/Handler/ResultDTO; Prepare/Apply —
+  отдельные внутренние команды; Get/List — Query/Handler/DTO/read repository.
+  HTTP controller/request/response и именованный Depends разделены по сценарию.
+- Сохранение intent/результата и jobs атомарно. Внешние запросы вне SQL. Перед PUT
+  фиксируется sending, повтор такого шага проверяет результат. Retry выполняет
+  сверку или возобновляет прерванный job; новая отправка требует нового preview.
+- Console: одиночный/групповой выбор → сравнение локалей → явное разрешение
+  исходящих операций → подтверждение → прогресс/результат/история. Включение
+  is_enabled не запускает автоматическую синхронизацию.
+
+Архитектурная проверка среза: Domain factories/create/restore и методы переходов;
+EntityIdVO; отсутствие SQL/HTTP во внутренних слоях; конкретные use-case DTO;
+публичные межмодульные фасады; один UoW/jobs; пустые package init; аннотации и
+русские docstrings; SQL mapper без I/O; read projections без восстановления roots;
+frontend DTO/mapper/API/query/mutation/Page/UI и tenant/actor query keys.
+
 ## 1. Решения и границы
 
-**Catalog — источник истины о товаре для создания публикации.** Ни импорт,
-ни обновление справочников, ни ответ площадки не создают и не изменяют товары,
-переводы, цены, наличие, категории или характеристики Catalog.
+**Catalog — источник истины о товаре для исходящей публикации.** Автоматический
+импорт, обновление справочников и ответы площадки не создают и не перезаписывают
+товары Catalog. Исключение — явное пользовательское «Создать товар» по разделу 0.7:
+оно атомарно создаёт новый Draft и binding; последующие импорты его не обновляют.
 
-**Channel** задаёт правила нашей платформы для конкретного канала продаж:
-название, платформу, включение интеграции, выбор обслуживающих складов,
-политику наценки, правила отбора и подготовки товаров к публикации.
+**Channel** — конкретный источник продаж, например «Prom: магазин A» или
+«WooCommerce: shop.example». Он задаёт название, платформу, включение исходящей
+синхронизации, выбор обслуживающих складов, наценку, отбор и подготовку товаров.
+Один магазин/кабинет/site — отдельный Channel со своими правилами.
 
-**Connection** описывает конкретный внешний ресурс и работу с ним: магазин,
-кабинет, marketplace/site, credentials, языки ресурса, валюту ресурса,
-разрешённые операции, расписание и техническую доступность.
+**Connection** — единственная техническая часть Channel: подтверждённая identity
+внешнего магазина/кабинета/site, credentials, языки и валюта ресурса,
+разрешённые операции и техническая доступность. Это внутренняя Entity Channel,
+её lifecycle и изменения контролирует Channel.
 
 **Connector** — Infrastructure adapter платформы/транспорта за Application-портом.
 Это реализация обмена, а не пользовательское подключение или Aggregate Root.
@@ -940,7 +1446,7 @@ updated_fields/переводы/минимальные XML-теги и пров�
 | Настройка | Владелец | Правило |
 | --- | --- | --- |
 | Название и `platform_kind` | Channel | Платформа неизменна после создания; несколько Channel одной платформы допустимы |
-| `is_enabled` | Channel | Общий пользовательский выключатель всех автоматических операций его Connections |
+| `is_enabled` | Channel | По умолчанию false; разрешение исходящей синхронизации. Verify, initialization, read, bind и явный Catalog Draft от него не зависят |
 | Обслуживающие склады и правила доступного количества | Channel | Только ссылки на владельца складского учёта и политика использования |
 | Наценка, округление, отбор товаров | Channel | Общие бизнес-правила подготовки публикаций |
 | Внешний магазин/кабинет, marketplace/site, endpoint | Connection | Определяют изолированную идентичность ресурса |
@@ -964,16 +1470,40 @@ JSON Schema формы подключения, схема требований �
 
 ### 2.2. Связи и идентичность
 
-Целевое отношение: `Channel 1 → N Connection`. Connection принадлежит ровно
-одному Channel и не переносится между каналами. Channel может временно не иметь
-подключений. UI первого среза может создавать один Connection, но модель,
-запуски и внешние идентификаторы сразу используют `connection_id`.
+Целевое отношение: `Channel 1 → 0..1 Connection`; у подключённого Channel —
+ровно один Connection. Отсутствие допустимо только до подключения. Второй
+Connection запрещён Domain, Application и SQL, включая конкурентные запросы.
+Это постоянная граница модели. Channel представляет конкретный источник продаж;
+правила принадлежат этому источнику. Юридическое лицо, организация продавца
+или объединение магазинов не являются ответственностью Channel.
 
-Один Channel объединяет ресурсы одной платформы с общими бизнес-правилами.
-Если у магазинов разные наценки или наборы складов, создаются разные Channel.
-Один marketplace/site с собственной валютой или независимыми требованиями
-выделяется в отдельный Connection. Совместное использование credentials несколькими
-подключениями не означает совместное владение публикациями.
+Например: «Prom: магазин A», «Prom: магазин B» и «WooCommerce: основной сайт» —
+три независимых Channel, даже при одинаковых складах/наценках или общих credentials.
+Нет коллекции подключений и выбора подключения при управлении публикациями канала.
+Если позже понадобятся общие шаблоны правил или группировка, это отдельная
+возможность, не основание добавлять Connections в существующий Channel.
+
+Channel — Aggregate Root; Connection с собственным стабильным ID — его Entity.
+ChannelRepository загружает/сохраняет агрегат вместе с Connection. Все изменения
+подключения, verification result, pause/resume и ротация секрета проходят через
+доменные методы Channel. Собственного ConnectionRepository и независимого
+archive/delete Connection нет. Архивирование Channel архивирует источник целиком
+и запрещает новые сетевые порции. До него отключить все сетевые операции можно
+паузой Connection, а только исходящую синхронизацию — is_enabled=false.
+
+Файлы connection-сценариев, их ports/adapters/HTTP/Depends располагаются под root
+`channel` во всех слоях. Query возвращает отдельные DTO без восстановления
+агрегата. Изменения Channel/Connection сохраняются одним repository в общем UoW;
+expected revision относится к Channel. Settings/credentials/policy revisions
+нужны для точной проверки актуальности jobs и не создают самостоятельный агрегат.
+
+SQL сохраняет отдельную таблицу `channel_connections`: `channel_id NOT NULL`,
+FK на channels внутри tenant и безусловный UNIQUE(channel_id). Ограничение
+действует и для архивных строк: нет схемы «один активный, остальные исторические».
+History/audit хранится отдельно от изменяемой Entity. Наличие двух таблиц не
+означает два Aggregate Roots. Публикации/runs сохраняют connection_id как стабильный
+технический scope. В write-сценариях владелец определяется по Channel; Connection
+не загружается отдельным Domain repository и не переносится между Channel.
 
 Connection хранит проверенный `resource_identity` (account/shop/site и иные
 части scope), а не определяет его по введённому названию. Одна и та же цель
@@ -986,8 +1516,10 @@ Connection хранит проверенный `resource_identity` (account/shop
 `settings_revision` и `policy_revision` Channel служат для проверки актуальности
 задания. Они не являются ревизиями Catalog. Новые credentials сначала сохраняются
 как кандидат; до подтверждения identity рабочие не заменяются.
-Смена магазина, аккаунта или site создаёт новый Connection, старый архивируется;
-его публикации и история не становятся объектами нового ресурса.
+Смена подтверждённого магазина, аккаунта или site требует нового Channel и его
+единственного Connection. Старый Channel можно архивировать; его публикации,
+bindings и история не становятся объектами нового ресурса. Исправление настроек
+до первой успешной проверки допустимо в том же Connection, пока identity не закреплена.
 
 Внешний ключ: `(connection_id, resource_type, external_id)`, при необходимости
 с явным provider scope. SKU, подпись и URL не устанавливают идентичность.
@@ -995,8 +1527,8 @@ Connection хранит проверенный `resource_identity` (account/shop
 
 ### 2.3. Выключение и доступность
 
-Операция обмена, включая ручной запуск, разрешена только при включённом Channel,
-неархивном и неприостановленном Connection, включённой операции, доступной
+Исходящая операция обмена, включая ручной запуск, разрешена только при включённом
+неархивном Channel, неприостановленном Connection, включённой операции, доступной
 реализации и достаточных проверенных правах ресурса. Для записи обязательна
 подтверждённая identity. Сервер проверяет условия и при постановке job,
 и перед выполнением/сохранением результата; UI использует серверные причины отказа.
@@ -1007,12 +1539,14 @@ Connection хранит проверенный `resource_identity` (account/shop
 Результат запуска `queued / running / succeeded / partial / failed / cancelled`
 не является статусом Connection.
 
-Выключение Channel или пауза Connection запрещает новые вызовы обмена
-и дальнейшие порции. Уже отправленный внешний запрос отозвать нельзя: его
+Выключение Channel запрещает новые исходящие вызовы и их дальнейшие порции.
+Read initialization/ручной read-retry доступны при is_enabled=false. Пауза
+Connection или архивирование Channel останавливает все новые сетевые порции,
+включая initialization. Уже отправленный внешний запрос отозвать нельзя: его
 неоднозначный исход требует сверки. Выключение не снимает товары с продажи,
 не удаляет внешние карточки и не очищает сохранённые данные. Локальное чтение
-и настройка остаются доступны. Проверку доступа можно запускать вручную при
-выключенном Channel: она не импортирует и не публикует товары.
+и настройка остаются доступны. Verify, initialization, bind и явный create Catalog
+Draft доступны при выключенном Channel и не включают его автоматически.
 
 ## 3. Операции подключения
 
@@ -1064,7 +1598,8 @@ Channel хранит **политику**, а не копию складских
 Без наценки `p=0, a=0`; Decimal, без float. Источник — вычисленная цена Catalog
 на `as_of`. Передача старой/акционной цены — отдельная поддержанная возможность,
 не догадка адаптера. Политика Channel не содержит валюту внешнего ресурса:
-одна фиксированная надбавка трактуется в валюте каждого Connection и видна в preview.
+фиксированная надбавка трактуется в валюте единственного Connection канала
+и видна в preview.
 
 Connection задаёт валюту цели; конвертация выполняется только по явной политике
 с зафиксированными курсом, источником и моментом. Реализация использует
@@ -1116,7 +1651,7 @@ SQL/JSONB — Infrastructure; Domain работает с типизирован�
 | Планируемое tenant-хранение | Поля и ограничения |
 | --- | --- |
 | `channels` | id, platform_kind, name, is_enabled, policy_revision, правила политики, audit |
-| `channel_connections` | id, channel_id, resource identity, currency/locales, operation settings, revisions, audit; секреты отдельным ciphertext |
+| `channel_connections` | id, channel_id NOT NULL UNIQUE с FK на channels, resource identity, currency/locales, operation settings, revisions, audit; Entity Channel, секреты отдельным ciphertext |
 | `channel_external_taxonomies` | id, connection_id, scope key, active_release_id, revision; UNIQUE(connection_id, scope key) |
 | `channel_taxonomy_releases` | id, taxonomy_id, version/checksum, completeness, fetched_at, staging/published status |
 | `channel_external_categories` | release_id, external_id, parent_external_id, kind, labels JSONB, selectable; UNIQUE(release_id, kind, external_id) |
@@ -1269,28 +1804,28 @@ Locale bindings явны: язык ресурса → locale Catalog; отсут
 не доказывает удаление. Явное связывание публикации с CatalogItem использует ID
 и preview, без угадывания по SKU/названию.
 
-В этом плане нет сценария «импортировать в Catalog», обратной синхронизации
-из observed и автоматического создания его справочников. Пользователь может
-редактировать Catalog обычными сценариями, после чего заново строит публикацию.
-Будущее создание канонического товара по внешним данным требует отдельного
-продуктового решения; оно не входит в разрешённые операции Connection.
+Автоматической обратной синхронизации из observed в Catalog нет. В MVP разрешён
+отдельный явный сценарий «Создать товар»: новый Draft с title/SKU/regular+sale/stock
+и атомарным binding по разделу 0.7. Существующий товар этим сценарием не обновляется.
+Дальнейшие правки выполняются в Catalog; повторный read импорт не создаёт товары
+и не перезаписывает их значения или справочники.
 
-Channel/Connection с историей архивируются. Архивирование не удаляет внешние
+Channel с историей архивируется вместе со своим Connection. Архивирование не удаляет внешние
 публикации, bindings, audit и Catalog. Hard delete и retention проектируются
 отдельно. Удаление товара/используемого справочника Catalog проверяет usage через
 публичный контракт Channels и отклоняется при активных зависимостях. Архивирование
-Connection не разрывает bindings: отдельный явный сценарий прекращения управления
+Channel и его Connection не разрывает bindings: отдельный явный сценарий прекращения управления
 должен снять активные ссылки, сохранив immutable историю. До его реализации
-удаление используемого источника запрещено. Проверка и создание binding координируются
-общим reference guard и внешним tenant UoW через порты, чтобы закрыть гонку
-«создать связь / удалить источник» без чужих ORM/FK.
+удаление используемого источника запрещено. Проверка и создание binding
+координируются публичной item-блокировкой владельца Catalog и внешним tenant UoW
+по порядку раздела 0.7, закрывая гонку «создать связь / удалить источник» без чужих
+ORM/FK и без возвращения удалённых tenant-wide reference guards.
 
 ## 9. Aggregate Roots и слои
 
 | Корень в Channels | Собственное состояние и инварианты |
 | --- | --- |
-| `channel` / Channel | Платформа, включение и согласованная бизнес-политика |
-| `connection` / Connection | Принадлежность Channel, неизменная resource identity, доступ, настройки и разрешённые операции |
+| `channel` / Channel | Конкретный источник продаж, платформа, включение, бизнес-политика и единственный Connection: неизменная resource identity, доступ, настройки и разрешённые операции |
 | `external_taxonomy` / ExternalTaxonomy | Scope и lifecycle releases, переключение активной версии; категории — versioned read projections |
 | `external_category_schema` / ExternalCategorySchema | Неизменяемое определение требований, статус полноты и применимости конкретного selector/операции |
 | `publication_mapping` / PublicationMapping | Проверенные соответствия в одном Connection и schema version |
@@ -1304,6 +1839,11 @@ Dictionary values и строки категорий не получают не�
 внешними ресурсами, не Aggregate Root только из-за отдельной таблицы.
 Ссылки между самостоятельными корнями только по ID.
 
+Connection — Entity внутри Channel, не отдельная строка корней. Её файлы —
+`domain/channel/entity/connection.py`; сценарии и адаптеры — под root `channel`.
+У неё есть create/restore, но нет своего write repository. Инвариант «максимум
+один Connection» принадлежит Channel, SQL UNIQUE служит последней защитой гонки.
+
 Структура: `src/modules/channels/<layer>/<aggregate_root>/<responsibility>/`.
 Domain содержит фабрики create/restore, доменные методы, VO, errors и write
 repository contracts. Application координирует порты и возвращает DTO сценариев.
@@ -1314,7 +1854,8 @@ Infrastructure-реализация Application-порта, не импорт Do
 
 ## 10. Сценарии, результаты и обязательные файлы
 
-Ниже полная целевая матрица; обязательные content-сценарии v1 заданы в разделе 0.4.
+Ниже полная целевая матрица; обязательные content-сценарии v1 заданы в разделе 0.4,
+initialization/list/create-draft — в разделе 0.7.
 Каждая строка — отдельный Command/Query и Handler.execute с указанным результатом.
 Tenant/actor поступают из доверенного Identity context и не принимаются из body.
 Для мутаций существующих настроек передаётся expected revision владельца;
@@ -1330,12 +1871,12 @@ HTTP-пути ниже относительны к `/api/console/channels`.
 | channel/get_channel | channel ID | GetChannelResultDTO | GET /{id} |
 | channel/list_channels | filters, offset/limit | ListChannelsResultDTO | GET / |
 | channel/archive_channel | channel ID, revision | None | POST /{id}/archive → 204 |
-| connection/create_connection | channel ID, config version, resource settings, credentials, operations | CreateConnectionResultDTO | POST /{id}/connections |
-| connection/update_connection_settings | connection ID, revision, config version, changes/candidate credentials | UpdateConnectionSettingsResultDTO | PATCH /connections/{id} |
-| connection/verify_connection | connection ID, revision | VerifyConnectionResultDTO | POST /connections/{id}/verify → 202 |
-| connection/get_connection | connection ID | GetConnectionResultDTO | GET /connections/{id} |
-| connection/list_connections | channel ID, offset/limit | ListConnectionsResultDTO | GET /{id}/connections |
-| connection/archive_connection | connection ID, revision | None | POST /connections/{id}/archive → 204 |
+| channel/create_connection | channel ID, Channel revision, config version, resource settings, credentials, operations | CreateConnectionResultDTO | POST /{id}/connection → 201; второй запрещён |
+| channel/update_connection_settings | channel ID, Channel revision, config version, changes/candidate credentials | UpdateConnectionSettingsResultDTO | PATCH /{id}/connection |
+| channel/verify_connection | channel ID, Channel revision | VerifyConnectionResultDTO | POST /{id}/connection/verify → 202 |
+| channel/get_connection | channel ID | GetConnectionResultDTO | GET /{id}/connection; отсутствие → 404 connection_not_configured |
+| channel/pause_connection | channel ID, Channel revision | None | POST /{id}/connection/pause → 204 |
+| channel/resume_connection | channel ID, Channel revision | None | POST /{id}/connection/resume → 204 |
 | external_taxonomy/refresh_external_taxonomy | connection ID, scope | RefreshExternalTaxonomyResultDTO | POST /connections/{id}/taxonomy/refresh → 202 |
 | external_taxonomy/list_external_categories | connection ID, release ID optional, kind, parent/search, locale, page | ListExternalCategoriesResultDTO | GET /connections/{id}/categories |
 | external_category_schema/get_external_category_schema | connection ID, selector, operation, locale, version optional | GetExternalCategorySchemaResultDTO | GET /connections/{id}/category-schema |
@@ -1362,6 +1903,15 @@ Get schema возвращает normalized attributes/constraints/version/comple
 list values — только страницу значений в закреплённой версии.
 Usage DTO содержит активные зависимости конкретных IDs.
 
+Connection-сценарии принадлежат Channel: Create/UpdateConnection result возвращает
+channel_id, connection_id и revision Channel. ListConnections не существует.
+GetChannel содержит optional connection summary и состояние «не настроено»;
+GetConnection — детали единственного подключения. Технические resource routes
+`/connections/{id}/publications`, `/initialization`, `/runs` сохраняют стабильный
+connection_id, но не означают коллекцию подключений у Channel. Проверка их
+принадлежности/доступности выполняется через Channel. Архивирование — только
+archive_channel; переключение внешнего ресурса создаёт новый Channel.
+
 В будущем срезе сопоставлений один mapping profile на Connection; payload содержит набор правил по
 категориям/схемам, а не единственную внешнюю категорию для всех товаров.
 Для создания representation UUID задаётся в URL и проверяется как новый;
@@ -1383,7 +1933,7 @@ Usage DTO содержит активные зависимости конкре�
   по используемому поведению. По одной SQL-модели в
   `infrastructure/persistence/models/<model>.py`.
 
-Основные Application-порты: `connection/port/resource_gateway.py` (проверка identity
+Основные Application-порты: `channel/port/resource_gateway.py` (проверка identity
 и прав), `external_taxonomy/port/source.py` и `release_store.py`,
 `external_category_schema/port/source.py` и `dictionary_query.py`,
 `product_representation/port/catalog.py`, `reference_data.py`, `rates.py`,
@@ -1396,7 +1946,8 @@ PrepareSyncBatchResultDTO, `apply_sync_batch` → ApplySyncBatchResultDTO,
 `complete_sync_run` → None в `application/sync_run/command/`.
 Их command/handler/dto создаются по тем же правилам, HTTP не нужен.
 Проверка доступа имеет отдельный job entry point и внутренний
-`apply_connection_verification` → None с command/handler и портами Connection;
+`apply_connection_verification` → None в `application/channel/command/` со своими
+command/handler и портами Channel; результат применяется доменным методом Channel;
 сетевой шаг находится между короткими UoW. Набор DTO batch фиксируется
 для каждой реализуемой операции до написания её worker; универсальный dict
 не заменяет контракт taxonomy/publication/verification результата.
@@ -1428,14 +1979,24 @@ commit. Повторы чтения идемпотентны по внешнем
 
 ## 12. Console
 
-Список каналов показывает бизнес-активность и сводку Connections. В карточке:
-«Правила канала» (склады/наличие, наценки, отбор), «Подключения», «Публикации».
-В Connection отдельно: ресурс и credentials, языки/валюта, операции и их причины
+Текущий реализованный read-срез: `/channels` и `/channels/:channelId` с вкладками
+«Публикации»/«Подключение», декларативным endpoint, автоматической проверкой и
+загрузкой, pause/resume и явными повторами. Прогресс не обещает total источника;
+partial/read_complete и прерванный partial различаются. Связывание с Catalog, снятие связи и атомарный Draft также реализованы.
+«Правила канала» и outbound из целевого описания ниже ещё не реализованы.
+Состояния и проверки описаны в [действующем модуле](../modules/channels.md#console).
+
+Список каналов показывает конкретные источники продаж, бизнес-активность и статус
+единственного подключения каждого. В карточке: «Правила канала» (склады/наличие,
+наценки, отбор), «Подключение», «Публикации». Нет списка/селектора Connections
+или действия «Добавить ещё подключение» внутри канала. В Connection: ресурс
+и credentials, языки/валюта, операции и их причины
 недоступности, история проверки и запусков, внешние категории/характеристики.
 
 Мастер создаёт Channel и Connection отдельными шагами; ошибка проверки ресурса
-не теряет Channel. После подтверждения identity запускаются только явно включённые
-read-операции. Запись требует валидного preview и отдельного запуска.
+не теряет Channel. После подтверждения identity автоматически запускается полная
+read initialization даже при is_enabled=false. В списке доступны link/create Draft.
+Исходящая запись требует явного включения синхронизации, preview и запуска.
 Неизвестная схема/неподдержанная операция видна как недоступная с причиной.
 
 Для категории доступны дерево/поиск, затем список требований и допустимых значений,
@@ -1453,10 +2014,10 @@ connection, scope, schema version, locale и фильтры по необход�
 
 | Этап | Результат и проверяемая граница |
 | --- | --- |
-| 1. Ядро v1 | Channel/Connection, verify, два явных языка и проверенный multilingual adapter, существующие внешние targets |
-| 2. Подготовка v1 | Явные bindings, Catalog snapshot title/body двух locale, preview/hash, usage protection |
-| 3. Обновление v1 | Woo API update, Prom XML + import_url + status polling после подтверждения update-only, immutable artifacts и результаты по locale |
-| 4. Приёмка v1 | Ни одной созданной карточки/перевода, изменены только тексты; внешняя сверка, Catalog isolation, retries/partial и архитектурные проверки |
+| 1. Ядро v1 | Channel/Connection, is_enabled=false, verify/read capabilities и автоматический initialization run |
+| 2. Публикации и Catalog v1 | Полный paginated core import и локальный список, bind либо явный Draft с title/SKU/regular+sale/stock, atomic receipt/binding, usage protection |
+| 3. Обновление v1 | После явного включения: title/body snapshot двух locale, preview/hash, Woo API и Prom XML/import_url/status после проверки update-only |
+| 4. Приёмка v1 | Нет автоматически созданных Catalog или новых внешних карточек; явный Draft атомарен; init/core/null/precision, sync off, isolation, retries/partial, архитектура |
 | 5. Последующие срезы | Создание карточек, taxonomy/schema/dictionaries/mappings, overrides/media, наценки/цены/наличие — отдельные утверждаемые объёмы |
 | 6. Расширение | Warehouse stock через владельца учёта, Catalog v2 topology, новые платформы и операции |
 
@@ -1476,9 +2037,11 @@ connection, scope, schema version, locale и фильтры по необход�
 - Для каждой строки реализуемого среза — свои Command/Query, Handler, DTO,
   ports/adapters, HTTP request/response и Depends согласно разделу 10.
   Query не восстанавливает агрегат ради списка, mapper без I/O/бизнес-правил.
-- Domain/HTTP: Channel vs Connection, 1:N, запрет дубликата resource identity,
+- Domain/HTTP: Channel → 0..1 Connection, для настроенного — 1:1; запрет второго
+  подключения в Domain/HTTP/SQL, включая concurrent create и архивную строку;
+  Connection изменяется только через Channel; запрет дубликата resource identity,
   pause/disable без unpublish, ротация секрета без потери bindings, новый ресурс
-  отдельно, права/unsupported operations и CSRF/tenant.
+  отдельным Channel, права/unsupported operations и CSRF/tenant.
 - Taxonomy: неполный/сбойный refresh сохраняет активную версию; parent/search/page,
   большие enums, unknown conditions, deleted IDs, provider `$ref`, version conflict,
   отсутствующий перевод; `false/0/empty` не теряются.
@@ -1521,8 +2084,12 @@ Channel/Connection, JSONB requirements в Channels и отсутствие об�
 публикационный pipeline и независимость Catalog; учтено удаление старого модуля.
 Дальнейшее уточнение 2026-10-18: v1 ограничена обновлением title/body существующих
 карточек на двух locale; учтён API запуска/проверки XML-импорта Prom.
+Уточнение MVP: автоматическая полная initialization, стабильный core списка,
+явный Catalog Draft с базовой/акционной ценой и default off исходящей синхронизации.
 Зафиксирован plugin SDK: платформенные пакеты, внутренние фасады, декларативная
 регистрация и contract suite без platform-specific условий в общем ядре/UI.
+Уточнена граница: Channel — конкретный источник продаж с единственным Connection;
+Connection стал Entity агрегата Channel, модель 1:N и ListConnections исключены.
 
 ## 15. Исторический срез Rozetka: контракт и результаты
 
@@ -1756,4 +2323,81 @@ UoW, repositories не делают commit, shared jobs подключаются
 товаров. Контрактная часть реализована на документации и синтетических fixtures;
 поддержка полного scope и готовность реального подключения остаются
 неподтверждёнными до проверки. Фактические решения и ограничения описаны
-в [Channels](../modules/channels.md#rozetka).
+в [историческом срезе выше](#15-исторический-срез-rozetka-контракт-и-результаты).
+
+## 16. Пакетное обновление текстов Prom: реализация и приёмка
+
+Актуальный срез: единый `BatchExportRun` на Connection с явным разрешением
+экспорта у каждой активной representation. Привязка к Catalog не включает
+экспорт. По умолчанию Channel outbound, разрешение позиции и ежедневный запуск
+выключены; существующие разрешения других операций не сбрасываются миграцией.
+
+Ядро владеет составом, снимками переводов, durable шагами, идемпотентностью,
+слотом подключения, расписанием и результатами. SDK `BatchExportPlugin`
+предоставляет inspect, порционный полный обход идентификаторов, потоковую сборку,
+однократную отправку URL, poll и verify. Плагин Prom владеет XML,
+`portal_category_id`, `_ua` тегами и параметрами `/products/import_url`.
+Новые условия по platform kind в общий UI или handlers не добавляются.
+
+Пакет использует публичные фасады Catalog/Files и existing shared Jobs.
+Состав фиксируется до сетевой работы. После получения текстов выполняется
+полный обход внешних ключей, включая чужие пакету позиции, затем сборка файла
+и проверка актуальности связей/разрешений перед POST. Пропущенные позиции имеют
+явные причины. Скрытые карточки и варианты в этом срезе не отправляются.
+XML хранится в приватном Files/MinIO; hash/размер/срок принадлежат run. Публичный
+путь `/api/channels/batch-exports/{run_id}/feed.xml` защищён capability конкретного
+tenant/файла/срока. Адрес задаёт зарегистрированный домен tenant через фасад Tenancy,
+не пользовательский Host; localhost допускает локальную подготовку XML.
+
+Один активный пакет включает неопределённые состояния. Ответ запуска и
+счётчики Prom не заменяют чтение четырёх текстов на исходных native ID и
+сравнение остальных полей. Потерянный ответ POST не повторяется; recovery
+проверяет карточки/известный import ID. Неизвестный ID импорта удерживает слот
+даже после совпадения текстов до внешнего подтверждения завершения.
+
+Ежедневная policy — отдельный агрегат, а не часть credentials/settings,
+изменяющая generation Connection. Сохраняются локальное время, IANA зона,
+revision и следующий запуск. Существующий worker исполняет одно событие дня,
+планирует следующий день и не догоняет старые снимки. Ручной старт не сдвигает
+календарь. Устаревшие revisions no-op; ручной режим остаётся default.
+
+Console: capability-driven блок настроек и истории, разрешения отдельных и
+выбранных связей, URL-фильтр, подтверждение ручного пакета, отдельная страница
+результатов/причин и восстановление прерванного шага. Полезные данные сохраняются
+при refetch; несохранённая policy защищена от перезаписи и ухода со страницы.
+
+Обязательная приёмка: Domain/DST/подписи; PostgreSQL и MinIO с настоящими
+controllers, CSRF, tenant isolation, Catalog snapshots и Jobs; конкурентные
+старты, stale binding, lease/recovery, неоднозначный POST; сравнение других
+полей и безопасное поведение WooCommerce; lint/typecheck/build Console,
+браузер desktop/mobile/loading/error/retry/pending и URL/reload.
+
+Живой XML [13](../experiments/prom-xml/2026-10-20/README.md) подтвердил четыре
+текста, сохранение остальных полей и отсутствие новых карточек. Обработка
+оказалась поздней; ранний SUCCESS/total=0 не доказывает окончание. Связь с
+публичным endpoint приложения владелец отложил до публикации. Последующая
+приёмка должна проверить доступность пути из Prom, его параметры и свежую
+запись текстов через `import_url`; локальный integration fixture не объявляется
+этой публичной проверкой.
+
+Ограничения: XML остаётся upsert при гонке удаления карточки; автоматическое
+создание новых публикаций не включено. URL истекает через семь дней, но
+автоматическое удаление файлов истории не входит в текущую policy хранения.
+Полное поведение непустых галерей, вариантов и скрытых карточек не подтверждено
+этим живым тестом; варианты/скрытые позиции исключены, fixture сохранности
+непустой галереи входит в integration tests.
+
+### 16.1. Уточнение домена и ручного XML (2026-10-21)
+
+Фиды размещаются на основном активном домене тенанта: localhost по HTTP,
+production-домен по HTTPS. Глобальный `CHANNELS__PUBLIC_BASE_URL` удалён.
+Public endpoint проверяет подпись и принадлежность Host tenant. В UI доступны
+подготовка без отправки (`delivery_mode=file`, терминальный `prepared`), копирование
+и открытие готового XML со сроком действия. Исходящая синхронизация и экспорт
+позиций разрешаются явно; копирование ссылки не включает автоматическую отправку.
+Режим provider и ежедневное расписание продолжают использовать `import_url`;
+локальный host запрещает внешнюю отправку, но не подготовку файла. Ссылка конкретного
+запуска неизменяема и действует семь дней; ежедневная операция передаёт свежую ссылку.
+Приёмка: XML на localhost, отсутствие POST для file, tenant host isolation/expiry,
+освобождение слота, сохранность старых связей/флагов, копирование/открытие в Console,
+мобильный экран и ошибки clipboard; общий provider pipeline и daily остаются под тестами.

@@ -352,9 +352,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
 
         async with self.engine.begin() as connection:
             schema = self.schemas[0]
-            await TenantMigrator().downgrade(
-                connection, schema, "0022_tenant_currency_settings"
-            )
+            await TenantMigrator().downgrade(connection, schema, "base")
             self.assertIsNone(
                 await connection.scalar(
                     text("SELECT to_regclass(:table)"),
@@ -364,7 +362,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(
                 await connection.scalar(
                     text("SELECT to_regclass(:table)"),
-                    {"table": schema + ".files_registry"},
+                    {"table": self.schemas[1] + ".files_registry"},
                 )
             )
             await TenantMigrator().upgrade(connection, schema)
@@ -379,7 +377,12 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
                 try:
                     return compare_metadata(
                         MigrationContext.configure(
-                            sync, opts={"include_schemas": False, "compare_type": True}
+                            sync,
+                            opts={
+                                "include_schemas": False,
+                                "compare_type": True,
+                                "compare_server_default": True,
+                            },
                         ),
                         migration_metadata(),
                     )
@@ -607,21 +610,8 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(len(files.data), 2)
 
-    async def test_simple_sections_snapshot_and_removal(self) -> None:
-        """Все разделы используют единый PATCH, полные наборы и простой snapshot."""
-        from datetime import UTC, datetime
-        from uuid import UUID
-        from src.modules.catalog.application.catalog_item.query.get_catalog_items_publication_snapshot.query import (
-            GetCatalogItemsPublicationSnapshotQuery,
-        )
-        from src.modules.catalog.domain.catalog_item.value_object.identifier import (
-            CatalogItemIdVO,
-        )
-        from src.modules.catalog.infrastructure.catalog_item.persistence.query_repository import (
-            SqlAlchemyCatalogItemQueryRepository,
-        )
-        from src.modules.catalog.domain.error import CatalogConflictError
-
+    async def test_simple_sections_and_removal(self) -> None:
+        """Все разделы используют единый PATCH, полные наборы и явное удаление."""
         created = await self.create_item()
         self.assertEqual(set(created), {"id"})
         ident = created["id"]
@@ -664,18 +654,6 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             }
             & item.keys()
         )
-        async with self.engine.connect() as connection:
-            connection = await connection.execution_options(
-                schema_translate_map={"tenant": self.schemas[0]},
-                isolation_level="REPEATABLE READ",
-            )
-            async with async_sessionmaker(connection)() as session:
-                repository = SqlAlchemyCatalogItemQueryRepository(session)
-                query = GetCatalogItemsPublicationSnapshotQuery(
-                    self.tenant, (CatalogItemIdVO(UUID(ident)),), "en"
-                )
-                snapshot = await repository.snapshot(query, datetime.now(UTC))
-                self.assertEqual(snapshot.items[0].content, item["content"])
         for section in ("content/en", "gallery/en"):
             await self.patch_section(ident, f"{section}", status=204)
         item = (await self.request("GET", f"/items/{ident}?locale=en"))["item"]
@@ -953,3 +931,120 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
         read = await self.request("GET", f"/items/{item['id']}?locale=en")
         self.assertIsNone(read["item"]["content"])
+
+    async def test_create_complete_product_uses_existing_endpoint_atomically(
+        self,
+    ) -> None:
+        """Один POST создаёт все поддержанные разделы и проверяет переводы/Files до записи."""
+        from unittest.mock import AsyncMock
+        from decimal import Decimal
+        from src.modules.catalog.presentation.catalog_item.depends import get_files
+        from src.modules.catalog.domain.error import CatalogNotFoundError
+        from sqlalchemy import select, func
+        from src.modules.catalog.infrastructure.persistence.models.catalog_item import (
+            CatalogItemModel,
+        )
+
+        files = AsyncMock()
+        self.app.dependency_overrides[get_files] = lambda: files
+        image, file = str(uuid4()), str(uuid4())
+        body = {
+            "status": "active",
+            "sku": "FULL-CREATE",
+            "virtual": False,
+            "price_specification": {
+                "regular_price": "123.456789",
+                "currency": "UAH",
+                "sale_price": "100",
+                "date_on_sale_from": "2026-01-01T00:00:00Z",
+                "date_on_sale_to": "2027-01-01T00:00:00Z",
+            },
+            "stock": {
+                "manage_stock": True,
+                "stock_quantity": 4,
+                "stock_status": None,
+                "backorders": "no",
+            },
+            "weight": {"value": "1.25", "unit": "kg"},
+            "dimensions": {
+                "length": {"value": "12", "unit": "cm"},
+                "width": None,
+                "height": None,
+            },
+            "translations": {
+                "en": {
+                    "expected_schema_version": 1,
+                    "values": {
+                        "title": "Created",
+                        "body": "<p>Safe</p><script>alert(1)</script>",
+                    },
+                },
+                "ru": {"expected_schema_version": 1, "values": {"title": "Созданный"}},
+            },
+            "galleries": {
+                "en": {
+                    "images": [{"id": image, "file_id": file, "position": 0}],
+                    "primary_image_id": image,
+                }
+            },
+        }
+        result = await self.request("POST", "/items", body, 201)
+        item = (await self.request("GET", f"/items/{result['id']}?locale=en"))["item"]
+        self.assertEqual(item["status"], "active")
+        self.assertEqual(item["sku"], "FULL-CREATE")
+        self.assertEqual(item["price_specification"]["regular_price"], "123.456789")
+        self.assertEqual(
+            Decimal(item["price_specification"]["sale_price"]), Decimal("100")
+        )
+        self.assertEqual(Decimal(item["weight"]["value"]), Decimal("1.25"))
+        self.assertEqual(item["weight"]["unit"], "kg")
+        self.assertEqual(item["dimensions"]["length"]["unit"], "cm")
+        self.assertEqual(item["stock"]["stock_quantity"], 4)
+        self.assertEqual(item["content"]["title"], "Created")
+        self.assertNotIn("<script", item["content"]["body"])
+        self.assertEqual(item["gallery"]["primary_image_id"], image)
+        self.assertEqual(
+            (await self.request("GET", f"/items/{result['id']}?locale=ru"))["item"][
+                "content"
+            ]["title"],
+            "Созданный",
+        )
+        files.ensure_images.assert_awaited_once()
+
+        async def count() -> int:
+            """Считает товары текущего tenant независимо от ответа HTTP."""
+            async with self.sessions() as session:
+                await bind_tenant_schema(
+                    await session.connection(), self.tenant.uuid, self.naming
+                )
+                return await session.scalar(
+                    select(func.count()).select_from(CatalogItemModel)
+                )
+
+        self.assertEqual(await count(), 1)
+        await self.request("POST", "/items", body, 409)
+        body["sku"] = "REJECTED-SCHEMA"
+        body["translations"]["ru"]["expected_schema_version"] = 999
+        await self.request("POST", "/items", body, 409)
+        self.assertEqual(await count(), 1)
+        body["translations"]["ru"]["expected_schema_version"] = 1
+        files.ensure_images.side_effect = CatalogNotFoundError("Missing image")
+        await self.request("POST", "/items", body, 422)
+        self.assertEqual(await count(), 1)
+
+        files.ensure_images.side_effect = None
+        body["sku"] = "CONCURRENT-CREATE"
+        fresh_image = str(uuid4())
+        body["galleries"]["en"]["images"][0]["id"] = fresh_image
+        body["galleries"]["en"]["primary_image_id"] = fresh_image
+        responses = await asyncio.gather(
+            *(
+                self.client.post(self.base + "/items", json=body, headers=self.headers)
+                for _ in range(2)
+            )
+        )
+        self.assertEqual(
+            sorted(response.status_code for response in responses), [201, 409]
+        )
+        self.assertEqual(await count(), 2)
+        await self.request("POST", "/items", {"stock": None}, 422)

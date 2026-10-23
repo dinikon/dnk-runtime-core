@@ -1,3 +1,11 @@
+from src.modules.catalog.application.catalog_item.creation_service import (
+    CatalogItemCreationService,
+)
+from src.modules.catalog.application.catalog_item.creation_values import (
+    CreateCatalogItemValues,
+)
+from src.modules.catalog.infrastructure.rich_text import Nh3RichTextSanitizer
+
 """Контракты tenant-схем и регрессия удаления справочников Catalog."""
 
 from dataclasses import fields, replace
@@ -120,7 +128,19 @@ class CatalogProductTypeTests(unittest.IsolatedAsyncioTestCase):
         schemas.get_by_code.return_value = schema
         now = datetime(2026, 10, 18, tzinfo=UTC)
         clock = type("Clock", (), {"now": lambda self: now})()
-        handler = CreateCatalogItemHandler(repository, schemas, clock, UUID7Generator())
+        handler = CreateCatalogItemHandler(
+            repository,
+            CatalogItemCreationService(
+                schemas,
+                AsyncMock(),
+                AsyncMock(),
+                AsyncMock(),
+                Nh3RichTextSanitizer(),
+                AsyncMock(),
+                clock,
+                UUID7Generator(),
+            ),
+        )
         command = CreateCatalogItemCommand(EntityIdVO(uuid4()), EntityIdVO(uuid4()))
         await handler.execute(command)
         schemas.get_by_code.assert_awaited_once_with("default")
@@ -128,7 +148,12 @@ class CatalogProductTypeTests(unittest.IsolatedAsyncioTestCase):
         repository.add.reset_mock()
         schemas.get_by_code.side_effect = CatalogNotFoundError("Нет схемы.")
         with self.assertRaises(CatalogNotFoundError):
-            await handler.execute(replace(command, product_type_code="missing"))
+            await handler.execute(
+                replace(
+                    command,
+                    product=CreateCatalogItemValues(product_type_code="missing"),
+                )
+            )
         repository.add.assert_not_awaited()
 
     async def test_content_uses_schema_codes_and_required_blocks(self) -> None:
@@ -187,8 +212,12 @@ class CatalogRemovedContractsTests(unittest.TestCase):
             with self.subTest(field=name), self.assertRaises(ValidationError):
                 UpdateCatalogItemRequest.model_validate({name: []})
         self.assertFalse(removed & {field.name for field in fields(CatalogItem)})
-        with self.assertRaises(ValidationError):
-            CreateCatalogItemRequest.model_validate({"product_type_code": "custom"})
+        self.assertEqual(
+            CreateCatalogItemRequest.model_validate(
+                {"product_type_code": "custom"}
+            ).product_type_code,
+            "custom",
+        )
         app = FastAPI()
         app.include_router(router)
         schema = app.openapi()

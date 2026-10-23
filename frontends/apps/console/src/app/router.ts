@@ -2,6 +2,7 @@ import type { Pinia } from "pinia";
 import { createRouter, createWebHistory } from "vue-router";
 
 import { useUserStore } from "@/app/stores/user";
+import { requestsCloudLogin, withoutAuthProvider } from "@/modules/auth";
 import { AdminLayout, AppLayout } from "@/layouts";
 import { accessRoutes } from "@/modules/access/routes";
 import { authRoutes } from "@/modules/auth/routes";
@@ -9,7 +10,6 @@ import { catalogRoutes } from "@/modules/catalog/routes";
 import { filesRoutes } from "@/modules/files/routes";
 import { crmRoutes } from "@/modules/crm";
 import { dashboardRoutes } from "@/modules/dashboard";
-import { priceListRoutes } from "@/modules/price-lists";
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -38,7 +38,6 @@ export const router = createRouter({
         ...dashboardRoutes,
         ...catalogRoutes,
         ...crmRoutes,
-        ...priceListRoutes,
         {
           path: "settings/members",
           redirect: { name: "admin-users" },
@@ -89,8 +88,17 @@ export function installRouterGuards(pinia: Pinia) {
     } catch {
       return {
         name: "login",
-        query: { redirect: to.fullPath },
+        query: {
+          redirect: withoutAuthProvider(to.fullPath),
+          ...(requestsCloudLogin(to.query.auth_provider)
+            ? { auth_provider: "cloud" }
+            : {}),
+        },
       };
+    }
+
+    if (to.query.auth_provider !== undefined) {
+      return withoutAuthProvider(to.fullPath);
     }
 
     const requiredRole = [...to.matched]
