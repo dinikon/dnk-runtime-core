@@ -18,6 +18,7 @@ from src.modules.identity.application.invitation.command.request_invitation_otp.
 
 
 class RequestInvitationOtpHandler:
+    """Выдаёт OTP приглашения с доставкой, зависящей от серверного режима."""
 
     def __init__(
         self,
@@ -28,17 +29,21 @@ class RequestInvitationOtpHandler:
         settings: IdentityAuthSettings,
         tenant_reader: TenantContextReaderPort,
         tokens: TokenManager,
+        development_mode: bool = False,
     ) -> None:
+        """Собирает проверку приглашения, генерацию OTP и email-доставку."""
         self.email = email
         self.invitations = invitations
         self.otp = otp
         self.settings = settings
         self.tenant_reader = tenant_reader
         self.tokens = tokens
+        self.development_mode = development_mode
 
     async def execute(
         self, request: RequestInvitationOtpCommand
     ) -> RequestInvitationOtpResultDTO:
+        """Сохраняет challenge и возвращает Dev-код либо отправляет письмо."""
         host = request.host
         invitation_token = request.invitation_token
         context = await self.tenant_reader.get_by_host(host)
@@ -60,13 +65,14 @@ class RequestInvitationOtpHandler:
             },
             ttl=self.settings.otp_token_ttl_seconds,
         )
-        await self.email.send(
-            SystemEmailKind.SEND_OTP_CODE,
-            invitation.email,
-            {"otp_code": generated.code},
-        )
+        if not self.development_mode:
+            await self.email.send(
+                SystemEmailKind.SEND_OTP_CODE,
+                invitation.email,
+                {"otp_code": generated.code},
+            )
         return RequestInvitationOtpResultDTO(
             token=generated.token,
             expires_in=self.settings.otp_token_ttl_seconds,
-            code=generated.code,
+            code=generated.code if self.development_mode else None,
         )

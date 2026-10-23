@@ -95,6 +95,7 @@ class AccessScenarios:
             session_ttl_seconds=dependencies["settings"].session_ttl_seconds,
         )
         self.invitations = InvitationValidator(access=self.access)
+        self.development_mode = True
 
     async def principal(self, *args, **kwargs):
         return await self.authentication.principal(*args, **kwargs)
@@ -239,7 +240,15 @@ HANDLERS = {
     "revoke_invitation": (RevokeInvitationHandler, ["access", "authentication", "uow"]),
     "request_invitation_otp": (
         RequestInvitationOtpHandler,
-        ["email", "invitations", "otp", "settings", "tenant_reader", "tokens"],
+        [
+            "email",
+            "invitations",
+            "otp",
+            "settings",
+            "tenant_reader",
+            "tokens",
+            "development_mode",
+        ],
     ),
     "accept_invitation": (
         AcceptInvitationHandler,

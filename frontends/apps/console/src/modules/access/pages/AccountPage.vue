@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { getApiErrorMessage } from "@/app/providers/http";
+import { useTenantStore } from "@/app/stores/tenant";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,8 +13,14 @@ import {
   CardContent,
 } from "@/components/ui/card";
 import { accessApi } from "../api";
+import { useCloudStatusQuery, useStartCloudAuth } from "@/modules/auth";
 
-const status = ref<{ enabled: boolean; linked: boolean } | null>(null);
+const tenantStore = useTenantStore();
+const statusQuery = useCloudStatusQuery(
+  () => tenantStore.tenant?.tenant_id ?? null,
+);
+const status = computed(() => statusQuery.data.value);
+const startCloudAuth = useStartCloudAuth();
 const busy = ref(false);
 const error = ref(
   useRoute().query.cloud_error
@@ -21,11 +28,11 @@ const error = ref(
     : "",
 );
 onMounted(async () => {
-  try {
-    status.value = await accessApi.cloudStatus();
-  } catch (cause) {
+  if (!tenantStore.tenant) await tenantStore.resolveTenant();
+  const result = await statusQuery.refetch();
+  if (result.error) {
     error.value = getApiErrorMessage(
-      cause,
+      result.error,
       "Could not load your cloud account.",
     );
   }
@@ -34,7 +41,7 @@ async function link() {
   busy.value = true;
   try {
     window.location.assign(
-      (await accessApi.cloudStart("link")).authorization_url,
+      await startCloudAuth.mutateAsync({ purpose: "link" }),
     );
   } catch (cause) {
     error.value = getApiErrorMessage(

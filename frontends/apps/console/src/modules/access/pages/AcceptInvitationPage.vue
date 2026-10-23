@@ -15,7 +15,6 @@ import {
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { AuthLayout } from "@/layouts";
-import { authApi } from "@/modules/auth/api/auth.api";
 import { accessApi } from "../api";
 
 const route = useRoute();
@@ -26,6 +25,7 @@ const invitationToken =
   new URLSearchParams(route.hash.slice(1)).get("token") ??
   (typeof route.query.token === "string" ? route.query.token : "");
 const otpToken = ref("");
+const devCode = ref<string | null>(null);
 const code = ref("");
 const firstName = ref("");
 const lastName = ref("");
@@ -39,9 +39,10 @@ async function requestCode() {
   busy.value = true;
   error.value = "";
   try {
-    otpToken.value = (
-      await accessApi.requestInvitationOtp(invitationToken)
-    ).token;
+    const challenge = await accessApi.requestInvitationOtp(invitationToken);
+    otpToken.value = challenge.token;
+    devCode.value = challenge.code ?? null;
+    code.value = "";
   } catch (cause) {
     error.value = getApiErrorMessage(
       cause,
@@ -62,7 +63,8 @@ async function accept() {
       first_name: firstName.value,
       last_name: lastName.value,
     });
-    userStore.setUser(await authApi.getCurrentUser());
+    userStore.clearUser();
+    await userStore.ensureCurrentUser();
     await router.replace("/settings/account");
   } catch (cause) {
     error.value = getApiErrorMessage(
@@ -95,6 +97,17 @@ async function accept() {
         >
         <form v-else @submit.prevent="accept">
           <FieldGroup>
+            <Alert v-if="devCode">
+              <AlertDescription>
+                Development code: {{ devCode }}
+                <span class="block"
+                  >Email delivery is disabled in Development.</span
+                >
+              </AlertDescription>
+            </Alert>
+            <p v-else role="status" class="text-sm text-muted-foreground">
+              A verification code has been sent to your invited email address.
+            </p>
             <Field
               ><FieldLabel for="invitation-code">Verification code</FieldLabel
               ><Input

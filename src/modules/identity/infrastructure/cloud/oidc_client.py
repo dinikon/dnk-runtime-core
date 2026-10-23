@@ -13,6 +13,7 @@ from authlib.jose import JsonWebToken
 from authlib.oidc.core import CodeIDToken
 
 from src.modules.identity.domain.access.error import IdentityAccessError
+from src.modules.identity.application.cloud.port.cloud import CloudConnection
 
 
 class OidcClient:
@@ -90,7 +91,16 @@ class OidcClient:
             transport=self.transport,
         )
 
-    async def authorization_url(self, connection, *, state, nonce, verifier):
+    async def authorization_url(
+        self,
+        connection: CloudConnection,
+        *,
+        state: str,
+        nonce: str,
+        verifier: str,
+        silent: bool = False,
+    ) -> str:
+        """Создаёт PKCE URL; автоматический вход запрещает интерактивный prompt."""
         metadata = await self.discovery(connection)
         async with self.oauth_client(connection) as client:
             url, _ = client.create_authorization_url(
@@ -99,6 +109,7 @@ class OidcClient:
                 nonce=nonce,
                 code_verifier=verifier,
                 response_mode="query",
+                **({"prompt": "none"} if silent else {}),
             )
         return url
 

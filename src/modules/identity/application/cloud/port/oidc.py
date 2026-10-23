@@ -5,7 +5,13 @@ from src.modules.identity.application.cloud.port.cloud import CloudConnection
 class OidcClientPort(Protocol):
 
     async def authorization_url(
-        self, connection: CloudConnection, *, state: str, nonce: str, verifier: str
+        self,
+        connection: CloudConnection,
+        *,
+        state: str,
+        nonce: str,
+        verifier: str,
+        silent: bool = False,
     ) -> str: ...
 
     async def exchange(

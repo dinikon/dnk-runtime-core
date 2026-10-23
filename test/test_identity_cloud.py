@@ -151,6 +151,20 @@ class OidcValidationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(query["scope"], ["openid profile email"])
         self.assertNotIn("prompt", query)
 
+    async def test_automatic_authorization_never_prompts_for_login(self):
+        url = await self.client.authorization_url(
+            self.connection,
+            state="state",
+            nonce="nonce",
+            verifier="verifier",
+            silent=True,
+        )
+        query = parse_qs(httpx.URL(url).query.decode())
+        self.assertEqual(query["prompt"], ["none"])
+        self.assertEqual(query["code_challenge_method"], ["S256"])
+        self.assertEqual(query["state"], ["state"])
+        self.assertEqual(query["nonce"], ["nonce"])
+
 
 class AtomicTokenTests(unittest.IsolatedAsyncioTestCase):
     async def test_concurrent_consumption_has_one_winner(self):

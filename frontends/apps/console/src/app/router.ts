@@ -2,6 +2,7 @@ import type { Pinia } from "pinia";
 import { createRouter, createWebHistory } from "vue-router";
 
 import { useUserStore } from "@/app/stores/user";
+import { requestsCloudLogin, withoutAuthProvider } from "@/modules/auth";
 import { AdminLayout, AppLayout } from "@/layouts";
 import { accessRoutes } from "@/modules/access/routes";
 import { authRoutes } from "@/modules/auth/routes";
@@ -87,8 +88,17 @@ export function installRouterGuards(pinia: Pinia) {
     } catch {
       return {
         name: "login",
-        query: { redirect: to.fullPath },
+        query: {
+          redirect: withoutAuthProvider(to.fullPath),
+          ...(requestsCloudLogin(to.query.auth_provider)
+            ? { auth_provider: "cloud" }
+            : {}),
+        },
       };
+    }
+
+    if (to.query.auth_provider !== undefined) {
+      return withoutAuthProvider(to.fullPath);
     }
 
     const requiredRole = [...to.matched]

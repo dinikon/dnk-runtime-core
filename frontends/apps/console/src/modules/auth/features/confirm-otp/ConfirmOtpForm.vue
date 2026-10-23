@@ -16,7 +16,7 @@ import {
   InputOTPGroup,
   InputOTPSlot,
 } from "@/components/ui/input-otp";
-import { Label } from "@/components/ui/label";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import AuthErrorAlert from "@/modules/auth/components/AuthErrorAlert.vue";
 import AuthPageTitle from "@/modules/auth/components/AuthPageTitle.vue";
 import type { EmailChallenge } from "@/modules/auth/model/auth.types";
@@ -39,7 +39,10 @@ const OTP_CODE_LENGTH = 6;
 const code = ref("");
 
 const canConfirmOtp = computed(
-  () => code.value.length === OTP_CODE_LENGTH && !props.isConfirming,
+  () =>
+    code.value.length === OTP_CODE_LENGTH &&
+    !props.isConfirming &&
+    !props.isResending,
 );
 
 function confirmOtp() {
@@ -51,7 +54,7 @@ function confirmOtp() {
 }
 
 function resendOtp() {
-  if (props.isResending) {
+  if (props.isResending || props.isConfirming) {
     return;
   }
 
@@ -77,7 +80,13 @@ function openMail(provider: "gmail" | "outlook") {
 <template>
   <Card class="w-full max-w-sm">
     <CardHeader class="items-center text-center">
-      <AuthPageTitle title="Check your email">
+      <AuthPageTitle
+        :title="
+          emailChallenge.devCode
+            ? 'Enter your verification code'
+            : 'Check your email'
+        "
+      >
         <template #icon>
           <div
             class="mx-auto grid size-9 place-items-center rounded-full border"
@@ -86,7 +95,11 @@ function openMail(provider: "gmail" | "outlook") {
           </div>
         </template>
         <CardDescription>
-          A verification email has been sent to:
+          {{
+            emailChallenge.devCode
+              ? "Use the development code below for:"
+              : "A verification email has been sent to:"
+          }}
           <strong class="block text-foreground">{{
             emailChallenge.email
           }}</strong>
@@ -94,93 +107,102 @@ function openMail(provider: "gmail" | "outlook") {
       </AuthPageTitle>
     </CardHeader>
     <CardContent>
-      <form class="grid gap-4" @submit.prevent="confirmOtp">
-        <div class="grid gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            class="w-full"
-            @click="openMail('gmail')"
-          >
-            <span
-              class="grid size-4 place-items-center rounded-[3px] bg-[#4285f4] text-[0.6rem] font-extrabold text-white"
-              aria-hidden="true"
+      <form @submit.prevent="confirmOtp">
+        <FieldGroup class="gap-4">
+          <div v-if="!emailChallenge.devCode" class="grid gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              class="w-full"
+              @click="openMail('gmail')"
             >
-              G
-            </span>
-            Open Gmail
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            class="w-full"
-            @click="openMail('outlook')"
-          >
-            <span
-              class="grid size-4 place-items-center rounded-[3px] bg-[#f25022] text-[0.6rem] font-extrabold text-white"
-              aria-hidden="true"
+              <span
+                class="grid size-4 place-items-center rounded-[3px] bg-[#4285f4] text-[0.6rem] font-extrabold text-white"
+                aria-hidden="true"
+              >
+                G
+              </span>
+              Open Gmail
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              class="w-full"
+              @click="openMail('outlook')"
             >
-              M
-            </span>
-            Open Outlook
+              <span
+                class="grid size-4 place-items-center rounded-[3px] bg-[#f25022] text-[0.6rem] font-extrabold text-white"
+                aria-hidden="true"
+              >
+                M
+              </span>
+              Open Outlook
+            </Button>
+          </div>
+
+          <Field :data-disabled="isConfirming || isResending">
+            <FieldLabel for="auth-code">Verification code</FieldLabel>
+            <InputOTP
+              id="auth-code"
+              v-model="code"
+              :maxlength="OTP_CODE_LENGTH"
+              :pattern="REGEXP_ONLY_DIGITS"
+              class="justify-center"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              :disabled="isConfirming || isResending"
+            >
+              <InputOTPGroup class="gap-2">
+                <InputOTPSlot
+                  v-for="index in OTP_CODE_LENGTH"
+                  :key="index"
+                  :index="index - 1"
+                  class="rounded-md border-l"
+                />
+              </InputOTPGroup>
+            </InputOTP>
+          </Field>
+
+          <Alert v-if="emailChallenge.devCode">
+            <AlertDescription>
+              Development code: {{ emailChallenge.devCode }}
+              <span class="block"
+                >Email delivery is disabled in Development.</span
+              >
+            </AlertDescription>
+          </Alert>
+
+          <Button class="w-full" type="submit" :disabled="!canConfirmOtp">
+            {{ isConfirming ? "Checking..." : "Continue" }}
           </Button>
-        </div>
 
-        <div class="grid gap-2">
-          <Label for="auth-code">Verification code</Label>
-          <InputOTP
-            id="auth-code"
-            v-model="code"
-            :maxlength="OTP_CODE_LENGTH"
-            :pattern="REGEXP_ONLY_DIGITS"
-            class="justify-center"
-            inputmode="numeric"
-            autocomplete="one-time-code"
-          >
-            <InputOTPGroup class="gap-2">
-              <InputOTPSlot
-                v-for="index in OTP_CODE_LENGTH"
-                :key="index"
-                :index="index - 1"
-                class="rounded-md border-l"
-              />
-            </InputOTPGroup>
-          </InputOTP>
-        </div>
+          <AuthErrorAlert :message="authError" />
 
-        <Alert v-if="emailChallenge.devCode">
-          <AlertDescription>
-            Development code: {{ emailChallenge.devCode }}
-          </AlertDescription>
-        </Alert>
-
-        <Button class="w-full" type="submit" :disabled="!canConfirmOtp">
-          {{ isConfirming ? "Checking..." : "Continue" }}
-        </Button>
-
-        <AuthErrorAlert :message="authError" />
-
-        <div class="flex justify-center gap-3">
-          <Button
-            variant="link"
-            size="sm"
-            type="button"
-            class="h-auto px-0 text-muted-foreground"
-            :disabled="isResending"
-            @click="resendOtp"
-          >
-            Resend email
-          </Button>
-          <Button
-            variant="link"
-            size="sm"
-            type="button"
-            class="h-auto px-0 text-muted-foreground"
-            @click="changeEmail"
-          >
-            Change email
-          </Button>
-        </div>
+          <div class="flex justify-center gap-3">
+            <Button
+              variant="link"
+              size="sm"
+              type="button"
+              class="h-auto px-0 text-muted-foreground"
+              :disabled="isResending || isConfirming"
+              @click="resendOtp"
+            >
+              {{
+                emailChallenge.devCode ? "Generate a new code" : "Resend email"
+              }}
+            </Button>
+            <Button
+              variant="link"
+              size="sm"
+              type="button"
+              class="h-auto px-0 text-muted-foreground"
+              :disabled="isResending || isConfirming"
+              @click="changeEmail"
+            >
+              Change email
+            </Button>
+          </div>
+        </FieldGroup>
       </form>
     </CardContent>
   </Card>

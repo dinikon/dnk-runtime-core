@@ -48,6 +48,7 @@ def get_request_email_otp_handler(
         otp_service=otp_service,
         email_service=email_service,
         otp_ttl_seconds=settings.otp_token_ttl_seconds,
+        development_mode=dnk_config.DEPLOY_ENV == "DEVELOPMENT",
     )
 
 
