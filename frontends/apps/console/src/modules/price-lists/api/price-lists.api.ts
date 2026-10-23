@@ -1,1 +1,0 @@
-export { priceListsApi } from "./client";

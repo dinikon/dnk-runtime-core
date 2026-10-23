@@ -14,11 +14,6 @@ from src.modules.catalog.application.catalog_item.query.get_catalog_item.dto imp
     CatalogItemDetailsImageDTO,
     CatalogItemDetailsGalleryDTO,
 )
-from src.modules.catalog.application.catalog_item.query.get_catalog_items_publication_snapshot.dto import (
-    CatalogItemPublicationDTO,
-    CatalogItemPublicationImageDTO,
-    CatalogItemPublicationGalleryDTO,
-)
 
 
 class CatalogItemQueryMapper:
@@ -55,53 +50,6 @@ class CatalogItemQueryMapper:
                     tuple(
                         (
                             CatalogItemDetailsImageDTO(
-                                i.id.uuid, i.file_id.uuid, i.position, i.alt, i.caption
-                            )
-                            for i in gallery.images
-                        )
-                    ),
-                    gallery.primary_image_id.uuid if gallery.primary_image_id else None,
-                )
-                if gallery is not None
-                else None
-            ),
-            created_at=item.created_at,
-            updated_at=item.updated_at,
-            created_by=item.created_by.uuid,
-            updated_by=item.updated_by.uuid,
-        )
-
-    @staticmethod
-    def publication(
-        item: CatalogItemValuesSnapshot, locale: str, as_of: datetime
-    ) -> CatalogItemPublicationDTO:
-        """Собирает самостоятельный контракт publication без восстановления агрегата."""
-        computed = CatalogItemValuesPolicy.calculate(item, as_of)
-        gallery = item.galleries.get(locale)
-        return CatalogItemPublicationDTO(
-            id=item.id.uuid,
-            product_type_id=item.product_type_id.uuid,
-            status=item.status,
-            sku=item.sku,
-            virtual=item.virtual,
-            price_specification=item.price,
-            price=computed.price,
-            weight=item.weight,
-            dimensions=item.dimensions,
-            stock=item.stock,
-            stock_status=computed.stock_status.value,
-            backorders_allowed=computed.backorders_allowed,
-            backordered=computed.backordered,
-            available_for_sale=computed.available_for_sale,
-            available_for_publication=computed.available_for_publication,
-            content=(
-                dict(item.translations[locale]) if locale in item.translations else None
-            ),
-            gallery=(
-                CatalogItemPublicationGalleryDTO(
-                    tuple(
-                        (
-                            CatalogItemPublicationImageDTO(
                                 i.id.uuid, i.file_id.uuid, i.position, i.alt, i.caption
                             )
                             for i in gallery.images

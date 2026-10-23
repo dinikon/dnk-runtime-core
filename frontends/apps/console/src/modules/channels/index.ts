@@ -1,1 +1,0 @@
-export { channelsRoutes } from "./routes";

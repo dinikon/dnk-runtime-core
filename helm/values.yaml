@@ -38,24 +38,6 @@ application:
     secretKey:
       value: ''
       existingSecret: {name: '', key: ''}
-  priceLists:
-    batchSize: 1000
-    maxErrorRatio: 0.5
-    maxRows: 2000000
-    maxDownloadBytes: 1073741824
-    maxUncompressedBytes: 4294967296
-    batchMaxBytes: 4194304
-    parserQueueBatches: 1
-    maxRecordBytes: 1048576
-    stringCacheBytes: 8388608
-    maxTempBytes: 4294967296
-    failedStagingRetentionDays: 7
-    # Persistent Fernet key. Generate once with `openssl rand -base64 32 | tr '+/' '-_'`.
-    sourceEncryptionKey:
-      value: ''
-      existingSecret:
-        name: ''
-        key: ''
   email:
     provider: smtp
     fromAddress: ''

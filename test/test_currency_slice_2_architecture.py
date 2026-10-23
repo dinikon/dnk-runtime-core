@@ -15,7 +15,7 @@ FILES = (
     "src/modules/reference_data/infrastructure/currency/persistence/validation_catalog_mapper.py",
     "src/modules/reference_data/infrastructure/currency/persistence/validation_catalog_repository.py",
     "src/management/commands/currency.py",
-    "migrations/tenant/versions/0024_currency_exchange_rates.py",
+    "migrations/tenant/versions/0001_tenant_baseline.py",
 )
 
 
@@ -124,10 +124,11 @@ class CurrencySliceTwoArchitectureTests(unittest.TestCase):
         self.assertNotIn("sqlalchemy", source)
         self.assertNotIn("session", source)
         migration = (
-            ROOT / "migrations/tenant/versions/0024_currency_exchange_rates.py"
+            ROOT / "migrations/tenant/versions/0001_tenant_baseline.py"
         ).read_text()
         self.assertNotIn("httpx", migration)
-        self.assertNotIn("JSON", migration)
+        self.assertIn("CREATE TABLE currency_exchange_rate_books", migration)
+        self.assertIn("CREATE TABLE currency_exchange_rate_quotes", migration)
 
     def test_currency_models_are_tenant_local(self) -> None:
         from src.modules.currency.infrastructure.persistence.models.exchange_rate_book import (

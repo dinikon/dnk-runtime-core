@@ -9,7 +9,6 @@
     "lint": "eslint .",
     "preview": "vite preview --host 0.0.0.0",
     "typecheck": "vue-tsc -b",
-    "test:channels": "node --experimental-transform-types --test test/channels*.test.ts",
     "test:catalog": "node --experimental-transform-types --test test/catalog-*.test.ts"
   },
   "dependencies": {

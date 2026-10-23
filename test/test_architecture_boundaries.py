@@ -118,38 +118,6 @@ class ArchitectureBoundariesTests(unittest.TestCase):
                         f"{path}: indirect import {name}",
                     )
 
-    def test_price_lists_dependencies_point_inward(self):
-        forbidden = {
-            "domain": (
-                "sqlalchemy",
-                "fastapi",
-                "pydantic",
-                "src.modules.price_lists.application",
-                "src.modules.price_lists.infrastructure",
-                "src.modules.price_lists.presentation",
-                "src.modules.shared.application",
-                "src.modules.shared.infrastructure",
-                "src.modules.shared.presentation",
-                "src.config",
-            ),
-            "application": (
-                "sqlalchemy",
-                "fastapi",
-                "pydantic",
-                "src.modules.price_lists.infrastructure",
-                "src.modules.price_lists.presentation",
-                "src.modules.shared.infrastructure",
-                "src.modules.shared.presentation",
-                "src.config",
-            ),
-        }
-        for layer, prefixes in forbidden.items():
-            for path in iter_python_files("src/modules/price_lists/" + layer):
-                for name in iter_imports(path):
-                    self.assertFalse(
-                        name.startswith(prefixes), f"{path} imports {name}"
-                    )
-
     def test_no_modules_namespace_imports_are_used(self) -> None:
         forbidden_prefix = "modules."
         for root in ("src", "test"):

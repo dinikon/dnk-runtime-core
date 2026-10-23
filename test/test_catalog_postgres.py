@@ -352,9 +352,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
 
         async with self.engine.begin() as connection:
             schema = self.schemas[0]
-            await TenantMigrator().downgrade(
-                connection, schema, "0022_tenant_currency_settings"
-            )
+            await TenantMigrator().downgrade(connection, schema, "base")
             self.assertIsNone(
                 await connection.scalar(
                     text("SELECT to_regclass(:table)"),
@@ -364,7 +362,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(
                 await connection.scalar(
                     text("SELECT to_regclass(:table)"),
-                    {"table": schema + ".files_registry"},
+                    {"table": self.schemas[1] + ".files_registry"},
                 )
             )
             await TenantMigrator().upgrade(connection, schema)
@@ -379,7 +377,12 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
                 try:
                     return compare_metadata(
                         MigrationContext.configure(
-                            sync, opts={"include_schemas": False, "compare_type": True}
+                            sync,
+                            opts={
+                                "include_schemas": False,
+                                "compare_type": True,
+                                "compare_server_default": True,
+                            },
                         ),
                         migration_metadata(),
                     )
@@ -607,21 +610,8 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(len(files.data), 2)
 
-    async def test_simple_sections_snapshot_and_removal(self) -> None:
-        """Все разделы используют единый PATCH, полные наборы и простой snapshot."""
-        from datetime import UTC, datetime
-        from uuid import UUID
-        from src.modules.catalog.application.catalog_item.query.get_catalog_items_publication_snapshot.query import (
-            GetCatalogItemsPublicationSnapshotQuery,
-        )
-        from src.modules.catalog.domain.catalog_item.value_object.identifier import (
-            CatalogItemIdVO,
-        )
-        from src.modules.catalog.infrastructure.catalog_item.persistence.query_repository import (
-            SqlAlchemyCatalogItemQueryRepository,
-        )
-        from src.modules.catalog.domain.error import CatalogConflictError
-
+    async def test_simple_sections_and_removal(self) -> None:
+        """Все разделы используют единый PATCH, полные наборы и явное удаление."""
         created = await self.create_item()
         self.assertEqual(set(created), {"id"})
         ident = created["id"]
@@ -664,18 +654,6 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             }
             & item.keys()
         )
-        async with self.engine.connect() as connection:
-            connection = await connection.execution_options(
-                schema_translate_map={"tenant": self.schemas[0]},
-                isolation_level="REPEATABLE READ",
-            )
-            async with async_sessionmaker(connection)() as session:
-                repository = SqlAlchemyCatalogItemQueryRepository(session)
-                query = GetCatalogItemsPublicationSnapshotQuery(
-                    self.tenant, (CatalogItemIdVO(UUID(ident)),), "en"
-                )
-                snapshot = await repository.snapshot(query, datetime.now(UTC))
-                self.assertEqual(snapshot.items[0].content, item["content"])
         for section in ("content/en", "gallery/en"):
             await self.patch_section(ident, f"{section}", status=204)
         item = (await self.request("GET", f"/items/{ident}?locale=en"))["item"]

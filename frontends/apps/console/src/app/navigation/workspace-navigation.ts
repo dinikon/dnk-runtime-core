@@ -1,9 +1,7 @@
 import {
   Building2,
-  FileSpreadsheet,
   LifeBuoy,
   ShoppingBasket,
-  Plug,
   Users,
 } from "@lucide/vue";
 
@@ -14,10 +12,6 @@ export const workspaceNavigation: WorkspaceNavigation = {
     {
       title: "Каталог",
       items: [{ title: "Товары", url: "/catalog/items", icon: ShoppingBasket }],
-    },
-    {
-      title: "Продажи",
-      items: [{ title: "Каналы", url: "/channels", icon: Plug }],
     },
     {
       title: "CRM",
@@ -39,21 +33,6 @@ export const workspaceNavigation: WorkspaceNavigation = {
               icon: Building2,
             },
           ],
-        },
-      ],
-    },
-    {
-      title: "Закупки",
-      items: [
-        {
-          title: "Прайс-листы",
-          url: "/purchases/price-lists",
-          icon: FileSpreadsheet,
-        },
-        {
-          title: "Офферы поставщиков",
-          url: "/purchases/offers",
-          icon: ShoppingBasket,
         },
       ],
     },

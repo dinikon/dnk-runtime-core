@@ -374,14 +374,12 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
                         )
                     )
 
-    async def test_upgrade_from_warehouses_and_identity_downgrade(self) -> None:
+    async def test_identity_baseline_downgrade_and_upgrade(self) -> None:
         tenant_id = await self.new_tenant_schema()
         schema = self.naming.schema_name(tenant_id)
         async with self.engine.begin() as connection:
-            await self.migrator.downgrade(connection, schema, "0001_warehouses")
-            self.assertEqual(
-                await self.migrator.current(connection, schema), ("0001_warehouses",)
-            )
+            await self.migrator.downgrade(connection, schema, "base")
+            self.assertEqual(await self.migrator.current(connection, schema), ())
             self.assertFalse(
                 await connection.run_sync(
                     lambda conn: inspect(conn).has_table("users", schema=schema)
@@ -411,7 +409,7 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
         empty = await self.new_tenant_schema()
         async with self.engine.begin() as connection:
             await self.migrator.downgrade(
-                connection, self.naming.schema_name(empty), "0001_warehouses"
+                connection, self.naming.schema_name(empty), "base"
             )
         for tenant_id in (missing, empty):
             with self.assertRaises(ProgrammingError) as raised:

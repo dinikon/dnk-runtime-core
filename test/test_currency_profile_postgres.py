@@ -221,7 +221,7 @@ class CurrencyProfilePostgresTests(unittest.IsolatedAsyncioTestCase):
                 self.command(tenant, **changes)
             )
 
-    async def test_column_is_local_nullable_and_migration_roundtrip_preserves_users(
+    async def test_column_is_local_nullable_and_repeated_upgrade_preserves_users(
         self,
     ) -> None:
         async with self.engine.begin() as connection:
@@ -236,9 +236,6 @@ class CurrencyProfilePostgresTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertTrue(column["nullable"])
             self.assertEqual(column["type"].length, 3)
-            await TenantMigrator().downgrade(
-                connection, self.schema, "0024_currency_exchange_rates"
-            )
             await TenantMigrator().upgrade(connection, self.schema)
             self.assertEqual(
                 await connection.scalar(

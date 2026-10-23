@@ -2,15 +2,6 @@ from src.modules.catalog.application.catalog_item.creation_service import (
     CatalogItemCreationService,
 )
 from src.modules.catalog.infrastructure.catalog_item.sku import SqlAlchemyCatalogItemSku
-from src.modules.catalog.infrastructure.catalog_item.channels_usage import (
-    ChannelsCatalogItemUsage,
-)
-from src.modules.channels.application.product_representation.query.get_catalog_usage.handler import (
-    GetCatalogUsageHandler,
-)
-from src.modules.channels.infrastructure.product_representation.persistence.binding_queries import (
-    SqlAlchemyBindingQueries,
-)
 from typing import Annotated
 from fastapi import Depends
 from src.modules.shared.presentation.persistence.depends import UoWDep
@@ -42,7 +33,6 @@ from src.modules.catalog.application.catalog_item.port.content_schema import (
 from src.modules.catalog.infrastructure.catalog_item.content_schema import (
     SqlAlchemyProductTypeSchemas,
 )
-from src.modules.catalog.application.catalog_item.port.usage import CatalogItemUsagePort
 from src.modules.catalog.application.catalog_item.port.files import (
     CatalogImageFilesPort,
 )
@@ -69,16 +59,6 @@ def get_schemas(uow: UoWDep) -> CatalogItemContentSchemaPort:
 
 
 SchemasDep = Annotated[CatalogItemContentSchemaPort, Depends(get_schemas)]
-
-
-def get_usage(uow: UoWDep) -> CatalogItemUsagePort:
-    """Собирает порт usage конкретного процесса."""
-    return ChannelsCatalogItemUsage(
-        GetCatalogUsageHandler(SqlAlchemyBindingQueries(uow.session))
-    )
-
-
-UsageDep = Annotated[CatalogItemUsagePort, Depends(get_usage)]
 
 
 def get_currencies(handler: ValidateCurrencyHandlerDep) -> CurrencyPort:
@@ -155,12 +135,10 @@ from src.modules.catalog.application.catalog_item.command.delete_catalog_item.ha
 
 
 def get_delete_catalog_item_handler(
-    mutations: MutationsDep, repository: ItemRepositoryDep, usage: UsageDep
+    mutations: MutationsDep, repository: ItemRepositoryDep
 ) -> DeleteCatalogItemHandler:
     """Собирает отдельный handler сценария delete_catalog_item."""
-    return DeleteCatalogItemHandler(
-        mutations=mutations, repository=repository, usage=usage
-    )
+    return DeleteCatalogItemHandler(mutations=mutations, repository=repository)
 
 
 DeleteCatalogItemHandlerDep = Annotated[
@@ -220,22 +198,8 @@ GetCatalogItemImageContentHandlerDep = Annotated[
     GetCatalogItemImageContentHandler,
     Depends(get_get_catalog_item_image_content_handler),
 ]
-from src.modules.catalog.application.catalog_item.query.get_catalog_items_publication_snapshot.handler import (
-    GetCatalogItemsPublicationSnapshotHandler,
-)
 
 
-def get_get_catalog_items_publication_snapshot_handler(
-    repository: QueriesDep, clock: ClockDep
-) -> GetCatalogItemsPublicationSnapshotHandler:
-    """Собирает отдельный handler сценария get_catalog_items_publication_snapshot."""
-    return GetCatalogItemsPublicationSnapshotHandler(repository=repository, clock=clock)
-
-
-GetCatalogItemsPublicationSnapshotHandlerDep = Annotated[
-    GetCatalogItemsPublicationSnapshotHandler,
-    Depends(get_get_catalog_items_publication_snapshot_handler),
-]
 from src.modules.catalog.application.catalog_item.query.list_catalog_items.handler import (
     ListCatalogItemsHandler,
 )

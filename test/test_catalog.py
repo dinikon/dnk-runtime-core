@@ -66,10 +66,7 @@ class CatalogArchitectureTests(unittest.TestCase):
                 )
                 scenario, aggregate = path.parent.name, path.parents[2].name
                 if scenario in {
-                    "get_catalog_items_publication_snapshot",
                     "find_used_image_files",
-                    "validate_catalog_draft",
-                    "lock_catalog_item_for_binding",
                 }:
                     self.assertTrue((path.parent / "dto.py").exists())
                     continue

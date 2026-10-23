@@ -149,11 +149,6 @@ class CatalogItem:
             galleries=dict(self.galleries),
         )
 
-    def ensure_deletable(self, used: bool) -> None:
-        """Запрещает удаление товара с внешними зависимостями."""
-        if used:
-            raise CatalogConflictError("Товар используется внешним модулем.")
-
     def _validate(self) -> None:
         """Проверяет итоговые инварианты самостоятельного товара."""
         if (
