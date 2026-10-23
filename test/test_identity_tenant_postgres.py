@@ -468,7 +468,8 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
 
-    async def test_http_login_profile_isolation_and_logout_with_real_di(self):
+    async def test_http_login_profile_isolation_and_logout_with_real_di(self) -> None:
+        self.enterContext(patch.object(dnk_config, "DEPLOY_ENV", "PRODUCTION"))
         left, right = await self.onboard("left"), await self.onboard("right")
         tokens, mail = _MemoryTokens(), AsyncMock()
         app = FastAPI()

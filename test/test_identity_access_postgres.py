@@ -159,7 +159,7 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_invitation_creates_only_after_one_time_otp_and_refuses_existing_account(
         self,
-    ):
+    ) -> None:
         async with self.tenant_uow() as uow:
             service = self.service(uow)
             with self.assertRaises(IdentityAccessError):
@@ -186,9 +186,12 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
                     self.tenant, "guest@example.com"
                 )
             )
+            service.development_mode = False
             otp = await service.request_invitation_otp("tenant.example", secret)
             self.assertEqual(self.mail.send.await_count, 2)
             self.assertEqual(self.mail.send.call_args.args[1], "guest@example.com")
+            self.assertIsNone(otp["code"])
+            code = self.mail.send.await_args.args[2]["otp_code"]
 
         async def accept():
             try:
@@ -197,7 +200,7 @@ class IdentityAccessPostgresTests(unittest.IsolatedAsyncioTestCase):
                         "tenant.example",
                         secret,
                         otp["token"],
-                        otp["code"],
+                        code,
                         "Guest",
                         "Person",
                     )

@@ -1,3 +1,13 @@
+## v3.2.0 (2026-10-23)
+
+### Feat
+
+- **migrations**: add baseline schemas for global and tenant databases
+- **migrations**: add initial baseline schema for global and tenant databases
+- **channels**: introduce batch export operations with scheduling and XML support
+- **prom-xml**: add experimental XML and CSV contracts for item updates
+- **channels**: implement new channels core with simplified connection management
+
 ## v3.1.0 (2026-10-18)
 
 ### Feat
