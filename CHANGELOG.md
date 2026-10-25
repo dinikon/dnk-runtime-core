@@ -1,3 +1,11 @@
+## v3.4.0 (2026-10-26)
+
+### Feat
+
+- **tests**: use `migrator.head()` for version comparison in CRM sales tests
+- **catalog**: add resume support for idempotent catalog imports with generation handling
+- **catalog**: add catalog import lifecycle with idempotency and media support
+
 ## v3.3.0 (2026-10-23)
 
 ### Feat

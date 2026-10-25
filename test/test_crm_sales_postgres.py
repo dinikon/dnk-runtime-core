@@ -558,7 +558,7 @@ class CrmSalesPostgresTests(unittest.IsolatedAsyncioTestCase):
             await migrator.upgrade(connection, self.schemas[0])
             self.assertEqual(
                 await migrator.current(connection, self.schemas[0]),
-                ("0002_crm_sales_mvp",),
+                (migrator.head(),),
             )
         self.assertEqual((await self.client.get(path)).json(), contact.json())
         self.assertEqual(
