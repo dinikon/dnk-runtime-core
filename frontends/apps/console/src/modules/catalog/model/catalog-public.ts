@@ -14,3 +14,48 @@ export async function invalidateCatalogItems(
 ): Promise<void> {
   await cache.invalidateQueries({ queryKey: ["catalog", tenantId] });
 }
+
+export interface SalesCatalogChoice {
+  id: string;
+  title: string;
+  price: string | null;
+  currency: string | null;
+  kind: "product" | "service";
+  sku: string | null;
+}
+export async function searchSalesCatalog(
+  search: string,
+  signal?: AbortSignal,
+): Promise<SalesCatalogChoice[]> {
+  const { catalogApi } = await import("../api/catalog.api");
+  const page = await catalogApi.listItems(
+    "uk",
+    search,
+    0,
+    20,
+    undefined,
+    signal,
+  );
+  return page.items.map((i) => ({
+    id: i.id,
+    title: i.title ?? "",
+    price: i.price ?? null,
+    currency: i.currency ?? null,
+    kind: "product",
+    sku: i.sku ?? null,
+  }));
+}
+export async function readSalesCatalog(
+  id: string,
+): Promise<SalesCatalogChoice> {
+  const { catalogApi } = await import("../api/catalog.api");
+  const item = await catalogApi.getItem(id, "uk");
+  return {
+    id: item.id,
+    title: item.title ?? "",
+    price: item.price ?? null,
+    currency: item.price_specification?.currency ?? null,
+    kind: item.virtual ? "service" : "product",
+    sku: item.sku ?? null,
+  };
+}

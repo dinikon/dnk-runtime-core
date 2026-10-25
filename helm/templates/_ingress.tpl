@@ -25,7 +25,7 @@
 {{- $annotations := deepCopy .Values.ingress.annotations | default dict -}}
 {{- if eq .Values.ingress.className "nginx" -}}
 {{- $defaults := dict
-    "nginx.ingress.kubernetes.io/proxy-body-size" (printf "%d" (add .Values.application.files.consoleMaxUploadBytes 65536))
+    "nginx.ingress.kubernetes.io/proxy-body-size" (printf "%d" (add (max .Values.application.files.consoleMaxUploadBytes .Values.application.catalogImport.sourceMaxBytes) 65536))
     "nginx.ingress.kubernetes.io/proxy-request-buffering" "off"
     "nginx.ingress.kubernetes.io/proxy-read-timeout" (printf "%d" (int (ceil .Values.application.files.operationTimeoutSeconds)))
     "nginx.ingress.kubernetes.io/proxy-send-timeout" (printf "%d" (int (ceil .Values.application.files.operationTimeoutSeconds))) -}}

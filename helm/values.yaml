@@ -38,6 +38,19 @@ application:
     secretKey:
       value: ''
       existingSecret: {name: '', key: ''}
+  catalogImport:
+    maxActivePerTenant: 1
+    sourceMaxBytes: 104857600
+    maxRecords: 100000
+    maxImages: 100
+    imageMaxBytes: 10485760
+    downloadConcurrency: 4
+    downloadTimeoutSeconds: 300
+    batchSize: 100
+    batchSeconds: 60
+    draftHours: 24
+    sourceDays: 7
+    resultDays: 30
   email:
     provider: smtp
     fromAddress: ''

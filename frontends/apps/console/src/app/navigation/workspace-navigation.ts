@@ -1,9 +1,4 @@
-import {
-  Building2,
-  LifeBuoy,
-  ShoppingBasket,
-  Users,
-} from "@lucide/vue";
+import { Building2, LifeBuoy, ShoppingBasket, Users } from "@lucide/vue";
 
 import type { WorkspaceNavigation } from "./workspace-navigation.types";
 
@@ -16,24 +11,10 @@ export const workspaceNavigation: WorkspaceNavigation = {
     {
       title: "CRM",
       items: [
-        {
-          title: "Контакты",
-          url: "/crm/contacts",
-          icon: Users,
-          defaultOpen: true,
-          items: [
-            {
-              title: "Контакты",
-              url: "/crm/contacts",
-              icon: Users,
-            },
-            {
-              title: "Компании",
-              url: "/crm/companies",
-              icon: Building2,
-            },
-          ],
-        },
+        { title: "Лиды", url: "/crm/leads", icon: Users },
+        { title: "Сделки", url: "/crm/deals", icon: ShoppingBasket },
+        { title: "Контакты", url: "/crm/contacts", icon: Users },
+        { title: "Компании", url: "/crm/companies", icon: Building2 },
       ],
     },
   ],

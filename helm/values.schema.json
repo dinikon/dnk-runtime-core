@@ -417,6 +417,64 @@
               }
             }
           }
+        },
+        "catalogImport": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxActivePerTenant": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "sourceMaxBytes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "maxRecords": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "maxImages": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "imageMaxBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10485760
+            },
+            "downloadConcurrency": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            },
+            "downloadTimeoutSeconds": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "batchSize": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            },
+            "batchSeconds": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "draftHours": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "sourceDays": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "resultDays": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
         }
       }
     },

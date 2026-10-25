@@ -8,3 +8,9 @@ from src.modules.catalog.presentation.product_type.router import router as schem
 router = APIRouter(dependencies=[Depends(prepare_catalog_transaction)])
 router.include_router(items_router)
 router.include_router(schema_router)
+
+from src.modules.catalog.presentation.catalog_import.router import (
+    router as imports_router,
+)
+
+router.include_router(imports_router)

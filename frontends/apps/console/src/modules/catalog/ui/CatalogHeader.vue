@@ -19,8 +19,13 @@ defineEmits<{ create: [] }>();
       <h1 class="mt-1 text-2xl font-semibold">{{ title }}</h1>
       <p class="mt-2 text-sm text-muted-foreground">{{ description }}</p>
     </div>
-    <Button v-if="action" :disabled="disabled" @click="$emit('create')">{{
-      action
-    }}</Button>
+    <div class="flex flex-wrap gap-2">
+      <slot name="actions" /><Button
+        v-if="action"
+        :disabled="disabled"
+        @click="$emit('create')"
+        >{{ action }}</Button
+      >
+    </div>
   </header>
 </template>

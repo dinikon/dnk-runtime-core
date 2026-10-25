@@ -2,6 +2,18 @@ import type { RouteRecordRaw } from "vue-router";
 export const catalogRoutes: RouteRecordRaw[] = [
   { path: "catalog", redirect: "/catalog/items" },
   {
+    path: "catalog/imports",
+    component: () => import("./ui/page/CatalogImportsPage.vue"),
+  },
+  {
+    path: "catalog/imports/new",
+    component: () => import("./ui/page/CatalogImportsPage.vue"),
+  },
+  {
+    path: "catalog/imports/:importId",
+    component: () => import("./ui/page/CatalogImportsPage.vue"),
+  },
+  {
     path: "catalog/items",
     component: () => import("./ui/page/CatalogItemsPage.vue"),
   },

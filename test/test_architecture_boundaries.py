@@ -25,6 +25,23 @@ def iter_imports(path: Path) -> list[str]:
 
 
 class ArchitectureBoundariesTests(unittest.TestCase):
+    def test_persistence_models_have_no_integer_primary_keys(self) -> None:
+        """Исключает целочисленные PK, включая составные и унаследованные ключи."""
+        import src.modules.persistence  # noqa: F401
+        import src.modules.tenant_persistence  # noqa: F401
+        from sqlalchemy import Integer
+
+        from src.modules.shared.infrastructure.persistence.base import Base
+        from src.modules.tenancy.infrastructure.tenant.persistence.tenant_base import (
+            TenantBase,
+        )
+
+        for metadata in (Base.metadata, TenantBase.metadata):
+            for table in metadata.tables.values():
+                for column in table.primary_key.columns:
+                    with self.subTest(table=table.fullname, column=column.name):
+                        self.assertNotIsInstance(column.type, Integer)
+
     def test_removed_modules_have_no_imports(self) -> None:
         for root in ("src", "test"):
             for path in iter_python_files(root):

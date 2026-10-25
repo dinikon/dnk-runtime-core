@@ -16,7 +16,7 @@ from src.modules.catalog.infrastructure.product_type.persistence.repository impo
 )
 from src.modules.shared.infrastructure.uuid.uuid7_generator import UUID7Generator
 from src.modules.shared.infrastructure.time.utc_clock import UtcClock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
@@ -81,6 +81,9 @@ from src.modules.tenancy.infrastructure.adapter.currency_validator import (
 )
 from src.modules.tenancy.infrastructure.adapter.tenant_currency_settings import (
     TenantCurrencySettingsPersistenceAdapter,
+)
+from src.modules.tenancy.infrastructure.persistence.models.tenant_currency_settings import (
+    TENANT_CURRENCY_SETTINGS_ID,
 )
 from src.modules.tenancy.infrastructure.repository.tenant_domain_repository import (
     SqlAlchemyTenantDomainRepository,
@@ -161,14 +164,16 @@ class CurrencySliceOnePostgresTests(unittest.IsolatedAsyncioTestCase):
                     text(f'INSERT INTO "{schema}".existing_data VALUES (17)')
                 )
                 await apply_currency_migration(connection, schema)
-                self.assertEqual(
-                    await connection.scalar(
+                settings = (
+                    await connection.execute(
                         text(
-                            f'SELECT base_currency FROM "{schema}".tenant_currency_settings'
+                            f'SELECT id, base_currency FROM "{schema}".tenant_currency_settings'
                         )
-                    ),
-                    "UAH",
-                )
+                    )
+                ).one()
+                self.assertIsInstance(settings.id, UUID)
+                self.assertEqual(settings.id, TENANT_CURRENCY_SETTINGS_ID)
+                self.assertEqual(settings.base_currency, "UAH")
                 self.assertEqual(
                     await connection.scalar(
                         text(f'SELECT id FROM "{schema}".existing_data')
@@ -180,6 +185,9 @@ class CurrencySliceOnePostgresTests(unittest.IsolatedAsyncioTestCase):
                         "tenant_currency_settings", schema=schema
                     )
                 )
+                id_column = next(item for item in columns if item["name"] == "id")
+                self.assertIs(id_column["type"].python_type, UUID)
+                self.assertIsNone(id_column["default"])
                 column = next(
                     item for item in columns if item["name"] == "base_currency"
                 )
@@ -201,11 +209,26 @@ class CurrencySliceOnePostgresTests(unittest.IsolatedAsyncioTestCase):
                         f'UPDATE "{schemas[0]}".tenant_currency_settings SET base_currency = NULL'
                     )
                 )
-        with self.assertRaises(IntegrityError):
+        with self.assertRaises(IntegrityError) as raised:
             async with self.engine.begin() as connection:
                 await connection.execute(
-                    text(f'UPDATE "{schemas[0]}".tenant_currency_settings SET id = 2')
+                    text(
+                        f'UPDATE "{schemas[0]}".tenant_currency_settings SET id = :id'
+                    ),
+                    {"id": uuid4()},
                 )
+        self.assertEqual(raised.exception.orig.sqlstate, "23514")
+        with self.assertRaises(IntegrityError) as raised:
+            async with self.engine.begin() as connection:
+                await connection.execute(
+                    text(
+                        f'INSERT INTO "{schemas[0]}".tenant_currency_settings '
+                        "(id, base_currency, created_at, updated_at) "
+                        "VALUES (:id, 'USD', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                    ),
+                    {"id": uuid4()},
+                )
+        self.assertEqual(raised.exception.orig.sqlstate, "23514")
         async with self.engine.begin() as connection:
             await apply_currency_migration(connection, schemas[0], downgrade=True)
             self.assertIsNone(

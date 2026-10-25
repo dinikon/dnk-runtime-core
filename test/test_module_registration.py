@@ -108,8 +108,8 @@ class ModuleRegistrationTests(unittest.TestCase):
             any(name.startswith(("channel", "warehousing_")) for name in tables)
         )
 
-    def test_migrations_have_one_independent_baseline_per_schema(self) -> None:
-        """Каждая цепочка начинается и заканчивается собственной baseline."""
+    def test_migrations_extend_independent_schema_baselines(self) -> None:
+        """Каждая цепочка имеет свою baseline и линейные независимые продолжения."""
         configs = (
             (GlobalMigrator().config(), "global"),
             (TenantMigrator().config("dnk_test"), "tenant"),
@@ -117,13 +117,21 @@ class ModuleRegistrationTests(unittest.TestCase):
         for config, kind in configs:
             script = ScriptDirectory.from_config(config)
             revisions = list(script.walk_revisions())
-            self.assertEqual([r.revision for r in revisions], [f"0001_{kind}_baseline"])
-            self.assertIsNone(revisions[0].down_revision)
-            tree = ast.parse(Path(revisions[0].path).read_text())
-            imports = [
-                n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)
-            ]
-            self.assertFalse(any((name or "").startswith("src.") for name in imports))
+            self.assertEqual(len(script.get_heads()), 1)
+            self.assertEqual(revisions[-1].revision, f"0001_{kind}_baseline")
+            self.assertIsNone(revisions[-1].down_revision)
+            for index, revision in enumerate(revisions):
+                if index + 1 < len(revisions):
+                    self.assertEqual(
+                        revision.down_revision, revisions[index + 1].revision
+                    )
+                tree = ast.parse(Path(revision.path).read_text())
+                imports = [
+                    n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)
+                ]
+                self.assertFalse(
+                    any((name or "").startswith("src.") for name in imports)
+                )
 
     def test_worker_and_configuration_do_not_depend_on_removed_modules(self) -> None:
         """CLI и конфигурация не зависят от удалённых модулей."""

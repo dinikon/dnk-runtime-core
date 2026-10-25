@@ -27,3 +27,13 @@ router.include_router(contacts_router)
 router.include_router(companies_router)
 
 __all__ = ["router"]
+
+from src.modules.crm.presentation.lead.router import router as leads_router
+from src.modules.crm.presentation.deal.router import router as deals_router
+from src.modules.crm.presentation.sales.router import router as sales_router
+from src.modules.funnel.presentation.router import router as funnel_router
+
+router.include_router(leads_router)
+router.include_router(deals_router)
+router.include_router(sales_router)
+router.include_router(funnel_router)

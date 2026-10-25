@@ -23,6 +23,7 @@ from src.config.infrastructure.event_bus_config import EventBusConfig
 from src.config.infrastructure.rabbitmq_config import RabbitMQConfig
 from src.config.infrastructure.redis_config import RedisConfig
 from src.config.infrastructure.scheduled_jobs_config import ScheduledJobsConfig
+from src.config.feature.catalog_import_config import CatalogImportConfig
 
 # from .deploy import DeploymentConfig
 # from .enterprise import EnterpriseFeatureConfig
@@ -101,6 +102,7 @@ class DnkConfig(
     ScheduledJobsConfig,
     EmailConfig,
     FilesConfig,
+    CatalogImportConfig,
     # Redis config
     RedisConfig,
     # Auth config
