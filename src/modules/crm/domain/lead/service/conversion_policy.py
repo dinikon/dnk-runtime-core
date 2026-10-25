@@ -43,3 +43,56 @@ class LeadConversionPolicy:
         ) != len(selected_company_ids):
             raise SalesError("Выбрана недопустимая дополнительная компания.")
         return selected
+
+    @staticmethod
+    def relations(
+        *,
+        links: tuple[tuple[EntityIdVO | None, EntityIdVO | None], ...],
+        new_contact: EntityIdVO | None,
+        new_company: EntityIdVO | None,
+        source_contact: EntityIdVO | None,
+        source_company: EntityIdVO | None,
+        additional_companies: tuple[EntityIdVO, ...],
+    ) -> frozenset[tuple[EntityIdVO, EntityIdVO]]:
+        """Планирует только разрешённые связи, включающие создаваемую сторону."""
+        pairs = set()
+        if new_contact and new_company:
+            pairs.add((new_contact, new_company))
+        allowed_companies = set(additional_companies) | (
+            {source_company} if source_company else set()
+        )
+        for contact, company in links:
+            contact = contact or new_contact
+            company = company or new_company
+            if (
+                contact is None
+                or company is None
+                or (contact != new_contact and company != new_company)
+            ):
+                raise SalesError(
+                    "Связь должна включать хотя бы один создаваемый объект."
+                )
+            if contact != new_contact and contact != source_contact:
+                raise SalesError("Недопустимый контакт связи.")
+            if company != new_company and company not in allowed_companies:
+                raise SalesError("Недопустимая компания связи.")
+            pairs.add((contact, company))
+        return frozenset(pairs)
+
+    @staticmethod
+    def deal_participants(
+        *,
+        new_contact: EntityIdVO | None,
+        new_company: EntityIdVO | None,
+        source_contact: EntityIdVO | None,
+        source_company: EntityIdVO | None,
+        additional_companies: tuple[EntityIdVO, ...],
+    ) -> tuple[tuple[EntityIdVO, ...], tuple[EntityIdVO, ...]]:
+        """Включает исходные и создаваемые записи без дубликатов участников."""
+        contacts = {
+            value for value in (new_contact, source_contact) if value is not None
+        }
+        companies = set(additional_companies) | {
+            value for value in (new_company, source_company) if value is not None
+        }
+        return tuple(sorted(contacts, key=str)), tuple(sorted(companies, key=str))

@@ -135,6 +135,10 @@ class ConvertLeadHandler:
         source_contact_id = lead.contact_id.uuid if lead.contact_id else None
         source_company_id = lead.company_id.uuid if lead.company_id else None
         source = await self._baskets.lock("crm.lead", lead.id.uuid)
+        await self._participants.validate(
+            (source_contact_id,) if source_contact_id else (),
+            (source_company_id,) if source_company_id else (),
+        )
         context = await self._preparation.prepare(command.tenant_id, lead.id.uuid)
         if (
             context.source_token != command.expected_source_token
@@ -206,23 +210,31 @@ class ConvertLeadHandler:
                 )
             ),
         )
-        pairs = set()
-        if contact_id and company_id:
-            pairs.add((contact_id, company_id))
-        for link in command.links:
-            c = link.contact_id or contact_id
-            k = link.company_id or company_id
-            if c is None or k is None or (c != contact_id and k != company_id):
-                raise SalesError(
-                    "Связь должна включать хотя бы один создаваемый объект."
+        participant_inputs = dict(
+            new_contact=EntityIdVO(contact_id) if contact_id else None,
+            new_company=EntityIdVO(company_id) if company_id else None,
+            source_contact=EntityIdVO(source_contact_id) if source_contact_id else None,
+            source_company=EntityIdVO(source_company_id) if source_company_id else None,
+            additional_companies=tuple(EntityIdVO(value) for value in additional),
+        )
+        pairs = LeadConversionPolicy.relations(
+            links=tuple(
+                (
+                    EntityIdVO(link.contact_id) if link.contact_id else None,
+                    EntityIdVO(link.company_id) if link.company_id else None,
                 )
-            if c != contact_id and c != source_contact_id:
-                raise SalesError("Недопустимый контакт связи.")
-            if k != company_id and k not in ({source_company_id} | set(additional)):
-                raise SalesError("Недопустимая компания связи.")
-            pairs.add((c, k))
-        for c, k in sorted(pairs, key=lambda pair: (str(pair[0]), str(pair[1]))):
-            await self._links.link(ContactCompanyLinkVO(ContactIdVO(c), CompanyIdVO(k)))
+                for link in command.links
+            ),
+            **participant_inputs,
+        )
+        for contact, company in sorted(
+            pairs, key=lambda pair: (str(pair[0]), str(pair[1]))
+        ):
+            await self._links.link(
+                ContactCompanyLinkVO(
+                    ContactIdVO(contact.uuid), CompanyIdVO(company.uuid)
+                )
+            )
         basket_id = None
         if deal_id:
             draft = command.deal or ConversionDealInput(lead.title)
@@ -234,14 +246,8 @@ class ConvertLeadHandler:
                 actor_id=EntityIdVO(command.actor_id),
                 now=now,
             )
-            contacts = tuple(
-                sorted({i for i in (contact_id, source_contact_id) if i}, key=str)
-            )
-            companies = tuple(
-                sorted(
-                    set(additional) | {i for i in (company_id, source_company_id) if i},
-                    key=str,
-                )
+            contacts, companies = LeadConversionPolicy.deal_participants(
+                **participant_inputs
             )
             deal.revise(
                 fields={"contact_ids": contacts, "company_ids": companies},

@@ -30,6 +30,8 @@ import {
 } from "../model/sales.queries";
 import {
   cloneSaleValue,
+  rebaseSavedSale,
+  saleDraftFingerprint,
   emptySaleDraft,
   saleDraft,
   newBasketLine,
@@ -37,7 +39,6 @@ import {
 } from "../model/sales.draft";
 import type {
   SalesKind,
-  SaleDraft,
   ConversionSubmission,
   ConversionResult,
 } from "../model/sales.types";
@@ -84,7 +85,9 @@ const draft = ref(emptySaleDraft()),
   error = ref(""),
   notice = ref("");
 const dirty = computed(
-    () => JSON.stringify(draft.value) !== JSON.stringify(baseline.value),
+    () =>
+      saleDraftFingerprint(draft.value) !==
+      saleDraftFingerprint(baseline.value),
   ),
   frozen = computed(() => !!record.value?.conversionResult),
   pending = computed(
@@ -189,30 +192,9 @@ async function save(): Promise<boolean> {
       throw new Error(
         "Изменения отправлены, но карточку не удалось перечитать.",
       );
-    const saved = saleDraft(fresh.data),
-      current = cloneSaleValue(draft.value);
-    for (const key of Object.keys(saved) as (keyof SaleDraft)[])
-      if (JSON.stringify(current[key]) === JSON.stringify(sent[key]))
-        Object.assign(current, { [key]: saved[key] });
-    current.basketRevision = saved.basketRevision;
-    current.items = current.items.map((item) => {
-      if (item.id) return item;
-      const savedLineId = result.lineIdMap[item.clientLineKey];
-      return savedLineId ? { ...item, id: savedLineId } : item;
-    });
-    for (const group of ["phones", "emails"] as const)
-      current.points[group] = current.points[group].map((p) => {
-        const found = saved.points[group].find((v) => v.value === p.value);
-        return found
-          ? {
-              ...p,
-              bindingId: found.bindingId,
-              contactPointId: found.contactPointId,
-            }
-          : p;
-      });
+    const saved = saleDraft(fresh.data);
+    draft.value = rebaseSavedSale(draft.value, sent, saved, result.lineIdMap);
     baseline.value = saved;
-    draft.value = current;
     notice.value = "Изменения сохранены.";
     if (!dirty.value) editing.value = false;
     return true;

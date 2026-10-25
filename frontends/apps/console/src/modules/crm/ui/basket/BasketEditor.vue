@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, useId } from "vue";
+import { computed, ref, useId, nextTick, watch } from "vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
@@ -40,6 +40,11 @@ const emit = defineEmits<{
 const uid = useId(),
   nextCurrency = ref(""),
   reviewed = ref(false);
+const currencySelection = ref(props.currency);
+watch(
+  () => props.currency,
+  (value) => (currencySelection.value = value),
+);
 const total = computed(() => {
   try {
     return basketPreview(props.items);
@@ -69,10 +74,12 @@ function sum(i: BasketLine) {
 }
 function selectCurrency(v: unknown) {
   const value = String(v);
+  currencySelection.value = value;
   if (value === props.currency) return;
   if (props.items.length) {
     nextCurrency.value = value;
     reviewed.value = false;
+    void nextTick(() => (currencySelection.value = props.currency));
   } else emit("update:currency", value);
 }
 function rename(index: number, key: string, name: string) {
@@ -94,7 +101,7 @@ function rename(index: number, key: string, name: string) {
         ><FieldLabel :for="uid + 'currency'">Валюта продажи</FieldLabel
         ><NativeSelect
           :id="uid + 'currency'"
-          :model-value="currency"
+          :model-value="currencySelection"
           :disabled="readonly"
           @update:model-value="selectCurrency($event)"
           ><option>USD</option>
@@ -129,7 +136,7 @@ function rename(index: number, key: string, name: string) {
     >
     <article
       v-for="(item, index) in items"
-      :key="item.id ?? item.clientLineKey"
+      :key="item.clientLineKey"
       class="flex flex-col gap-4 rounded-lg border p-4"
     >
       <div class="flex flex-wrap items-center justify-between gap-2">

@@ -18,6 +18,9 @@ HISTORICAL_TENANT_TABLE_NAMES = frozenset(
         "catalog_content_block_definitions",
         "catalog_content_block_translations",
         "catalog_item",
+        "catalog_imports",
+        "catalog_import_rows",
+        "catalog_import_media",
         "catalog_item_content_values",
         "catalog_item_galleries",
         "catalog_item_images",
@@ -87,3 +90,7 @@ import src.modules.crm.infrastructure.persistence.models.basket_item  # noqa: F4
 import src.modules.funnel.infrastructure.persistence.models.funnel  # noqa: F401
 
 import src.modules.funnel.infrastructure.persistence.models.stage  # noqa: F401
+
+import src.modules.catalog.infrastructure.persistence.models.catalog_import  # noqa: F401
+import src.modules.catalog.infrastructure.persistence.models.catalog_import_row  # noqa: F401
+import src.modules.catalog.infrastructure.persistence.models.catalog_import_media  # noqa: F401

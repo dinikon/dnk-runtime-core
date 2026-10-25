@@ -119,9 +119,22 @@ async def handle_worker(_args: argparse.Namespace) -> int:
         JOB_TYPE as FILES_CLEANUP_JOB_TYPE,
     )
 
+    from src.modules.catalog.presentation.catalog_import.jobs import (
+        CatalogImportJobHandler,
+    )
+    from src.modules.catalog.presentation.catalog_import.maintenance_job import (
+        CatalogImportMaintenanceJobHandler,
+    )
+
+    catalog_imports = CatalogImportJobHandler(db_helper.session_factory)
     dispatcher = build_scheduled_job_dispatcher(
         {
             JOB_TYPE: ReferenceDataRefreshJobHandler(db_helper.session_factory),
+            "catalog.import.prepare": catalog_imports,
+            "catalog.import.run": catalog_imports,
+            "catalog.import.maintain": CatalogImportMaintenanceJobHandler(
+                db_helper.session_factory
+            ),
             FILES_CLEANUP_JOB_TYPE: FilesCleanupJobHandler(db_helper.session_factory),
             FILES_PURGE_JOB_TYPE: FilesPurgeJobHandler(db_helper.session_factory),
             FILES_EMPTY_TRASH_JOB_TYPE: FilesEmptyTrashJobHandler(

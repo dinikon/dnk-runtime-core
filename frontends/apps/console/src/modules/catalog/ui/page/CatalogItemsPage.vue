@@ -67,7 +67,29 @@ async function remove(id: string) {
       action="Создать товар"
       :disabled="!ctx.active.value || pending"
       @create="creation.show"
-    /><CatalogToolbar
+      ><template #actions
+        ><Button
+          variant="outline"
+          :disabled="!ctx.tenantId.value"
+          @click="
+            ctx.router.push({
+              path: '/catalog/imports/new',
+              query: { locale: ctx.locale.value },
+            })
+          "
+          >Импортировать позиции</Button
+        ><Button
+          variant="ghost"
+          @click="
+            ctx.router.push({
+              path: '/catalog/imports',
+              query: { locale: ctx.locale.value },
+            })
+          "
+          >Журнал импортов</Button
+        ></template
+      ></CatalogHeader
+    ><CatalogToolbar
       :locale="ctx.locale.value"
       :options="ctx.options.value"
       @locale="ctx.selectLocale"

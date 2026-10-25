@@ -283,6 +283,7 @@ async function move(record: SaleSummary, stageId: string) {
           ? getApiErrorMessage(e, "Не удалось переместить карточку.")
           : "Результат перемещения неизвестен. Сначала проверяем карточку.";
     verified = await verifyMove(record);
+    moving.value = null;
     resetColumns();
   } finally {
     if (verified && context === scope.value.join("|")) movingId.value = "";
