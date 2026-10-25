@@ -1,3 +1,10 @@
+## v3.4.0-rc.1 (2026-10-25)
+
+### Feat
+
+- **catalog**: add resume support for idempotent catalog imports with generation handling
+- **catalog**: add catalog import lifecycle with idempotency and media support
+
 ## v3.3.0 (2026-10-23)
 
 ### Feat
